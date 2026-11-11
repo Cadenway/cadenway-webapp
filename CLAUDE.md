@@ -42,8 +42,6 @@ pnpm build
 pnpm build
 ```
 
-
-
 ## Tooling: this repository ships its own `.claude/`
 
 Open `waypoint-webapp/` as the workspace root to activate it. The `wp-web-*` agents, the `/wp-*`
