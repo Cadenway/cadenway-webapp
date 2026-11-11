@@ -1,0 +1,27 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "waypoint-webapp",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": [
+        "start"
+      ],
+      "port": 4200
+    },
+    {
+      "name": "maquette",
+      "runtimeExecutable": "python",
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "4180",
+        "--bind",
+        "127.0.0.1",
+        "--directory",
+        "docs/maquette/source"
+      ],
+      "port": 4180
+    }
+  ]
+}
