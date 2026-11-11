@@ -38,3 +38,6 @@ playwright-report/
 blob-report/
 test-results/
 test-results-*/
+
+# Artifacts of the Playwright MCP server.
+.playwright-mcp/
