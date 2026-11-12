@@ -49,7 +49,7 @@ const TOKEN_PATTERNS = [
 const REPO_RULES = [
   [(rel, body) => rel.startsWith('src/') && /\b(ReactiveFormsModule|FormBuilder|FormGroup|FormControl)\b/.test(body), 'forms use Signal Forms only (rules/forms.md).'],
   [(rel, body) => rel.startsWith('src/app/') && !rel.includes('/data-access/') && !rel.startsWith('src/app/core/api/') && /\bHttpClient\b/.test(body), 'reach the API through @cadenway/api-client in a feature data-access/ folder.'],
-  [(rel, body) => rel.startsWith('src/') && /from\s+['"](?:@ngrx\/(?:store|effects|entity|store-devtools|component-store|router-store|data)|@angular-architects\/ngrx-toolkit|@ngrx-toolkit\/|@ngrx-traits\/)/.test(body), 'state is NgRx SignalStore (@ngrx/signals): no global Store family and no third-party store extension (skill cw-tech-ngrx).'],
+  [(rel, body) => rel.startsWith('src/') && /(?:\bfrom\s*|\bimport\s*\(?\s*|\brequire\s*\(\s*)['"](?:@ngrx\/(?:store|effects|entity|store-devtools|component-store|router-store|data)(?=['"/])|@angular-architects\/ngrx-toolkit|@ngrx-toolkit\/|@ngrx-traits\/)/.test(body), 'state is NgRx SignalStore (@ngrx/signals): no global Store family and no third-party store extension (skill cw-tech-ngrx).'],
   [(rel, body) => rel.startsWith('src/') && /\bprotectedState\s*:\s*false\b/.test(body), 'a SignalStore keeps its state protected; change it through store methods (skill cw-tech-ngrx).'],
   [(rel) => /^src\/app\/shared\/ui(\/|$)/.test(rel), 'there is no shared/ui: compose from @cadenway/ui and request missing bricks from cadenway-design-system.'],
   [(rel, body) => /(^|\/)index\.ts$/.test(rel) && /^\s*export\s+\*\s+from\s/m.test(body), 'a barrel uses explicit named exports, never "export * from".'],

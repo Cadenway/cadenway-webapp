@@ -19,4 +19,7 @@ None yet.
 
 ## Invariants
 
-None yet.
+- `RuntimeConfigStore` is loaded once by the application initializer, through
+  `config/data-access/runtime-config-source.ts` (`RuntimeConfigSource`, the only reader of
+  `config.json`), and is never reset: the gateway addresses do not depend on the user or the
+  organization.

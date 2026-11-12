@@ -1,6 +1,8 @@
+import { inject } from '@angular/core';
 import { patchState, signalStore, withComputed, withMethods, withState } from '@ngrx/signals';
 
-import { parseRuntimeConfig, type RuntimeConfig } from './runtime-config';
+import { RuntimeConfigSource } from './data-access/runtime-config-source';
+import type { RuntimeConfig } from './runtime-config';
 
 interface RuntimeConfigState {
   readonly _config: RuntimeConfig | null;
@@ -11,8 +13,9 @@ const initialState: RuntimeConfigState = { _config: null };
 /**
  * Holds the configuration the environment mounts as `config.json`.
  *
- * The file is fetched when the application starts instead of being compiled in, so the same Docker
- * image runs in staging and in production.
+ * The file is read when the application starts instead of being compiled in, so the same Docker
+ * image runs in staging and in production. Loaded once and never reset: it does not depend on the
+ * user or the organization.
  */
 export const RuntimeConfigStore = signalStore(
   { providedIn: 'root' },
@@ -33,20 +36,13 @@ export const RuntimeConfigStore = signalStore(
       return config;
     },
   })),
-  withMethods((store) => ({
+  withMethods((store, source = inject(RuntimeConfigSource)) => ({
     /**
-     * Fetches and validates `config.json`; called once by the application initializer.
-     *
-     * @throws {Error} When the file cannot be fetched.
-     * @throws {TypeError} When its content is not a valid configuration.
+     * Reads `config.json` through {@link RuntimeConfigSource}; called once by the application
+     * initializer. A failure leaves no configuration and rejects, which stops the start-up.
      */
     async load(): Promise<void> {
-      // `no-store`: a new deployment may mount a different file under the same URL.
-      const response = await fetch('config.json', { cache: 'no-store' });
-      if (!response.ok) {
-        throw new Error(`config.json could not be loaded (HTTP ${String(response.status)}).`);
-      }
-      patchState(store, { _config: parseRuntimeConfig(await response.json()) });
+      patchState(store, { _config: await source.load() });
     },
   })),
 );

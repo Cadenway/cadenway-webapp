@@ -49,8 +49,9 @@ export default defineConfig(
       tseslint.configs.stylisticTypeChecked,
       angular.configs.tsRecommended,
       // SignalStore is the state management; the type-checked set includes the plain `signals` rules.
+      // `ngrx.configs.operators` is left out: its only rule matches inside `createEffect`, which
+      // comes from the banned @ngrx/effects, so it never fires here.
       ngrx.configs.signalsTypeChecked,
-      ngrx.configs.operators,
     ],
     processor: angular.processInlineTemplates,
     languageOptions: {
@@ -85,6 +86,12 @@ export default defineConfig(
         {
           selector: 'ExportAllDeclaration',
           message: 'Use explicit named exports: a barrel hides what a feature exposes.',
+        },
+        {
+          // no-restricted-imports does not see dynamic imports.
+          // esquery ends a regex at the first slash: match any character there instead.
+          selector: `ImportExpression[source.value=/${signalStoreOnly.regex.replaceAll('/', '.')}/]`,
+          message: signalStoreOnly.message,
         },
       ],
     },
@@ -137,6 +144,17 @@ export default defineConfig(
               name: '@angular/common/http',
               message: 'A store calls its feature data-access/ service, never HTTP.',
             },
+            {
+              name: 'rxjs',
+              importNames: ['withLatestFrom'],
+              message:
+                'Read store signals inside the pipe (store.x()), or use concatLatestFrom from @ngrx/operators.',
+            },
+            {
+              name: 'rxjs/operators',
+              message:
+                'Import operators from rxjs; in a store, read signals instead of withLatestFrom.',
+            },
           ],
           patterns: [
             {
@@ -145,6 +163,14 @@ export default defineConfig(
             },
           ],
         },
+      ],
+      'no-restricted-globals': [
+        'error',
+        ...['fetch', 'XMLHttpRequest', 'WebSocket', 'EventSource'].map((name) => ({
+          name,
+          message:
+            'A store calls its feature data-access/ service (or the realtime client), never the network.',
+        })),
       ],
     },
   },

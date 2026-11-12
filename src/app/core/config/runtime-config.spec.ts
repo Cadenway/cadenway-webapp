@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
-import { parseRuntimeConfig } from './runtime-config';
+import { parseRuntimeConfig, type RuntimeConfig } from './runtime-config';
 
-const localConfig = {
+const localConfig: RuntimeConfig = {
   apiUrl: 'http://api.cadenway.localhost',
   realtimeUrl: 'http://realtime.cadenway.localhost',
 };
