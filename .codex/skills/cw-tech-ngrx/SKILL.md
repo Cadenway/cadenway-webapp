@@ -67,6 +67,154 @@ A third-party SignalStore extension (`@angular-architects/ngrx-toolkit`, `@ngrx-
 - `withProps` holds dependencies (`inject(...)`), observables and resources: anything that is
   not state.
 
+## Canonical store
+
+Reference implementation in the repository: `src/app/core/config/runtime-config-store.ts` (root
+store, private slice, a computed that guards a missing value, an async method) and its spec.
+
+The example below shows the feature pattern: entities, a debounced search with `rxMethod`, an
+optimistic status change with rollback and undo, and a pure updater shared by several methods.
+`TaskApi`, `Task` and `StatusKey` are example names. The fast-click rule (one pending change per
+task, final status only) adds a per-task pending slice on top of this snapshot. The example was
+compiled, linted and tested against the installed versions.
+
+```ts
+import { inject } from '@angular/core';
+import { tapResponse } from '@ngrx/operators';
+import { patchState, signalStore, withComputed, withMethods, withState } from '@ngrx/signals';
+import { setAllEntities, updateEntity, withEntities } from '@ngrx/signals/entities';
+import { rxMethod } from '@ngrx/signals/rxjs-interop';
+import { debounceTime, distinctUntilChanged, pipe, switchMap, tap } from 'rxjs';
+
+import { TaskApi } from '../data-access/services/task-api';
+import type { StatusKey, Task } from '../models/task';
+
+interface TaskListState {
+  readonly query: string;
+  readonly isLoading: boolean;
+  readonly selectedIds: readonly string[];
+  /** Status of each task before its unconfirmed change: the undo and rollback snapshot. */
+  readonly _saved: Readonly<Record<string, StatusKey>>;
+}
+
+const initialState: TaskListState = { query: '', isLoading: false, selectedIds: [], _saved: {} };
+
+/** Pure updater, shared by several methods: drops the snapshot of one task. */
+function dropSnapshot(id: string): (state: TaskListState) => Partial<TaskListState> {
+  return ({ _saved }) => ({
+    _saved: Object.fromEntries(Object.entries(_saved).filter(([key]) => key !== id)),
+  });
+}
+
+export const TaskListStore = signalStore(
+  withEntities<Task>(),
+  withState(initialState),
+  withComputed(({ entities, selectedIds }) => ({
+    selectedCount: () => selectedIds().length,
+    doneCount: () => entities().filter((task) => task.status === 'done').length,
+  })),
+  withMethods((store, api = inject(TaskApi)) => ({
+    select(ids: readonly string[]): void {
+      patchState(store, { selectedIds: ids });
+    },
+    search: rxMethod<string>(
+      pipe(
+        debounceTime(300),
+        distinctUntilChanged(),
+        tap((query) => {
+          patchState(store, { query, isLoading: true });
+        }),
+        switchMap((query) =>
+          api.search(query).pipe(
+            tapResponse({
+              next: (tasks) => {
+                patchState(store, setAllEntities(tasks));
+              },
+              error: () => {
+                patchState(store, setAllEntities<Task>([]));
+              },
+              finalize: () => {
+                patchState(store, { isLoading: false });
+              },
+            }),
+          ),
+        ),
+      ),
+    ),
+    async changeStatus(id: string, status: StatusKey): Promise<void> {
+      if (!(id in store.entityMap())) return;
+      const previous = store.entityMap()[id].status;
+      patchState(store, updateEntity({ id, changes: { status } }), ({ _saved }) => ({
+        _saved: { ..._saved, [id]: previous },
+      }));
+      try {
+        await api.changeStatus(id, status);
+      } catch {
+        patchState(store, updateEntity({ id, changes: { status: previous } }), dropSnapshot(id));
+        // Raise the error toast here once core/ provides the toast service.
+      }
+    },
+    /** The toast's Annuler: restores the snapshot and sends it. */
+    async undo(id: string): Promise<void> {
+      if (!(id in store._saved())) return;
+      const status = store._saved()[id];
+      patchState(store, updateEntity({ id, changes: { status } }), dropSnapshot(id));
+      await api.changeStatus(id, status);
+    },
+  })),
+);
+```
+
+Its spec:
+
+```ts
+import { TestBed } from '@angular/core/testing';
+import { patchState } from '@ngrx/signals';
+import { setAllEntities } from '@ngrx/signals/entities';
+import { unprotected } from '@ngrx/signals/testing';
+import { describe, expect, it, vi } from 'vitest';
+
+import { TaskApi } from '../data-access/services/task-api';
+import type { Task } from '../models/task';
+import { TaskListStore } from './task-list-store';
+
+const tasks: Task[] = [{ id: 't1', title: 'Maquette', status: 'todo' }];
+
+function setup(changeStatus: () => Promise<void>) {
+  TestBed.configureTestingModule({
+    providers: [TaskListStore, { provide: TaskApi, useValue: { changeStatus } }],
+  });
+  const store = TestBed.inject(TaskListStore);
+  patchState(unprotected(store), setAllEntities(tasks));
+  return store;
+}
+
+describe('TaskListStore', () => {
+  it('changes the status at once and keeps it when the API accepts', async () => {
+    const store = setup(vi.fn(() => Promise.resolve()));
+    const change = store.changeStatus('t1', 'done');
+    expect(store.entityMap()['t1'].status).toBe('done');
+    await change;
+    expect(store.doneCount()).toBe(1);
+  });
+
+  it('rolls back when the API refuses', async () => {
+    const store = setup(vi.fn(() => Promise.reject(new Error('500'))));
+    await store.changeStatus('t1', 'done');
+    expect(store.entityMap()['t1'].status).toBe('todo');
+  });
+
+  it('undo restores the saved status and sends it', async () => {
+    const changeStatus = vi.fn(() => Promise.resolve());
+    const store = setup(changeStatus);
+    await store.changeStatus('t1', 'done');
+    await store.undo('t1');
+    expect(store.entityMap()['t1'].status).toBe('todo');
+    expect(changeStatus).toHaveBeenLastCalledWith('t1', 'todo');
+  });
+});
+```
+
 ## Providing a store
 
 | Scope | How | Use for |
@@ -136,7 +284,8 @@ Load `cw-web-testing`; specs run with Vitest through `pnpm test --include <featu
   `TestBed.configureTestingModule({ providers: [Store, ...] })`. Never `new`: `rxMethod`,
   `signalMethod` and `inject()` need the injection context.
 - Fake the data-access service with `{ provide: TaskApi, useValue: fake }`; no network, no
-  api-client in a store spec.
+  api-client in a store spec. Type fixtures with the model (`const tasks: Task[] = ...`): entity
+  updaters otherwise infer literal types and the spec does not compile.
 - Test the public API only: initial state, computed values and the effect of methods. Do not spy on
   the store's own methods; extract complex logic into a service and fake that.
 - Arrange state the public API cannot reach with `patchState(unprotected(store), ...)` from
@@ -146,6 +295,39 @@ Load `cw-web-testing`; specs run with Vitest through `pnpm test --include <featu
   in its place.
 - Cover the Cadenway rules: rollback and toast on failure, undo, the last click of a burst being the
   only call, a pushed change not overwriting a pending edit.
+
+## Enforced mechanically
+
+| Check | Runs in | Refuses |
+| --- | --- | --- |
+| `@ngrx/eslint-plugin` `signalsTypeChecked` | `pnpm lint` | `protectedState: false`, an array at the root of `withState` or `signalState`, an uncalled `type`, a custom feature with input but no generic |
+| `@ngrx/eslint-plugin` `operators` | `pnpm lint` | `withLatestFrom` where `concatLatestFrom` belongs |
+| `no-restricted-imports` | `pnpm lint`, all files | the global Store family and third-party store extensions |
+| `@typescript-eslint/no-restricted-imports` | `pnpm lint`, store files (`state/**`, `*-store.ts`) | `@cadenway/api-client`, `@angular/common/http`, `effect` |
+| `@typescript-eslint/no-restricted-imports` | `pnpm lint`, non-spec files | `@ngrx/signals/testing` |
+| `guard.mjs` | every agent edit under `src/` | the global Store family, third-party store extensions, `protectedState: false` |
+| TypeScript | `pnpm typecheck` | `patchState` on a store from outside it, a `_` member read from outside |
+
+A lint or guard refusal is the rule speaking: change the design, never disable the rule.
+
+## Review checklist
+
+1. SignalStore only; no global Store, effects, devtools or third-party extension.
+2. File, store, state type and member names follow the naming table; private members use `_`.
+3. Provided at the narrowest scope; a root store holds app-wide state only and is reset on sign-out
+   and organization change.
+4. Injected only by pages; presentational components get inputs and emit outputs.
+5. State protected; one `patchState` per user action; new references, no mutation.
+6. Derived values in `withComputed`; no `effect()` writing state.
+7. API through the feature's `data-access/` service; display models only in state; `rxMethod`
+   calls use `tapResponse` and a deliberate flattening operator.
+8. Optimistic changes snapshot, roll back with the error toast and support Annuler; the fast-click
+   rule holds; a pushed change never overwrites a pending edit.
+9. Loading, error and empty states reach the page (skeleton, error panel with Réessayer, empty
+   state).
+10. Spec next to the store: `TestBed`, data-access faked, typed fixtures, public API, the rules of
+    item 8 covered; `unprotected` only to arrange.
+11. `FEATURE.md` lists the store and its scope.
 
 ## Anti-patterns
 

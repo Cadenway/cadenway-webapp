@@ -15,6 +15,19 @@ const noSiblingSources = {
   regex: '\\.\\./cadenway-',
   message: 'Never import sibling sources: use the published @cadenway/* packages.',
 };
+const signalStoreOnly = {
+  regex:
+    '^(@ngrx/(store|effects|entity|store-devtools|component-store|router-store|data)|@angular-architects/ngrx-toolkit|@ngrx-toolkit/|@ngrx-traits/)',
+  message:
+    'State is NgRx SignalStore (@ngrx/signals): no global Store family, no third-party store extension (skill cw-tech-ngrx).',
+};
+const ngrxTestingInSpecsOnly = {
+  name: '@ngrx/signals/testing',
+  message:
+    'unprotected() arranges state in specs only; production code changes state through store methods.',
+};
+// Store files outside a `state/` folder (core root stores) follow the same rules.
+const storeFiles = ['src/app/**/state/**/*.ts', 'src/app/**/*-store.ts'];
 
 export default defineConfig(
   globalIgnores([
@@ -65,7 +78,7 @@ export default defineConfig(
       '@typescript-eslint/no-extraneous-class': ['error', { allowWithDecorator: true }],
       'no-restricted-imports': [
         'error',
-        { paths: [signalFormsOnly], patterns: [noSiblingSources] },
+        { paths: [signalFormsOnly], patterns: [noSiblingSources, signalStoreOnly] },
       ],
       'no-restricted-syntax': [
         'error',
@@ -92,7 +105,45 @@ export default defineConfig(
               message: 'No HttpClient outside data-access/ and core/api/.',
             },
           ],
-          patterns: [noSiblingSources],
+          patterns: [noSiblingSources, signalStoreOnly],
+        },
+      ],
+    },
+  },
+  {
+    files: ['src/**/*.ts'],
+    ignores: ['src/**/*.spec.ts'],
+    rules: {
+      '@typescript-eslint/no-restricted-imports': ['error', { paths: [ngrxTestingInSpecsOnly] }],
+    },
+  },
+  {
+    // A store calls its feature's data-access/ service and derives with computed signals.
+    files: storeFiles,
+    ignores: ['src/**/*.spec.ts'],
+    rules: {
+      '@typescript-eslint/no-restricted-imports': [
+        'error',
+        {
+          paths: [
+            ngrxTestingInSpecsOnly,
+            {
+              name: '@angular/core',
+              importNames: ['effect'],
+              message:
+                'In a store, react with signalMethod or rxMethod and derive with withComputed, not effect().',
+            },
+            {
+              name: '@angular/common/http',
+              message: 'A store calls its feature data-access/ service, never HTTP.',
+            },
+          ],
+          patterns: [
+            {
+              regex: '^@cadenway/api-client(/|$)',
+              message: 'A store calls its feature data-access/ service, never the api-client.',
+            },
+          ],
         },
       ],
     },

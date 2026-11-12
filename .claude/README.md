@@ -1,7 +1,7 @@
 # cadenway-webapp: Claude Code tooling
 
-This `.claude/` folder ships the Claude Code tooling of cadenway-webapp: **21 agents**,
-22 slash commands, 16 rules, 21 skills, 3 hooks, the project
+This `.claude/` folder ships the Claude Code tooling of cadenway-webapp: **22 agents**,
+23 slash commands, 16 rules, 21 skills, 3 hooks, the project
 settings and launch configuration. The application launch requires the planned package scripts.
 
 Start from [AGENTS.md](../AGENTS.md) (the rules every assistant follows) and [CLAUDE.md](../CLAUDE.md)
@@ -57,6 +57,7 @@ check that writes files. No agent delegates further.
 | `cw-web-design-reviewer` | Visual fidelity to the mockup. | sonnet | high | Read-only |
 | `cw-web-a11y-auditor` | Roles, labels, focus, keyboard. | sonnet | high | Read-only |
 | `cw-web-architecture-reviewer` | Feature boundaries, imports, data access. | opus | xhigh | Read-only |
+| `cw-web-state-reviewer` | NgRx SignalStore state and its specs. | opus | high | Read-only |
 | `cw-web-security-auditor` | Session, tokens, HTML, redirects. | opus | xhigh | Read-only |
 | `cw-web-performance-reviewer` | Bundle, lazy loading, rendering cost. | sonnet | high | Read-only |
 | `cw-web-api-contract-reviewer` | Data access against the contracts. | opus | high | Read-only |
@@ -83,6 +84,7 @@ check that writes files. No agent delegates further.
 | `/cw-design-review` | Compare a screen with the mockup. | `cw-web-design-reviewer` |
 | `/cw-a11y` | Audit accessibility. | `cw-web-a11y-auditor` |
 | `/cw-arch-review` | Review boundaries of the current change. | `cw-web-architecture-reviewer` |
+| `/cw-state-review` | Review NgRx SignalStore state of the current change. | `cw-web-state-reviewer` |
 | `/cw-security-review` | Audit frontend security. | `cw-web-security-auditor` |
 | `/cw-perf-review` | Review performance. | `cw-web-performance-reviewer` |
 | `/cw-contract-review` | Check data access against the contracts. | `cw-web-api-contract-reviewer` |
@@ -100,7 +102,7 @@ check that writes files. No agent delegates further.
 | `overlays.md` | Overlays | `src/app/**/*menu*`, `src/app/**/*dialog*`, `src/app/**/*popover*`, `src/app/**/*overlay*` |
 | `collections.md` | Space views | `src/app/spaces/views/**` |
 | `data-access.md` | Data access | `src/app/**/data-access/**`, `src/app/core/api/**` |
-| `state.md` | State | `src/app/**/state/**` |
+| `state.md` | State (NgRx SignalStore) | `src/app/**/state/**`, `src/app/**/*-store.ts`, `src/app/**/*-store.spec.ts` |
 | `routing.md` | Routing | `src/app/**/*.routes.ts`, `src/app/**/guards/**` |
 | `styles-and-tokens.md` | Styles and tokens | `src/**/*.css`, `src/app/**/*.html` |
 | `motion.md` | Motion | `src/app/**/*.ts`, `src/**/*.css` |
@@ -134,6 +136,6 @@ See [skills/](skills/) for the complete inventory, including the technology guid
 
 | Hook | When | What it refuses or does |
 | --- | --- | --- |
-| `guard.mjs` | before `Write`, `Edit` or `MultiEdit` | Sibling checkouts, generated trees, lockfiles, `.git/`, secrets and tokens, reactive forms, direct HttpClient outside data access, a local shared/ui, `export *` barrels and edits of the mockup copy, unpinned third-party actions and `pull_request_target` in workflows. |
+| `guard.mjs` | before `Write`, `Edit` or `MultiEdit` | Sibling checkouts, generated trees, lockfiles, `.git/`, secrets and tokens, reactive forms, direct HttpClient outside data access, the global NgRx Store or a third-party store extension, `protectedState: false`, a local shared/ui, `export *` barrels and edits of the mockup copy, unpinned third-party actions and `pull_request_target` in workflows. |
 | `guard-git.mjs` | before `Bash` or `PowerShell` | Pushes to `main`, tag pushes, force-pushes, rewrites of pushed commits, hook bypasses, destructive resets, registry publishing, branch names outside `<type>/<kebab>`. Adapted from the dentalstock guard. |
 | `format.mjs` | after a successful `Write`, `Edit` or `MultiEdit` | Formats supported files with the repository's Prettier; a no-op until the formatter is installed. |

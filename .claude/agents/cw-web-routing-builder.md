@@ -43,6 +43,8 @@ Read the request, then re-read it against what you are about to do. Everything b
 1. `app.routes.ts` holds prefixes, redirects and lazy entries only.
 2. Guards check session and organization; a forbidden private space leads to the access-denied page with a request form.
 3. Route parameters reach pages as signal inputs (`withComponentInputBinding()`).
+4. A SignalStore shared by a route subtree goes in that route's `providers`, in the owning feature's
+   routes; never `providedIn: 'root'` for page state (skill `cw-tech-ngrx`).
 
 ## Checks
 

@@ -65,13 +65,17 @@ Load them with the `Skill` tool when their subject comes up (if the tool is unav
 3. Derived values are computed signals; state stays protected; private members take the `_` prefix.
 4. Optimistic updates keep a snapshot for undo and roll back on failure with a toast.
 5. Fast status clicks: the label changes at once, one pending change per task, the final status alone is sent.
-6. Write the spec next to the store: public API through `TestBed`, data-access faked, the rules of
-   steps 4 and 5 covered.
+6. Write the spec next to the store: public API through `TestBed`, data-access faked, typed
+   fixtures, the rules of steps 4 and 5 covered.
+7. Start from the canonical store of `cw-tech-ngrx`; before reporting, walk its review checklist
+   and state each item that does not apply. A lint or guard refusal changes the design; never
+   disable a rule.
 
 ## Checks
 
 - `pnpm test --include <feature>/state`
-- `pnpm lint` (the NgRx `signals` rules run there)
+- `pnpm lint` (the NgRx rules and the store import restrictions run there)
+- `pnpm typecheck` (protected state and private members are type errors from outside the store)
 - `pnpm test:coverage` once the scoped run is green
 
 ## Report

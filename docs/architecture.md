@@ -34,6 +34,7 @@ src/app/
 - No `shared/ui`, no local copy of a `@cadenway/ui` brick, no other component library.
 - No `HttpClient` to reach the API; no hand-built API URL.
 - Signal Forms only: never `ReactiveFormsModule`, `FormBuilder`, `FormGroup`, `FormControl`.
+- State is NgRx SignalStore (`@ngrx/signals`) only: never the global Store family (`@ngrx/store`, `@ngrx/effects`, `@ngrx/entity`, `@ngrx/store-devtools`) or a third-party store extension, never `protectedState: false`; a store reaches the API through its feature's `data-access/`.
 - `docs/maquette/` is a read-only reference copy of the mockup.
 
 ## Cross-repository changes

@@ -1,7 +1,7 @@
 {
   "name": "cadenway-webapp",
   "version": "0.1.0",
-  "description": "cadenway-webapp tooling: 21 cw-web-* agents (feature, component, form, overlay, collection, data-access, state, realtime, routing, UI-consumer, test and e2e builders plus read-only design, accessibility, architecture, security, performance, contract, motion and copy reviewers, plus a .github maintainer), 22 /cw-* commands, 16 path-scoped rules, 21 skills, and the guard, git-guard and format hooks. The plugin root is this .claude/ folder; the hooks only act inside a cadenway-webapp checkout.",
+  "description": "cadenway-webapp tooling: 22 cw-web-* agents (feature, component, form, overlay, collection, data-access, state, realtime, routing, UI-consumer, test and e2e builders plus read-only design, accessibility, architecture, state, security, performance, contract, motion and copy reviewers, plus a .github maintainer), 23 /cw-* commands, 16 path-scoped rules, 21 skills, and the guard, git-guard and format hooks. The plugin root is this .claude/ folder; the hooks only act inside a cadenway-webapp checkout.",
   "author": {
     "name": "Valentin FORTIN"
   }
