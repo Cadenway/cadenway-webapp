@@ -1,7 +1,7 @@
 # cadenway-webapp: Claude Code tooling
 
 This `.claude/` folder ships the Claude Code tooling of cadenway-webapp: **21 agents**,
-22 slash commands, 16 rules, 20 skills, 3 hooks, the project
+22 slash commands, 16 rules, 21 skills, 3 hooks, the project
 settings and launch configuration. The application launch requires the planned package scripts.
 
 Start from [AGENTS.md](../AGENTS.md) (the rules every assistant follows) and [CLAUDE.md](../CLAUDE.md)
@@ -48,7 +48,7 @@ check that writes files. No agent delegates further.
 | `cw-web-overlay-builder` | Menus, popovers, dialogs, context menus, confirmations. | sonnet | high | Assigned writes |
 | `cw-web-collection-builder` | List, board, calendar, Gantt, workload and sheet views. | opus | high | Assigned writes |
 | `cw-web-service-builder` | Data access over @cadenway/api-client. | sonnet | high | Assigned writes |
-| `cw-web-state-builder` | Signal state, optimistic updates, fast-click handling. | opus | high | Assigned writes |
+| `cw-web-state-builder` | NgRx SignalStore state, optimistic updates, fast-click handling. | opus | high | Assigned writes |
 | `cw-web-realtime-builder` | WebSocket client and pushed changes. | sonnet | high | Assigned writes |
 | `cw-web-routing-builder` | Routes, guards, lazy loading, error pages. | opus | high | Assigned writes |
 | `cw-web-ui-consumer` | Compose from @cadenway/ui; relay missing bricks. | sonnet | high | Assigned writes |
@@ -74,7 +74,7 @@ check that writes files. No agent delegates further.
 | `/cw-overlay` | Build a menu, popover, dialog or confirmation. | `cw-web-overlay-builder` |
 | `/cw-view` | Build a space view (list, board, calendar, Gantt…). | `cw-web-collection-builder` |
 | `/cw-service` | Build data access over @cadenway/api-client. | `cw-web-service-builder` |
-| `/cw-state` | Build feature state with signals. | `cw-web-state-builder` |
+| `/cw-state` | Build feature state with NgRx SignalStore. | `cw-web-state-builder` |
 | `/cw-realtime` | Connect pushed changes from the realtime gateway. | `cw-web-realtime-builder` |
 | `/cw-route` | Change routes, guards or error pages. | `cw-web-routing-builder` |
 | `/cw-ui` | Compose from @cadenway/ui or request a missing brick. | `cw-web-ui-consumer` |

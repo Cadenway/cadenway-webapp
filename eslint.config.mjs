@@ -1,4 +1,5 @@
 import eslint from '@eslint/js';
+import ngrx from '@ngrx/eslint-plugin';
 import angular from 'angular-eslint';
 import prettier from 'eslint-config-prettier';
 import { defineConfig, globalIgnores } from 'eslint/config';
@@ -34,6 +35,9 @@ export default defineConfig(
       tseslint.configs.strictTypeChecked,
       tseslint.configs.stylisticTypeChecked,
       angular.configs.tsRecommended,
+      // SignalStore is the state management; the type-checked set includes the plain `signals` rules.
+      ngrx.configs.signalsTypeChecked,
+      ngrx.configs.operators,
     ],
     processor: angular.processInlineTemplates,
     languageOptions: {

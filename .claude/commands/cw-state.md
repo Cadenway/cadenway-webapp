@@ -1,5 +1,5 @@
 ---
-description: "Build feature state with signals."
+description: "Build feature state with NgRx SignalStore."
 argument-hint: "<state slice>"
 ---
 

@@ -46,6 +46,7 @@ Load them with the `Skill` tool when their subject comes up (if the tool is unav
 | Skill | Load it when |
 | --- | --- |
 | `cw-web-testing` | always |
+| `cw-tech-ngrx` | when the subject is a SignalStore or a component that injects one |
 
 ## Procedure
 

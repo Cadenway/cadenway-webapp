@@ -1,6 +1,6 @@
 ---
 name: cw-state
-description: Build feature state with signals.
+description: Build feature state with NgRx SignalStore.
 ---
 
 Use the **cw-web-state-builder** specialist for this task when delegation is available and authorized; otherwise read `.codex/agents/cw-web-state-builder.toml` and follow its instructions directly: the user-provided arguments

@@ -1,6 +1,6 @@
 ---
 name: cw-web-state-builder
-description: "Use to build feature state in cadenway-webapp with signals: selection, filters, optimistic status changes, undo snapshots, the one-pending-change-per-task rule for fast clicks."
+description: "Use to build feature state in cadenway-webapp with NgRx SignalStore: stores, computed signals, entities, selection, filters, optimistic status changes, undo snapshots, the one-pending-change-per-task rule for fast clicks, and their specs."
 tools: Skill, Read, Grep, Glob, Edit, Write, Bash
 model: opus
 effort: high
@@ -24,7 +24,12 @@ inspection from executed checks.
 
 ## Role scope
 
-Code under a feature `state/`.
+Code under a feature `state/`: the NgRx SignalStores and their specs.
+
+Not yours:
+
+- The `data-access/` services a store calls (`cw-web-service-builder`), the pages that provide and
+  inject the store (`cw-web-component-builder`), the routes that provide it (`cw-web-routing-builder`).
 
 ## The request is the deliverable
 
@@ -45,18 +50,29 @@ Load them with the `Skill` tool when their subject comes up (if the tool is unav
 
 | Skill | Load it when |
 | --- | --- |
+| `cw-tech-ngrx` | always |
 | `cw-status-interactions` | always |
 | `cw-api-client-data-access` | when state wraps a request |
+| `cw-web-testing` | when writing the store spec |
 
 ## Procedure
 
-1. Use the state approach already established in the codebase; if none exists, stop and ask (the choice is an architecture decision).
-2. Optimistic updates keep a snapshot for undo and roll back on failure with a toast.
-3. Fast status clicks: the label changes at once, one pending change per task, the final status alone is sent.
+1. State is NgRx SignalStore (`@ngrx/signals`), laid out, named and provided as `cw-tech-ngrx`
+   says. Adding another state library, the global Store or a third-party store extension is an
+   architecture decision: stop and ask.
+2. The store calls the feature's `data-access/` service, never the api-client, and holds display
+   models; when the service it needs does not exist, name it in the report for `cw-web-service-builder`.
+3. Derived values are computed signals; state stays protected; private members take the `_` prefix.
+4. Optimistic updates keep a snapshot for undo and roll back on failure with a toast.
+5. Fast status clicks: the label changes at once, one pending change per task, the final status alone is sent.
+6. Write the spec next to the store: public API through `TestBed`, data-access faked, the rules of
+   steps 4 and 5 covered.
 
 ## Checks
 
 - `pnpm test --include <feature>/state`
+- `pnpm lint` (the NgRx `signals` rules run there)
+- `pnpm test:coverage` once the scoped run is green
 
 ## Report
 

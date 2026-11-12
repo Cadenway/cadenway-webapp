@@ -12,7 +12,7 @@
 ## TL;DR for every task
 
 1. Read before writing: the feature `FEATURE.md`, the mockup screen (`docs/maquette/source/*.dc.html`) and its guide section.
-2. Angular 22: no suffixes, `cw-` selectors, `input()`/`output()`/`model()`, `@if`/`@for`, OnPush default, zoneless, Signal Forms, `@Service()`.
+2. Angular 22: no suffixes, `cw-` selectors, `input()`/`output()`/`model()`, `@if`/`@for`, OnPush default, zoneless, Signal Forms, `@Service()`, NgRx SignalStore for state.
 3. Visuals come from `@cadenway/ui` with Tailwind over `@cadenway/tokens`; a missing brick is a cadenway-design-system request (`cw-web-ui-consumer`).
 4. API access only through `@cadenway/api-client`, only in `data-access/`; DTOs never leave it.
 5. French UI copy word for word from the mockup; English everything else.

@@ -42,7 +42,8 @@ Read the request, then re-read it against what you are about to do. Everything b
 
 1. One socket per tab, authenticated with the session; reconnect with backoff.
 2. Join the list and task rooms of what is on screen; leave them on navigation.
-3. Apply pushed changes to state without overwriting a local pending edit.
+3. Apply pushed changes to state through a method of the owning feature's SignalStore
+   (skill `cw-tech-ngrx`), without overwriting a local pending edit.
 
 ## Checks
 

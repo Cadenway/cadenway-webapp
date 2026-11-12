@@ -190,6 +190,12 @@ importers:
       '@angular/router':
         specifier: ^22.2.5
         version: 22.2.5(@angular/common@22.2.5(@angular/core@22.2.5(@angular/compiler@22.2.5)(rxjs@7.8.2))(rxjs@7.8.2))(@angular/core@22.2.5(@angular/compiler@22.2.5)(rxjs@7.8.2))(@angular/platform-browser@22.2.5(@angular/common@22.2.5(@angular/core@22.2.5(@angular/compiler@22.2.5)(rxjs@7.8.2))(rxjs@7.8.2))(@angular/core@22.2.5(@angular/compiler@22.2.5)(rxjs@7.8.2)))(rxjs@7.8.2)
+      '@ngrx/operators':
+        specifier: ^22.0.1
+        version: 22.0.1(rxjs@7.8.2)
+      '@ngrx/signals':
+        specifier: ^22.0.1
+        version: 22.0.1(@angular/core@22.2.5(@angular/compiler@22.2.5)(rxjs@7.8.2))(rxjs@7.8.2)
       rxjs:
         specifier: ~7.8.2
         version: 7.8.2
@@ -215,6 +221,9 @@ importers:
       '@eslint/js':
         specifier: ^10.0.1
         version: 10.0.1(eslint@10.14.0(jiti@2.7.0)(supports-color@8.1.1))
+      '@ngrx/eslint-plugin':
+        specifier: ^22.0.1
+        version: 22.0.1(@typescript-eslint/utils@8.72.2(eslint@10.14.0(jiti@2.7.0)(supports-color@8.1.1))(supports-color@8.1.1)(typescript@6.0.3))(eslint@10.14.0(jiti@2.7.0)(supports-color@8.1.1))(typescript-eslint@8.72.2(eslint@10.14.0(jiti@2.7.0)(supports-color@8.1.1))(supports-color@8.1.1)(typescript@6.0.3))(typescript@6.0.3)
       '@playwright/test':
         specifier: ^1.65.0
         version: 1.65.0
@@ -1261,6 +1270,28 @@ packages:
     peerDependencies:
       '@emnapi/core': ^1.7.1 || 2.0.0-beta.2 || 2.0.0-beta.3
       '@emnapi/runtime': ^1.7.1 || 2.0.0-beta.2 || 2.0.0-beta.3
+
+  '@ngrx/eslint-plugin@22.0.1':
+    resolution: {integrity: sha512-jBhZaLaFJZh0UWFSBx54Hkoog05akw6ovQFARkk65QAf/2BgN8EZOnAS3zUavFPHX90m4RYAkMzj9bRZI7iL8g==}
+    peerDependencies:
+      '@typescript-eslint/utils': ^8.0.0
+      eslint: ^9.0.0 || ^10.0.0
+      typescript: '*'
+      typescript-eslint: ^8.0.0
+
+  '@ngrx/operators@22.0.1':
+    resolution: {integrity: sha512-UyF1ESIKX8sClhXCz4/B+YhC4Baa4sZ4O0neHzMwdqFxvXg4P19AT6+RQ5lNCuwmYt/aH1dZuHr+EBaQSRFNyQ==}
+    peerDependencies:
+      rxjs: ^6.5.3 || ^7.4.0
+
+  '@ngrx/signals@22.0.1':
+    resolution: {integrity: sha512-R62VsPrnH54LgA3LAqw+GWA9FHii526CH1aqah8aiK1RZocp+3N9rS3g5wrrXU655eVH65jhN4k/k+EFyxO/RA==}
+    peerDependencies:
+      '@angular/core': ^22.0.0
+      rxjs: ^6.5.3 || ^7.4.0
+    peerDependenciesMeta:
+      rxjs:
+        optional: true
 
   '@oxc-parser/binding-android-arm-eabi@0.156.0':
     resolution: {integrity: sha512-RMq7DKNzEp1T51QKNLTn0NryNEt2IYfh7mZBlIdi2Ju52ltOEDMeIXv0XBpA6dL7j7ChjlcovtGcc1Jv4qMipg==}
@@ -4121,6 +4152,25 @@ snapshots:
       '@emnapi/runtime': 2.0.0-alpha.6
       '@tybys/wasm-util': 0.10.4
     optional: true
+
+  '@ngrx/eslint-plugin@22.0.1(@typescript-eslint/utils@8.72.2(eslint@10.14.0(jiti@2.7.0)(supports-color@8.1.1))(supports-color@8.1.1)(typescript@6.0.3))(eslint@10.14.0(jiti@2.7.0)(supports-color@8.1.1))(typescript-eslint@8.72.2(eslint@10.14.0(jiti@2.7.0)(supports-color@8.1.1))(supports-color@8.1.1)(typescript@6.0.3))(typescript@6.0.3)':
+    dependencies:
+      '@typescript-eslint/utils': 8.72.2(eslint@10.14.0(jiti@2.7.0)(supports-color@8.1.1))(supports-color@8.1.1)(typescript@6.0.3)
+      eslint: 10.14.0(jiti@2.7.0)(supports-color@8.1.1)
+      typescript: 6.0.3
+      typescript-eslint: 8.72.2(eslint@10.14.0(jiti@2.7.0)(supports-color@8.1.1))(supports-color@8.1.1)(typescript@6.0.3)
+
+  '@ngrx/operators@22.0.1(rxjs@7.8.2)':
+    dependencies:
+      rxjs: 7.8.2
+      tslib: 2.9.1
+
+  '@ngrx/signals@22.0.1(@angular/core@22.2.5(@angular/compiler@22.2.5)(rxjs@7.8.2))(rxjs@7.8.2)':
+    dependencies:
+      '@angular/core': 22.2.5(@angular/compiler@22.2.5)(rxjs@7.8.2)
+      tslib: 2.9.1
+    optionalDependencies:
+      rxjs: 7.8.2
 
   '@oxc-parser/binding-android-arm-eabi@0.156.0':
     optional: true
