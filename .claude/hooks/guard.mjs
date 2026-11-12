@@ -1,12 +1,12 @@
 #!/usr/bin/env node
 /**
- * PreToolUse hook (waypoint-webapp): refuse writes that are never right in this repository.
+ * PreToolUse hook (cadenway-webapp): refuse writes that are never right in this repository.
  * Deny = exit 2 with the reason on stderr; everything else = exit 0.
  *
  * Reads `tool_input.file_path` and the written text (`content`, `new_string`, or the
  * `edits[].new_string` of a MultiEdit) and denies, in this order:
  *
- *  1. Sibling checkouts (`../waypoint-*`): read-only from a waypoint-webapp session.
+ *  1. Sibling checkouts (`../cadenway-*`): read-only from a cadenway-webapp session.
  *  2. Generated trees and build outputs. Edit the source and rebuild.
  *  3. Lockfiles edited by hand (`pnpm-lock.yaml`, `package-lock.json`). Use the package manager.
  *  4. Git internals (`.git/`).
@@ -15,14 +15,14 @@
  *  6. Repository-specific rules (see REPO_RULES).
  *
  * Deliberately conservative: ordinary sources, specs, docs and configuration stay writable. The hook
- * only acts inside a waypoint-webapp checkout (marker: `.claude/.claude-plugin/plugin.json` named
- * waypoint-webapp), so it is inert elsewhere.
+ * only acts inside a cadenway-webapp checkout (marker: `.claude/.claude-plugin/plugin.json` named
+ * cadenway-webapp), so it is inert elsewhere.
  */
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const REPO_NAME = 'waypoint-webapp';
+const REPO_NAME = 'cadenway-webapp';
 
 const GENERATED = [
   [/^(?:.*\/)?node_modules\//, 'an installed dependency'],
@@ -47,8 +47,8 @@ const TOKEN_PATTERNS = [
 /** Repository-specific rules: [test(rel, body) => boolean, message]. */
 const REPO_RULES = [
   [(rel, body) => rel.startsWith('src/') && /\b(ReactiveFormsModule|FormBuilder|FormGroup|FormControl)\b/.test(body), 'forms use Signal Forms only (rules/forms.md).'],
-  [(rel, body) => rel.startsWith('src/app/') && !rel.includes('/data-access/') && !rel.startsWith('src/app/core/api/') && /\bHttpClient\b/.test(body), 'reach the API through @waypoint/api-client in a feature data-access/ folder.'],
-  [(rel) => /^src\/app\/shared\/ui(\/|$)/.test(rel), 'there is no shared/ui: compose from @waypoint/ui and request missing bricks from waypoint-design-system.'],
+  [(rel, body) => rel.startsWith('src/app/') && !rel.includes('/data-access/') && !rel.startsWith('src/app/core/api/') && /\bHttpClient\b/.test(body), 'reach the API through @cadenway/api-client in a feature data-access/ folder.'],
+  [(rel) => /^src\/app\/shared\/ui(\/|$)/.test(rel), 'there is no shared/ui: compose from @cadenway/ui and request missing bricks from cadenway-design-system.'],
   [(rel, body) => /(^|\/)index\.ts$/.test(rel) && /^\s*export\s+\*\s+from\s/m.test(body), 'a barrel uses explicit named exports, never "export * from".'],
   [(rel, body) => /^\.github\/workflows\/.+\.ya?ml$/.test(rel) && /uses:\s*(?!\.\/|docker:\/\/)[^@\s]+@(?![0-9a-f]{40}\b)/.test(body), 'pin third-party actions to a full commit SHA, with the version in a comment.'],
   [(rel, body) => /^\.github\/workflows\/.+\.ya?ml$/.test(rel) && /pull_request_target/.test(body), 'pull_request_target runs with secrets on untrusted code; use pull_request, or ask the user.'],
@@ -66,7 +66,7 @@ function isRepoRoot(dir) {
   }
 }
 
-/** Walks upward from a path and returns the nearest waypoint-webapp checkout root, or null. */
+/** Walks upward from a path and returns the nearest cadenway-webapp checkout root, or null. */
 export function findRepoRoot(start) {
   let dir = path.resolve(start);
   for (;;) {
@@ -84,16 +84,16 @@ export function writtenText(input) {
   return String(input.content ?? input.new_string ?? '');
 }
 
-/** Refuses writes into a sibling Waypoint checkout. */
+/** Refuses writes into a sibling Cadenway checkout. */
 export function evaluateSibling(root, absolute) {
   const relative = path.relative(path.dirname(root), path.resolve(absolute));
   if (!relative || relative.startsWith('..') || path.isAbsolute(relative)) return null;
   const [folder] = relative.split(/[\\/]/);
   if (folder === path.basename(root)) return null;
-  if (!/^waypoint-[a-z0-9-]+$/i.test(folder)) return null;
+  if (!/^cadenway-[a-z0-9-]+$/i.test(folder)) return null;
   return deny(
     `${relative.replace(/\\/g, '/')} belongs to the sibling checkout ${folder}, which is read-only from a ` +
-      'waypoint-webapp session. Write the need down for its owner (its wp-* agents) and change it in its own session and pull request.',
+      'cadenway-webapp session. Write the need down for its owner (its cw-* agents) and change it in its own session and pull request.',
   );
 }
 

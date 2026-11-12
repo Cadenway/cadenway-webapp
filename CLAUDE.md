@@ -1,4 +1,4 @@
-# waypoint-webapp: Claude Code instructions
+# cadenway-webapp: Claude Code instructions
 
 > **Source of truth.** This file is the entry point for Claude Code. The normative rules live in
 > [AGENTS.md](AGENTS.md), imported below: read it, do not paraphrase it from memory.
@@ -12,9 +12,9 @@
 ## TL;DR for every task
 
 1. Read before writing: the feature `FEATURE.md`, the mockup screen (`docs/maquette/source/*.dc.html`) and its guide section.
-2. Angular 22: no suffixes, `wp-` selectors, `input()`/`output()`/`model()`, `@if`/`@for`, OnPush default, zoneless, Signal Forms, `@Service()`.
-3. Visuals come from `@waypoint/ui` with Tailwind over `@waypoint/tokens`; a missing brick is a waypoint-design-system request (`wp-web-ui-consumer`).
-4. API access only through `@waypoint/api-client`, only in `data-access/`; DTOs never leave it.
+2. Angular 22: no suffixes, `cw-` selectors, `input()`/`output()`/`model()`, `@if`/`@for`, OnPush default, zoneless, Signal Forms, `@Service()`.
+3. Visuals come from `@cadenway/ui` with Tailwind over `@cadenway/tokens`; a missing brick is a cadenway-design-system request (`cw-web-ui-consumer`).
+4. API access only through `@cadenway/api-client`, only in `data-access/`; DTOs never leave it.
 5. French UI copy word for word from the mockup; English everything else.
 6. Every screen has its states: skeleton while loading, error panel with Réessayer, empty state.
 7. Placement = usage locality; lift code only when a real second consumer appears.
@@ -22,7 +22,7 @@
 ## Boundaries (hard rules)
 
 - `core` never imports a feature; features import each other only through entries declared in the owner's `FEATURE.md`.
-- No `shared/ui`, no local copy of a `@waypoint/ui` brick, no other component library.
+- No `shared/ui`, no local copy of a `@cadenway/ui` brick, no other component library.
 - No `HttpClient` to reach the API; no hand-built API URL.
 - Signal Forms only: never `ReactiveFormsModule`, `FormBuilder`, `FormGroup`, `FormControl`.
 - `docs/maquette/` is a read-only reference copy of the mockup.
@@ -30,7 +30,7 @@
 ## Target quality gate
 
 Use the [minimum checks by change](docs/development.md#minimum-checks-by-change) first.
-Run `/wp-quality` without arguments for the full local gate when applicable. Report unavailable
+Run `/cw-quality` without arguments for the full local gate when applicable. Report unavailable
 checks during bootstrap.
 
 ```bash
@@ -42,11 +42,9 @@ pnpm build
 pnpm build
 ```
 
-
-
 ## Tooling: this repository ships its own `.claude/`
 
-Open `waypoint-webapp/` as the workspace root to activate it. The `wp-web-*` agents, the `/wp-*`
+Open `cadenway-webapp/` as the workspace root to activate it. The `cw-web-*` agents, the `/cw-*`
 commands, the skills and the hooks are described in [.claude/README.md](.claude/README.md). Two things
 the session listing does not tell you:
 
@@ -59,5 +57,5 @@ the session listing does not tell you:
   registry publishing, and `format.mjs` formats supported files when its formatter is available.
   Apply the repository rules across tools. Resolve a refusal without bypassing the hook.
 
-The sibling repositories (`../waypoint-design-system`, `../waypoint-api-contracts`, `../waypoint-api-gateway`, `../waypoint-ops`) are read-only references
+The sibling repositories (`../cadenway-design-system`, `../cadenway-api-contracts`, `../cadenway-api-gateway`, `../cadenway-ops`) are read-only references
 from here; add them to the session (`--add-dir`) when a task needs to read them.

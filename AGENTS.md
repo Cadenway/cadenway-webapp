@@ -1,4 +1,4 @@
-# waypoint-webapp: agent instructions
+# cadenway-webapp: agent instructions
 
 These instructions are mandatory for every AI assistant working in this repository, whatever the
 vendor. [CLAUDE.md](CLAUDE.md) imports them for Claude Code. Explicit user instructions take
@@ -11,7 +11,7 @@ and [Codex](.codex/README.md) for agents, skills, commands and hooks.
 
 - The `FEATURE.md` of the feature you touch.
 - The mockup screen you implement (`docs/maquette/source/*.dc.html`, or the live mockup) and its section in the [integration guide](https://claude.ai/artifact/CpJHVCiFfF9j3KbHQ2S1Et).
-- The [repositories document](https://claude.ai/artifact/BPinmYxoF3mbK8w9BMB43N), section "waypoint-webapp".
+- The [repositories document](https://claude.ai/artifact/BPinmYxoF3mbK8w9BMB43N), section "cadenway-webapp".
 - `package.json` for versions and scripts once the repository is bootstrapped. Do not restate
   versions elsewhere: a copy goes stale.
 
@@ -19,7 +19,7 @@ and [Codex](.codex/README.md) for agents, skills, commands and hooks.
 
 The structure and workflows below describe the bootstrap target. Check the checkout for available files and commands.
 
-waypoint-webapp is the whole application of the mockup, from the sign-in screens to the settings: Angular 22, Tailwind 4, Signal Forms, `@waypoint/ui`, `@waypoint/api-client`. It talks only to `waypoint-api-gateway` (REST) and `waypoint-realtime-gateway` (WebSocket), ships as a Docker image of static files behind Traefik on `app.<domain>`, and reads the gateway addresses from `public/config.json` at start-up.
+cadenway-webapp is the whole application of the mockup, from the sign-in screens to the settings: Angular 22, Tailwind 4, Signal Forms, `@cadenway/ui`, `@cadenway/api-client`. It talks only to `cadenway-api-gateway` (REST) and `cadenway-realtime-gateway` (WebSocket), ships as a Docker image of static files behind Traefik on `app.<domain>`, and reads the gateway addresses from `public/config.json` at start-up.
 
 ```text
 src/app/
@@ -46,19 +46,19 @@ src/app/
 
 - Business UI belongs to the owning feature folder; `core` is app-wide infrastructure only (shell, config, API client setup, realtime, theme, shortcuts).
 - Pages orchestrate; presentational components only take inputs and emit outputs.
-- Generic visual bricks belong to waypoint-design-system, never here.
+- Generic visual bricks belong to cadenway-design-system, never here.
 
 ## Boundaries (hard rules)
 
 - `core` never imports a feature; features import each other only through entries declared in the owner's `FEATURE.md`.
-- No `shared/ui`, no local copy of a `@waypoint/ui` brick, no other component library.
+- No `shared/ui`, no local copy of a `@cadenway/ui` brick, no other component library.
 - No `HttpClient` to reach the API; no hand-built API URL.
 - Signal Forms only: never `ReactiveFormsModule`, `FormBuilder`, `FormGroup`, `FormControl`.
 - `docs/maquette/` is a read-only reference copy of the mockup.
 
 ## GitHub files (`.github/`)
 
-This repository carries everything GitHub reads from it; Waypoint has no organization `.github`
+This repository carries everything GitHub reads from it; Cadenway has no organization `.github`
 repository and nothing is inherited.
 
 - [`.github/README.md`](.github/README.md) is the repository home page; `CONTRIBUTING.md`,
@@ -70,21 +70,20 @@ repository and nothing is inherited.
 - The parts shared with the other repositories are duplicated on purpose; a change to them is repeated
   in each repository through its own pull request.
 
-
 ## Commands and quality gates
 
 The scripts below are this repository's contract. While the repository is being bootstrapped,
 create them with these exact names; afterwards, use them and never an ad-hoc equivalent. Run the
 narrowest check that covers the change first, then widen:
 
-| Changed | Minimum check |
-| --- | --- |
-| Components, templates | `pnpm test -- <area>`, `pnpm lint`, `pnpm build` (strict templates) |
-| State, services | `pnpm test -- <area>`, then `pnpm test:coverage` |
-| Routes, guards | `pnpm build` |
-| Browser flows | `pnpm e2e -- <spec>` |
-| Copy | `wp-web-copy-reviewer` against the mockup |
-| Docs or agent instructions only | Scoped formatting and link review |
+| Changed                         | Minimum check                                                              |
+| ------------------------------- | -------------------------------------------------------------------------- |
+| Components, templates           | `pnpm test --include <area>`, `pnpm lint`, `pnpm build` (strict templates) |
+| State, services                 | `pnpm test --include <area>`, then `pnpm test:coverage`                    |
+| Routes, guards                  | `pnpm build`                                                               |
+| Browser flows                   | `pnpm e2e <spec>`                                                          |
+| Copy                            | `cw-web-copy-reviewer` against the mockup                                  |
+| Docs or agent instructions only | Scoped formatting and link review                                          |
 
 Report the commands you actually ran and their results; a check you did not run is reported as not
 run.
@@ -93,11 +92,11 @@ run.
 
 - Trunk-based: work branches come from `main`, named `<type>/<lowercase-kebab-description>` with a
   type among `feat`, `fix`, `docs`, `style`, `refactor`, `perf`, `test`, `build`, `ci`, `chore`,
-  `revert`; put the Waypoint task id first when there is one (`feat/way-482-sso-screen`). Never an
+  `revert`; put the Cadenway task id first when there is one (`feat/cad-482-sso-screen`). Never an
   agent name as a prefix. Validate with `git check-ref-format --branch <name>`.
 - Commits and PR titles follow Conventional Commits: `type(scope): subject`, English, imperative,
   lowercase subject, no trailing period, at most 100 characters; `!` only for a breaking change.
-- Pull requests target `main` and are squash-merged after review and green CI. release-please opens the release pull request; its merge tags, publishes the image and lets the deploy workflow write the version into waypoint-ops.
+- Pull requests target `main` and are squash-merged after review and green CI. release-please opens the release pull request; its merge tags, publishes the image and lets the deploy workflow write the version into cadenway-ops.
 - Stage only the files of your task; preserve other people's changes in the working tree.
 
 ## Hard limits (never without the user's explicit request in this conversation)
@@ -106,12 +105,11 @@ run.
 - Never run a registry publish (`npm publish`, `pnpm publish`): this repository ships as a Docker image built by CI.
 - Never force-push, and never amend or rebase commits that are already pushed.
 - Never bypass the Git hooks (`--no-verify`, `core.hooksPath` overrides, `ALLOW_MAIN_PUSH=1`,
-  `WP_SKIP_PUSH_CHECKS=1`).
+  `CW_SKIP_PUSH_CHECKS=1`).
 - Never write a token, password or private key anywhere; `.npmrc` keeps `${NODE_AUTH_TOKEN}`. Do
   not read or write secret environment files; new variables are documented in `.env.example`.
 - Never edit generated trees (`dist/`, `node_modules/`, `coverage/`) or lockfiles by hand.
-- Never modify a sibling checkout (`../waypoint-*`) from a task in this repository.
-
+- Never modify a sibling checkout (`../cadenway-*`) from a task in this repository.
 
 The agent hooks enforce most of these mechanically; a refused command is a signal to stop and ask,
 not to find another way around it.
@@ -119,11 +117,11 @@ not to find another way around it.
 ## Agent tooling
 
 - **Claude Code**: [CLAUDE.md](CLAUDE.md) and [.claude/README.md](.claude/README.md): the
-  `wp-web-*` agents, the `/wp-*` commands (`/wp-quality` runs the whole local gate),
+  `cw-web-*` agents, the `/cw-*` commands (`/cw-quality` runs the whole local gate),
   path-scoped rules and hooks.
-- **Codex**: [.codex/README.md](.codex/README.md) covers the specialists, `$wp-*` skills, rules and hooks.
-- **Builders** (assigned writes): `wp-web-feature-builder`, `wp-web-component-builder`, `wp-web-form-builder`, `wp-web-overlay-builder`, `wp-web-collection-builder`, `wp-web-service-builder`, `wp-web-state-builder`, `wp-web-realtime-builder`, `wp-web-routing-builder`, `wp-web-ui-consumer`, `wp-web-test-writer`, `wp-web-e2e-runner`, `wp-web-github-maintainer`.
-- **Reviewers** (read-only): `wp-web-design-reviewer`, `wp-web-a11y-auditor`, `wp-web-architecture-reviewer`, `wp-web-security-auditor`, `wp-web-performance-reviewer`, `wp-web-api-contract-reviewer`, `wp-web-motion-reviewer`, `wp-web-copy-reviewer`.
+- **Codex**: [.codex/README.md](.codex/README.md) covers the specialists, `$cw-*` skills, rules and hooks.
+- **Builders** (assigned writes): `cw-web-feature-builder`, `cw-web-component-builder`, `cw-web-form-builder`, `cw-web-overlay-builder`, `cw-web-collection-builder`, `cw-web-service-builder`, `cw-web-state-builder`, `cw-web-realtime-builder`, `cw-web-routing-builder`, `cw-web-ui-consumer`, `cw-web-test-writer`, `cw-web-e2e-runner`, `cw-web-github-maintainer`.
+- **Reviewers** (read-only): `cw-web-design-reviewer`, `cw-web-a11y-auditor`, `cw-web-architecture-reviewer`, `cw-web-security-auditor`, `cw-web-performance-reviewer`, `cw-web-api-contract-reviewer`, `cw-web-motion-reviewer`, `cw-web-copy-reviewer`.
 - Specialists are available, not mandatory. Delegate a bounded responsibility with explicit files and
   checks, assign disjoint files to parallel agents and integrate their results yourself.
 
