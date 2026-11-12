@@ -5,6 +5,6 @@ description: "How to test Waypoint web components, state and services with Vites
 
 # Web testing
 
-- `pnpm test -- <glob ending in .spec.ts>`.
+- `pnpm test --include <glob ending in .spec.ts>`.
 - Render with the testing utilities; locate by role and name; interact with user events.
 - Fake the api-client per test; assert loading, success, error and retry.

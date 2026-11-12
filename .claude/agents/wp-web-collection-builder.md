@@ -57,7 +57,7 @@ Load them with the `Skill` tool when their subject comes up (if the tool is unav
 
 ## Checks
 
-- `pnpm test -- src/app/spaces/views`
+- `pnpm test --include src/app/spaces/views`
 
 ## Report
 

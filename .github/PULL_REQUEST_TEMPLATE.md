@@ -20,10 +20,10 @@ Fixes: WAY-
 - [ ] `pnpm format:check`
 - [ ] `pnpm lint`
 - [ ] `pnpm typecheck`
-- [ ] `pnpm test -- "src/app/<area>/**/*.spec.ts"`
+- [ ] `pnpm test --include "src/app/<area>/**/*.spec.ts"`
 - [ ] `pnpm test:coverage`
 - [ ] `pnpm build`
-- [ ] `pnpm e2e -- <spec>`
+- [ ] `pnpm e2e <spec>`
 
 ## Contracts
 

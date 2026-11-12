@@ -55,7 +55,7 @@ Load them with the `Skill` tool when their subject comes up (if the tool is unav
 
 ## Checks
 
-- `pnpm test -- <feature>/data-access`
+- `pnpm test --include <feature>/data-access`
 
 ## Report
 

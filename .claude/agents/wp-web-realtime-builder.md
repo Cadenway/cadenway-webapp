@@ -46,7 +46,7 @@ Read the request, then re-read it against what you are about to do. Everything b
 
 ## Checks
 
-- `pnpm test -- src/app/core/realtime`
+- `pnpm test --include src/app/core/realtime`
 
 ## Report
 

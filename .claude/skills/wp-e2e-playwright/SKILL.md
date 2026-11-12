@@ -8,4 +8,4 @@ description: "How to run Waypoint end-to-end scenarios locally against the Docke
 1. Start the stack: `docker compose -f compose.yaml -f compose.local.yaml --profile core up -d` in
    `../waypoint-ops/compose` (read-only reference from here: run it, do not edit it).
 2. Start the app with `pnpm start` (or reuse a running one).
-3. `pnpm e2e -- <spec>`; traces and screenshots of failures stay in `test-results/`.
+3. `pnpm e2e <spec>`; traces and screenshots of failures stay in `test-results/`.

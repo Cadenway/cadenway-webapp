@@ -40,10 +40,10 @@ Run the narrowest check first; CI runs them all on every pull request.
 pnpm format:check
 pnpm lint
 pnpm typecheck
-pnpm test -- "src/app/<area>/**/*.spec.ts"   # targeted
+pnpm test --include "src/app/<area>/**/*.spec.ts"   # targeted
 pnpm test:coverage
 pnpm build
-pnpm e2e -- <spec>                          # browser flows, stack running
+pnpm e2e <spec>                          # browser flows, stack running
 ```
 
 ## Contributing
