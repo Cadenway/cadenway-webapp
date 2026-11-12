@@ -7,7 +7,7 @@ import {
 import { provideRouter } from '@angular/router';
 
 import { routes } from './app.routes';
-import { RuntimeConfigStore } from './core/config/runtime-config';
+import { RuntimeConfigStore } from './core/config/runtime-config-store';
 
 /** Root providers of the application. */
 export const appConfig: ApplicationConfig = {

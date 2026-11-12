@@ -10,7 +10,8 @@ None yet.
 
 ## Public entry points
 
-- `config/runtime-config.ts`: `RuntimeConfigStore`, the gateway addresses read from `config.json`.
+- `config/runtime-config-store.ts`: `RuntimeConfigStore` (NgRx SignalStore, root), the gateway addresses read from `config.json`; `config()` throws before the application initializer has loaded it.
+- `config/runtime-config.ts`: the `RuntimeConfig` type and `parseRuntimeConfig`.
 
 ## Dependencies
 

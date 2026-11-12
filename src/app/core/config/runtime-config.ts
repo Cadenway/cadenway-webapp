@@ -1,5 +1,3 @@
-import { Service, signal } from '@angular/core';
-
 /** Addresses of the two gateways, the only backends this application talks to. */
 export interface RuntimeConfig {
   /** Base URL of cadenway-api-gateway (REST). */
@@ -31,43 +29,4 @@ function readAddress(value: unknown, key: keyof RuntimeConfig): string {
     throw new TypeError(`config.json: "${key}" must be a non-empty string.`);
   }
   return value;
-}
-
-/**
- * Holds the configuration the environment mounts as `config.json`.
- *
- * The file is fetched when the application starts instead of being compiled in, so the same Docker
- * image runs in staging and in production.
- */
-@Service()
-export class RuntimeConfigStore {
-  private readonly loaded = signal<RuntimeConfig | null>(null);
-
-  /**
-   * The loaded configuration.
-   *
-   * @throws {Error} When read before {@link load} has completed.
-   */
-  public get config(): RuntimeConfig {
-    const config = this.loaded();
-    if (config === null) {
-      throw new Error('The runtime configuration is read before the application initializer ran.');
-    }
-    return config;
-  }
-
-  /**
-   * Fetches and validates `config.json`; called once by the application initializer.
-   *
-   * @throws {Error} When the file cannot be fetched.
-   * @throws {TypeError} When its content is not a valid configuration.
-   */
-  public async load(): Promise<void> {
-    // `no-store`: a new deployment may mount a different file under the same URL.
-    const response = await fetch('config.json', { cache: 'no-store' });
-    if (!response.ok) {
-      throw new Error(`config.json could not be loaded (HTTP ${String(response.status)}).`);
-    }
-    this.loaded.set(parseRuntimeConfig(await response.json()));
-  }
 }
