@@ -10,14 +10,14 @@ The app consumes the published API client and UI packages and communicates with 
 
 ## Angular22 Conventions
 
-Source: `wp-angular22-conventions` ([Claude](../.claude/skills/wp-angular22-conventions/SKILL.md), [Codex](../.codex/skills/wp-angular22-conventions/SKILL.md)).
+Source: `cw-angular22-conventions` ([Claude](../.claude/skills/cw-angular22-conventions/SKILL.md), [Codex](../.codex/skills/cw-angular22-conventions/SKILL.md)).
 
 | Element                 | Convention                       | Example                                |
 | ----------------------- | -------------------------------- | -------------------------------------- |
-| Selector                | `wp-` + kebab-case               | `wp-task-row`                          |
+| Selector                | `cw-` + kebab-case               | `cw-task-row`                          |
 | Class                   | PascalCase, no suffix            | `TaskRow`                              |
 | Files                   | kebab-case                       | `task-row.ts`, `task-row.html`         |
-| Attribute directive     | `wp` + camelCase                 | `[wpSwap]`                             |
+| Attribute directive     | `cw` + camelCase                 | `[cwSwap]`                             |
 | Inputs, outputs, models | `input()`, `output()`, `model()` | `status = input.required<StatusKey>()` |
 | Injectable              | `@Service()`                     | `@Service() export class TaskApi`      |
 
@@ -26,15 +26,15 @@ Source: `wp-angular22-conventions` ([Claude](../.claude/skills/wp-angular22-conv
 - Async data: `resource()` or the established helper, backed by the generated client (loading → skeleton, error →
   error panel, `reload()` → Réessayer).
 - Overlays: CDK Overlay and Angular Aria (`ngMenu`, `ngCombobox`, `ngListbox`, `ngTabs`) through
-  `@waypoint/ui`.
+  `@cadenway/ui`.
 
 ## Api Client Data Access
 
-Source: `wp-api-client-data-access` ([Claude](../.claude/skills/wp-api-client-data-access/SKILL.md), [Codex](../.codex/skills/wp-api-client-data-access/SKILL.md)).
+Source: `cw-api-client-data-access` ([Claude](../.claude/skills/cw-api-client-data-access/SKILL.md), [Codex](../.codex/skills/cw-api-client-data-access/SKILL.md)).
 
 ```text
 <feature>/data-access/
-├─ services/<concern>.ts     ← calls @waypoint/api-client, returns display models
+├─ services/<concern>.ts     ← calls @cadenway/api-client, returns display models
 └─ adapters/<concept>.ts     ← pure DTO → model functions, unit tested
 ```
 
@@ -45,7 +45,7 @@ Source: `wp-api-client-data-access` ([Claude](../.claude/skills/wp-api-client-da
 
 ## Status Interactions
 
-Source: `wp-status-interactions` ([Claude](../.claude/skills/wp-status-interactions/SKILL.md), [Codex](../.codex/skills/wp-status-interactions/SKILL.md)).
+Source: `cw-status-interactions` ([Claude](../.claude/skills/cw-status-interactions/SKILL.md), [Codex](../.codex/skills/cw-status-interactions/SKILL.md)).
 
 - Status change: icon and label update at once; the row joins its new group 460 ms later when the
   view groups by status.

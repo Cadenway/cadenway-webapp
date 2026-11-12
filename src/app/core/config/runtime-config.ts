@@ -2,9 +2,9 @@ import { Service, signal } from '@angular/core';
 
 /** Addresses of the two gateways, the only backends this application talks to. */
 export interface RuntimeConfig {
-  /** Base URL of waypoint-api-gateway (REST). */
+  /** Base URL of cadenway-api-gateway (REST). */
   readonly apiUrl: string;
-  /** Base URL of waypoint-realtime-gateway (WebSocket). */
+  /** Base URL of cadenway-realtime-gateway (WebSocket). */
   readonly realtimeUrl: string;
 }
 

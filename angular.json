@@ -7,7 +7,7 @@
   },
   "newProjectRoot": "projects",
   "projects": {
-    "waypoint-webapp": {
+    "cadenway-webapp": {
       "projectType": "application",
       "schematics": {},
       "root": "",
@@ -55,10 +55,10 @@
           "builder": "@angular/build:dev-server",
           "configurations": {
             "production": {
-              "buildTarget": "waypoint-webapp:build:production"
+              "buildTarget": "cadenway-webapp:build:production"
             },
             "development": {
-              "buildTarget": "waypoint-webapp:build:development"
+              "buildTarget": "cadenway-webapp:build:development"
             }
           },
           "defaultConfiguration": "development"

@@ -4,8 +4,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { parseRuntimeConfig, RuntimeConfigStore } from './runtime-config';
 
 const localConfig = {
-  apiUrl: 'http://api.waypoint.localhost',
-  realtimeUrl: 'http://realtime.waypoint.localhost',
+  apiUrl: 'http://api.cadenway.localhost',
+  realtimeUrl: 'http://realtime.cadenway.localhost',
 };
 
 describe('parseRuntimeConfig', () => {

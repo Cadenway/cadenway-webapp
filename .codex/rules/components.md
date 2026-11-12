@@ -6,7 +6,7 @@ paths:
 
 # Angular components
 
-- **No `Component` suffix**: `TaskRow`, file `task-row.ts`, selector `wp-task-row`. Pages end in `Page`
+- **No `Component` suffix**: `TaskRow`, file `task-row.ts`, selector `cw-task-row`. Pages end in `Page`
   and live under `ui/pages/<name>-page/`.
 - Signal APIs only: `input()`, `input.required()`, `output()`, `model()`; control flow `@if`, `@for`
   (with `track`), `@switch`; `@defer` for heavy parts. No `standalone: true` (default), no
@@ -15,6 +15,6 @@ paths:
   what the template reads, `private` for injected collaborators (`inject()`).
 - Outputs are past-tense or nouns: `opened`, `statusChanged`, never `onOpen`.
 - Only pages inject state or services; presentational components take inputs and emit outputs.
-- Visual bricks come from `@waypoint/ui`; icons through `<ng-icon name="phosphor…Bold" />` registered by
-  `provideWaypointIcons()`.
+- Visual bricks come from `@cadenway/ui`; icons through `<ng-icon name="phosphor…Bold" />` registered by
+  `provideCadenwayIcons()`.
 - French copy word for word from the mockup.

@@ -7,6 +7,6 @@ test('the application starts and loads its runtime configuration', async ({ page
   await page.goto('/');
 
   expect((await config).ok()).toBe(true);
-  await expect(page).toHaveTitle('Waypoint');
-  await expect(page.locator('wp-root')).toBeAttached();
+  await expect(page).toHaveTitle('Cadenway');
+  await expect(page.locator('cw-root')).toBeAttached();
 });

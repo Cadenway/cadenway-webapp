@@ -1,6 +1,6 @@
-# waypoint-webapp: Claude Code tooling
+# cadenway-webapp: Claude Code tooling
 
-This `.claude/` folder ships the Claude Code tooling of waypoint-webapp: **21 agents**,
+This `.claude/` folder ships the Claude Code tooling of cadenway-webapp: **21 agents**,
 22 slash commands, 16 rules, 20 skills, 3 hooks, the project
 settings and launch configuration. The application launch requires the planned package scripts.
 
@@ -27,11 +27,11 @@ Start from [AGENTS.md](../AGENTS.md) (the rules every assistant follows) and [CL
 Start from this checkout and attach the peers you need, for example:
 
 ```powershell
-claude --add-dir ../waypoint-design-system ../waypoint-api-contracts ../waypoint-api-gateway
+claude --add-dir ../cadenway-design-system ../cadenway-api-contracts ../cadenway-api-gateway
 ```
 
-Their `.claude/agents/` are discovered too, so their `wp-*` roles become available. Peer checkouts
-are **read-only** from a waypoint-webapp session (the guard refuses edits there): change them in their
+Their `.claude/agents/` are discovered too, so their `cw-*` roles become available. Peer checkouts
+are **read-only** from a cadenway-webapp session (the guard refuses edits there): change them in their
 own session and pull request.
 
 ## Agents
@@ -42,54 +42,54 @@ check that writes files. No agent delegates further.
 
 | Agent | Responsibility | Model | Effort | Mode |
 | --- | --- | --- | --- | --- |
-| `wp-web-feature-builder` | Feature ownership, routes, public API, FEATURE.md. | opus | high | Assigned writes |
-| `wp-web-component-builder` | Pages and presentational components from @waypoint/ui. | sonnet | high | Assigned writes |
-| `wp-web-form-builder` | Signal Forms, validation and messages. | sonnet | high | Assigned writes |
-| `wp-web-overlay-builder` | Menus, popovers, dialogs, context menus, confirmations. | sonnet | high | Assigned writes |
-| `wp-web-collection-builder` | List, board, calendar, Gantt, workload and sheet views. | opus | high | Assigned writes |
-| `wp-web-service-builder` | Data access over @waypoint/api-client. | sonnet | high | Assigned writes |
-| `wp-web-state-builder` | Signal state, optimistic updates, fast-click handling. | opus | high | Assigned writes |
-| `wp-web-realtime-builder` | WebSocket client and pushed changes. | sonnet | high | Assigned writes |
-| `wp-web-routing-builder` | Routes, guards, lazy loading, error pages. | opus | high | Assigned writes |
-| `wp-web-ui-consumer` | Compose from @waypoint/ui; relay missing bricks. | sonnet | high | Assigned writes |
-| `wp-web-test-writer` | Component, state and service tests. | sonnet | high | Assigned writes |
-| `wp-web-e2e-runner` | Playwright scenarios of the mockup flows. | sonnet | high | Assigned writes |
-| `wp-web-design-reviewer` | Visual fidelity to the mockup. | sonnet | high | Read-only |
-| `wp-web-a11y-auditor` | Roles, labels, focus, keyboard. | sonnet | high | Read-only |
-| `wp-web-architecture-reviewer` | Feature boundaries, imports, data access. | opus | xhigh | Read-only |
-| `wp-web-security-auditor` | Session, tokens, HTML, redirects. | opus | xhigh | Read-only |
-| `wp-web-performance-reviewer` | Bundle, lazy loading, rendering cost. | sonnet | high | Read-only |
-| `wp-web-api-contract-reviewer` | Data access against the contracts. | opus | high | Read-only |
-| `wp-web-motion-reviewer` | Animation timings and reduced motion. | sonnet | medium | Read-only |
-| `wp-web-copy-reviewer` | French copy against the mockup. | sonnet | medium | Read-only |
-| `wp-web-github-maintainer` | Workflows, templates and community files in .github/. | sonnet | medium | Assigned writes |
+| `cw-web-feature-builder` | Feature ownership, routes, public API, FEATURE.md. | opus | high | Assigned writes |
+| `cw-web-component-builder` | Pages and presentational components from @cadenway/ui. | sonnet | high | Assigned writes |
+| `cw-web-form-builder` | Signal Forms, validation and messages. | sonnet | high | Assigned writes |
+| `cw-web-overlay-builder` | Menus, popovers, dialogs, context menus, confirmations. | sonnet | high | Assigned writes |
+| `cw-web-collection-builder` | List, board, calendar, Gantt, workload and sheet views. | opus | high | Assigned writes |
+| `cw-web-service-builder` | Data access over @cadenway/api-client. | sonnet | high | Assigned writes |
+| `cw-web-state-builder` | Signal state, optimistic updates, fast-click handling. | opus | high | Assigned writes |
+| `cw-web-realtime-builder` | WebSocket client and pushed changes. | sonnet | high | Assigned writes |
+| `cw-web-routing-builder` | Routes, guards, lazy loading, error pages. | opus | high | Assigned writes |
+| `cw-web-ui-consumer` | Compose from @cadenway/ui; relay missing bricks. | sonnet | high | Assigned writes |
+| `cw-web-test-writer` | Component, state and service tests. | sonnet | high | Assigned writes |
+| `cw-web-e2e-runner` | Playwright scenarios of the mockup flows. | sonnet | high | Assigned writes |
+| `cw-web-design-reviewer` | Visual fidelity to the mockup. | sonnet | high | Read-only |
+| `cw-web-a11y-auditor` | Roles, labels, focus, keyboard. | sonnet | high | Read-only |
+| `cw-web-architecture-reviewer` | Feature boundaries, imports, data access. | opus | xhigh | Read-only |
+| `cw-web-security-auditor` | Session, tokens, HTML, redirects. | opus | xhigh | Read-only |
+| `cw-web-performance-reviewer` | Bundle, lazy loading, rendering cost. | sonnet | high | Read-only |
+| `cw-web-api-contract-reviewer` | Data access against the contracts. | opus | high | Read-only |
+| `cw-web-motion-reviewer` | Animation timings and reduced motion. | sonnet | medium | Read-only |
+| `cw-web-copy-reviewer` | French copy against the mockup. | sonnet | medium | Read-only |
+| `cw-web-github-maintainer` | Workflows, templates and community files in .github/. | sonnet | medium | Assigned writes |
 
 ## Commands
 
 | Command | What it does | Runs |
 | --- | --- | --- |
-| `/wp-feature` | Create or reshape a feature and its FEATURE.md. | `wp-web-feature-builder` |
-| `/wp-component` | Build a page or a presentational component. | `wp-web-component-builder` |
-| `/wp-form` | Build a Signal Form. | `wp-web-form-builder` |
-| `/wp-overlay` | Build a menu, popover, dialog or confirmation. | `wp-web-overlay-builder` |
-| `/wp-view` | Build a space view (list, board, calendar, Gantt…). | `wp-web-collection-builder` |
-| `/wp-service` | Build data access over @waypoint/api-client. | `wp-web-service-builder` |
-| `/wp-state` | Build feature state with signals. | `wp-web-state-builder` |
-| `/wp-realtime` | Connect pushed changes from the realtime gateway. | `wp-web-realtime-builder` |
-| `/wp-route` | Change routes, guards or error pages. | `wp-web-routing-builder` |
-| `/wp-ui` | Compose from @waypoint/ui or request a missing brick. | `wp-web-ui-consumer` |
-| `/wp-test` | Write unit or component tests. | `wp-web-test-writer` |
-| `/wp-e2e` | Write or run a Playwright scenario. | `wp-web-e2e-runner` |
-| `/wp-design-review` | Compare a screen with the mockup. | `wp-web-design-reviewer` |
-| `/wp-a11y` | Audit accessibility. | `wp-web-a11y-auditor` |
-| `/wp-arch-review` | Review boundaries of the current change. | `wp-web-architecture-reviewer` |
-| `/wp-security-review` | Audit frontend security. | `wp-web-security-auditor` |
-| `/wp-perf-review` | Review performance. | `wp-web-performance-reviewer` |
-| `/wp-contract-review` | Check data access against the contracts. | `wp-web-api-contract-reviewer` |
-| `/wp-motion-review` | Review animations. | `wp-web-motion-reviewer` |
-| `/wp-copy-review` | Check French copy against the mockup. | `wp-web-copy-reviewer` |
-| `/wp-github` | Change workflows, templates or community files in .github/. | `wp-web-github-maintainer` |
-| `/wp-quality` | Run the local quality gate, stopping at the first failure. | runs the commands itself |
+| `/cw-feature` | Create or reshape a feature and its FEATURE.md. | `cw-web-feature-builder` |
+| `/cw-component` | Build a page or a presentational component. | `cw-web-component-builder` |
+| `/cw-form` | Build a Signal Form. | `cw-web-form-builder` |
+| `/cw-overlay` | Build a menu, popover, dialog or confirmation. | `cw-web-overlay-builder` |
+| `/cw-view` | Build a space view (list, board, calendar, Gantt…). | `cw-web-collection-builder` |
+| `/cw-service` | Build data access over @cadenway/api-client. | `cw-web-service-builder` |
+| `/cw-state` | Build feature state with signals. | `cw-web-state-builder` |
+| `/cw-realtime` | Connect pushed changes from the realtime gateway. | `cw-web-realtime-builder` |
+| `/cw-route` | Change routes, guards or error pages. | `cw-web-routing-builder` |
+| `/cw-ui` | Compose from @cadenway/ui or request a missing brick. | `cw-web-ui-consumer` |
+| `/cw-test` | Write unit or component tests. | `cw-web-test-writer` |
+| `/cw-e2e` | Write or run a Playwright scenario. | `cw-web-e2e-runner` |
+| `/cw-design-review` | Compare a screen with the mockup. | `cw-web-design-reviewer` |
+| `/cw-a11y` | Audit accessibility. | `cw-web-a11y-auditor` |
+| `/cw-arch-review` | Review boundaries of the current change. | `cw-web-architecture-reviewer` |
+| `/cw-security-review` | Audit frontend security. | `cw-web-security-auditor` |
+| `/cw-perf-review` | Review performance. | `cw-web-performance-reviewer` |
+| `/cw-contract-review` | Check data access against the contracts. | `cw-web-api-contract-reviewer` |
+| `/cw-motion-review` | Review animations. | `cw-web-motion-reviewer` |
+| `/cw-copy-review` | Check French copy against the mockup. | `cw-web-copy-reviewer` |
+| `/cw-github` | Change workflows, templates or community files in .github/. | `cw-web-github-maintainer` |
+| `/cw-quality` | Run the local quality gate, stopping at the first failure. | runs the commands itself |
 
 ## Rules
 
@@ -118,17 +118,17 @@ See [skills/](skills/) for the complete inventory, including the technology guid
 
 | Skill | Use |
 | --- | --- |
-| `wp-context` | What Waypoint is, where the mockup, the integration guide and the repository map live, the product vocabulary (spaces, lists, sprints, tasks, statuses, milestones) and the multi-repository ownership rules. |
-| `wp-mockup` | Where the mockup lives (docs/maquette/source and the live artifact), what each artboard covers, how to read a .dc.html file and its properties, and which guide section maps each screen to Angular components. |
-| `wp-angular22-conventions` | The Angular 22 conventions this app follows: file and class names without suffix, wp- selectors, signal inputs, outputs and models, control flow, OnPush default, Signal Forms, @Service(), resource APIs. |
-| `wp-ui-consumer` | Which @waypoint/ui brick to use for each mockup pattern, how to import tokens and icons, and how to request a missing brick from waypoint-design-system. |
-| `wp-api-client-data-access` | How a feature reaches the API: generated client, data-access services, pure adapters to display models, loading and error states, partial aggregates. |
-| `wp-signal-forms` | How to build a Waypoint form with Signal Forms: model signal, schema rules, field binding, messages from the mockup, submit and focus behavior. |
-| `wp-overlay-placement` | The placement, sizing and dismissal rules of every menu, popover and dialog in Waypoint, from the mockup and the guide. |
-| `wp-status-interactions` | The mockup rules for status changes, fast clicks, toasts with undo, confirmations and the cancel-reason dialog. |
-| `wp-web-testing` | How to test Waypoint web components, state and services with Vitest and Angular testing utilities, with mockup fixtures. |
-| `wp-e2e-playwright` | How to run Waypoint end-to-end scenarios locally against the Docker Compose stack, with evidence. |
-| `wp-feature-md` | The canonical sections of a feature FEATURE.md and the changes that make updating it mandatory. |
+| `cw-context` | What Cadenway is, where the mockup, the integration guide and the repository map live, the product vocabulary (spaces, lists, sprints, tasks, statuses, milestones) and the multi-repository ownership rules. |
+| `cw-mockup` | Where the mockup lives (docs/maquette/source and the live artifact), what each artboard covers, how to read a .dc.html file and its properties, and which guide section maps each screen to Angular components. |
+| `cw-angular22-conventions` | The Angular 22 conventions this app follows: file and class names without suffix, cw- selectors, signal inputs, outputs and models, control flow, OnPush default, Signal Forms, @Service(), resource APIs. |
+| `cw-ui-consumer` | Which @cadenway/ui brick to use for each mockup pattern, how to import tokens and icons, and how to request a missing brick from cadenway-design-system. |
+| `cw-api-client-data-access` | How a feature reaches the API: generated client, data-access services, pure adapters to display models, loading and error states, partial aggregates. |
+| `cw-signal-forms` | How to build a Cadenway form with Signal Forms: model signal, schema rules, field binding, messages from the mockup, submit and focus behavior. |
+| `cw-overlay-placement` | The placement, sizing and dismissal rules of every menu, popover and dialog in Cadenway, from the mockup and the guide. |
+| `cw-status-interactions` | The mockup rules for status changes, fast clicks, toasts with undo, confirmations and the cancel-reason dialog. |
+| `cw-web-testing` | How to test Cadenway web components, state and services with Vitest and Angular testing utilities, with mockup fixtures. |
+| `cw-e2e-playwright` | How to run Cadenway end-to-end scenarios locally against the Docker Compose stack, with evidence. |
+| `cw-feature-md` | The canonical sections of a feature FEATURE.md and the changes that make updating it mandatory. |
 
 ## Hooks
 

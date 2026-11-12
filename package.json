@@ -1,7 +1,7 @@
 {
-  "name": "waypoint-webapp",
+  "name": "cadenway-webapp",
   "version": "0.0.0",
-  "description": "Waypoint web application: the Angular application of the mockup.",
+  "description": "Cadenway web application: the Angular application of the mockup.",
   "private": true,
   "license": "UNLICENSED",
   "packageManager": "pnpm@12.18.0",

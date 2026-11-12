@@ -10,7 +10,7 @@ The following architecture is the target recorded in [AGENTS.md](../AGENTS.md). 
 
 ## Purpose and target structure
 
-waypoint-webapp is the whole application of the mockup, from the sign-in screens to the settings: Angular 22, Tailwind 4, Signal Forms, `@waypoint/ui`, `@waypoint/api-client`. It talks only to `waypoint-api-gateway` (REST) and `waypoint-realtime-gateway` (WebSocket), ships as a Docker image of static files behind Traefik on `app.<domain>`, and reads the gateway addresses from `public/config.json` at start-up.
+cadenway-webapp is the whole application of the mockup, from the sign-in screens to the settings: Angular 22, Tailwind 4, Signal Forms, `@cadenway/ui`, `@cadenway/api-client`. It talks only to `cadenway-api-gateway` (REST) and `cadenway-realtime-gateway` (WebSocket), ships as a Docker image of static files behind Traefik on `app.<domain>`, and reads the gateway addresses from `public/config.json` at start-up.
 
 ```text
 src/app/
@@ -26,16 +26,16 @@ src/app/
 
 - Business UI belongs to the owning feature folder; `core` is app-wide infrastructure only (shell, config, API client setup, realtime, theme, shortcuts).
 - Pages orchestrate; presentational components only take inputs and emit outputs.
-- Generic visual bricks belong to waypoint-design-system, never here.
+- Generic visual bricks belong to cadenway-design-system, never here.
 
 ## Boundaries
 
 - `core` never imports a feature; features import each other only through entries declared in the owner's `FEATURE.md`.
-- No `shared/ui`, no local copy of a `@waypoint/ui` brick, no other component library.
+- No `shared/ui`, no local copy of a `@cadenway/ui` brick, no other component library.
 - No `HttpClient` to reach the API; no hand-built API URL.
 - Signal Forms only: never `ReactiveFormsModule`, `FormBuilder`, `FormGroup`, `FormControl`.
 - `docs/maquette/` is a read-only reference copy of the mockup.
 
 ## Cross-repository changes
 
-Each checkout owns its implementation and release. Use published `@waypoint/*` packages instead of sibling source imports or local dependency links. For contract changes, make the contract and generated package available first, then update the producing service, gateways and listeners, and finally the webapp. Each step should remain deployable independently.
+Each checkout owns its implementation and release. Use published `@cadenway/*` packages instead of sibling source imports or local dependency links. For contract changes, make the contract and generated package available first, then update the producing service, gateways and listeners, and finally the webapp. Each step should remain deployable independently.

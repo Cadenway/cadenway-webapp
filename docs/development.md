@@ -12,7 +12,7 @@ The commands below are the documented **target workflow**, copied from the repos
 
 - The `FEATURE.md` of the feature you touch.
 - The mockup screen you implement (`docs/maquette/source/*.dc.html`, or the live mockup) and its section in the [integration guide](https://claude.ai/artifact/CpJHVCiFfF9j3KbHQ2S1Et).
-- The [repositories document](https://claude.ai/artifact/BPinmYxoF3mbK8w9BMB43N), section "waypoint-webapp".
+- The [repositories document](https://claude.ai/artifact/BPinmYxoF3mbK8w9BMB43N), section "cadenway-webapp".
 - `package.json` for versions and scripts once the repository is bootstrapped. Do not restate
   versions elsewhere: a copy goes stale.
 
@@ -20,13 +20,13 @@ The commands below are the documented **target workflow**, copied from the repos
 
 Requirements: Node.js LTS and pnpm (versions in `package.json`), and Docker.
 
-1. Clone this repository next to the other Waypoint repositories, flat, in one folder.
-2. To run it with the rest of Waypoint, start the stack from `waypoint-ops`; it builds the sibling
+1. Clone this repository next to the other Cadenway repositories, flat, in one folder.
+2. To run it with the rest of Cadenway, start the stack from `cadenway-ops`; it builds the sibling
    folders. The planned `core` profile provides the core backend. Start this frontend
    separately as shown below:
 
    ```bash
-   cd ../waypoint-ops/compose
+   cd ../cadenway-ops/compose
    docker compose -f compose.yaml -f compose.local.yaml --profile core up -d
    ```
 
@@ -49,7 +49,7 @@ narrowest check that covers the change first, then widen:
 | State, services                 | `pnpm test --include <area>`, then `pnpm test:coverage`                    |
 | Routes, guards                  | `pnpm build`                                                               |
 | Browser flows                   | `pnpm e2e <spec>`                                                          |
-| Copy                            | `wp-web-copy-reviewer` against the mockup                                  |
+| Copy                            | `cw-web-copy-reviewer` against the mockup                                  |
 | Docs or agent instructions only | Scoped formatting and link review                                          |
 
 Report the commands you actually ran and their results; a check you did not run is reported as not
@@ -57,8 +57,8 @@ run.
 
 ## Planned full check list
 
-The following commands match the planned local gate. Run `/wp-quality` in Claude Code or
-`$wp-quality` in Codex without arguments. Verify CI coverage once workflows exist.
+The following commands match the planned local gate. Run `/cw-quality` in Claude Code or
+`$cw-quality` in Codex without arguments. Verify CI coverage once workflows exist.
 
 ```bash
 pnpm format:check
@@ -76,11 +76,11 @@ Run the browser checks separately once the stack is available. Pass the actual s
 
 - Trunk-based: work branches come from `main`, named `<type>/<lowercase-kebab-description>` with a
   type among `feat`, `fix`, `docs`, `style`, `refactor`, `perf`, `test`, `build`, `ci`, `chore`,
-  `revert`; put the Waypoint task id first when there is one (`feat/way-482-sso-screen`). Never an
+  `revert`; put the Cadenway task id first when there is one (`feat/cad-482-sso-screen`). Never an
   agent name as a prefix. Validate with `git check-ref-format --branch <name>`.
 - Commits and PR titles follow Conventional Commits: `type(scope): subject`, English, imperative,
   lowercase subject, no trailing period, at most 100 characters; `!` only for a breaking change.
-- Pull requests target `main` and are squash-merged after review and green CI. release-please opens the release pull request; its merge tags, publishes the image and lets the deploy workflow write the version into waypoint-ops.
+- Pull requests target `main` and are squash-merged after review and green CI. release-please opens the release pull request; its merge tags, publishes the image and lets the deploy workflow write the version into cadenway-ops.
 - Stage only the files of your task; preserve other people's changes in the working tree.
 
 Keep credentials, private keys, decrypted environment files and Terraform state out of documentation and logs. Follow the hard limits in [AGENTS.md](../AGENTS.md); setup instructions do not authorize deployments or changes to real infrastructure.
