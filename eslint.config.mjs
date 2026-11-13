@@ -26,6 +26,17 @@ const ngrxTestingInSpecsOnly = {
   message:
     'unprotected() arranges state in specs only; production code changes state through store methods.',
 };
+// Packages the dependency review rejected, with what replaces each one. A sub-path import is
+// refused too.
+const rejectedPackages = [
+  ['axios', 'The API is reached through @cadenway/api-client only.'],
+  [
+    'date-fns',
+    'It does not separate a plain date from an instant: use Temporal (temporal-polyfill).',
+  ],
+  ['qrcode', 'Use qr: qrcode is CommonJS and frozen since 2024.'],
+  ['uqr', 'Use qr, the maintained choice.'],
+].map(([name, message]) => ({ regex: `^${name}(/|$)`, message }));
 // Store files outside a `state/` folder (core root stores) follow the same rules.
 const storeFiles = ['src/app/**/state/**/*.ts', 'src/app/**/*-store.ts'];
 
@@ -79,7 +90,10 @@ export default defineConfig(
       '@typescript-eslint/no-extraneous-class': ['error', { allowWithDecorator: true }],
       'no-restricted-imports': [
         'error',
-        { paths: [signalFormsOnly], patterns: [noSiblingSources, signalStoreOnly] },
+        {
+          paths: [signalFormsOnly],
+          patterns: [noSiblingSources, signalStoreOnly, ...rejectedPackages],
+        },
       ],
       'no-restricted-syntax': [
         'error',
@@ -112,7 +126,7 @@ export default defineConfig(
               message: 'No HttpClient outside data-access/ and core/api/.',
             },
           ],
-          patterns: [noSiblingSources, signalStoreOnly],
+          patterns: [noSiblingSources, signalStoreOnly, ...rejectedPackages],
         },
       ],
     },
