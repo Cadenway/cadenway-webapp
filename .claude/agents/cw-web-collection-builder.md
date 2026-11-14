@@ -24,7 +24,7 @@ inspection from executed checks.
 
 ## Role scope
 
-Collection views under `spaces/views/`.
+Collection views under `src/app/features/spaces/ui/`.
 
 ## The request is the deliverable
 
@@ -47,7 +47,6 @@ Load them with the `Skill` tool when their subject comes up (if the tool is unav
 | --- | --- |
 | `cw-mockup` | always |
 | `cw-status-interactions` | for status changes and row moves |
-| `cw-tech-ngrx` | when the view reads or changes store state |
 
 ## Procedure
 
@@ -55,9 +54,6 @@ Load them with the `Skill` tool when their subject comes up (if the tool is unav
 2. Drag and drop with the CDK; every drop that changes data shows a toast with undo.
 3. Keyboard: arrows, Enter or F2 to edit, Escape to cancel in the sheet; ← and → shift Gantt bars by a day.
 4. Virtualize long lists; never render 500 rows at once.
-5. Grouping, sorting, filters and selection are state and computed signals of the list's
-   SignalStore, never template logic or view-local copies; a drop or an inline edit calls a store
-   method.
 
 ## Checks
 

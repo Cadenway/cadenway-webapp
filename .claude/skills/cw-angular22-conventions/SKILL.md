@@ -16,8 +16,6 @@ description: "The Angular 22 conventions this app follows: file role suffixes an
 
 - Change detection is OnPush by default; zoneless.
 - Forms: Signal Forms (`form()`, `[formField]`).
-- State: NgRx SignalStore in the feature's `state/` (`TaskListStore` in `task-list.store.ts`),
-  injected by pages only; see `cw-tech-ngrx`.
 - Async data: `resource()` or the established helper, backed by the generated client (loading → skeleton, error →
   error panel, `reload()` → Réessayer).
 - Overlays: CDK Overlay and Angular Aria (`ngMenu`, `ngCombobox`, `ngListbox`, `ngTabs`) through
