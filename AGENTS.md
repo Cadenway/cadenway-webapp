@@ -9,7 +9,7 @@ and [Codex](.codex/README.md) for agents, skills, commands and hooks.
 
 ## First read
 
-- The `FEATURE.md` of the feature you touch.
+- The [frontend architecture](docs/architecture.md) and the `FEATURE.md` of the feature you touch.
 - The mockup screen you implement (`docs/maquette/source/*.dc.html`, or the live mockup) and its section in the [integration guide](https://claude.ai/artifact/CpJHVCiFfF9j3KbHQ2S1Et).
 - The [repositories document](https://claude.ai/artifact/BPinmYxoF3mbK8w9BMB43N), section "cadenway-webapp".
 - `package.json` for versions and scripts once the repository is bootstrapped. Do not restate
@@ -23,12 +23,16 @@ cadenway-webapp is the whole application of the mockup, from the sign-in screens
 
 ```text
 src/app/
-├─ core/          ← shell, rail, sidebar, Ctrl + K palette, toasts, shortcuts, session, api client setup, realtime
-├─ auth/          ← sign-in, sign-up, MFA, codes, password, sign-out, organization choice
-├─ home/  my-tasks/  spaces/ (list-page, views/, space-overview)  task/ (task-detail, task-create, shared/)
-├─ goals/  docs/  dashboards/  trash/  archives/
-├─ account/       ← 5 sections
-└─ organization/  ← 7 sections
+├─ app.component.ts  app.component.html  app.component.spec.ts
+├─ app.config.ts     app.routes.ts
+├─ core/             # app-wide infrastructure, organized by concern
+│  └─ config/
+│     ├─ index.ts
+│     └─ environment/ # source, validation, models and runtime config store
+├─ features/         # auth, account, organization, spaces, task, home, my-tasks,
+│                    # goals, docs, dashboards, trash and archives
+├─ layouts/          # application shells and their slots, when implemented
+└─ shared/           # generic non-visual helpers, when needed
 ```
 
 ## Language
@@ -44,13 +48,13 @@ src/app/
 
 ## Architectural ownership
 
-- Business UI belongs to the owning feature folder; `core` is app-wide infrastructure only (shell, config, API client setup, realtime, theme, shortcuts).
-- Pages orchestrate; presentational components only take inputs and emit outputs.
+- Business UI belongs to its owner under `features/`. `core` owns app-wide infrastructure (config, API client setup, realtime, theme and shortcuts). `layouts` owns shells and `shared` owns generic non-visual helpers.
+- Pages orchestrate under `ui/pages/`; presentational components take inputs and emit outputs. Place unit specs beside their subjects and browser scenarios under `tests/e2e/`.
 - Generic visual bricks belong to cadenway-design-system, never here.
 
 ## Boundaries (hard rules)
 
-- `core` never imports a feature; features import each other only through entries declared in the owner's `FEATURE.md`.
+- `core` never imports a feature or a layout. Cross-feature imports use an entry and consumer declared in the owner's `FEATURE.md`.
 - No `shared/ui`, no local copy of a `@cadenway/ui` brick, no other component library.
 - No `HttpClient` to reach the API; no hand-built API URL.
 - Signal Forms only: never `ReactiveFormsModule`, `FormBuilder`, `FormGroup`, `FormControl`.

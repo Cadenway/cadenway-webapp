@@ -1,7 +1,17 @@
 import { describe, expect, it } from 'vitest';
 
-import { parseRuntimeConfig, type RuntimeConfig } from './runtime-config';
+import type { RuntimeConfig } from '../../models/runtime-config.interface';
 
+import { parseRuntimeConfig } from './runtime-config.utils';
+
+/**
+ * Constant localConfig
+ *
+ * @description
+ * Gateway addresses used by the configuration parser tests.
+ *
+ * @type {RuntimeConfig}
+ */
 const localConfig: RuntimeConfig = {
   apiUrl: 'http://api.cadenway.localhost',
   realtimeUrl: 'http://realtime.cadenway.localhost',

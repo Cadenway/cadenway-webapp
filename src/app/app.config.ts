@@ -6,15 +6,23 @@ import {
 } from '@angular/core';
 import { provideRouter } from '@angular/router';
 
-import { routes } from './app.routes';
-import { RuntimeConfigStore } from './core/config/runtime-config-store';
+import { RuntimeConfigStore } from '@core/config';
 
-/** Root providers of the application. */
+import { APP_ROUTES } from './app.routes';
+
+/**
+ * Constant appConfig
+ *
+ * @description
+ * Root providers of the application.
+ *
+ * @type {ApplicationConfig}
+ */
 export const appConfig: ApplicationConfig = {
   providers: [
     provideBrowserGlobalErrorListeners(),
     // The gateway addresses must be known before anything calls the API.
     provideAppInitializer(() => inject(RuntimeConfigStore).load()),
-    provideRouter(routes),
+    provideRouter(APP_ROUTES),
   ],
 };

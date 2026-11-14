@@ -1,8 +1,8 @@
 ---
 paths:
   - 'src/app/**/state/**'
-  - 'src/app/**/*-store.ts'
-  - 'src/app/**/*-store.spec.ts'
+  - 'src/app/**/*.store.ts'
+  - 'src/app/**/*.store.spec.ts'
 ---
 
 # State
@@ -11,7 +11,7 @@ Load the `cw-tech-ngrx` skill before writing or reviewing a store.
 
 - NgRx SignalStore (`@ngrx/signals`) only: no global Store family, no third-party store extension.
   ESLint and the edit guard refuse them.
-- One store per concept, `<Concept>Store` in `<concept>-store.ts`, functional `signalStore(...)`;
+- One store per concept, `<Concept>Store` in `<concept>.store.ts`, functional `signalStore(...)`;
   provided at the narrowest scope (component, route, then root for app-wide state in `core/`).
 - State stays protected (never `protectedState: false`); private members take the `_` prefix;
   `withState` takes a record, never an array at the root.

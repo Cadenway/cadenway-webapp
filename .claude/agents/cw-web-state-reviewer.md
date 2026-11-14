@@ -22,7 +22,7 @@ reported as not run.
 
 ## Role scope
 
-SignalStores (`state/**`, `*-store.ts`), their specs, and the pages, routes and overlays that
+SignalStores (`state/**`, `*.store.ts`), their specs, and the pages, routes and overlays that
 provide or inject them.
 
 ## Skills to load

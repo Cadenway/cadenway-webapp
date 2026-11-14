@@ -23,8 +23,8 @@ A third-party SignalStore extension (`@angular-architects/ngrx-toolkit`, `@ngrx-
 ├─ data-access/services/<concern>.ts   ← the only callers of @cadenway/api-client; return display models
 ├─ models/<concept>.ts                 ← display models the store holds
 └─ state/
-   ├─ <concept>-store.ts               ← one signalStore per concept the screen manages
-   ├─ <concept>-store.spec.ts
+   ├─ <concept>.store.ts               ← one signalStore per concept the screen manages
+   ├─ <concept>.store.spec.ts
    └─ <concept>-updaters.ts            ← optional: pure state updaters shared by several methods
 ```
 
@@ -40,7 +40,7 @@ A third-party SignalStore extension (`@angular-architects/ngrx-toolkit`, `@ngrx-
 
 | Element | Convention | Example |
 | --- | --- | --- |
-| File | `<concept>-store.ts`, kebab-case | `task-list-store.ts` |
+| File | `<concept>.store.ts`, kebab-case | `task-list.store.ts` |
 | Store | PascalCase, `Store` suffix (the noun names what it is) | `TaskListStore` |
 | State type and initial state | `<Concept>State`, `initialState` | `TaskListState` |
 | Store type, only when needed | `export type TaskListStore = InstanceType<typeof TaskListStore>;` | |
@@ -71,7 +71,7 @@ A third-party SignalStore extension (`@angular-architects/ngrx-toolkit`, `@ngrx-
 
 ## Canonical store
 
-Reference implementation in the repository: `src/app/core/config/runtime-config-store.ts` (root
+Reference implementation in the repository: `src/app/core/config/environment/state/runtime-config/runtime-config.store.ts` (root
 store, private slice, a computed that guards a missing value, an async method over its
 `data-access/` source) and its spec, which fakes that source.
 
@@ -497,7 +497,7 @@ Load `cw-web-testing`; specs run with Vitest through `pnpm test --include <featu
 | --- | --- | --- |
 | `@ngrx/eslint-plugin` `signalsTypeChecked` | `pnpm lint` | `protectedState: false`, an array at the root of `withState` or `signalState`, an uncalled `type`, a custom feature with input but no generic |
 | `no-restricted-imports`, `no-restricted-syntax` | `pnpm lint`, every `.ts` file | static and dynamic imports of the global Store family and third-party store extensions |
-| `@typescript-eslint/no-restricted-imports` | `pnpm lint`, store files (`state/**`, `*-store.ts`) | `@cadenway/api-client`, `@angular/common/http`, `effect`, `withLatestFrom`, `rxjs/operators` |
+| `@typescript-eslint/no-restricted-imports` | `pnpm lint`, store files (`state/**`, `*.store.ts`) | `@cadenway/api-client`, `@angular/common/http`, `effect`, `withLatestFrom`, `rxjs/operators` |
 | `no-restricted-globals` | `pnpm lint`, store files | `fetch`, `XMLHttpRequest`, `WebSocket`, `EventSource` |
 | `@typescript-eslint/no-restricted-imports` | `pnpm lint`, non-spec files under `src/` | `@ngrx/signals/testing` |
 | `guard.mjs` | agent edits under `src/` through `Write`, `Edit`, `MultiEdit` (Claude Code) and `apply_patch` (Codex) | static, side-effect and dynamic imports or `require` of the global Store family and third-party store extensions, `protectedState: false` |

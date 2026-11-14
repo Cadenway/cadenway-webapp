@@ -1,6 +1,6 @@
 ---
 name: cw-angular22-conventions
-description: "The Angular 22 conventions this app follows: file and class names without suffix, cw- selectors, signal inputs, outputs and models, control flow, OnPush default, Signal Forms, @Service(), resource APIs. Load it before writing any Angular code."
+description: "The Angular 22 conventions this app follows: file role suffixes and class names without a Component suffix, cw- selectors, signal inputs, outputs and models, control flow, OnPush default, Signal Forms, @Service(), resource APIs. Load it before writing any Angular code."
 ---
 
 # Angular 22 conventions
@@ -9,14 +9,14 @@ description: "The Angular 22 conventions this app follows: file and class names 
 | --- | --- | --- |
 | Selector | `cw-` + kebab-case | `cw-task-row` |
 | Class | PascalCase, no suffix | `TaskRow` |
-| Files | kebab-case | `task-row.ts`, `task-row.html` |
+| Files | kebab-case | `task-row.component.ts`, `task-row.component.html` |
 | Attribute directive | `cw` + camelCase | `[cwSwap]` |
 | Inputs, outputs, models | `input()`, `output()`, `model()` | `status = input.required<StatusKey>()` |
 | Injectable | `@Service()` | `@Service() export class TaskApi` |
 
 - Change detection is OnPush by default; zoneless.
 - Forms: Signal Forms (`form()`, `[formField]`).
-- State: NgRx SignalStore in the feature's `state/` (`TaskListStore` in `task-list-store.ts`),
+- State: NgRx SignalStore in the feature's `state/` (`TaskListStore` in `task-list.store.ts`),
   injected by pages only; see `cw-tech-ngrx`.
 - Async data: `resource()` or the established helper, backed by the generated client (loading → skeleton, error →
   error panel, `reload()` → Réessayer).

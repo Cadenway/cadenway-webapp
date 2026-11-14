@@ -6,7 +6,7 @@ paths:
 
 # Angular components
 
-- **No `Component` suffix**: `TaskRow`, file `task-row.ts`, selector `cw-task-row`. Pages end in `Page`
+- **No `Component` suffix**: `TaskRow`, file `task-row.component.ts`, selector `cw-task-row`. Pages end in `Page`
   and live under `ui/pages/<name>-page/`.
 - Signal APIs only: `input()`, `input.required()`, `output()`, `model()`; control flow `@if`, `@for`
   (with `track`), `@switch`; `@defer` for heavy parts. No `standalone: true` (default), no

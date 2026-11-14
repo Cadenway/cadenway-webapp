@@ -56,7 +56,7 @@ Load them with the `Skill` tool when their subject comes up (if the tool is unav
 ## Procedure
 
 1. Map the request to mockup screens and to an existing feature; prefer extending one.
-2. Create `src/app/<feature>/` with only the folders actually needed (`ui/`, `data-access/`, `state/`, `models/`, `utils/`).
+2. Create `src/app/features/<feature>/` with only the folders actually needed (`ui/`, `data-access/`, `state/`, `models/`, `utils/`).
 3. Declare lazy routes in `<feature>.routes.ts`; keep `app.routes.ts` to prefixes and lazy entries.
 4. Write FEATURE.md: purpose, routes, public entry points, dependencies, invariants, and each
    SignalStore with its providing scope (`state/` holds them; `cw-web-state-builder` writes them).

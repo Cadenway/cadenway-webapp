@@ -100,14 +100,14 @@ check that writes files. No agent delegates further.
 | `components.md` | Angular components | `src/app/**/*.ts`, `src/app/**/*.html` |
 | `forms.md` | Forms | `src/app/**/*form*`, `src/app/**/forms/**`, `src/app/**/*.validator.ts` |
 | `overlays.md` | Overlays | `src/app/**/*menu*`, `src/app/**/*dialog*`, `src/app/**/*popover*`, `src/app/**/*overlay*` |
-| `collections.md` | Space views | `src/app/spaces/views/**` |
+| `collections.md` | Space views | `src/app/features/spaces/ui/**` |
 | `data-access.md` | Data access | `src/app/**/data-access/**`, `src/app/core/api/**` |
-| `state.md` | State (NgRx SignalStore) | `src/app/**/state/**`, `src/app/**/*-store.ts`, `src/app/**/*-store.spec.ts` |
+| `state.md` | State (NgRx SignalStore) | `src/app/**/state/**`, `src/app/**/*.store.ts`, `src/app/**/*.store.spec.ts` |
 | `routing.md` | Routing | `src/app/**/*.routes.ts`, `src/app/**/guards/**` |
 | `styles-and-tokens.md` | Styles and tokens | `src/**/*.css`, `src/app/**/*.html` |
 | `motion.md` | Motion | `src/app/**/*.ts`, `src/**/*.css` |
 | `testing.md` | Tests | `src/**/*.spec.ts` |
-| `e2e.md` | End-to-end tests | `e2e/**` |
+| `e2e.md` | End-to-end tests | `tests/e2e/**` |
 | `feature-docs.md` | FEATURE.md | `src/app/**/FEATURE.md` |
 | `language.md` | Language | always |
 | `git-and-commits.md` | Git and commits | always |
@@ -122,7 +122,7 @@ See [skills/](skills/) for the complete inventory, including the technology guid
 | --- | --- |
 | `cw-context` | What Cadenway is, where the mockup, the integration guide and the repository map live, the product vocabulary (spaces, lists, sprints, tasks, statuses, milestones) and the multi-repository ownership rules. |
 | `cw-mockup` | Where the mockup lives (docs/maquette/source and the live artifact), what each artboard covers, how to read a .dc.html file and its properties, and which guide section maps each screen to Angular components. |
-| `cw-angular22-conventions` | The Angular 22 conventions this app follows: file and class names without suffix, cw- selectors, signal inputs, outputs and models, control flow, OnPush default, Signal Forms, @Service(), resource APIs. |
+| `cw-angular22-conventions` | The Angular 22 conventions this app follows: file role suffixes and class names without a Component suffix, cw- selectors, signal inputs, outputs and models, control flow, OnPush default, Signal Forms, @Service(), resource APIs. |
 | `cw-ui-consumer` | Which @cadenway/ui brick to use for each mockup pattern, how to import tokens and icons, and how to request a missing brick from cadenway-design-system. |
 | `cw-api-client-data-access` | How a feature reaches the API: generated client, data-access services, pure adapters to display models, loading and error states, partial aggregates. |
 | `cw-signal-forms` | How to build a Cadenway form with Signal Forms: model signal, schema rules, field binding, messages from the mockup, submit and focus behavior. |

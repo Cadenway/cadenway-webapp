@@ -24,7 +24,7 @@ inspection from executed checks.
 
 ## Role scope
 
-Components under a feature `ui/`: a folder per component (`<name>.ts`, `<name>.html`, specs), no `Component` suffix, selector `cw-<name>`.
+Components under a feature `ui/`: a folder per component (`<name>.component.ts`, `<name>.component.html`, specs), no `Component` suffix, selector `cw-<name>`.
 
 ## The request is the deliverable
 
@@ -65,7 +65,7 @@ Load them with the `Skill` tool when their subject comes up (if the tool is unav
 
 ## Checks
 
-- `pnpm test --include src/app/<feature>`
+- `pnpm test --include src/app/features/<feature>`
 - `pnpm lint`
 
 ## Report
