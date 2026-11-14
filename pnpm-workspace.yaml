@@ -1,6 +1,9 @@
 packages:
   - '.'
 
+minimumReleaseAgeExclude:
+  - '@cadenway/angular-testing@0.1.0'
+
 allowBuilds:
   '@parcel/watcher': false
   esbuild: false
