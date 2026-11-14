@@ -26,7 +26,7 @@ src/app/
 
 ## Architectural ownership
 
-The [Angular architecture checker](https://github.com/Cadenway/cadenway-tooling/tree/main/packages/angular-testing) verifies authored source, file names and import boundaries. Once the package is published, add `@cadenway/angular-testing` as a development dependency and commit the updated lockfile. Run `pnpm install --frozen-lockfile` and `pnpm test:architecture`, then add the latter to `pnpm quality` and the blocking CI job. Use the application profile with the application TypeScript config.
+The application profile of the [Angular architecture checker](https://github.com/Cadenway/cadenway-tooling/tree/main/packages/angular-testing) checks authored source, file names and import boundaries using the application TypeScript config. Run `pnpm test:architecture` to run it on its own. Both `pnpm quality` and the CI quality gate run it.
 
 - Business UI belongs to its owner under `features/`. `core` owns app-wide infrastructure (config, API client setup, realtime, theme and shortcuts). `layouts` owns shells and `shared` owns generic non-visual helpers.
 - Pages orchestrate; presentational components only take inputs and emit outputs.

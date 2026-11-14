@@ -24,7 +24,7 @@ inspection from executed checks.
 
 ## Role scope
 
-Collection views under `spaces/views/`.
+Collection views under `src/app/features/spaces/ui/`.
 
 ## The request is the deliverable
 
