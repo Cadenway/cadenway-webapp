@@ -76,6 +76,8 @@ jobs:
           context: .
           platforms: linux/amd64
           push: true
+          secrets: |
+            npmrc=//npm.pkg.github.com/:_authToken=${{ secrets.GITHUB_TOKEN }}
           # The tag is the bare version, as versions.env in cadenway-ops holds it (1.4.0).
           tags: |
             ${{ steps.image.outputs.name }}:${{ needs.release-please.outputs.version }}

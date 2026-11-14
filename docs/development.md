@@ -64,6 +64,7 @@ The following commands match the planned local gate. Run `/cw-quality` in Claude
 pnpm format:check
 pnpm lint
 pnpm typecheck
+pnpm test:architecture
 pnpm test:coverage
 pnpm build
 pnpm build
@@ -71,6 +72,9 @@ pnpm build
 
 Run the browser checks separately once the stack is available. Pass the actual spec path to
 `pnpm e2e --` for a targeted run.
+
+When building the container locally, pass an npm configuration with GitHub Packages read access as
+a BuildKit secret with `docker build --secret id=npmrc,src=/path/to/user/.npmrc .`.
 
 ## Collaboration and release
 

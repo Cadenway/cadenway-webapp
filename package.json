@@ -21,7 +21,7 @@
     "test": "ng test --no-watch",
     "test:coverage": "ng test --no-watch --coverage",
     "e2e": "playwright test --config=tests/e2e/playwright.config.ts",
-    "quality": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test:coverage && pnpm build"
+    "quality": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test:architecture && pnpm test:coverage && pnpm build"
   },
   "dependencies": {
     "@angular/aria": "^22.2.6",

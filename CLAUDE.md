@@ -37,6 +37,7 @@ checks during bootstrap.
 pnpm format:check
 pnpm lint
 pnpm typecheck
+pnpm test:architecture
 pnpm test:coverage
 pnpm build
 pnpm build
