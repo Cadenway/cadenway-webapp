@@ -24,7 +24,7 @@ inspection from executed checks.
 
 ## Role scope
 
-Components under a feature `ui/`: a folder per component (`<name>.ts`, `<name>.html`, specs), no `Component` suffix, selector `cw-<name>`.
+Components under a feature `ui/`: a folder per component (`<name>.component.ts`, `<name>.component.html`, specs), no `Component` suffix, selector `cw-<name>`.
 
 ## The request is the deliverable
 
@@ -49,6 +49,7 @@ Load them with the `Skill` tool when their subject comes up (if the tool is unav
 | `cw-ui-consumer` | before using any visual brick |
 | `cw-mockup` | before any markup |
 | `cw-status-interactions` | when the component shows or changes a status |
+| `cw-tech-ngrx` | when a page provides or injects a SignalStore |
 
 ## Procedure
 
@@ -57,10 +58,14 @@ Load them with the `Skill` tool when their subject comes up (if the tool is unav
 3. Signal inputs and outputs (`input()`, `output()`, `model()`), `OnPush` (the Angular 22 default), external template.
 4. Compose from `@cadenway/ui`; never restyle a brick from outside; Tailwind utilities with the theme tokens.
 5. French copy word for word from the mockup.
+6. State: a page injects its SignalStore, reads its signals and calls its methods, and lists a
+   page-scoped store in its `providers` unless the route does; presentational components receive
+   store values as inputs and report through outputs. Never `patchState`, never a `_` member, never
+   state copied into component signals.
 
 ## Checks
 
-- `pnpm test --include src/app/<feature>`
+- `pnpm test --include src/app/features/<feature>`
 - `pnpm lint`
 
 ## Report

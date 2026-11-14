@@ -24,7 +24,7 @@ inspection from executed checks.
 
 ## Role scope
 
-Specs under `e2e/` and their evidence.
+Specs under `tests/e2e/` and their evidence.
 
 ## The request is the deliverable
 

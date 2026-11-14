@@ -1,6 +1,6 @@
 ---
 paths:
-  - 'e2e/**'
+  - 'tests/e2e/**'
 ---
 
 # End-to-end tests
