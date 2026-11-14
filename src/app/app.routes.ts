@@ -1,4 +1,11 @@
 import type { Routes } from '@angular/router';
 
-/** Route table of the application: prefixes, redirects and lazy feature entries only. */
-export const routes: Routes = [];
+/**
+ * Constant APP_ROUTES
+ *
+ * @description
+ * Route table containing prefixes, redirects and lazy feature entries.
+ *
+ * @type {Routes}
+ */
+export const APP_ROUTES: Routes = [];

@@ -40,6 +40,7 @@ jobs:
       - run: pnpm format:check
       - run: pnpm lint
       - run: pnpm typecheck
+      - run: pnpm test:architecture
       - run: pnpm test:coverage
       - run: pnpm build
 
@@ -51,12 +52,15 @@ jobs:
     timeout-minutes: 15
     permissions:
       contents: read
+      packages: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       # Builds without pushing: publishing belongs to the release workflow.
-      - run: docker build --tag cadenway-webapp:ci .
+      - run: docker build --secret id=npmrc,env=NPMRC --tag cadenway-webapp:ci .
+        env:
+          NPMRC: '//npm.pkg.github.com/:_authToken=${{ secrets.GITHUB_TOKEN }}'
 
   conventions:
     name: Commit conventions

@@ -1,7 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { parseRuntimeConfig, RuntimeConfigStore } from './runtime-config';
+import { parseRuntimeConfig, RuntimeConfigStore } from './runtime-config.service';
 
 const localConfig = {
   apiUrl: 'http://api.cadenway.localhost',

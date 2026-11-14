@@ -1,6 +1,6 @@
 ---
 paths:
-  - 'src/app/spaces/views/**'
+  - 'src/app/features/spaces/ui/**'
 ---
 
 # Space views

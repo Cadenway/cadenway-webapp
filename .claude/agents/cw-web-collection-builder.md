@@ -24,7 +24,7 @@ inspection from executed checks.
 
 ## Role scope
 
-Collection views under `spaces/views/`.
+Collection views under `src/app/features/spaces/ui/`.
 
 ## The request is the deliverable
 
@@ -57,7 +57,7 @@ Load them with the `Skill` tool when their subject comes up (if the tool is unav
 
 ## Checks
 
-- `pnpm test --include src/app/spaces/views`
+- `pnpm test --include src/app/features/spaces/ui`
 
 ## Report
 

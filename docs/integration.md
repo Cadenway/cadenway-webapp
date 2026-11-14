@@ -12,14 +12,14 @@ The app consumes the published API client and UI packages and communicates with 
 
 Source: `cw-angular22-conventions` ([Claude](../.claude/skills/cw-angular22-conventions/SKILL.md), [Codex](../.codex/skills/cw-angular22-conventions/SKILL.md)).
 
-| Element                 | Convention                       | Example                                |
-| ----------------------- | -------------------------------- | -------------------------------------- |
-| Selector                | `cw-` + kebab-case               | `cw-task-row`                          |
-| Class                   | PascalCase, no suffix            | `TaskRow`                              |
-| Files                   | kebab-case                       | `task-row.ts`, `task-row.html`         |
-| Attribute directive     | `cw` + camelCase                 | `[cwSwap]`                             |
-| Inputs, outputs, models | `input()`, `output()`, `model()` | `status = input.required<StatusKey>()` |
-| Injectable              | `@Service()`                     | `@Service() export class TaskApi`      |
+| Element                 | Convention                       | Example                                            |
+| ----------------------- | -------------------------------- | -------------------------------------------------- |
+| Selector                | `cw-` + kebab-case               | `cw-task-row`                                      |
+| Class                   | PascalCase, no suffix            | `TaskRow`                                          |
+| Files                   | kebab-case                       | `task-row.component.ts`, `task-row.component.html` |
+| Attribute directive     | `cw` + camelCase                 | `[cwSwap]`                                         |
+| Inputs, outputs, models | `input()`, `output()`, `model()` | `status = input.required<StatusKey>()`             |
+| Injectable              | `@Service()`                     | `@Service() export class TaskApi`                  |
 
 - Change detection is OnPush by default; zoneless.
 - Forms: Signal Forms (`form()`, `[formField]`).

@@ -206,6 +206,9 @@ importers:
       '@angular/compiler-cli':
         specifier: ^22.2.5
         version: 22.2.5(@angular/compiler@22.2.5)(typescript@6.0.3)
+      '@cadenway/angular-testing':
+        specifier: 0.1.0
+        version: 0.1.0(typescript@6.0.3)
       '@commitlint/cli':
         specifier: ^21.2.4
         version: 21.2.4(conventional-commits-parser@7.1.4)(typescript@6.0.3)
@@ -560,6 +563,11 @@ packages:
 
   '@cacheable/utils@2.5.0':
     resolution: {integrity: sha512-buipgOVDkkPXNR5+xBpDw7Zk2n1EvU7qBJCNUcL7rhQ//kfpOXPAvQ511Os0vpLYJ1pZnvudNytkQt2hst3wqA==}
+
+  '@cadenway/angular-testing@0.1.0':
+    resolution: {integrity: sha512-eFvSdI1+T3TmOo0Yow0L6bnr5iPWkOAMJH4cfr1t0Tc1UfHfiJuyCmwaHO/e3UthSS7t5naDz+nBWzuX0/KVhA==, tarball: https://npm.pkg.github.com/download/@cadenway/angular-testing/0.1.0/03e19005355a43db6e3843b4f692b5a6decfdad3}
+    peerDependencies:
+      typescript: '>=6.0 <6.1'
 
   '@commitlint/cli@21.2.4':
     resolution: {integrity: sha512-g3M/wrQdElqGH5vROIeL2QiYIxrzqUkhCgsDyDlWfKEyQdCt10OyMB28W2cJtpZ+VNGMvmaN923infr1hOfyrg==}
@@ -3558,6 +3566,10 @@ snapshots:
     dependencies:
       hashery: 1.5.1
       keyv: 5.6.0
+
+  '@cadenway/angular-testing@0.1.0(typescript@6.0.3)':
+    dependencies:
+      typescript: 6.0.3
 
   '@commitlint/cli@21.2.4(conventional-commits-parser@7.1.4)(typescript@6.0.3)':
     dependencies:
