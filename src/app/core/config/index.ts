@@ -1,4 +1,2 @@
-export {
-  type RuntimeConfig,
-  RuntimeConfigStore,
-} from './environment/services/runtime-config/runtime-config.service';
+export { RuntimeConfigStore } from './environment/state/runtime-config/runtime-config.store';
+export type { RuntimeConfig } from './environment/models/runtime-config.interface';

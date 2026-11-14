@@ -19,7 +19,7 @@ and [Codex](.codex/README.md) for agents, skills, commands and hooks.
 
 The structure and workflows below describe the bootstrap target. Check the checkout for available files and commands.
 
-cadenway-webapp is the whole application of the mockup, from the sign-in screens to the settings: Angular 22, Tailwind 4, Signal Forms, `@cadenway/ui`, `@cadenway/api-client`. It talks only to `cadenway-api-gateway` (REST) and `cadenway-realtime-gateway` (WebSocket), ships as a Docker image of static files behind Traefik on `app.<domain>`, and reads the gateway addresses from `public/config.json` at start-up.
+cadenway-webapp is the whole application of the mockup, from the sign-in screens to the settings: Angular 22, Tailwind 4, Signal Forms, NgRx SignalStore, `@cadenway/ui`, `@cadenway/api-client`. It talks only to `cadenway-api-gateway` (REST) and `cadenway-realtime-gateway` (WebSocket), ships as a Docker image of static files behind Traefik on `app.<domain>`, and reads the gateway addresses from `public/config.json` at start-up.
 
 ```text
 src/app/
@@ -58,6 +58,7 @@ src/app/
 - No `shared/ui`, no local copy of a `@cadenway/ui` brick, no other component library.
 - No `HttpClient` to reach the API; no hand-built API URL.
 - Signal Forms only: never `ReactiveFormsModule`, `FormBuilder`, `FormGroup`, `FormControl`.
+- State is NgRx SignalStore (`@ngrx/signals`) only: never the global Store family (`@ngrx/store`, `@ngrx/effects`, `@ngrx/entity`, `@ngrx/store-devtools`) or a third-party store extension, never `protectedState: false`; a store reaches the API through its feature's `data-access/`.
 - `docs/maquette/` is a read-only reference copy of the mockup.
 
 ## GitHub files (`.github/`)
@@ -125,7 +126,7 @@ not to find another way around it.
   path-scoped rules and hooks.
 - **Codex**: [.codex/README.md](.codex/README.md) covers the specialists, `$cw-*` skills, rules and hooks.
 - **Builders** (assigned writes): `cw-web-feature-builder`, `cw-web-component-builder`, `cw-web-form-builder`, `cw-web-overlay-builder`, `cw-web-collection-builder`, `cw-web-service-builder`, `cw-web-state-builder`, `cw-web-realtime-builder`, `cw-web-routing-builder`, `cw-web-ui-consumer`, `cw-web-test-writer`, `cw-web-e2e-runner`, `cw-web-github-maintainer`.
-- **Reviewers** (read-only): `cw-web-design-reviewer`, `cw-web-a11y-auditor`, `cw-web-architecture-reviewer`, `cw-web-security-auditor`, `cw-web-performance-reviewer`, `cw-web-api-contract-reviewer`, `cw-web-motion-reviewer`, `cw-web-copy-reviewer`.
+- **Reviewers** (read-only): `cw-web-design-reviewer`, `cw-web-a11y-auditor`, `cw-web-architecture-reviewer`, `cw-web-state-reviewer`, `cw-web-security-auditor`, `cw-web-performance-reviewer`, `cw-web-api-contract-reviewer`, `cw-web-motion-reviewer`, `cw-web-copy-reviewer`.
 - Specialists are available, not mandatory. Delegate a bounded responsibility with explicit files and
   checks, assign disjoint files to parallel agents and integrate their results yourself.
 

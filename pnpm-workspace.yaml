@@ -1,8 +1,10 @@
 packages:
   - '.'
 
-minimumReleaseAgeExclude:
-  - '@cadenway/angular-testing@0.1.0'
+# Disable pnpm's default release-age delay.
+minimumReleaseAge: 0
+# Refuse a package version with weaker trust evidence than an earlier release.
+trustPolicy: no-downgrade
 
 allowBuilds:
   '@parcel/watcher': false

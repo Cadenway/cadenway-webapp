@@ -12,7 +12,7 @@
 ## TL;DR for every task
 
 1. Read before writing: the feature `FEATURE.md`, the mockup screen (`docs/maquette/source/*.dc.html`) and its guide section.
-2. Angular 22: role suffixes in files, no `Component` suffix in classes, `cw-` selectors, `input()`/`output()`/`model()`, `@if`/`@for`, OnPush default, zoneless, Signal Forms, `@Service()`.
+2. Angular 22: role suffixes in files, no `Component` suffix in classes, `cw-` selectors, `input()`/`output()`/`model()`, `@if`/`@for`, OnPush default, zoneless, Signal Forms, `@Service()`, NgRx SignalStore for state.
 3. Visuals come from `@cadenway/ui` with Tailwind over `@cadenway/tokens`; a missing brick is a cadenway-design-system request (`cw-web-ui-consumer`).
 4. API access only through `@cadenway/api-client`, only in `data-access/`; DTOs never leave it.
 5. French UI copy word for word from the mockup; English everything else.
@@ -25,6 +25,7 @@
 - No `shared/ui`, no local copy of a `@cadenway/ui` brick, no other component library.
 - No `HttpClient` to reach the API; no hand-built API URL.
 - Signal Forms only: never `ReactiveFormsModule`, `FormBuilder`, `FormGroup`, `FormControl`.
+- State is NgRx SignalStore (`@ngrx/signals`) only: never the global Store family (`@ngrx/store`, `@ngrx/effects`, `@ngrx/entity`, `@ngrx/store-devtools`) or a third-party store extension, never `protectedState: false`; a store reaches the API through its feature's `data-access/`.
 - `docs/maquette/` is a read-only reference copy of the mockup.
 
 ## Target quality gate
@@ -35,11 +36,11 @@ checks during bootstrap.
 
 ```bash
 pnpm format:check
+pnpm test:lint
 pnpm lint
 pnpm typecheck
 pnpm test:architecture
 pnpm test:coverage
-pnpm build
 pnpm build
 ```
 

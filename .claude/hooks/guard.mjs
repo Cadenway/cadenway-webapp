@@ -12,7 +12,8 @@
  *  4. Git internals (`.git/`).
  *  5. Secrets: `.env*` files other than `.env.example`, token-shaped text, private keys, an
  *     `_authToken` other than the `${NODE_AUTH_TOKEN}` placeholder.
- *  6. Repository-specific rules (see REPO_RULES).
+ *  6. Repository-specific rules (see REPO_RULES): Signal Forms, data access, shared/ui, barrels,
+ *     NgRx SignalStore only with protected state, and the workflow rules.
  *
  * Deliberately conservative: ordinary sources, specs, docs and configuration stay writable. The hook
  * only acts inside a cadenway-webapp checkout (marker: `.claude/.claude-plugin/plugin.json` named
@@ -48,6 +49,8 @@ const TOKEN_PATTERNS = [
 const REPO_RULES = [
   [(rel, body) => rel.startsWith('src/') && /\b(ReactiveFormsModule|FormBuilder|FormGroup|FormControl)\b/.test(body), 'forms use Signal Forms only (rules/forms.md).'],
   [(rel, body) => rel.startsWith('src/app/') && !rel.includes('/data-access/') && !rel.startsWith('src/app/core/api/') && /\bHttpClient\b/.test(body), 'reach the API through @cadenway/api-client in a feature data-access/ folder.'],
+  [(rel, body) => rel.startsWith('src/') && /(?:\bfrom\s*|\bimport\s*\(?\s*|\brequire\s*\(\s*)['"](?:@ngrx\/(?:store|effects|entity|store-devtools|component-store|router-store|data)(?=['"/])|@angular-architects\/ngrx-toolkit|@ngrx-toolkit\/|@ngrx-traits\/)/.test(body), 'state is NgRx SignalStore (@ngrx/signals): no global Store family and no third-party store extension (skill cw-tech-ngrx).'],
+  [(rel, body) => rel.startsWith('src/') && /\bprotectedState\s*:\s*false\b/.test(body), 'a SignalStore keeps its state protected; change it through store methods (skill cw-tech-ngrx).'],
   [(rel) => /^src\/app\/shared\/ui(\/|$)/.test(rel), 'there is no shared/ui: compose from @cadenway/ui and request missing bricks from cadenway-design-system.'],
   [(rel, body) => /(^|\/)index\.ts$/.test(rel) && /^\s*export\s+\*\s+from\s/m.test(body), 'a barrel uses explicit named exports, never "export * from".'],
   [(rel, body) => /^\.github\/workflows\/.+\.ya?ml$/.test(rel) && /uses:\s*(?!\.\/|docker:\/\/)[^@\s]+@(?![0-9a-f]{40}\b)/.test(body), 'pin third-party actions to a full commit SHA, with the version in a comment.'],

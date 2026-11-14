@@ -31,6 +31,9 @@ Structure and boundaries.
 3. Visual bricks only from `@cadenway/ui`; no `shared/ui`.
 4. Signal Forms only; `input()`/`output()`/`model()`; control flow `@if`/`@for`.
 5. FEATURE.md updated with routes, public entries or invariants.
+6. State in NgRx SignalStores under the owning feature's `state/`, provided at the narrowest scope,
+   injected only by pages, calling `data-access/` rather than the api-client, with protected state
+   and no global Store or third-party store extension (skill `cw-tech-ngrx`).
 
 ## Review method
 

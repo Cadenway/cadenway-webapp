@@ -10,7 +10,14 @@ import { RuntimeConfigStore } from '@core/config';
 
 import { APP_ROUTES } from './app.routes';
 
-/** Root providers of the application. */
+/**
+ * Constant appConfig
+ *
+ * @description
+ * Root providers of the application.
+ *
+ * @type {ApplicationConfig}
+ */
 export const appConfig: ApplicationConfig = {
   providers: [
     provideBrowserGlobalErrorListeners(),

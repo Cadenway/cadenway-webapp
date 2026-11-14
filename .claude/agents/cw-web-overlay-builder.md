@@ -55,6 +55,8 @@ Load them with the `Skill` tool when their subject comes up (if the tool is unav
 2. Overlays render in the CDK overlay container: they open on the side with room, shift horizontally and cap their height.
 3. Close on outside click and Escape; one menu open at a time; focus returns to the trigger.
 4. Destructive actions confirm; sensitive ones require typing the name (space, account, Git connection).
+5. State that lives only while an overlay is open is a SignalStore in the overlay's own
+   `providers`; an overlay changes page state only through the page store's methods.
 
 ## Checks
 

@@ -54,6 +54,8 @@ Load them with the `Skill` tool when their subject comes up (if the tool is unav
 2. Rules in the schema (`required`, `minLength`, `pattern`, custom validators); messages are the mockup's, in French.
 3. Submit stays disabled while the form is invalid; the first invalid field gets focus on submit.
 4. Never `ReactiveFormsModule`, `FormBuilder`, `FormGroup` or `FormControl`.
+5. Field state stays in the form; submit hands the value to a SignalStore method (or to the
+   data-access service when no store owns the data). Never mirror field state into a store.
 
 ## Checks
 

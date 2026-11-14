@@ -1,7 +1,7 @@
 # cadenway-webapp: Claude Code tooling
 
-This `.claude/` folder ships the Claude Code tooling of cadenway-webapp: **21 agents**,
-22 slash commands, 16 rules, 20 skills, 3 hooks, the project
+This `.claude/` folder ships the Claude Code tooling of cadenway-webapp: **22 agents**,
+23 slash commands, 16 rules, 21 skills, 3 hooks, the project
 settings and launch configuration. The application launch requires the planned package scripts.
 
 Start from [AGENTS.md](../AGENTS.md) (the rules every assistant follows) and [CLAUDE.md](../CLAUDE.md)
@@ -48,7 +48,7 @@ check that writes files. No agent delegates further.
 | `cw-web-overlay-builder` | Menus, popovers, dialogs, context menus, confirmations. | sonnet | high | Assigned writes |
 | `cw-web-collection-builder` | List, board, calendar, Gantt, workload and sheet views. | opus | high | Assigned writes |
 | `cw-web-service-builder` | Data access over @cadenway/api-client. | sonnet | high | Assigned writes |
-| `cw-web-state-builder` | Signal state, optimistic updates, fast-click handling. | opus | high | Assigned writes |
+| `cw-web-state-builder` | NgRx SignalStore state, optimistic updates, fast-click handling. | opus | high | Assigned writes |
 | `cw-web-realtime-builder` | WebSocket client and pushed changes. | sonnet | high | Assigned writes |
 | `cw-web-routing-builder` | Routes, guards, lazy loading, error pages. | opus | high | Assigned writes |
 | `cw-web-ui-consumer` | Compose from @cadenway/ui; relay missing bricks. | sonnet | high | Assigned writes |
@@ -57,6 +57,7 @@ check that writes files. No agent delegates further.
 | `cw-web-design-reviewer` | Visual fidelity to the mockup. | sonnet | high | Read-only |
 | `cw-web-a11y-auditor` | Roles, labels, focus, keyboard. | sonnet | high | Read-only |
 | `cw-web-architecture-reviewer` | Feature boundaries, imports, data access. | opus | xhigh | Read-only |
+| `cw-web-state-reviewer` | NgRx SignalStore state and its specs. | opus | high | Read-only |
 | `cw-web-security-auditor` | Session, tokens, HTML, redirects. | opus | xhigh | Read-only |
 | `cw-web-performance-reviewer` | Bundle, lazy loading, rendering cost. | sonnet | high | Read-only |
 | `cw-web-api-contract-reviewer` | Data access against the contracts. | opus | high | Read-only |
@@ -74,7 +75,7 @@ check that writes files. No agent delegates further.
 | `/cw-overlay` | Build a menu, popover, dialog or confirmation. | `cw-web-overlay-builder` |
 | `/cw-view` | Build a space view (list, board, calendar, Gantt…). | `cw-web-collection-builder` |
 | `/cw-service` | Build data access over @cadenway/api-client. | `cw-web-service-builder` |
-| `/cw-state` | Build feature state with signals. | `cw-web-state-builder` |
+| `/cw-state` | Build feature state with NgRx SignalStore. | `cw-web-state-builder` |
 | `/cw-realtime` | Connect pushed changes from the realtime gateway. | `cw-web-realtime-builder` |
 | `/cw-route` | Change routes, guards or error pages. | `cw-web-routing-builder` |
 | `/cw-ui` | Compose from @cadenway/ui or request a missing brick. | `cw-web-ui-consumer` |
@@ -83,6 +84,7 @@ check that writes files. No agent delegates further.
 | `/cw-design-review` | Compare a screen with the mockup. | `cw-web-design-reviewer` |
 | `/cw-a11y` | Audit accessibility. | `cw-web-a11y-auditor` |
 | `/cw-arch-review` | Review boundaries of the current change. | `cw-web-architecture-reviewer` |
+| `/cw-state-review` | Review NgRx SignalStore state of the current change. | `cw-web-state-reviewer` |
 | `/cw-security-review` | Audit frontend security. | `cw-web-security-auditor` |
 | `/cw-perf-review` | Review performance. | `cw-web-performance-reviewer` |
 | `/cw-contract-review` | Check data access against the contracts. | `cw-web-api-contract-reviewer` |
@@ -98,14 +100,14 @@ check that writes files. No agent delegates further.
 | `components.md` | Angular components | `src/app/**/*.ts`, `src/app/**/*.html` |
 | `forms.md` | Forms | `src/app/**/*form*`, `src/app/**/forms/**`, `src/app/**/*.validator.ts` |
 | `overlays.md` | Overlays | `src/app/**/*menu*`, `src/app/**/*dialog*`, `src/app/**/*popover*`, `src/app/**/*overlay*` |
-| `collections.md` | Space views | `src/app/spaces/views/**` |
+| `collections.md` | Space views | `src/app/features/spaces/ui/**` |
 | `data-access.md` | Data access | `src/app/**/data-access/**`, `src/app/core/api/**` |
-| `state.md` | State | `src/app/**/state/**` |
+| `state.md` | State (NgRx SignalStore) | `src/app/**/state/**`, `src/app/**/*.store.ts`, `src/app/**/*.store.spec.ts` |
 | `routing.md` | Routing | `src/app/**/*.routes.ts`, `src/app/**/guards/**` |
 | `styles-and-tokens.md` | Styles and tokens | `src/**/*.css`, `src/app/**/*.html` |
 | `motion.md` | Motion | `src/app/**/*.ts`, `src/**/*.css` |
 | `testing.md` | Tests | `src/**/*.spec.ts` |
-| `e2e.md` | End-to-end tests | `e2e/**` |
+| `e2e.md` | End-to-end tests | `tests/e2e/**` |
 | `feature-docs.md` | FEATURE.md | `src/app/**/FEATURE.md` |
 | `language.md` | Language | always |
 | `git-and-commits.md` | Git and commits | always |
@@ -120,7 +122,7 @@ See [skills/](skills/) for the complete inventory, including the technology guid
 | --- | --- |
 | `cw-context` | What Cadenway is, where the mockup, the integration guide and the repository map live, the product vocabulary (spaces, lists, sprints, tasks, statuses, milestones) and the multi-repository ownership rules. |
 | `cw-mockup` | Where the mockup lives (docs/maquette/source and the live artifact), what each artboard covers, how to read a .dc.html file and its properties, and which guide section maps each screen to Angular components. |
-| `cw-angular22-conventions` | The Angular 22 conventions this app follows: file and class names without suffix, cw- selectors, signal inputs, outputs and models, control flow, OnPush default, Signal Forms, @Service(), resource APIs. |
+| `cw-angular22-conventions` | The Angular 22 conventions this app follows: file role suffixes and class names without a Component suffix, cw- selectors, signal inputs, outputs and models, control flow, OnPush default, Signal Forms, @Service(), resource APIs. |
 | `cw-ui-consumer` | Which @cadenway/ui brick to use for each mockup pattern, how to import tokens and icons, and how to request a missing brick from cadenway-design-system. |
 | `cw-api-client-data-access` | How a feature reaches the API: generated client, data-access services, pure adapters to display models, loading and error states, partial aggregates. |
 | `cw-signal-forms` | How to build a Cadenway form with Signal Forms: model signal, schema rules, field binding, messages from the mockup, submit and focus behavior. |
@@ -134,6 +136,6 @@ See [skills/](skills/) for the complete inventory, including the technology guid
 
 | Hook | When | What it refuses or does |
 | --- | --- | --- |
-| `guard.mjs` | before `Write`, `Edit` or `MultiEdit` | Sibling checkouts, generated trees, lockfiles, `.git/`, secrets and tokens, reactive forms, direct HttpClient outside data access, a local shared/ui, `export *` barrels and edits of the mockup copy, unpinned third-party actions and `pull_request_target` in workflows. |
+| `guard.mjs` | before `Write`, `Edit` or `MultiEdit` | Sibling checkouts, generated trees, lockfiles, `.git/`, secrets and tokens, reactive forms, direct HttpClient outside data access, the global NgRx Store or a third-party store extension, `protectedState: false`, a local shared/ui, `export *` barrels and edits of the mockup copy, unpinned third-party actions and `pull_request_target` in workflows. |
 | `guard-git.mjs` | before `Bash` or `PowerShell` | Pushes to `main`, tag pushes, force-pushes, rewrites of pushed commits, hook bypasses, destructive resets, registry publishing, branch names outside `<type>/<kebab>`. Adapted from the dentalstock guard. |
 | `format.mjs` | after a successful `Write`, `Edit` or `MultiEdit` | Formats supported files with the repository's Prettier; a no-op until the formatter is installed. |

@@ -29,6 +29,8 @@ Performance findings with measurements.
 1. Each feature is lazy; heavy widgets are deferred.
 2. No duplicate request for the same data on one screen.
 3. Long lists are virtualized.
+4. State: derived lists are `withComputed` signals, not recomputed in templates or methods; stores
+   are provided at the narrowest scope; no root store keeps page data alive after navigation.
 
 ## Review method
 

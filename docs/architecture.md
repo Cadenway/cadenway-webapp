@@ -8,7 +8,7 @@ The checkout has an Angular application shell and runtime configuration. The fea
 
 ## Purpose and target structure
 
-cadenway-webapp is the whole application of the mockup, from the sign-in screens to the settings: Angular 22, Tailwind 4, Signal Forms, `@cadenway/ui`, `@cadenway/api-client`. It talks only to `cadenway-api-gateway` (REST) and `cadenway-realtime-gateway` (WebSocket), ships as a Docker image of static files behind Traefik on `app.<domain>`, and reads the gateway addresses from `public/config.json` at start-up.
+cadenway-webapp is the whole application of the mockup, from the sign-in screens to the settings: Angular 22, Tailwind 4, Signal Forms, NgRx SignalStore, `@cadenway/ui`, `@cadenway/api-client`. It talks only to `cadenway-api-gateway` (REST) and `cadenway-realtime-gateway` (WebSocket), ships as a Docker image of static files behind Traefik on `app.<domain>`, and reads the gateway addresses from `public/config.json` at start-up.
 
 ```text
 src/app/
@@ -17,7 +17,7 @@ src/app/
 ├─ core/             # app-wide infrastructure, organized by concern
 │  └─ config/
 │     ├─ index.ts
-│     └─ environment/ # locally configured gateway addresses
+│     └─ environment/ # source, validation, models and runtime config store
 ├─ features/         # auth, account, organization, spaces, task, home, my-tasks,
 │                    # goals, docs, dashboards, trash and archives
 ├─ layouts/          # application shells and their slots, when implemented
@@ -38,6 +38,7 @@ The application profile of the [Angular architecture checker](https://github.com
 - No `shared/ui`, no local copy of a `@cadenway/ui` brick, no other component library.
 - No `HttpClient` to reach the API; no hand-built API URL.
 - Signal Forms only: never `ReactiveFormsModule`, `FormBuilder`, `FormGroup`, `FormControl`.
+- State is NgRx SignalStore (`@ngrx/signals`) only: never the global Store family (`@ngrx/store`, `@ngrx/effects`, `@ngrx/entity`, `@ngrx/store-devtools`) or a third-party store extension, never `protectedState: false`; a store reaches the API through its feature's `data-access/`.
 - `docs/maquette/` is a read-only reference copy of the mockup.
 
 ## Feature structure
