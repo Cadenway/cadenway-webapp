@@ -55,10 +55,10 @@ narrowest check that covers the change first, then widen:
 Report the commands you actually ran and their results; a check you did not run is reported as not
 run.
 
-## Planned full check list
+## Full local quality gate
 
-The following commands match the planned local gate. Run `/cw-quality` in Claude Code or
-`$cw-quality` in Codex without arguments. Verify CI coverage once workflows exist.
+Run the commands below from this repository, in order, and stop at the first failure.
+`pnpm quality` runs the same checks. Keep the build in the gate for strict template checking.
 
 ```bash
 pnpm format:check
@@ -69,6 +69,12 @@ pnpm test:architecture
 pnpm test:coverage
 pnpm build
 ```
+
+For a focused check, run `pnpm test --include "<glob>"` with one spec glob.
+
+Report each command as passed, failed, not run or unavailable. When a test command runs,
+include the executed count. Report `0 tests executed` as unverified even if the process exits
+successfully. If a required dependency is unavailable, state what it prevented you from checking.
 
 Run the browser checks separately once the stack is available. Pass the actual spec path to
 `pnpm e2e --` for a targeted run.

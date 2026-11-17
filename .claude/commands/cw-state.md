@@ -3,6 +3,4 @@ description: "Build feature state with NgRx SignalStore."
 argument-hint: "<state slice>"
 ---
 
-Delegate to the **cw-web-state-builder** subagent: $ARGUMENTS
-
-The agent carries its own procedure and rules; do not restate them.
+Delegate to subagent **cw-web-state-builder** without restating its rules or procedure: $ARGUMENTS
