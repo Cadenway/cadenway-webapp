@@ -3,12 +3,6 @@ description: "Build a page or a presentational component."
 argument-hint: "<component in feature>"
 ---
 
-Delegate to the **cw-web-component-builder** subagent: $ARGUMENTS
+Delegate to subagent **cw-web-component-builder** without restating its rules or procedure: $ARGUMENTS
 
-The agent carries its own procedure and rules; do not restate them.
-
-Require its report to state:
-
-- The mockup screen used.
-- Placement and the rule behind it.
-- Files created and checks run.
+Require the report to name the mockup screen, placement and its rule, files created and checks run.

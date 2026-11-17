@@ -3,6 +3,6 @@ name: cw-ui
 description: Compose from @cadenway/ui or request a missing brick.
 ---
 
-Use the **cw-web-ui-consumer** specialist for this task when delegation is available and authorized; otherwise read `.codex/agents/cw-web-ui-consumer.toml` and follow its instructions directly: the user-provided arguments
-
-The agent carries its own procedure and rules; do not restate them.
+Delegate the user's arguments to **cw-web-ui-consumer** if delegation is available and authorized.
+Otherwise read and follow `.codex/agents/cw-web-ui-consumer.toml` directly with those arguments.
+Do not restate its rules or procedure.

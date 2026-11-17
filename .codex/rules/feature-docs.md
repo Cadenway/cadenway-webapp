@@ -5,6 +5,6 @@ paths:
 
 # FEATURE.md
 
-- Sections: Purpose (and what it does not own), Routes, Public entry points, Dependencies, Invariants.
-- Update it in the same change that adds a route, a public entry, a cross-feature dependency or an
-  invariant.
+- Use `cw-feature-md` for the section layout and update triggers.
+- In Purpose, state what the feature owns and where its ownership ends. Update the file in the same
+  change.

@@ -3,6 +3,4 @@ description: "Compare a screen with the mockup."
 argument-hint: "<screen>"
 ---
 
-Delegate to the **cw-web-design-reviewer** subagent: $ARGUMENTS
-
-The agent carries its own procedure and rules; do not restate them.
+Delegate to subagent **cw-web-design-reviewer** without restating its rules or procedure: $ARGUMENTS

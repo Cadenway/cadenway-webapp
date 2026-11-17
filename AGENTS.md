@@ -1,25 +1,26 @@
 # cadenway-webapp: agent instructions
 
-These instructions are mandatory for every AI assistant working in this repository, whatever the
-vendor. [CLAUDE.md](CLAUDE.md) imports them for Claude Code. Explicit user instructions take
-precedence over procedures, never over the hard limits below.
-
-This file states the **rules**. See the tooling guides for [Claude Code](.claude/README.md)
-and [Codex](.codex/README.md) for agents, skills, commands and hooks.
+Apply these instructions in every assistant. Explicit user instructions take precedence over
+procedures, within the hard limits below. Follow the rules for the affected paths and load only
+the skills relevant to the task.
 
 ## First read
 
-- The [frontend architecture](docs/architecture.md) and the `FEATURE.md` of the feature you touch.
-- The mockup screen you implement (`docs/maquette/source/*.dc.html`, or the live mockup) and its section in the [integration guide](https://claude.ai/artifact/CpJHVCiFfF9j3KbHQ2S1Et).
-- The [repositories document](https://claude.ai/artifact/BPinmYxoF3mbK8w9BMB43N), section "cadenway-webapp".
-- `package.json` for versions and scripts once the repository is bootstrapped. Do not restate
-  versions elsewhere: a copy goes stale.
+- Read the [frontend architecture](docs/architecture.md) and the affected feature's `FEATURE.md`.
+- Before UI changes, consult the relevant `docs/maquette/source/*.dc.html` screen or live mockup
+  and its integration guide section. Use `cw-angular22-conventions` for Angular code and
+  `cw-ui-consumer` for markup. Route missing bricks to the design system through
+  `cw-web-ui-consumer`.
+- For screens and services that fetch data, apply the data-access rule for the generated client,
+  DTO ownership and loading, error with Réessayer, and empty states.
+- For ownership decisions, consult the webapp section of the repositories document.
+- Get versions and scripts from `package.json`. Keep version declarations there.
 
 ## What this repository is
 
-The structure and workflows below describe the bootstrap target. Check the checkout for available files and commands.
-
-cadenway-webapp is the whole application of the mockup, from the sign-in screens to the settings: Angular 22, Tailwind 4, Signal Forms, NgRx SignalStore, `@cadenway/ui`, `@cadenway/api-client`. It talks only to `cadenway-api-gateway` (REST) and `cadenway-realtime-gateway` (WebSocket), ships as a Docker image of static files behind Traefik on `app.<domain>`, and reads the gateway addresses from `public/config.json` at start-up.
+This Angular application serves the authenticated mockup, using the REST and realtime gateways.
+See the [deployment and target structure](docs/architecture.md#purpose-and-target-structure)
+and check the checkout for available files and commands.
 
 ```text
 src/app/
@@ -56,53 +57,48 @@ src/app/
 
 - `core` never imports a feature or a layout. Cross-feature imports use an entry and consumer declared in the owner's `FEATURE.md`.
 - No `shared/ui`, no local copy of a `@cadenway/ui` brick, no other component library.
-- No `HttpClient` to reach the API; no hand-built API URL.
+- Only `@cadenway/api-client` reaches the API, through `data-access/`. Keep DTOs there.
+  No `HttpClient` to reach the API; no hand-built API URL.
 - Signal Forms only: never `ReactiveFormsModule`, `FormBuilder`, `FormGroup`, `FormControl`.
 - State is NgRx SignalStore (`@ngrx/signals`) only: never the global Store family (`@ngrx/store`, `@ngrx/effects`, `@ngrx/entity`, `@ngrx/store-devtools`) or a third-party store extension, never `protectedState: false`; a store reaches the API through its feature's `data-access/`.
 - `docs/maquette/` is a read-only reference copy of the mockup.
 
 ## GitHub files (`.github/`)
 
-This repository carries everything GitHub reads from it; Cadenway has no organization `.github`
-repository and nothing is inherited.
+Use the `github.md` rule for this checkout's [GitHub homepage](.github/README.md), community
+files, templates, owners and workflows. Cadenway has no organization `.github` repository.
+Keep complete CI, release and deploy workflows here, without reusable workflows from siblings.
+Keep Renovate local without a shared preset. Apply common changes through a PR in each affected
+repository.
 
-- [`.github/README.md`](.github/README.md) is the repository home page; `CONTRIBUTING.md`,
-  `CODE_OF_CONDUCT.md`, `SECURITY.md`, `SUPPORT.md`, `PULL_REQUEST_TEMPLATE.md`, `ISSUE_TEMPLATE/` and
-  `CODEOWNERS` sit next to it.
-- `.github/workflows/` holds this repository's complete CI, release and deploy workflows: no reusable
-  workflow from another repository. The Renovate configuration is complete here too, with no shared
-  preset.
-- The parts shared with the other repositories are duplicated on purpose; a change to them is repeated
-  in each repository through its own pull request.
+## Code quality
+
+- Read the affected entry point, its callers, and its relevant tests before editing.
+  Preserve the behavior callers rely on unless the task changes it.
+- Keep the diff focused. Use names that express intent and reuse existing code when
+  it preserves the required behavior. Extract code when it clarifies a responsibility.
+- Keep business decisions with their owning module. Validate external inputs at the
+  boundary and use documented public interfaces across modules and repositories.
+- For writes that can fail, overlap, or be retried, verify the resulting state.
+  Check transaction boundaries, tenant scope, and repeated delivery where relevant.
+- For collections and repeated work, check what grows with input size. Measure or
+  inspect the bottleneck before adding an index, cache, worker, or replica.
+- Run the repository checks that cover the affected behavior. Report the commands
+  and their results, including checks that did not run and tests that selected zero cases.
 
 ## Commands and quality gates
 
-The scripts below are this repository's contract. While the repository is being bootstrapped,
-create them with these exact names; afterwards, use them and never an ad-hoc equivalent. Run the
-narrowest check that covers the change first, then widen:
-
-| Changed                         | Minimum check                                                              |
-| ------------------------------- | -------------------------------------------------------------------------- |
-| Components, templates           | `pnpm test --include <area>`, `pnpm lint`, `pnpm build` (strict templates) |
-| State, services                 | `pnpm test --include <area>`, then `pnpm test:coverage`                    |
-| Routes, guards                  | `pnpm build`                                                               |
-| Browser flows                   | `pnpm e2e <spec>`                                                          |
-| Copy                            | `cw-web-copy-reviewer` against the mockup                                  |
-| Docs or agent instructions only | Scoped formatting and link review                                          |
-
-Report the commands you actually ran and their results; a check you did not run is reported as not
-run.
+Use the repository scripts and start with the [minimum checks by change](docs/development.md#minimum-checks-by-change).
+The [full local quality gate](docs/development.md#full-local-quality-gate) defines the ordered
+suite and the focused test procedure for both assistants.
 
 ## Git and branch flow
 
-- Trunk-based: work branches come from `main`, named `<type>/<lowercase-kebab-description>` with a
-  type among `feat`, `fix`, `docs`, `style`, `refactor`, `perf`, `test`, `build`, `ci`, `chore`,
-  `revert`; put the Cadenway task id first when there is one (`feat/cad-482-sso-screen`). Never an
-  agent name as a prefix. Validate with `git check-ref-format --branch <name>`.
-- Commits and PR titles follow Conventional Commits: `type(scope): subject`, English, imperative,
-  lowercase subject, no trailing period, at most 100 characters; `!` only for a breaking change.
-- Pull requests target `main` and are squash-merged after review and green CI. release-please opens the release pull request; its merge tags, publishes the image and lets the deploy workflow write the version into cadenway-ops.
-- Stage only the files of your task; preserve other people's changes in the working tree.
+Use the `git-and-commits.md` rule for work off `main`, branch names and Conventional
+Commits. Validate a branch name with `git check-ref-format --branch <name>`. Target `main` with
+reviewed PRs and squash-merge after green CI. release-please opens the release PR. CI publishes
+the image and the deploy workflow writes its version into cadenway-ops. Stage only task files
+and preserve existing changes.
 
 ## Hard limits (never without the user's explicit request in this conversation)
 
@@ -121,14 +117,10 @@ not to find another way around it.
 
 ## Agent tooling
 
-- **Claude Code**: [CLAUDE.md](CLAUDE.md) and [.claude/README.md](.claude/README.md): the
-  `cw-web-*` agents, the `/cw-*` commands (`/cw-quality` runs the whole local gate),
-  path-scoped rules and hooks.
-- **Codex**: [.codex/README.md](.codex/README.md) covers the specialists, `$cw-*` skills, rules and hooks.
-- **Builders** (assigned writes): `cw-web-feature-builder`, `cw-web-component-builder`, `cw-web-form-builder`, `cw-web-overlay-builder`, `cw-web-collection-builder`, `cw-web-service-builder`, `cw-web-state-builder`, `cw-web-realtime-builder`, `cw-web-routing-builder`, `cw-web-ui-consumer`, `cw-web-test-writer`, `cw-web-e2e-runner`, `cw-web-github-maintainer`.
-- **Reviewers** (read-only): `cw-web-design-reviewer`, `cw-web-a11y-auditor`, `cw-web-architecture-reviewer`, `cw-web-state-reviewer`, `cw-web-security-auditor`, `cw-web-performance-reviewer`, `cw-web-api-contract-reviewer`, `cw-web-motion-reviewer`, `cw-web-copy-reviewer`.
-- Specialists are available, not mandatory. Delegate a bounded responsibility with explicit files and
-  checks, assign disjoint files to parallel agents and integrate their results yourself.
+Use the [Codex](.codex/README.md) and [Claude Code](.claude/README.md) guides for rules,
+skills, hooks and the [specialist inventory](.claude/README.md#agents). Builders have
+assigned write scopes and reviewers are read-only. Specialists are optional. When delegating,
+assign disjoint files and explicit checks, then integrate the results yourself.
 
 ## Repository hygiene
 

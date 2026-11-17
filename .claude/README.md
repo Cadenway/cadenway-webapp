@@ -1,8 +1,7 @@
 # cadenway-webapp: Claude Code tooling
 
-This `.claude/` folder ships the Claude Code tooling of cadenway-webapp: **22 agents**,
-23 slash commands, 16 rules, 21 skills, 3 hooks, the project
-settings and launch configuration. The application launch requires the planned package scripts.
+This directory contains the repository's Claude Code agents, commands, scoped rules, skills,
+hooks and project settings. The tables below explain when to use them.
 
 Start from [AGENTS.md](../AGENTS.md) (the rules every assistant follows) and [CLAUDE.md](../CLAUDE.md)
 (the Claude entry point).

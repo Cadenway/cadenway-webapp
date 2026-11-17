@@ -8,9 +8,7 @@ paths:
 
 # Overlays
 
-- Use `@cadenway/ui` overlays (CDK overlay underneath): they open on the side with room, shift
-  horizontally to stay visible and cap their height (96 px minimum) with scrolling.
-- Width follows the content (`max-w-sm`); the selected option carries a check on the right.
-- Close on outside click and Escape; one menu at a time; focus returns to the trigger.
+- Use `@cadenway/ui` overlays over CDK. Follow `cw-overlay-placement` for sizing, placement,
+  selection and dismissal, including focus return. Open one menu at a time.
 - Hover is `bg-muted` without border; the active choice is violet (`primary`).
 - Deletions confirm through `cw-confirm-dialog`; sensitive ones require typing the name.
