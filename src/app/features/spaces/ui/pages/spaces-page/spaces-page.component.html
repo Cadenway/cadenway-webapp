@@ -1,0 +1,170 @@
+<main
+  class="mx-auto w-full max-w-6xl space-y-5 px-4 py-6 sm:px-6"
+  aria-labelledby="collection-title"
+>
+  <nav
+    aria-label="Navigation dans les espaces"
+    class="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm"
+  >
+    <a routerLink="/accueil" class="underline-offset-4 hover:underline">Accueil</a>
+    @if (pageKind() !== 'spaces') {
+      <a routerLink="/espaces" class="underline-offset-4 hover:underline">Espaces</a>
+    }
+    @if (pageKind() === 'tasks' && request(); as destination) {
+      @if (destination.kind === 'tasks') {
+        <a
+          [routerLink]="['/espaces', destination.spaceId, 'listes']"
+          class="underline-offset-4 hover:underline"
+          >Listes</a
+        >
+      }
+    }
+  </nav>
+
+  <h1 id="collection-title" class="text-2xl font-semibold tracking-tight">{{ heading() }}</h1>
+
+  @if (!request()) {
+    <cw-empty role="alert">
+      <cw-empty-header><cw-empty-title>Page introuvable</cw-empty-title></cw-empty-header>
+      <cw-empty-content><a routerLink="/espaces" class="underline">Espaces</a></cw-empty-content>
+    </cw-empty>
+  } @else if (collection.error()) {
+    <cw-empty role="alert">
+      <cw-empty-header>
+        <cw-empty-title>
+          {{
+            pageKind() === 'tasks'
+              ? 'Impossible de charger les tâches'
+              : 'Impossible de charger cette page'
+          }}
+        </cw-empty-title>
+      </cw-empty-header>
+      <cw-empty-content>
+        <button cwButton type="button" variant="outline" (click)="collection.reload()">
+          Réessayer
+        </button>
+      </cw-empty-content>
+    </cw-empty>
+  } @else if (collection.isLoading()) {
+    <div
+      class="space-y-3 rounded-lg border border-border p-4"
+      role="status"
+      aria-busy="true"
+      [attr.aria-label]="pageKind() === 'tasks' ? 'Chargement des tâches' : 'Chargement'"
+    >
+      <div cwSkeleton class="h-4 w-2/3" aria-hidden="true"></div>
+      <div cwSkeleton class="h-4 w-1/2" aria-hidden="true"></div>
+      <div cwSkeleton class="h-4 w-3/5" aria-hidden="true"></div>
+    </div>
+  } @else if (collection.hasValue()) {
+    @let data = collection.value();
+    @switch (data.kind) {
+      @case ('spaces') {
+        @if (data.page.items.length) {
+          <ul class="divide-y divide-border rounded-lg border border-border">
+            @for (space of data.page.items; track space.id) {
+              <li>
+                <a
+                  [routerLink]="['/espaces', space.id, 'listes']"
+                  class="block px-4 py-3 font-medium hover:bg-accent focus-visible:bg-accent"
+                  >{{ space.name }}</a
+                >
+              </li>
+            }
+          </ul>
+        } @else {
+          <cw-empty>
+            <cw-empty-header><cw-empty-title>Aucun espace</cw-empty-title></cw-empty-header>
+          </cw-empty>
+        }
+      }
+      @case ('lists') {
+        @if (data.page.items.length) {
+          <ul class="divide-y divide-border rounded-lg border border-border">
+            @for (list of data.page.items; track list.id) {
+              <li>
+                <a
+                  [routerLink]="['/espaces', data.spaceId, 'listes', list.id]"
+                  class="block px-4 py-3 font-medium hover:bg-accent focus-visible:bg-accent"
+                  >{{ list.name }}</a
+                >
+              </li>
+            }
+          </ul>
+        } @else {
+          <cw-empty>
+            <cw-empty-header
+              ><cw-empty-title>Aucune liste dans cet espace</cw-empty-title></cw-empty-header
+            >
+          </cw-empty>
+        }
+      }
+      @case ('tasks') {
+        @if (data.sprint; as sprint) {
+          <div class="space-y-1 text-sm text-muted-foreground">
+            <p>
+              {{ sprint.startDate | date: 'dd/MM/yyyy' }} –
+              {{ sprint.endDate | date: 'dd/MM/yyyy' }}
+            </p>
+            @if (sprint.goal) {
+              <p>{{ sprint.goal }}</p>
+            }
+          </div>
+        }
+        @if (data.page.items.length) {
+          <div class="overflow-auto rounded-lg border border-border">
+            <table class="w-full table-auto text-left text-sm" [attr.aria-label]="data.listName">
+              <thead class="text-xs text-muted-foreground">
+                <tr>
+                  <th scope="col" class="px-4 py-3">Nom</th>
+                  <th scope="col" class="px-3 py-3">Statut</th>
+                  <th scope="col" class="px-3 py-3 max-sm:hidden">Assignés</th>
+                  <th scope="col" class="px-3 py-3 max-sm:hidden">Échéance</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-border">
+                @for (task of data.page.items; track task.key) {
+                  <tr class="hover:bg-accent">
+                    <th scope="row" class="p-0 font-medium">
+                      <a
+                        [routerLink]="['/taches', task.key]"
+                        class="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 px-4 py-2.5 underline-offset-4 hover:underline"
+                      >
+                        <span class="font-mono text-xs text-muted-foreground">{{ task.key }}</span>
+                        <span>{{ task.name }}</span>
+                      </a>
+                    </th>
+                    <td class="px-3 py-2"><cw-status-badge [status]="task.status" /></td>
+                    <td class="px-3 py-2 max-sm:hidden">
+                      {{ task.assigneeCount || 'Non assignée' }}
+                    </td>
+                    <td class="px-3 py-2 whitespace-nowrap max-sm:hidden">
+                      {{ task.dueDate ? (task.dueDate | date: 'dd/MM/yyyy') : '—' }}
+                    </td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        } @else {
+          <cw-empty>
+            <cw-empty-header><cw-empty-title>Aucune tâche</cw-empty-title></cw-empty-header>
+          </cw-empty>
+        }
+      }
+    }
+
+    @if (cursor() || data.page.nextCursor) {
+      <nav aria-label="Pagination" class="flex flex-wrap gap-4 text-sm">
+        @if (cursor()) {
+          <a [routerLink]="[]" class="underline">Première page</a>
+        }
+        @if (data.page.nextCursor; as nextCursor) {
+          <a [routerLink]="[]" [queryParams]="{ cursor: nextCursor }" class="underline"
+            >Page suivante</a
+          >
+        }
+      </nav>
+    }
+  }
+</main>
