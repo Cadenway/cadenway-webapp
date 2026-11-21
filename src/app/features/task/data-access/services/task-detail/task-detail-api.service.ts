@@ -2,7 +2,12 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { inject, Service } from '@angular/core';
 import { OrganizationsService, TasksService, TrashService } from '@cadenway/api-client';
 import type { StatusKey } from '@cadenway/contracts';
-import { CreateTaskBody, GetTaskDetailParams } from '@cadenway/contracts/validators/public/tasks';
+import {
+  CreateTaskBody,
+  GetTaskDetailHeader,
+  GetTaskDetailParams,
+  UpdateTaskHeader,
+} from '@cadenway/contracts/validators/public/tasks';
 import {
   RestoreTrashEntryParams,
   TrashTaskResponse,
@@ -88,7 +93,9 @@ function classifyFailure(error: unknown): TaskDetailFailure {
       ? 'organization-changed'
       : 'forbidden';
   }
-  if (error.status === 412) return 'stale';
+  if (error.status === 412) {
+    return code === 'organization.context-changed' ? 'organization-changed' : 'stale';
+  }
   return 'unavailable';
 }
 
@@ -165,16 +172,21 @@ export class TaskDetailApi {
       return throwError(() => new TaskDetailRequestError('not-found'));
     }
     return this.inOrganization(organizationId, () =>
-      this.client.getTaskDetail(taskKey, { cache: 'no-store' }).pipe(
-        map(toTaskDetailView),
-        catchError((error: unknown) => {
-          if (error instanceof HttpErrorResponse && classifyFailure(error) === 'trashed') {
-            const task: TrashedTaskView | null = readTrashedTask(error.error, taskKey);
-            return throwError(() => new TaskDetailRequestError('trashed', task));
-          }
-          return rejectTaskRequest(error);
-        }),
-      ),
+      this.client
+        .getTaskDetail(taskKey, {
+          cache: 'no-store',
+          headers: GetTaskDetailHeader.parse({ 'If-Organization-Match': organizationId }),
+        })
+        .pipe(
+          map(toTaskDetailView),
+          catchError((error: unknown) => {
+            if (error instanceof HttpErrorResponse && classifyFailure(error) === 'trashed') {
+              const task: TrashedTaskView | null = readTrashedTask(error.error, taskKey);
+              return throwError(() => new TaskDetailRequestError('trashed', task));
+            }
+            return rejectTaskRequest(error);
+          }),
+        ),
     );
   }
 
@@ -229,7 +241,16 @@ export class TaskDetailApi {
   ): Observable<TaskStatusConfirmation> {
     return this.inOrganization(organizationId, () =>
       this.client
-        .updateTask(taskKey, { status }, { headers: { 'If-Match': `"${version.toString()}"` } })
+        .updateTask(
+          taskKey,
+          { status },
+          {
+            headers: UpdateTaskHeader.parse({
+              'If-Match': `"${version.toString()}"`,
+              'If-Organization-Match': organizationId,
+            }),
+          },
+        )
         .pipe(map((task) => ({ key: task.key, status: task.status, version: task.version }))),
     );
   }

@@ -42,7 +42,12 @@ async function stubGateway(
   let selected = false;
   let organizationRequests = 0;
   const selections: unknown[] = [];
-  const statusChanges: { body: unknown; ifMatch: string | undefined }[] = [];
+  const taskDetailOrganizations: (string | undefined)[] = [];
+  const statusChanges: {
+    body: unknown;
+    ifMatch: string | undefined;
+    ifOrganizationMatch: string | undefined;
+  }[] = [];
 
   await page.route('**/config.json', async (route) => {
     const origin = new URL(route.request().url()).origin;
@@ -208,6 +213,7 @@ async function stubGateway(
       return;
     }
     if (path === '/v1/tasks/CAD-482/detail' && request.method() === 'GET') {
+      taskDetailOrganizations.push(request.headers()['if-organization-match']);
       const statuses = Object.fromEntries(
         [
           'triage',
@@ -247,13 +253,19 @@ async function stubGateway(
       statusChanges.push({
         body: request.postDataJSON() as unknown,
         ifMatch: request.headers()['if-match'],
+        ifOrganizationMatch: request.headers()['if-organization-match'],
       });
       await route.fulfill({ json: { key: 'CAD-482', status: 'review', version: 4 } });
       return;
     }
     await route.abort();
   });
-  return { selections, statusChanges, organizationRequests: () => organizationRequests };
+  return {
+    selections,
+    taskDetailOrganizations,
+    statusChanges,
+    organizationRequests: () => organizationRequests,
+  };
 }
 
 async function signIn(page: Page): Promise<void> {
@@ -344,5 +356,8 @@ test('opens Sprint 14 and changes the status of CAD-482', async ({ page }) => {
   await page.getByRole('combobox', { name: 'Statut' }).click();
   await page.getByRole('option', { name: 'En revue' }).click();
   await expect(page.getByText('Statut modifié.')).toBeVisible();
-  expect(gateway.statusChanges).toEqual([{ body: { status: 'review' }, ifMatch: '"3"' }]);
+  expect(gateway.taskDetailOrganizations).toEqual([organizationId]);
+  expect(gateway.statusChanges).toEqual([
+    { body: { status: 'review' }, ifMatch: '"3"', ifOrganizationMatch: organizationId },
+  ]);
 });
