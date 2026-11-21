@@ -118,16 +118,30 @@ test('signs in and persists the status change through the isolated stack', async
   await page.reload();
   await expect(review.getByRole('link', { name: taskName })).toBeVisible();
 
-  const beforeTrash = await page.request.get(`${apiOrigin}/v1/tasks/CAD-482`);
-  expect(beforeTrash.status()).toBe(200);
-  const version = beforeTrash.headers()['etag'];
+  const beforeTrash = await page.evaluate(async (origin) => {
+    const response = await fetch(`${origin}/v1/tasks/CAD-482`, {
+      credentials: 'include',
+      cache: 'no-store',
+    });
+    return { status: response.status, version: response.headers.get('ETag') };
+  }, apiOrigin);
+  expect(beforeTrash.status).toBe(200);
+  const { version } = beforeTrash;
   expect(version).toMatch(/^"[1-9][0-9]*"$/u);
   if (!version) throw new Error('The task response did not include an ETag.');
-  const trashed = await page.request.post(`${apiOrigin}/v1/tasks/CAD-482/trash`, {
-    headers: { 'If-Match': version },
-    data: {},
-  });
-  expect(trashed.status()).toBe(200);
+  const trashedStatus = await page.evaluate(
+    async ({ origin, etag }) => {
+      const response = await fetch(`${origin}/v1/tasks/CAD-482/trash`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json', 'If-Match': etag },
+        body: '{}',
+      });
+      return response.status;
+    },
+    { origin: apiOrigin, etag: version },
+  );
+  expect(trashedStatus).toBe(200);
   await page.goto('/taches/CAD-482');
   await expect(page.getByRole('heading', { name: 'Cette tâche a été supprimée' })).toBeVisible();
   await expect(page.getByText(`CAD-482 « ${taskName} »`, { exact: false })).toBeVisible();
@@ -140,8 +154,13 @@ test('signs in and persists the status change through the isolated stack', async
   await page.reload();
   await expect(page.getByRole('heading', { name: taskName })).toBeVisible();
   await expect(page.getByRole('combobox', { name: 'Statut' })).toContainText('En revue');
-  const restored = await page.request.get(`${apiOrigin}/v1/tasks/CAD-482`);
-  expect(restored.status()).toBe(200);
-  const restoredTask: unknown = await restored.json();
-  expect(restoredTask).toMatchObject({ key: 'CAD-482', status: 'review' });
+  const restored = await page.evaluate(async (origin) => {
+    const response = await fetch(`${origin}/v1/tasks/CAD-482`, {
+      credentials: 'include',
+      cache: 'no-store',
+    });
+    return { status: response.status, task: (await response.json()) as unknown };
+  }, apiOrigin);
+  expect(restored.status).toBe(200);
+  expect(restored.task).toMatchObject({ key: 'CAD-482', status: 'review' });
 });
