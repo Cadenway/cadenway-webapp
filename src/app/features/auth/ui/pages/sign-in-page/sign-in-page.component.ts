@@ -3,6 +3,9 @@ import {
   computed,
   DestroyRef,
   inject,
+  input,
+  type InputSignal,
+  type OnInit,
   type Signal,
   signal,
   type WritableSignal,
@@ -16,7 +19,7 @@ import {
   required,
   submit,
 } from '@angular/forms/signals';
-import { Router } from '@angular/router';
+import { Router, RouterLink } from '@angular/router';
 import { CwAlert, CwAlertDescription } from '@cadenway/ui/components/alert';
 import { CwButton } from '@cadenway/ui/components/button';
 import { CwCard } from '@cadenway/ui/components/card';
@@ -25,7 +28,9 @@ import { CwInput } from '@cadenway/ui/components/input';
 import { NgIcon } from '@ng-icons/core';
 
 import type { AuthProblem, SignInCredentials } from '../../../models/auth/auth.interface';
+import type { FederatedSignInRequest } from '../../../models/auth/auth.type';
 import { SignInStore } from '../../../state/sign-in/sign-in.store';
+import { FederatedSignInForm } from '../../components/federated-sign-in-form/federated-sign-in-form.component';
 
 /**
  * Function problemMessage
@@ -46,6 +51,8 @@ function problemMessage(problem: AuthProblem | null): string | null {
       return 'Compte verrouillé pendant 15 minutes.';
     case 'auth.email-not-verified':
       return 'Vérifiez votre adresse e-mail avant de vous connecter.';
+    case 'auth.federated-sign-in-refused':
+      return 'Cette méthode de connexion ne peut pas être utilisée.';
     case 'auth.challenge-expired':
       return 'La vérification a expiré. Connectez-vous à nouveau.';
     case 'auth.two-step-code-invalid':
@@ -61,16 +68,38 @@ function problemMessage(problem: AuthProblem | null): string | null {
  * Component SignInPage
  *
  * @description
- * Opens a cookie session through the password form and, when required, the authenticator challenge.
+ * Opens a cookie session through password or a provider and shares the authenticator challenge.
  */
 @Component({
   selector: 'cw-sign-in-page',
-  imports: [CwAlert, CwAlertDescription, CwButton, CwCard, CwCheckbox, CwInput, FormField, NgIcon],
+  imports: [
+    CwAlert,
+    CwAlertDescription,
+    CwButton,
+    CwCard,
+    CwCheckbox,
+    CwInput,
+    FederatedSignInForm,
+    FormField,
+    NgIcon,
+    RouterLink,
+  ],
   providers: [SignInStore],
   templateUrl: './sign-in-page.component.html',
 })
-export class SignInPage {
+export class SignInPage implements OnInit {
   // #region Properties
+  /**
+   * Property federatedContinuation
+   *
+   * @description
+   * Fixed route data selects the page that redeems the HttpOnly continuation cookie.
+   *
+   * @type {InputSignal<boolean>}
+   * @readonly
+   */
+  public readonly federatedContinuation: InputSignal<boolean> = input(false);
+
   /**
    * Property store
    *
@@ -135,6 +164,17 @@ export class SignInPage {
   });
 
   /**
+   * Property rememberMe
+   *
+   * @description
+   * Reuses the browser persistence preference for provider sign-in.
+   *
+   * @type {Signal<boolean>}
+   * @readonly
+   */
+  protected readonly rememberMe: Signal<boolean> = computed(() => this.credentials().rememberMe);
+
+  /**
    * Property codeModel
    *
    * @description
@@ -186,6 +226,62 @@ export class SignInPage {
 
   // #region Methods
   /**
+   * Method ngOnInit
+   *
+   * @description
+   * Redeems the provider continuation once when the callback page opens.
+   */
+  public ngOnInit(): void {
+    if (this.federatedContinuation()) void this.completeFederated();
+  }
+
+  /**
+   * Method startFederated
+   *
+   * @description
+   * Hands the browser to the authorization destination returned by the gateway.
+   *
+   * @param {FederatedSignInRequest} request - The selected provider and form values.
+   * @returns {Promise<void>} Resolves after accepting or refusing the redirect.
+   */
+  protected async startFederated(request: FederatedSignInRequest): Promise<void> {
+    if (this.signInForm().submitting()) return;
+    const authorizationUrl: string | null = await this.store.startFederated(request);
+    if (authorizationUrl !== null && !this.destroyRef.destroyed) {
+      window.location.assign(authorizationUrl);
+    }
+  }
+
+  /**
+   * Method cancelChallenge
+   *
+   * @description
+   * Returns to the main sign-in page after discarding the challenge.
+   *
+   * @returns {Promise<void>} Resolves after returning to sign-in.
+   */
+  protected async cancelChallenge(): Promise<void> {
+    this.store.cancelChallenge();
+    if (this.federatedContinuation()) {
+      await this.router.navigateByUrl('/connexion', { replaceUrl: true });
+    }
+  }
+
+  /**
+   * Method completeFederated
+   *
+   * @description
+   * Waits for the gateway to open a session before leaving the provider continuation page.
+   *
+   * @returns {Promise<void>} Resolves once the session, challenge or refusal is available.
+   */
+  private async completeFederated(): Promise<void> {
+    if ((await this.store.finishFederated()) && !this.destroyRef.destroyed) {
+      await this.router.navigateByUrl('/organisations', { replaceUrl: true });
+    }
+  }
+
+  /**
    * Method submitPassword
    *
    * @description
@@ -196,6 +292,7 @@ export class SignInPage {
    */
   protected async submitPassword(event: Event): Promise<void> {
     event.preventDefault();
+    if (this.store.federatedStarting()) return;
     await submit(this.signInForm, async () => {
       const signedIn: boolean = await this.store.signIn(this.credentials());
       if (signedIn || this.store.challengeEmail() !== null) {

@@ -1,4 +1,5 @@
 import type { Routes } from '@angular/router';
+import { provideCadenwayIcons } from '@cadenway/icons';
 
 import { requireOrganization } from '@features/auth';
 
@@ -13,6 +14,7 @@ import { requireOrganization } from '@features/auth';
 export const ERRORS_ROUTES: Routes = [
   {
     path: '',
+    providers: provideCadenwayIcons(),
     canActivate: [requireOrganization],
     runGuardsAndResolvers: 'always',
     title: 'Page introuvable — Cadenway',

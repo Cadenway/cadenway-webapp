@@ -1,10 +1,14 @@
+import type { HttpResponse } from '@angular/common/http';
 import { inject, Service } from '@angular/core';
 import {
   AuthService as GeneratedAuthService,
+  type FederatedAuthorization,
   OrganizationsService,
   type CurrentUser,
   type MyOrganization,
   type MyOrganizationPage,
+  type SignedIn,
+  type SignInChallenge,
 } from '@cadenway/api-client';
 import { catchError, forkJoin, map, type Observable, of } from 'rxjs';
 
@@ -13,7 +17,11 @@ import type {
   OrganizationEntry,
   SignInCredentials,
 } from '../../../models/auth/auth.interface';
-import type { AuthResult, SignInOutcome } from '../../../models/auth/auth.type';
+import type {
+  AuthResult,
+  FederatedSignInRequest,
+  SignInOutcome,
+} from '../../../models/auth/auth.type';
 import { withSessionLock } from '../../../services/session-lock/session-lock.service';
 import { authProblem } from '../../adapters/auth-problem.adapter';
 
@@ -69,6 +77,37 @@ function authResult<T>(request: Observable<T>): Observable<AuthResult<T>> {
 }
 
 /**
+ * Function signInOutcome
+ *
+ * @description
+ * Distinguishes a confirmed session from an authenticator challenge using the HTTP status.
+ *
+ * @param {HttpResponse<SignedIn | SignInChallenge>} response - The gateway's first-factor outcome.
+ * @returns {SignInOutcome} The confirmed session or the next step for this screen.
+ */
+function signInOutcome(response: HttpResponse<SignedIn | SignInChallenge>): SignInOutcome {
+  if (response.status === 200 && response.body && 'session' in response.body) {
+    return { kind: 'signed-in' };
+  }
+
+  if (
+    response.status === 202 &&
+    response.body &&
+    'token' in response.body &&
+    response.body.token &&
+    Array.isArray(response.body.methods) &&
+    response.body.methods.includes('authenticator-app')
+  ) {
+    return {
+      kind: 'challenge',
+      challenge: { token: response.body.token, email: response.body.email },
+    };
+  }
+
+  throw new Error('The gateway returned an unsupported sign-in response.');
+}
+
+/**
  * Service AuthEntryService
  *
  * @description
@@ -115,28 +154,51 @@ export class AuthEntryService {
     return authResult(
       withSessionLock(() =>
         this.auth.signInWithPassword(credentials, { observe: 'response' }),
-      ).pipe(
-        map((response): SignInOutcome => {
-          if (response.status === 200 && response.body && 'session' in response.body) {
-            return { kind: 'signed-in' };
-          }
+      ).pipe(map(signInOutcome)),
+    );
+  }
 
+  /**
+   * Method startFederated
+   *
+   * @description
+   * Opens a browser-bound flow and validates the contracted HTTPS destination before navigation.
+   *
+   * @param {FederatedSignInRequest} request - The selected method and form values.
+   * @returns {Observable<AuthResult<string>>} The verified provider authorization URL.
+   */
+  public startFederated(request: FederatedSignInRequest): Observable<AuthResult<string>> {
+    return authResult(
+      this.auth.startFederatedSignIn(request).pipe(
+        map(({ authorizationUrl }: FederatedAuthorization): string => {
+          const url: URL = new URL(authorizationUrl);
           if (
-            response.status === 202 &&
-            response.body &&
-            'token' in response.body &&
-            response.body.token &&
-            Array.isArray(response.body.methods) &&
-            response.body.methods.includes('authenticator-app')
+            authorizationUrl.length > 8_192 ||
+            !authorizationUrl.startsWith('https://') ||
+            url.protocol !== 'https:' ||
+            url.username ||
+            url.password
           ) {
-            return {
-              kind: 'challenge',
-              challenge: { token: response.body.token, email: response.body.email },
-            };
+            throw new Error('The gateway returned an invalid provider authorization URL.');
           }
-
-          throw new Error('The gateway returned an unsupported sign-in response.');
+          return url.href;
         }),
+      ),
+    );
+  }
+
+  /**
+   * Method finishFederated
+   *
+   * @description
+   * Redeems the continuation cookie once with an empty body under the standard session lock.
+   *
+   * @returns {Observable<AuthResult<SignInOutcome>>} The confirmed session or authenticator challenge.
+   */
+  public finishFederated(): Observable<AuthResult<SignInOutcome>> {
+    return authResult(
+      withSessionLock(() => this.auth.finishFederatedSignIn({}, { observe: 'response' })).pipe(
+        map(signInOutcome),
       ),
     );
   }

@@ -1,4 +1,5 @@
 import type { Routes } from '@angular/router';
+import { provideCadenwayIcons } from '@cadenway/icons';
 
 import { requireOrganization, resolveOrganizationId } from '@features/auth';
 
@@ -13,6 +14,7 @@ import { requireOrganization, resolveOrganizationId } from '@features/auth';
 export const SPACES_ROUTES: Routes = [
   {
     path: '',
+    providers: provideCadenwayIcons(),
     pathMatch: 'full',
     canActivate: [requireOrganization],
     runGuardsAndResolvers: 'always',
@@ -22,6 +24,7 @@ export const SPACES_ROUTES: Routes = [
   },
   {
     path: ':spaceId/listes',
+    providers: provideCadenwayIcons(),
     pathMatch: 'full',
     canActivate: [requireOrganization],
     runGuardsAndResolvers: 'always',
@@ -31,6 +34,7 @@ export const SPACES_ROUTES: Routes = [
   },
   {
     path: ':spaceId/listes/:listId',
+    providers: provideCadenwayIcons(),
     resolve: { organizationId: resolveOrganizationId },
     runGuardsAndResolvers: 'always',
     data: { pageKind: 'tasks' },

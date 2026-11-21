@@ -6,7 +6,6 @@ import {
   provideBrowserGlobalErrorListeners,
 } from '@angular/core';
 import { provideRouter, withComponentInputBinding } from '@angular/router';
-import { provideCadenwayIcons } from '@cadenway/icons';
 
 import { apiClientInterceptor } from '@core/api';
 import { RuntimeConfigStore } from '@core/config';
@@ -27,7 +26,6 @@ export const appConfig: ApplicationConfig = {
     // The gateway addresses must be known before anything calls the API.
     provideAppInitializer(() => inject(RuntimeConfigStore).load()),
     provideHttpClient(withInterceptors([apiClientInterceptor])),
-    provideCadenwayIcons(),
     provideRouter(APP_ROUTES, withComponentInputBinding()),
   ],
 };

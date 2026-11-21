@@ -1,4 +1,5 @@
 import type { Routes } from '@angular/router';
+import { provideCadenwayIcons } from '@cadenway/icons';
 
 import { resolveOrganizationId } from '@features/auth';
 
@@ -13,6 +14,7 @@ import { resolveOrganizationId } from '@features/auth';
 export const TASK_ROUTES: Routes = [
   {
     path: ':taskKey',
+    providers: provideCadenwayIcons(),
     resolve: { organizationId: resolveOrganizationId },
     runGuardsAndResolvers: 'always',
     loadComponent: () =>

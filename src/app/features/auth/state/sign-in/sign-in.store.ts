@@ -8,7 +8,11 @@ import type {
   SignInChallenge,
   SignInCredentials,
 } from '../../models/auth/auth.interface';
-import type { AuthResult, SignInOutcome } from '../../models/auth/auth.type';
+import type {
+  AuthResult,
+  FederatedSignInRequest,
+  SignInOutcome,
+} from '../../models/auth/auth.type';
 
 /**
  * Interface SignInStoreInstance
@@ -39,6 +43,17 @@ interface SignInStoreInstance {
    * @readonly
    */
   readonly problem: Signal<AuthProblem | null>;
+
+  /**
+   * Property federatedStarting
+   *
+   * @description
+   * Indicates that the gateway is preparing a provider redirect.
+   *
+   * @type {Signal<boolean>}
+   * @readonly
+   */
+  readonly federatedStarting: Signal<boolean>;
   // #endregion
 
   // #region Methods
@@ -52,6 +67,27 @@ interface SignInStoreInstance {
    * @returns {Promise<boolean>} Whether the gateway opened the session.
    */
   signIn(credentials: SignInCredentials): Promise<boolean>;
+
+  /**
+   * Method startFederated
+   *
+   * @description
+   * Prepares one browser-bound provider redirect.
+   *
+   * @param {FederatedSignInRequest} request - The selected provider and form values.
+   * @returns {Promise<string | null>} The provider destination or a refusal.
+   */
+  startFederated(request: FederatedSignInRequest): Promise<string | null>;
+
+  /**
+   * Method finishFederated
+   *
+   * @description
+   * Checks the continuation cookie and stores any second-step challenge privately.
+   *
+   * @returns {Promise<boolean>} Whether the gateway opened the session.
+   */
+  finishFederated(): Promise<boolean>;
 
   /**
    * Method answer
@@ -80,18 +116,23 @@ interface SignInStoreInstance {
  * @description
  * The challenge is private to this page store and is erased on completion or cancellation.
  *
- * @type {{ _challenge: SignInChallenge | null; problem: AuthProblem | null }}
+ * @type {{ _challenge: SignInChallenge | null; problem: AuthProblem | null; federatedStarting: boolean }}
  */
-const initialState: { _challenge: SignInChallenge | null; problem: AuthProblem | null } = {
+const initialState: {
+  _challenge: SignInChallenge | null;
+  problem: AuthProblem | null;
+  federatedStarting: boolean;
+} = {
   _challenge: null,
   problem: null,
+  federatedStarting: false,
 };
 
 /**
  * Constant SignInStore
  *
  * @description
- * Coordinates password sign-in and the authenticator challenge without retaining session data.
+ * Coordinates password and federated sign-in and their authenticator challenges.
  *
  * @type {Type<SignInStoreInstance>}
  */
@@ -100,11 +141,8 @@ export const SignInStore: Type<SignInStoreInstance> = signalStore(
   withComputed(({ _challenge }: { _challenge: Signal<SignInChallenge | null> }) => ({
     challengeEmail: computed(() => _challenge()?.email ?? null),
   })),
-  withMethods((store, api = inject(AuthEntryService)) => ({
-    /** Checks the password and exposes any required second step. */
-    async signIn(credentials: SignInCredentials): Promise<boolean> {
-      patchState(store, { problem: null });
-      const result: AuthResult<SignInOutcome> = await firstValueFrom(api.signIn(credentials));
+  withMethods((store, api = inject(AuthEntryService)) => {
+    const acceptFirstFactor: (result: AuthResult<SignInOutcome>) => boolean = (result) => {
       if (!result.ok) {
         patchState(store, { problem: result.problem });
         return false;
@@ -116,34 +154,60 @@ export const SignInStore: Type<SignInStoreInstance> = signalStore(
       }
 
       return true;
-    },
+    };
 
-    /** Answers the outstanding challenge using the six digits from the authenticator. */
-    async answer(code: string): Promise<boolean> {
-      const challenge: SignInChallenge | null = store._challenge();
-      if (!challenge) {
-        return false;
-      }
+    return {
+      /** Checks the password and exposes any required second step. */
+      async signIn(credentials: SignInCredentials): Promise<boolean> {
+        patchState(store, { problem: null });
+        return acceptFirstFactor(await firstValueFrom(api.signIn(credentials)));
+      },
 
-      patchState(store, { problem: null });
-      const result: AuthResult<void> = await firstValueFrom(
-        api.answerWithCode(challenge.token, code),
-      );
-      if (!result.ok) {
-        patchState(store, {
-          problem: result.problem,
-          ...(result.problem.code === 'auth.challenge-expired' ? { _challenge: null } : {}),
-        });
-        return false;
-      }
+      /** Opens one pending browser flow and returns its provider destination. */
+      async startFederated(request: FederatedSignInRequest): Promise<string | null> {
+        if (store.federatedStarting()) return null;
+        patchState(store, { problem: null, federatedStarting: true });
+        const result: AuthResult<string> = await firstValueFrom(api.startFederated(request));
+        if (result.ok) {
+          patchState(store, { federatedStarting: false });
+          return result.value;
+        }
+        patchState(store, { problem: result.problem, federatedStarting: false });
+        return null;
+      },
 
-      patchState(store, { _challenge: null });
-      return true;
-    },
+      /** Redeems the continuation cookie from the browser redirect page. */
+      async finishFederated(): Promise<boolean> {
+        return acceptFirstFactor(await firstValueFrom(api.finishFederated()));
+      },
 
-    /** Clears the challenge when the caller returns to password entry. */
-    cancelChallenge(): void {
-      patchState(store, { _challenge: null, problem: null });
-    },
-  })),
+      /** Answers the outstanding challenge using the six digits from the authenticator. */
+      async answer(code: string): Promise<boolean> {
+        const challenge: SignInChallenge | null = store._challenge();
+        if (!challenge) {
+          return false;
+        }
+
+        patchState(store, { problem: null });
+        const result: AuthResult<void> = await firstValueFrom(
+          api.answerWithCode(challenge.token, code),
+        );
+        if (!result.ok) {
+          patchState(store, {
+            problem: result.problem,
+            ...(result.problem.code === 'auth.challenge-expired' ? { _challenge: null } : {}),
+          });
+          return false;
+        }
+
+        patchState(store, { _challenge: null });
+        return true;
+      },
+
+      /** Clears the challenge when the caller returns to password entry. */
+      cancelChallenge(): void {
+        patchState(store, { _challenge: null, problem: null });
+      },
+    };
+  }),
 );

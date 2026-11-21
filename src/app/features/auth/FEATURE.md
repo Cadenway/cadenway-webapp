@@ -6,7 +6,8 @@ Sign-in, sign-up, MFA, codes, password, sign-out and organization choice.
 
 ## Routes
 
-- `/connexion` opens a session with a password and handles a required authenticator code.
+- `/connexion` starts password, OAuth or work-email SAML sign-in.
+- `/auth/federated/continue` redeems the continuation cookie and handles a required authenticator code.
 - `/organisations` lists the signed-in caller's organizations and changes the current session.
 - `/accueil` displays the organization only after confirming it with the gateway.
 
@@ -24,7 +25,11 @@ Sign-in, sign-up, MFA, codes, password, sign-out and organization choice.
 ## Invariants
 
 - The gateway cookie is the only session credential. Passwords and second-step secrets are kept in page memory and are never persisted.
-- Password sign-in opens the chooser only on a confirmed session. The second step supports the authenticator app. Email codes, account recovery, social sign-in and other challenge methods are later workflows.
+- Password and federated sign-in open the chooser only on a confirmed session. The second step
+  supports the authenticator app. Email codes, account recovery and other challenge methods are
+  later workflows.
+- Provider callbacks go through the gateway. The browser never reads the continuation receipt
+  and only sends an empty body when redeeming it.
 - `SignInStore` and `OrganizationActionsStore` are page-scoped.
 - A session without usable organization access cannot load private workspace features.
 - Sign-in, its second step, sign-out and organization changes coordinate with organization-bound

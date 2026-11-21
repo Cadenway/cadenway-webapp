@@ -8,6 +8,8 @@ const spaceId = '019a5f3c-8d2e-7c4a-9b1f-3e5d7a9c1b31';
 const listId = '019a5f3c-8d2e-7c4a-9b1f-3e5d7a9c1b32';
 const taskName = 'Refondre l’écran de connexion SSO';
 const sessionCookie = '__Host-cw_session';
+const receiptCookie = '__Host-cw_federated_receipt';
+const receipt = 'synthetic-federated-receipt';
 const challengeToken = 'ExampleOnlyChallengeToken00000000000000000';
 const user = {
   id: '019a5f3c-8d2e-7c4a-9b1f-3e5d7a9c1b30',
@@ -41,6 +43,7 @@ async function stubGateway(
   let authenticated = false;
   let selected = false;
   let organizationRequests = 0;
+  let federatedFinishes = 0;
   const selections: unknown[] = [];
   const taskDetailOrganizations: (string | undefined)[] = [];
   const statusChanges: {
@@ -57,9 +60,26 @@ async function stubGateway(
   await page.route('**/v1/**', async (route: Route) => {
     const request = route.request();
     const path = new URL(request.url()).pathname;
-    if (path === '/v1/auth/sign-in' && request.method() === 'POST') {
+    const federated = path === '/v1/auth/sign-in/federated/finish';
+    if ((path === '/v1/auth/sign-in' || federated) && request.method() === 'POST') {
       const body: unknown = request.postDataJSON();
-      if (
+      if (federated) {
+        federatedFinishes += 1;
+        expect(body).toEqual({});
+        const cookies = (await request.headerValue('cookie'))?.split('; ');
+        if (!cookies?.includes(`${receiptCookie}=${receipt}`)) {
+          await route.fulfill({
+            status: 422,
+            json: {
+              type: 'about:blank',
+              status: 422,
+              code: 'auth.federated-sign-in-refused',
+              title: 'Synthetic claim detail never displayed',
+            },
+          });
+          return;
+        }
+      } else if (
         typeof body !== 'object' ||
         body === null ||
         !('email' in body) ||
@@ -82,6 +102,13 @@ async function stubGateway(
       if (requireChallenge) {
         await route.fulfill({
           status: 202,
+          ...(federated
+            ? {
+                headers: {
+                  'Set-Cookie': `${receiptCookie}=; Path=/; Secure; HttpOnly; SameSite=Lax; Max-Age=0`,
+                },
+              }
+            : {}),
           json: {
             token: challengeToken,
             expiresAt: '2099-12-08T13:07:00Z',
@@ -265,6 +292,7 @@ async function stubGateway(
     taskDetailOrganizations,
     statusChanges,
     organizationRequests: () => organizationRequests,
+    federatedFinishes: () => federatedFinishes,
   };
 }
 
@@ -337,6 +365,67 @@ test('waits for the second factor before opening the session', async ({ page, co
   await page.getByRole('button', { name: 'Vérifier le code' }).click();
   await expect(page).toHaveURL(/\/organisations\/?$/u);
   expect((await context.cookies()).find(({ name }) => name === sessionCookie)?.httpOnly).toBe(true);
+});
+
+test('starts OAuth, redeems the federated cookie once and completes the ordinary MFA flow', async ({
+  page,
+  context,
+}) => {
+  const gateway = await stubGateway(page, { requireChallenge: true });
+  const authorizationUrl = 'https://oidc.example.test/authorize?state=fixture';
+
+  await page.goto('/connexion');
+  const callback = new URL(
+    '/v1/auth/sign-in/federated/providers/google/callback?state=fixture&code=fixture',
+    page.url(),
+  );
+  await page.route('**/v1/auth/sign-in/federated/start', async (route) => {
+    expect(route.request().method()).toBe('POST');
+    expect(route.request().postDataJSON()).toEqual({ provider: 'google', rememberMe: false });
+    await route.fulfill({ json: { authorizationUrl } });
+  });
+  await page.route(authorizationUrl, async (route) => {
+    await route.fulfill({
+      contentType: 'text/html',
+      body: `<script>location.replace(${JSON.stringify(callback.href)})</script>`,
+    });
+  });
+  await page.route('**/v1/auth/sign-in/federated/providers/google/callback?*', async (route) => {
+    await route.fulfill({
+      status: 303,
+      headers: {
+        Location: '/auth/federated/continue',
+        'Set-Cookie': `${receiptCookie}=${receipt}; Path=/; Secure; HttpOnly; SameSite=Lax`,
+      },
+    });
+  });
+  await page.getByRole('button', { name: 'Google', exact: true }).click();
+
+  await expect(page.getByRole('heading', { name: 'Vérification en deux étapes' })).toBeVisible();
+  await expect(page).toHaveURL(/\/auth\/federated\/continue$/u);
+  expect(gateway.federatedFinishes()).toBe(1);
+  expect((await context.cookies()).map(({ name }) => name)).not.toContain(receiptCookie);
+  expect((await context.cookies()).map(({ name }) => name)).not.toContain(sessionCookie);
+
+  await page.getByLabel("Code de l'application").fill('123456');
+  await page.getByRole('button', { name: 'Vérifier le code' }).click();
+  await expect(page).toHaveURL(/\/organisations$/u);
+  await expect(page.getByRole('heading', { name: 'Choisir une organisation' })).toBeVisible();
+  expect((await context.cookies()).find(({ name }) => name === sessionCookie)?.httpOnly).toBe(true);
+  expect(gateway.federatedFinishes()).toBe(1);
+});
+
+test('offers other sign-in methods when the provider continuation was refused', async ({
+  page,
+}) => {
+  const gateway = await stubGateway(page);
+  await page.goto('/auth/federated/continue');
+  await expect(page.getByRole('alert')).toHaveText(
+    'Cette méthode de connexion ne peut pas être utilisée.',
+  );
+  await page.getByRole('link', { name: 'Autres méthodes de connexion' }).click();
+  await expect(page.getByRole('heading', { name: 'Se connecter' })).toBeVisible();
+  expect(gateway.federatedFinishes()).toBe(1);
 });
 
 test('opens Sprint 14 and changes the status of CAD-482', async ({ page }) => {
