@@ -1,6 +1,6 @@
 import type { Routes } from '@angular/router';
 
-import { requireOrganization } from '@features/auth';
+import { requireOrganization, resolveOrganizationId } from '@features/auth';
 
 /**
  * Constant SPACES_ROUTES
@@ -31,7 +31,7 @@ export const SPACES_ROUTES: Routes = [
   },
   {
     path: ':spaceId/listes/:listId',
-    canActivate: [requireOrganization],
+    resolve: { organizationId: resolveOrganizationId },
     runGuardsAndResolvers: 'always',
     data: { pageKind: 'tasks' },
     loadComponent: () =>

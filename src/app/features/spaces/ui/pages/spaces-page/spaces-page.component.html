@@ -23,6 +23,27 @@
 
   <h1 id="collection-title" class="text-2xl font-semibold tracking-tight">{{ heading() }}</h1>
 
+  @if (pageKind() === 'tasks' && request()) {
+    <nav
+      aria-label="Vues de la liste"
+      class="flex items-center gap-1 border-b border-border text-sm"
+    >
+      <a
+        [routerLink]="[]"
+        [attr.aria-current]="vue() !== 'tableau' ? 'page' : null"
+        class="rounded-sm px-3 py-2 hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring aria-[current=page]:font-semibold"
+        >Liste</a
+      >
+      <a
+        [routerLink]="[]"
+        [queryParams]="{ vue: 'tableau' }"
+        [attr.aria-current]="vue() === 'tableau' ? 'page' : null"
+        class="rounded-sm px-3 py-2 hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring aria-[current=page]:font-semibold"
+        >Tableau</a
+      >
+    </nav>
+  }
+
   @if (!request()) {
     <cw-empty role="alert">
       <cw-empty-header><cw-empty-title>Page introuvable</cw-empty-title></cw-empty-header>
@@ -58,6 +79,22 @@
     </div>
   } @else if (collection.hasValue()) {
     @let data = collection.value();
+    @if (
+      (data.kind === 'tasks' || data.kind === 'board') &&
+        !board.organizationChanged() &&
+        data.sprint;
+      as sprint
+    ) {
+      <div class="space-y-1 text-sm text-muted-foreground">
+        <p>
+          {{ sprint.startDate | date: 'dd/MM/yyyy' }} –
+          {{ sprint.endDate | date: 'dd/MM/yyyy' }}
+        </p>
+        @if (sprint.goal) {
+          <p>{{ sprint.goal }}</p>
+        }
+      </div>
+    }
     @switch (data.kind) {
       @case ('spaces') {
         @if (data.page.items.length) {
@@ -99,18 +136,26 @@
           </cw-empty>
         }
       }
-      @case ('tasks') {
-        @if (data.sprint; as sprint) {
-          <div class="space-y-1 text-sm text-muted-foreground">
-            <p>
-              {{ sprint.startDate | date: 'dd/MM/yyyy' }} –
-              {{ sprint.endDate | date: 'dd/MM/yyyy' }}
-            </p>
-            @if (sprint.goal) {
-              <p>{{ sprint.goal }}</p>
-            }
-          </div>
+      @case ('board') {
+        @if (boardPresentation(); as presentation) {
+          @defer (on immediate) {
+            <cw-sprint-board
+              [view]="presentation"
+              (statusChanged)="board.move($event.key, $event.status)"
+              (pageRequested)="board.loadPage($event.status, $event.cursor)"
+              (reloadRequested)="board.reload()"
+            />
+          } @placeholder {
+            <div
+              cwSkeleton
+              class="h-36 w-full"
+              aria-label="Chargement du tableau"
+              role="status"
+            ></div>
+          }
         }
+      }
+      @case ('tasks') {
         @if (data.page.items.length) {
           <div class="overflow-auto rounded-lg border border-border">
             <table class="w-full table-auto text-left text-sm" [attr.aria-label]="data.listName">
@@ -154,7 +199,7 @@
       }
     }
 
-    @if (cursor() || data.page.nextCursor) {
+    @if (data.kind !== 'board' && (cursor() || data.page.nextCursor)) {
       <nav aria-label="Pagination" class="flex flex-wrap gap-4 text-sm">
         @if (cursor()) {
           <a [routerLink]="[]" class="underline">Première page</a>
