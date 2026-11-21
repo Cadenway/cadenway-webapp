@@ -16,6 +16,81 @@ export type TaskDetailFailure =
   | 'unavailable';
 
 /**
+ * Interface TrashedTaskView
+ *
+ * @description
+ * Contains the display fields that a caller allowed to restore the task may see.
+ */
+export interface TrashedTaskView {
+  // #region Properties
+  /**
+   * Property key
+   *
+   * @description
+   * The task the caller opened.
+   *
+   * @type {string}
+   * @readonly
+   */
+  readonly key: string;
+
+  /**
+   * Property name
+   *
+   * @description
+   * The name of the deleted task.
+   *
+   * @type {string}
+   * @readonly
+   */
+  readonly name: string;
+
+  /**
+   * Property entryId
+   *
+   * @description
+   * The trash entry containing the task.
+   *
+   * @type {string}
+   * @readonly
+   */
+  readonly entryId: string;
+
+  /**
+   * Property trashedAt
+   *
+   * @description
+   * The date and time of deletion.
+   *
+   * @type {string}
+   * @readonly
+   */
+  readonly trashedAt: string;
+
+  /**
+   * Property purgeAt
+   *
+   * @description
+   * The date and time when the entry becomes eligible for purge.
+   *
+   * @type {string}
+   * @readonly
+   */
+  readonly purgeAt: string;
+  // #endregion
+}
+
+/**
+ * Type TaskRestoreOutcome
+ *
+ * @description
+ * Represents the outcomes the deleted-task page can present.
+ *
+ * @type {'restored' | 'pending' | 'not-found'}
+ */
+export type TaskRestoreOutcome = 'restored' | 'pending' | 'not-found';
+
+/**
  * Class TaskDetailRequestError
  *
  * @description
@@ -33,6 +108,17 @@ export class TaskDetailRequestError extends Error {
    * @readonly
    */
   public readonly failure: TaskDetailFailure;
+
+  /**
+   * Property trashedTask
+   *
+   * @description
+   * Validated public metadata for the current deleted task, when available.
+   *
+   * @type {TrashedTaskView | null}
+   * @readonly
+   */
+  public readonly trashedTask: TrashedTaskView | null;
   // #endregion
 
   // #region Constructor
@@ -43,11 +129,13 @@ export class TaskDetailRequestError extends Error {
    * Preserves the display category without retaining the rejected request.
    *
    * @param {TaskDetailFailure} failure - The mapped category.
+   * @param {TrashedTaskView | null} [trashedTask] - Validated deleted-task metadata.
    * @constructor
    */
-  public constructor(failure: TaskDetailFailure) {
+  public constructor(failure: TaskDetailFailure, trashedTask: TrashedTaskView | null = null) {
     super(failure);
     this.failure = failure;
+    this.trashedTask = trashedTask;
   }
   // #endregion
 }

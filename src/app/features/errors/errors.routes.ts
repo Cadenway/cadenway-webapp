@@ -1,0 +1,24 @@
+import type { Routes } from '@angular/router';
+
+import { requireOrganization } from '@features/auth';
+
+/**
+ * Constant ERRORS_ROUTES
+ *
+ * @description
+ * Protects the application fallback with the same access check as other workspace routes.
+ *
+ * @type {Routes}
+ */
+export const ERRORS_ROUTES: Routes = [
+  {
+    path: '',
+    canActivate: [requireOrganization],
+    runGuardsAndResolvers: 'always',
+    title: 'Page introuvable — Cadenway',
+    loadComponent: () =>
+      import('./ui/pages/not-found-page/not-found-page.component').then(
+        (entry) => entry.NotFoundPage,
+      ),
+  },
+];

@@ -4,7 +4,11 @@ import { of, type Observable, Subject, throwError } from 'rxjs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { TaskDetailApi } from '../../data-access/services/task-detail/task-detail-api.service';
-import { TaskDetailRequestError } from '../../models/task-detail/task-detail-failure.model';
+import {
+  TaskDetailRequestError,
+  type TaskRestoreOutcome,
+  type TrashedTaskView,
+} from '../../models/task-detail/task-detail-failure.model';
 import type {
   TaskDetailView,
   TaskRouteContext,
@@ -42,6 +46,22 @@ const taskView: TaskDetailView = {
 };
 
 /**
+ * Constant trashedTask
+ *
+ * @description
+ * Represents a valid deleted-task response for the current route.
+ *
+ * @type {TrashedTaskView}
+ */
+const trashedTask: TrashedTaskView = {
+  key: taskView.key,
+  name: taskView.name,
+  entryId: '019a7006-7a8b-7c9d-8e0f-1a2b3c4d5e01',
+  trashedAt: '2026-11-06T16:20:00Z',
+  purgeAt: '2026-12-06T16:20:00Z',
+};
+
+/**
  * Function flushResource
  *
  * @description
@@ -61,12 +81,12 @@ async function flushResource(): Promise<void> {
  * @description
  * Binds one fixture client to a fresh store and starts following its route parameter.
  *
- * @param {Pick<TaskDetailApi, 'load' | 'changeStatus'>} api - Fixture reads and writes.
+ * @param {Pick<TaskDetailApi, 'load' | 'changeStatus'> & Partial<Pick<TaskDetailApi, 'restore'>>} api - Fixture reads and writes.
  * @param {WritableSignal<TaskRouteContext>} [route] - Mutable input used to test route changes.
  * @returns {Promise<InstanceType<typeof TaskDetailStore>>} The store after loading.
  */
 async function setup(
-  api: Pick<TaskDetailApi, 'load' | 'changeStatus'>,
+  api: Pick<TaskDetailApi, 'load' | 'changeStatus'> & Partial<Pick<TaskDetailApi, 'restore'>>,
   route: WritableSignal<TaskRouteContext> = signal({ key: taskView.key, organizationId: 'org-a' }),
 ): Promise<InstanceType<typeof TaskDetailStore>> {
   TestBed.configureTestingModule({
@@ -87,6 +107,62 @@ describe('TaskDetailStore', () => {
 
   afterEach(() => {
     vi.useRealTimers();
+  });
+
+  it('discards the opaque 404 after refreshing a newly deleted entry for the same key', async () => {
+    const newerEntry: TrashedTaskView = {
+      ...trashedTask,
+      entryId: '019a7006-7a8b-7c9d-8e0f-1a2b3c4d5e02',
+    };
+    const load: ReturnType<typeof vi.fn<TaskDetailApi['load']>> = vi
+      .fn<TaskDetailApi['load']>()
+      .mockReturnValueOnce(throwError(() => new TaskDetailRequestError('trashed', trashedTask)))
+      .mockReturnValueOnce(throwError(() => new TaskDetailRequestError('trashed', newerEntry)));
+    const restore: ReturnType<typeof vi.fn<TaskDetailApi['restore']>> = vi
+      .fn<TaskDetailApi['restore']>()
+      .mockReturnValue(of('not-found'));
+    const store: InstanceType<typeof TaskDetailStore> = await setup({
+      load,
+      restore,
+      changeStatus: vi.fn<TaskDetailApi['changeStatus']>(),
+    });
+    expect(store.trashedTask()).toEqual(trashedTask);
+
+    store.restore();
+    await flushResource();
+
+    expect(restore).toHaveBeenCalledWith(trashedTask.entryId, 'org-a');
+    expect(store.trashedTask()).toEqual(newerEntry);
+    expect(store.restoreError()).toBeNull();
+    expect(store.restoreSucceeded()).toBe(false);
+  });
+
+  it('ignores the successful restoration of the old route after an organization switch', async () => {
+    const route: WritableSignal<TaskRouteContext> = signal({
+      key: taskView.key,
+      organizationId: 'org-a',
+    });
+    const response: Subject<TaskRestoreOutcome> = new Subject<TaskRestoreOutcome>();
+    const load: ReturnType<typeof vi.fn<TaskDetailApi['load']>> = vi
+      .fn<TaskDetailApi['load']>()
+      .mockReturnValueOnce(throwError(() => new TaskDetailRequestError('trashed', trashedTask)))
+      .mockReturnValue(of(taskView));
+    const store: InstanceType<typeof TaskDetailStore> = await setup(
+      { load, restore: () => response, changeStatus: vi.fn<TaskDetailApi['changeStatus']>() },
+      route,
+    );
+    store.restore();
+    expect(store.restorePending()).toBe(true);
+
+    route.set({ key: taskView.key, organizationId: 'org-b' });
+    await flushResource();
+    response.next('restored');
+    await flushResource();
+
+    expect(store.detail()).toEqual(taskView);
+    expect(store.restorePending()).toBe(false);
+    expect(store.restoreSucceeded()).toBe(false);
+    expect(load).toHaveBeenCalledTimes(2);
   });
 
   it('makes only the last write from a burst and disables overlapping writes', async () => {

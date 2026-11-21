@@ -18,6 +18,8 @@ import { TaskDetailApi } from '../../data-access/services/task-detail/task-detai
 import {
   type TaskDetailFailure,
   TaskDetailRequestError,
+  type TaskRestoreOutcome,
+  type TrashedTaskView,
 } from '../../models/task-detail/task-detail-failure.model';
 import type {
   TaskDetailView,
@@ -35,6 +37,16 @@ import type {
  * @type {number}
  */
 const STATUS_SETTLE_DURATION: number = 460;
+
+/**
+ * Type TaskRestoreError
+ *
+ * @description
+ * Represents restore errors that the task page can show directly.
+ *
+ * @type {'pending' | 'unavailable'}
+ */
+type TaskRestoreError = 'pending' | 'unavailable';
 
 /**
  * Interface TaskDetailState
@@ -98,6 +110,50 @@ interface TaskDetailState {
    * @readonly
    */
   readonly statusFailure: TaskDetailFailure | null;
+
+  /**
+   * Property restorePending
+   *
+   * @description
+   * Indicates that a restore is in flight for the current trash entry.
+   *
+   * @type {boolean}
+   * @readonly
+   */
+  readonly restorePending: boolean;
+
+  /**
+   * Property restoreSucceeded
+   *
+   * @description
+   * Records a confirmed restoration for the current route.
+   *
+   * @type {boolean}
+   * @readonly
+   */
+  readonly restoreSucceeded: boolean;
+
+  /**
+   * Property restoreError
+   *
+   * @description
+   * The latest recoverable restore failure for the current route.
+   *
+   * @type {TaskRestoreError | null}
+   * @readonly
+   */
+  readonly restoreError: TaskRestoreError | null;
+
+  /**
+   * Property _restoreAccessFailure
+   *
+   * @description
+   * The access failure that invalidates the deleted task view.
+   *
+   * @type {TaskDetailFailure | null}
+   * @readonly
+   */
+  readonly _restoreAccessFailure: TaskDetailFailure | null;
   // #endregion
 }
 
@@ -123,6 +179,27 @@ interface TaskStatusCommand extends TaskRouteContext, Pick<TaskDetailView, 'vers
 }
 
 /**
+ * Interface TaskRestoreCommand
+ *
+ * @description
+ * Identifies a trash entry and the organization in which it was disclosed.
+ */
+interface TaskRestoreCommand extends Pick<TaskRouteContext, 'organizationId'> {
+  // #region Properties
+  /**
+   * Property entryId
+   *
+   * @description
+   * The identifier passed to the restore endpoint.
+   *
+   * @type {string}
+   * @readonly
+   */
+  readonly entryId: string;
+  // #endregion
+}
+
+/**
  * Constant initialState
  *
  * @description
@@ -136,6 +213,10 @@ const initialState: TaskDetailState = {
   savingStatus: false,
   statusSaved: false,
   statusFailure: null,
+  restorePending: false,
+  restoreSucceeded: false,
+  restoreError: null,
+  _restoreAccessFailure: null,
 };
 
 /**
@@ -239,6 +320,50 @@ interface TaskDetailStoreInstance {
    * @readonly
    */
   readonly statusFailure: Signal<TaskDetailFailure | null>;
+
+  /**
+   * Property trashedTask
+   *
+   * @description
+   * Validated trash metadata visible to the current task editor.
+   *
+   * @type {Signal<TrashedTaskView | null>}
+   * @readonly
+   */
+  readonly trashedTask: Signal<TrashedTaskView | null>;
+
+  /**
+   * Property restorePending
+   *
+   * @description
+   * Indicates whether restoration is in flight.
+   *
+   * @type {Signal<boolean>}
+   * @readonly
+   */
+  readonly restorePending: Signal<boolean>;
+
+  /**
+   * Property restoreSucceeded
+   *
+   * @description
+   * Exposes the confirmation after the requested restoration succeeds.
+   *
+   * @type {Signal<boolean>}
+   * @readonly
+   */
+  readonly restoreSucceeded: Signal<boolean>;
+
+  /**
+   * Property restoreError
+   *
+   * @description
+   * The latest restore error that can be shown on the task page.
+   *
+   * @type {Signal<TaskRestoreError | null>}
+   * @readonly
+   */
+  readonly restoreError: Signal<TaskRestoreError | null>;
   // #endregion
 
   // #region Methods
@@ -269,6 +394,14 @@ interface TaskDetailStoreInstance {
    * @param {StatusKey | null} status - Value selected from the task's current choices.
    */
   changeStatus(status: StatusKey | null): void;
+
+  /**
+   * Method restore
+   *
+   * @description
+   * Restores the current trash entry and reloads the originally opened task.
+   */
+  restore(): void;
   // #endregion
 }
 
@@ -300,8 +433,17 @@ function createTaskDetailStore(): Type<TaskDetailStoreInstance> {
       loadFailure: computed(() => {
         const statusFailure: TaskDetailFailure | null = store.statusFailure();
         if (lostAccess(statusFailure)) return statusFailure;
+        const restoreAccessFailure: TaskDetailFailure | null = store._restoreAccessFailure();
+        if (restoreAccessFailure) return restoreAccessFailure;
         const failure: Error | undefined = store._detail.error();
         return failure ? failureOf(failure) : null;
+      }),
+      trashedTask: computed(() => {
+        if (store._restoreAccessFailure() || store._detail.isLoading()) return null;
+        const failure: Error | undefined = store._detail.error();
+        const task: TrashedTaskView | null =
+          failure instanceof TaskDetailRequestError ? failure.trashedTask : null;
+        return task && task.key === store._context()?.key ? task : null;
       }),
     })),
     withMethods((store, api = inject(TaskDetailApi)) => {
@@ -341,6 +483,34 @@ function createTaskDetailStore(): Type<TaskDetailStoreInstance> {
         }),
       );
 
+      const restoreEntry: RxMethod<TaskRestoreCommand | null> = rxMethod<TaskRestoreCommand | null>(
+        switchMap((command) => {
+          if (command === null) return EMPTY;
+          return api.restore(command.entryId, command.organizationId).pipe(
+            tapResponse({
+              next: (outcome: TaskRestoreOutcome) => {
+                patchState(store, {
+                  restorePending: false,
+                  restoreSucceeded: outcome === 'restored',
+                  restoreError: outcome === 'pending' ? outcome : null,
+                });
+                if (outcome !== 'pending') store._detail.reload();
+              },
+              error: (error: unknown) => {
+                const failure: TaskDetailFailure = failureOf(error);
+                const accessFailure: TaskDetailFailure | null =
+                  lostAccess(failure) || failure === 'forbidden' ? failure : null;
+                patchState(store, {
+                  restorePending: false,
+                  restoreError: accessFailure ? null : 'unavailable',
+                  _restoreAccessFailure: accessFailure,
+                });
+              },
+            }),
+          );
+        }),
+      );
+
       return {
         followTask: signalMethod<TaskRouteContext>((context) => {
           const current: TaskRouteContext | undefined = store._context();
@@ -348,12 +518,26 @@ function createTaskDetailStore(): Type<TaskDetailStoreInstance> {
             return;
           }
           dispatch(null);
+          restoreEntry(null);
           patchState(store, { ...initialState, _context: context });
         }),
         retry(): void {
-          if (store._pendingStatus() === null && !lostAccess(store.statusFailure())) {
+          if (
+            store._pendingStatus() === null &&
+            !lostAccess(store.statusFailure()) &&
+            !store.restorePending() &&
+            !store._restoreAccessFailure()
+          ) {
+            patchState(store, { restoreError: null, restoreSucceeded: false });
             store._detail.reload();
           }
+        },
+        restore(): void {
+          const task: TrashedTaskView | null = store.trashedTask();
+          const context: TaskRouteContext | undefined = store._context();
+          if (!task || !context || store.restorePending()) return;
+          patchState(store, { restorePending: true, restoreSucceeded: false, restoreError: null });
+          restoreEntry({ entryId: task.entryId, organizationId: context.organizationId });
         },
         changeStatus(status: StatusKey | null): void {
           if (status === null || status === 'cancelled' || store.savingStatus()) return;

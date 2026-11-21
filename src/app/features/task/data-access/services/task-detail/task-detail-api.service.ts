@@ -1,20 +1,70 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { inject, Service } from '@angular/core';
-import { OrganizationsService, TasksService } from '@cadenway/api-client';
+import { OrganizationsService, TasksService, TrashService } from '@cadenway/api-client';
 import type { StatusKey } from '@cadenway/contracts';
-import { GetTaskDetailParams } from '@cadenway/contracts/validators/public/tasks';
+import { CreateTaskBody, GetTaskDetailParams } from '@cadenway/contracts/validators/public/tasks';
+import {
+  RestoreTrashEntryParams,
+  TrashTaskResponse,
+} from '@cadenway/contracts/validators/public/trash';
 import { withSessionLock } from '@features/auth';
-import { catchError, EMPTY, map, type Observable, switchMap, throwError } from 'rxjs';
+import { catchError, EMPTY, map, type Observable, of, switchMap, throwError } from 'rxjs';
 
 import {
   type TaskDetailFailure,
   TaskDetailRequestError,
+  type TaskRestoreOutcome,
+  type TrashedTaskView,
 } from '../../../models/task-detail/task-detail-failure.model';
 import type {
   TaskDetailView,
   TaskStatusConfirmation,
 } from '../../../models/task-detail/task-detail.model';
 import { toTaskDetailView } from '../../adapters/task-detail/task-detail.adapter';
+
+/**
+ * Function problemCode
+ *
+ * @description
+ * Returns the stable problem code without retaining the response payload.
+ *
+ * @param {unknown} body - The upstream error body.
+ * @returns {unknown} The untrusted problem code, if present.
+ */
+function problemCode(body: unknown): unknown {
+  return body && typeof body === 'object' && 'code' in body ? body.code : undefined;
+}
+
+/**
+ * Function readTrashedTask
+ *
+ * @description
+ * Maps an authorized trash response to display fields for the opened task.
+ *
+ * @param {unknown} body - The public Problem received for the requested task.
+ * @param {string} key - The task key in the current route.
+ * @returns {TrashedTaskView | null} Metadata sufficient to offer restoration.
+ */
+function readTrashedTask(body: unknown, key: string): TrashedTaskView | null {
+  if (!body || typeof body !== 'object' || !('details' in body)) return null;
+  const details: unknown = body.details;
+  if (!details || typeof details !== 'object' || !('key' in details) || details.key !== key) {
+    return null;
+  }
+  const entry: ReturnType<typeof RestoreTrashEntryParams.safeParse> =
+    RestoreTrashEntryParams.safeParse(details);
+  const dateShape: typeof TrashTaskResponse.shape = TrashTaskResponse.shape;
+  const trashedAt: ReturnType<typeof dateShape.trashedAt.safeParse> = dateShape.trashedAt.safeParse(
+    'trashedAt' in details ? details.trashedAt : undefined,
+  );
+  const purgeAt: ReturnType<typeof dateShape.purgeAt.safeParse> = dateShape.purgeAt.safeParse(
+    'purgeAt' in details ? details.purgeAt : undefined,
+  );
+  const name: ReturnType<typeof CreateTaskBody.shape.name.safeParse> =
+    CreateTaskBody.shape.name.safeParse('name' in details ? details.name : undefined);
+  if (!entry.success || !trashedAt.success || !purgeAt.success || !name.success) return null;
+  return { key, name: name.data, ...entry.data, trashedAt: trashedAt.data, purgeAt: purgeAt.data };
+}
 
 /**
  * Function classifyFailure
@@ -28,8 +78,7 @@ import { toTaskDetailView } from '../../adapters/task-detail/task-detail.adapter
 function classifyFailure(error: unknown): TaskDetailFailure {
   if (error instanceof TaskDetailRequestError) return error.failure;
   if (!(error instanceof HttpErrorResponse)) return 'unavailable';
-  const body: unknown = error.error;
-  const code: unknown = body && typeof body === 'object' && 'code' in body ? body.code : undefined;
+  const code: unknown = problemCode(error.error);
   if (error.status === 404) {
     return code === 'task.trashed' ? 'trashed' : 'not-found';
   }
@@ -53,6 +102,7 @@ function classifyFailure(error: unknown): TaskDetailFailure {
  * @returns {Observable<never>} A stream with the mapped task failure.
  */
 function rejectTaskRequest(error: unknown): Observable<never> {
+  if (error instanceof TaskDetailRequestError) return throwError(() => error);
   return throwError(() => new TaskDetailRequestError(classifyFailure(error)));
 }
 
@@ -75,6 +125,17 @@ export class TaskDetailApi {
    * @readonly
    */
   private readonly client: TasksService = inject(TasksService);
+
+  /**
+   * Property trash
+   *
+   * @description
+   * The generated client used to restore authorized trash entries.
+   *
+   * @type {TrashService}
+   * @readonly
+   */
+  private readonly trash: TrashService = inject(TrashService);
 
   /**
    * Property organizations
@@ -104,7 +165,47 @@ export class TaskDetailApi {
       return throwError(() => new TaskDetailRequestError('not-found'));
     }
     return this.inOrganization(organizationId, () =>
-      this.client.getTaskDetail(taskKey, { cache: 'no-store' }).pipe(map(toTaskDetailView)),
+      this.client.getTaskDetail(taskKey, { cache: 'no-store' }).pipe(
+        map(toTaskDetailView),
+        catchError((error: unknown) => {
+          if (error instanceof HttpErrorResponse && classifyFailure(error) === 'trashed') {
+            const task: TrashedTaskView | null = readTrashedTask(error.error, taskKey);
+            return throwError(() => new TaskDetailRequestError('trashed', task));
+          }
+          return rejectTaskRequest(error);
+        }),
+      ),
+    );
+  }
+
+  /**
+   * Method restore
+   *
+   * @description
+   * Restores an authorized trash entry while the browser's organization is stable.
+   *
+   * @param {string} entryId - Identifier of the trash entry from the access-checked response.
+   * @param {string} organizationId - Organization resolved for the current task route.
+   * @returns {Observable<TaskRestoreOutcome>} A restore outcome without upstream metadata.
+   */
+  public restore(entryId: string, organizationId: string): Observable<TaskRestoreOutcome> {
+    if (!RestoreTrashEntryParams.safeParse({ entryId }).success) return of('not-found');
+    return this.inOrganization(organizationId, () =>
+      this.trash.restoreTrashEntry(entryId, {}, { reportNotReady: true }).pipe(
+        map((): TaskRestoreOutcome => 'restored'),
+        catchError((error: unknown): Observable<TaskRestoreOutcome> => {
+          if (error instanceof HttpErrorResponse) {
+            if (error.status === 404) return of('not-found');
+            if (
+              error.status === 409 &&
+              problemCode(error.error) === 'trash-entry.not-restorable-yet'
+            ) {
+              return of('pending');
+            }
+          }
+          return rejectTaskRequest(error);
+        }),
+      ),
     );
   }
 

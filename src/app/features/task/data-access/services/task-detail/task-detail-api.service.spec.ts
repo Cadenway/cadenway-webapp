@@ -13,6 +13,10 @@ import type {
   TaskDetailView,
   TaskStatusConfirmation,
 } from '../../../models/task-detail/task-detail.model';
+import type {
+  TaskRestoreOutcome,
+  TrashedTaskView,
+} from '../../../models/task-detail/task-detail-failure.model';
 import { TaskDetailApi } from './task-detail-api.service';
 
 /**
@@ -38,6 +42,8 @@ function stubSessionLocks(): void {
 }
 
 describe('TaskDetailApi organization binding', () => {
+  const entryId: string = '019a7006-7a8b-7c9d-8e0f-1a2b3c4d5e01';
+
   beforeEach(() => {
     TestBed.configureTestingModule({
       providers: [provideHttpClient(), provideHttpClientTesting()],
@@ -76,6 +82,44 @@ describe('TaskDetailApi organization binding', () => {
 
     await expect(result).rejects.toMatchObject({ failure: 'organization-changed' });
     http.expectNone((request) => request.method === 'PATCH');
+  });
+
+  it.each(['CAD-482', 'CAD-481'])('retains only validated trash metadata for %s', async (key) => {
+    const api: TaskDetailApi = TestBed.inject(TaskDetailApi);
+    const http: HttpTestingController = TestBed.inject(HttpTestingController);
+    const result: Promise<TaskDetailView> = firstValueFrom(api.load('CAD-482', 'org-a'));
+    const current: TestRequest = await vi.waitFor(() => http.expectOne('/v1/organization'));
+    current.flush({ id: 'org-a' });
+
+    const metadata: TrashedTaskView = {
+      key,
+      entryId,
+      name: 'Refondre l’écran de connexion SSO',
+      trashedAt: '2026-11-06T16:20:00Z',
+      purgeAt: '2026-12-06T16:20:00Z',
+    };
+    http
+      .expectOne('/v1/tasks/CAD-482/detail')
+      .flush(
+        { code: 'task.trashed', details: { ...metadata, trashedBy: { id: 'discarded' } } },
+        { status: 404, statusText: 'Not Found' },
+      );
+
+    await expect(result).rejects.toMatchObject({
+      failure: 'trashed',
+      trashedTask: key === 'CAD-482' ? metadata : null,
+    });
+  });
+
+  it('restores by validated entry ID only after verifying the session organization', async () => {
+    const api: TaskDetailApi = TestBed.inject(TaskDetailApi);
+    const http: HttpTestingController = TestBed.inject(HttpTestingController);
+    const result: Promise<TaskRestoreOutcome> = firstValueFrom(api.restore(entryId, 'org-a'));
+    const current: TestRequest = await vi.waitFor(() => http.expectOne('/v1/organization'));
+    current.flush({ id: 'org-b' });
+
+    await expect(result).rejects.toMatchObject({ failure: 'organization-changed' });
+    http.expectNone((request) => request.method === 'POST');
   });
 
   it('keeps the lock through an in-flight PATCH when the page detaches', async () => {

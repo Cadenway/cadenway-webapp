@@ -1,3 +1,4 @@
+import { DatePipe } from '@angular/common';
 import { Component, computed, inject, input, type InputSignal, type Signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { CwButton } from '@cadenway/ui/components/button';
@@ -30,6 +31,7 @@ import { TaskDetailStore } from '../../../state/task-detail/task-detail.store';
   templateUrl: './task-detail-page.component.html',
   imports: [
     RouterLink,
+    DatePipe,
     CwButton,
     CwEmpty,
     CwEmptyContent,

@@ -35,4 +35,11 @@ export const APP_ROUTES: Routes = [
         (entry: { TASK_ROUTES: Routes }) => entry.TASK_ROUTES,
       ),
   },
+  {
+    path: '**',
+    loadChildren: () =>
+      import('@features/errors/errors.routes').then(
+        (entry: { ERRORS_ROUTES: Routes }) => entry.ERRORS_ROUTES,
+      ),
+  },
 ];
