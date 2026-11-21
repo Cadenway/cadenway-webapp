@@ -26,6 +26,7 @@ export type SpacesPageRequest =
       readonly spaceId: string;
       readonly listId: string;
       readonly cursor?: string;
+      readonly view?: 'board';
     };
 
 /**
@@ -95,6 +96,14 @@ type Page<Item> = Readonly<{
 export type SpacesPageData =
   | { readonly kind: 'spaces'; readonly page: Page<Destination> }
   | { readonly kind: 'lists'; readonly spaceId: string; readonly page: Page<Destination> }
+  | {
+      readonly kind: 'board';
+      readonly listName: string;
+      readonly sprint: Sprint | null;
+      readonly listId: string;
+      readonly spaceId: string;
+      readonly mayEdit: boolean;
+    }
   | {
       readonly kind: 'tasks';
       readonly listName: string;

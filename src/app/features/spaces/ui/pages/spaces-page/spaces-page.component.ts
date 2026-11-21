@@ -12,6 +12,7 @@ import {
   CwEmptyTitle,
 } from '@cadenway/ui/components/empty';
 import { CwSkeleton } from '@cadenway/ui/components/skeleton';
+import { CwToastService } from '@cadenway/ui/components/toast';
 
 import { ListNavigation } from '../../../data-access/services/list-navigation/list-navigation.service';
 import type {
@@ -19,6 +20,12 @@ import type {
   SpacesPageKind,
   SpacesPageRequest,
 } from '../../../models/list-navigation/list-navigation.model';
+import type {
+  BoardLocation,
+  BoardPresentation,
+} from '../../../models/sprint-board/sprint-board.model';
+import { SprintBoardStore } from '../../../state/sprint-board/sprint-board.store';
+import { SprintBoard } from '../../components/sprint-board/sprint-board.component';
 
 /**
  * Constant ROUTE_ID
@@ -48,8 +55,10 @@ const ROUTE_ID: RegExp = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
     CwEmptyTitle,
     CwSkeleton,
     CwStatusBadge,
+    SprintBoard,
   ],
   templateUrl: './spaces-page.component.html',
+  providers: [SprintBoardStore, CwToastService],
 })
 export class SpacesPage {
   // #region Properties
@@ -98,6 +107,28 @@ export class SpacesPage {
   public readonly cursor: InputSignal<string | undefined> = input<string>();
 
   /**
+   * Property vue
+   *
+   * @description
+   * Selects the board when the current list link uses the Tableau view.
+   *
+   * @type {InputSignal<string | undefined>}
+   * @readonly
+   */
+  public readonly vue: InputSignal<string | undefined> = input<string>();
+
+  /**
+   * Property organizationId
+   *
+   * @description
+   * The organization resolved before the task collection route opens.
+   *
+   * @type {InputSignal<string | undefined>}
+   * @readonly
+   */
+  public readonly organizationId: InputSignal<string | undefined> = input<string>();
+
+  /**
    * Property navigation
    *
    * @description
@@ -107,6 +138,17 @@ export class SpacesPage {
    * @readonly
    */
   private readonly navigation: ListNavigation = inject(ListNavigation);
+
+  /**
+   * Property board
+   *
+   * @description
+   * Owns the selected list's board reads and versioned card changes.
+   *
+   * @type {InstanceType<typeof SprintBoardStore>}
+   * @readonly
+   */
+  protected readonly board: InstanceType<typeof SprintBoardStore> = inject(SprintBoardStore);
 
   /**
    * Property request
@@ -127,8 +169,8 @@ export class SpacesPage {
     if (kind === 'lists') return { kind, spaceId, cursor };
 
     const listId: string | undefined = this.listId()?.toLowerCase();
-    if (listId === undefined || !ROUTE_ID.test(listId)) return undefined;
-    return { kind, spaceId, listId, cursor };
+    if (!this.organizationId() || listId === undefined || !ROUTE_ID.test(listId)) return undefined;
+    return { kind, spaceId, listId, cursor, view: this.vue() === 'tableau' ? 'board' : undefined };
   });
 
   /**
@@ -150,6 +192,52 @@ export class SpacesPage {
   });
 
   /**
+   * Property boardLocation
+   *
+   * @description
+   * Mounts the board only after the list's route and session have been verified.
+   *
+   * @type {Signal<BoardLocation | undefined>}
+   * @readonly
+   */
+  private readonly boardLocation: Signal<BoardLocation | undefined> = computed(() => {
+    const organizationId: string | undefined = this.organizationId();
+    if (!organizationId || !this.collection.hasValue()) return undefined;
+    const data: SpacesPageData = this.collection.value();
+    if (data.kind !== 'board') return undefined;
+    return {
+      organizationId,
+      listId: data.listId,
+      spaceId: data.spaceId,
+      mayEdit: data.mayEdit,
+    };
+  });
+
+  /**
+   * Property boardPresentation
+   *
+   * @description
+   * Supplies the passive board view with the current route's permission and render state.
+   *
+   * @type {Signal<BoardPresentation | undefined>}
+   * @readonly
+   */
+  protected readonly boardPresentation: Signal<BoardPresentation | undefined> = computed(() => {
+    const location: BoardLocation | undefined = this.boardLocation();
+    if (!location) return undefined;
+    return {
+      mayEdit: location.mayEdit,
+      columns: this.board.columns(),
+      moves: this.board.moves(),
+      hasPendingMoves: this.board.hasPendingMoves(),
+      loading: this.board.loading(),
+      loadError: this.board.loadError(),
+      organizationChanged: this.board.organizationChanged(),
+      paging: this.board.paging(),
+    };
+  });
+
+  /**
    * Property heading
    *
    * @description
@@ -159,9 +247,10 @@ export class SpacesPage {
    * @readonly
    */
   protected readonly heading: Signal<string> = computed(() => {
+    if (this.vue() === 'tableau' && this.board.organizationChanged()) return 'Liste';
     if (this.collection.hasValue()) {
       const result: SpacesPageData = this.collection.value();
-      if (result.kind === 'tasks') return result.listName;
+      if (result.kind === 'tasks' || result.kind === 'board') return result.listName;
     }
     switch (this.pageKind()) {
       case 'spaces':
@@ -172,5 +261,18 @@ export class SpacesPage {
         return 'Liste';
     }
   });
+  // #endregion
+
+  // #region Constructor
+  /**
+   * Constructor
+   *
+   * @description
+   * Starts and clears the page-scoped board as the selected list view changes.
+   * @constructor
+   */
+  public constructor() {
+    this.board.connect(this.boardLocation);
+  }
   // #endregion
 }

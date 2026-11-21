@@ -7,7 +7,7 @@ import type {
   ListTasksClientResult,
   ListTasksParams,
 } from '@cadenway/api-client';
-import { map, switchMap } from 'rxjs';
+import { map, of, switchMap } from 'rxjs';
 import type { Observable } from 'rxjs';
 
 import type {
@@ -107,23 +107,38 @@ export class ListNavigation {
           })),
         );
       case 'tasks':
-        return this.lists.getList(request.listId).pipe(
+        return this.lists.getList(request.listId, { cache: 'no-store' }).pipe(
           switchMap((list: GetListClientResult) => {
             if (list.spaceId !== request.spaceId || list.archivedAt != null) {
               throw new Error('The selected list is unavailable in this space.');
             }
+            const details: Pick<
+              Extract<SpacesPageData, { kind: 'tasks' }>,
+              'listName' | 'sprint'
+            > = {
+              listName: list.name,
+              sprint:
+                list.sprint === null
+                  ? null
+                  : {
+                      startDate: list.sprint.startDate,
+                      endDate: list.sprint.endDate,
+                      goal: list.sprint.goal,
+                    },
+            };
+            if (request.view === 'board') {
+              return of<SpacesPageData>({
+                kind: 'board',
+                ...details,
+                listId: request.listId,
+                spaceId: request.spaceId,
+                mayEdit: list.callerRole === 'edit' || list.callerRole === undefined,
+              });
+            }
             return this.tasks.listTasks(request.listId, { ...params, sort: 'manual' }).pipe(
               map((result: ListTasksClientResult): SpacesPageData => ({
                 kind: 'tasks',
-                listName: list.name,
-                sprint:
-                  list.sprint === null
-                    ? null
-                    : {
-                        startDate: list.sprint.startDate,
-                        endDate: list.sprint.endDate,
-                        goal: list.sprint.goal,
-                      },
+                ...details,
                 page: {
                   items: result.items.map((task) => ({
                     key: task.key,
