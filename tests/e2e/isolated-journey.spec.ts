@@ -34,7 +34,8 @@ test('signs in and persists the status change through the isolated stack', async
   expect(isFixtureUrl(apiUrl, 'api.cadenway.localhost')).toBe(true);
   expect(email).toBeTruthy();
   expect(password).toBeTruthy();
-  if (!email || !password) return;
+  if (!apiUrl || !email || !password) return;
+  const apiOrigin = new URL(apiUrl).origin;
 
   await page.goto('/connexion');
   const runtimeApiUrl: unknown = await page.evaluate(async () => {
@@ -53,12 +54,30 @@ test('signs in and persists the status change through the isolated stack', async
   await page.getByRole('link', { name: 'Espaces' }).click();
   await page.getByRole('link', { name: 'Produit' }).click();
   await page.getByRole('link', { name: 'Sprint 14' }).click();
-  await page.getByRole('link', { name: /CAD-482.*Refondre/u }).click();
+  const [detailRequest] = await Promise.all([
+    page.waitForRequest(
+      (request) =>
+        request.method() === 'GET' && request.url() === `${apiOrigin}/v1/tasks/CAD-482/detail`,
+    ),
+    page.getByRole('link', { name: /CAD-482.*Refondre/u }).click(),
+  ]);
+  const expectedOrganization = await detailRequest.headerValue('If-Organization-Match');
+  expect(expectedOrganization).toMatch(
+    /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu,
+  );
   await expect(
     page.getByRole('heading', { name: 'Refondre l’écran de connexion SSO' }),
   ).toBeVisible();
   await page.getByRole('combobox', { name: 'Statut' }).click();
-  await page.getByRole('option', { name: 'En revue' }).click();
+  const [statusRequest] = await Promise.all([
+    page.waitForRequest(
+      (request) =>
+        request.method() === 'PATCH' && request.url() === `${apiOrigin}/v1/tasks/CAD-482`,
+    ),
+    page.getByRole('option', { name: 'En revue' }).click(),
+  ]);
+  expect(await statusRequest.headerValue('If-Organization-Match')).toBe(expectedOrganization);
+  expect(await statusRequest.headerValue('If-Match')).toMatch(/^"[1-9][0-9]*"$/u);
   await expect(page.getByText('Statut modifié.')).toBeVisible();
 
   await page.reload();
