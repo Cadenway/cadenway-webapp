@@ -12,10 +12,10 @@ Sign-in, sign-up, MFA, codes, password, sign-out and organization choice.
 
 ## Public entry points
 
-| Entry point   | Consumers    |
-| ------------- | ------------ |
-| `auth.routes` | app          |
-| `.`           | spaces, task |
+| Entry point   | Consumers            |
+| ------------- | -------------------- |
+| `auth.routes` | app                  |
+| `.`           | errors, spaces, task |
 
 ## Dependencies
 
