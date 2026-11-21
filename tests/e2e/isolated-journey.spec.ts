@@ -82,4 +82,66 @@ test('signs in and persists the status change through the isolated stack', async
 
   await page.reload();
   await expect(page.getByRole('combobox', { name: 'Statut' })).toContainText('En revue');
+
+  if (process.env['P8_WEBAPP_FULL_JOURNEY'] !== '1') return;
+
+  await page.getByRole('link', { name: /Produit \/ Sprint 14/u }).click();
+  await page.getByRole('link', { name: 'Tableau' }).click();
+  const review = page.getByRole('region', { name: 'En revue' });
+  const active = page.getByRole('region', { name: 'En cours' });
+  const taskName = 'Refondre l’écran de connexion SSO';
+  await expect(review.getByRole('link', { name: taskName })).toBeVisible();
+
+  const card = page.getByTestId('board-drag-CAD-482');
+  await active.scrollIntoViewIfNeeded();
+  await card.hover({ position: { x: 12, y: 9 } });
+  const destination = await active.boundingBox();
+  if (!destination) throw new Error('The target board column has no bounding box.');
+  const moved = page.waitForResponse(
+    (response) =>
+      response.request().method() === 'PATCH' && response.url() === `${apiOrigin}/v1/tasks/CAD-482`,
+  );
+  await page.mouse.down();
+  await page.mouse.move(destination.x + 40, destination.y + 90, { steps: 18 });
+  await page.mouse.up();
+  expect((await moved).status()).toBe(200);
+  await expect(active.getByRole('link', { name: taskName })).toBeVisible();
+  await expect(page.getByText('CAD-482 déplacée')).toBeVisible();
+
+  const undone = page.waitForResponse(
+    (response) =>
+      response.request().method() === 'PATCH' && response.url() === `${apiOrigin}/v1/tasks/CAD-482`,
+  );
+  await page.getByRole('button', { name: 'Annuler' }).click();
+  expect((await undone).status()).toBe(200);
+  await expect(review.getByRole('link', { name: taskName })).toBeVisible();
+  await page.reload();
+  await expect(review.getByRole('link', { name: taskName })).toBeVisible();
+
+  const beforeTrash = await page.request.get(`${apiOrigin}/v1/tasks/CAD-482`);
+  expect(beforeTrash.status()).toBe(200);
+  const version = beforeTrash.headers()['etag'];
+  expect(version).toMatch(/^"[1-9][0-9]*"$/u);
+  if (!version) throw new Error('The task response did not include an ETag.');
+  const trashed = await page.request.post(`${apiOrigin}/v1/tasks/CAD-482/trash`, {
+    headers: { 'If-Match': version },
+    data: {},
+  });
+  expect(trashed.status()).toBe(200);
+  await page.goto('/taches/CAD-482');
+  await expect(page.getByRole('heading', { name: 'Cette tâche a été supprimée' })).toBeVisible();
+  await expect(page.getByText(`CAD-482 « ${taskName} »`, { exact: false })).toBeVisible();
+  const restore = page.getByRole('button', { name: 'Restaurer la tâche' });
+  await restore.focus();
+  await page.keyboard.press('Enter');
+  await expect(page.getByRole('status')).toHaveText('Tâche restaurée');
+  await expect(page.getByRole('heading', { name: taskName })).toBeVisible();
+  await expect(page).toHaveURL(/\/taches\/CAD-482$/u);
+  await page.reload();
+  await expect(page.getByRole('heading', { name: taskName })).toBeVisible();
+  await expect(page.getByRole('combobox', { name: 'Statut' })).toContainText('En revue');
+  const restored = await page.request.get(`${apiOrigin}/v1/tasks/CAD-482`);
+  expect(restored.status()).toBe(200);
+  const restoredTask: unknown = await restored.json();
+  expect(restoredTask).toMatchObject({ key: 'CAD-482', status: 'review' });
 });
