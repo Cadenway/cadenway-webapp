@@ -1,0 +1,107 @@
+<div class="flex min-h-dvh flex-col bg-canvas text-sm text-foreground">
+  <header class="flex h-14 items-center justify-between px-4 sm:px-6">
+    <span class="text-base font-bold tracking-tight">Cadenway</span>
+    <button cwButton variant="ghost" [disabled]="actions.pending()" (click)="signOut()">
+      Se déconnecter
+    </button>
+  </header>
+  <main class="flex flex-1 justify-center px-4 py-6 sm:items-center sm:py-10">
+    <cw-card class="w-full max-w-[520px] p-6 sm:p-8">
+      <div class="flex flex-col gap-6">
+        <div class="flex flex-col gap-1">
+          <h1 class="text-2xl font-semibold tracking-tight">Choisir une organisation</h1>
+          @if (choices.value(); as result) {
+            @if (result.ok) {
+              <p class="break-all text-muted-foreground">
+                Connecté en tant que
+                <span class="font-medium text-foreground">{{ result.value.email }}</span
+                >.
+              </p>
+            }
+          }
+        </div>
+
+        @if (actionMessage(); as message) {
+          <cw-alert variant="destructive" role="alert">
+            <cw-alert-description>{{ message }}</cw-alert-description>
+          </cw-alert>
+        }
+
+        @if (choices.isLoading()) {
+          <div role="status" class="flex flex-col gap-2">
+            <span class="sr-only">Chargement de vos organisations</span>
+            <div cwSkeleton class="h-12 w-full"></div>
+            <div cwSkeleton class="h-12 w-full"></div>
+          </div>
+        } @else if (choices.value(); as result) {
+          @if (result.ok) {
+            @if (result.value.items.length) {
+              <div class="flex flex-col gap-2">
+                <p class="text-xs font-medium text-muted-foreground">Vos organisations</p>
+                <ul class="flex flex-col gap-1">
+                  @for (organization of result.value.items; track organization.id) {
+                    <li>
+                      <button
+                        cwButton
+                        variant="outline"
+                        type="button"
+                        class="h-auto w-full justify-between px-3 py-2.5 text-left"
+                        [disabled]="actions.pending()"
+                        (click)="choose(organization.id)"
+                      >
+                        <span class="flex min-w-0 flex-col gap-0.5">
+                          <span class="truncate font-medium">{{ organization.name }}</span>
+                          <span class="text-xs text-muted-foreground">{{ organization.role }}</span>
+                        </span>
+                        <ng-icon name="phosphorCaretRightBold" aria-hidden="true" />
+                      </button>
+                    </li>
+                  }
+                </ul>
+              </div>
+            } @else {
+              <cw-empty>
+                <cw-empty-header>
+                  <cw-empty-description>
+                    Pour rejoindre une organisation existante, demandez une invitation à l'un de ses
+                    administrateurs.
+                  </cw-empty-description>
+                </cw-empty-header>
+              </cw-empty>
+            }
+            @if (pageCursors().length > 1 || result.value.nextCursor) {
+              <div class="flex justify-between gap-2">
+                @if (pageCursors().length > 1) {
+                  <button
+                    cwButton
+                    variant="ghost"
+                    [disabled]="actions.pending()"
+                    (click)="pageCursors.set(pageCursors().slice(0, -1))"
+                  >
+                    Précédent
+                  </button>
+                }
+                @if (result.value.nextCursor; as next) {
+                  <button
+                    cwButton
+                    variant="outline"
+                    class="ms-auto"
+                    [disabled]="actions.pending()"
+                    (click)="pageCursors.set([...pageCursors(), next])"
+                  >
+                    Suivant
+                  </button>
+                }
+              </div>
+            }
+          } @else if (result.problem.status !== 401) {
+            <cw-alert variant="destructive" role="alert">
+              <cw-alert-description>Impossible de charger vos organisations.</cw-alert-description>
+            </cw-alert>
+            <button cwButton variant="outline" (click)="choices.reload()">Réessayer</button>
+          }
+        }
+      </div>
+    </cw-card>
+  </main>
+</div>

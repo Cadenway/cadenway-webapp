@@ -4,7 +4,9 @@
 
 ## Status
 
-The checkout has an Angular application shell and runtime configuration. The feature ownership documents define their intended responsibilities. The route table is currently empty.
+The checkout has an Angular application shell, runtime configuration, and a protected workspace
+entry. The Auth feature opens a password session with optional authenticator verification and
+selects the current organization before private Spaces and Task routes load.
 
 ## Purpose and target structure
 

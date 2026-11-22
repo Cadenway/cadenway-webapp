@@ -1,0 +1,212 @@
+<main class="mx-auto min-h-screen max-w-6xl px-4 py-8 sm:px-8" aria-labelledby="task-detail-title">
+  <p role="status" class="sr-only">
+    @if (store.restorePending()) {
+      Restauration en cours
+    } @else if (store.restoreSucceeded()) {
+      Tâche restaurée
+    }
+  </p>
+  @if (store.loading()) {
+    <h1 id="task-detail-title" class="sr-only">Détails de la tâche</h1>
+    <section aria-busy="true" aria-label="Détails de la tâche">
+      <div cwSkeleton class="mb-4 h-5 w-24" aria-hidden="true"></div>
+      <div cwSkeleton class="mb-8 h-8 w-2/3" aria-hidden="true"></div>
+      <div cwSkeleton class="h-28 w-full" aria-hidden="true"></div>
+    </section>
+  } @else if (store.loadFailure(); as failure) {
+    <cw-empty role="alert">
+      <cw-empty-header>
+        <h1 id="task-detail-title" class="text-lg font-semibold">
+          @switch (failure) {
+            @case ('not-found') {
+              Page introuvable
+            }
+            @case ('trashed') {
+              Cette tâche a été supprimée
+            }
+            @case ('forbidden') {
+              Accès refusé
+            }
+            @case ('organization-changed') {
+              Votre organisation a changé
+            }
+            @default {
+              Impossible de charger la tâche
+            }
+          }
+        </h1>
+        @if (failure === 'not-found') {
+          <cw-empty-description>
+            Le lien est incomplet, ou la page a été déplacée ou supprimée.
+          </cw-empty-description>
+        } @else if (failure === 'trashed') {
+          @if (store.trashedTask(); as task) {
+            <cw-empty-description>
+              {{ task.key }} « {{ task.name }} » a été supprimée le
+              {{ task.trashedAt | date: 'dd/MM/yyyy' }}. Elle reste dans la corbeille jusqu’au
+              {{ task.purgeAt | date: 'dd/MM/yyyy' }}.
+            </cw-empty-description>
+          }
+        }
+      </cw-empty-header>
+      <cw-empty-content>
+        @if (failure === 'session-expired') {
+          <a cwButton routerLink="/connexion">Se connecter</a>
+        } @else if (failure === 'organization-changed') {
+          <a cwButton routerLink="/espaces">Retour aux espaces</a>
+        } @else if (failure === 'trashed' && store.trashedTask()) {
+          <button
+            cwButton
+            type="button"
+            [disabled]="store.restorePending()"
+            (click)="store.restore()"
+          >
+            Restaurer la tâche
+          </button>
+          @if (store.restoreError(); as error) {
+            <p role="alert" class="text-sm text-destructive">
+              @switch (error) {
+                @case ('pending') {
+                  La mise en corbeille est en cours. Réessayez dans un instant.
+                }
+                @default {
+                  Impossible de restaurer la tâche. Réessayez.
+                }
+              }
+            </p>
+          }
+        } @else if (failure === 'unavailable' || failure === 'stale') {
+          <button cwButton type="button" variant="outline" (click)="store.retry()">
+            Réessayer
+          </button>
+        } @else {
+          <a cwButton variant="outline" routerLink="/accueil">Retour à l’accueil</a>
+        }
+      </cw-empty-content>
+    </cw-empty>
+  } @else if (store.detail(); as task) {
+    <header class="space-y-2 border-b border-border pb-5">
+      <nav aria-label="Fil d’Ariane" class="text-sm text-muted-foreground">
+        <a
+          class="rounded-sm underline-offset-4 hover:underline focus-visible:ring-2 focus-visible:ring-ring"
+          [routerLink]="['/espaces', task.space.id, 'listes', task.list.id]"
+        >
+          {{ task.space.name }} / {{ task.list.name }}
+        </a>
+      </nav>
+      <p class="font-mono text-xs text-muted-foreground">{{ task.key }}</p>
+      <h1 id="task-detail-title" class="text-2xl font-semibold text-foreground">{{ task.name }}</h1>
+      @if (task.parent; as parent) {
+        <a
+          class="inline-block rounded-sm text-sm text-muted-foreground underline-offset-4 hover:underline focus-visible:ring-2 focus-visible:ring-ring"
+          [routerLink]="['/taches', parent.key]"
+        >
+          Sous-tâche de {{ parent.key }} · {{ parent.name }}
+        </a>
+      }
+    </header>
+
+    <div class="grid gap-8 pt-5 md:grid-cols-[minmax(0,1fr)_minmax(16rem,22rem)]">
+      <div class="min-w-0 space-y-7">
+        @if (task.description; as description) {
+          <section aria-labelledby="task-description-title" class="space-y-2">
+            <h2 id="task-description-title" class="text-sm font-medium">Description</h2>
+            <cw-markdown [source]="description" />
+          </section>
+        }
+
+        @if (task.subtasks.length) {
+          <section aria-labelledby="task-subtasks-title" class="space-y-2">
+            <h2 id="task-subtasks-title" class="text-sm font-medium">
+              Sous-tâches <span class="text-muted-foreground">{{ task.subtasks.length }}</span>
+            </h2>
+            <ul class="divide-y divide-border rounded-lg border border-border">
+              @for (subtask of task.subtasks; track subtask.key) {
+                <li class="px-3 py-2">
+                  <a
+                    class="rounded-sm text-sm underline-offset-4 hover:underline focus-visible:ring-2 focus-visible:ring-ring"
+                    [routerLink]="['/taches', subtask.key]"
+                  >
+                    <span class="mr-2 font-mono text-xs text-muted-foreground">{{
+                      subtask.key
+                    }}</span>
+                    {{ subtask.name }}
+                  </a>
+                </li>
+              }
+            </ul>
+          </section>
+        }
+
+        @if (task.commentsUnavailable || task.comments) {
+          <section aria-labelledby="task-comments-title" class="space-y-2">
+            <h2 id="task-comments-title" class="text-sm font-medium">Commentaires</h2>
+            @if (task.commentsUnavailable) {
+              <div role="alert" class="rounded-lg border border-border px-3 py-2">
+                <p class="mb-2 text-sm text-muted-foreground">
+                  Impossible de charger les commentaires
+                </p>
+                <button cwButton type="button" variant="outline" (click)="store.retry()">
+                  Réessayer
+                </button>
+              </div>
+            } @else {
+              <ul class="divide-y divide-border">
+                @for (comment of task.comments; track comment.id) {
+                  <li class="py-2"><cw-markdown [source]="comment.body" /></li>
+                } @empty {
+                  <li class="text-sm text-muted-foreground">Aucun commentaire</li>
+                }
+              </ul>
+            }
+          </section>
+        }
+      </div>
+
+      <aside
+        aria-labelledby="task-properties-title"
+        class="space-y-3 md:border-l md:border-border md:pl-6"
+      >
+        <h2 id="task-properties-title" class="text-sm font-medium">Propriétés</h2>
+        <dl class="grid grid-cols-[5rem_minmax(0,1fr)] items-center gap-2">
+          <dt class="text-sm text-muted-foreground">Statut</dt>
+          <dd class="min-w-0">
+            @if (task.mayEditStatus) {
+              <cw-select
+                ariaLabel="Statut"
+                [value]="task.status"
+                [disabled]="store.savingStatus()"
+                (valueChange)="store.changeStatus($event)"
+              >
+                @for (option of task.options; track option.key) {
+                  @if (option.selectable || option.key === task.status) {
+                    <cw-select-option [value]="option.key" [disabled]="!option.selectable">
+                      <cw-status-icon [status]="option.key" />
+                      {{ option.label }}
+                    </cw-select-option>
+                  }
+                }
+              </cw-select>
+            } @else {
+              <span class="inline-flex items-center gap-2 text-sm">
+                <cw-status-icon [status]="task.status" />
+                {{ statusLabel() }}
+              </span>
+            }
+          </dd>
+        </dl>
+        @if (store.statusFailure(); as failure) {
+          <p role="alert" class="text-sm text-destructive">
+            @if (failure === 'stale') {
+              La tâche a été modifiée. Vérifiez son statut avant de réessayer.
+            } @else {
+              Impossible de modifier le statut. Réessayez.
+            }
+          </p>
+        } @else if (store.statusSaved()) {
+          <p role="status" class="text-sm text-muted-foreground">Statut modifié.</p>
+        }
+      </aside>
+    </div>
+  }
+</main>

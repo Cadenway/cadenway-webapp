@@ -1,0 +1,29 @@
+<div class="flex min-h-dvh flex-col bg-canvas text-sm text-foreground">
+  <header class="flex h-14 items-center justify-between gap-3 border-b border-border px-4 sm:px-6">
+    <span class="text-base font-bold tracking-tight">Cadenway</span>
+    <button cwButton variant="ghost" [disabled]="actions.pending()" (click)="signOut()">
+      Se déconnecter
+    </button>
+  </header>
+  <main class="mx-auto flex w-full max-w-4xl flex-1 flex-col gap-6 px-4 py-8 sm:px-6">
+    @let result = workspace();
+    @if (result.ok) {
+      <h1 class="text-2xl font-semibold tracking-tight">{{ result.value.name }}</h1>
+      <cw-card class="flex flex-wrap items-center gap-3 p-5">
+        <a cwButton routerLink="/espaces">Espaces</a>
+        <a cwButton variant="outline" routerLink="/organisations">Changer d’organisation</a>
+      </cw-card>
+    } @else {
+      <h1 class="text-2xl font-semibold tracking-tight">Accueil</h1>
+      <cw-alert variant="destructive" role="alert">
+        <cw-alert-description>Impossible d’ouvrir votre espace de travail.</cw-alert-description>
+      </cw-alert>
+      <button cwButton variant="outline" class="self-start" (click)="retry()">Réessayer</button>
+    }
+    @if (actions.problem()) {
+      <cw-alert variant="destructive" role="alert">
+        <cw-alert-description>Impossible de fermer la session. Réessayez.</cw-alert-description>
+      </cw-alert>
+    }
+  </main>
+</div>

@@ -1,0 +1,144 @@
+<div class="flex min-h-dvh flex-col bg-canvas text-sm text-foreground">
+  <header class="flex h-14 items-center px-4 sm:px-6">
+    <span class="text-base font-bold tracking-tight">Cadenway</span>
+  </header>
+  <main class="flex flex-1 justify-center px-4 py-6 sm:items-center sm:py-10">
+    <cw-card class="w-full max-w-[400px] p-6 sm:p-8">
+      <div class="flex flex-col gap-6">
+        @if (store.challengeEmail(); as email) {
+          <div class="flex flex-col gap-1">
+            <h1 class="text-2xl font-semibold tracking-tight">Vérification en deux étapes</h1>
+            <p class="text-muted-foreground">{{ email }}</p>
+            <p class="text-muted-foreground">
+              Saisissez le code à 6 chiffres affiché par votre application d'authentification.
+            </p>
+          </div>
+        } @else if (federatedContinuation()) {
+          <h1 class="text-2xl font-semibold tracking-tight">Connexion SSO</h1>
+          @if (store.problem() === null) {
+            <p role="status" class="text-muted-foreground">Connexion…</p>
+          }
+        } @else {
+          <div class="flex flex-col gap-1">
+            <h1 class="text-2xl font-semibold tracking-tight">Se connecter</h1>
+            <p class="text-muted-foreground">Accédez à vos espaces de travail.</p>
+          </div>
+        }
+
+        @if (message(); as alert) {
+          <cw-alert variant="destructive" role="alert">
+            <cw-alert-description>
+              {{ alert }}
+              @if (store.problem()?.remainingAttempts; as attempts) {
+                @if (attempts === 1) {
+                  Il vous reste 1 tentative avant le verrouillage temporaire.
+                } @else {
+                  Il vous reste {{ attempts }} tentatives avant le verrouillage temporaire.
+                }
+              }
+            </cw-alert-description>
+          </cw-alert>
+        }
+
+        @if (store.challengeEmail() !== null) {
+          <form class="flex flex-col gap-4" novalidate (submit)="submitCode($event)">
+            <div class="flex flex-col gap-2">
+              <label for="login-code" class="leading-none font-medium">Code de l'application</label>
+              <input
+                cwInput
+                id="login-code"
+                autocomplete="one-time-code"
+                inputmode="numeric"
+                [formField]="codeForm.code"
+              />
+            </div>
+            <button
+              cwButton
+              type="submit"
+              [disabled]="codeForm().invalid() || codeForm().submitting()"
+              [loading]="codeForm().submitting()"
+            >
+              Vérifier le code
+            </button>
+            <button
+              cwButton
+              type="button"
+              variant="ghost"
+              [disabled]="codeForm().submitting()"
+              (click)="cancelChallenge()"
+            >
+              Revenir à la connexion
+            </button>
+          </form>
+        } @else if (federatedContinuation()) {
+          @if (store.problem() !== null) {
+            <a cwButton variant="ghost" routerLink="/connexion" [replaceUrl]="true">
+              Autres méthodes de connexion
+            </a>
+          }
+        } @else {
+          <form class="flex flex-col gap-4" novalidate (submit)="submitPassword($event)">
+            <div class="flex flex-col gap-2">
+              <label for="login-email" class="leading-none font-medium">Adresse e-mail</label>
+              <input
+                cwInput
+                id="login-email"
+                type="email"
+                autocomplete="username"
+                [formField]="signInForm.email"
+              />
+            </div>
+            <div class="flex flex-col gap-2">
+              <label for="login-password" class="leading-none font-medium">Mot de passe</label>
+              <div class="flex items-center gap-2">
+                <input
+                  cwInput
+                  class="min-w-0 flex-1"
+                  id="login-password"
+                  placeholder="Votre mot de passe"
+                  autocomplete="current-password"
+                  [type]="showPassword() ? 'text' : 'password'"
+                  [formField]="signInForm.password"
+                />
+                <button
+                  cwButton
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  [attr.aria-label]="
+                    showPassword() ? 'Masquer le mot de passe' : 'Afficher le mot de passe'
+                  "
+                  [attr.aria-pressed]="showPassword()"
+                  (click)="showPassword.set(!showPassword())"
+                >
+                  <ng-icon [name]="showPassword() ? 'phosphorEyeSlashBold' : 'phosphorEyeBold'" />
+                </button>
+              </div>
+            </div>
+            <div class="flex items-center gap-2">
+              <cw-checkbox id="login-remember" [formField]="signInForm.rememberMe" />
+              <label for="login-remember" class="leading-none font-medium">
+                Rester connecté pendant 30 jours
+              </label>
+            </div>
+            <button
+              cwButton
+              type="submit"
+              [disabled]="
+                store.federatedStarting() || signInForm().invalid() || signInForm().submitting()
+              "
+              [loading]="signInForm().submitting()"
+            >
+              Se connecter
+            </button>
+          </form>
+          <cw-federated-sign-in-form
+            [rememberMe]="rememberMe()"
+            [busy]="store.federatedStarting() || signInForm().submitting()"
+            (started)="startFederated($event)"
+          />
+        }
+      </div>
+    </cw-card>
+  </main>
+</div>
