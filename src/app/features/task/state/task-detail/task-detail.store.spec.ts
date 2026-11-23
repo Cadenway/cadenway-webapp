@@ -166,6 +166,42 @@ describe('TaskDetailStore', () => {
     expect(store.loadFailure()).toBe('session-expired');
   });
 
+  it('drops the old notice after leaving and reopening the same task', async () => {
+    const route: WritableSignal<TaskRouteContext> = signal({
+      key: taskView.key,
+      organizationId: 'org-a',
+    });
+    const notice: Subject<void> = new Subject<void>();
+    const initial: Subject<TaskDetailView> = new Subject<TaskDetailView>();
+    const reopened: TaskDetailView = { ...taskView, status: 'review', version: 4 };
+    const load: ReturnType<typeof vi.fn<TaskDetailApi['load']>> = vi
+      .fn<TaskDetailApi['load']>()
+      .mockReturnValueOnce(initial)
+      .mockReturnValueOnce(of({ ...taskView, key: 'CAD-483' }))
+      .mockReturnValueOnce(of(reopened));
+    const store: InstanceType<typeof TaskDetailStore> = await setup(
+      {
+        load,
+        watchForChanges: () => notice,
+        changeStatus: vi.fn<TaskDetailApi['changeStatus']>(),
+      },
+      route,
+    );
+
+    notice.next();
+    route.update((context) => ({ ...context, key: 'CAD-483' }));
+    await flushResource();
+    expect(store.detail()?.key).toBe('CAD-483');
+    route.update((context) => ({ ...context, key: taskView.key }));
+    await flushResource();
+    initial.next(taskView);
+    initial.complete();
+    await flushResource();
+
+    expect(load).toHaveBeenCalledTimes(3);
+    expect(store.detail()).toEqual(reopened);
+  });
+
   it('discards the opaque 404 after refreshing a newly deleted entry for the same key', async () => {
     const newerEntry: TrashedTaskView = {
       ...trashedTask,
