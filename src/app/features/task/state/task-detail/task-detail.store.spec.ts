@@ -1,6 +1,6 @@
 import { signal, type WritableSignal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { of, type Observable, Subject, throwError } from 'rxjs';
+import { EMPTY, of, type Observable, Subject, throwError } from 'rxjs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { TaskDetailApi } from '../../data-access/services/task-detail/task-detail-api.service';
@@ -90,7 +90,10 @@ async function setup(
   route: WritableSignal<TaskRouteContext> = signal({ key: taskView.key, organizationId: 'org-a' }),
 ): Promise<InstanceType<typeof TaskDetailStore>> {
   TestBed.configureTestingModule({
-    providers: [TaskDetailStore, { provide: TaskDetailApi, useValue: api }],
+    providers: [
+      TaskDetailStore,
+      { provide: TaskDetailApi, useValue: { watchForChanges: () => EMPTY, ...api } },
+    ],
   });
   const store: InstanceType<typeof TaskDetailStore> = TestBed.inject(TaskDetailStore);
   TestBed.runInInjectionContext(() => {

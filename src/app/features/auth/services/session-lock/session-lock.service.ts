@@ -1,4 +1,4 @@
-import { firstValueFrom, Observable } from 'rxjs';
+import { firstValueFrom, fromEvent, Observable, takeUntil, timeout } from 'rxjs';
 
 /**
  * Constant SESSION_LOCK
@@ -14,16 +14,18 @@ const SESSION_LOCK: string = 'cadenway-gateway-session';
  * Function withSessionLock
  *
  * @description
- * Serializes cookie changes and dependent requests across tabs. Cancellation removes a queued
- * request or prevents a later HTTP operation. A dispatched request retains its lock until the
- * response settles even if the initiating view unsubscribes.
+ * Coordinates cookie changes and dependent requests across tabs. Shared reads can run together
+ * and release their lock on cancellation or after eight seconds. A dispatched exclusive request
+ * retains its lock until the response settles, even if the initiating view unsubscribes.
  *
  * @template T
  * @param {(signal: AbortSignal) => Observable<T>} operation - The single-response operation under the lock.
+ * @param {LockMode} mode - Shared for cancellable reads, exclusive for cookie changes and writes.
  * @returns {Observable<T>} The response, or an error when browser coordination is unavailable.
  */
 export function withSessionLock<T>(
   operation: (signal: AbortSignal) => Observable<T>,
+  mode: LockMode = 'exclusive',
 ): Observable<T> {
   return new Observable<T>((subscriber) => {
     const environment: { navigator?: { locks?: LockManager } } = globalThis;
@@ -35,10 +37,18 @@ export function withSessionLock<T>(
 
     const controller: AbortController = new AbortController();
     void locks
-      .request(SESSION_LOCK, { signal: controller.signal }, async () => {
+      .request(SESSION_LOCK, { mode, signal: controller.signal }, async () => {
         if (controller.signal.aborted) return;
 
-        const result: T = await firstValueFrom(operation(controller.signal));
+        const response: Observable<T> = operation(controller.signal);
+        const result: T = await firstValueFrom(
+          mode === 'shared'
+            ? response.pipe(
+                takeUntil(fromEvent(controller.signal, 'abort')),
+                timeout({ first: 8_000 }),
+              )
+            : response,
+        );
         subscriber.next(result);
         subscriber.complete();
       })

@@ -52,6 +52,30 @@ function toBoardCard(task: ListTasksClientResult['items'][number]): BoardCard {
 }
 
 /**
+ * Function rejectBoardRequest
+ *
+ * @description
+ * Maps a failed organization precondition to the board's context-change state.
+ *
+ * @param {unknown} error - The request failure.
+ * @returns {Observable<never>} A stream rejecting with the matching board error.
+ */
+function rejectBoardRequest(error: unknown): Observable<never> {
+  if (error instanceof HttpErrorResponse && error.status === 412) {
+    const problem: unknown = error.error;
+    if (
+      problem &&
+      typeof problem === 'object' &&
+      'code' in problem &&
+      problem.code === 'organization.context-changed'
+    ) {
+      return throwError(() => new BoardOrganizationChanged());
+    }
+  }
+  return throwError(() => error);
+}
+
+/**
  * Class SprintBoardApi
  *
  * @description
@@ -116,44 +140,54 @@ export class SprintBoardApi {
    * @returns {Observable<readonly BoardColumn[]>} The visible workflow with its initial card pages.
    */
   public load(location: BoardLocation): Observable<readonly BoardColumn[]> {
-    const options: { readonly cache: 'no-store' } = { cache: 'no-store' };
-    return this.inOrganization(location, (signal) =>
-      forkJoin({
-        space: this.spaces.getSpace(location.spaceId, options),
-        groups: this.queries.countTaskGroups(
-          location.listId,
-          { groupBy: 'status', limit: STATUS_KEYS.length },
-          options,
-        ),
-      }).pipe(
-        switchMap(
-          ({
-            space,
-            groups,
-          }: {
-            space: GetSpaceClientResult;
-            groups: CountTaskGroupsClientResult;
-          }) => {
-            if (signal.aborted) return EMPTY;
-            const counts: Map<string, number> = new Map<string, number>(
-              groups.items.map((group) => [group.value, group.count]),
-            );
-            const columns: Observable<BoardColumn>[] = STATUS_KEYS.filter(
-              (status) => !space.statuses[status].hidden,
-            ).map((status) => {
-              const label: string = space.statuses[status].name ?? BOARD_STATUS_LABELS[status];
-              const count: number = counts.get(status) ?? 0;
-              const page: Observable<BoardCardPage> = count
-                ? this.readPage(location, status)
-                : of({ cards: [], count, nextCursor: null });
-              return page.pipe(
-                map((value): BoardColumn => ({ ...value, status, label, hasPreviousPage: false })),
+    const options: { cache: 'no-store'; headers: Record<string, string> } = {
+      cache: 'no-store',
+      headers: { 'If-Organization-Match': location.organizationId },
+    };
+    return withSessionLock(
+      () =>
+        forkJoin({
+          space: this.spaces.getSpace(location.spaceId, options),
+          groups: this.queries.countTaskGroups(
+            location.listId,
+            { groupBy: 'status', limit: STATUS_KEYS.length },
+            options,
+          ),
+        }).pipe(
+          switchMap(
+            ({
+              space,
+              groups,
+            }: {
+              space: GetSpaceClientResult;
+              groups: CountTaskGroupsClientResult;
+            }) => {
+              const counts: Map<string, number> = new Map<string, number>(
+                groups.items.map((group) => [group.value, group.count]),
               );
-            });
-            return columns.length ? forkJoin(columns) : of([]);
-          },
+              const columns: Observable<BoardColumn>[] = STATUS_KEYS.filter(
+                (status) => !space.statuses[status].hidden,
+              ).map((status) => {
+                const label: string = space.statuses[status].name ?? BOARD_STATUS_LABELS[status];
+                const count: number = counts.get(status) ?? 0;
+                const page: Observable<BoardCardPage> = count
+                  ? this.readPage(location, status)
+                  : of({ cards: [], count, nextCursor: null });
+                return page.pipe(
+                  map((value): BoardColumn => ({
+                    ...value,
+                    status,
+                    label,
+                    hasPreviousPage: false,
+                  })),
+                );
+              });
+              return columns.length ? forkJoin(columns) : of([]);
+            },
+          ),
+          catchError(rejectBoardRequest),
         ),
-      ),
+      'shared',
     );
   }
 
@@ -173,7 +207,7 @@ export class SprintBoardApi {
     status: StatusKey,
     cursor?: string,
   ): Observable<BoardCardPage> {
-    return this.inOrganization(location, () => this.readPage(location, status, cursor));
+    return this.readPage(location, status, cursor).pipe(catchError(rejectBoardRequest));
   }
 
   /**
@@ -204,23 +238,7 @@ export class SprintBoardApi {
             },
           },
         )
-        .pipe(
-          map(toBoardCard),
-          catchError((error: unknown) => {
-            if (error instanceof HttpErrorResponse && error.status === 412) {
-              const problem: unknown = error.error;
-              if (
-                problem &&
-                typeof problem === 'object' &&
-                'code' in problem &&
-                problem.code === 'organization.context-changed'
-              ) {
-                return throwError(() => new BoardOrganizationChanged());
-              }
-            }
-            return throwError(() => error);
-          }),
-        ),
+        .pipe(map(toBoardCard), catchError(rejectBoardRequest)),
     );
   }
 
@@ -228,7 +246,7 @@ export class SprintBoardApi {
    * Method readPage
    *
    * @description
-   * Reads one group's roots within an already verified session operation.
+   * Reads one group's roots with the route's expected organization.
    *
    * @param {BoardLocation} location - Identifies the list containing the group.
    * @param {StatusKey} status - Filters the result to one workflow status.
@@ -244,7 +262,10 @@ export class SprintBoardApi {
       .listTasks(
         location.listId,
         { status: [status], limit: BOARD_PAGE_SIZE, cursor, sort: 'manual' },
-        { cache: 'no-store' },
+        {
+          cache: 'no-store',
+          headers: { 'If-Organization-Match': location.organizationId },
+        },
       )
       .pipe(
         map((result: ListTasksClientResult) => ({

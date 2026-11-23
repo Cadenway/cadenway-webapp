@@ -8,17 +8,17 @@ import type { RuntimeConfig } from '../../models/runtime-config.interface';
  *
  * @param {unknown} value - Parsed JSON of the file.
  * @returns {RuntimeConfig} The configuration, with exactly the known keys.
- * @throws {TypeError} When a gateway address is missing or is not a non-empty string.
+ * @throws {TypeError} When the REST address is missing or a supplied address is invalid.
  */
 export function parseRuntimeConfig(value: unknown): RuntimeConfig {
   if (typeof value !== 'object' || value === null) {
     throw new TypeError('config.json must contain a JSON object.');
   }
   const source: Partial<Record<keyof RuntimeConfig, unknown>> = value;
-  return {
-    apiUrl: readAddress(source.apiUrl, 'apiUrl'),
-    realtimeUrl: readAddress(source.realtimeUrl, 'realtimeUrl'),
-  };
+  const apiUrl: string = readAddress(source.apiUrl, 'apiUrl');
+  return source.realtimeUrl === undefined
+    ? { apiUrl }
+    : { apiUrl, realtimeUrl: readAddress(source.realtimeUrl, 'realtimeUrl') };
 }
 
 /**

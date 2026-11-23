@@ -12,7 +12,7 @@ import {
   withState,
 } from '@ngrx/signals';
 import { type RxMethod, rxMethod } from '@ngrx/signals/rxjs-interop';
-import { EMPTY, switchMap, timer } from 'rxjs';
+import { EMPTY, switchMap, tap, timer } from 'rxjs';
 
 import { TaskDetailApi } from '../../data-access/services/task-detail/task-detail-api.service';
 import {
@@ -447,6 +447,22 @@ function createTaskDetailStore(): Type<TaskDetailStoreInstance> {
       }),
     })),
     withMethods((store, api = inject(TaskDetailApi)) => {
+      const watch: RxMethod<TaskRouteContext> = rxMethod<TaskRouteContext>(
+        switchMap((context) =>
+          api.watchForChanges(context.key, context.organizationId).pipe(
+            tap(() => {
+              if (
+                store._pendingStatus() === null &&
+                !store.restorePending() &&
+                !store.loading() &&
+                !lostAccess(store.loadFailure())
+              ) {
+                store._detail.reload();
+              }
+            }),
+          ),
+        ),
+      );
       const dispatch: RxMethod<TaskStatusCommand | null> = rxMethod<TaskStatusCommand | null>(
         switchMap((command) => {
           if (command === null) return EMPTY;
@@ -520,6 +536,7 @@ function createTaskDetailStore(): Type<TaskDetailStoreInstance> {
           dispatch(null);
           restoreEntry(null);
           patchState(store, { ...initialState, _context: context });
+          watch(context);
         }),
         retry(): void {
           if (

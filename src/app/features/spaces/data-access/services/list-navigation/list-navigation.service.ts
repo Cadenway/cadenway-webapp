@@ -7,6 +7,7 @@ import type {
   ListTasksClientResult,
   ListTasksParams,
 } from '@cadenway/api-client';
+import { withSessionLock } from '@features/auth';
 import { map, of, switchMap } from 'rxjs';
 import type { Observable } from 'rxjs';
 
@@ -106,53 +107,65 @@ export class ListNavigation {
             },
           })),
         );
-      case 'tasks':
-        return this.lists.getList(request.listId, { cache: 'no-store' }).pipe(
-          switchMap((list: GetListClientResult) => {
-            if (list.spaceId !== request.spaceId || list.archivedAt != null) {
-              throw new Error('The selected list is unavailable in this space.');
-            }
-            const details: Pick<
-              Extract<SpacesPageData, { kind: 'tasks' }>,
-              'listName' | 'sprint'
-            > = {
-              listName: list.name,
-              sprint:
-                list.sprint === null
-                  ? null
-                  : {
-                      startDate: list.sprint.startDate,
-                      endDate: list.sprint.endDate,
-                      goal: list.sprint.goal,
-                    },
-            };
-            if (request.view === 'board') {
-              return of<SpacesPageData>({
-                kind: 'board',
-                ...details,
-                listId: request.listId,
-                spaceId: request.spaceId,
-                mayEdit: list.callerRole === 'edit' || list.callerRole === undefined,
-              });
-            }
-            return this.tasks.listTasks(request.listId, { ...params, sort: 'manual' }).pipe(
-              map((result: ListTasksClientResult): SpacesPageData => ({
-                kind: 'tasks',
-                ...details,
-                page: {
-                  items: result.items.map((task) => ({
-                    key: task.key,
-                    name: task.name,
-                    status: task.status,
-                    assigneeCount: task.assignees.length,
-                    dueDate: task.dueDate,
-                  })),
-                  nextCursor: result.nextCursor,
-                },
-              })),
-            );
-          }),
+      case 'tasks': {
+        const options: { cache: 'no-store'; headers: Record<string, string> } = {
+          cache: 'no-store',
+          headers: { 'If-Organization-Match': request.organizationId },
+        };
+        return withSessionLock(
+          () =>
+            this.lists.getList(request.listId, options).pipe(
+              switchMap((list: GetListClientResult) => {
+                if (list.spaceId !== request.spaceId || list.archivedAt != null) {
+                  throw new Error('The selected list is unavailable in this space.');
+                }
+                const details: Pick<
+                  Extract<SpacesPageData, { kind: 'tasks' }>,
+                  'listName' | 'sprint'
+                > = {
+                  listName: list.name,
+                  sprint:
+                    list.sprint === null
+                      ? null
+                      : {
+                          startDate: list.sprint.startDate,
+                          endDate: list.sprint.endDate,
+                          goal: list.sprint.goal,
+                        },
+                };
+                if (request.view === 'board') {
+                  return of<SpacesPageData>({
+                    kind: 'board',
+                    ...details,
+                    listId: request.listId,
+                    spaceId: request.spaceId,
+                    organizationId: request.organizationId,
+                    mayEdit: list.callerRole === 'edit' || list.callerRole === undefined,
+                  });
+                }
+                return this.tasks
+                  .listTasks(request.listId, { ...params, sort: 'manual' }, options)
+                  .pipe(
+                    map((result: ListTasksClientResult): SpacesPageData => ({
+                      kind: 'tasks',
+                      ...details,
+                      page: {
+                        items: result.items.map((task) => ({
+                          key: task.key,
+                          name: task.name,
+                          status: task.status,
+                          assigneeCount: task.assignees.length,
+                          dueDate: task.dueDate,
+                        })),
+                        nextCursor: result.nextCursor,
+                      },
+                    })),
+                  );
+              }),
+            ),
+          'shared',
         );
+      }
     }
   }
   // #endregion

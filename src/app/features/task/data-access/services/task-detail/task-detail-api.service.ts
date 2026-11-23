@@ -1,7 +1,13 @@
 import { HttpErrorResponse } from '@angular/common/http';
-import { inject, Service } from '@angular/core';
-import { OrganizationsService, TasksService, TrashService } from '@cadenway/api-client';
+import { DOCUMENT, inject, Service } from '@angular/core';
+import {
+  OrganizationsService,
+  RealtimeService,
+  TasksService,
+  TrashService,
+} from '@cadenway/api-client';
 import type { StatusKey } from '@cadenway/contracts';
+import { IssueRealtimeTicketResponse } from '@cadenway/contracts/validators/public/realtime';
 import {
   CreateTaskBody,
   GetTaskDetailHeader,
@@ -12,8 +18,23 @@ import {
   RestoreTrashEntryParams,
   TrashTaskResponse,
 } from '@cadenway/contracts/validators/public/trash';
+import { RuntimeConfigStore } from '@core/config';
+import { observeTaskRoom } from '@core/realtime';
 import { withSessionLock } from '@features/auth';
-import { catchError, EMPTY, map, type Observable, of, switchMap, throwError } from 'rxjs';
+import {
+  auditTime,
+  catchError,
+  EMPTY,
+  filter,
+  fromEvent,
+  map,
+  merge,
+  type Observable,
+  of,
+  switchMap,
+  throwError,
+  timer,
+} from 'rxjs';
 
 import {
   type TaskDetailFailure,
@@ -154,6 +175,39 @@ export class TaskDetailApi {
    * @readonly
    */
   private readonly organizations: OrganizationsService = inject(OrganizationsService);
+
+  /**
+   * Property realtime
+   *
+   * @description
+   * Issues single-use Realtime credentials through the generated API client.
+   *
+   * @type {RealtimeService}
+   * @readonly
+   */
+  private readonly realtime: RealtimeService = inject(RealtimeService);
+
+  /**
+   * Property config
+   *
+   * @description
+   * Reads whether the environment enabled a Realtime connection.
+   *
+   * @type {InstanceType<typeof RuntimeConfigStore>}
+   * @readonly
+   */
+  private readonly config: InstanceType<typeof RuntimeConfigStore> = inject(RuntimeConfigStore);
+
+  /**
+   * Property document
+   *
+   * @description
+   * Restricts recovery reads to visible task pages.
+   *
+   * @type {Document}
+   * @readonly
+   */
+  private readonly document: Document = inject(DOCUMENT);
   // #endregion
 
   // #region Methods
@@ -171,22 +225,65 @@ export class TaskDetailApi {
     if (!GetTaskDetailParams.safeParse({ taskKey }).success) {
       return throwError(() => new TaskDetailRequestError('not-found'));
     }
-    return this.inOrganization(organizationId, () =>
-      this.client
-        .getTaskDetail(taskKey, {
-          cache: 'no-store',
-          headers: GetTaskDetailHeader.parse({ 'If-Organization-Match': organizationId }),
-        })
-        .pipe(
-          map(toTaskDetailView),
+    return this.client
+      .getTaskDetail(taskKey, {
+        cache: 'no-store',
+        headers: GetTaskDetailHeader.parse({ 'If-Organization-Match': organizationId }),
+      })
+      .pipe(
+        map(toTaskDetailView),
+        catchError((error: unknown) => {
+          if (error instanceof HttpErrorResponse && classifyFailure(error) === 'trashed') {
+            const task: TrashedTaskView | null = readTrashedTask(error.error, taskKey);
+            return throwError(() => new TaskDetailRequestError('trashed', task));
+          }
+          return rejectTaskRequest(error);
+        }),
+      );
+  }
+
+  /**
+   * Method watchForChanges
+   *
+   * @description
+   * Requests guarded detail reloads after a notice or reconnect and independently catches up
+   * on missed notifications while the page remains visible.
+   *
+   * @param {string} taskKey - The opened task's key.
+   * @param {string} organizationId - The route's expected organization.
+   * @returns {Observable<void>} Coalesced reload signals until the route disconnects.
+   */
+  public watchForChanges(taskKey: string, organizationId: string): Observable<void> {
+    const configured: string | undefined = this.config.config().realtimeUrl;
+    if (
+      !configured ||
+      !URL.canParse(configured) ||
+      !GetTaskDetailParams.safeParse({ taskKey }).success
+    ) {
+      return EMPTY;
+    }
+    const origin: URL = new URL(configured);
+    if (!['http:', 'https:'].includes(origin.protocol) || origin.username || origin.password) {
+      return EMPTY;
+    }
+    return merge(
+      observeTaskRoom(origin, organizationId, taskKey, () =>
+        this.realtime.issueRealtimeTicket({}, { timeout: 5_000 }).pipe(
+          map((ticket) => IssueRealtimeTicketResponse.parse(ticket).token),
           catchError((error: unknown) => {
-            if (error instanceof HttpErrorResponse && classifyFailure(error) === 'trashed') {
-              const task: TrashedTaskView | null = readTrashedTask(error.error, taskKey);
-              return throwError(() => new TaskDetailRequestError('trashed', task));
+            if (error instanceof HttpErrorResponse && [401, 403, 404].includes(error.status)) {
+              return EMPTY;
             }
-            return rejectTaskRequest(error);
+            return throwError(() => error);
           }),
         ),
+      ),
+      fromEvent(this.document, 'visibilitychange'),
+      timer(30_000, 30_000),
+    ).pipe(
+      auditTime(250),
+      filter(() => this.document.visibilityState === 'visible'),
+      map(() => undefined),
     );
   }
 

@@ -2,7 +2,7 @@
  * Interface RuntimeConfig
  *
  * @description
- * Addresses of the two gateways used by the application.
+ * REST gateway address and optional Realtime gateway address.
  */
 export interface RuntimeConfig {
   // #region Properties
@@ -21,11 +21,11 @@ export interface RuntimeConfig {
    * Property realtimeUrl
    *
    * @description
-   * Base URL of the WebSocket gateway.
+   * Base URL of the WebSocket gateway, when enabled.
    *
-   * @type {string}
+   * @type {string | undefined}
    * @readonly
    */
-  readonly realtimeUrl: string;
+  readonly realtimeUrl?: string;
   // #endregion
 }

@@ -6,7 +6,7 @@ import {
 } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
 import { firstValueFrom } from 'rxjs';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type {
   SpacesPageData,
@@ -27,6 +27,7 @@ const sprint: Extract<SpacesPageRequest, { kind: 'tasks' }> = {
   kind: 'tasks',
   spaceId: '01923680-b800-7000-8000-000000000010',
   listId: '01923680-b800-7000-8000-000000000020',
+  organizationId: '01923680-b800-7000-8000-000000000030',
   cursor: 'opaque-page-two',
 };
 
@@ -35,9 +36,15 @@ describe('ListNavigation', () => {
     TestBed.configureTestingModule({
       providers: [provideHttpClient(), provideHttpClientTesting()],
     });
+    vi.stubGlobal('navigator', {
+      locks: {
+        request: (_name: string, _options: LockOptions, run: () => Promise<void>) => run(),
+      },
+    });
   });
 
   afterEach(() => {
+    vi.unstubAllGlobals();
     TestBed.inject(HttpTestingController).verify();
   });
 
@@ -47,7 +54,9 @@ describe('ListNavigation', () => {
       TestBed.inject(ListNavigation).load(sprint),
     );
 
-    http.expectOne(`/v1/lists/${sprint.listId}`).flush({
+    const list: TestRequest = http.expectOne(`/v1/lists/${sprint.listId}`);
+    expect(list.request.headers.get('If-Organization-Match')).toBe(sprint.organizationId);
+    list.flush({
       id: sprint.listId,
       spaceId: sprint.spaceId,
       name: 'Sprint 14',
@@ -61,6 +70,7 @@ describe('ListNavigation', () => {
     expect(tasks.request.params.get('cursor')).toBe('opaque-page-two');
     expect(tasks.request.params.get('limit')).toBe('50');
     expect(tasks.request.params.get('sort')).toBe('manual');
+    expect(tasks.request.headers.get('If-Organization-Match')).toBe(sprint.organizationId);
     tasks.flush({
       items: [
         {

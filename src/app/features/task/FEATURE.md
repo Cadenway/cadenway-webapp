@@ -31,11 +31,14 @@ organization verified at navigation.
 - The optimistic status settles after 460 milliseconds, with at most one write in flight.
   Writes name the current task version in `If-Match`. A rejected write restores the confirmed
   status and a version conflict reloads the task before the next selection.
-- Detail reads and status writes recheck the active organization under the same browser lock used
-  by session changes and send it as `If-Organization-Match` so the gateway can verify the same
-  precondition. An organization change invalidates the detail. A sent write holds the lock until
-  it settles, including when navigation discards its result. Detail reads bypass the HTTP cache.
+- Detail reads bypass the HTTP cache and pin their expected organization with
+  `If-Organization-Match`. Status writes also recheck the active organization under the same
+  browser lock used by session changes. An organization change invalidates the detail. A sent
+  write holds the lock until it settles, including when navigation discards its result.
 - Only a `task.trashed` response with a verified entry UUID can offer to restore a task. The
   restore call checks the active organization, uses that UUID and lets the Gateway enforce
   current permissions. The page reloads the original task key after restoration.
 - Partial comments failures remain local to the comments section.
+- With a Realtime origin configured, task detail treats live notices and reconnects as reload
+  signals only. Returning to the page or reaching its visible refresh interval also reloads
+  through the pinned API, which covers notices dropped while the connection remained open.

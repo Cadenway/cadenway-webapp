@@ -5,9 +5,19 @@ import {
   type TestRequest,
 } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
+import { RuntimeConfigStore } from '@core/config';
 import { withSessionLock } from '@features/auth';
 import { firstValueFrom, type Observable, of, type Subscription } from 'rxjs';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  type Mock,
+  type MockInstance,
+  vi,
+} from 'vitest';
 
 import type {
   TaskDetailView,
@@ -56,7 +66,19 @@ describe('TaskDetailApi organization binding', () => {
 
   beforeEach(() => {
     TestBed.configureTestingModule({
-      providers: [provideHttpClient(), provideHttpClientTesting()],
+      providers: [
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        {
+          provide: RuntimeConfigStore,
+          useValue: {
+            config: () => ({
+              apiUrl: 'https://api.example.test',
+              realtimeUrl: 'https://realtime.example.test',
+            }),
+          },
+        },
+      ],
     });
     stubSessionLocks();
   });
@@ -66,14 +88,14 @@ describe('TaskDetailApi organization binding', () => {
     TestBed.inject(HttpTestingController).verify();
   });
 
-  it('bypasses the browser cache and pins the organization when loading detail', async () => {
+  it('pins detail reads without a browser lock or an organization preflight', async () => {
+    vi.stubGlobal('navigator', {});
     const api: TaskDetailApi = TestBed.inject(TaskDetailApi);
     const http: HttpTestingController = TestBed.inject(HttpTestingController);
     const result: Promise<TaskDetailView> = firstValueFrom(api.load('CAD-482', organizationId));
-    const current: TestRequest = await vi.waitFor(() => http.expectOne('/v1/organization'));
-    current.flush({ id: organizationId });
 
     const detail: TestRequest = http.expectOne({ method: 'GET', url: '/v1/tasks/CAD-482/detail' });
+    http.expectNone('/v1/organization');
     expect(detail.request.cache).toBe('no-store');
     expect(detail.request.headers.get('If-Organization-Match')).toBe(organizationId);
     detail.flush(
@@ -81,6 +103,42 @@ describe('TaskDetailApi organization binding', () => {
       { status: 412, statusText: 'Precondition Failed' },
     );
     await expect(result).rejects.toMatchObject({ failure: 'organization-changed' });
+  });
+
+  it('catches up independently even when a realtime ticket is denied', async () => {
+    vi.useFakeTimers();
+    const visibility: MockInstance<() => DocumentVisibilityState> = vi.spyOn(
+      document,
+      'visibilityState',
+      'get',
+    );
+    visibility.mockReturnValue('visible');
+    const refresh: Mock<() => void> = vi.fn();
+    const subscription: Subscription = TestBed.inject(TaskDetailApi)
+      .watchForChanges('CAD-482', organizationId)
+      .subscribe(refresh);
+    const http: HttpTestingController = TestBed.inject(HttpTestingController);
+    http
+      .expectOne({ method: 'POST', url: '/v1/realtime/tickets' })
+      .flush(null, { status: 403, statusText: 'Forbidden' });
+
+    try {
+      await vi.advanceTimersByTimeAsync(30_250);
+      expect(refresh).toHaveBeenCalledTimes(1);
+
+      visibility.mockReturnValue('hidden');
+      await vi.advanceTimersByTimeAsync(30_000);
+      expect(refresh).toHaveBeenCalledTimes(1);
+
+      visibility.mockReturnValue('visible');
+      document.dispatchEvent(new Event('visibilitychange'));
+      await vi.advanceTimersByTimeAsync(250);
+      expect(refresh).toHaveBeenCalledTimes(2);
+    } finally {
+      subscription.unsubscribe();
+      visibility.mockRestore();
+      vi.useRealTimers();
+    }
   });
 
   it('checks the live organization and declines to write across an organization switch', async () => {
@@ -102,9 +160,6 @@ describe('TaskDetailApi organization binding', () => {
     const api: TaskDetailApi = TestBed.inject(TaskDetailApi);
     const http: HttpTestingController = TestBed.inject(HttpTestingController);
     const result: Promise<TaskDetailView> = firstValueFrom(api.load('CAD-482', organizationId));
-    const current: TestRequest = await vi.waitFor(() => http.expectOne('/v1/organization'));
-    current.flush({ id: organizationId });
-
     const metadata: TrashedTaskView = {
       key,
       entryId,

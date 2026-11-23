@@ -22,8 +22,14 @@ describe('parseRuntimeConfig', () => {
     expect(parseRuntimeConfig({ ...localConfig, extra: true })).toEqual(localConfig);
   });
 
-  it('refuses a file without a gateway address', () => {
-    expect(() => parseRuntimeConfig({ apiUrl: localConfig.apiUrl })).toThrow(TypeError);
+  it('allows REST startup without Realtime', () => {
+    expect(parseRuntimeConfig({ apiUrl: localConfig.apiUrl })).toEqual({
+      apiUrl: localConfig.apiUrl,
+    });
+  });
+
+  it('refuses a missing REST address or an invalid configured address', () => {
+    expect(() => parseRuntimeConfig({ realtimeUrl: localConfig.realtimeUrl })).toThrow(TypeError);
     expect(() => parseRuntimeConfig({ ...localConfig, realtimeUrl: '' })).toThrow(TypeError);
     expect(() => parseRuntimeConfig(null)).toThrow(TypeError);
   });
