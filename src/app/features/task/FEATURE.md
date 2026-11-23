@@ -41,4 +41,6 @@ organization verified at navigation.
 - Partial comments failures remain local to the comments section.
 - Task detail treats live notices and reconnects as reload signals only. Returning to the page
   or reaching its visible refresh interval reloads through the pinned API, including when no
-  usable Realtime origin is configured or when an open connection missed a notice.
+  usable Realtime origin is configured or when an open connection missed a notice. Signals that
+  arrive during a read or optimistic edit wait for it to settle and coalesce into one reload.
+  A lost session or organization suppresses that reload.

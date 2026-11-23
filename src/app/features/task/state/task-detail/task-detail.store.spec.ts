@@ -81,12 +81,13 @@ async function flushResource(): Promise<void> {
  * @description
  * Binds one fixture client to a fresh store and starts following its route parameter.
  *
- * @param {Pick<TaskDetailApi, 'load' | 'changeStatus'> & Partial<Pick<TaskDetailApi, 'restore'>>} api - Fixture reads and writes.
+ * @param {Pick<TaskDetailApi, 'load' | 'changeStatus'> & Partial<Pick<TaskDetailApi, 'restore' | 'watchForChanges'>>} api - Fixture reads and writes.
  * @param {WritableSignal<TaskRouteContext>} [route] - Mutable input used to test route changes.
  * @returns {Promise<InstanceType<typeof TaskDetailStore>>} The store after loading.
  */
 async function setup(
-  api: Pick<TaskDetailApi, 'load' | 'changeStatus'> & Partial<Pick<TaskDetailApi, 'restore'>>,
+  api: Pick<TaskDetailApi, 'load' | 'changeStatus'> &
+    Partial<Pick<TaskDetailApi, 'restore' | 'watchForChanges'>>,
   route: WritableSignal<TaskRouteContext> = signal({ key: taskView.key, organizationId: 'org-a' }),
 ): Promise<InstanceType<typeof TaskDetailStore>> {
   TestBed.configureTestingModule({
@@ -110,6 +111,59 @@ describe('TaskDetailStore', () => {
 
   afterEach(() => {
     vi.useRealTimers();
+  });
+
+  it('reloads once when notices arrive before the current snapshot finishes', async () => {
+    const notice: Subject<void> = new Subject<void>();
+    const current: Subject<TaskDetailView> = new Subject<TaskDetailView>();
+    const fresh: TaskDetailView = { ...taskView, status: 'review', version: 4 };
+    const load: ReturnType<typeof vi.fn<TaskDetailApi['load']>> = vi
+      .fn<TaskDetailApi['load']>()
+      .mockReturnValueOnce(current)
+      .mockReturnValueOnce(of(fresh));
+    const store: InstanceType<typeof TaskDetailStore> = await setup({
+      load,
+      watchForChanges: () => notice,
+      changeStatus: vi.fn<TaskDetailApi['changeStatus']>(),
+    });
+
+    notice.next();
+    notice.next();
+    expect(load).toHaveBeenCalledOnce();
+    current.next(taskView);
+    current.complete();
+    await flushResource();
+    await flushResource();
+
+    expect(load).toHaveBeenCalledTimes(2);
+    expect(store.detail()).toEqual(fresh);
+  });
+
+  it('discards a queued notice when the running refresh reports a lost session', async () => {
+    const notice: Subject<void> = new Subject<void>();
+    const current: Subject<TaskDetailView> = new Subject<TaskDetailView>();
+    const load: ReturnType<typeof vi.fn<TaskDetailApi['load']>> = vi
+      .fn<TaskDetailApi['load']>()
+      .mockReturnValueOnce(of(taskView))
+      .mockReturnValueOnce(current);
+    const store: InstanceType<typeof TaskDetailStore> = await setup({
+      load,
+      watchForChanges: () => notice,
+      changeStatus: vi.fn<TaskDetailApi['changeStatus']>(),
+    });
+    expect(store.detail()).toEqual(taskView);
+
+    notice.next();
+    await flushResource();
+    expect(store.loading()).toBe(true);
+    notice.next();
+    current.error(new TaskDetailRequestError('session-expired'));
+    await flushResource();
+    await flushResource();
+
+    expect(load).toHaveBeenCalledTimes(2);
+    expect(store.detail()).toBeUndefined();
+    expect(store.loadFailure()).toBe('session-expired');
   });
 
   it('discards the opaque 404 after refreshing a newly deleted entry for the same key', async () => {
