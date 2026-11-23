@@ -32,6 +32,9 @@ Sign-in, sign-up, MFA, codes, password, sign-out and organization choice.
   and only sends an empty body when redeeming it.
 - `SignInStore` and `OrganizationActionsStore` are page-scoped.
 - A session without usable organization access cannot load private workspace features.
-- Sign-in, its second step, sign-out and organization changes coordinate with organization-bound
-  task requests through one origin-scoped browser lock. These operations require Web Locks in a
-  secure context and fail without sending a request when the browser cannot acquire the lock.
+- Sign-in, its second step, sign-out and organization changes coordinate with protected task writes
+  through one origin-scoped browser lock. These operations require Web Locks in a secure context
+  and fail without sending a request when the browser cannot acquire the lock. Task detail reads
+  pin the route's expected organization at the gateway and can be cancelled without the lock.
+- Multi-request list and board reads run concurrently under shared locks. A lock is released when
+  its view cancels the read or that sequence exceeds its eight-second deadline.

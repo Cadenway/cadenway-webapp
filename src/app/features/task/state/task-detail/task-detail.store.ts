@@ -1,5 +1,5 @@
 import { computed, inject, type Signal, type Type } from '@angular/core';
-import { rxResource } from '@angular/core/rxjs-interop';
+import { rxResource, toObservable } from '@angular/core/rxjs-interop';
 import type { StatusKey } from '@cadenway/contracts';
 import { tapResponse } from '@ngrx/operators';
 import {
@@ -12,7 +12,7 @@ import {
   withState,
 } from '@ngrx/signals';
 import { type RxMethod, rxMethod } from '@ngrx/signals/rxjs-interop';
-import { EMPTY, switchMap, timer } from 'rxjs';
+import { EMPTY, filter, type Observable, switchMap, take, tap, timer } from 'rxjs';
 
 import { TaskDetailApi } from '../../data-access/services/task-detail/task-detail-api.service';
 import {
@@ -447,6 +447,28 @@ function createTaskDetailStore(): Type<TaskDetailStoreInstance> {
       }),
     })),
     withMethods((store, api = inject(TaskDetailApi)) => {
+      const readyToRefresh: Signal<boolean> = computed(
+        () => store._pendingStatus() === null && !store.restorePending() && !store.loading(),
+      );
+      const ready: Observable<boolean> = toObservable(readyToRefresh);
+      const watch: RxMethod<TaskRouteContext> = rxMethod<TaskRouteContext>(
+        switchMap((context) =>
+          api.watchForChanges(context.key, context.organizationId).pipe(
+            // Coalesce notices until the current load or write settles.
+            switchMap(() =>
+              ready.pipe(
+                filter(() => readyToRefresh()),
+                take(1),
+              ),
+            ),
+            tap(() => {
+              if (!lostAccess(store.loadFailure()) && store._restoreAccessFailure() === null) {
+                store._detail.reload();
+              }
+            }),
+          ),
+        ),
+      );
       const dispatch: RxMethod<TaskStatusCommand | null> = rxMethod<TaskStatusCommand | null>(
         switchMap((command) => {
           if (command === null) return EMPTY;
@@ -520,6 +542,7 @@ function createTaskDetailStore(): Type<TaskDetailStoreInstance> {
           dispatch(null);
           restoreEntry(null);
           patchState(store, { ...initialState, _context: context });
+          watch(context);
         }),
         retry(): void {
           if (

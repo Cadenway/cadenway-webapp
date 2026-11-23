@@ -24,7 +24,10 @@ The list page, the views of a space and the space overview.
 - The generated Spaces, Lists and Task Queries clients read the current organization.
   The generated Task client writes status changes with the observed version and expected organization.
 - The auth feature verifies an active organization before every navigator route loads.
-  Board operations share its session lock with organization switching.
+  List and board reads send its expected organization with each request. Deploy API Gateway's
+  organization precondition support for these reads before releasing this client. Multi-request
+  reads take a shared, cancellable session lock so they cannot mix two users of one organization.
+  Board writes take the exclusive lock used by organization switching.
 - Task links use the task feature's `/taches/:taskKey` route.
 
 ## Invariants

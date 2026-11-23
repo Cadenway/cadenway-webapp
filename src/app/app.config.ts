@@ -23,7 +23,7 @@ import { APP_ROUTES } from './app.routes';
 export const appConfig: ApplicationConfig = {
   providers: [
     provideBrowserGlobalErrorListeners(),
-    // The gateway addresses must be known before anything calls the API.
+    // The REST gateway address must be known before anything calls the API.
     provideAppInitializer(() => inject(RuntimeConfigStore).load()),
     provideHttpClient(withInterceptors([apiClientInterceptor])),
     provideRouter(APP_ROUTES, withComponentInputBinding()),

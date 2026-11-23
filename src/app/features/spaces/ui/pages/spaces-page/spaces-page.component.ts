@@ -169,8 +169,16 @@ export class SpacesPage {
     if (kind === 'lists') return { kind, spaceId, cursor };
 
     const listId: string | undefined = this.listId()?.toLowerCase();
-    if (!this.organizationId() || listId === undefined || !ROUTE_ID.test(listId)) return undefined;
-    return { kind, spaceId, listId, cursor, view: this.vue() === 'tableau' ? 'board' : undefined };
+    const organizationId: string | undefined = this.organizationId();
+    if (!organizationId || listId === undefined || !ROUTE_ID.test(listId)) return undefined;
+    return {
+      kind,
+      spaceId,
+      listId,
+      organizationId,
+      cursor,
+      view: this.vue() === 'tableau' ? 'board' : undefined,
+    };
   });
 
   /**
@@ -204,7 +212,7 @@ export class SpacesPage {
     const organizationId: string | undefined = this.organizationId();
     if (!organizationId || !this.collection.hasValue()) return undefined;
     const data: SpacesPageData = this.collection.value();
-    if (data.kind !== 'board') return undefined;
+    if (data.kind !== 'board' || data.organizationId !== organizationId) return undefined;
     return {
       organizationId,
       listId: data.listId,

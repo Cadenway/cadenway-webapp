@@ -25,6 +25,7 @@ export type SpacesPageRequest =
       readonly kind: 'tasks';
       readonly spaceId: string;
       readonly listId: string;
+      readonly organizationId: string;
       readonly cursor?: string;
       readonly view?: 'board';
     };
@@ -102,6 +103,7 @@ export type SpacesPageData =
       readonly sprint: Sprint | null;
       readonly listId: string;
       readonly spaceId: string;
+      readonly organizationId: string;
       readonly mayEdit: boolean;
     }
   | {
