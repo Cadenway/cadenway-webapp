@@ -5,7 +5,7 @@ import {
   type TestRequest,
 } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
-import { RuntimeConfigStore } from '@core/config';
+import { type RuntimeConfig, RuntimeConfigStore } from '@core/config';
 import { withSessionLock } from '@features/auth';
 import { firstValueFrom, type Observable, of, type Subscription } from 'rxjs';
 import {
@@ -140,6 +140,36 @@ describe('TaskDetailApi organization binding', () => {
       vi.useRealTimers();
     }
   });
+
+  it.each([undefined, 'unusable', 'file:///realtime'])(
+    'keeps visible REST catch-up with no usable realtime origin (%s)',
+    async (realtimeUrl) => {
+      vi.useFakeTimers();
+      const visibility: MockInstance<() => DocumentVisibilityState> = vi
+        .spyOn(document, 'visibilityState', 'get')
+        .mockReturnValue('visible');
+      const config: MockInstance<() => RuntimeConfig> = vi
+        .spyOn(TestBed.inject(RuntimeConfigStore), 'config')
+        .mockReturnValue({
+          apiUrl: 'https://api.example.test',
+          ...(realtimeUrl === undefined ? {} : { realtimeUrl }),
+        });
+      const refresh: Mock<() => void> = vi.fn();
+      const subscription: Subscription = TestBed.inject(TaskDetailApi)
+        .watchForChanges('CAD-482', organizationId)
+        .subscribe(refresh);
+      try {
+        await vi.advanceTimersByTimeAsync(30_250);
+        expect(refresh).toHaveBeenCalledOnce();
+        TestBed.inject(HttpTestingController).expectNone('/v1/realtime/tickets');
+      } finally {
+        subscription.unsubscribe();
+        config.mockRestore();
+        visibility.mockRestore();
+        vi.useRealTimers();
+      }
+    },
+  );
 
   it('checks the live organization and declines to write across an organization switch', async () => {
     const api: TaskDetailApi = TestBed.inject(TaskDetailApi);

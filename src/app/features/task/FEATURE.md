@@ -39,6 +39,6 @@ organization verified at navigation.
   restore call checks the active organization, uses that UUID and lets the Gateway enforce
   current permissions. The page reloads the original task key after restoration.
 - Partial comments failures remain local to the comments section.
-- With a Realtime origin configured, task detail treats live notices and reconnects as reload
-  signals only. Returning to the page or reaching its visible refresh interval also reloads
-  through the pinned API, which covers notices dropped while the connection remained open.
+- Task detail treats live notices and reconnects as reload signals only. Returning to the page
+  or reaching its visible refresh interval reloads through the pinned API, including when no
+  usable Realtime origin is configured or when an open connection missed a notice.

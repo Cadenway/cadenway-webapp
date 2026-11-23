@@ -254,36 +254,45 @@ export class TaskDetailApi {
    * @returns {Observable<void>} Coalesced reload signals until the route disconnects.
    */
   public watchForChanges(taskKey: string, organizationId: string): Observable<void> {
+    if (!GetTaskDetailParams.safeParse({ taskKey }).success) return EMPTY;
     const configured: string | undefined = this.config.config().realtimeUrl;
-    if (
-      !configured ||
-      !URL.canParse(configured) ||
-      !GetTaskDetailParams.safeParse({ taskKey }).success
-    ) {
-      return EMPTY;
-    }
-    const origin: URL = new URL(configured);
-    if (!['http:', 'https:'].includes(origin.protocol) || origin.username || origin.password) {
-      return EMPTY;
-    }
-    return merge(
-      observeTaskRoom(origin, organizationId, taskKey, () =>
-        this.realtime.issueRealtimeTicket({}, { timeout: 5_000 }).pipe(
-          map((ticket) => IssueRealtimeTicketResponse.parse(ticket).token),
-          catchError((error: unknown) => {
-            if (error instanceof HttpErrorResponse && [401, 403, 404].includes(error.status)) {
-              return EMPTY;
-            }
-            return throwError(() => error);
-          }),
-        ),
-      ),
-      fromEvent(this.document, 'visibilitychange'),
-      timer(30_000, 30_000),
-    ).pipe(
+    const origin: URL | null = configured && URL.canParse(configured) ? new URL(configured) : null;
+    const notice: Observable<void> =
+      origin &&
+      ['http:', 'https:'].includes(origin.protocol) &&
+      !origin.username &&
+      !origin.password
+        ? this.observeRoom(origin, taskKey, organizationId)
+        : EMPTY;
+    return merge(notice, fromEvent(this.document, 'visibilitychange'), timer(30_000, 30_000)).pipe(
       auditTime(250),
       filter(() => this.document.visibilityState === 'visible'),
       map(() => undefined),
+    );
+  }
+
+  /**
+   * Method observeRoom
+   *
+   * @description
+   * Connects to the configured Realtime gateway and stops requesting tickets after a refusal.
+   *
+   * @param {URL} origin - The validated gateway origin.
+   * @param {string} taskKey - The opened task.
+   * @param {string} organizationId - The route's expected organization.
+   * @returns {Observable<void>} Signals from the joined socket.
+   */
+  private observeRoom(origin: URL, taskKey: string, organizationId: string): Observable<void> {
+    return observeTaskRoom(origin, organizationId, taskKey, () =>
+      this.realtime.issueRealtimeTicket({}, { timeout: 5_000 }).pipe(
+        map((ticket) => IssueRealtimeTicketResponse.parse(ticket).token),
+        catchError((error: unknown) => {
+          if (error instanceof HttpErrorResponse && [401, 403, 404].includes(error.status)) {
+            return EMPTY;
+          }
+          return throwError(() => error);
+        }),
+      ),
     );
   }
 
