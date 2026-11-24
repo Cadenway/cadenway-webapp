@@ -1,13 +1,17 @@
 import { Component } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import {
+  NavigationEnd,
   provideRouter,
   Router,
+  withAutoCleanupInjectors,
   withComponentInputBinding,
   withRouterConfig,
 } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
-import { type Observable, of } from 'rxjs';
+import { filter, firstValueFrom, type Observable, of } from 'rxjs';
+
+import { OrganizationPin } from '@core/api';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { WorkspaceSession } from './data-access/services/workspace-session/workspace-session.service';
@@ -199,6 +203,7 @@ describe('WORKSPACE_ROUTES', () => {
             { path: 'organizations', component: AuthStub },
             ...WORKSPACE_ROUTES,
           ],
+          withAutoCleanupInjectors(),
           withComponentInputBinding(),
           withRouterConfig({ paramsInheritanceStrategy: 'always' }),
         ),
@@ -236,6 +241,35 @@ describe('WORKSPACE_ROUTES', () => {
     expect(switcher?.textContent).toContain('AN');
     expect(switcher?.textContent).toContain('Changer d’organisation : Atelier Nord');
     expect(session.switchOrganization).not.toHaveBeenCalled();
+  });
+
+  it('revalidates after a context mismatch but not for query-only navigation', async () => {
+    const harness: RouterTestingHarness = await open('/atelier-nord');
+    const pin: OrganizationPin = TestBed.inject(OrganizationPin);
+    expect(pin.current()).toBe(atelierNord.id);
+    expect(session.currentOrganization).toHaveBeenCalledTimes(1);
+    await harness.navigateByUrl('/atelier-nord?task=CAD-1');
+    expect(session.currentOrganization).toHaveBeenCalledTimes(1);
+    session.currentOrganization.mockReturnValue(ok(lumen));
+    const navigation: Promise<NavigationEnd> = firstValueFrom(
+      TestBed.inject(Router).events.pipe(
+        filter((event): event is NavigationEnd => event instanceof NavigationEnd),
+      ),
+    );
+    pin.notifyContextChanged();
+    await navigation;
+    expect(session.currentOrganization).toHaveBeenCalledTimes(2);
+    expect(session.switchOrganization).toHaveBeenCalledWith(atelierNord.id);
+    expect(pin.current()).toBe(atelierNord.id);
+  });
+
+  it('clears the organization pin when the workspace injector is destroyed', async () => {
+    const harness: RouterTestingHarness = await open('/atelier-nord');
+    const pin: OrganizationPin = TestBed.inject(OrganizationPin);
+    expect(pin.current()).toBe(atelierNord.id);
+    await harness.navigateByUrl('/organizations');
+    await harness.fixture.whenStable();
+    expect(pin.current()).toBeNull();
   });
 
   it('switches the session to another organization of the person named by the slug', async () => {

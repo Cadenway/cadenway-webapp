@@ -11,6 +11,10 @@ import { slugRedirectGuard } from './http/guards/slug-redirect/slug-redirect.gua
 import { workspaceResolver } from './http/resolvers/workspace/workspace.resolver';
 import { withOrganizationSwitcher } from './providers/organization-switcher/organization-switcher.provider';
 import { provideWorkspaceContext } from './providers/workspace-context/workspace-context.provider';
+import {
+  provideWorkspaceRuntime,
+  shouldRevalidateWorkspace,
+} from './providers/workspace-runtime/workspace-runtime.provider';
 
 /**
  * Constant WORKSPACE_ROUTES
@@ -41,10 +45,11 @@ export const WORKSPACE_ROUTES: Routes = [
     path: ':org',
     canActivate: [sessionGuard, organizationGuard],
     resolve: { workspaceContext: workspaceResolver },
-    runGuardsAndResolvers: 'pathParamsChange',
+    runGuardsAndResolvers: shouldRevalidateWorkspace,
     providers: [
       provideCadenwayIcons(),
       provideWorkspaceContext(),
+      ...provideWorkspaceRuntime(),
       provideAppShellSlots({ organizationSwitcher: [withOrganizationSwitcher()] }),
     ],
     loadComponent: async (): Promise<Type<AppShell>> =>

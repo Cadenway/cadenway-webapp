@@ -8,6 +8,8 @@ import { TestBed } from '@angular/core/testing';
 import { firstValueFrom } from 'rxjs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { SKIP_ORGANIZATION_PIN } from '@core/api';
+
 import type {
   WorkspaceOrganization,
   WorkspaceResult,
@@ -104,6 +106,7 @@ describe('WorkspaceSession', () => {
     );
     const request: TestRequest = http.expectOne('/v1/organization');
     expect(request.request.cache).toBe('no-store');
+    expect(request.request.context.get(SKIP_ORGANIZATION_PIN)).toBe(true);
     request.flush({ ...myOrganization('atelier-nord', 'Atelier Nord'), role: 'owner' });
 
     await expect(result).resolves.toMatchObject({
