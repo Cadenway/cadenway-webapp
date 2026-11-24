@@ -1,14 +1,23 @@
 import { Component } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import {
+  NavigationEnd,
   provideRouter,
   Router,
+  withAutoCleanupInjectors,
   withComponentInputBinding,
   withRouterConfig,
 } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
-import { type Observable, of } from 'rxjs';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { filter, firstValueFrom, type Observable, of, Subject } from 'rxjs';
+
+import { RealtimeService } from '@cadenway/api-client';
+import { io, type Socket } from 'socket.io-client';
+
+import { OrganizationPin } from '@core/api';
+import { RuntimeConfigStore } from '@core/config';
+import { REALTIME_TERMINAL_FAILURE, RealtimeConnection } from '@core/realtime';
+import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 
 import { WorkspaceSession } from './data-access/services/workspace-session/workspace-session.service';
 import type {
@@ -18,6 +27,8 @@ import type {
   WorkspaceUser,
 } from './models/workspace-context/workspace-context.interface';
 import { WORKSPACE_ROUTES } from './workspace.routes';
+
+vi.mock('socket.io-client', () => ({ io: vi.fn() }));
 
 /**
  * Component AuthStub
@@ -199,6 +210,7 @@ describe('WORKSPACE_ROUTES', () => {
             { path: 'organizations', component: AuthStub },
             ...WORKSPACE_ROUTES,
           ],
+          withAutoCleanupInjectors(),
           withComponentInputBinding(),
           withRouterConfig({ paramsInheritanceStrategy: 'always' }),
         ),
@@ -238,6 +250,94 @@ describe('WORKSPACE_ROUTES', () => {
     expect(session.switchOrganization).not.toHaveBeenCalled();
   });
 
+  it('revalidates after a context mismatch but not for query-only navigation', async () => {
+    const harness: RouterTestingHarness = await open('/atelier-nord');
+    const pin: OrganizationPin = TestBed.inject(OrganizationPin);
+    expect(pin.current()).toBe(atelierNord.id);
+    expect(session.currentOrganization).toHaveBeenCalledTimes(1);
+    await harness.navigateByUrl('/atelier-nord?task=CAD-1');
+    expect(session.currentOrganization).toHaveBeenCalledTimes(1);
+    session.currentOrganization.mockReturnValue(ok(lumen));
+    const navigation: Promise<NavigationEnd> = firstValueFrom(
+      TestBed.inject(Router).events.pipe(
+        filter((event): event is NavigationEnd => event instanceof NavigationEnd),
+      ),
+    );
+    pin.notifyContextChanged();
+    await navigation;
+    expect(session.currentOrganization).toHaveBeenCalledTimes(2);
+    expect(session.switchOrganization).toHaveBeenCalledWith(atelierNord.id);
+    expect(pin.current()).toBe(atelierNord.id);
+  });
+
+  it('does not interrupt an in-progress organization navigation on a context change', async () => {
+    const harness: RouterTestingHarness = await open('/atelier-nord');
+    const pending: Subject<WorkspaceResult<void>> = new Subject<WorkspaceResult<void>>();
+    session.switchOrganization.mockReturnValue(pending);
+    const router: Router = TestBed.inject(Router);
+    const navigation: Promise<boolean> = router.navigateByUrl('/lumen');
+    await vi.waitFor(() => {
+      expect(session.switchOrganization).toHaveBeenCalledOnce();
+    });
+    const pin: OrganizationPin = TestBed.inject(OrganizationPin);
+    expect(pin.isSwitching()).toBe(true);
+    pin.notifyContextChanged();
+    pin.notifyContextChanged();
+    pending.next({ ok: true, value: undefined });
+    pending.complete();
+    expect(await navigation).toBe(true);
+    await harness.fixture.whenStable();
+    expect(router.url).toBe('/lumen');
+    expect(pin.current()).toBe(lumen.id);
+    expect(pin.isSwitching()).toBe(false);
+  });
+
+  it('coalesces multiple context changes into one revalidation', async () => {
+    const harness: RouterTestingHarness = await open('/atelier-nord');
+    const router: Router = TestBed.inject(Router);
+    const navigation: Promise<NavigationEnd> = firstValueFrom(
+      router.events.pipe(filter((event): event is NavigationEnd => event instanceof NavigationEnd)),
+    );
+    const pin: OrganizationPin = TestBed.inject(OrganizationPin);
+    pin.notifyContextChanged();
+    pin.notifyContextChanged();
+    pin.notifyContextChanged();
+    await navigation;
+    await harness.fixture.whenStable();
+    expect(session.currentOrganization).toHaveBeenCalledTimes(2);
+  });
+
+  it.each([
+    [401, '/login?next=%2Fatelier-nord%3Ftask%3DCAD-1'],
+    [403, '/organizations'],
+  ] as const)(
+    'redirects terminal realtime status %s',
+    async (status: 401 | 403, target: string) => {
+      const harness: RouterTestingHarness = await open('/atelier-nord?task=CAD-1');
+      const callback: ((status: 401 | 403) => void) | undefined =
+        harness.routeDebugElement?.injector.get(REALTIME_TERMINAL_FAILURE);
+      if (!callback) throw new Error('Workspace runtime was not provided.');
+      const router: Router = TestBed.inject(Router);
+      const navigation: Promise<NavigationEnd> = firstValueFrom(
+        router.events.pipe(
+          filter((event): event is NavigationEnd => event instanceof NavigationEnd),
+        ),
+      );
+      callback(status);
+      await navigation;
+      expect(router.url).toBe(target);
+    },
+  );
+
+  it('clears the organization pin when the workspace injector is destroyed', async () => {
+    const harness: RouterTestingHarness = await open('/atelier-nord');
+    const pin: OrganizationPin = TestBed.inject(OrganizationPin);
+    expect(pin.current()).toBe(atelierNord.id);
+    await harness.navigateByUrl('/organizations');
+    await harness.fixture.whenStable();
+    expect(pin.current()).toBeNull();
+  });
+
   it('switches the session to another organization of the person named by the slug', async () => {
     const harness: RouterTestingHarness = await open('/lumen');
 
@@ -259,6 +359,94 @@ describe('WORKSPACE_ROUTES', () => {
     expect(element.querySelector('[data-testid="organization-switcher"]')?.textContent).toContain(
       'Coopérative Lumen',
     );
+  });
+
+  it('reconnects an active realtime watch when the workspace slug changes', async () => {
+    const handlers: Map<string, (data: unknown) => void>[] = [];
+    const disconnects: (() => void)[] = [];
+    const joins: unknown[] = [];
+    const tickets: ReturnType<typeof vi.fn> = vi.fn(() =>
+      of({ token: 'ticket', expiresAt: '2026-11-08T11:00:00Z' }),
+    );
+    TestBed.overrideProvider(RuntimeConfigStore, {
+      useValue: { config: () => ({ realtimeUrl: 'https://realtime.example.test' }) },
+    });
+    TestBed.overrideProvider(RealtimeService, { useValue: { issueRealtimeTicket: tickets } });
+    vi.mocked(io).mockImplementation(() => {
+      const events: Map<string, (data: unknown) => void> = new Map<
+        string,
+        (data: unknown) => void
+      >();
+      handlers.push(events);
+      const disconnect: Mock<() => void> = vi.fn();
+      disconnects.push(disconnect);
+      return {
+        once: (name: string, callback: (data: unknown) => void) => events.set(name, callback),
+        on: (name: string, callback: (data: unknown) => void) => events.set(name, callback),
+        connect: () => undefined,
+        disconnect,
+        removeAllListeners: () => {
+          events.clear();
+        },
+        volatile: { emit: () => undefined },
+        timeout: () => ({
+          emit: (
+            event: string,
+            body: unknown,
+            callback: (error: null, response: unknown) => void,
+          ) => {
+            if (event === 'room:join') joins.push(body);
+            callback(null, { ok: true });
+          },
+        }),
+        emit: () => undefined,
+      } as unknown as Socket;
+    });
+    const harness: RouterTestingHarness = await open('/atelier-nord');
+    const realtime: RealtimeConnection | undefined =
+      harness.routeDebugElement?.injector.get(RealtimeConnection);
+    if (!realtime) throw new Error('Realtime connection is not provided.');
+    const watch: import('rxjs').Subscription = realtime
+      .watch({ kind: 'task', taskKey: 'CAD-1' })
+      .subscribe();
+    await vi.waitFor(() => {
+      expect(handlers).toHaveLength(1);
+    });
+    handlers[0].get('hello')?.({
+      id: '019a7005-6f7a-7b8c-9d0e-1f2a3b4c5d4f',
+      type: 'connection.ready.v1',
+      at: '2026-11-08T10:40:00Z',
+      version: 1,
+      data: {
+        organizationId: atelierNord.id,
+        sessionExpiresAt: '2026-11-08T11:00:00Z',
+        heartbeatIntervalSeconds: 10,
+      },
+    });
+    await harness.fixture.whenStable();
+    await harness.navigateByUrl('/lumen');
+    await harness.fixture.whenStable();
+    expect(disconnects[0]).toHaveBeenCalledOnce();
+    await vi.waitFor(() => {
+      expect(tickets).toHaveBeenCalledTimes(2);
+    });
+    expect(handlers).toHaveLength(2);
+    handlers[1].get('hello')?.({
+      id: '019a7005-6f7a-7b8c-9d0e-1f2a3b4c5d4f',
+      type: 'connection.ready.v1',
+      at: '2026-11-08T10:40:00Z',
+      version: 1,
+      data: {
+        organizationId: lumen.id,
+        sessionExpiresAt: '2026-11-08T11:00:00Z',
+        heartbeatIntervalSeconds: 10,
+      },
+    });
+    await vi.waitFor(() => {
+      expect(joins).toHaveLength(2);
+    });
+    expect(joins[1]).toEqual({ kind: 'task', taskKey: 'CAD-1' });
+    watch.unsubscribe();
   });
 
   it('switches when the session has no current organization and the slug matches one', async () => {

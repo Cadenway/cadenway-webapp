@@ -8,6 +8,7 @@ import {
 } from '@angular/router';
 import { map, type Observable, of, switchMap } from 'rxjs';
 
+import { OrganizationPin } from '@core/api';
 import { isReservedSlug } from '@core/routing';
 
 import { WorkspaceSession } from '../../../data-access/services/workspace-session/workspace-session.service';
@@ -83,8 +84,8 @@ function mayNameAnotherOrganization(problem: WorkspaceProblem): boolean {
  * lets the switch complete: the session is never left half switched. The store only takes the
  * organization when the guard answers.
  *
- * Use it with `runGuardsAndResolvers: 'pathParamsChange'` on the route that provides
- * `WorkspaceContextStore`.
+ * Use it on the route that provides `WorkspaceContextStore` and reruns guards for organization
+ * changes and requested context revalidation.
  *
  * @param {ActivatedRouteSnapshot} route - Route whose `org` parameter is the slug.
  * @param {RouterStateSnapshot} state - Target router state, whose URL becomes the return URL.
@@ -96,6 +97,7 @@ export const organizationGuard: CanActivateFn = (
 ): Observable<boolean | UrlTree> => {
   const router: Router = inject(Router);
   const session: WorkspaceSession = inject(WorkspaceSession);
+  const pin: OrganizationPin = inject(OrganizationPin);
   const store: InstanceType<typeof WorkspaceContextStore> = inject(WorkspaceContextStore);
   const slug: string = route.paramMap.get('org') ?? '';
   if (isReservedSlug(slug)) return of(organizationChoiceRedirect(router));
@@ -113,6 +115,7 @@ export const organizationGuard: CanActivateFn = (
             (organization: WorkspaceOrganization) => organization.slug === slug,
           );
           if (!match) return of(UNKNOWN_SLUG);
+          pin.beginSwitch();
           return session
             .switchOrganization(match.id)
             .pipe(
