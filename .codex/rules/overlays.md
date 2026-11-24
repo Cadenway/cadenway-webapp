@@ -11,4 +11,4 @@ paths:
 - Use `@cadenway/ui` overlays over CDK. Follow `cw-overlay-placement` for sizing, placement,
   selection and dismissal, including focus return. Open one menu at a time.
 - Hover is `bg-muted` without border; the active choice is violet (`primary`).
-- Deletions confirm through `cw-confirm-dialog`; sensitive ones require typing the name.
+- Deletions confirm through `cw-alert-dialog`; sensitive ones require typing the name (`confirmText`).

@@ -8,6 +8,10 @@ The checkout has an Angular application shell, runtime configuration, and a prot
 entry. The Auth feature opens a password session with optional authenticator verification and
 selects the current organization before private Spaces and Task routes load.
 
+The application is being rebuilt from the mockup and the backend, following the routing, layout,
+error and localization patterns below. Screens still on the earlier structure are replaced feature by
+feature.
+
 ## Purpose and target structure
 
 cadenway-webapp is the whole application of the mockup, from the sign-in screens to the settings: Angular 22, Tailwind 4, Signal Forms, NgRx SignalStore, `@cadenway/ui`, `@cadenway/api-client`. It talks only to `cadenway-api-gateway` (REST) and `cadenway-realtime-gateway` (WebSocket), ships as a Docker image of static files behind Traefik on `app.<domain>`, and reads its required REST address and optional Realtime address from `public/config.json` at start-up.
@@ -20,9 +24,10 @@ src/app/
 │  └─ config/
 │     ├─ index.ts
 │     └─ environment/ # source, validation, models and runtime config store
-├─ features/         # auth, account, organization, spaces, task, home, my-tasks,
-│                    # goals, docs, dashboards, trash and archives
-├─ layouts/          # application shells and their slots, when implemented
+├─ features/         # auth, workspace, account, organization, spaces, task, intake, home,
+│                    # my-tasks, inbox, search, onboarding, goals, docs, dashboards, trash,
+│                    # archives and errors
+├─ layouts/          # auth-layout, app-shell, settings-shell and their slots
 └─ shared/           # generic non-visual helpers, when needed
 ```
 
@@ -62,8 +67,9 @@ Create folders when they have code. Other feature concerns use `services/`, `acc
 feature owns its workflow under `features/` with its own `FEATURE.md`.
 
 - `APP_ROUTES` owns prefixes, redirects and lazy feature entries. The feature route file owns its
-  layout, guards and scoped providers. A layout reads data via published ports and composes
-  widgets from documented public feature entries.
+  layout, guards and scoped providers. A layout never imports a feature: it declares slots,
+  and the feature root routes bind the features' `with<Thing>()` contributions to them (see Layouts
+  and slots).
 - Cross-boundary imports use `@app`, `@core`, `@features`, `@layouts`, `@shared` or `@env`.
   An app-wide concern publishes its supported symbols through its `index.ts`. Keep private relative
   imports within their concern. Features list entry points and consumers in a
@@ -77,6 +83,59 @@ feature owns its workflow under `features/` with its own `FEATURE.md`.
 - Place a unit spec, mock, fixture or harness directly beside its subject. Use
   `<subject>.spec.ts` and keep `testing/` folders out of the source and test trees. Browser
   scenarios live in `tests/e2e/`.
+
+## Routing
+
+- `APP_ROUTES` holds prefixes, redirects and `loadChildren` entries only. Each feature has exactly
+  one `<feature>.routes.ts` with one `<FEATURE>_ROUTES` constant; a constant may be mounted twice (the
+  404 under the root and under the workspace).
+- Paths are English. Public entries belong to `auth` (`/login`, `/login/code`, `/signup`, `/forgot`,
+  `/reset`, `/invite/:invitationId`, `/organizations`, `/auth/federated/continue`) and to `intake`
+  (`/f/:publicKey`). The `workspace` feature owns `/:org` (the organization slug), its session and slug
+  guards, the context resolver, and the redirects of slug-less e-mail links (`/home`, `/account`,
+  `/account/:section`, `/org/:section`). Every fixed first segment is a reserved organization slug,
+  refused by the organization service. The other features mount below it: `/:org/t/:taskKey`, `/:org/l/:listId/<view>`,
+  `/:org/d/:docId`, `/:org/account/:section`, `/:org/organization/:section`.
+- `provideRouter(APP_ROUTES, withComponentInputBinding(), withRouterConfig({ paramsInheritanceStrategy:
+'always' }), withErrorBoundaries({ defaultErrorComponent, onError }))`: parameters, query parameters
+  and `data` reach pages as signal inputs.
+- Guards and resolvers are functional and live in `http/`. A resolver fills the owning store and
+  publishes it through a port (`WORKSPACE_CONTEXT_PORT`); pages read the port, not a resolved input.
+
+## Layouts and slots
+
+Layouts never import features. Features fill them in three ways:
+
+1. **Route-bound slots.** A layout declares one `InjectionToken<readonly SlotContribution[]>` per slot
+   (`slots/*.slot.ts`) and a `provide<Layout>Slots({ ... })` factory in `providers/`, published as its
+   own entry so the layout stays in its lazy chunk. A feature publishes `with<Thing>()` factories in its
+   `providers/`. The feature's root route binds them. The layout injects each slot as optional, sorts
+   by `order`, and renders with `NgComponentOutlet`.
+2. **Page-to-shell services** in `core/`: breadcrumb, page actions (a `TemplateRef` registered with
+   `connect()`), page tabs and page selection.
+3. **Typed route `data`** (`satisfies`): `skeleton`, `mobileTitle`, `breadcrumb`.
+
+## Errors and loading
+
+- Reads use `rxResource` in the store's `withProps`. A page's primary read that fails (its resource loader rejects) is caught by the route's error
+  boundary: `errorComponent` replaces the page content with the typed state, which is not found,
+  access denied (with an access request), deleted task (with Restore) or unavailable (with Retry,
+  `Réessayer` in French, which runs the route again). A secondary or partial read (a shell widget,
+  a popover, `TaskDetail.partial`) keeps an inline error whose Retry calls its `reload()`. Guards and
+  resolvers never reach the boundary: they redirect with a `UrlTree` or a `RedirectCommand`.
+  Page and view routes set `errorComponent`, so the shell and the page header stay.
+- Writes are store methods with optimistic updates, `If-Match` versions and undo toasts. A feature that
+  drives its feedback toasts through `@ngrx/signals/events` records that decision in its `FEATURE.md`.
+- `withErrorBoundaries` is a developer preview in Angular 22.3; its retry and reset behavior is
+  covered by route specs.
+
+## Localization
+
+- `@angular/localize`, with English as the source locale. Every string uses `$localize` or `i18n` and
+  carries a stable `@@feature.area.key` id. `src/locale/messages.fr.xlf` holds the mockup's French
+  wording, word for word, and missing translations fail the build.
+- Bricks with their own text receive English source labels from `core/locale` through their labels
+  providers. Route titles use `$localize` and go through the application `TitleStrategy`.
 
 ## Cross-repository changes
 

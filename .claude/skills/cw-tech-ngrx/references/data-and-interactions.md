@@ -8,8 +8,9 @@
   `data-access/` service (`withMethods((store, api = inject(TaskApi)) => ...)`) and holds the
   display models it returns. DTOs never reach state.
 - Reading server data for a screen: Angular `resource()` / `rxResource()` backed by the
-  data-access service, exposed through `withProps`, so pages keep loading (skeleton), error
-  (error panel) and `reload()` (Réessayer). `@ngrx/signals/resource` (`extendResource`,
+  data-access service, exposed through `withProps`, so pages keep loading (skeleton) and
+  `reload()`. A primary read error reaches the route's `errorComponent`; a secondary read keeps an
+  inline error whose Retry calls `reload()`. `@ngrx/signals/resource` (`extendResource`,
   `withPreviousValueOnLoading`, `withValueOnError`) is experimental: use it only where keeping the
   previous value while reloading is needed, and say so in the report.
 - One-shot writes: `async` methods in `withMethods` awaiting the data-access service.
@@ -20,7 +21,7 @@
   repeats, `groupBy` + `mergeMap` to keep one stream per task. Read other store state inside the
   pipe through its signals (`store.query()`), not with `withLatestFrom`.
 - A failed read is a state flag (`searchFailed`), never an emptied collection, with a retry method
-  the page calls from Réessayer.
+  the page calls from Retry (`Réessayer` in French).
 - Reacting to a signal without RxJS: `signalMethod` rather than an `effect()` that writes state.
 - Call an `rxMethod` or `signalMethod` with a signal or an observable inside an injection context,
   or pass `{ injector }`: calling outside one without an injector is deprecated and will throw.

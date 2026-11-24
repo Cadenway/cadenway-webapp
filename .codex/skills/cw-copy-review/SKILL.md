@@ -1,6 +1,6 @@
 ---
 name: cw-copy-review
-description: Check French copy against the mockup.
+description: Check the copy and its French translation against the mockup.
 ---
 
 Delegate the user's arguments to **cw-web-copy-reviewer** if delegation is available and authorized.

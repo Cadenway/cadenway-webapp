@@ -49,7 +49,7 @@ const REPO_RULES = [
   [(rel, body) => rel.startsWith('src/app/') && !rel.includes('/data-access/') && !rel.startsWith('src/app/core/api/') && /\bHttpClient\b/.test(body), 'reach the API through @cadenway/api-client in a feature data-access/ folder.'],
   [(rel, body) => rel.startsWith('src/') && /(?:\bfrom\s*|\bimport\s*\(?\s*|\brequire\s*\(\s*)['"](?:@ngrx\/(?:store|effects|entity|store-devtools|component-store|router-store|data)(?=['"/])|@angular-architects\/ngrx-toolkit|@ngrx-toolkit\/|@ngrx-traits\/)/.test(body), 'state is NgRx SignalStore (@ngrx/signals): no global Store family and no third-party store extension (skill cw-tech-ngrx).'],
   [(rel, body) => rel.startsWith('src/') && /\bprotectedState\s*:\s*false\b/.test(body), 'a SignalStore keeps its state protected; change it through store methods (skill cw-tech-ngrx).'],
-  [(rel) => /^src\/app\/shared\/ui(\/|$)/.test(rel), 'there is no shared/ui: compose from @cadenway/ui and request missing bricks from cadenway-design-system.'],
+  [(rel) => /^src\/app\/shared\/ui(\/|$)/.test(rel), 'there is no shared/ui: compose from @cadenway/ui; a missing generic brick is built in cadenway-design-system.'],
   [(rel, body) => /(^|\/)index\.ts$/.test(rel) && /^\s*export\s+\*\s+from\s/m.test(body), 'a barrel uses explicit named exports, never "export * from".'],
   [(rel, body) => /^\.github\/workflows\/.+\.ya?ml$/.test(rel) && /uses:\s*(?!\.\/|docker:\/\/)[^@\s]+@(?![0-9a-f]{40}\b)/.test(body), 'pin third-party actions to a full commit SHA, with the version in a comment.'],
   [(rel, body) => /^\.github\/workflows\/.+\.ya?ml$/.test(rel) && /pull_request_target/.test(body), 'pull_request_target runs with secrets on untrusted code; use pull_request, or ask the user.'],
