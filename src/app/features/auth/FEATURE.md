@@ -35,14 +35,13 @@ its children matches falls through to the next application route.
 
 ## Public entry points
 
-| Entry point   | Consumers            |
-| ------------- | -------------------- |
-| `auth.routes` | app                  |
-| `.`           | errors, spaces, task |
+| Entry point   | Consumers |
+| ------------- | --------- |
+| `auth.routes` | app       |
+| `.`           | workspace |
 
-`.` exports `withSessionLock` (cross-tab session lock, signature unchanged) and, until the
-workspace routes replace their last consumers, the transitional `requireOrganization` guard and
-`resolveOrganizationId` resolver (`/login` on `401`, `/organizations` otherwise).
+`.` exports `withSessionLock`, the cross-tab session lock that serializes organization switches with
+the session cookie.
 
 ## Dependencies
 

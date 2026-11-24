@@ -5,7 +5,8 @@
 App-wide infrastructure organized by concern. Runtime configuration lives in
 `config/environment/` with its source, validator, model and state. The generated API client is
 configured in `api/client/`. The shell belongs to
-`layouts/`, and session workflows belong to their owning feature.
+`layouts/`, and session workflows belong to their owning feature. The realtime client is rebuilt
+in step 3; the earlier task-room adapter was removed with the screens that used it.
 
 ## Public entry points
 

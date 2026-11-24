@@ -1,49 +1,74 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 
-test.beforeEach(async ({ page }) => {
+const user = {
+  id: '019a5f3c-8d2e-7c4a-9b1f-3e5d7a9c1b30',
+  name: 'Camille Martin',
+  email: 'camille.martin@ateliernord.fr',
+  language: 'fr',
+  displayName: null,
+  jobTitle: null,
+  timeZone: 'Europe/Paris',
+  version: 2,
+};
+const organization = {
+  id: '019a5f3c-8d2e-7c4a-9b1f-3e5d7a9c1b2f',
+  name: 'Atelier Nord',
+  slug: 'atelier-nord',
+  description: null,
+  website: null,
+  defaultLanguage: 'fr',
+  plan: 'team',
+  memberCount: 18,
+  role: 'owner',
+  createdAt: '2026-01-12T09:00:00Z',
+  version: 3,
+};
+const sessionExpired = {
+  status: 401,
+  json: {
+    type: 'about:blank',
+    title: 'Session expirée',
+    status: 401,
+    code: 'auth.session-expired',
+  },
+};
+
+/** Stubs the runtime configuration and the two reads of the workspace guards. */
+async function stubGateway(page: Page, { signedIn }: { signedIn: boolean }): Promise<void> {
   await page.route('**/config.json', async (route) => {
     const origin = new URL(route.request().url()).origin;
     await route.fulfill({ json: { apiUrl: origin, realtimeUrl: origin } });
   });
-});
-
-test('an unknown workspace address shows a 404 with a way back home', async ({ page }) => {
-  await page.route('**/v1/organization', async (route) => {
-    await route.fulfill({
-      json: {
-        id: '019a5f3c-8d2e-7c4a-9b1f-3e5d7a9c1b2f',
-        name: 'Atelier Nord',
-        slug: 'atelier-nord',
-        role: 'owner',
-        memberCount: 5,
-        plan: 'free',
-        joinedAt: '2026-11-01T10:00:00Z',
-      },
-    });
+  await page.route('**/v1/me', async (route) => {
+    await route.fulfill(signedIn ? { json: user } : sessionExpired);
   });
+  await page.route('**/v1/organization', async (route) => {
+    await route.fulfill(signedIn ? { json: organization } : sessionExpired);
+  });
+}
 
-  await page.goto('/lien/introuvable');
+test('an unknown workspace address shows a 404 in the shell with a way back home', async ({
+  page,
+}) => {
+  await stubGateway(page, { signedIn: true });
+
+  await page.goto('/atelier-nord/lien/introuvable');
+
   await expect(page.getByRole('heading', { name: 'Page introuvable' })).toBeVisible();
-  await expect(page).toHaveURL(/\/lien\/introuvable$/);
+  await expect(page).toHaveURL(/\/atelier-nord\/lien\/introuvable$/u);
+  await expect(
+    page.getByRole('link', { name: 'Changer d’organisation : Atelier Nord' }),
+  ).toBeVisible();
   await page.getByRole('link', { name: 'Retour à l’accueil' }).click();
-  await expect(page).toHaveURL(/\/accueil$/);
-  await expect(page.getByRole('heading', { name: 'Atelier Nord' })).toBeVisible();
+  await expect(page).toHaveURL(/\/atelier-nord$/u);
+  await expect(page.getByRole('heading', { name: 'Bonjour Camille' })).toBeVisible();
 });
 
 test('unknown workspace addresses require a session', async ({ page }) => {
-  await page.route('**/v1/organization', async (route) => {
-    await route.fulfill({
-      status: 401,
-      json: {
-        type: 'about:blank',
-        title: 'Session expirée',
-        status: 401,
-        code: 'auth.session-expired',
-      },
-    });
-  });
+  await stubGateway(page, { signedIn: false });
 
-  await page.goto('/lien/introuvable');
-  await expect(page).toHaveURL(/\/connexion$/);
+  await page.goto('/atelier-nord/lien/introuvable');
+
+  await expect(page).toHaveURL(/\/login\?returnUrl=%2Fatelier-nord%2Flien%2Fintrouvable$/u);
   await expect(page.getByRole('heading', { name: 'Page introuvable' })).toHaveCount(0);
 });

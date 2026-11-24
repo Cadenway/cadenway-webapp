@@ -1872,6 +1872,238 @@
           <context context-type="linenumber">293</context>
         </context-group>
       </trans-unit>
+      <trans-unit id="errors.not-found.route-title" datatype="html">
+        <source>Page not found</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/errors/errors.routes.ts</context>
+          <context context-type="linenumber">21</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="errors.not-found.code" datatype="html">
+        <source> Error 404 </source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/errors/ui/components/route-error-state/route-error-state.component.html</context>
+          <context context-type="linenumber">12,15</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="errors.not-found.title" datatype="html">
+        <source> Page not found </source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/errors/ui/components/route-error-state/route-error-state.component.html</context>
+          <context context-type="linenumber">19,21</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="errors.not-found.text" datatype="html">
+        <source> The link is incomplete, or the page was moved or deleted. Check the address or search for what you wanted to open. </source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/errors/ui/components/route-error-state/route-error-state.component.html</context>
+          <context context-type="linenumber">22,25</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="errors.back-home" datatype="html">
+        <source>Back to home</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/errors/ui/components/route-error-state/route-error-state.component.html</context>
+          <context context-type="linenumber">29,31</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/errors/ui/components/route-error-state/route-error-state.component.html</context>
+          <context context-type="linenumber">78,81</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/errors/ui/components/route-error-state/route-error-state.component.html</context>
+          <context context-type="linenumber">88,90</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="errors.access-denied.code" datatype="html">
+        <source> Access denied </source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/errors/ui/components/route-error-state/route-error-state.component.html</context>
+          <context context-type="linenumber">44,47</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="errors.access-denied.title" datatype="html">
+        <source> You do not have access to this space </source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/errors/ui/components/route-error-state/route-error-state.component.html</context>
+          <context context-type="linenumber">51,53</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="errors.access-denied.private-space" datatype="html">
+        <source>“<x id="INTERPOLATION" equiv-text="{{ resource.name }}"/>” is a private space.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/errors/ui/components/route-error-state/route-error-state.component.html</context>
+          <context context-type="linenumber">58,59</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="errors.access-denied.owner-can-add" datatype="html">
+        <source><x id="INTERPOLATION" equiv-text="{{ resource.ownerName }}"/>, its owner, can add you.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/errors/ui/components/route-error-state/route-error-state.component.html</context>
+          <context context-type="linenumber">64,65</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="errors.access-denied.sent" datatype="html">
+        <source>Request sent</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/errors/ui/components/route-error-state/route-error-state.component.html</context>
+          <context context-type="linenumber">75,77</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="errors.deleted-task.code" datatype="html">
+        <source> Task deleted </source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/errors/ui/components/route-error-state/route-error-state.component.html</context>
+          <context context-type="linenumber">104,107</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="errors.deleted-task.title" datatype="html">
+        <source> This task has been deleted </source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/errors/ui/components/route-error-state/route-error-state.component.html</context>
+          <context context-type="linenumber">111,113</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="errors.deleted-task.text" datatype="html">
+        <source> <x id="INTERPOLATION" equiv-text="{{ task.key }}"/> “<x id="INTERPOLATION_1" equiv-text="{{ task.name }}"/>” has been deleted. It stays in the trash for 30 days before being erased. </source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/errors/ui/components/route-error-state/route-error-state.component.html</context>
+          <context context-type="linenumber">115,117</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="errors.deleted-task.already-restored" datatype="html">
+        <source>Already restored</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/errors/ui/components/route-error-state/route-error-state.component.html</context>
+          <context context-type="linenumber">125,128</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="errors.deleted-task.restore" datatype="html">
+        <source>Restore the task</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/errors/ui/components/route-error-state/route-error-state.component.html</context>
+          <context context-type="linenumber">136,138</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="errors.deleted-task.open-trash" datatype="html">
+        <source>Open the trash</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/errors/ui/components/route-error-state/route-error-state.component.html</context>
+          <context context-type="linenumber">141,145</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="errors.unavailable.title" datatype="html">
+        <source>Could not load this page</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/errors/ui/components/route-error-state/route-error-state.component.html</context>
+          <context context-type="linenumber">154,156</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="errors.unavailable.text" datatype="html">
+        <source> The server did not answer in time. Your data is not lost: try again in a moment. </source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/errors/ui/components/route-error-state/route-error-state.component.html</context>
+          <context context-type="linenumber">157,158</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="errors.unavailable.retry" datatype="html">
+        <source>Retry</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/errors/ui/components/route-error-state/route-error-state.component.html</context>
+          <context context-type="linenumber">163,165</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="errors.unavailable.status" datatype="html">
+        <source>Error <x id="INTERPOLATION" equiv-text="{{ code }}"/></source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/errors/ui/components/route-error-state/route-error-state.component.html</context>
+          <context context-type="linenumber">169,170</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="errors.unavailable.reference" datatype="html">
+        <source>ref. <x id="INTERPOLATION" equiv-text="{{ reference }}"/></source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/errors/ui/components/route-error-state/route-error-state.component.html</context>
+          <context context-type="linenumber">175,176</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="errors.access-denied.message-label" datatype="html">
+        <source>Message for <x id="INTERPOLATION" equiv-text="{{ owner }}"/> <x id="START_TAG_SPAN" ctype="x-span" equiv-text="&lt;span class=&quot;font-normal text-muted-foreground&quot;&gt;"/>(optional)<x id="CLOSE_TAG_SPAN" ctype="x-span" equiv-text="&lt;/span&gt;"/></source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/errors/ui/forms/access-request-form/access-request-form.component.html</context>
+          <context context-type="linenumber">5,7</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="errors.access-denied.message-label-anonymous" datatype="html">
+        <source>Message <x id="START_TAG_SPAN" ctype="x-span" equiv-text="&lt;span class=&quot;font-normal text-muted-foreground&quot;&gt;"/>(optional)<x id="CLOSE_TAG_SPAN" ctype="x-span" equiv-text="&lt;/span&gt;"/></source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/errors/ui/forms/access-request-form/access-request-form.component.html</context>
+          <context context-type="linenumber">10,11</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="errors.access-denied.request" datatype="html">
+        <source>Request access</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/errors/ui/forms/access-request-form/access-request-form.component.html</context>
+          <context context-type="linenumber">31,33</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="home.route.title" datatype="html">
+        <source>Home</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/home/home.routes.ts</context>
+          <context context-type="linenumber">16</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="home.header.greeting" datatype="html">
+        <source> Hello <x id="INTERPOLATION" equiv-text="{{ firstName() }}"/> </source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/home/ui/pages/home-page/home-page.component.html</context>
+          <context context-type="linenumber">10,12</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="workspace.organization-switcher.label" datatype="html">
+        <source>Switch organization: <x id="INTERPOLATION" equiv-text="{{ workspace().organization().name }}"/></source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/workspace/ui/components/organization-switcher/organization-switcher.component.html</context>
+          <context context-type="linenumber">11,12</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="layouts.app-shell.rail" datatype="html">
+        <source>Applications</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/layouts/app-shell/app-shell.component.html</context>
+          <context context-type="linenumber">9</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="layouts.app-shell.sidebar" datatype="html">
+        <source>Space navigation</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/layouts/app-shell/app-shell.component.html</context>
+          <context context-type="linenumber">40,41</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="layouts.app-shell.sidebar-close" datatype="html">
+        <source>Close the sidebar</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/layouts/app-shell/app-shell.component.html</context>
+          <context context-type="linenumber">42,43</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="layouts.app-shell.sidebar-collapse" datatype="html">
+        <source>Collapse the sidebar</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/layouts/app-shell/app-shell.component.html</context>
+          <context context-type="linenumber">57,58</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="layouts.app-shell.sidebar-expand" datatype="html">
+        <source>Expand the sidebar</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/layouts/app-shell/app-shell.component.html</context>
+          <context context-type="linenumber">90,91</context>
+        </context-group>
+      </trans-unit>
       <trans-unit id="layouts.auth-layout.home-link" datatype="html">
         <source>Cadenway, sign-in page</source>
         <context-group purpose="location">

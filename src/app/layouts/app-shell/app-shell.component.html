@@ -33,6 +33,8 @@
       <cw-sidebar
         #sidebarRef="cwSidebar"
         collapsible="offcanvas"
+        overlayBelow="lg"
+        backdrop="container"
         [state]="sidebarState.state()"
         (stateChange)="sidebarState.sync($event)"
         ariaLabel="Space navigation"

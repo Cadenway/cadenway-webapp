@@ -1,0 +1,26 @@
+import { inject } from '@angular/core';
+import type { SlotContribution, SlotFeature } from '@shared/layout-slot';
+
+import { WORKSPACE_CONTEXT } from '../../ports/workspace-context/workspace-context.token';
+import { OrganizationSwitcher } from '../../ui/components/organization-switcher/organization-switcher.component';
+
+/**
+ * Function withOrganizationSwitcher
+ *
+ * @description
+ * Contributes the organization switcher to the shell's `organizationSwitcher` slot: the rail
+ * square with the organization's initials, linking to the organization choice. Bind it on the
+ * `/:org` route, whose injector provides `WORKSPACE_CONTEXT`.
+ *
+ * @returns {SlotFeature<SlotContribution>} The slot contribution factory.
+ */
+export function withOrganizationSwitcher(): SlotFeature<SlotContribution> {
+  return {
+    useFactory: (): SlotContribution => ({
+      id: 'workspace.organization-switcher',
+      order: 0,
+      component: OrganizationSwitcher,
+      inputs: { workspace: inject(WORKSPACE_CONTEXT) },
+    }),
+  };
+}
