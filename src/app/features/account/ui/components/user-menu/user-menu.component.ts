@@ -1,10 +1,9 @@
 import {
   Component,
   computed,
+  effect,
   ElementRef,
   inject,
-  input,
-  type InputSignal,
   type Signal,
   viewChild,
 } from '@angular/core';
@@ -25,7 +24,10 @@ import { NgIcon } from '@ng-icons/core';
 import type { PresenceStatus } from '@core/realtime';
 import { ThemeService } from '@core/theme';
 import { SignOut } from '@features/auth';
-import type { WorkspaceContextPort } from '@features/workspace/ports/workspace-context';
+import {
+  WORKSPACE_CONTEXT,
+  type WorkspaceContextPort,
+} from '@features/workspace/ports/workspace-context';
 
 import type { PresencePort } from '../../../ports/presence/presence-port.interface';
 import { PRESENCE } from '../../../ports/presence/presence.token';
@@ -164,11 +166,10 @@ export class UserMenu {
    * @description
    * Workspace context whose person the menu shows.
    *
-   * @type {InputSignal<WorkspaceContextPort>}
+   * @type {WorkspaceContextPort}
    * @readonly
    */
-  public readonly workspace: InputSignal<WorkspaceContextPort> =
-    input.required<WorkspaceContextPort>();
+  protected readonly workspace: WorkspaceContextPort = inject(WORKSPACE_CONTEXT);
 
   /**
    * Property presenceOptions
@@ -279,6 +280,31 @@ export class UserMenu {
   );
 
   /**
+   * Property presenceAvailable
+   *
+   * @description
+   * Whether a chosen presence can reach the gateway: false when realtime is disabled (no
+   * `realtimeUrl`), in which case « Statut » is disabled with a hint and nothing is confirmed.
+   *
+   * @type {Signal<boolean>}
+   * @readonly
+   */
+  protected readonly presenceAvailable: Signal<boolean> = computed(
+    (): boolean => this.presence.status() !== 'disabled',
+  );
+
+  /**
+   * Property pendingPresence
+   *
+   * @description
+   * The last presence chosen here, watched until it is replaced: if `ownStatus` leaves it without a
+   * new choice, the gateway refused it.
+   *
+   * @type {PresenceStatus | null}
+   */
+  private pendingPresence: PresenceStatus | null = null;
+
+  /**
    * Property label
    *
    * @description
@@ -289,7 +315,7 @@ export class UserMenu {
    */
   protected readonly label: Signal<string> = computed((): string => {
     const current: PresenceOption | null = this.current();
-    const name: string = this.workspace().user().name;
+    const name: string = this.workspace.user().name;
     return current
       ? $localize`:@@account.user-menu.label:Account of ${name}:name:, status: ${current.label}:status:`
       : $localize`:@@account.user-menu.label-no-status:Account of ${name}:name:`;
@@ -311,13 +337,38 @@ export class UserMenu {
   );
   // #endregion
 
+  // #region Constructor
+  /**
+   * Constructor
+   *
+   * @description
+   * Reports a refused presence: when `ownStatus` returns to the confirmed value instead of the
+   * presence chosen here, an error toast says so.
+   *
+   * @constructor
+   */
+  public constructor() {
+    effect((): void => {
+      const status: PresenceStatus | null = this.presence.ownStatus();
+      if (this.pendingPresence === null || status === this.pendingPresence) return;
+      this.pendingPresence = null;
+      this.toasts.error(
+        $localize`:@@account.user-menu.status-failed:The status could not be changed`,
+        {
+          description: $localize`:@@account.user-menu.status-failed-text:The server refused it. Try again in a moment.`,
+        },
+      );
+    });
+  }
+  // #endregion
+
   // #region Methods
   /**
    * Method choosePresence
    *
    * @description
    * Sets the chosen presence, closes the menu and confirms with a toast; choosing the current
-   * presence only closes the menu.
+   * presence only closes the menu, and nothing is set while realtime is disabled.
    *
    * @param {string | undefined} value - Value of the chosen radio.
    */
@@ -327,7 +378,8 @@ export class UserMenu {
     );
     if (!option) return;
     this.menu()?.close();
-    if (option.status === this.presence.ownStatus()) return;
+    if (!this.presenceAvailable() || option.status === this.presence.ownStatus()) return;
+    this.pendingPresence = option.status;
     this.presence.setPresence(option.status);
     this.toasts.show($localize`:@@account.user-menu.status-toast:Status: ${option.label}:status:`, {
       description: $localize`:@@account.user-menu.status-toast-text:${option.hint}:hint:.`,
@@ -361,7 +413,7 @@ export class UserMenu {
    * @param {AccountSection} section - Section to open.
    */
   protected open(section: AccountSection): void {
-    void this.router.navigate(['/', this.workspace().organization().slug, 'account', section]);
+    void this.router.navigate(['/', this.workspace.organization().slug, 'account', section]);
   }
 
   /**

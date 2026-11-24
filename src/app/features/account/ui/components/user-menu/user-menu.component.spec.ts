@@ -8,7 +8,10 @@ import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 import type { PresenceStatus } from '@core/realtime';
 import { ThemeService } from '@core/theme';
 import { SignOut } from '@features/auth';
-import type { WorkspaceContextPort } from '@features/workspace/ports/workspace-context';
+import {
+  WORKSPACE_CONTEXT,
+  type WorkspaceContextPort,
+} from '@features/workspace/ports/workspace-context';
 
 import { PRESENCE } from '../../../ports/presence/presence.token';
 import { UserMenu } from './user-menu.component';
@@ -66,10 +69,12 @@ describe('UserMenu', () => {
   let theme: { set: Mock; resolved: () => 'light' | 'dark' };
   let status: WritableSignal<PresenceStatus | null>;
   let setPresence: Mock<(next: PresenceStatus) => void>;
+  let connection: WritableSignal<'disabled' | 'connecting' | 'connected' | 'reconnecting'>;
   let fixture: ComponentFixture<UserMenu>;
 
   beforeEach(async () => {
     status = signal<PresenceStatus | null>(null);
+    connection = signal<'disabled' | 'connecting' | 'connected' | 'reconnecting'>('connected');
     setPresence = vi.fn((next: PresenceStatus) => {
       status.set(next);
     });
@@ -81,7 +86,8 @@ describe('UserMenu', () => {
       imports: [UserMenu],
       providers: [
         provideCadenwayIcons(),
-        { provide: PRESENCE, useValue: { ownStatus: status, setPresence } },
+        { provide: PRESENCE, useValue: { ownStatus: status, status: connection, setPresence } },
+        { provide: WORKSPACE_CONTEXT, useValue: workspace },
         { provide: SignOut, useValue: { run } },
         { provide: Router, useValue: { navigate } },
         { provide: CwToastService, useValue: toasts },
@@ -89,7 +95,6 @@ describe('UserMenu', () => {
       ],
     });
     fixture = TestBed.createComponent(UserMenu);
-    fixture.componentRef.setInput('workspace', workspace);
     await fixture.whenStable();
   });
 
@@ -129,6 +134,35 @@ describe('UserMenu', () => {
 
     expect(trigger.textContent).toContain('Compte de Camille Martin, statut : Absent');
     expect(trigger.querySelector('cw-presence-dot')?.getAttribute('data-status')).toBe('away');
+  });
+
+  it('disables « Statut » without realtime, and never confirms anything', async () => {
+    connection.set('disabled');
+    await fixture.whenStable();
+    await openMenu();
+
+    const status: HTMLButtonElement = item('Statut');
+    expect(status.getAttribute('aria-disabled')).toBe('true');
+    expect(status.textContent).toContain('Indisponible');
+    status.click();
+    await fixture.whenStable();
+
+    expect(document.querySelector('[role="menuitemradio"]')).toBeNull();
+    expect(setPresence).not.toHaveBeenCalled();
+    expect(toasts.show).not.toHaveBeenCalled();
+  });
+
+  it('reports a presence the server refused', async () => {
+    await openMenu();
+    item('Statut').click();
+    await fixture.whenStable();
+    item('Absent').click();
+    await fixture.whenStable();
+
+    status.set(null);
+    await fixture.whenStable();
+
+    expect(toasts.error).toHaveBeenCalledWith('Impossible de changer de statut', expect.anything());
   });
 
   it('sets the presence from « Statut » and confirms it', async () => {

@@ -1,4 +1,15 @@
-import { Service, signal, type Signal, type WritableSignal } from '@angular/core';
+import { computed, inject, Service, type Signal } from '@angular/core';
+import { ShellOverlay } from '@shared/layout-slot';
+
+/**
+ * Constant PALETTE
+ *
+ * @description
+ * Id of the command palette among the shell overlays.
+ *
+ * @type {string}
+ */
+const PALETTE: string = 'search.command-palette';
 
 /**
  * Service CommandPalette
@@ -6,21 +17,22 @@ import { Service, signal, type Signal, type WritableSignal } from '@angular/core
  * @description
  * Whether the command palette is open, shared by the palette (an `overlays` contribution), the
  * rail's « Rechercher » item and the sidebar's « Rechercher… » button, which the shell renders as
- * separate components. It holds no user or organization data.
+ * separate components. It goes through `ShellOverlay`, so the palette never opens over another
+ * shell overlay such as the keyboard shortcuts dialog. It holds no user or organization data.
  */
 @Service()
 export class CommandPalette {
   // #region Properties
   /**
-   * Property state
+   * Property overlay
    *
    * @description
-   * Whether the palette is open.
+   * The shell's one-overlay-at-a-time coordinator.
    *
-   * @type {WritableSignal<boolean>}
+   * @type {ShellOverlay}
    * @readonly
    */
-  private readonly state: WritableSignal<boolean> = signal(false);
+  private readonly overlay: ShellOverlay = inject(ShellOverlay);
 
   /**
    * Property isOpen
@@ -31,7 +43,7 @@ export class CommandPalette {
    * @type {Signal<boolean>}
    * @readonly
    */
-  public readonly isOpen: Signal<boolean> = this.state.asReadonly();
+  public readonly isOpen: Signal<boolean> = computed((): boolean => this.overlay.isOpen(PALETTE));
   // #endregion
 
   // #region Methods
@@ -39,12 +51,14 @@ export class CommandPalette {
    * Method setOpen
    *
    * @description
-   * Opens or closes the palette; the palette also reports its own closing here.
+   * Opens the palette unless another shell overlay is open, or closes it; the palette also reports
+   * its own closing here.
    *
-   * @param {boolean} open - Whether the palette is open.
+   * @param {boolean} open - Whether the palette should be open.
    */
   public setOpen(open: boolean): void {
-    this.state.set(open);
+    if (open) this.overlay.open(PALETTE);
+    else this.overlay.close(PALETTE);
   }
 
   /**
@@ -54,7 +68,7 @@ export class CommandPalette {
    * Opens a closed palette or closes an open one, as Ctrl K does.
    */
   public toggle(): void {
-    this.state.update((open: boolean) => !open);
+    this.setOpen(!this.isOpen());
   }
   // #endregion
 }

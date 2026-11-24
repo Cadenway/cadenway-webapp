@@ -1,7 +1,4 @@
-import { inject } from '@angular/core';
 import type { SlotContribution, SlotFeature } from '@shared/layout-slot';
-
-import { WORKSPACE_CONTEXT } from '@features/workspace/ports/workspace-context';
 
 import { SearchButton } from '../../ui/components/search-button/search-button.component';
 import { SearchRailItem } from '../../ui/components/search-rail-item/search-rail-item.component';
@@ -58,7 +55,6 @@ export function withCommandPalette(): SlotFeature<SlotContribution> {
       id: 'search.command-palette',
       order: 0,
       component: CommandPaletteDialog,
-      inputs: { workspace: inject(WORKSPACE_CONTEXT) },
     }),
   };
 }

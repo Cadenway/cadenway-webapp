@@ -6,7 +6,7 @@
   data-testid="user-menu-trigger"
 >
   <span cwAppRailItemMedia class="relative inline-flex">
-    <cw-avatar [name]="workspace().user().name" />
+    <cw-avatar [name]="workspace.user().name" />
     @if (presence.ownStatus(); as status) {
       <cw-presence-dot
         class="absolute -right-0.5 -bottom-0.5 size-3 ring-2 ring-canvas"
@@ -26,7 +26,7 @@
 >
   <div class="flex items-center gap-2 px-2 py-1.5">
     <span class="relative inline-flex shrink-0">
-      <cw-avatar [name]="workspace().user().name" />
+      <cw-avatar [name]="workspace.user().name" />
       @if (presence.ownStatus(); as status) {
         <cw-presence-dot
           class="absolute -right-0.5 -bottom-0.5 size-3 ring-2 ring-popover"
@@ -35,20 +35,32 @@
       }
     </span>
     <span class="flex min-w-0 flex-col">
-      <span class="truncate font-medium">{{ workspace().user().name }}</span>
-      <span class="truncate text-xs text-muted-foreground">{{ workspace().user().email }}</span>
+      <span class="truncate font-medium">{{ workspace.user().name }}</span>
+      <span class="truncate text-xs text-muted-foreground">{{ workspace.user().email }}</span>
     </span>
   </div>
   <cw-menu-separator />
-  <button cwMenuItem [cwMenuTriggerFor]="statusMenu" data-testid="user-menu-status">
-    <span class="flex size-4 shrink-0 items-center justify-center" aria-hidden="true">
-      @if (presence.ownStatus(); as status) {
-        <cw-presence-dot class="size-2.5" [status]="status" />
-      }
-    </span>
-    <ng-container i18n="@@account.user-menu.status">Status</ng-container>
-    <span class="ml-auto pl-6 text-xs text-muted-foreground">{{ current()?.label }}</span>
-  </button>
+  @if (presenceAvailable()) {
+    <button cwMenuItem [cwMenuTriggerFor]="statusMenu" data-testid="user-menu-status">
+      <span class="flex size-4 shrink-0 items-center justify-center" aria-hidden="true">
+        @if (presence.ownStatus(); as status) {
+          <cw-presence-dot class="size-2.5" [status]="status" />
+        }
+      </span>
+      <ng-container i18n="@@account.user-menu.status">Status</ng-container>
+      <span class="ml-auto pl-6 text-xs text-muted-foreground">{{ current()?.label }}</span>
+    </button>
+  } @else {
+    <button cwMenuItem disabled data-testid="user-menu-status">
+      <span class="size-4 shrink-0" aria-hidden="true"></span>
+      <ng-container i18n="@@account.user-menu.status">Status</ng-container>
+      <span
+        class="ml-auto pl-6 text-xs text-muted-foreground"
+        i18n="@@account.user-menu.status-unavailable"
+        >Unavailable</span
+      >
+    </button>
+  }
   <cw-menu-separator />
   <button cwMenuItem (triggered)="open('profile')">
     <ng-icon name="phosphorUserCircleBold" aria-hidden="true" />

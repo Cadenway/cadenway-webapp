@@ -10,7 +10,11 @@ import { providePresence } from './presence.provider';
 
 describe('providePresence', () => {
   it('publishes the workspace realtime connection as the presence', () => {
-    const connection: PresencePort = { ownStatus: signal(null), setPresence: vi.fn() };
+    const connection: PresencePort = {
+      ownStatus: signal(null),
+      status: signal('connected'),
+      setPresence: vi.fn(),
+    };
     TestBed.configureTestingModule({
       providers: [{ provide: RealtimeConnection, useValue: connection }, providePresence()],
     });

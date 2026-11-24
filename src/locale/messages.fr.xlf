@@ -15,11 +15,23 @@
         <target>Statut</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/account/ui/components/user-menu/user-menu.component.html</context>
-          <context context-type="linenumber">49,50</context>
+          <context context-type="linenumber">50,51</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/account/ui/components/user-menu/user-menu.component.html</context>
-          <context context-type="linenumber">81</context>
+          <context context-type="linenumber">56,58</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/account/ui/components/user-menu/user-menu.component.html</context>
+          <context context-type="linenumber">93</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="account.user-menu.status-unavailable" datatype="html">
+        <source>Unavailable</source>
+        <target>Indisponible</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/account/ui/components/user-menu/user-menu.component.html</context>
+          <context context-type="linenumber">60,64</context>
         </context-group>
       </trans-unit>
       <trans-unit id="account.user-menu.profile" datatype="html">
@@ -27,7 +39,7 @@
         <target>Mon profil</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/account/ui/components/user-menu/user-menu.component.html</context>
-          <context context-type="linenumber">55,57</context>
+          <context context-type="linenumber">67,69</context>
         </context-group>
       </trans-unit>
       <trans-unit id="account.user-menu.security" datatype="html">
@@ -35,7 +47,7 @@
         <target>Sécurité et connexions</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/account/ui/components/user-menu/user-menu.component.html</context>
-          <context context-type="linenumber">59,61</context>
+          <context context-type="linenumber">71,73</context>
         </context-group>
       </trans-unit>
       <trans-unit id="account.user-menu.notifications" datatype="html">
@@ -43,7 +55,7 @@
         <target>Notifications</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/account/ui/components/user-menu/user-menu.component.html</context>
-          <context context-type="linenumber">63,65</context>
+          <context context-type="linenumber">75,77</context>
         </context-group>
       </trans-unit>
       <trans-unit id="account.user-menu.theme" datatype="html">
@@ -51,11 +63,11 @@
         <target>Thème</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/account/ui/components/user-menu/user-menu.component.html</context>
-          <context context-type="linenumber">71,72</context>
+          <context context-type="linenumber">83,84</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/account/ui/components/user-menu/user-menu.component.html</context>
-          <context context-type="linenumber">98</context>
+          <context context-type="linenumber">110</context>
         </context-group>
       </trans-unit>
       <trans-unit id="account.user-menu.sign-out" datatype="html">
@@ -63,7 +75,7 @@
         <target>Se déconnecter</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/account/ui/components/user-menu/user-menu.component.html</context>
-          <context context-type="linenumber">77,81</context>
+          <context context-type="linenumber">89,93</context>
         </context-group>
       </trans-unit>
       <trans-unit id="account.user-menu.theme-light" datatype="html">
@@ -71,11 +83,11 @@
         <target>Clair</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/account/ui/components/user-menu/user-menu.component.html</context>
-          <context context-type="linenumber">102,104</context>
+          <context context-type="linenumber">114,116</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/account/ui/components/user-menu/user-menu.component.ts</context>
-          <context context-type="linenumber">310</context>
+          <context context-type="linenumber">336</context>
         </context-group>
       </trans-unit>
       <trans-unit id="account.user-menu.theme-dark" datatype="html">
@@ -83,11 +95,11 @@
         <target>Sombre</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/account/ui/components/user-menu/user-menu.component.html</context>
-          <context context-type="linenumber">106,108</context>
+          <context context-type="linenumber">118,120</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/account/ui/components/user-menu/user-menu.component.ts</context>
-          <context context-type="linenumber">309</context>
+          <context context-type="linenumber">335</context>
         </context-group>
       </trans-unit>
       <trans-unit id="account.user-menu.status-online" datatype="html">
@@ -95,7 +107,7 @@
         <target>Actif</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/account/ui/components/user-menu/user-menu.component.ts</context>
-          <context context-type="linenumber">99</context>
+          <context context-type="linenumber">101</context>
         </context-group>
       </trans-unit>
       <trans-unit id="account.user-menu.status-online-hint" datatype="html">
@@ -103,7 +115,7 @@
         <target>Vous apparaissez en ligne</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/account/ui/components/user-menu/user-menu.component.ts</context>
-          <context context-type="linenumber">100</context>
+          <context context-type="linenumber">102</context>
         </context-group>
       </trans-unit>
       <trans-unit id="account.user-menu.status-dnd" datatype="html">
@@ -111,7 +123,7 @@
         <target>Ne pas déranger</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/account/ui/components/user-menu/user-menu.component.ts</context>
-          <context context-type="linenumber">104</context>
+          <context context-type="linenumber">106</context>
         </context-group>
       </trans-unit>
       <trans-unit id="account.user-menu.status-dnd-hint" datatype="html">
@@ -119,7 +131,7 @@
         <target>Notifications en pause</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/account/ui/components/user-menu/user-menu.component.ts</context>
-          <context context-type="linenumber">105</context>
+          <context context-type="linenumber">107</context>
         </context-group>
       </trans-unit>
       <trans-unit id="account.user-menu.status-away" datatype="html">
@@ -127,7 +139,7 @@
         <target>Absent</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/account/ui/components/user-menu/user-menu.component.ts</context>
-          <context context-type="linenumber">109</context>
+          <context context-type="linenumber">111</context>
         </context-group>
       </trans-unit>
       <trans-unit id="account.user-menu.status-away-hint" datatype="html">
@@ -135,7 +147,7 @@
         <target>Vous apparaissez absent</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/account/ui/components/user-menu/user-menu.component.ts</context>
-          <context context-type="linenumber">110</context>
+          <context context-type="linenumber">112</context>
         </context-group>
       </trans-unit>
       <trans-unit id="account.user-menu.status-invisible" datatype="html">
@@ -143,7 +155,7 @@
         <target>Invisible</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/account/ui/components/user-menu/user-menu.component.ts</context>
-          <context context-type="linenumber">114</context>
+          <context context-type="linenumber">116</context>
         </context-group>
       </trans-unit>
       <trans-unit id="account.user-menu.status-invisible-hint" datatype="html">
@@ -151,7 +163,7 @@
         <target>Connecté, mais affiché hors ligne</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/account/ui/components/user-menu/user-menu.component.ts</context>
-          <context context-type="linenumber">115</context>
+          <context context-type="linenumber">117</context>
         </context-group>
       </trans-unit>
       <trans-unit id="account.user-menu.avatar-unknown" datatype="html">
@@ -159,11 +171,11 @@
         <target>Utilisateur inconnu</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/account/ui/components/user-menu/user-menu.component.ts</context>
-          <context context-type="linenumber">150</context>
+          <context context-type="linenumber">152</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/account/ui/components/user-menu/user-menu.component.ts</context>
-          <context context-type="linenumber">150</context>
+          <context context-type="linenumber">152</context>
         </context-group>
       </trans-unit>
       <trans-unit id="account.user-menu.avatar-online" datatype="html">
@@ -171,11 +183,11 @@
         <target>en ligne</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/account/ui/components/user-menu/user-menu.component.ts</context>
-          <context context-type="linenumber">151</context>
+          <context context-type="linenumber">153</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/account/ui/components/user-menu/user-menu.component.ts</context>
-          <context context-type="linenumber">151</context>
+          <context context-type="linenumber">153</context>
         </context-group>
       </trans-unit>
       <trans-unit id="account.user-menu.avatar-away" datatype="html">
@@ -183,11 +195,11 @@
         <target>absent</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/account/ui/components/user-menu/user-menu.component.ts</context>
-          <context context-type="linenumber">152</context>
+          <context context-type="linenumber">154</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/account/ui/components/user-menu/user-menu.component.ts</context>
-          <context context-type="linenumber">152</context>
+          <context context-type="linenumber">154</context>
         </context-group>
       </trans-unit>
       <trans-unit id="account.user-menu.avatar-disabled" datatype="html">
@@ -195,11 +207,11 @@
         <target>désactivé</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/account/ui/components/user-menu/user-menu.component.ts</context>
-          <context context-type="linenumber">153</context>
+          <context context-type="linenumber">155</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/account/ui/components/user-menu/user-menu.component.ts</context>
-          <context context-type="linenumber">153</context>
+          <context context-type="linenumber">155</context>
         </context-group>
       </trans-unit>
       <trans-unit id="account.user-menu.label" datatype="html">
@@ -207,7 +219,7 @@
         <target>Compte de <x id="name" equiv-text="this.workspace().user().name"/>, statut : <x id="status" equiv-text="this.current().label"/></target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/account/ui/components/user-menu/user-menu.component.ts</context>
-          <context context-type="linenumber">294</context>
+          <context context-type="linenumber">320</context>
         </context-group>
       </trans-unit>
       <trans-unit id="account.user-menu.label-no-status" datatype="html">
@@ -215,7 +227,23 @@
         <target>Compte de <x id="name" equiv-text="name"/></target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/account/ui/components/user-menu/user-menu.component.ts</context>
-          <context context-type="linenumber">295</context>
+          <context context-type="linenumber">321</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="account.user-menu.status-failed" datatype="html">
+        <source>The status could not be changed</source>
+        <target>Impossible de changer de statut</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/account/ui/components/user-menu/user-menu.component.ts</context>
+          <context context-type="linenumber">356</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="account.user-menu.status-failed-text" datatype="html">
+        <source>The server refused it. Try again in a moment.</source>
+        <target>Le serveur l’a refusé. Réessayez dans un instant.</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/account/ui/components/user-menu/user-menu.component.ts</context>
+          <context context-type="linenumber">358</context>
         </context-group>
       </trans-unit>
       <trans-unit id="account.user-menu.status-toast" datatype="html">
@@ -223,7 +251,7 @@
         <target>Statut : <x id="status" equiv-text="option.label"/></target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/account/ui/components/user-menu/user-menu.component.ts</context>
-          <context context-type="linenumber">332</context>
+          <context context-type="linenumber">384</context>
         </context-group>
       </trans-unit>
       <trans-unit id="account.user-menu.status-toast-text" datatype="html">
@@ -231,7 +259,7 @@
         <target><x id="hint" equiv-text="option.hint"/>.</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/account/ui/components/user-menu/user-menu.component.ts</context>
-          <context context-type="linenumber">333</context>
+          <context context-type="linenumber">385</context>
         </context-group>
       </trans-unit>
       <trans-unit id="account.user-menu.sign-out-failed" datatype="html">
@@ -239,7 +267,7 @@
         <target>Impossible de vous déconnecter</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/account/ui/components/user-menu/user-menu.component.ts</context>
-          <context context-type="linenumber">377</context>
+          <context context-type="linenumber">429</context>
         </context-group>
       </trans-unit>
       <trans-unit id="account.user-menu.sign-out-failed-text" datatype="html">
@@ -247,7 +275,7 @@
         <target>Le serveur n’a pas répondu. Réessayez dans un instant.</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/account/ui/components/user-menu/user-menu.component.ts</context>
-          <context context-type="linenumber">378</context>
+          <context context-type="linenumber">430</context>
         </context-group>
       </trans-unit>
       <trans-unit id="auth.code.aria-label" datatype="html">
@@ -2641,7 +2669,7 @@
         <target>Accueil</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/ui/components/home-rail-item/home-rail-item.component.ts</context>
-          <context context-type="linenumber">34,35</context>
+          <context context-type="linenumber">37,38</context>
         </context-group>
       </trans-unit>
       <trans-unit id="home.header.greeting" datatype="html">
@@ -2750,7 +2778,7 @@
       </trans-unit>
       <trans-unit id="inbox.verb.mention" datatype="html">
         <source>mentioned you</source>
-        <target>vous a mentionnée</target>
+        <target>a mentionné votre nom</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/inbox/constants/notification-kinds/notification-kinds.constants.ts</context>
           <context context-type="linenumber">55</context>
@@ -2821,7 +2849,7 @@
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/inbox/ui/components/inbox-rail-item/inbox-rail-item.component.html</context>
-          <context context-type="linenumber">28,29</context>
+          <context context-type="linenumber">34,36</context>
         </context-group>
       </trans-unit>
       <trans-unit id="inbox.mark-all" datatype="html">
@@ -2829,7 +2857,7 @@
         <target>Tout marquer comme lu</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/inbox/ui/components/inbox-rail-item/inbox-rail-item.component.html</context>
-          <context context-type="linenumber">46,47</context>
+          <context context-type="linenumber">53,54</context>
         </context-group>
       </trans-unit>
       <trans-unit id="inbox.tabs" datatype="html">
@@ -2837,7 +2865,7 @@
         <target>Contenu de la boîte de réception</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/inbox/ui/components/inbox-rail-item/inbox-rail-item.component.html</context>
-          <context context-type="linenumber">53,54</context>
+          <context context-type="linenumber">60,61</context>
         </context-group>
       </trans-unit>
       <trans-unit id="inbox.tab-notifications" datatype="html">
@@ -2845,7 +2873,7 @@
         <target>Notifications</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/inbox/ui/components/inbox-rail-item/inbox-rail-item.component.html</context>
-          <context context-type="linenumber">57,59</context>
+          <context context-type="linenumber">64,66</context>
         </context-group>
       </trans-unit>
       <trans-unit id="inbox.tab-reminders" datatype="html">
@@ -2853,7 +2881,7 @@
         <target>Rappels</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/inbox/ui/components/inbox-rail-item/inbox-rail-item.component.html</context>
-          <context context-type="linenumber">64,66</context>
+          <context context-type="linenumber">72,74</context>
         </context-group>
       </trans-unit>
       <trans-unit id="inbox.do-not-disturb" datatype="html">
@@ -2861,7 +2889,7 @@
         <target>Ne pas déranger : notifications en pause</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/inbox/ui/components/inbox-rail-item/inbox-rail-item.component.html</context>
-          <context context-type="linenumber">79,81</context>
+          <context context-type="linenumber">87,89</context>
         </context-group>
       </trans-unit>
       <trans-unit id="inbox.notifications-failed" datatype="html">
@@ -2869,7 +2897,7 @@
         <target>Impossible de charger les notifications</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/inbox/ui/components/inbox-rail-item/inbox-rail-item.component.html</context>
-          <context context-type="linenumber">98,100</context>
+          <context context-type="linenumber">106,108</context>
         </context-group>
       </trans-unit>
       <trans-unit id="inbox.retry" datatype="html">
@@ -2877,11 +2905,11 @@
         <target>Réessayer</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/inbox/ui/components/inbox-rail-item/inbox-rail-item.component.html</context>
-          <context context-type="linenumber">110,111</context>
+          <context context-type="linenumber">118,119</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/inbox/ui/components/inbox-rail-item/inbox-rail-item.component.html</context>
-          <context context-type="linenumber">169,170</context>
+          <context context-type="linenumber">177,178</context>
         </context-group>
       </trans-unit>
       <trans-unit id="inbox.notifications-empty" datatype="html">
@@ -2889,7 +2917,7 @@
         <target>Aucune notification</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/inbox/ui/components/inbox-rail-item/inbox-rail-item.component.html</context>
-          <context context-type="linenumber">121,122</context>
+          <context context-type="linenumber">129,130</context>
         </context-group>
       </trans-unit>
       <trans-unit id="inbox.notifications-empty-text" datatype="html">
@@ -2897,7 +2925,7 @@
         <target>Les mentions, assignations et commentaires sur vos tâches s’afficheront ici.</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/inbox/ui/components/inbox-rail-item/inbox-rail-item.component.html</context>
-          <context context-type="linenumber">123,125</context>
+          <context context-type="linenumber">131,133</context>
         </context-group>
       </trans-unit>
       <trans-unit id="inbox.reminders-failed" datatype="html">
@@ -2905,7 +2933,7 @@
         <target>Impossible de charger les rappels</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/inbox/ui/components/inbox-rail-item/inbox-rail-item.component.html</context>
-          <context context-type="linenumber">157,159</context>
+          <context context-type="linenumber">165,167</context>
         </context-group>
       </trans-unit>
       <trans-unit id="inbox.reminders-empty" datatype="html">
@@ -2913,7 +2941,7 @@
         <target>Aucun rappel en attente</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/inbox/ui/components/inbox-rail-item/inbox-rail-item.component.html</context>
-          <context context-type="linenumber">180,181</context>
+          <context context-type="linenumber">188,189</context>
         </context-group>
       </trans-unit>
       <trans-unit id="inbox.reminders-empty-text" datatype="html">
@@ -2921,7 +2949,7 @@
         <target>Programmez-en un depuis une tâche : le réveil en haut du détail, ou clic droit sur la tâche.</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/inbox/ui/components/inbox-rail-item/inbox-rail-item.component.html</context>
-          <context context-type="linenumber">182,184</context>
+          <context context-type="linenumber">190,192</context>
         </context-group>
       </trans-unit>
       <trans-unit id="inbox.see-all" datatype="html">
@@ -2929,7 +2957,7 @@
         <target>Tout afficher dans l’accueil</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/inbox/ui/components/inbox-rail-item/inbox-rail-item.component.html</context>
-          <context context-type="linenumber">212,213</context>
+          <context context-type="linenumber">220,221</context>
         </context-group>
       </trans-unit>
       <trans-unit id="inbox.rail.badge" datatype="html">
@@ -2937,7 +2965,7 @@
         <target><x id="count" equiv-text="this.unread()"/> non lues</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/inbox/ui/components/inbox-rail-item/inbox-rail-item.component.ts</context>
-          <context context-type="linenumber">231</context>
+          <context context-type="linenumber">260</context>
         </context-group>
       </trans-unit>
       <trans-unit id="inbox.mark-all-failed" datatype="html">
@@ -2945,7 +2973,15 @@
         <target>Impossible de marquer les notifications comme lues</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/inbox/ui/components/inbox-rail-item/inbox-rail-item.component.ts</context>
-          <context context-type="linenumber">261</context>
+          <context context-type="linenumber">293</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="inbox.mark-read-failed" datatype="html">
+        <source>The notification could not be marked as read</source>
+        <target>Impossible de marquer la notification comme lue</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/inbox/ui/components/inbox-rail-item/inbox-rail-item.component.ts</context>
+          <context context-type="linenumber">310</context>
         </context-group>
       </trans-unit>
       <trans-unit id="inbox.reminder.snoozed" datatype="html">
@@ -2953,7 +2989,7 @@
         <target>Rappel reporté</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/inbox/ui/components/inbox-rail-item/inbox-rail-item.component.ts</context>
-          <context context-type="linenumber">314</context>
+          <context context-type="linenumber">350</context>
         </context-group>
       </trans-unit>
       <trans-unit id="inbox.reminder.snooze-failed" datatype="html">
@@ -2961,7 +2997,7 @@
         <target>Impossible de reporter le rappel</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/inbox/ui/components/inbox-rail-item/inbox-rail-item.component.ts</context>
-          <context context-type="linenumber">319</context>
+          <context context-type="linenumber">355</context>
         </context-group>
       </trans-unit>
       <trans-unit id="inbox.reminder.completed" datatype="html">
@@ -2969,7 +3005,7 @@
         <target>Rappel terminé</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/inbox/ui/components/inbox-rail-item/inbox-rail-item.component.ts</context>
-          <context context-type="linenumber">333</context>
+          <context context-type="linenumber">376</context>
         </context-group>
       </trans-unit>
       <trans-unit id="inbox.reminder.complete-failed" datatype="html">
@@ -2977,7 +3013,7 @@
         <target>Impossible de marquer le rappel comme fait</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/inbox/ui/components/inbox-rail-item/inbox-rail-item.component.ts</context>
-          <context context-type="linenumber">339</context>
+          <context context-type="linenumber">382</context>
         </context-group>
       </trans-unit>
       <trans-unit id="inbox.write-failed-text" datatype="html">
@@ -2985,7 +3021,7 @@
         <target>Le serveur n’a pas répondu. Réessayez dans un instant.</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/inbox/ui/components/inbox-rail-item/inbox-rail-item.component.ts</context>
-          <context context-type="linenumber">353</context>
+          <context context-type="linenumber">426</context>
         </context-group>
       </trans-unit>
       <trans-unit id="inbox.notification.unread" datatype="html">
@@ -3100,12 +3136,28 @@
           <context context-type="linenumber">112</context>
         </context-group>
       </trans-unit>
+      <trans-unit id="organization.plan-summary.failed" datatype="html">
+        <source>The plan could not be loaded.</source>
+        <target>Impossible de charger le plan.</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/organization/ui/components/plan-summary/plan-summary.component.ts</context>
+          <context context-type="linenumber">48,51</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="organization.retry" datatype="html">
+        <source> Retry </source>
+        <target>Réessayer</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/organization/ui/components/plan-summary/plan-summary.component.ts</context>
+          <context context-type="linenumber">59,61</context>
+        </context-group>
+      </trans-unit>
       <trans-unit id="organization.plan-summary.label" datatype="html">
         <source><x id="plan" equiv-text="planName(subscription.plan)"/> plan · <x id="used" equiv-text="subscription.seatsUsed"/> / <x id="limit" equiv-text="subscription.seatsLimit"/> seats</source>
         <target>Plan <x id="plan" equiv-text="planName(subscription.plan)"/> · <x id="used" equiv-text="subscription.seatsUsed"/> / <x id="limit" equiv-text="subscription.seatsLimit"/> sièges</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/organization/ui/components/plan-summary/plan-summary.component.ts</context>
-          <context context-type="linenumber">90</context>
+          <context context-type="linenumber">114</context>
         </context-group>
       </trans-unit>
       <trans-unit id="organization.storage-banner.title" datatype="html">
@@ -3145,7 +3197,7 @@
         <target>· <x id="used" equiv-text="used"/> Go utilisés sur <x id="limit" equiv-text="limit"/> Go. Au-delà, les nouvelles pièces jointes seront refusées.</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/organization/ui/components/storage-banner/storage-banner.component.ts</context>
-          <context context-type="linenumber">162</context>
+          <context context-type="linenumber">161</context>
         </context-group>
       </trans-unit>
       <trans-unit id="organization.plan.free" datatype="html">
@@ -3209,11 +3261,11 @@
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/search/ui/dialogs/command-palette/command-palette.component.ts</context>
-          <context context-type="linenumber">117</context>
+          <context context-type="linenumber">112</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/search/ui/dialogs/command-palette/command-palette.component.ts</context>
-          <context context-type="linenumber">117</context>
+          <context context-type="linenumber">112</context>
         </context-group>
       </trans-unit>
       <trans-unit id="search.palette.input-label" datatype="html">
@@ -3316,16 +3368,28 @@
           <context context-type="linenumber">91,92</context>
         </context-group>
       </trans-unit>
-      <trans-unit id="search.palette.organizations" datatype="html">
-        <source>Switch organization</source>
-        <target>Changer d’organisation</target>
+      <trans-unit id="search.palette.billing" datatype="html">
+        <source>Billing and quotas</source>
+        <target>Facturation et quotas</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/search/ui/dialogs/command-palette/command-palette.component.html</context>
           <context context-type="linenumber">97,98</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/search/ui/dialogs/command-palette/command-palette.component.html</context>
-          <context context-type="linenumber">106,108</context>
+          <context context-type="linenumber">102,103</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="search.palette.organizations" datatype="html">
+        <source>Switch organization</source>
+        <target>Changer d’organisation</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/search/ui/dialogs/command-palette/command-palette.component.html</context>
+          <context context-type="linenumber">108,109</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/search/ui/dialogs/command-palette/command-palette.component.html</context>
+          <context context-type="linenumber">117,119</context>
         </context-group>
       </trans-unit>
       <trans-unit id="search.palette.actions" datatype="html">
@@ -3333,31 +3397,7 @@
         <target>Actions</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/search/ui/dialogs/command-palette/command-palette.component.html</context>
-          <context context-type="linenumber">109</context>
-        </context-group>
-      </trans-unit>
-      <trans-unit id="search.palette.theme-light" datatype="html">
-        <source>Switch to the light theme</source>
-        <target>Passer au thème clair</target>
-        <context-group purpose="location">
-          <context context-type="sourcefile">src/app/features/search/ui/dialogs/command-palette/command-palette.component.html</context>
-          <context context-type="linenumber">111,112</context>
-        </context-group>
-        <context-group purpose="location">
-          <context context-type="sourcefile">src/app/features/search/ui/dialogs/command-palette/command-palette.component.html</context>
-          <context context-type="linenumber">116,118</context>
-        </context-group>
-      </trans-unit>
-      <trans-unit id="search.palette.theme-dark" datatype="html">
-        <source>Switch to the dark theme</source>
-        <target>Passer au thème sombre</target>
-        <context-group purpose="location">
-          <context context-type="sourcefile">src/app/features/search/ui/dialogs/command-palette/command-palette.component.html</context>
-          <context context-type="linenumber">119,120</context>
-        </context-group>
-        <context-group purpose="location">
-          <context context-type="sourcefile">src/app/features/search/ui/dialogs/command-palette/command-palette.component.html</context>
-          <context context-type="linenumber">124,126</context>
+          <context context-type="linenumber">120</context>
         </context-group>
       </trans-unit>
       <trans-unit id="search.palette.sign-out" datatype="html">
@@ -3365,11 +3405,11 @@
         <target>Se déconnecter</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/search/ui/dialogs/command-palette/command-palette.component.html</context>
-          <context context-type="linenumber">126</context>
+          <context context-type="linenumber">129</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/search/ui/dialogs/command-palette/command-palette.component.html</context>
-          <context context-type="linenumber">128,130</context>
+          <context context-type="linenumber">131,133</context>
         </context-group>
       </trans-unit>
       <trans-unit id="search.palette.failed" datatype="html">
@@ -3377,7 +3417,7 @@
         <target>La recherche n’a pas pu aboutir.</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/search/ui/dialogs/command-palette/command-palette.component.html</context>
-          <context context-type="linenumber">144,147</context>
+          <context context-type="linenumber">147,150</context>
         </context-group>
       </trans-unit>
       <trans-unit id="search.retry" datatype="html">
@@ -3385,7 +3425,7 @@
         <target>Réessayer</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/search/ui/dialogs/command-palette/command-palette.component.html</context>
-          <context context-type="linenumber">154,156</context>
+          <context context-type="linenumber">157,159</context>
         </context-group>
       </trans-unit>
       <trans-unit id="search.palette.empty" datatype="html">
@@ -3393,11 +3433,11 @@
         <target>Aucun résultat pour « <x id="search" equiv-text="SEARCH_TOKEN"/> ».</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/search/ui/dialogs/command-palette/command-palette.component.ts</context>
-          <context context-type="linenumber">118</context>
+          <context context-type="linenumber">113</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/search/ui/dialogs/command-palette/command-palette.component.ts</context>
-          <context context-type="linenumber">118</context>
+          <context context-type="linenumber">113</context>
         </context-group>
       </trans-unit>
       <trans-unit id="search.palette.navigate" datatype="html">
@@ -3405,11 +3445,11 @@
         <target>naviguer</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/search/ui/dialogs/command-palette/command-palette.component.ts</context>
-          <context context-type="linenumber">119</context>
+          <context context-type="linenumber">114</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/search/ui/dialogs/command-palette/command-palette.component.ts</context>
-          <context context-type="linenumber">119</context>
+          <context context-type="linenumber">114</context>
         </context-group>
       </trans-unit>
       <trans-unit id="search.palette.run" datatype="html">
@@ -3417,11 +3457,11 @@
         <target>ouvrir</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/search/ui/dialogs/command-palette/command-palette.component.ts</context>
-          <context context-type="linenumber">120</context>
+          <context context-type="linenumber">115</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/search/ui/dialogs/command-palette/command-palette.component.ts</context>
-          <context context-type="linenumber">120</context>
+          <context context-type="linenumber">115</context>
         </context-group>
       </trans-unit>
       <trans-unit id="search.palette.close" datatype="html">
@@ -3429,11 +3469,11 @@
         <target>fermer</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/search/ui/dialogs/command-palette/command-palette.component.ts</context>
-          <context context-type="linenumber">121</context>
+          <context context-type="linenumber">116</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/search/ui/dialogs/command-palette/command-palette.component.ts</context>
-          <context context-type="linenumber">121</context>
+          <context context-type="linenumber">116</context>
         </context-group>
       </trans-unit>
       <trans-unit id="search.palette.results" datatype="html">
@@ -3441,11 +3481,11 @@
         <target>Résultats</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/search/ui/dialogs/command-palette/command-palette.component.ts</context>
-          <context context-type="linenumber">122</context>
+          <context context-type="linenumber">117</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/search/ui/dialogs/command-palette/command-palette.component.ts</context>
-          <context context-type="linenumber">122</context>
+          <context context-type="linenumber">117</context>
         </context-group>
       </trans-unit>
       <trans-unit id="search.palette.loading" datatype="html">
@@ -3453,11 +3493,11 @@
         <target>Recherche…</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/search/ui/dialogs/command-palette/command-palette.component.ts</context>
-          <context context-type="linenumber">123</context>
+          <context context-type="linenumber">118</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/search/ui/dialogs/command-palette/command-palette.component.ts</context>
-          <context context-type="linenumber">123</context>
+          <context context-type="linenumber">118</context>
         </context-group>
       </trans-unit>
       <trans-unit id="search.palette.results-none" datatype="html">
@@ -3465,11 +3505,11 @@
         <target>Aucun résultat</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/search/ui/dialogs/command-palette/command-palette.component.ts</context>
-          <context context-type="linenumber">124</context>
+          <context context-type="linenumber">119</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/search/ui/dialogs/command-palette/command-palette.component.ts</context>
-          <context context-type="linenumber">124</context>
+          <context context-type="linenumber">119</context>
         </context-group>
       </trans-unit>
       <trans-unit id="search.palette.results-one" datatype="html">
@@ -3477,11 +3517,11 @@
         <target>1 résultat</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/search/ui/dialogs/command-palette/command-palette.component.ts</context>
-          <context context-type="linenumber">125</context>
+          <context context-type="linenumber">120</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/search/ui/dialogs/command-palette/command-palette.component.ts</context>
-          <context context-type="linenumber">125</context>
+          <context context-type="linenumber">120</context>
         </context-group>
       </trans-unit>
       <trans-unit id="search.palette.results-many" datatype="html">
@@ -3489,11 +3529,27 @@
         <target><x id="count" equiv-text="count"/> résultats</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/search/ui/dialogs/command-palette/command-palette.component.ts</context>
-          <context context-type="linenumber">127</context>
+          <context context-type="linenumber">122</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/search/ui/dialogs/command-palette/command-palette.component.ts</context>
-          <context context-type="linenumber">127</context>
+          <context context-type="linenumber">122</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="search.palette.theme-light" datatype="html">
+        <source>Switch to the light theme</source>
+        <target>Passer au thème clair</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/search/ui/dialogs/command-palette/command-palette.component.ts</context>
+          <context context-type="linenumber">263</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="search.palette.theme-dark" datatype="html">
+        <source>Switch to the dark theme</source>
+        <target>Passer au thème sombre</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/search/ui/dialogs/command-palette/command-palette.component.ts</context>
+          <context context-type="linenumber">264</context>
         </context-group>
       </trans-unit>
       <trans-unit id="search.palette.sign-out-failed" datatype="html">
@@ -3501,7 +3557,7 @@
         <target>Impossible de vous déconnecter</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/search/ui/dialogs/command-palette/command-palette.component.ts</context>
-          <context context-type="linenumber">356</context>
+          <context context-type="linenumber">377</context>
         </context-group>
       </trans-unit>
       <trans-unit id="search.palette.sign-out-failed-text" datatype="html">
@@ -3509,7 +3565,7 @@
         <target>Le serveur n’a pas répondu. Réessayez dans un instant.</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/search/ui/dialogs/command-palette/command-palette.component.ts</context>
-          <context context-type="linenumber">357</context>
+          <context context-type="linenumber">378</context>
         </context-group>
       </trans-unit>
       <trans-unit id="workspace.shortcuts.key-ctrl" datatype="html">
@@ -3689,7 +3745,7 @@
         </context-group>
       </trans-unit>
       <trans-unit id="workspace.organization-switcher.label" datatype="html">
-        <source>Switch organization: <x id="INTERPOLATION" equiv-text="{{ workspace().organization().name }}"/></source>
+        <source>Switch organization: <x id="INTERPOLATION" equiv-text="{{ workspace.organization().name }}"/></source>
         <target>Changer d’organisation : <x id="INTERPOLATION" equiv-text="{{ workspace().organization().name }}"/></target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/workspace/ui/components/organization-switcher/organization-switcher.component.html</context>
@@ -3765,7 +3821,7 @@
         <target>Propriétaire</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/workspace/ui/components/organization-switcher/organization-switcher.component.ts</context>
-          <context context-type="linenumber">44</context>
+          <context context-type="linenumber">45</context>
         </context-group>
       </trans-unit>
       <trans-unit id="workspace.organization-menu.role-admin" datatype="html">
@@ -3773,7 +3829,7 @@
         <target>Administrateur</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/workspace/ui/components/organization-switcher/organization-switcher.component.ts</context>
-          <context context-type="linenumber">45</context>
+          <context context-type="linenumber">46</context>
         </context-group>
       </trans-unit>
       <trans-unit id="workspace.organization-menu.role-member" datatype="html">
@@ -3781,7 +3837,7 @@
         <target>Membre</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/workspace/ui/components/organization-switcher/organization-switcher.component.ts</context>
-          <context context-type="linenumber">46</context>
+          <context context-type="linenumber">47</context>
         </context-group>
       </trans-unit>
       <trans-unit id="workspace.organization-menu.role-guest" datatype="html">
@@ -3789,7 +3845,7 @@
         <target>Invité</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/workspace/ui/components/organization-switcher/organization-switcher.component.ts</context>
-          <context context-type="linenumber">47</context>
+          <context context-type="linenumber">48</context>
         </context-group>
       </trans-unit>
       <trans-unit id="workspace.organization-menu.meta" datatype="html">

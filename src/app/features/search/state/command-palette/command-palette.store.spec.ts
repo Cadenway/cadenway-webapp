@@ -1,6 +1,12 @@
+import { signal, type WritableSignal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { delay, type Observable, of, throwError } from 'rxjs';
 import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
+
+import {
+  WORKSPACE_CONTEXT,
+  type WorkspaceOrganization,
+} from '@features/workspace/ports/workspace-context';
 
 import { SearchApi } from '../../data-access/services/search-api/search-api.service';
 import type { SearchResult } from '../../models/search-result/search-result.interface';
@@ -19,17 +25,37 @@ const results: readonly SearchResult[] = [
   { kind: 'list', listId: 'l1', name: 'Sprint 14', spaceName: 'Produit' },
 ];
 
+/**
+ * Function organization
+ *
+ * @description
+ * An organization of the mockup as the workspace port shows it.
+ *
+ * @param {string} id - Organization id.
+ * @returns {WorkspaceOrganization} The organization.
+ */
+function organization(id: string): WorkspaceOrganization {
+  return { id, slug: id, name: id, initials: 'AN', role: 'owner', plan: 'team' };
+}
+
 describe('CommandPaletteStore', () => {
   let search: Mock<(query: string) => Observable<readonly SearchResult[]>>;
+  let current: WritableSignal<WorkspaceOrganization>;
   let store: InstanceType<typeof CommandPaletteStore>;
 
   beforeEach(() => {
     vi.useFakeTimers();
     search = vi.fn(() => of(results));
+    current = signal(organization('atelier-nord'));
     TestBed.configureTestingModule({
-      providers: [CommandPaletteStore, { provide: SearchApi, useValue: { search } }],
+      providers: [
+        CommandPaletteStore,
+        { provide: SearchApi, useValue: { search } },
+        { provide: WORKSPACE_CONTEXT, useValue: { organization: current } },
+      ],
     });
     store = TestBed.inject(CommandPaletteStore);
+    TestBed.tick();
   });
 
   afterEach(() => {
@@ -51,17 +77,24 @@ describe('CommandPaletteStore', () => {
     expect(store.lists().map((list) => list.name)).toEqual(['Sprint 14']);
   });
 
-  it('cancels a running search when the text changes', async () => {
+  it('drops an old answer that arrives inside the next text’s pause', async () => {
     search.mockImplementation((query: string) =>
-      of(query === 'sso' ? results : []).pipe(delay(1_000)),
+      of(query === 'sso' ? results : []).pipe(delay(200)),
     );
     store.search('sso');
     await vi.advanceTimersByTimeAsync(DEBOUNCE_MS + 100);
+    expect(search).toHaveBeenCalledWith('sso');
+
     store.search('zzz');
-    await vi.advanceTimersByTimeAsync(DEBOUNCE_MS + 1_000);
+    expect(store.tasks()).toEqual([]);
+    await vi.advanceTimersByTimeAsync(150);
 
     expect(store.tasks()).toEqual([]);
+    expect(store.loading()).toBe(true);
+    await vi.advanceTimersByTimeAsync(DEBOUNCE_MS + 200);
+    expect(store.loading()).toBe(false);
     expect(store.query()).toBe('zzz');
+    expect(store.tasks()).toEqual([]);
   });
 
   it('clears the results for a blank text without searching', async () => {
@@ -89,5 +122,19 @@ describe('CommandPaletteStore', () => {
     expect(search).toHaveBeenCalledTimes(2);
     expect(store.failed()).toBe(false);
     expect(store.tasks()).toHaveLength(1);
+  });
+
+  it('cancels and clears everything on an organization switch', async () => {
+    search.mockImplementation(() => of(results).pipe(delay(200)));
+    store.search('sso');
+    await vi.advanceTimersByTimeAsync(DEBOUNCE_MS + 100);
+
+    current.set(organization('lumen'));
+    TestBed.tick();
+    await vi.advanceTimersByTimeAsync(500);
+
+    expect(store.query()).toBe('');
+    expect(store.tasks()).toEqual([]);
+    expect(store.loading()).toBe(false);
   });
 });

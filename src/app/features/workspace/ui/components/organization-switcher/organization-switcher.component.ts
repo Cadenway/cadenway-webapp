@@ -1,4 +1,4 @@
-import { Component, inject, input, type InputSignal, type Signal, viewChild } from '@angular/core';
+import { Component, inject, type Signal, viewChild } from '@angular/core';
 import { Router } from '@angular/router';
 import { CwAppRailItem } from '@cadenway/ui/components/app-rail';
 import { CwButton } from '@cadenway/ui/components/button';
@@ -20,6 +20,7 @@ import { planName } from '@features/organization/utils/plan-label';
 import type { OrganizationMenuEntry } from '../../../models/organization-menu-entry/organization-menu-entry.interface';
 import type { WorkspaceRole } from '../../../models/workspace-context/workspace-context.interface';
 import type { WorkspaceContextPort } from '../../../ports/workspace-context/workspace-context-port.interface';
+import { WORKSPACE_CONTEXT } from '../../../ports/workspace-context/workspace-context.token';
 import { OrganizationMenuStore } from '../../../state/organization-menu/organization-menu.store';
 
 /**
@@ -90,11 +91,10 @@ export class OrganizationSwitcher {
    * @description
    * Workspace context whose organization the item shows.
    *
-   * @type {InputSignal<WorkspaceContextPort>}
+   * @type {WorkspaceContextPort}
    * @readonly
    */
-  public readonly workspace: InputSignal<WorkspaceContextPort> =
-    input.required<WorkspaceContextPort>();
+  protected readonly workspace: WorkspaceContextPort = inject(WORKSPACE_CONTEXT);
 
   /**
    * Property store
@@ -155,7 +155,7 @@ export class OrganizationSwitcher {
    * @returns {number | null} The count, or null before the list arrives.
    */
   protected memberCount(): number | null {
-    const id: string = this.workspace().organization().id;
+    const id: string = this.workspace.organization().id;
     return (
       this.store.entries().find((entry: OrganizationMenuEntry) => entry.id === id)?.memberCount ??
       null
@@ -176,7 +176,7 @@ export class OrganizationSwitcher {
     const entry: OrganizationMenuEntry | undefined = this.store
       .entries()
       .find((candidate: OrganizationMenuEntry) => candidate.id === id);
-    if (!entry || entry.id === this.workspace().organization().id) return;
+    if (!entry || entry.id === this.workspace.organization().id) return;
     void this.router.navigateByUrl(workspacePath(entry.slug));
   }
 
@@ -189,7 +189,7 @@ export class OrganizationSwitcher {
    * @param {OrganizationSection} section - Section to open.
    */
   protected open(section: OrganizationSection): void {
-    void this.router.navigate(['/', this.workspace().organization().slug, 'organization', section]);
+    void this.router.navigate(['/', this.workspace.organization().slug, 'organization', section]);
   }
 
   /**

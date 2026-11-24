@@ -23,6 +23,18 @@ export interface PresencePort {
    * @readonly
    */
   readonly ownStatus: Signal<PresenceStatus | null>;
+
+  /**
+   * Property status
+   *
+   * @description
+   * State of the realtime connection; `disabled` when no realtime gateway is configured, in which
+   * case a chosen presence is never sent.
+   *
+   * @type {Signal<'disabled' | 'connecting' | 'connected' | 'reconnecting'>}
+   * @readonly
+   */
+  readonly status: Signal<'disabled' | 'connecting' | 'connected' | 'reconnecting'>;
   // #endregion
 
   // #region Methods
@@ -30,7 +42,8 @@ export interface PresencePort {
    * Method setPresence
    *
    * @description
-   * Chooses a presence and sends it to the gateway; `ownStatus` follows at once.
+   * Chooses a presence and sends it to the gateway; `ownStatus` follows at once, and returns to
+   * the last confirmed presence when the gateway refuses it.
    *
    * @param {PresenceStatus} status - The chosen presence.
    */

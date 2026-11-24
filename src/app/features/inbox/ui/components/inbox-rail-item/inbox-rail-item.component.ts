@@ -1,12 +1,14 @@
 import {
+  afterNextRender,
   Component,
   computed,
+  ElementRef,
   inject,
-  input,
-  type InputSignal,
+  Injector,
   LOCALE_ID,
   type Signal,
   signal,
+  viewChild,
   type WritableSignal,
 } from '@angular/core';
 import { Router } from '@angular/router';
@@ -27,7 +29,10 @@ import { CwToastService } from '@cadenway/ui/components/toast';
 import { NgIcon } from '@ng-icons/core';
 
 import { PRESENCE, type PresencePort } from '@features/account/ports/presence';
-import type { WorkspaceContextPort } from '@features/workspace/ports/workspace-context';
+import {
+  WORKSPACE_CONTEXT,
+  type WorkspaceContextPort,
+} from '@features/workspace/ports/workspace-context';
 
 import type { InboxNotification } from '../../../models/inbox-notification/inbox-notification.interface';
 import type { InboxReminder } from '../../../models/inbox-reminder/inbox-reminder.interface';
@@ -87,11 +92,10 @@ export class InboxRailItem {
    * @description
    * Workspace context whose tasks and home screen the popover opens.
    *
-   * @type {InputSignal<WorkspaceContextPort>}
+   * @type {WorkspaceContextPort}
    * @readonly
    */
-  public readonly workspace: InputSignal<WorkspaceContextPort> =
-    input.required<WorkspaceContextPort>();
+  protected readonly workspace: WorkspaceContextPort = inject(WORKSPACE_CONTEXT);
 
   /**
    * Property store
@@ -182,6 +186,31 @@ export class InboxRailItem {
   private readonly locale: string = inject(LOCALE_ID);
 
   /**
+   * Property injector
+   *
+   * @description
+   * Injector scheduling the focus moves after rendering.
+   *
+   * @type {Injector}
+   * @readonly
+   */
+  private readonly injector: Injector = inject(Injector);
+
+  /**
+   * Property content
+   *
+   * @description
+   * The popover's content, where focus moves after a row or a button disappears.
+   *
+   * @type {Signal<ElementRef<HTMLElement> | undefined>}
+   * @readonly
+   */
+  private readonly content: Signal<ElementRef<HTMLElement> | undefined> = viewChild<
+    string,
+    ElementRef<HTMLElement>
+  >('popoverContent', { read: ElementRef });
+
+  /**
    * Property doNotDisturb
    *
    * @description
@@ -252,12 +281,15 @@ export class InboxRailItem {
    * Method markAllRead
    *
    * @description
-   * Marks every notification read; a refusal shows an error toast.
+   * Marks every notification read; the button then becomes disabled, so focus moves to the
+   * popover's heading. A refusal shows an error toast.
    *
    * @returns {Promise<void>} Resolves once handled.
    */
   protected async markAllRead(): Promise<void> {
-    if (await this.store.markAllRead()) return;
+    const done: Promise<boolean> = this.store.markAllRead();
+    this.focusAfterRender('[data-inbox-heading]');
+    if (await done) return;
     this.failed($localize`:@@inbox.mark-all-failed:The notifications could not be marked as read`);
   }
 
@@ -265,13 +297,17 @@ export class InboxRailItem {
    * Method openNotification
    *
    * @description
-   * Marks the notification read and opens its task, if it has one, closing the popover.
+   * Marks the notification read and opens its task, if it has one, closing the popover. A
+   * refused read shows the inbox's error toast.
    *
    * @param {InboxNotification} notification - The activated notification.
+   * @returns {Promise<void>} Resolves once handled.
    */
-  protected openNotification(notification: InboxNotification): void {
-    void this.store.markRead(notification);
+  protected async openNotification(notification: InboxNotification): Promise<void> {
+    const done: Promise<boolean> = this.store.markRead(notification);
     if (notification.taskKey !== null) this.openTask(notification.taskKey);
+    if (await done) return;
+    this.failed($localize`:@@inbox.mark-read-failed:The notification could not be marked as read`);
   }
 
   /**
@@ -284,7 +320,7 @@ export class InboxRailItem {
    */
   protected openTask(taskKey: string): void {
     this.open.set(false);
-    void this.router.navigate(['/', this.workspace().organization().slug, 't', taskKey]);
+    void this.router.navigate(['/', this.workspace.organization().slug, 't', taskKey]);
   }
 
   /**
@@ -295,7 +331,7 @@ export class InboxRailItem {
    */
   protected openHome(): void {
     this.open.set(false);
-    void this.router.navigate(['/', this.workspace().organization().slug]);
+    void this.router.navigate(['/', this.workspace.organization().slug]);
   }
 
   /**
@@ -323,13 +359,20 @@ export class InboxRailItem {
    * Method complete
    *
    * @description
-   * Marks a reminder done and confirms with a toast.
+   * Marks a reminder done and confirms with a toast. Its row disappears at once, so focus moves to
+   * the row that takes its place, or to the « Rappels » tab when it was the last one.
    *
    * @param {InboxReminder} reminder - The reminder.
    * @returns {Promise<void>} Resolves once handled.
    */
   protected async complete(reminder: InboxReminder): Promise<void> {
-    if (await this.store.complete(reminder)) {
+    const rows: readonly InboxReminder[] = this.store.reminders.hasValue()
+      ? this.store.reminders.value().items
+      : [];
+    const index: number = rows.findIndex((row: InboxReminder) => row.id === reminder.id);
+    const done: Promise<boolean> = this.store.complete(reminder);
+    this.focusAfterRender('', index, '[data-inbox-reminders-tab]');
+    if (await done) {
       this.toasts.success($localize`:@@inbox.reminder.completed:Reminder done`, {
         description: `${reminder.taskKey} · ${reminder.taskName}`,
       });
@@ -337,6 +380,36 @@ export class InboxRailItem {
     }
     this.failed(
       $localize`:@@inbox.reminder.complete-failed:The reminder could not be marked as done`,
+    );
+  }
+
+  /**
+   * Method focusAfterRender
+   *
+   * @description
+   * Once the change is rendered, focuses an element of the popover: the `index`-th row button when
+   * an index is given (the row now at that place, else the previous one), else the fallback.
+   *
+   * @param {string} selector - Element to focus when no index is given.
+   * @param {number} index - Position of the removed row, or -1.
+   * @param {string} fallback - Element to focus when no row is left.
+   */
+  private focusAfterRender(selector: string, index: number = -1, fallback: string = ''): void {
+    afterNextRender(
+      (): void => {
+        const content: HTMLElement | undefined = this.content()?.nativeElement;
+        if (!content) return;
+        if (index < 0) {
+          content.querySelector<HTMLElement>(selector)?.focus();
+          return;
+        }
+        const buttons: HTMLElement[] = Array.from(
+          content.querySelectorAll<HTMLElement>('[data-testid="reminder-row"] > button'),
+        );
+        const row: HTMLElement | undefined = buttons.at(Math.min(index, buttons.length - 1));
+        (row ?? content.querySelector<HTMLElement>(fallback))?.focus();
+      },
+      { injector: this.injector },
     );
   }
 

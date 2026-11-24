@@ -90,7 +90,18 @@
         <ng-icon name="phosphorGearSixBold" class="text-muted-foreground" aria-hidden="true" />
         <span i18n="@@search.palette.organization">Organization settings</span>
         <span class="ml-auto text-xs text-muted-foreground">{{
-          workspace().organization().name
+          workspace.organization().name
+        }}</span>
+      </cw-command-item>
+      <cw-command-item
+        value="Billing and quotas"
+        i18n-value="@@search.palette.billing"
+        (selected)="go(['organization', 'billing'])"
+      >
+        <ng-icon name="phosphorCreditCardBold" class="text-muted-foreground" aria-hidden="true" />
+        <span i18n="@@search.palette.billing">Billing and quotas</span>
+        <span class="ml-auto text-xs text-muted-foreground">{{
+          workspace.organization().name
         }}</span>
       </cw-command-item>
       <cw-command-item
@@ -107,21 +118,13 @@
       </cw-command-item>
     </cw-command-group>
     <cw-command-group heading="Actions" i18n-heading="@@search.palette.actions">
-      <cw-command-item
-        value="Switch to the light theme"
-        i18n-value="@@search.palette.theme-light"
-        (selected)="setTheme('light')"
-      >
-        <ng-icon name="phosphorSunBold" class="text-muted-foreground" aria-hidden="true" />
-        <span i18n="@@search.palette.theme-light">Switch to the light theme</span>
-      </cw-command-item>
-      <cw-command-item
-        value="Switch to the dark theme"
-        i18n-value="@@search.palette.theme-dark"
-        (selected)="setTheme('dark')"
-      >
-        <ng-icon name="phosphorMoonBold" class="text-muted-foreground" aria-hidden="true" />
-        <span i18n="@@search.palette.theme-dark">Switch to the dark theme</span>
+      <cw-command-item [value]="themeLabel()" (selected)="toggleTheme()">
+        <ng-icon
+          [name]="darkTheme() ? 'phosphorSunBold' : 'phosphorMoonBold'"
+          class="text-muted-foreground"
+          aria-hidden="true"
+        />
+        <span>{{ themeLabel() }}</span>
       </cw-command-item>
       <cw-command-item value="Sign out" i18n-value="@@search.palette.sign-out" (selected)="leave()">
         <ng-icon name="phosphorSignOutBold" class="text-muted-foreground" aria-hidden="true" />

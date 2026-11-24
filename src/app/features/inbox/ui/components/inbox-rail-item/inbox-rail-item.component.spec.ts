@@ -7,10 +7,14 @@ import { of } from 'rxjs';
 import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 
 import { PRESENCE, type PresenceStatus } from '@features/account/ports/presence';
-import type { WorkspaceContextPort } from '@features/workspace/ports/workspace-context';
+import {
+  WORKSPACE_CONTEXT,
+  type WorkspaceContextPort,
+} from '@features/workspace/ports/workspace-context';
 
 import { InboxApi } from '../../../data-access/services/inbox-api/inbox-api.service';
 import type { InboxNotificationPage } from '../../../models/inbox-notification/inbox-notification.interface';
+import type { InboxReminderPage } from '../../../models/inbox-reminder/inbox-reminder.interface';
 import { InboxRailItem } from './inbox-rail-item.component';
 
 /**
@@ -70,16 +74,52 @@ function page(): InboxNotificationPage {
   };
 }
 
+/**
+ * Function reminderPage
+ *
+ * @description
+ * Two pending reminders of the mockup.
+ *
+ * @returns {InboxReminderPage} The page.
+ */
+function reminderPage(): InboxReminderPage {
+  return {
+    pendingCount: 2,
+    items: [
+      {
+        id: 'r0',
+        taskKey: 'CAD-479',
+        taskName: 'Prévenir le support',
+        remindAt: '2026-11-08T08:00:00Z',
+        note: null,
+      },
+      {
+        id: 'r1',
+        taskKey: 'CAD-488',
+        taskName: 'Maquettes',
+        remindAt: '2099-11-08T14:00:00Z',
+        note: null,
+      },
+    ],
+  };
+}
+
 describe('InboxRailItem', () => {
   let status: WritableSignal<PresenceStatus>;
   let notifications: Mock<() => Promise<InboxNotificationPage>>;
   let navigate: Mock<(commands: readonly unknown[]) => Promise<boolean>>;
+  let markRead: Mock<() => Promise<void>>;
+  let complete: Mock<() => Promise<void>>;
+  let error: Mock;
   let fixture: ComponentFixture<InboxRailItem>;
 
   beforeEach(async () => {
     status = signal<PresenceStatus>('online');
     notifications = vi.fn(() => Promise.resolve(page()));
     navigate = vi.fn(() => Promise.resolve(true));
+    markRead = vi.fn(() => Promise.resolve());
+    complete = vi.fn(() => Promise.resolve());
+    error = vi.fn();
     TestBed.configureTestingModule({
       imports: [InboxRailItem],
       providers: [
@@ -88,19 +128,20 @@ describe('InboxRailItem', () => {
           useValue: {
             unreadCount: () => of(1),
             notifications,
-            pendingReminders: () => Promise.resolve({ items: [], pendingCount: 0 }),
+            pendingReminders: () => Promise.resolve(reminderPage()),
             markAllRead: () => Promise.resolve(0),
-            markRead: () => Promise.resolve(),
+            markRead,
+            complete,
           },
         },
         { provide: PRESENCE, useValue: { ownStatus: status, setPresence: vi.fn() } },
+        { provide: WORKSPACE_CONTEXT, useValue: workspace },
         { provide: Router, useValue: { navigate } },
-        { provide: CwToastService, useValue: { error: vi.fn(), success: vi.fn() } },
+        { provide: CwToastService, useValue: { error, success: vi.fn() } },
         provideCadenwayIcons(),
       ],
     });
     fixture = TestBed.createComponent(InboxRailItem);
-    fixture.componentRef.setInput('workspace', workspace);
     await fixture.whenStable();
   });
 
@@ -154,7 +195,7 @@ describe('InboxRailItem', () => {
   it('lists the notifications, marks them all read and clears the badge', async () => {
     const content: HTMLElement = await openPopover();
     expect(content.textContent).toContain('Inès Robert');
-    expect(content.textContent).toContain('vous a mentionnée');
+    expect(content.textContent).toContain('a mentionné votre nom');
     expect(content.textContent).toContain('12 min');
 
     const markAll: HTMLButtonElement | undefined = Array.from(
@@ -165,6 +206,7 @@ describe('InboxRailItem', () => {
 
     expect(content.querySelector('[aria-label="Non lu"]')).toBeNull();
     expect(markAll?.disabled).toBe(true);
+    expect(document.activeElement?.hasAttribute('data-inbox-heading')).toBe(true);
     expect(trigger().textContent).not.toContain('1 non lues');
   });
 
@@ -174,6 +216,47 @@ describe('InboxRailItem', () => {
     content.querySelector<HTMLButtonElement>('[data-testid="notification-row"]')?.click();
 
     expect(navigate).toHaveBeenCalledWith(['/', 'atelier-nord', 't', 'CAD-482']);
+  });
+
+  it('reports a refused read of an opened notification', async () => {
+    markRead.mockRejectedValueOnce(new Error('unavailable'));
+    const content: HTMLElement = await openPopover();
+
+    content.querySelector<HTMLButtonElement>('[data-testid="notification-row"]')?.click();
+
+    await vi.waitFor(() => {
+      expect(error).toHaveBeenCalledWith(
+        'Impossible de marquer la notification comme lue',
+        expect.anything(),
+      );
+    });
+  });
+
+  it('moves focus to the next reminder, then to the tab, as they are completed', async () => {
+    await openPopover();
+    Array.from(document.querySelectorAll<HTMLButtonElement>('[role="tab"]'))
+      .find((tab: HTMLButtonElement) => tab.textContent.includes('Rappels'))
+      ?.click();
+    await fixture.whenStable();
+    const done: () => HTMLButtonElement | undefined = (): HTMLButtonElement | undefined =>
+      document.querySelector<HTMLButtonElement>(
+        '[data-testid="reminder-row"] button[aria-label^="Marquer le rappel"]',
+      ) ?? undefined;
+
+    done()?.click();
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      expect(
+        document.activeElement?.closest('[data-testid="reminder-row"]')?.textContent,
+      ).toContain('CAD-488');
+    });
+
+    done()?.click();
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      expect(document.activeElement?.hasAttribute('data-inbox-reminders-tab')).toBe(true);
+    });
+    expect(complete).toHaveBeenCalledTimes(2);
   });
 
   it('shows the do-not-disturb notice', async () => {

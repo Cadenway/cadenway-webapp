@@ -1,6 +1,12 @@
+import { signal, type WritableSignal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { type Observable, of, throwError } from 'rxjs';
 import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
+
+import {
+  WORKSPACE_CONTEXT,
+  type WorkspaceOrganization,
+} from '@features/workspace/ports/workspace-context';
 
 import { InboxApi } from '../../data-access/services/inbox-api/inbox-api.service';
 import type {
@@ -76,6 +82,101 @@ function reminderAt(index: number): InboxReminder {
   const reminder: InboxReminder | undefined = reminders.items.at(index);
   if (reminder === undefined) throw new Error('No reminder');
   return reminder;
+}
+
+/**
+ * Constant other
+ *
+ * @description
+ * A second unread notification, a comment on CAD-475.
+ *
+ * @type {InboxNotification}
+ */
+const other: InboxNotification = {
+  ...mention,
+  id: 'n2',
+  kind: 'comment',
+  taskKey: 'CAD-475',
+  excerpt: null,
+};
+
+/**
+ * Interface Deferred
+ *
+ * @description
+ * A promise settled by the test, to order overlapping writes.
+ *
+ * @template T
+ */
+interface Deferred<T> {
+  // #region Properties
+  /**
+   * Property promise
+   *
+   * @description
+   * The pending promise.
+   *
+   * @type {Promise<T>}
+   * @readonly
+   */
+  readonly promise: Promise<T>;
+
+  /**
+   * Property resolve
+   *
+   * @description
+   * Fulfils the promise.
+   *
+   * @type {(value: T) => void}
+   * @readonly
+   */
+  readonly resolve: (value: T) => void;
+
+  /**
+   * Property reject
+   *
+   * @description
+   * Rejects the promise.
+   *
+   * @type {(error: Error) => void}
+   * @readonly
+   */
+  readonly reject: (error: Error) => void;
+  // #endregion
+}
+
+/**
+ * Function deferred
+ *
+ * @description
+ * Creates a promise the test settles.
+ *
+ * @template T
+ * @returns {Deferred<T>} The promise and its settlers.
+ */
+function deferred<T>(): Deferred<T> {
+  let resolve: (value: T) => void = (): void => undefined;
+  let reject: (error: Error) => void = (): void => undefined;
+  const promise: Promise<T> = new Promise<T>(
+    (done: (value: T) => void, fail: (error: Error) => void) => {
+      resolve = done;
+      reject = fail;
+    },
+  );
+  return { promise, resolve, reject };
+}
+
+/**
+ * Function workspaceOrganization
+ *
+ * @description
+ * An organization as the workspace port shows it.
+ *
+ * @param {string} id - Organization id.
+ * @returns {WorkspaceOrganization} The organization.
+ */
+function workspaceOrganization(id: string): WorkspaceOrganization {
+  return { id, slug: id, name: id, initials: 'AN', role: 'owner', plan: 'team' };
 }
 
 /**
@@ -167,6 +268,7 @@ interface InboxApiFake {
 
 describe('InboxStore', () => {
   let api: InboxApiFake;
+  let current: WritableSignal<WorkspaceOrganization>;
 
   beforeEach(() => {
     vi.useFakeTimers();
@@ -179,8 +281,13 @@ describe('InboxStore', () => {
       snooze: vi.fn(() => Promise.resolve({})),
       complete: vi.fn(() => Promise.resolve()),
     };
+    current = signal(workspaceOrganization('atelier-nord'));
     TestBed.configureTestingModule({
-      providers: [InboxStore, { provide: InboxApi, useValue: api }],
+      providers: [
+        InboxStore,
+        { provide: InboxApi, useValue: api },
+        { provide: WORKSPACE_CONTEXT, useValue: { organization: current } },
+      ],
     });
   });
 
@@ -198,6 +305,7 @@ describe('InboxStore', () => {
    */
   async function opened(): Promise<InstanceType<typeof InboxStore>> {
     const store: InstanceType<typeof InboxStore> = TestBed.inject(InboxStore);
+    TestBed.tick();
     store.open();
     await vi.waitFor(() => {
       TestBed.tick();
@@ -208,6 +316,7 @@ describe('InboxStore', () => {
 
   it('polls the unread count at once, every minute and when the window regains focus', async () => {
     const store: InstanceType<typeof InboxStore> = TestBed.inject(InboxStore);
+    TestBed.tick();
     await vi.advanceTimersByTimeAsync(0);
     expect(store.unreadCount()).toBe(1);
 
@@ -223,6 +332,7 @@ describe('InboxStore', () => {
 
   it('keeps the last count when a poll fails', async () => {
     const store: InstanceType<typeof InboxStore> = TestBed.inject(InboxStore);
+    TestBed.tick();
     await vi.advanceTimersByTimeAsync(0);
     api.unreadCount.mockReturnValue(throwError(() => new Error('unavailable')));
     await vi.advanceTimersByTimeAsync(POLL_MS);
@@ -290,5 +400,133 @@ describe('InboxStore', () => {
 
     expect(api.snooze).toHaveBeenCalledWith('r0', '2026-11-09T08:00:00Z');
     expect(store.reminders.value()?.items.map((item) => item.id)).toEqual(['r1', 'r0']);
+  });
+
+  /**
+   * Function openedWithTwo
+   *
+   * @description
+   * Opens the popover on two unread notifications.
+   *
+   * @returns {Promise<InstanceType<typeof InboxStore>>} The store.
+   */
+  async function openedWithTwo(): Promise<InstanceType<typeof InboxStore>> {
+    api.notifications.mockResolvedValue({ items: [mention, other], unreadCount: 2 });
+    api.unreadCount.mockReturnValue(of(2));
+    return opened();
+  }
+
+  /**
+   * Function readIds
+   *
+   * @description
+   * Ids of the notifications shown read.
+   *
+   * @param {InstanceType<typeof InboxStore>} store - The store.
+   * @returns {string[]} The read ids.
+   */
+  function readIds(store: InstanceType<typeof InboxStore>): string[] {
+    return (store.notifications.value()?.items ?? [])
+      .filter((item: InboxNotification) => item.read)
+      .map((item: InboxNotification) => item.id);
+  }
+
+  it('keeps a notification read when its own write fails after mark-all succeeded', async () => {
+    const store: InstanceType<typeof InboxStore> = await openedWithTwo();
+    const single: Deferred<undefined> = deferred<undefined>();
+    api.markRead.mockReturnValueOnce(single.promise.then((): void => undefined));
+
+    const one: Promise<boolean> = store.markRead(mention);
+    await expect(store.markAllRead()).resolves.toBe(true);
+    single.reject(new Error('unavailable'));
+
+    await expect(one).resolves.toBe(false);
+    expect(readIds(store)).toEqual(['n1', 'n2']);
+    expect(store.unreadCount()).toBe(0);
+  });
+
+  it('keeps a notification read when its own write fails while mark-all is pending', async () => {
+    const store: InstanceType<typeof InboxStore> = await openedWithTwo();
+    const all: Deferred<number> = deferred<number>();
+    api.markAllRead.mockReturnValueOnce(all.promise);
+    api.markRead.mockRejectedValueOnce(new Error('unavailable'));
+
+    const everything: Promise<boolean> = store.markAllRead();
+    await expect(store.markRead(mention)).resolves.toBe(false);
+    expect(readIds(store)).toEqual(['n1', 'n2']);
+    all.resolve(0);
+
+    await expect(everything).resolves.toBe(true);
+    expect(store.unreadCount()).toBe(0);
+  });
+
+  it('restores only the others when mark-all fails after one was confirmed', async () => {
+    const store: InstanceType<typeof InboxStore> = await openedWithTwo();
+    const all: Deferred<number> = deferred<number>();
+    api.markAllRead.mockReturnValueOnce(all.promise);
+
+    await expect(store.markRead(mention)).resolves.toBe(true);
+    const everything: Promise<boolean> = store.markAllRead();
+    all.reject(new Error('unavailable'));
+
+    await expect(everything).resolves.toBe(false);
+    expect(readIds(store)).toEqual(['n1']);
+    expect(store.unreadCount()).toBe(1);
+  });
+
+  it('restores only the others when mark-all fails while one is pending, which then succeeds', async () => {
+    const store: InstanceType<typeof InboxStore> = await openedWithTwo();
+    const single: Deferred<undefined> = deferred<undefined>();
+    api.markRead.mockReturnValueOnce(single.promise.then((): void => undefined));
+    api.markAllRead.mockRejectedValueOnce(new Error('unavailable'));
+
+    const one: Promise<boolean> = store.markRead(mention);
+    await expect(store.markAllRead()).resolves.toBe(false);
+    expect(readIds(store)).toEqual(['n1']);
+    expect(store.unreadCount()).toBe(1);
+    single.resolve(undefined);
+
+    await expect(one).resolves.toBe(true);
+    expect(readIds(store)).toEqual(['n1']);
+    expect(store.unreadCount()).toBe(1);
+  });
+
+  it('drops a poll answer that began before mark-all, so the badge stays clear', async () => {
+    const store: InstanceType<typeof InboxStore> = await openedWithTwo();
+    const late: Deferred<number> = deferred<number>();
+    api.unreadCount.mockReturnValueOnce(
+      new (await import('rxjs')).Observable<number>((subscriber) => {
+        void late.promise.then((count: number) => {
+          subscriber.next(count);
+          subscriber.complete();
+        });
+      }),
+    );
+    await vi.advanceTimersByTimeAsync(POLL_MS);
+
+    await store.markAllRead();
+    late.resolve(2);
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(store.unreadCount()).toBe(0);
+  });
+
+  it('clears everything and polls the new organization on a switch, ignoring the old answers', async () => {
+    const store: InstanceType<typeof InboxStore> = await openedWithTwo();
+    const all: Deferred<number> = deferred<number>();
+    api.markAllRead.mockReturnValueOnce(all.promise);
+    const everything: Promise<boolean> = store.markAllRead();
+    api.unreadCount.mockReturnValue(of(5));
+
+    current.set(workspaceOrganization('lumen'));
+    TestBed.tick();
+    expect(store.notifications.hasValue()).toBe(false);
+    expect(store.reminders.hasValue()).toBe(false);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(store.unreadCount()).toBe(5);
+
+    all.reject(new Error('unavailable'));
+    await everything;
+    expect(store.unreadCount()).toBe(5);
   });
 });

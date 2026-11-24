@@ -37,7 +37,12 @@ Until then the menu's links open the 404 inside the shell.
   Workspace's runtime on `/:org`). `ownStatus` is null until the person chooses a presence in this
   tab, since the gateway keeps the saved preference and `hello` does not return it: until then the
   rail button names the person only, the presence dots are hidden and « Statut » checks nothing.
-- Choosing a presence closes the menu and confirms with the toast « Statut : <presence> ».
+- Choosing a presence closes the menu and confirms with the toast « Statut : <presence> ». When the
+  gateway refuses it and `ownStatus` returns to the confirmed value, an error toast says so.
+- When realtime is disabled (`status()` is `disabled`, no `realtimeUrl`), « Statut » is disabled with
+  « Indisponible » and nothing is set or confirmed.
+- The menu is a slot contribution acting as a container: it injects `WORKSPACE_CONTEXT`, `PRESENCE`,
+  the router and the toasts; `PresenceDot` stays presentational.
 - The theme submenu drives `ThemeService`; the transition spreads from the account button.
 - A refused sign-out keeps the page and shows an error toast.
 - Known gap: « Définir un message de statut » and the status message under the header are left out,
@@ -45,7 +50,10 @@ Until then the menu's links open the 404 inside the shell.
 
 ## Copy not taken word for word from the mockup
 
-| Unit                                                                          | Reason                                       |
-| ----------------------------------------------------------------------------- | -------------------------------------------- |
-| `account.user-menu.sign-out-failed`, `account.user-menu.sign-out-failed-text` | The mockup draws no refused sign-out.        |
-| `account.user-menu.avatar-*`                                                  | The avatar brick's texts, not in the mockup. |
+| Unit                                                                                                                                        | Reason                                                                            |
+| ------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| `account.user-menu.label-no-status`                                                                                                         | The mockup always knows the presence; here it is unknown until chosen in the tab. |
+| `account.user-menu.status-unavailable`                                                                                                      | The mockup has no state without realtime.                                         |
+| `account.user-menu.status-failed`, `account.user-menu.status-failed-text`                                                                   | The mockup draws no refused presence.                                             |
+| `account.user-menu.sign-out-failed`, `account.user-menu.sign-out-failed-text`                                                               | The mockup draws no refused sign-out.                                             |
+| `account.user-menu.avatar-unknown`, `account.user-menu.avatar-online`, `account.user-menu.avatar-away`, `account.user-menu.avatar-disabled` | Texts of the avatar brick, taken from its French defaults.                        |

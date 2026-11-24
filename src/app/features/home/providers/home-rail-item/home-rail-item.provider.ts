@@ -1,7 +1,4 @@
-import { inject } from '@angular/core';
 import type { SlotContribution, SlotFeature } from '@shared/layout-slot';
-
-import { WORKSPACE_CONTEXT } from '@features/workspace/ports/workspace-context';
 
 import { HomeRailItem } from '../../ui/components/home-rail-item/home-rail-item.component';
 
@@ -20,7 +17,6 @@ export function withHomeRailItem(): SlotFeature<SlotContribution> {
       id: 'home.rail-item',
       order: 0,
       component: HomeRailItem,
-      inputs: { workspace: inject(WORKSPACE_CONTEXT) },
     }),
   };
 }

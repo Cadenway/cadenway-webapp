@@ -1,8 +1,11 @@
-import { Component, computed, input, type InputSignal, type Signal } from '@angular/core';
+import { Component, inject, computed, type Signal } from '@angular/core';
 import { RouterLink, RouterLinkActive } from '@angular/router';
 import { CwAppRailGroup, CwAppRailItem } from '@cadenway/ui/components/app-rail';
 
-import type { WorkspaceContextPort } from '@features/workspace/ports/workspace-context';
+import {
+  WORKSPACE_CONTEXT,
+  type WorkspaceContextPort,
+} from '@features/workspace/ports/workspace-context';
 
 /**
  * Component HomeRailItem
@@ -43,11 +46,10 @@ export class HomeRailItem {
    * @description
    * Workspace context whose home screen the item opens.
    *
-   * @type {InputSignal<WorkspaceContextPort>}
+   * @type {WorkspaceContextPort}
    * @readonly
    */
-  public readonly workspace: InputSignal<WorkspaceContextPort> =
-    input.required<WorkspaceContextPort>();
+  protected readonly workspace: WorkspaceContextPort = inject(WORKSPACE_CONTEXT);
 
   /**
    * Property link
@@ -59,7 +61,7 @@ export class HomeRailItem {
    * @readonly
    */
   protected readonly link: Signal<string> = computed(
-    (): string => `/${this.workspace().organization().slug}`,
+    (): string => `/${this.workspace.organization().slug}`,
   );
   // #endregion
 }

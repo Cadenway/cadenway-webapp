@@ -1,12 +1,4 @@
-import {
-  Component,
-  computed,
-  DestroyRef,
-  inject,
-  input,
-  type InputSignal,
-  type Signal,
-} from '@angular/core';
+import { Component, computed, DestroyRef, inject, type Signal } from '@angular/core';
 import { Router } from '@angular/router';
 import { CwButton } from '@cadenway/ui/components/button';
 import {
@@ -28,7 +20,10 @@ import { NgIcon } from '@ng-icons/core';
 import { ShortcutsService } from '@core/shortcuts';
 import { ThemeService } from '@core/theme';
 import { SignOut } from '@features/auth';
-import type { WorkspaceContextPort } from '@features/workspace/ports/workspace-context';
+import {
+  WORKSPACE_CONTEXT,
+  type WorkspaceContextPort,
+} from '@features/workspace/ports/workspace-context';
 
 import type {
   ListSearchResult,
@@ -137,11 +132,10 @@ export class CommandPaletteDialog {
    * @description
    * Workspace context whose organization the palette's addresses and history belong to.
    *
-   * @type {InputSignal<WorkspaceContextPort>}
+   * @type {WorkspaceContextPort}
    * @readonly
    */
-  public readonly workspace: InputSignal<WorkspaceContextPort> =
-    input.required<WorkspaceContextPort>();
+  protected readonly workspace: WorkspaceContextPort = inject(WORKSPACE_CONTEXT);
 
   /**
    * Property filter
@@ -243,16 +237,45 @@ export class CommandPaletteDialog {
   private readonly toasts: CwToastService = inject(CwToastService);
 
   /**
+   * Property darkTheme
+   *
+   * @description
+   * Whether the effective theme is dark.
+   *
+   * @type {Signal<boolean>}
+   * @readonly
+   */
+  protected readonly darkTheme: Signal<boolean> = computed(
+    (): boolean => this.theme.resolved() === 'dark',
+  );
+
+  /**
+   * Property themeLabel
+   *
+   * @description
+   * The theme action, named after the theme it switches to.
+   *
+   * @type {Signal<string>}
+   * @readonly
+   */
+  protected readonly themeLabel: Signal<string> = computed((): string =>
+    this.darkTheme()
+      ? $localize`:@@search.palette.theme-light:Switch to the light theme`
+      : $localize`:@@search.palette.theme-dark:Switch to the dark theme`,
+  );
+
+  /**
    * Property recent
    *
    * @description
-   * Recent tasks of the current organization.
+   * Recent tasks of the person in the current organization.
    *
    * @type {Signal<readonly TaskSearchResult[]>}
    * @readonly
    */
   protected readonly recent: Signal<readonly TaskSearchResult[]> = computed(
-    (): readonly TaskSearchResult[] => this.recentTasks.list(this.workspace().organization().id),
+    (): readonly TaskSearchResult[] =>
+      this.recentTasks.list(this.workspace.user().id, this.workspace.organization().id),
   );
   // #endregion
 
@@ -289,7 +312,7 @@ export class CommandPaletteDialog {
    * @param {TaskSearchResult} task - The chosen task.
    */
   protected openTask(task: TaskSearchResult): void {
-    this.recentTasks.remember(this.workspace().organization().id, task);
+    this.recentTasks.remember(this.workspace.user().id, this.workspace.organization().id, task);
     this.go(['t', task.key]);
   }
 
@@ -315,7 +338,7 @@ export class CommandPaletteDialog {
    */
   protected go(segments: readonly string[]): void {
     this.palette.setOpen(false);
-    void this.router.navigate(['/', this.workspace().organization().slug, ...segments]);
+    void this.router.navigate(['/', this.workspace.organization().slug, ...segments]);
   }
 
   /**
@@ -330,16 +353,14 @@ export class CommandPaletteDialog {
   }
 
   /**
-   * Method setTheme
+   * Method toggleTheme
    *
    * @description
-   * Closes the palette and applies a theme.
-   *
-   * @param {'light' | 'dark'} theme - The chosen theme.
+   * Closes the palette and switches to the other theme, as the mockup's one theme action does.
    */
-  protected setTheme(theme: 'light' | 'dark'): void {
+  protected toggleTheme(): void {
     this.palette.setOpen(false);
-    this.theme.set(theme);
+    this.theme.toggle();
   }
 
   /**

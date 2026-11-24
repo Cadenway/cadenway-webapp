@@ -1,7 +1,4 @@
-import { inject } from '@angular/core';
 import type { SlotContribution, SlotFeature } from '@shared/layout-slot';
-
-import { WORKSPACE_CONTEXT } from '@features/workspace/ports/workspace-context';
 
 import { InboxRailItem } from '../../ui/components/inbox-rail-item/inbox-rail-item.component';
 
@@ -21,7 +18,6 @@ export function withInbox(): SlotFeature<SlotContribution> {
       id: 'inbox.rail-item',
       order: 10,
       component: InboxRailItem,
-      inputs: { workspace: inject(WORKSPACE_CONTEXT) },
     }),
   };
 }

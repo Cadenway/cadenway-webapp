@@ -1,3 +1,4 @@
+import { HttpErrorResponse } from '@angular/common/http';
 import { signal, type Type } from '@angular/core';
 import { type ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
@@ -12,6 +13,7 @@ import {
 
 import { BillingApi } from '../../../data-access/services/billing-api/billing-api.service';
 import type { OrganizationSubscription } from '../../../models/organization-subscription/organization-subscription.interface';
+import { SubscriptionStore } from '../../../state/subscription/subscription.store';
 import { PlanSummary } from '../plan-summary/plan-summary.component';
 import { StorageBanner } from './storage-banner.component';
 
@@ -90,6 +92,7 @@ async function render<T>(
       provideCadenwayIcons(),
       { provide: WORKSPACE_CONTEXT, useValue: workspaceAs(role) },
       { provide: BillingApi, useValue: { subscription } },
+      SubscriptionStore,
     ],
   });
   const fixture: ComponentFixture<T> = TestBed.createComponent(component);
@@ -99,6 +102,22 @@ async function render<T>(
   });
   await fixture.whenStable();
   return fixture;
+}
+
+/**
+ * Function httpError
+ *
+ * @description
+ * A Billing refusal as the generated client rejects it: an `Error` whose cause is the HTTP
+ * response, as Angular's resource wraps it.
+ *
+ * @param {number} status - HTTP status.
+ * @returns {Error} The rejection.
+ */
+function httpError(status: number): Error {
+  return new Error('Billing refused', {
+    cause: new HttpErrorResponse({ status, url: '/v1/billing/subscription' }),
+  });
 }
 
 describe('StorageBanner', () => {
@@ -178,13 +197,50 @@ describe('PlanSummary', () => {
     expect(link?.getAttribute('href')).toBe('/atelier-nord/organization/billing');
   });
 
-  it('shows nothing when Billing fails', async () => {
+  it('offers Réessayer when Billing fails, and shows the plan once it answers', async () => {
+    const subscription: Mock<() => Promise<OrganizationSubscription>> = vi.fn(() =>
+      Promise.reject(httpError(503)),
+    );
+    const fixture: ComponentFixture<PlanSummary> = await render(PlanSummary, 'owner', subscription);
+    const host: HTMLElement = fixture.nativeElement as HTMLElement;
+    await vi.waitFor(async () => {
+      await fixture.whenStable();
+      expect(host.textContent).toContain('Impossible de charger le plan.');
+    });
+
+    subscription.mockResolvedValueOnce(usage(1));
+    Array.from(host.querySelectorAll('button'))
+      .find((button: HTMLButtonElement) => button.textContent.trim() === 'Réessayer')
+      ?.click();
+
+    await vi.waitFor(async () => {
+      await fixture.whenStable();
+      expect(host.querySelector('a')?.textContent.trim()).toBe('Plan Équipe · 18 / 25 sièges');
+    });
+    expect(subscription).toHaveBeenCalledTimes(2);
+  });
+
+  it('stays silent when Billing refuses with 403', async () => {
     const fixture: ComponentFixture<PlanSummary> = await render(
       PlanSummary,
       'owner',
-      vi.fn(() => Promise.reject(new Error('unavailable'))),
+      vi.fn(() => Promise.reject(httpError(403))),
     );
+    await fixture.whenStable();
 
-    expect((fixture.nativeElement as HTMLElement).querySelector('a')).toBeNull();
+    expect((fixture.nativeElement as HTMLElement).textContent.trim()).toBe('');
+  });
+
+  it('shares one Billing request with the banner', async () => {
+    const subscription: Mock<() => Promise<OrganizationSubscription>> = vi.fn(() =>
+      Promise.resolve(usage(95_000_000_000)),
+    );
+    const fixture: ComponentFixture<PlanSummary> = await render(PlanSummary, 'owner', subscription);
+    const banner: ComponentFixture<StorageBanner> = TestBed.createComponent(StorageBanner);
+    await banner.whenStable();
+    await fixture.whenStable();
+
+    expect(subscription).toHaveBeenCalledOnce();
+    expect((banner.nativeElement as HTMLElement).textContent).toContain('Stockage presque plein');
   });
 });

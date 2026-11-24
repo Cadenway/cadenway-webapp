@@ -5,7 +5,11 @@ import { provideCadenwayIcons } from '@cadenway/icons';
 import { providePresence, withUserMenu } from '@features/account/providers';
 import { withHomeRailItem } from '@features/home/providers';
 import { withInbox } from '@features/inbox/providers';
-import { withPlanSummary, withStorageBanner } from '@features/organization/providers';
+import {
+  provideOrganizationUsage,
+  withPlanSummary,
+  withStorageBanner,
+} from '@features/organization/providers';
 import {
   withCommandPalette,
   withSearchButton,
@@ -65,6 +69,7 @@ export const WORKSPACE_ROUTES: Routes = [
       provideWorkspaceContext(),
       ...provideWorkspaceRuntime(),
       providePresence(),
+      provideOrganizationUsage(),
       provideAppShellSlots({
         banners: [withStorageBanner()],
         organizationSwitcher: [withOrganizationSwitcher()],

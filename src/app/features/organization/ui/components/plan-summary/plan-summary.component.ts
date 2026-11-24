@@ -1,5 +1,6 @@
 import { Component, computed, inject, type Signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
+import { CwButton } from '@cadenway/ui/components/button';
 import { NgIcon } from '@ng-icons/core';
 
 import {
@@ -17,13 +18,14 @@ import { planName } from '../../../utils/plan-label/plan-label.util';
  * @description
  * The « Plan Équipe · 18 / 25 sièges » line of the sidebar footer (mockup `App.dc.html` line
  * 263), linking to `/<slug>/organization/billing`. It shows once Billing answered, which it does
- * for an owner only; nothing shows before, after a failure, or for anyone else. It provides its
- * own `SubscriptionStore` and is a `sidebarFooter` slot contribution.
+ * for an owner only; nothing shows before the answer, after a `403` or a `404`, or for anyone
+ * else. Any other failure shows an inline error with « Réessayer », which reads the subscription
+ * again. It reads the `SubscriptionStore` of the `/:org` route and is a `sidebarFooter` slot
+ * contribution.
  */
 @Component({
   selector: 'cw-plan-summary',
-  imports: [NgIcon, RouterLink],
-  providers: [SubscriptionStore],
+  imports: [CwButton, NgIcon, RouterLink],
   host: { class: 'contents' },
   template: `
     @if (store.current(); as subscription) {
@@ -35,6 +37,28 @@ import { planName } from '../../../utils/plan-label/plan-label.util';
         <ng-icon name="phosphorUsersThreeBold" class="size-3.5" aria-hidden="true" />
         {{ label(subscription) }}
       </a>
+    } @else if (store.failed()) {
+      <div class="flex items-center gap-1.5 text-xs text-muted-foreground" role="alert">
+        <ng-icon
+          name="phosphorWarningCircleBold"
+          class="size-3.5 text-destructive"
+          aria-hidden="true"
+        />
+        <span class="min-w-0 flex-1 truncate" i18n="@@organization.plan-summary.failed"
+          >The plan could not be loaded.</span
+        >
+        <button
+          cwButton
+          type="button"
+          variant="ghost"
+          size="sm"
+          class="h-6 px-1.5 text-xs"
+          (click)="store.retry()"
+          i18n="@@organization.retry"
+        >
+          Retry
+        </button>
+      </div>
     }
   `,
 })

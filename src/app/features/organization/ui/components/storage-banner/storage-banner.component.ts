@@ -40,12 +40,11 @@ const GIGABYTE: number = 1_000_000_000;
  * used and included gigabytes, « Plus tard » and the close button (both hide it for this browser
  * tab's session and this organization) and « Gérer les quotas », which opens
  * `/<slug>/organization/quotas`. Billing answers an owner only, so nobody else sees it. It
- * provides its own `SubscriptionStore` and is a `banners` slot contribution.
+ * reads the `SubscriptionStore` of the `/:org` route and is a `banners` slot contribution.
  */
 @Component({
   selector: 'cw-storage-banner',
   imports: [CwBanner, CwBannerActions, CwButton, RouterLink],
-  providers: [SubscriptionStore],
   templateUrl: './storage-banner.component.html',
 })
 export class StorageBanner {

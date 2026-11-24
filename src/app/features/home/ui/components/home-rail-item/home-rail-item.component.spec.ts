@@ -5,7 +5,10 @@ import { RouterTestingHarness } from '@angular/router/testing';
 import { provideCadenwayIcons } from '@cadenway/icons';
 import { describe, expect, it } from 'vitest';
 
-import type { WorkspaceContextPort } from '@features/workspace/ports/workspace-context';
+import {
+  WORKSPACE_CONTEXT,
+  type WorkspaceContextPort,
+} from '@features/workspace/ports/workspace-context';
 
 import { HomeRailItem } from './home-rail-item.component';
 
@@ -47,28 +50,16 @@ const workspace: WorkspaceContextPort = {
 @Component({
   selector: 'cw-rail-host',
   imports: [HomeRailItem],
-  template: '<cw-home-rail-item [workspace]="workspace" />',
+  template: '<cw-home-rail-item />',
 })
-class RailHost {
-  // #region Properties
-  /**
-   * Property workspace
-   *
-   * @description
-   * The workspace port given to the item.
-   *
-   * @type {WorkspaceContextPort}
-   * @readonly
-   */
-  protected readonly workspace: WorkspaceContextPort = workspace;
-  // #endregion
-}
+class RailHost {}
 
 describe('HomeRailItem', () => {
   it('links to the workspace and marks itself current on the home screen only', async () => {
     TestBed.configureTestingModule({
       providers: [
         provideCadenwayIcons(),
+        { provide: WORKSPACE_CONTEXT, useValue: workspace },
         provideRouter([
           { path: 'atelier-nord', component: RailHost },
           { path: 'atelier-nord/t/:key', component: RailHost },

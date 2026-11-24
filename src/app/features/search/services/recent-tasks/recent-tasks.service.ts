@@ -59,9 +59,10 @@ function isRecentTask(value: unknown): value is TaskSearchResult {
  *
  * @description
  * The palette's « Tâches récentes »: the last tasks opened from the palette, kept in this
- * browser's `localStorage` per organization (`cadenway-recent-tasks:<organizationId>`), so one
- * organization's tasks never show in another. Inaccessible storage reads as an empty history and
- * ignores writes. Opening a task from its own page will add to it once the task page exists
+ * browser's `localStorage` per person and organization
+ * (`cadenway-recent-tasks:<userId>:<organizationId>`), so neither another person on the device nor
+ * another organization sees them. Auth's `SignOut` removes every key with this prefix. Inaccessible
+ * storage reads as an empty history and ignores writes. Opening a task from its own page will add to it once the task page exists
  * (step 5); until then only the palette writes it.
  */
 @Service()
@@ -95,16 +96,17 @@ export class RecentTasks {
    * Method list
    *
    * @description
-   * The organization's recent tasks, the most recent first. Reactive to `remember`.
+   * The person's recent tasks in an organization, the most recent first. Reactive to `remember`.
    *
+   * @param {string} userId - The signed-in person.
    * @param {string} organizationId - Organization of the workspace.
    * @returns {readonly TaskSearchResult[]} At most five tasks.
    */
-  public list(organizationId: string): readonly TaskSearchResult[] {
+  public list(userId: string, organizationId: string): readonly TaskSearchResult[] {
     this.revision();
     try {
       const raw: string | null | undefined = this.document.defaultView?.localStorage.getItem(
-        this.key(organizationId),
+        this.key(userId, organizationId),
       );
       const parsed: unknown = raw ? JSON.parse(raw) : [];
       return Array.isArray(parsed) ? parsed.filter(isRecentTask).slice(0, LIMIT) : [];
@@ -117,19 +119,22 @@ export class RecentTasks {
    * Method remember
    *
    * @description
-   * Puts a task first in the organization's history, without duplicates.
+   * Puts a task first in the person's history for an organization, without duplicates.
    *
+   * @param {string} userId - The signed-in person.
    * @param {string} organizationId - Organization of the workspace.
    * @param {TaskSearchResult} task - The opened task.
    */
-  public remember(organizationId: string, task: TaskSearchResult): void {
+  public remember(userId: string, organizationId: string, task: TaskSearchResult): void {
     const next: readonly TaskSearchResult[] = [
       task,
-      ...this.list(organizationId).filter((entry: TaskSearchResult) => entry.key !== task.key),
+      ...this.list(userId, organizationId).filter(
+        (entry: TaskSearchResult) => entry.key !== task.key,
+      ),
     ].slice(0, LIMIT);
     try {
       this.document.defaultView?.localStorage.setItem(
-        this.key(organizationId),
+        this.key(userId, organizationId),
         JSON.stringify(next),
       );
     } catch {
@@ -142,13 +147,14 @@ export class RecentTasks {
    * Method key
    *
    * @description
-   * Storage key of an organization's history.
+   * Storage key of a person's history in an organization.
    *
+   * @param {string} userId - The signed-in person.
    * @param {string} organizationId - Organization of the workspace.
    * @returns {string} The storage key.
    */
-  private key(organizationId: string): string {
-    return `cadenway-recent-tasks:${organizationId}`;
+  private key(userId: string, organizationId: string): string {
+    return `cadenway-recent-tasks:${userId}:${organizationId}`;
   }
   // #endregion
 }

@@ -1,6 +1,7 @@
 import { inject, resource, type ResourceRef, type Signal, type Type } from '@angular/core';
-import { signalStore, withComputed, withProps } from '@ngrx/signals';
+import { signalStore, withComputed, withMethods, withProps } from '@ngrx/signals';
 
+import { type ApiProblem, readProblem } from '@core/api';
 import {
   WORKSPACE_CONTEXT,
   type WorkspaceContextPort,
@@ -20,10 +21,21 @@ import type { OrganizationSubscription } from '../../models/organization-subscri
 const NEARLY_FULL: number = 0.9;
 
 /**
+ * Constant SILENT_STATUSES
+ *
+ * @description
+ * Refusals that mean the person may not read billing (no longer an owner, organization gone):
+ * the widgets then show nothing rather than an error.
+ *
+ * @type {ReadonlySet<number>}
+ */
+const SILENT_STATUSES: ReadonlySet<number> = new Set([403, 404]);
+
+/**
  * Interface SubscriptionStoreInstance
  *
  * @description
- * The current organization's plan and usage, read for an owner only.
+ * The current organization's plan and usage, read once per organization for an owner only.
  */
 interface SubscriptionStoreInstance {
   // #region Properties
@@ -50,6 +62,17 @@ interface SubscriptionStoreInstance {
   readonly current: Signal<OrganizationSubscription | null>;
 
   /**
+   * Property failed
+   *
+   * @description
+   * Whether the read failed for a reason worth a « Réessayer » (not a `403` or a `404`).
+   *
+   * @type {Signal<boolean>}
+   * @readonly
+   */
+  readonly failed: Signal<boolean>;
+
+  /**
    * Property storageNearlyFull
    *
    * @description
@@ -59,6 +82,16 @@ interface SubscriptionStoreInstance {
    * @readonly
    */
   readonly storageNearlyFull: Signal<boolean>;
+  // #endregion
+
+  // #region Methods
+  /**
+   * Method retry
+   *
+   * @description
+   * Reads the subscription again after a failure.
+   */
+  retry(): void;
   // #endregion
 }
 
@@ -86,6 +119,12 @@ function createSubscriptionStore(): Type<SubscriptionStoreInstance> {
     withComputed((store) => ({
       current: (): OrganizationSubscription | null =>
         store.subscription.hasValue() ? store.subscription.value() : null,
+      failed: (): boolean => {
+        const error: Error | undefined = store.subscription.error();
+        if (error === undefined) return false;
+        const problem: ApiProblem | null = readProblem(error.cause ?? error);
+        return problem === null || !SILENT_STATUSES.has(problem.status);
+      },
       storageNearlyFull: (): boolean => {
         const subscription: OrganizationSubscription | undefined = store.subscription.hasValue()
           ? store.subscription.value()
@@ -96,6 +135,11 @@ function createSubscriptionStore(): Type<SubscriptionStoreInstance> {
         );
       },
     })),
+    withMethods((store) => ({
+      retry(): void {
+        store.subscription.reload();
+      },
+    })),
   );
 }
 
@@ -103,9 +147,11 @@ function createSubscriptionStore(): Type<SubscriptionStoreInstance> {
  * Constant SubscriptionStore
  *
  * @description
- * Plan and usage of the current organization, provided by each shell widget that shows them.
- * Billing answers only an owner, so nobody else sends the request; a failed read shows nothing,
- * since both widgets are secondary hints.
+ * Plan and usage of the current organization, provided once on the `/:org` route by
+ * `provideOrganizationUsage()` and shared by the plan line and the storage banner, so an owner's
+ * workspace sends one request. Billing answers an owner only, so nobody else sends it. A `403` or
+ * `404` shows nothing; any other failure is a flag the plan line offers to retry, and the banner
+ * stays hidden until a retry succeeds.
  *
  * @type {ReturnType<typeof createSubscriptionStore>}
  */

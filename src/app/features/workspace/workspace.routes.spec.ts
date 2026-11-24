@@ -9,7 +9,7 @@ import {
   withRouterConfig,
 } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
-import { RealtimeService } from '@cadenway/api-client';
+import { BillingService, InboxService, RealtimeService } from '@cadenway/api-client';
 import { filter, firstValueFrom, type Observable, of, Subject } from 'rxjs';
 import { io, type Socket } from 'socket.io-client';
 import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
@@ -17,8 +17,6 @@ import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vite
 import { OrganizationPin } from '@core/api';
 import { RuntimeConfigStore } from '@core/config';
 import { REALTIME_TERMINAL_FAILURE, RealtimeConnection } from '@core/realtime';
-import { InboxApi } from '@features/inbox/data-access/services/inbox-api/inbox-api.service';
-import { BillingApi } from '@features/organization/data-access/services/billing-api/billing-api.service';
 
 import { WorkspaceSession } from './data-access/services/workspace-session/workspace-session.service';
 import type {
@@ -217,17 +215,16 @@ describe('WORKSPACE_ROUTES', () => {
         ),
         { provide: WorkspaceSession, useValue: session },
         { provide: RuntimeConfigStore, useValue: { config: () => ({}) } },
-        { provide: InboxApi, useValue: { unreadCount: () => of(2) } },
+        { provide: InboxService, useValue: { getInboxUnreadCount: () => of({ unreadCount: 2 }) } },
         {
-          provide: BillingApi,
+          provide: BillingService,
           useValue: {
-            subscription: () =>
-              Promise.resolve({
+            getBillingSubscription: () =>
+              of({
                 plan: 'team',
-                seatsUsed: 18,
-                seatsLimit: 25,
-                storageUsedBytes: 92_400_000_000,
-                storageLimitBytes: 100_000_000_000,
+                seats: { used: 18, limit: 25 },
+                guestCount: 0,
+                storage: { attachmentBytesUsed: 92_400_000_000, limitBytes: 100_000_000_000 },
               }),
           },
         },

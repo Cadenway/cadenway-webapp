@@ -9,6 +9,7 @@ import { WorkspaceSession } from '../../../data-access/services/workspace-sessio
 import type { OrganizationMenuEntry } from '../../../models/organization-menu-entry/organization-menu-entry.interface';
 import type { WorkspaceResult } from '../../../models/workspace-context/workspace-context.interface';
 import type { WorkspaceContextPort } from '../../../ports/workspace-context/workspace-context-port.interface';
+import { WORKSPACE_CONTEXT } from '../../../ports/workspace-context/workspace-context.token';
 import { OrganizationSwitcher } from './organization-switcher.component';
 
 /**
@@ -109,10 +110,10 @@ describe('OrganizationSwitcher', () => {
         provideCadenwayIcons(),
         { provide: WorkspaceSession, useValue: { menuOrganizations } },
         { provide: Router, useValue: { navigateByUrl, navigate } },
+        { provide: WORKSPACE_CONTEXT, useValue: workspace },
       ],
     });
     fixture = TestBed.createComponent(OrganizationSwitcher);
-    fixture.componentRef.setInput('workspace', workspace);
     await fixture.whenStable();
   });
 

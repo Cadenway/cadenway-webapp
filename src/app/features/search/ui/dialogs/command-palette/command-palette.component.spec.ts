@@ -7,7 +7,11 @@ import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vite
 
 import { ThemeService } from '@core/theme';
 import { SignOut } from '@features/auth';
-import type { WorkspaceContextPort } from '@features/workspace/ports/workspace-context';
+import {
+  WORKSPACE_CONTEXT,
+  type WorkspaceContextPort,
+} from '@features/workspace/ports/workspace-context';
+import { ShellOverlay } from '@shared/layout-slot';
 
 import { SearchApi } from '../../../data-access/services/search-api/search-api.service';
 import type { SearchResult } from '../../../models/search-result/search-result.interface';
@@ -62,6 +66,7 @@ describe('CommandPaletteDialog', () => {
   let search: Mock<(query: string) => Observable<readonly SearchResult[]>>;
   let navigate: Mock<(commands: readonly unknown[]) => Promise<boolean>>;
   let run: Mock<() => Promise<boolean>>;
+  let toggle: Mock<() => void>;
   let fixture: ComponentFixture<CommandPaletteDialog>;
 
   beforeEach(async () => {
@@ -70,18 +75,19 @@ describe('CommandPaletteDialog', () => {
     );
     navigate = vi.fn(() => Promise.resolve(true));
     run = vi.fn(() => Promise.resolve(true));
+    toggle = vi.fn();
     TestBed.configureTestingModule({
       imports: [CommandPaletteDialog],
       providers: [
         { provide: SearchApi, useValue: { search } },
         { provide: Router, useValue: { navigate, navigateByUrl: navigate } },
         { provide: SignOut, useValue: { run } },
-        { provide: ThemeService, useValue: { set: vi.fn() } },
+        { provide: ThemeService, useValue: { resolved: () => 'light', toggle } },
+        { provide: WORKSPACE_CONTEXT, useValue: workspace },
         { provide: CwToastService, useValue: { error: vi.fn() } },
       ],
     });
     fixture = TestBed.createComponent(CommandPaletteDialog);
-    fixture.componentRef.setInput('workspace', workspace);
     await fixture.whenStable();
   });
 
@@ -121,7 +127,7 @@ describe('CommandPaletteDialog', () => {
     optionNamed('Relecture du parcours SSO')?.click();
 
     expect(navigate).toHaveBeenCalledWith(['/', 'atelier-nord', 't', 'CAD-482']);
-    expect(localStorage.getItem('cadenway-recent-tasks:o1')).toContain('CAD-482');
+    expect(localStorage.getItem('cadenway-recent-tasks:u1:o1')).toContain('CAD-482');
   });
 
   it('says nothing matched the text', async () => {
@@ -137,6 +143,30 @@ describe('CommandPaletteDialog', () => {
       fixture.detectChanges();
       expect(document.body.textContent).toContain('Aucun résultat pour « zzzz ».');
     });
+  });
+
+  it('offers « Facturation et quotas » and one theme action that toggles', async () => {
+    TestBed.inject(CommandPalette).setOpen(true);
+    await fixture.whenStable();
+
+    optionNamed('Facturation et quotas')?.click();
+    expect(navigate).toHaveBeenCalledWith(['/', 'atelier-nord', 'organization', 'billing']);
+
+    TestBed.inject(CommandPalette).setOpen(true);
+    await fixture.whenStable();
+    expect(optionNamed('Passer au thème clair')).toBeUndefined();
+    optionNamed('Passer au thème sombre')?.click();
+    expect(toggle).toHaveBeenCalledOnce();
+  });
+
+  it('never opens over another shell overlay', async () => {
+    TestBed.inject(ShellOverlay).open('workspace.shortcuts-dialog');
+
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', ctrlKey: true }));
+    await fixture.whenStable();
+
+    expect(TestBed.inject(CommandPalette).isOpen()).toBe(false);
+    TestBed.inject(ShellOverlay).close('workspace.shortcuts-dialog');
   });
 
   it('signs out from « Actions »', async () => {

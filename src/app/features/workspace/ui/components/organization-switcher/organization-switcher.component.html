@@ -3,14 +3,14 @@
   variant="primary"
   desktopOnly
   [cwMenuTriggerFor]="organizationMenu"
-  [tooltip]="workspace().organization().name"
+  [tooltip]="workspace.organization().name"
   data-testid="organization-switcher"
   (click)="store.load()"
   (keydown)="store.load()"
 >
-  <span cwAppRailItemMedia>{{ workspace().organization().initials }}</span>
+  <span cwAppRailItemMedia>{{ workspace.organization().initials }}</span>
   <ng-container i18n="@@workspace.organization-switcher.label"
-    >Switch organization: {{ workspace().organization().name }}</ng-container
+    >Switch organization: {{ workspace.organization().name }}</ng-container
   >
 </button>
 
@@ -44,7 +44,7 @@
       </button>
     </div>
   } @else {
-    <cw-menu-radio-group [value]="workspace().organization().id" (valueChange)="choose($event)">
+    <cw-menu-radio-group [value]="workspace.organization().id" (valueChange)="choose($event)">
       @for (entry of store.entries(); track entry.id) {
         <button cwMenuItemRadio [value]="entry.id">
           <span

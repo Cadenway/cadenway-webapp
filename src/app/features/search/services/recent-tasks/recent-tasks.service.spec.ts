@@ -25,26 +25,27 @@ describe('RecentTasks', () => {
   it('keeps the last five tasks of an organization, the latest first, without duplicates', () => {
     const recent: RecentTasks = TestBed.inject(RecentTasks);
     for (const key of ['CAD-1', 'CAD-2', 'CAD-3', 'CAD-4', 'CAD-5', 'CAD-6', 'CAD-3']) {
-      recent.remember('org-1', task(key));
+      recent.remember('u1', 'org-1', task(key));
     }
 
-    expect(recent.list('org-1').map((entry: TaskSearchResult) => entry.key)).toEqual([
+    expect(recent.list('u1', 'org-1').map((entry: TaskSearchResult) => entry.key)).toEqual([
       'CAD-3',
       'CAD-6',
       'CAD-5',
       'CAD-4',
       'CAD-2',
     ]);
-    expect(recent.list('org-2')).toEqual([]);
+    expect(recent.list('u1', 'org-2')).toEqual([]);
+    expect(recent.list('u2', 'org-1')).toEqual([]);
   });
 
   it('ignores a corrupt history', () => {
-    localStorage.setItem('cadenway-recent-tasks:org-1', '[{"kind":"task","key":1},"x"');
-    expect(TestBed.inject(RecentTasks).list('org-1')).toEqual([]);
+    localStorage.setItem('cadenway-recent-tasks:u1:org-1', '[{"kind":"task","key":1},"x"');
+    expect(TestBed.inject(RecentTasks).list('u1', 'org-1')).toEqual([]);
     localStorage.setItem(
-      'cadenway-recent-tasks:org-1',
+      'cadenway-recent-tasks:u1:org-1',
       JSON.stringify([task('CAD-1'), { kind: 'task', key: 'CAD-2', name: 'x', status: 'nope' }]),
     );
-    expect(TestBed.inject(RecentTasks).list('org-1')).toEqual([task('CAD-1')]);
+    expect(TestBed.inject(RecentTasks).list('u1', 'org-1')).toEqual([task('CAD-1')]);
   });
 });

@@ -1,4 +1,5 @@
 import {
+  computed,
   DOCUMENT,
   inject,
   resource,
@@ -8,6 +9,7 @@ import {
 } from '@angular/core';
 import {
   patchState,
+  signalMethod,
   signalStore,
   withComputed,
   withHooks,
@@ -27,6 +29,11 @@ import {
   tap,
   timer,
 } from 'rxjs';
+
+import {
+  WORKSPACE_CONTEXT,
+  type WorkspaceContextPort,
+} from '@features/workspace/ports/workspace-context';
 
 import { InboxApi } from '../../data-access/services/inbox-api/inbox-api.service';
 import type {
@@ -50,10 +57,21 @@ import type {
 export const POLL_MS: number = 60_000;
 
 /**
+ * Constant LOAD_ATTEMPTS
+ *
+ * @description
+ * Times a notifications load is sent again when a write changed the inbox while it ran, before its
+ * answer is kept anyway.
+ *
+ * @type {number}
+ */
+const LOAD_ATTEMPTS: number = 3;
+
+/**
  * Interface InboxState
  *
  * @description
- * The unread badge and how many times the popover opened.
+ * The unread badge, the organization it counts, the popover's openings and the write version.
  */
 interface InboxState {
   // #region Properties
@@ -61,7 +79,7 @@ interface InboxState {
    * Property unreadCount
    *
    * @description
-   * Unread notifications, or null before the first answer.
+   * Unread notifications, or null before the first answer for the current organization.
    *
    * @type {number | null}
    * @readonly
@@ -69,15 +87,71 @@ interface InboxState {
   readonly unreadCount: number | null;
 
   /**
+   * Property _organizationId
+   *
+   * @description
+   * Organization the badge and the lists belong to.
+   *
+   * @type {string | null}
+   * @readonly
+   */
+  readonly _organizationId: string | null;
+
+  /**
    * Property _openings
    *
    * @description
-   * Openings of the popover; each one reads the lists again, none is read before the first.
+   * Openings of the popover in this organization; each one reads the lists again, none is read
+   * before the first.
    *
    * @type {number}
    * @readonly
    */
   readonly _openings: number;
+
+  /**
+   * Property _version
+   *
+   * @description
+   * Bumped when a write starts or settles; a poll answer or a notifications load that began before
+   * the last bump is out of date.
+   *
+   * @type {number}
+   * @readonly
+   */
+  readonly _version: number;
+  // #endregion
+}
+
+/**
+ * Interface ReadClaim
+ *
+ * @description
+ * The notifications a pending read write shows read.
+ */
+interface ReadClaim {
+  // #region Properties
+  /**
+   * Property ids
+   *
+   * @description
+   * Notifications the write marked read in the list.
+   *
+   * @type {ReadonlySet<string>}
+   * @readonly
+   */
+  readonly ids: ReadonlySet<string>;
+
+  /**
+   * Property all
+   *
+   * @description
+   * Whether the write is « Tout marquer comme lu », which also covers notifications off the list.
+   *
+   * @type {boolean}
+   * @readonly
+   */
+  readonly all: boolean;
   // #endregion
 }
 
@@ -85,7 +159,8 @@ interface InboxState {
  * Interface InboxStoreInstance
  *
  * @description
- * The inbox badge and popover: unread count, notifications, reminders and their writes.
+ * The inbox badge and popover of the current organization: unread count, notifications,
+ * reminders and their writes.
  */
 interface InboxStoreInstance {
   // #region Properties
@@ -147,9 +222,10 @@ interface InboxStoreInstance {
    * Method markAllRead
    *
    * @description
-   * Shows every notification read at once, then records it; a refusal restores them.
+   * Shows every notification read at once, then records it; a refusal restores what no other
+   * write also marked read.
    *
-   * @returns {Promise<boolean>} Whether the gateway recorded it.
+   * @returns {Promise<boolean>} Whether the gateway recorded it (true when the organization changed meanwhile).
    */
   markAllRead(): Promise<boolean>;
 
@@ -157,10 +233,11 @@ interface InboxStoreInstance {
    * Method markRead
    *
    * @description
-   * Shows a notification read at once, then records it; a refusal restores it.
+   * Shows a notification read at once, then records it; a refusal restores it unless another
+   * write also marked it read.
    *
-   * @param {InboxNotification} notification - An unread notification.
-   * @returns {Promise<boolean>} Whether the gateway recorded it.
+   * @param {InboxNotification} notification - A notification.
+   * @returns {Promise<boolean>} Whether the gateway recorded it (true when it was already read or the organization changed meanwhile).
    */
   markRead(notification: InboxNotification): Promise<boolean>;
 
@@ -168,7 +245,8 @@ interface InboxStoreInstance {
    * Method snooze
    *
    * @description
-   * Moves a reminder to a later instant at once, then records it; a refusal restores it.
+   * Moves a reminder to a later instant at once, then records it; a refusal restores that
+   * reminder's time.
    *
    * @param {InboxReminder} reminder - A pending reminder.
    * @param {string} remindAt - New instant, as ISO 8601.
@@ -180,7 +258,7 @@ interface InboxStoreInstance {
    * Method complete
    *
    * @description
-   * Removes a reminder from the list at once, then marks it done; a refusal restores it.
+   * Removes a reminder from the list at once, then marks it done; a refusal puts it back.
    *
    * @param {InboxReminder} reminder - A pending reminder.
    * @returns {Promise<boolean>} Whether the gateway recorded it.
@@ -193,11 +271,16 @@ interface InboxStoreInstance {
  * Constant initialState
  *
  * @description
- * No count and no opening yet.
+ * No organization, count or opening yet.
  *
  * @type {InboxState}
  */
-const initialState: InboxState = { unreadCount: null, _openings: 0 };
+const initialState: InboxState = {
+  unreadCount: null,
+  _organizationId: null,
+  _openings: 0,
+  _version: 0,
+};
 
 /**
  * Function byDueTime
@@ -214,6 +297,32 @@ function byDueTime(first: InboxReminder, second: InboxReminder): number {
 }
 
 /**
+ * Function withRead
+ *
+ * @description
+ * A page whose given notifications are read or unread.
+ *
+ * @param {InboxNotificationPage} page - Current page.
+ * @param {ReadonlySet<string>} ids - Notifications to change.
+ * @param {boolean} read - Their new state.
+ * @param {number} unreadCount - The page's new unread count.
+ * @returns {InboxNotificationPage} The changed page.
+ */
+function withRead(
+  page: InboxNotificationPage,
+  ids: ReadonlySet<string>,
+  read: boolean,
+  unreadCount: number,
+): InboxNotificationPage {
+  return {
+    unreadCount,
+    items: page.items.map((item: InboxNotification) =>
+      ids.has(item.id) ? { ...item, read } : item,
+    ),
+  };
+}
+
+/**
  * Function createInboxStore
  *
  * @description
@@ -226,19 +335,40 @@ function createInboxStore(): Type<InboxStoreInstance> {
     withState(initialState),
     withProps((store) => {
       const api: InboxApi = inject(InboxApi);
+      const workspace: WorkspaceContextPort = inject(WORKSPACE_CONTEXT);
+      const opened: () => { organizationId: string; opening: number } | undefined = () => {
+        const organizationId: string | null = store._organizationId();
+        return store._openings() > 0 && organizationId !== null
+          ? { organizationId, opening: store._openings() }
+          : undefined;
+      };
       return {
         _api: api,
+        _workspace: workspace,
         _window: inject(DOCUMENT).defaultView,
         notifications: resource({
-          params: (): number | undefined => store._openings() || undefined,
-          loader: async (): Promise<InboxNotificationPage> => {
-            const page: InboxNotificationPage = await api.notifications();
-            patchState(store, { unreadCount: page.unreadCount });
+          params: opened,
+          loader: async ({
+            params,
+          }: {
+            params: { organizationId: string };
+          }): Promise<InboxNotificationPage> => {
+            let page: InboxNotificationPage | undefined;
+            for (let attempt: number = 0; attempt < LOAD_ATTEMPTS; attempt += 1) {
+              const version: number = store._version();
+              page = await api.notifications();
+              if (version !== store._version()) continue;
+              if (params.organizationId === store._organizationId()) {
+                patchState(store, { unreadCount: page.unreadCount });
+              }
+              return page;
+            }
+            if (page === undefined) throw new Error('The notifications were not read.');
             return page;
           },
         }),
         reminders: resource({
-          params: (): number | undefined => store._openings() || undefined,
+          params: opened,
           loader: (): Promise<InboxReminderPage> => api.pendingReminders(),
         }),
       };
@@ -248,96 +378,168 @@ function createInboxStore(): Type<InboxStoreInstance> {
         store.reminders.hasValue() ? store.reminders.value().pendingCount : 0,
     })),
     withMethods((store) => {
-      // Applies an optimistic change to the notifications, then the write; restores both the page
-      // and the count when the write fails.
-      const notificationWrite: (
-        change: (page: InboxNotificationPage) => InboxNotificationPage,
-        write: () => Promise<number | null>,
-      ) => Promise<boolean> = async (change, write) => {
-        const page: InboxNotificationPage | undefined = store.notifications.hasValue()
-          ? store.notifications.value()
-          : undefined;
-        const count: number | null = store.unreadCount();
-        if (page) {
-          const changed: InboxNotificationPage = change(page);
-          store.notifications.set(changed);
-          patchState(store, { unreadCount: changed.unreadCount });
-        }
+      let claims: Map<number, ReadClaim> = new Map<number, ReadClaim>();
+      let confirmedIds: Set<string> = new Set<string>();
+      let confirmedAll: boolean = false;
+      let sequence: number = 0;
+
+      const bump: () => void = (): void => {
+        patchState(store, { _version: store._version() + 1 });
+      };
+      const sameOrganization: (organizationId: string | null) => boolean = (
+        organizationId: string | null,
+      ): boolean => organizationId === store._organizationId();
+      const protectedRead: (id: string) => boolean = (id: string): boolean =>
+        confirmedIds.has(id) || [...claims.values()].some((claim: ReadClaim) => claim.ids.has(id));
+      const currentPage: () => InboxNotificationPage | undefined = () =>
+        store.notifications.hasValue() ? store.notifications.value() : undefined;
+
+      // Shows notifications read, sends the write and, on a refusal, restores only the
+      // notifications no other write covers, adding their count back to the current count.
+      const readWrite: (
+        ids: ReadonlySet<string>,
+        all: boolean,
+        offList: number,
+        send: () => Promise<number | null>,
+      ) => Promise<boolean> = async (ids, all, offList, send) => {
+        const organizationId: string | null = store._organizationId();
+        const id: number = (sequence += 1);
+        claims.set(id, { ids, all });
+        bump();
+        const page: InboxNotificationPage | undefined = currentPage();
+        const before: number = store.unreadCount() ?? page?.unreadCount ?? 0;
+        const after: number = all ? 0 : Math.max(0, before - ids.size);
+        if (page) store.notifications.set(withRead(page, ids, true, after));
+        patchState(store, { unreadCount: after });
         try {
-          const confirmed: number | null = await write();
-          if (confirmed !== null) patchState(store, { unreadCount: confirmed });
+          const confirmed: number | null = await send();
+          if (!sameOrganization(organizationId)) return true;
+          claims.delete(id);
+          for (const read of ids) confirmedIds.add(read);
+          if (all) confirmedAll = true;
+          if (confirmed !== null && claims.size === 0)
+            patchState(store, { unreadCount: confirmed });
+          bump();
           return true;
         } catch {
-          if (page) store.notifications.set(page);
+          if (!sameOrganization(organizationId)) return false;
+          claims.delete(id);
+          bump();
+          const restored: Set<string> = new Set<string>(
+            [...ids].filter((read: string) => !protectedRead(read)),
+          );
+          const otherAll: boolean =
+            confirmedAll || [...claims.values()].some((claim: ReadClaim) => claim.all);
+          const added: number = restored.size + (all && !otherAll ? offList : 0);
+          const count: number = (store.unreadCount() ?? 0) + added;
+          const now: InboxNotificationPage | undefined = currentPage();
+          if (now) store.notifications.set(withRead(now, restored, false, count));
           patchState(store, { unreadCount: count });
           return false;
         }
       };
 
-      // Applies an optimistic change to the reminders, then the write; restores the page when the
-      // write fails.
+      // Applies an optimistic change to the reminders and sends the write; a refusal undoes only
+      // that change, on the current list.
       const reminderWrite: (
         change: (page: InboxReminderPage) => InboxReminderPage,
-        write: () => Promise<unknown>,
-      ) => Promise<boolean> = async (change, write) => {
+        undo: (page: InboxReminderPage) => InboxReminderPage,
+        send: () => Promise<unknown>,
+      ) => Promise<boolean> = async (change, undo, send) => {
         if (!store.reminders.hasValue()) return false;
-        const page: InboxReminderPage = store.reminders.value();
-        store.reminders.set(change(page));
+        const organizationId: string | null = store._organizationId();
+        store.reminders.set(change(store.reminders.value()));
         try {
-          await write();
+          await send();
           return true;
         } catch {
-          store.reminders.set(page);
+          if (sameOrganization(organizationId) && store.reminders.hasValue()) {
+            store.reminders.set(undo(store.reminders.value()));
+          }
           return false;
         }
       };
 
       return {
-        _watchUnread: rxMethod<unknown>(
+        _poll: rxMethod<string>(
           pipe(
-            switchMap(() => store._api.unreadCount().pipe(catchError(() => EMPTY))),
-            tap((unreadCount: number) => {
-              patchState(store, { unreadCount });
+            switchMap((organizationId: string) => {
+              const triggers: Observable<unknown>[] = [timer(0, POLL_MS)];
+              if (store._window) triggers.push(fromEvent(store._window, 'focus'));
+              return merge(...triggers).pipe(
+                switchMap(() => {
+                  const version: number = store._version();
+                  return store._api.unreadCount().pipe(
+                    catchError(() => EMPTY),
+                    tap((unreadCount: number) => {
+                      if (sameOrganization(organizationId) && version === store._version()) {
+                        patchState(store, { unreadCount });
+                      }
+                    }),
+                  );
+                }),
+              );
             }),
           ),
         ),
+        _followOrganization: signalMethod<string>((organizationId: string): void => {
+          if (sameOrganization(organizationId)) return;
+          claims = new Map<number, ReadClaim>();
+          confirmedIds = new Set<string>();
+          confirmedAll = false;
+          patchState(store, {
+            _organizationId: organizationId,
+            unreadCount: null,
+            _openings: 0,
+            _version: store._version() + 1,
+          });
+        }),
         open(): void {
           patchState(store, { _openings: store._openings() + 1 });
         },
         markAllRead(): Promise<boolean> {
-          return notificationWrite(
-            (page: InboxNotificationPage) => ({
-              unreadCount: 0,
-              items: page.items.map((item: InboxNotification) => ({ ...item, read: true })),
-            }),
-            () => store._api.markAllRead(),
+          const page: InboxNotificationPage | undefined = currentPage();
+          const visible: readonly InboxNotification[] = page?.items ?? [];
+          const unread: number = visible.filter((item: InboxNotification) => !item.read).length;
+          const covered: Set<string> = new Set<string>(
+            visible
+              .filter(
+                (item: InboxNotification) =>
+                  !item.read ||
+                  [...claims.values()].some((claim: ReadClaim) => claim.ids.has(item.id)),
+              )
+              .map((item: InboxNotification) => item.id),
+          );
+          const before: number = store.unreadCount() ?? page?.unreadCount ?? 0;
+          return readWrite(covered, true, Math.max(0, before - unread), () =>
+            store._api.markAllRead(),
           );
         },
         markRead(notification: InboxNotification): Promise<boolean> {
           if (notification.read) return Promise.resolve(true);
-          return notificationWrite(
-            (page: InboxNotificationPage) => ({
-              unreadCount: Math.max(0, page.unreadCount - 1),
-              items: page.items.map((item: InboxNotification) =>
-                item.id === notification.id ? { ...item, read: true } : item,
-              ),
-            }),
-            async (): Promise<null> => {
-              await store._api.markRead(notification.id);
-              return null;
-            },
-          );
+          return readWrite(new Set([notification.id]), false, 0, async (): Promise<null> => {
+            await store._api.markRead(notification.id);
+            return null;
+          });
         },
         snooze(reminder: InboxReminder, remindAt: string): Promise<boolean> {
+          const moved: (page: InboxReminderPage, from: string, to: string) => InboxReminderPage = (
+            page: InboxReminderPage,
+            from: string,
+            to: string,
+          ): InboxReminderPage => ({
+            ...page,
+            items: page.items
+              .map((item: InboxReminder) =>
+                item.id === reminder.id && item.remindAt === from
+                  ? { ...item, remindAt: to }
+                  : item,
+              )
+              .sort(byDueTime),
+          });
           return reminderWrite(
-            (page: InboxReminderPage) => ({
-              ...page,
-              items: page.items
-                .map((item: InboxReminder) =>
-                  item.id === reminder.id ? { ...item, remindAt } : item,
-                )
-                .sort(byDueTime),
-            }),
+            (page: InboxReminderPage) => moved(page, reminder.remindAt, remindAt),
+            (page: InboxReminderPage) => moved(page, remindAt, reminder.remindAt),
             () => store._api.snooze(reminder.id, remindAt),
           );
         },
@@ -347,6 +549,13 @@ function createInboxStore(): Type<InboxStoreInstance> {
               items: page.items.filter((item: InboxReminder) => item.id !== reminder.id),
               pendingCount: Math.max(0, page.pendingCount - 1),
             }),
+            (page: InboxReminderPage) =>
+              page.items.some((item: InboxReminder) => item.id === reminder.id)
+                ? page
+                : {
+                    items: [...page.items, reminder].sort(byDueTime),
+                    pendingCount: page.pendingCount + 1,
+                  },
             () => store._api.complete(reminder.id),
           );
         },
@@ -354,9 +563,11 @@ function createInboxStore(): Type<InboxStoreInstance> {
     }),
     withHooks({
       onInit(store): void {
-        const triggers: Observable<unknown>[] = [timer(0, POLL_MS)];
-        if (store._window) triggers.push(fromEvent(store._window, 'focus'));
-        store._watchUnread(merge(...triggers));
+        const organizationId: Signal<string> = computed(
+          (): string => store._workspace.organization().id,
+        );
+        store._followOrganization(organizationId);
+        store._poll(organizationId);
       },
     }),
   );
@@ -366,10 +577,14 @@ function createInboxStore(): Type<InboxStoreInstance> {
  * Constant InboxStore
  *
  * @description
- * The inbox of the rail, provided by its rail item so it lives with the shell. The unread count is
- * read at once, every 60 seconds and when the window regains focus; the notifications and the
- * reminders are read each time the popover opens. Writes are optimistic and restored on refusal;
- * a failed read keeps its resource error for the popover's inline « Réessayer ».
+ * The inbox of the rail, provided by its rail item so it lives with the shell. Everything is keyed
+ * on the workspace's organization: a committed switch clears the count and the lists at once and
+ * restarts the poll, and any answer or write result of the previous organization is ignored. The
+ * unread count is read at once, every 60 seconds and when the window regains focus; the
+ * notifications and the reminders are read at each opening of the popover. Every write bumps a
+ * version, so a poll answer or a notifications load that began before it is dropped. Writes are
+ * optimistic; a refusal restores only what that write changed and no other write covers, on the
+ * current state. A failed read keeps its resource error for the popover's inline « Réessayer ».
  *
  * @type {ReturnType<typeof createInboxStore>}
  */

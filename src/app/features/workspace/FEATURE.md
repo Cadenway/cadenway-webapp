@@ -83,6 +83,12 @@ injects it as optional.
   through `ShortcutsService`, for as long as the shell lives.
 - Known gap: the sidebar header's organization row of the mockup (name, host, caret) is not built;
   the rail square opens the same menu.
+- Every shell contribution is a container that injects `WORKSPACE_CONTEXT` itself (none takes it as
+  an input). `ShortcutsHelp` and Search's `CommandPalette` go through `ShellOverlay`
+  (`@shared/layout-slot`), so the shortcuts dialog and the palette never open over each other.
+- Backend gap, planned as contract work (B20): the inbox, reminder, search and billing operations do
+  not declare `If-Organization-Match`, so a switch made in another tab between the pin and the
+  request can redirect a write such as « Tout marquer comme lu » to the other organization.
 - The route runtime supplies the workspace organization and fresh tickets to the shared realtime
   connection. The gateway notice envelope does not name the delivering room: changes are broadcast
   to every active watch, whose consumer filters or refetches. A later contract should add the room.
@@ -96,3 +102,10 @@ injects it as optional.
 - Guards and the resolver never reach the error boundary: they redirect with a `UrlTree` or a
   `RedirectCommand`.
 - The `settings-shell` binding comes with the account and organization settings steps.
+
+## Copy not taken word for word from the mockup
+
+| Unit                                                                               | Reason                                                                      |
+| ---------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| `workspace.organization-menu.failed`, `workspace.retry`                            | The mockup draws no failed organizations read.                              |
+| `workspace.organization-menu.role-admin`, `workspace.organization-menu.role-guest` | Roles the mockup's menu does not list, worded as in `Organisation.dc.html`. |

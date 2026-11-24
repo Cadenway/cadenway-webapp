@@ -1,4 +1,7 @@
+import type { Provider } from '@angular/core';
 import type { SlotContribution, SlotFeature } from '@shared/layout-slot';
+
+import { SubscriptionStore } from '../../state/subscription/subscription.store';
 
 import { PlanSummary } from '../../ui/components/plan-summary/plan-summary.component';
 import { StorageBanner } from '../../ui/components/storage-banner/storage-banner.component';
@@ -39,4 +42,17 @@ export function withStorageBanner(): SlotFeature<SlotContribution> {
       component: StorageBanner,
     }),
   };
+}
+
+/**
+ * Function provideOrganizationUsage
+ *
+ * @description
+ * Provides the one `SubscriptionStore` the plan line and the storage banner share. Give it to the
+ * `/:org` route, next to the shell slots, whose injector provides `WORKSPACE_CONTEXT`.
+ *
+ * @returns {Provider[]} The store.
+ */
+export function provideOrganizationUsage(): Provider[] {
+  return [SubscriptionStore];
 }

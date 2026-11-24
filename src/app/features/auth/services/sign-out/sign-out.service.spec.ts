@@ -20,8 +20,15 @@ describe('SignOut', () => {
     });
   });
 
-  it('closes the session, then opens the signed-out screen in place', async () => {
+  it('closes the session, forgets the recent tasks, then opens the signed-out screen', async () => {
+    localStorage.setItem('cadenway-recent-tasks:u1:o1', '[]');
+    localStorage.setItem('cadenway-remembered-accounts', '[]');
+
     await expect(TestBed.inject(SignOut).run()).resolves.toBe(true);
+
+    expect(localStorage.getItem('cadenway-recent-tasks:u1:o1')).toBeNull();
+    expect(localStorage.getItem('cadenway-remembered-accounts')).toBe('[]');
+    localStorage.clear();
 
     expect(signOut).toHaveBeenCalledOnce();
     expect(navigateByUrl).toHaveBeenCalledWith('/logged-out?reason=signed-out', {
@@ -31,8 +38,11 @@ describe('SignOut', () => {
 
   it('stays on the page when the gateway refuses', async () => {
     signOut.mockRejectedValueOnce(new Error('unavailable'));
+    localStorage.setItem('cadenway-recent-tasks:u1:o1', '[]');
 
     await expect(TestBed.inject(SignOut).run()).resolves.toBe(false);
     expect(navigateByUrl).not.toHaveBeenCalled();
+    expect(localStorage.getItem('cadenway-recent-tasks:u1:o1')).toBe('[]');
+    localStorage.clear();
   });
 });

@@ -1,8 +1,22 @@
-import { inject, type Signal, type Type } from '@angular/core';
+import { computed, inject, type Signal, type Type } from '@angular/core';
 import { tapResponse } from '@ngrx/operators';
-import { patchState, signalStore, withComputed, withMethods, withState } from '@ngrx/signals';
+import {
+  patchState,
+  signalMethod,
+  signalStore,
+  withComputed,
+  withHooks,
+  withMethods,
+  withProps,
+  withState,
+} from '@ngrx/signals';
 import { rxMethod } from '@ngrx/signals/rxjs-interop';
-import { debounceTime, EMPTY, pipe, switchMap } from 'rxjs';
+import { EMPTY, pipe, switchMap, tap, timer } from 'rxjs';
+
+import {
+  WORKSPACE_CONTEXT,
+  type WorkspaceContextPort,
+} from '@features/workspace/ports/workspace-context';
 
 import { SearchApi } from '../../data-access/services/search-api/search-api.service';
 import type {
@@ -22,10 +36,42 @@ import type {
 export const DEBOUNCE_MS: number = 250;
 
 /**
+ * Interface SearchRequest
+ *
+ * @description
+ * A search the palette asked for, with the organization it belongs to.
+ */
+interface SearchRequest {
+  // #region Properties
+  /**
+   * Property query
+   *
+   * @description
+   * Trimmed text; empty cancels any search.
+   *
+   * @type {string}
+   * @readonly
+   */
+  readonly query: string;
+
+  /**
+   * Property organizationId
+   *
+   * @description
+   * Organization the search runs for; an answer for another one is dropped.
+   *
+   * @type {string | null}
+   * @readonly
+   */
+  readonly organizationId: string | null;
+  // #endregion
+}
+
+/**
  * Interface CommandPaletteState
  *
  * @description
- * The text searched and what the gateway answered for it.
+ * The text searched, the organization it was searched in, and what the gateway answered.
  */
 interface CommandPaletteState {
   // #region Properties
@@ -44,7 +90,7 @@ interface CommandPaletteState {
    * Property results
    *
    * @description
-   * Matches of the last answered search; kept while a newer search runs.
+   * Matches of `query`; emptied as soon as the text changes.
    *
    * @type {readonly SearchResult[]}
    * @readonly
@@ -72,6 +118,17 @@ interface CommandPaletteState {
    * @readonly
    */
   readonly failed: boolean;
+
+  /**
+   * Property _organizationId
+   *
+   * @description
+   * Organization of the workspace the results belong to.
+   *
+   * @type {string | null}
+   * @readonly
+   */
+  readonly _organizationId: string | null;
   // #endregion
 }
 
@@ -80,7 +137,7 @@ interface CommandPaletteState {
  *
  * @description
  * The palette's server search: debounced, the latest text winning, with loading and failure
- * flags and a retry.
+ * flags and a retry, scoped to the current organization.
  */
 interface CommandPaletteStoreInstance {
   // #region Properties
@@ -145,8 +202,9 @@ interface CommandPaletteStoreInstance {
    * Method search
    *
    * @description
-   * Searches a text after a 250 ms pause, cancelling the previous search; a blank text clears the
-   * results and cancels any search. The same text again does nothing.
+   * Searches a text after a 250 ms pause. A new text cancels the previous search at once, even a
+   * request already sent, and empties the results; a blank text cancels without searching. The
+   * same text again does nothing.
    *
    * @param {string} text - Text of the palette's field.
    */
@@ -175,6 +233,7 @@ const initialState: CommandPaletteState = {
   results: [],
   loading: false,
   failed: false,
+  _organizationId: null,
 };
 
 /**
@@ -194,22 +253,36 @@ function createCommandPaletteStore(): Type<CommandPaletteStoreInstance> {
       lists: (): readonly ListSearchResult[] =>
         results().filter((result: SearchResult) => result.kind === 'list'),
     })),
+    withProps(() => {
+      const workspace: WorkspaceContextPort = inject(WORKSPACE_CONTEXT);
+      return { _workspace: workspace };
+    }),
     withMethods((store, api: SearchApi = inject(SearchApi)) => {
-      const run: (query: string) => void = rxMethod<string>(
+      const current: (request: SearchRequest) => boolean = (request: SearchRequest): boolean =>
+        request.query === store.query() && request.organizationId === store._organizationId();
+      const run: (request: SearchRequest) => void = rxMethod<SearchRequest>(
         pipe(
-          debounceTime(DEBOUNCE_MS),
-          switchMap((query: string) =>
-            query === ''
+          tap((request: SearchRequest) => {
+            patchState(store, { results: [], failed: false, loading: request.query !== '' });
+          }),
+          switchMap((request: SearchRequest) =>
+            request.query === ''
               ? EMPTY
-              : api.search(query).pipe(
-                  tapResponse({
-                    next: (results: readonly SearchResult[]): void => {
-                      patchState(store, { results, loading: false });
-                    },
-                    error: (): void => {
-                      patchState(store, { results: [], loading: false, failed: true });
-                    },
-                  }),
+              : timer(DEBOUNCE_MS).pipe(
+                  switchMap(() =>
+                    api.search(request.query).pipe(
+                      tapResponse({
+                        next: (results: readonly SearchResult[]): void => {
+                          if (current(request)) patchState(store, { results, loading: false });
+                        },
+                        error: (): void => {
+                          if (current(request)) {
+                            patchState(store, { results: [], loading: false, failed: true });
+                          }
+                        },
+                      }),
+                    ),
+                  ),
                 ),
           ),
         ),
@@ -218,20 +291,24 @@ function createCommandPaletteStore(): Type<CommandPaletteStoreInstance> {
         search(text: string): void {
           const query: string = text.trim();
           if (query === store.query()) return;
-          patchState(store, {
-            query,
-            failed: false,
-            loading: query !== '',
-            results: query === '' ? [] : store.results(),
-          });
-          run(query);
+          patchState(store, { query });
+          run({ query, organizationId: store._organizationId() });
         },
         retry(): void {
           if (store.query() === '') return;
-          patchState(store, { failed: false, loading: true });
-          run(store.query());
+          run({ query: store.query(), organizationId: store._organizationId() });
         },
+        _followOrganization: signalMethod<string>((organizationId: string): void => {
+          if (organizationId === store._organizationId()) return;
+          patchState(store, { _organizationId: organizationId, query: '' });
+          run({ query: '', organizationId });
+        }),
       };
+    }),
+    withHooks({
+      onInit(store): void {
+        store._followOrganization(computed((): string => store._workspace.organization().id));
+      },
     }),
   );
 }
@@ -241,7 +318,9 @@ function createCommandPaletteStore(): Type<CommandPaletteStoreInstance> {
  *
  * @description
  * The command palette's server search, provided by the palette so it dies with the shell. A
- * failure is a flag with a retry, never an empty answer.
+ * committed organization switch cancels the pending request and clears the text and the
+ * results; an answer only applies to the text and the organization it was asked for. A failure
+ * is a flag with a retry, never an empty answer.
  *
  * @type {ReturnType<typeof createCommandPaletteStore>}
  */
