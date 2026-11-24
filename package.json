@@ -37,7 +37,7 @@
     "@cadenway/contracts": "0.39.0",
     "@cadenway/icons": "^0.3.0",
     "@cadenway/tokens": "^0.2.0",
-    "@cadenway/ui": "0.4.0",
+    "@cadenway/ui": "0.5.0",
     "@ng-icons/core": "^36.1.0",
     "@ngrx/operators": "^22.0.1",
     "@ngrx/signals": "^22.0.1",
