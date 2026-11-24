@@ -1,6 +1,6 @@
 ---
 name: cw-web-copy-reviewer
-description: "Use to check cadenway-webapp user-facing French copy against the mockup: labels, error messages, empty states, toasts, confirmation texts. Read-only."
+description: "Use to check cadenway-webapp user-facing copy: English source strings and their ids, and the French translation against the mockup: labels, error messages, empty states, toasts, confirmation texts. Read-only."
 tools: Skill, Read, Grep, Glob, Bash
 model: sonnet
 effort: medium
@@ -25,8 +25,9 @@ Copy fidelity.
 
 ## What to check
 
-1. Strings match the mockup word for word, including typographic apostrophes and non-breaking spaces before « ; : ? ! ».
-2. Every state has its text: empty, error, confirmation, toast.
+1. The `fr` translation matches the mockup word for word, including typographic apostrophes and non-breaking spaces before « ; : ? ! ».
+2. Every source string is English, carries a stable `@@feature.area.key` id and stays out of logic.
+3. Every state has its text: empty, error, confirmation, toast.
 
 ## Review method
 
