@@ -1,0 +1,224 @@
+<div class="flex w-full max-w-[420px] flex-col gap-5">
+  <cw-card class="gap-6 p-6 sm:p-8">
+    @if (unavailable()) {
+      <cw-alert variant="destructive" role="alert">
+        <cw-alert-description i18n="@@auth.reset.unavailable"
+          >The password could not be changed. Try again in a moment.</cw-alert-description
+        >
+      </cw-alert>
+    }
+    @switch (view()) {
+      @case ('loading') {
+        <div role="status" class="flex flex-col gap-3">
+          <span class="sr-only" i18n="@@auth.reset.loading">Checking the link</span>
+          <div cwSkeleton class="h-10 w-10 rounded-lg"></div>
+          <div cwSkeleton class="h-7 w-3/4"></div>
+          <div cwSkeleton class="h-9 w-full"></div>
+        </div>
+      }
+      @case ('expired') {
+        <div class="flex flex-col gap-4">
+          <div
+            class="flex size-10 items-center justify-center rounded-lg bg-grenat-soft text-grenat-text"
+          >
+            <ng-icon name="phosphorLinkBreakBold" class="size-5" aria-hidden="true" />
+          </div>
+          <div class="flex flex-col gap-1">
+            <h1 class="text-2xl font-semibold tracking-tight" i18n="@@auth.reset.expired-heading">
+              This link has expired
+            </h1>
+            <p class="text-sm text-muted-foreground" i18n="@@auth.reset.expired-lead">
+              A reset link stays valid for 30 minutes and works only once. Ask for a new one.
+            </p>
+          </div>
+        </div>
+        <div class="flex flex-col gap-2">
+          <a cwButton class="w-full" routerLink="/forgot" i18n="@@auth.reset.new-link"
+            >Ask for a new link</a
+          >
+          <a cwButton variant="ghost" class="w-full" routerLink="/login">
+            <ng-icon name="phosphorArrowLeftBold" aria-hidden="true" />
+            <span i18n="@@auth.back-to-login">Back to sign-in</span>
+          </a>
+        </div>
+      }
+      @case ('done') {
+        @if (result(); as done) {
+          <div class="flex flex-col gap-4" aria-live="polite">
+            <div
+              class="flex size-10 items-center justify-center rounded-lg bg-jade-soft text-jade-text"
+            >
+              <ng-icon name="phosphorCheckCircleBold" class="size-5" aria-hidden="true" />
+            </div>
+            <div class="flex flex-col gap-1">
+              <h1 class="text-2xl font-semibold tracking-tight" i18n="@@auth.reset.done-heading">
+                Password changed
+              </h1>
+              <p class="text-sm text-muted-foreground">
+                @if (done.closedSessionCount === 1) {
+                  <span i18n="@@auth.reset.done-closed-one">Your other session was closed.</span>
+                } @else if (done.closedSessionCount > 1) {
+                  <span i18n="@@auth.reset.done-closed"
+                    >Your {{ done.closedSessionCount }} other sessions were closed.</span
+                  >
+                } @else {
+                  <span i18n="@@auth.reset.done-open">Your other sessions stay open.</span>
+                }
+                <span i18n="@@auth.reset.done-email"
+                  >A confirmation email has just been sent to {{ done.email }}.</span
+                >
+              </p>
+            </div>
+          </div>
+          <button
+            cwButton
+            type="button"
+            class="w-full"
+            (click)="signIn()"
+            i18n="@@auth.reset.sign-in"
+          >
+            Sign in
+          </button>
+        }
+      }
+      @case ('form') {
+        <div class="flex flex-col gap-4">
+          <div class="flex size-10 items-center justify-center rounded-lg bg-muted text-foreground">
+            <ng-icon name="phosphorPasswordBold" class="size-5" aria-hidden="true" />
+          </div>
+          <div class="flex flex-col gap-1">
+            <h1 class="text-2xl font-semibold tracking-tight" i18n="@@auth.reset.heading">
+              Choose a new password
+            </h1>
+            @if (link(); as account) {
+              <p class="text-sm text-muted-foreground" i18n="@@auth.reset.for-account">
+                For the account <span class="font-medium text-foreground">{{ account.email }}</span
+                >.
+              </p>
+            }
+          </div>
+        </div>
+        <form class="flex flex-col gap-4" novalidate (submit)="save($event)">
+          <div class="flex flex-col gap-2">
+            <div class="flex items-center justify-between gap-2">
+              <label for="rp-new" class="text-sm leading-none font-medium" i18n="@@auth.reset.new"
+                >New password</label
+              >
+              <cw-password-strength-level [for]="strength" />
+            </div>
+            <div class="relative flex items-center">
+              <input
+                cwInput
+                id="rp-new"
+                class="pe-9"
+                autocomplete="new-password"
+                placeholder="12 characters minimum"
+                i18n-placeholder="@@auth.signup.password-placeholder"
+                [type]="showPassword() ? 'text' : 'password'"
+                [attr.aria-describedby]="strength.rulesId"
+                [formField]="resetForm.password"
+              />
+              <button
+                cwButton
+                type="button"
+                variant="ghost"
+                size="icon-xs"
+                class="absolute end-1.5 text-muted-foreground"
+                [attr.aria-label]="showPassword() ? hideLabel : showLabel"
+                [attr.aria-pressed]="showPassword()"
+                (click)="showPassword.set(!showPassword())"
+              >
+                <ng-icon
+                  [name]="showPassword() ? 'phosphorEyeSlashBold' : 'phosphorEyeBold'"
+                  aria-hidden="true"
+                />
+              </button>
+            </div>
+            <cw-password-strength #strength [value]="model().password" [minLength]="12" />
+            @if (resetForm.password().touched() && resetForm.password().invalid()) {
+              <p role="alert" class="flex items-center gap-1 text-xs font-medium text-destructive">
+                <ng-icon name="phosphorWarningCircleFill" class="size-3.5" aria-hidden="true" />
+                {{ resetForm.password().errors()[0]?.message }}
+              </p>
+            }
+          </div>
+          <div class="flex flex-col gap-2">
+            <label
+              for="rp-confirm"
+              class="text-sm leading-none font-medium"
+              i18n="@@auth.reset.confirm"
+              >Confirm the password</label
+            >
+            <input
+              cwInput
+              id="rp-confirm"
+              autocomplete="new-password"
+              aria-describedby="rp-confirm-help"
+              [type]="showPassword() ? 'text' : 'password'"
+              [formField]="resetForm.confirmation"
+            />
+            @if (
+              resetForm.confirmation().invalid() &&
+              (resetForm.confirmation().touched() || model().confirmation !== '')
+            ) {
+              <p
+                id="rp-confirm-help"
+                class="flex items-center gap-1 text-xs font-medium text-destructive"
+              >
+                <ng-icon name="phosphorWarningCircleFill" class="size-3.5" aria-hidden="true" />
+                {{ resetForm.confirmation().errors()[0]?.message }}
+              </p>
+            } @else if (model().confirmation !== '') {
+              <p id="rp-confirm-help" class="flex items-center gap-1 text-xs text-jade-text">
+                <ng-icon name="phosphorCheckBold" class="size-3.5" aria-hidden="true" />
+                <span i18n="@@auth.reset.match">The passwords match.</span>
+              </p>
+            }
+          </div>
+          <div class="flex items-start gap-2">
+            <cw-checkbox
+              class="mt-0.5"
+              [id]="'rp-signout'"
+              [formField]="resetForm.closeOtherSessions"
+            />
+            <div class="flex flex-col gap-1">
+              <label
+                for="rp-signout"
+                class="text-sm leading-none font-medium select-none"
+                i18n="@@auth.reset.close-others"
+                >Close my other sessions</label
+              >
+              @if (link(); as account) {
+                @if (account.sessionCount === 1) {
+                  <p class="text-xs text-muted-foreground" i18n="@@auth.reset.device-one">
+                    1 signed-in device will be signed out.
+                  </p>
+                } @else if (account.sessionCount > 1) {
+                  <p class="text-xs text-muted-foreground" i18n="@@auth.reset.devices">
+                    {{ account.sessionCount }} signed-in devices will be signed out.
+                  </p>
+                }
+              }
+            </div>
+          </div>
+          <div class="flex flex-col gap-2">
+            <button
+              cwButton
+              type="submit"
+              class="w-full"
+              [disabled]="resetForm().invalid() || resetForm().submitting()"
+              [loading]="resetForm().submitting()"
+              i18n="@@auth.reset.submit"
+            >
+              Save the password
+            </button>
+            <a cwButton variant="ghost" class="w-full" routerLink="/login">
+              <ng-icon name="phosphorArrowLeftBold" aria-hidden="true" />
+              <span i18n="@@auth.back-to-login">Back to sign-in</span>
+            </a>
+          </div>
+        </form>
+      }
+    }
+  </cw-card>
+</div>

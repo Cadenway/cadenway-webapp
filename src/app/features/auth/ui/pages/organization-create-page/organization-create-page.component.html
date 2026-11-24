@@ -1,0 +1,281 @@
+<div class="flex w-full max-w-[520px] flex-col gap-5">
+  <cw-card class="gap-6 p-6 sm:p-8">
+    <div class="flex flex-col gap-3">
+      <a cwButton variant="ghost" size="sm" class="self-start" routerLink="/organizations">
+        <ng-icon name="phosphorArrowLeftBold" aria-hidden="true" />
+        <span i18n="@@auth.organization-create.back">My organizations</span>
+      </a>
+      <div class="flex flex-col gap-1">
+        <h1 class="text-2xl font-semibold tracking-tight" i18n="@@auth.organization-create.heading">
+          Create an organization
+        </h1>
+        <p class="text-sm text-muted-foreground" i18n="@@auth.organization-create.lead">
+          An organization brings together your spaces, members and billing. You will be its owner.
+        </p>
+      </div>
+    </div>
+
+    @if (unavailable()) {
+      <cw-alert variant="destructive" role="alert">
+        <cw-alert-description i18n="@@auth.organizations.action-failed"
+          >The action is unavailable. Try again in a moment.</cw-alert-description
+        >
+      </cw-alert>
+    }
+
+    <form class="flex flex-col gap-5" novalidate (submit)="create($event)">
+      <div class="flex items-center gap-4">
+        <span
+          class="flex size-14 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-dashed border-input"
+        >
+          @if (logo(); as chosen) {
+            <img [src]="chosen.url" [alt]="logoAlt(chosen.file)" class="size-full object-cover" />
+          } @else {
+            <cw-avatar [name]="model().name || 'Aa'" />
+          }
+        </span>
+        <div class="flex min-w-0 flex-col gap-1.5">
+          <span
+            id="org-logo-label"
+            class="text-sm leading-none font-medium"
+            i18n="@@auth.organization-create.logo"
+            >Logo</span
+          >
+          <div class="flex flex-wrap items-center gap-2">
+            <input
+              #logoInput
+              id="org-logo"
+              type="file"
+              accept="image/png,image/svg+xml"
+              class="sr-only"
+              aria-labelledby="org-logo-label org-logo-button"
+              aria-describedby="org-logo-help"
+              (change)="pickLogo($event)"
+            />
+            <label
+              id="org-logo-button"
+              for="org-logo"
+              class="inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-lg border border-input px-3 text-sm font-medium hover:bg-muted"
+            >
+              <ng-icon name="phosphorUploadSimpleBold" aria-hidden="true" />
+              @if (logo()) {
+                <span i18n="@@auth.organization-create.logo-replace">Replace</span>
+              } @else {
+                <span i18n="@@auth.organization-create.logo-import">Import</span>
+              }
+            </label>
+            @if (logo(); as chosen) {
+              <button
+                cwButton
+                type="button"
+                variant="ghost"
+                size="sm"
+                (click)="removeLogo(logoInput)"
+              >
+                <ng-icon name="phosphorTrashBold" aria-hidden="true" />
+                <span i18n="@@auth.organization-create.logo-remove">Remove</span>
+              </button>
+              <span
+                id="org-logo-help"
+                class="text-xs text-muted-foreground"
+                aria-live="polite"
+                i18n="@@auth.organization-create.logo-meta"
+                >{{ chosen.file.name }} · {{ logoSize(chosen.file) }} KB</span
+              >
+            } @else {
+              <span
+                id="org-logo-help"
+                class="text-xs text-muted-foreground"
+                i18n="@@auth.organization-create.logo-hint"
+                >Square PNG or SVG, 512 px recommended</span
+              >
+            }
+          </div>
+          @if (logoError()) {
+            <p role="alert" class="flex items-center gap-1 text-xs font-medium text-destructive">
+              <ng-icon name="phosphorWarningCircleFill" class="size-3.5" aria-hidden="true" />
+              <span i18n="@@auth.organization-create.logo-error"
+                >This file is not a usable image: choose a PNG or an SVG.</span
+              >
+            </p>
+          }
+        </div>
+      </div>
+
+      <div class="flex flex-col gap-2">
+        <label
+          for="org-name"
+          class="text-sm leading-none font-medium"
+          i18n="@@auth.organization-create.name"
+          >Organization name</label
+        >
+        <input
+          cwInput
+          id="org-name"
+          type="text"
+          autocomplete="organization"
+          placeholder="Studio Nord"
+          [formField]="createForm.name"
+        />
+        @if (createForm.name().invalid() && createForm.name().touched()) {
+          <p role="alert" class="flex items-center gap-1 text-xs font-medium text-destructive">
+            <ng-icon name="phosphorWarningCircleFill" class="size-3.5" aria-hidden="true" />
+            {{ createForm.name().errors()[0]?.message }}
+          </p>
+        }
+      </div>
+
+      <div class="flex flex-col gap-2">
+        <label
+          for="org-slug"
+          class="text-sm leading-none font-medium"
+          i18n="@@auth.organization-create.address"
+          >Address</label
+        >
+        <div
+          class="flex h-9 items-center overflow-hidden rounded-lg border border-input bg-muted/40 text-sm"
+        >
+          <span class="shrink-0 ps-3 text-muted-foreground" aria-hidden="true">{{ host }}/</span>
+          <input
+            id="org-slug"
+            type="text"
+            readonly
+            class="h-full min-w-0 flex-1 bg-transparent pe-3 outline-none"
+            [value]="slug() || placeholderSlug"
+          />
+        </div>
+        <p class="text-xs text-muted-foreground" i18n="@@auth.organization-create.address-hint">
+          Generated from the name; it can be changed later in the settings.
+        </p>
+      </div>
+
+      <div class="flex flex-col gap-2">
+        <span
+          id="org-size-label"
+          class="text-sm leading-none font-medium"
+          i18n="@@auth.organization-create.size"
+          >Team size</span
+        >
+        <cw-radio-group
+          class="grid grid-cols-2 gap-2 sm:grid-cols-4"
+          ariaLabel="Team size"
+          i18n-ariaLabel="@@auth.organization-create.size"
+          [formField]="createForm.teamSize"
+        >
+          <cw-radio-group-item variant="card" value="1-5">
+            <span class="flex flex-col gap-1">
+              <ng-icon [name]="sizes[0].icon" aria-hidden="true" />
+              <span class="text-sm font-medium"
+                >{{ sizes[0].label }}
+                <span class="text-muted-foreground" i18n="@@auth.organization-create.people"
+                  >ppl</span
+                ></span
+              >
+              <span class="text-xs text-muted-foreground">{{ sizes[0].hint }}</span>
+            </span>
+          </cw-radio-group-item>
+          <cw-radio-group-item variant="card" value="6-20">
+            <span class="flex flex-col gap-1">
+              <ng-icon [name]="sizes[1].icon" aria-hidden="true" />
+              <span class="text-sm font-medium"
+                >{{ sizes[1].label }}
+                <span class="text-muted-foreground" i18n="@@auth.organization-create.people"
+                  >ppl</span
+                ></span
+              >
+              <span class="text-xs text-muted-foreground">{{ sizes[1].hint }}</span>
+            </span>
+          </cw-radio-group-item>
+          <cw-radio-group-item variant="card" value="21-100">
+            <span class="flex flex-col gap-1">
+              <ng-icon [name]="sizes[2].icon" aria-hidden="true" />
+              <span class="text-sm font-medium"
+                >{{ sizes[2].label }}
+                <span class="text-muted-foreground" i18n="@@auth.organization-create.people"
+                  >ppl</span
+                ></span
+              >
+              <span class="text-xs text-muted-foreground">{{ sizes[2].hint }}</span>
+            </span>
+          </cw-radio-group-item>
+          <cw-radio-group-item variant="card" value="over-100">
+            <span class="flex flex-col gap-1">
+              <ng-icon [name]="sizes[3].icon" aria-hidden="true" />
+              <span class="text-sm font-medium"
+                >{{ sizes[3].label }}
+                <span class="text-muted-foreground" i18n="@@auth.organization-create.people"
+                  >ppl</span
+                ></span
+              >
+              <span class="text-xs text-muted-foreground">{{ sizes[3].hint }}</span>
+            </span>
+          </cw-radio-group-item>
+        </cw-radio-group>
+      </div>
+
+      <div class="flex flex-col gap-2">
+        <label
+          for="org-use"
+          class="text-sm leading-none font-medium"
+          i18n="@@auth.organization-create.use"
+          >Main use</label
+        >
+        <cw-select [id]="'org-use'" [formField]="createForm.primaryUse">
+          <cw-select-option value="product-engineering">{{ uses[0].label }}</cw-select-option>
+          <cw-select-option value="agency-client-projects">{{ uses[1].label }}</cw-select-option>
+          <cw-select-option value="marketing-content">{{ uses[2].label }}</cw-select-option>
+          <cw-select-option value="operations-support">{{ uses[3].label }}</cw-select-option>
+          <cw-select-option value="other">{{ uses[4].label }}</cw-select-option>
+        </cw-select>
+      </div>
+
+      <div class="flex flex-col gap-2">
+        <label for="org-invite" class="text-sm leading-none font-medium"
+          ><span i18n="@@auth.organization-create.invite">Invite colleagues</span>
+          <span class="font-normal text-muted-foreground" i18n="@@auth.organization-create.optional"
+            >(optional)</span
+          ></label
+        >
+        <textarea
+          cwTextarea
+          id="org-invite"
+          rows="2"
+          placeholder="adresse@exemple.fr, autre@exemple.fr"
+          i18n-placeholder="@@auth.organization-create.invite-placeholder"
+          [formField]="createForm.invites"
+        ></textarea>
+        @if (createForm.invites().invalid() && createForm.invites().touched()) {
+          <p role="alert" class="flex items-center gap-1 text-xs font-medium text-destructive">
+            <ng-icon name="phosphorWarningCircleFill" class="size-3.5" aria-hidden="true" />
+            {{ createForm.invites().errors()[0]?.message }}
+          </p>
+        } @else {
+          <p class="text-xs text-muted-foreground" i18n="@@auth.organization-create.invite-hint">
+            They will receive an email; Member role by default.
+          </p>
+        }
+      </div>
+
+      <div
+        class="flex items-start gap-2 rounded-lg bg-muted px-3 py-2.5 text-xs text-muted-foreground"
+      >
+        <ng-icon name="phosphorInfoBold" class="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+        <p i18n="@@auth.organization-create.plan">
+          Free plan to start: 5 members and 2 GB of storage. Move to the Team plan at any time from
+          Billing.
+        </p>
+      </div>
+
+      <button
+        cwButton
+        type="submit"
+        class="w-full"
+        [disabled]="createForm().invalid() || store.creating()"
+        [loading]="store.creating()"
+        i18n="@@auth.organization-create.submit"
+      >
+        Create the organization
+      </button>
+    </form>
+  </cw-card>
+</div>

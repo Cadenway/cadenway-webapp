@@ -1,0 +1,128 @@
+<div class="flex w-full max-w-[420px] flex-col gap-5">
+  <cw-card class="gap-6 p-6 sm:p-8">
+    <div class="flex flex-col gap-4" aria-live="polite">
+      <div class="flex size-10 items-center justify-center rounded-lg bg-muted text-foreground">
+        @switch (motive()) {
+          @case ('expired') {
+            <ng-icon name="phosphorClockCountdownBold" class="size-5" aria-hidden="true" />
+          }
+          @case ('all-devices') {
+            <ng-icon name="phosphorShieldCheckBold" class="size-5" aria-hidden="true" />
+          }
+          @default {
+            <ng-icon name="phosphorSignOutBold" class="size-5" aria-hidden="true" />
+          }
+        }
+      </div>
+      <div class="flex flex-col gap-1">
+        @switch (motive()) {
+          @case ('expired') {
+            <h1
+              class="text-2xl font-semibold tracking-tight"
+              i18n="@@auth.logged-out.expired-title"
+            >
+              Session expired
+            </h1>
+            <p class="text-sm text-muted-foreground" i18n="@@auth.logged-out.expired-body">
+              Sign in again to pick up where you left off.
+            </p>
+          }
+          @case ('all-devices') {
+            <h1 class="text-2xl font-semibold tracking-tight" i18n="@@auth.logged-out.all-title">
+              Signed out of all devices
+            </h1>
+            <p class="text-sm text-muted-foreground" i18n="@@auth.logged-out.all-body">
+              The sessions open on your account were closed and the API tokens kept. Sign in again
+              on this device.
+            </p>
+          }
+          @default {
+            <h1 class="text-2xl font-semibold tracking-tight" i18n="@@auth.logged-out.title">
+              You are signed out
+            </h1>
+            <p class="text-sm text-muted-foreground">
+              @if (firstName(); as name) {
+                <span i18n="@@auth.logged-out.greeting">See you soon, {{ name }}.</span>
+              }
+              <span i18n="@@auth.logged-out.body"
+                >Your session is closed on this browser; your other devices stay signed in.</span
+              >
+            </p>
+          }
+        }
+      </div>
+    </div>
+
+    @if (remembered.accounts().length > 0) {
+      <div class="flex flex-col gap-2">
+        <p class="text-xs font-medium text-muted-foreground" i18n="@@auth.logged-out.remembered">
+          Accounts remembered on this device
+        </p>
+        <ul class="flex flex-col gap-1">
+          @for (account of remembered.accounts(); track account.email) {
+            <li class="flex items-center gap-3 rounded-lg border border-border px-3 py-2">
+              <cw-avatar size="sm" [name]="account.name" />
+              <div class="flex min-w-0 flex-1 flex-col">
+                <span class="truncate text-sm font-medium">{{ account.name }}</span>
+                <span class="truncate text-xs text-muted-foreground">{{ account.email }}</span>
+              </div>
+              <button
+                cwButton
+                type="button"
+                variant="outline"
+                size="sm"
+                [attr.aria-label]="signInLabel(account)"
+                (click)="signInAs(account)"
+                i18n="@@auth.logged-out.sign-in"
+              >
+                Sign in
+              </button>
+              <button
+                cwButton
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                class="text-muted-foreground"
+                [attr.aria-label]="forgetLabel(account)"
+                (click)="forget(account)"
+              >
+                <ng-icon name="phosphorXBold" aria-hidden="true" />
+              </button>
+            </li>
+          }
+        </ul>
+      </div>
+    }
+
+    @if (forgotten(); as last) {
+      <div
+        role="status"
+        class="flex items-center justify-between gap-2 rounded-lg bg-muted px-3 py-2 text-sm"
+      >
+        <span i18n="@@auth.logged-out.forgotten"
+          >{{ last.account.email }} is no longer remembered on this device.</span
+        >
+        <button cwButton type="button" variant="ghost" size="sm" (click)="undo()">
+          <ng-icon name="phosphorArrowCounterClockwiseBold" aria-hidden="true" />
+          <span i18n="@@auth.undo">Undo</span>
+        </button>
+      </div>
+    }
+
+    <div class="flex flex-col gap-2">
+      <button
+        cwButton
+        type="button"
+        class="w-full"
+        (click)="signInAs(remembered.accounts()[0])"
+        i18n="@@auth.logged-out.reconnect"
+      >
+        Sign in again
+      </button>
+      <button cwButton type="button" variant="ghost" class="w-full" (click)="signInAs(undefined)">
+        <ng-icon name="phosphorUserSwitchBold" aria-hidden="true" />
+        <span i18n="@@auth.logged-out.other-account">Use another account</span>
+      </button>
+    </div>
+  </cw-card>
+</div>

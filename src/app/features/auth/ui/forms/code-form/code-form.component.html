@@ -1,0 +1,74 @@
+<form class="flex flex-col gap-4" novalidate (submit)="send($event)">
+  <div class="flex flex-col gap-2">
+    <label for="code-input" class="text-sm leading-none font-medium" i18n="@@auth.code.label"
+      >Verification code</label
+    >
+    <cw-input-otp
+      [id]="'code-input'"
+      ariaLabel="Verification code"
+      i18n-ariaLabel="@@auth.code.label"
+      [formField]="codeForm.code"
+      [ariaDescribedBy]="error() === null ? '' : 'code-help'"
+    >
+      <cw-input-otp-group>
+        <cw-input-otp-slot [index]="0" />
+        <cw-input-otp-slot [index]="1" />
+        <cw-input-otp-slot [index]="2" />
+      </cw-input-otp-group>
+      <cw-input-otp-separator />
+      <cw-input-otp-group>
+        <cw-input-otp-slot [index]="3" />
+        <cw-input-otp-slot [index]="4" />
+        <cw-input-otp-slot [index]="5" />
+      </cw-input-otp-group>
+    </cw-input-otp>
+    @if (error(); as message) {
+      <p
+        id="code-help"
+        role="alert"
+        class="flex items-center gap-1 text-xs font-medium text-destructive"
+      >
+        <ng-icon name="phosphorWarningCircleFill" class="size-3.5" aria-hidden="true" />
+        {{ message }}
+      </p>
+    }
+  </div>
+  <button
+    cwButton
+    type="submit"
+    class="w-full"
+    [disabled]="codeForm().invalid() || busy()"
+    [loading]="busy()"
+  >
+    {{ submitLabel() }}
+  </button>
+  <div class="flex items-center justify-between gap-2">
+    <button
+      cwButton
+      type="button"
+      variant="ghost"
+      size="sm"
+      [disabled]="resendIn() !== null"
+      (click)="resendRequested.emit()"
+    >
+      <ng-icon name="phosphorArrowClockwiseBold" aria-hidden="true" />
+      @if (resendIn(); as time) {
+        <span i18n="@@auth.code.resend-in">Resend the code in {{ time }}</span>
+      } @else {
+        <span i18n="@@auth.code.resend">Resend the code</span>
+      }
+    </button>
+    <a
+      [routerLink]="backLink()"
+      class="rounded-sm text-sm font-medium text-primary underline-offset-4 hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+      i18n="@@auth.code.change-address"
+      >Change the address</a
+    >
+  </div>
+  @if (resent()) {
+    <p role="status" class="flex items-center gap-1.5 text-xs text-muted-foreground">
+      <ng-icon name="phosphorCheckCircleBold" class="size-3.5" aria-hidden="true" />
+      <span i18n="@@auth.code.resent">New code sent; the previous one no longer works.</span>
+    </p>
+  }
+</form>

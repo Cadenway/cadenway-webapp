@@ -2,7 +2,7 @@
  * Interface RuntimeConfig
  *
  * @description
- * REST gateway address and optional Realtime gateway address.
+ * REST gateway address, with the optional Realtime gateway and public site addresses.
  */
 export interface RuntimeConfig {
   // #region Properties
@@ -27,5 +27,17 @@ export interface RuntimeConfig {
    * @readonly
    */
   readonly realtimeUrl?: string;
+
+  /**
+   * Property siteUrl
+   *
+   * @description
+   * Base URL of the public site (privacy, terms and help pages), when the environment has one.
+   * Screens that link to the site hide those links when it is absent.
+   *
+   * @type {string | undefined}
+   * @readonly
+   */
+  readonly siteUrl?: string;
   // #endregion
 }
