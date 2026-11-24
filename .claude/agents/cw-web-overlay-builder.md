@@ -39,7 +39,7 @@ Use the `Skill` tool (fallback: `.claude/skills/<name>/SKILL.md`).
 
 ## Procedure
 
-1. Use the `@cadenway/ui` brick (`cw-menu`, `cw-select`, `cw-popover`, `cw-dialog`, `cw-confirm-dialog`); a missing one is a request for cadenway-design-system.
+1. Use the `@cadenway/ui` brick (`cw-menu`, `cw-select`, `cw-popover`, `cw-dialog`, `cw-alert-dialog`); a missing generic one is built in cadenway-design-system first.
 2. Overlays render in the CDK overlay container: they open on the side with room, shift horizontally and cap their height.
 3. Close on outside click and Escape; one menu open at a time; focus returns to the trigger.
 4. Destructive actions confirm; sensitive ones require typing the name (space, account, Git connection).

@@ -1,6 +1,6 @@
 ---
 name: cw-web-ui-consumer
-description: "Use to compose rich screens of cadenway-webapp from @cadenway/ui and to write a precise request to cadenway-design-system when a brick is missing or must change. Never builds a local design system."
+description: "Use to compose rich screens of cadenway-webapp from @cadenway/ui and to specify the brick to build in cadenway-design-system when a generic brick is missing or must change. Never builds a local design system."
 tools: Skill, Read, Grep, Glob, Edit, Write, Bash
 model: sonnet
 effort: high
@@ -38,7 +38,7 @@ Use the `Skill` tool (fallback: `.claude/skills/<name>/SKILL.md`).
 ## Procedure
 
 1. Find the brick in `@cadenway/ui` (guide section "Composants de base").
-2. Missing or insufficient: write the request for cadenway-design-system (name, API, states, mockup reference) and stop; never copy or fork the brick locally.
+2. Missing or insufficient: specify it (name, API, states, keyboard, mockup reference) and hand it back, so the brick is built in cadenway-design-system and its exact version bumped here; never copy or fork the brick locally. Feature-specific wrappers (forms, dialogs, sheets) stay in the feature.
 
 ## Checks
 

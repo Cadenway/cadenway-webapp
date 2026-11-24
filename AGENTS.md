@@ -9,8 +9,8 @@ the skills relevant to the task.
 - Read the [frontend architecture](docs/architecture.md) and the affected feature's `FEATURE.md`.
 - Before UI changes, consult the relevant `docs/maquette/source/*.dc.html` screen or live mockup
   and its integration guide section. Use `cw-angular22-conventions` for Angular code and
-  `cw-ui-consumer` for markup. Route missing bricks to the design system through
-  `cw-web-ui-consumer`.
+  `cw-ui-consumer` for markup. Build a missing generic brick in cadenway-design-system, then bump the
+  exact `@cadenway/ui` version here; feature-specific wrappers (forms, dialogs, sheets) stay in the feature.
 - For screens and services that fetch data, apply the data-access rule for the generated client,
   DTO ownership and loading, error with Réessayer, and empty states.
 - For ownership decisions, consult the webapp section of the repositories document.
@@ -30,8 +30,9 @@ src/app/
 │  └─ config/
 │     ├─ index.ts
 │     └─ environment/ # source, validation, models and runtime config store
-├─ features/         # auth, account, organization, spaces, task, home, my-tasks,
-│                    # goals, docs, dashboards, trash and archives
+├─ features/         # auth, workspace, account, organization, spaces, task, intake, home,
+│                    # my-tasks, inbox, search, onboarding, goals, docs, dashboards, trash,
+│                    # archives and errors
 ├─ layouts/          # application shells and their slots, when implemented
 └─ shared/           # generic non-visual helpers, when needed
 ```
@@ -40,8 +41,9 @@ src/app/
 
 - Everything written in the repository is **English**: code, comments, docs, agent prompts, rules,
   skills, commit messages, branch names, PR titles and descriptions.
-- User-facing copy is **French**, word for word from the mockup; keep it out of logic so a later
-  `@angular/localize` extraction is mechanical.
+- That includes URL paths and the user-facing source copy: English strings with a stable
+  `@@feature.area.key` id (`$localize`, `i18n`). The mockup's French wording, word for word, is the `fr`
+  translation users see. Keep copy out of logic.
 - Follow the user's language in the conversation only. No emojis.
 - Never invent facts about the product, the contracts, the mockup or the tooling: cite the file or
   the document. When something does not exist yet, say so and say which step of the start-up plan

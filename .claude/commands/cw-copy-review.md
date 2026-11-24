@@ -1,5 +1,5 @@
 ---
-description: "Check French copy against the mockup."
+description: "Check the copy and its French translation against the mockup."
 argument-hint: "[files]"
 ---
 
