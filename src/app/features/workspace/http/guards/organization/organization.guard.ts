@@ -8,6 +8,8 @@ import {
 } from '@angular/router';
 import { map, type Observable, of, switchMap } from 'rxjs';
 
+import { isReservedSlug } from '@core/routing';
+
 import { WorkspaceSession } from '../../../data-access/services/workspace-session/workspace-session.service';
 import type {
   WorkspaceOrganization,
@@ -37,6 +39,19 @@ const SWITCHABLE_CODES: ReadonlySet<string> = new Set([
 ]);
 
 /**
+ * Constant UNKNOWN_SLUG
+ *
+ * @description
+ * Result of a slug that names none of the caller's organizations.
+ *
+ * @type {WorkspaceResult<WorkspaceOrganization>}
+ */
+const UNKNOWN_SLUG: WorkspaceResult<WorkspaceOrganization> = {
+  ok: false,
+  problem: { status: 404, code: 'organization.not-found' },
+};
+
+/**
  * Function mayNameAnotherOrganization
  *
  * @description
@@ -56,10 +71,17 @@ function mayNameAnotherOrganization(problem: WorkspaceProblem): boolean {
  * @description
  * Makes the organization named by the `:org` slug the session's current organization before the
  * workspace activates, and keeps it for the workspace resolver:
+ * - the slug is reserved (`login`, `home`... see `RESERVED_SLUGS`): it goes to the organization
+ *   choice without reading the gateway;
  * - the slug is the current organization's: it passes;
  * - the slug is another organization of the caller: it switches the session to it, then passes;
  * - the slug is unknown, the switch is refused, or the gateway is unavailable: it goes to the
  *   organization choice (`/organizations`); a `401` goes to sign-in with the return URL.
+ *
+ * The current-organization read, the lookup and the switch run under one exclusive session lock,
+ * so another tab cannot switch in between, and a navigation cancelled once the lock is held still
+ * lets the switch complete: the session is never left half switched. The store only takes the
+ * organization when the guard answers.
  *
  * Use it with `runGuardsAndResolvers: 'pathParamsChange'` on the route that provides
  * `WorkspaceContextStore`.
@@ -76,43 +98,51 @@ export const organizationGuard: CanActivateFn = (
   const session: WorkspaceSession = inject(WorkspaceSession);
   const store: InstanceType<typeof WorkspaceContextStore> = inject(WorkspaceContextStore);
   const slug: string = route.paramMap.get('org') ?? '';
+  if (isReservedSlug(slug)) return of(organizationChoiceRedirect(router));
 
-  const accept: (organization: WorkspaceOrganization) => true = (
-    organization: WorkspaceOrganization,
-  ): true => {
-    store.verifyOrganization(organization);
-    return true;
-  };
-
-  const switchTo: () => Observable<boolean | UrlTree> = (): Observable<boolean | UrlTree> =>
+  const switchTo: () => Observable<WorkspaceResult<WorkspaceOrganization>> = (): Observable<
+    WorkspaceResult<WorkspaceOrganization>
+  > =>
     session.myOrganizations().pipe(
       switchMap(
         (
           organizations: WorkspaceResult<readonly WorkspaceOrganization[]>,
-        ): Observable<boolean | UrlTree> => {
-          if (!organizations.ok) {
-            return of(accessRedirect(router, organizations.problem, state.url));
-          }
+        ): Observable<WorkspaceResult<WorkspaceOrganization>> => {
+          if (!organizations.ok) return of(organizations);
           const match: WorkspaceOrganization | undefined = organizations.value.find(
             (organization: WorkspaceOrganization) => organization.slug === slug,
           );
-          if (!match) return of(organizationChoiceRedirect(router));
+          if (!match) return of(UNKNOWN_SLUG);
           return session
             .switchOrganization(match.id)
             .pipe(
-              map((switched: WorkspaceResult<void>): boolean | UrlTree =>
-                switched.ok ? accept(match) : accessRedirect(router, switched.problem, state.url),
+              map((switched: WorkspaceResult<void>): WorkspaceResult<WorkspaceOrganization> =>
+                switched.ok ? { ok: true, value: match } : switched,
               ),
             );
         },
       ),
     );
 
-  return session.currentOrganization().pipe(
-    switchMap((current: WorkspaceResult<WorkspaceOrganization>): Observable<boolean | UrlTree> => {
-      if (current.ok) return current.value.slug === slug ? of(accept(current.value)) : switchTo();
-      if (mayNameAnotherOrganization(current.problem)) return switchTo();
-      return of(accessRedirect(router, current.problem, state.url));
+  const enter: () => Observable<WorkspaceResult<WorkspaceOrganization>> = (): Observable<
+    WorkspaceResult<WorkspaceOrganization>
+  > =>
+    session.currentOrganization().pipe(
+      switchMap(
+        (
+          current: WorkspaceResult<WorkspaceOrganization>,
+        ): Observable<WorkspaceResult<WorkspaceOrganization>> => {
+          if (current.ok) return current.value.slug === slug ? of(current) : switchTo();
+          return mayNameAnotherOrganization(current.problem) ? switchTo() : of(current);
+        },
+      ),
+    );
+
+  return session.exclusive(enter).pipe(
+    map((result: WorkspaceResult<WorkspaceOrganization>): boolean | UrlTree => {
+      if (!result.ok) return accessRedirect(router, result.problem, state.url);
+      store.verifyOrganization(result.value);
+      return true;
     }),
   );
 };

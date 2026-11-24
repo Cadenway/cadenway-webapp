@@ -1,4 +1,3 @@
-import { Location } from '@angular/common';
 import { Component, inject, type OnInit, signal, type WritableSignal } from '@angular/core';
 import {
   type FieldContext,
@@ -132,21 +131,10 @@ export class ResetPage implements OnInit {
   private readonly route: ActivatedRoute = inject(ActivatedRoute);
 
   /**
-   * Property location
-   *
-   * @description
-   * Removes the token from the address bar.
-   *
-   * @type {Location}
-   * @readonly
-   */
-  private readonly location: Location = inject(Location);
-
-  /**
    * Property router
    *
    * @description
-   * Opens `/login` after the reset.
+   * Removes the token from the URL, then opens `/login` after the reset.
    *
    * @type {Router}
    * @readonly
@@ -304,7 +292,7 @@ export class ResetPage implements OnInit {
   private async start(): Promise<void> {
     const fragment: string = this.route.snapshot.fragment ?? '';
     this.token = new URLSearchParams(fragment).get('token');
-    if (fragment !== '') this.location.replaceState('/reset');
+    if (fragment !== '') await this.router.navigateByUrl('/reset', { replaceUrl: true });
     if (this.token === null || this.token === '') {
       this.view.set('expired');
       return;

@@ -19,10 +19,9 @@ renders inside the shell. The page keeps the unknown address in the browser.
 | `errors.routes` | app, workspace |
 | `.`             | app            |
 
-`.` publishes `RouteErrorPage`, the `defaultErrorComponent` of `withErrorBoundaries` in
-`app.config.ts`. A route that needs its own `errorComponent` uses the same page. The architecture
-test grants `index.ts` an exception to the `page-boundary` rule for this re-export, because the
-router takes the component type at bootstrap.
+`.` publishes `RouteErrorBoundary`, the `defaultErrorComponent` of `withErrorBoundaries` in
+`app.config.ts`, a component under `ui/components/route-error-boundary`. A route that needs its
+own `errorComponent` uses the same component; the 404 route loads it too.
 
 ## Dependencies
 
@@ -48,3 +47,5 @@ router takes the component type at bootstrap.
   access request or restore returns to its idle state; its failure message waits for the shell's
   toaster.
 - The failure is reported to Angular's `ErrorHandler` by the boundary's `onError`.
+- The recovery actions load in a deferred chunk: « Chargement… » shows while it loads, and when it
+  cannot load (offline) a fallback keeps « Impossible de charger cette page » with « Réessayer ».

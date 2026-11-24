@@ -8,6 +8,7 @@ import {
 } from '@angular/core';
 import {
   provideRouter,
+  withAutoCleanupInjectors,
   withComponentInputBinding,
   withErrorBoundaries,
   withRouterConfig,
@@ -17,7 +18,7 @@ import { apiClientInterceptor } from '@core/api';
 import { RuntimeConfigStore } from '@core/config';
 import { provideAppRouting } from '@core/routing';
 import { provideTheme } from '@core/theme';
-import { RouteErrorPage } from '@features/errors';
+import { RouteErrorBoundary } from '@features/errors';
 
 import { APP_ROUTES } from './app.routes';
 
@@ -36,14 +37,17 @@ export const appConfig: ApplicationConfig = {
     provideAppInitializer(() => inject(RuntimeConfigStore).load()),
     provideHttpClient(withInterceptors([apiClientInterceptor])),
     // Parameters, query parameters and data reach pages as inputs, a child seeing its ancestors'
-    // parameters. A routed page that fails renders `RouteErrorPage` in its outlet; the failure is
-    // still reported to the application's error handler.
+    // parameters. Leaving a route destroys the environment injector of its providers, so the
+    // route-scoped stores (AuthFlowStore, WorkspaceContextStore) die with it. A routed page that
+    // fails renders `RouteErrorBoundary` in its outlet; the failure is still reported to the
+    // application's error handler.
     provideRouter(
       APP_ROUTES,
       withComponentInputBinding(),
+      withAutoCleanupInjectors(),
       withRouterConfig({ paramsInheritanceStrategy: 'always' }),
       withErrorBoundaries({
-        defaultErrorComponent: RouteErrorPage,
+        defaultErrorComponent: RouteErrorBoundary,
         onError: (error: Error): void => {
           inject(ErrorHandler).handleError(error);
         },

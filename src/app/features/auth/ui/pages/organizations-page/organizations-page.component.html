@@ -41,7 +41,25 @@
       </cw-alert>
     }
 
-    @if (store.pendingInvitations().length > 0) {
+    @if (store.invitationsProblem() !== null) {
+      <cw-alert variant="destructive" role="alert" data-testid="invitations-error">
+        <cw-alert-description class="flex flex-wrap items-center justify-between gap-2">
+          <span i18n="@@auth.organizations.invitations-failed"
+            >This section could not be loaded</span
+          >
+          <button
+            cwButton
+            type="button"
+            variant="outline"
+            size="sm"
+            (click)="store.reloadInvitations()"
+            i18n="@@auth.retry"
+          >
+            Retry
+          </button>
+        </cw-alert-description>
+      </cw-alert>
+    } @else if (store.pendingInvitations().length > 0) {
       <section class="flex flex-col gap-2" aria-labelledby="org-invitations">
         <p
           id="org-invitations"

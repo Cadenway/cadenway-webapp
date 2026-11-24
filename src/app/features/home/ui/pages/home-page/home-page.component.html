@@ -11,4 +11,18 @@
       </h1>
     </div>
   </header>
+  @if (logoFailed()) {
+    <cw-alert
+      variant="warning"
+      role="status"
+      dismissible
+      [closeLabel]="closeLabel"
+      (dismissed)="noticeDismissed.set(true)"
+    >
+      <cw-alert-description i18n="@@home.notice.logo-upload-failed"
+        >The organization was created, but its logo could not be uploaded. You can add it later from
+        the organization settings.</cw-alert-description
+      >
+    </cw-alert>
+  }
 </div>

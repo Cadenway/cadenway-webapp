@@ -9,6 +9,14 @@
       </p>
     </div>
 
+    @if (reason() === 'sign-up-replaced') {
+      <cw-alert variant="warning" role="status">
+        <cw-alert-description i18n="@@auth.signup.replaced"
+          >A newer sign-up replaced this one: sign up again to receive a new
+          code.</cw-alert-description
+        >
+      </cw-alert>
+    }
     @if (problem()) {
       <cw-alert variant="destructive" role="alert">
         <cw-alert-description i18n="@@auth.login.unavailable"

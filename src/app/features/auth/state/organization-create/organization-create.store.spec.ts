@@ -59,20 +59,16 @@ function setup(api: Partial<Record<keyof OrganizationApi, unknown>>): Organizati
 }
 
 describe('OrganizationCreateStore', () => {
-  it('creates, switches to the new organization, uploads the logo and opens its workspace', async () => {
+  it('creates, then enters the new organization with its logo and opens its workspace', async () => {
     const calls: string[] = [];
     const store: OrganizationCreateStore = setup({
       create: vi.fn(() => {
         calls.push('create');
         return Promise.resolve(studio);
       }),
-      choose: vi.fn((id: string, justJoined: boolean) => {
-        calls.push(`choose ${id} ${String(justJoined)}`);
-        return Promise.resolve();
-      }),
-      uploadLogo: vi.fn(() => {
-        calls.push('logo');
-        return Promise.resolve();
+      enterCreated: vi.fn((id: string, logo: File | null) => {
+        calls.push(`enter ${id} ${logo?.name ?? 'without logo'}`);
+        return Promise.resolve({ logoFailed: false });
       }),
     });
 
@@ -81,15 +77,26 @@ describe('OrganizationCreateStore', () => {
       destination: '/studio-nord',
       logoFailed: false,
     });
-    expect(calls).toEqual(['create', 'choose org-studio true', 'logo']);
+    expect(calls).toEqual(['create', 'enter org-studio logo.png']);
     expect(store.creating()).toBe(false);
+  });
+
+  it('opens the chooser for a created organization whose slug is reserved', async () => {
+    const store: OrganizationCreateStore = setup({
+      create: () => Promise.resolve({ ...studio, slug: 'home' }),
+      enterCreated: () => Promise.resolve({ logoFailed: false }),
+    });
+
+    await expect(store.create({ ...draft, logo: null })).resolves.toMatchObject({
+      ok: true,
+      destination: '/organizations',
+    });
   });
 
   it('keeps the creation when the logo upload fails', async () => {
     const store: OrganizationCreateStore = setup({
       create: () => Promise.resolve(studio),
-      choose: () => Promise.resolve(),
-      uploadLogo: vi.fn().mockRejectedValue(new Error('storage')),
+      enterCreated: () => Promise.resolve({ logoFailed: true }),
     });
 
     await expect(store.create(draft)).resolves.toMatchObject({ ok: true, logoFailed: true });
@@ -116,7 +123,7 @@ describe('OrganizationCreateStore', () => {
   it('reports the created organization when the session could not move to it', async () => {
     const store: OrganizationCreateStore = setup({
       create: () => Promise.resolve(studio),
-      choose: vi.fn().mockRejectedValue(new HttpErrorResponse({ status: 404 })),
+      enterCreated: vi.fn().mockRejectedValue(new HttpErrorResponse({ status: 404 })),
     });
 
     await expect(store.create(draft)).resolves.toMatchObject({ ok: false, created: studio });

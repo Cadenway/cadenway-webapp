@@ -11,10 +11,10 @@ import type { WorkspaceProblem } from '../../models/workspace-context/workspace-
  *
  * @param {Router} router - Router building the tree.
  * @param {string} url - Address the caller asked for.
- * @returns {UrlTree} `/login?returnUrl=<url>`.
+ * @returns {UrlTree} `/login?next=<url>`.
  */
 export function signInRedirect(router: Router, url: string): UrlTree {
-  return router.createUrlTree(['/login'], { queryParams: { returnUrl: url } });
+  return router.createUrlTree(['/login'], { queryParams: { next: url } });
 }
 
 /**

@@ -1,6 +1,8 @@
 import { inject, type Signal, type Type } from '@angular/core';
 import { patchState, signalStore, withMethods, withState } from '@ngrx/signals';
 
+import { workspacePath } from '@core/routing';
+
 import { authProblem } from '../../utils/auth-problem/auth-problem.util';
 import { OrganizationApi } from '../../data-access/services/organization-api/organization-api.service';
 import type { AuthProblem } from '../../models/auth-problem/auth-problem.interface';
@@ -51,8 +53,9 @@ interface OrganizationCreateStoreInstance {
    * Method create
    *
    * @description
-   * Creates the organization, moves the session to it (retrying while the membership
-   * propagates), then uploads the logo. A failed logo upload does not undo the creation.
+   * Creates the organization, then moves the session to it and uploads the logo under one
+   * exclusive session lock (`OrganizationApi.enterCreated`). A failed logo upload does not undo
+   * the creation: the result says so, for the next screen to tell the person.
    *
    * @param {OrganizationDraft} draft - The submitted form.
    * @returns {Promise<CreationResult>} The workspace path or the refusal.
@@ -79,23 +82,20 @@ function createOrganizationCreateStore(): Type<OrganizationCreateStoreInstance> 
         }
         patchState(store, { creating: true });
         let created: OrganizationChoice | null = null;
+        let logoFailed: boolean;
         try {
           created = await api.create(draft);
-          await api.choose(created.id, true);
+          const entered: { readonly logoFailed: boolean } = await api.enterCreated(
+            created.id,
+            draft.logo,
+          );
+          logoFailed = entered.logoFailed;
         } catch (error: unknown) {
           patchState(store, { creating: false });
           return { ok: false, problem: authProblem(error), created };
         }
-        let logoFailed: boolean = false;
-        if (draft.logo !== null) {
-          try {
-            await api.uploadLogo(draft.logo);
-          } catch {
-            logoFailed = true;
-          }
-        }
         patchState(store, { creating: false });
-        return { ok: true, destination: `/${created.slug}`, logoFailed };
+        return { ok: true, destination: workspacePath(created.slug), logoFailed };
       },
     })),
   );

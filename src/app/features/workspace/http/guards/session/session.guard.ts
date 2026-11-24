@@ -21,7 +21,7 @@ import { WorkspaceContextStore } from '../../../state/workspace-context/workspac
  *
  * @description
  * Requires a signed-in session before a workspace route activates, and keeps the person it read
- * for the workspace resolver. A `401` goes to `/login?returnUrl=<url>`; any other failure goes to
+ * for the workspace resolver. A `401` goes to `/login?next=<url>`; any other failure goes to
  * the organization choice. Use it on the route that provides `WorkspaceContextStore`.
  *
  * @param {ActivatedRouteSnapshot} _route - Route being activated.

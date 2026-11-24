@@ -27,7 +27,7 @@ async function render(flow: Record<string, unknown>): Promise<{
     providers: [
       provideRouter([]),
       provideCadenwayIcons(),
-      { provide: AuthFlowStore, useValue: flow },
+      { provide: AuthFlowStore, useValue: { abandonSignUp: vi.fn(), ...flow } },
     ],
   });
   const navigate: Mock = vi
@@ -87,5 +87,27 @@ describe('SignupVerifyPage', () => {
 
     expect(verifySignUp).toHaveBeenCalledWith('654321');
     expect(navigate).toHaveBeenCalledWith('/organizations', { replaceUrl: true });
+  });
+
+  it('sends a replaced sign-up back to sign-up with its notice', async () => {
+    const { host, fixture, navigate }: Awaited<ReturnType<typeof render>> = await render({
+      signUpEmail: signal('camille.martin@ateliernord.fr'),
+      verifySignUp: vi.fn(() =>
+        Promise.resolve({
+          kind: 'failed',
+          problem: { status: 422, code: 'auth.sign-up-replaced', remainingAttempts: null },
+        }),
+      ),
+    });
+    const input: HTMLInputElement | null = host.querySelector('#code-input');
+    if (input === null) throw new Error('Expected the code input.');
+    input.value = '654321';
+    input.dispatchEvent(new Event('input'));
+    await fixture.whenStable();
+    host.querySelector('form')?.dispatchEvent(new Event('submit', { cancelable: true }));
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(navigate).toHaveBeenCalledWith('/signup?reason=sign-up-replaced', { replaceUrl: true });
+    expect(host.textContent).not.toContain('Code incorrect ou expiré');
   });
 });

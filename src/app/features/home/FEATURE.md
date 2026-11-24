@@ -26,5 +26,8 @@ route title.
 ## Invariants
 
 - The greeting is the page's `h1` and its route focus target (`data-route-focus`).
+- `?notice=logo-upload-failed`, set by Auth after a creation whose logo could not be uploaded,
+  shows a dismissible notice pointing to the organization settings. Its French copy is not in the
+  mockup.
 - The date follows the application locale (`LOCALE_ID`) and is computed when the page opens.
-- A failure of the page renders the router's default error component, `RouteErrorPage`.
+- A failure of the page renders the router's default error component, `RouteErrorBoundary`.

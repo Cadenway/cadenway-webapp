@@ -42,7 +42,7 @@ async function render(
     providers: [
       provideRouter([]),
       provideCadenwayIcons(),
-      { provide: AuthFlowStore, useValue: flow },
+      { provide: AuthFlowStore, useValue: { cancelChallenge: vi.fn(), ...flow } },
     ],
   });
   const navigate: Mock = vi
@@ -111,6 +111,40 @@ describe('TwoStepPage', () => {
     );
     await send();
     expect(navigate).toHaveBeenCalledWith('/atelier-nord', { replaceUrl: true });
+  });
+
+  it('keeps its frame and offers to sign in again when the challenge expired', async () => {
+    const pending: WritableSignal<TwoStepChallenge | null> = signal(challenge);
+    const answerChallenge: Mock = vi.fn(() => {
+      pending.set(null);
+      return Promise.resolve({
+        kind: 'failed',
+        problem: { status: 422, code: 'auth.challenge-expired', remainingAttempts: null },
+      });
+    });
+    const { host, fixture }: Awaited<ReturnType<typeof render>> = await render({
+      challenge: pending,
+      loadChallenge: vi.fn(() => Promise.resolve(true)),
+      answerChallenge,
+    });
+    const input: HTMLInputElement | null = host.querySelector('#mfa-app-code');
+    if (input === null) throw new Error('Expected the app code.');
+    input.value = '123456';
+    input.dispatchEvent(new Event('input'));
+    await fixture.whenStable();
+    host
+      .querySelector('cw-tab-panel form')
+      ?.dispatchEvent(new Event('submit', { cancelable: true }));
+    await fixture.whenStable();
+
+    expect(host.querySelector('h1')?.textContent.trim()).toBe('Vérification en deux étapes');
+    expect(host.querySelector('cw-alert')?.textContent).toContain(
+      'La vérification a expiré. Connectez-vous à nouveau.',
+    );
+    const again: HTMLAnchorElement | null = host.querySelector('a[href="/login"]');
+    expect(again?.textContent.trim()).toBe('Se reconnecter');
+    expect(host.querySelector('#mfa-app-code')).toBeNull();
+    expect(host.querySelector('[cwSkeleton]')).toBeNull();
   });
 
   it('lists the security keys and the unused backup codes', async () => {

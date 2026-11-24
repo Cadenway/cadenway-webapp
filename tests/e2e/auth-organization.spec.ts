@@ -340,3 +340,18 @@ test('the signed-out screen signs in again with a remembered account', async ({ 
   ).toBeVisible();
   await expect(page.getByLabel('Mot de passe', { exact: true })).toBeFocused();
 });
+
+test('a protected workspace link opened signed out comes back after sign-in with its query', async ({
+  page,
+}) => {
+  await stubGateway(page);
+
+  await page.goto('/atelier-nord/lien/introuvable?x=1');
+  await expect(page).toHaveURL(/\/login\?next=%2Fatelier-nord%2Flien%2Fintrouvable%3Fx%3D1$/u);
+  await page.getByLabel('Adresse e-mail').fill(email);
+  await page.getByLabel('Mot de passe', { exact: true }).fill(password);
+  await page.getByRole('button', { name: 'Se connecter', exact: true }).click();
+
+  await expect(page).toHaveURL(/\/atelier-nord\/lien\/introuvable\?x=1$/u);
+  await expect(page.getByRole('heading', { name: 'Page introuvable' })).toBeVisible();
+});

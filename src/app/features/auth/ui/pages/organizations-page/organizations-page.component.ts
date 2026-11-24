@@ -215,6 +215,7 @@ export class OrganizationsPage {
     effect(() => {
       if (
         this.store.loadProblem()?.status === 401 ||
+        this.store.invitationsProblem()?.status === 401 ||
         this.store.failure()?.problem.status === 401
       ) {
         void this.router.navigateByUrl('/login', { replaceUrl: true });

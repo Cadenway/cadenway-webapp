@@ -1,5 +1,14 @@
 import { inject, type Signal, type Type } from '@angular/core';
-import { patchState, signalStore, withComputed, withMethods, withState } from '@ngrx/signals';
+import {
+  patchState,
+  signalStore,
+  withComputed,
+  withHooks,
+  withMethods,
+  withState,
+} from '@ngrx/signals';
+
+import { workspacePath } from '@core/routing';
 
 import { authProblem } from '../../utils/auth-problem/auth-problem.util';
 import { AuthApi } from '../../data-access/services/auth-api/auth-api.service';
@@ -404,6 +413,14 @@ interface AuthFlowStoreInstance {
   cancelChallenge(): void;
 
   /**
+   * Method abandonSignUp
+   *
+   * @description
+   * Forgets the pending sign-up, its password included, when the person leaves its verification.
+   */
+  abandonSignUp(): void;
+
+  /**
    * Method signUp
    *
    * @description
@@ -516,7 +533,8 @@ const initialState: AuthFlowState = {
  * @description
  * Creates the flow store provided by the auth root route, so its screens share the address, the
  * pending challenge and the pending sign-up while the person moves between them. A session that
- * opens remembers its account on this device, clears the tab's challenge token, and resolves the
+ * opens remembers its account on this device when « Rester connecté » is ticked, clears the tab's
+ * challenge token, and resolves the
  * destination: the `?next=` path, else `/<slug>` of the session's organization, else
  * `/organizations` when the person must still choose.
  *
@@ -543,7 +561,7 @@ function createAuthFlowStore(): Type<AuthFlowStoreInstance> {
           storage.keepReturnUrl(null);
           if (next !== null) return next;
           try {
-            return `/${(await organizations.current()).slug}`;
+            return workspacePath((await organizations.current()).slug);
           } catch {
             return '/organizations';
           }
@@ -552,7 +570,7 @@ function createAuthFlowStore(): Type<AuthFlowStoreInstance> {
         const opened: (account: SignedInAccount) => Promise<SessionResult> = async (
           account: SignedInAccount,
         ): Promise<SessionResult> => {
-          accounts.remember(account);
+          if (store.rememberMe()) accounts.remember(account);
           storage.keepChallengeToken(null);
           patchState(store, { account, challenge: null, _challengeToken: null, _signUp: null });
           return { kind: 'signed-in', destination: await destination() };
@@ -693,6 +711,9 @@ function createAuthFlowStore(): Type<AuthFlowStoreInstance> {
             }
             return { kind: 'failed', problem: account.problem };
           },
+          abandonSignUp(): void {
+            patchState(store, { _signUp: null });
+          },
           cancelChallenge(): void {
             storage.keepChallengeToken(null);
             patchState(store, { challenge: null, _challengeToken: null });
@@ -764,6 +785,14 @@ function createAuthFlowStore(): Type<AuthFlowStoreInstance> {
         };
       },
     ),
+    withHooks(() => {
+      const storage: AuthStorageService = inject(AuthStorageService);
+      return {
+        onDestroy(): void {
+          storage.keepChallengeToken(null);
+        },
+      };
+    }),
   );
 }
 
@@ -771,8 +800,10 @@ function createAuthFlowStore(): Type<AuthFlowStoreInstance> {
  * Constant AuthFlowStore
  *
  * @description
- * Flow state shared by the auth screens, provided by the auth root route (never root-provided):
- * it lives while the person stays on auth screens and is gone once they enter a workspace.
+ * Flow state shared by the auth screens, provided by the auth root route (never root-provided).
+ * The router destroys it when the person leaves the auth screens (`withAutoCleanupInjectors`),
+ * which also forgets the tab's challenge token; nothing it holds, the pending sign-up password
+ * included, outlives the auth screens.
  *
  * @type {Type<AuthFlowStoreInstance>}
  */

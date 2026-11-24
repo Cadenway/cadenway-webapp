@@ -1,4 +1,12 @@
-import { Component, DestroyRef, inject, signal, type WritableSignal } from '@angular/core';
+import {
+  Component,
+  DestroyRef,
+  inject,
+  input,
+  type InputSignal,
+  signal,
+  type WritableSignal,
+} from '@angular/core';
 import {
   email,
   type FieldTree,
@@ -118,6 +126,18 @@ interface SignupModel {
 })
 export class SignupPage {
   // #region Properties
+  /**
+   * Property reason
+   *
+   * @description
+   * The `?reason=` query parameter; `sign-up-replaced` says the previous sign-up of the address
+   * was replaced and must be made again.
+   *
+   * @type {InputSignal<string | undefined>}
+   * @readonly
+   */
+  public readonly reason: InputSignal<string | undefined> = input<string | undefined>();
+
   /**
    * Property flow
    *
@@ -289,7 +309,7 @@ export class SignupPage {
           case 'auth.email-taken':
             return serverError(
               fields.email,
-              $localize`:@@auth.signup.email-taken:An account already uses this address.`,
+              $localize`:@@auth.signup.email-taken:An account already uses this address: sign in.`,
             );
           case 'auth.password-too-short':
             return serverError(

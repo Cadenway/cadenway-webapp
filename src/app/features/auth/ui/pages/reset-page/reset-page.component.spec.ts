@@ -1,6 +1,5 @@
-import { Location } from '@angular/common';
 import { TestBed, type ComponentFixture } from '@angular/core/testing';
-import { ActivatedRoute, provideRouter } from '@angular/router';
+import { ActivatedRoute, provideRouter, Router } from '@angular/router';
 import { provideCadenwayIcons } from '@cadenway/icons';
 import { describe, expect, it, type Mock, vi } from 'vitest';
 
@@ -31,7 +30,9 @@ async function render(
       { provide: ActivatedRoute, useValue: { snapshot: { fragment } } },
     ],
   });
-  const replaceState: Mock = vi.spyOn(TestBed.inject(Location), 'replaceState') as Mock;
+  const replaceState: Mock = vi
+    .spyOn(TestBed.inject(Router), 'navigateByUrl')
+    .mockResolvedValue(true) as Mock;
   const fixture: ComponentFixture<ResetPage> = TestBed.createComponent(ResetPage);
   await fixture.whenStable();
   await fixture.whenStable();
@@ -75,7 +76,7 @@ describe('ResetPage', () => {
     );
 
     expect(inspectPasswordReset).toHaveBeenCalledWith('reset-token');
-    expect(replaceState).toHaveBeenCalledWith('/reset');
+    expect(replaceState).toHaveBeenCalledWith('/reset', { replaceUrl: true });
     expect(host.textContent).toContain('Pour le compte camille.martin@ateliernord.fr.');
     expect(host.textContent).toContain('3 appareils connectés seront déconnectés.');
 

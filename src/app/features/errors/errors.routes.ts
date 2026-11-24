@@ -21,6 +21,7 @@ export const ERRORS_ROUTES: Routes = [
     title: $localize`:@@errors.not-found.route-title:Page not found`,
     data: { error: new NotFoundRouteError() },
     loadComponent: async (): Promise<Type<unknown>> =>
-      (await import('./ui/pages/route-error-page/route-error-page.component')).RouteErrorPage,
+      (await import('./ui/components/route-error-boundary/route-error-boundary.component'))
+        .RouteErrorBoundary,
   },
 ];

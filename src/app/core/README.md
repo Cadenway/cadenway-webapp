@@ -16,7 +16,7 @@ in step 3; the earlier task-room adapter was removed with the screens that used 
 | `@core/api`       | Transport interceptor and validated HTTP problem readers.    |
 | `@core/theme`     | Theme preference and document synchronization.               |
 | `@core/shortcuts` | Scoped keyboard shortcut registration.                       |
-| `@core/routing`   | Route title and focus infrastructure.                        |
+| `@core/routing`   | Route title, focus and the reserved first segments (slugs).  |
 
 ## Dependencies
 

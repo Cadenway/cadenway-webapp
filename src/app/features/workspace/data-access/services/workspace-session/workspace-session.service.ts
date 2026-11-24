@@ -146,19 +146,38 @@ export class WorkspaceSession {
    * Method switchOrganization
    *
    * @description
-   * Makes an organization of the caller the session's current organization, under the exclusive
-   * browser session lock so it never overlaps a sign-in, a sign-out or a protected write of
-   * another tab.
+   * Makes an organization of the caller the session's current organization. It takes no lock
+   * itself: call it inside `exclusive`, together with the read that decided the switch, so the
+   * read and the switch never interleave with a sign-in, a sign-out, a switch or a protected write
+   * of another tab.
    *
    * @param {string} organizationId - Organization the caller belongs to.
    * @returns {Observable<WorkspaceResult<void>>} Completion, or the problem.
    */
   public switchOrganization(organizationId: string): Observable<WorkspaceResult<void>> {
     return workspaceResult(
-      withSessionLock(
-        () => this.organizations.switchOrganization({ organizationId }),
-        'exclusive',
-      ).pipe(map((): void => undefined)),
+      this.organizations.switchOrganization({ organizationId }).pipe(map((): void => undefined)),
+    );
+  }
+
+  /**
+   * Method exclusive
+   *
+   * @description
+   * Runs a sequence of session reads and writes under one exclusive browser session lock. Once the
+   * lock is granted the whole sequence runs to its end, even if the subscriber unsubscribes (a
+   * cancelled navigation), so a read is never followed by half a switch. Without Web Locks the
+   * sequence is not started and the result is status zero.
+   *
+   * @template T
+   * @param {() => Observable<WorkspaceResult<T>>} operation - The sequence; it emits once.
+   * @returns {Observable<WorkspaceResult<T>>} The sequence's result, or the lock failure.
+   */
+  public exclusive<T>(
+    operation: () => Observable<WorkspaceResult<T>>,
+  ): Observable<WorkspaceResult<T>> {
+    return withSessionLock(operation, 'exclusive').pipe(
+      catchError(() => of<WorkspaceResult<T>>({ ok: false, problem: { status: 0, code: null } })),
     );
   }
   // #endregion

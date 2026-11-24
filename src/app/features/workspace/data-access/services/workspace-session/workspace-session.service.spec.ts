@@ -130,7 +130,18 @@ describe('WorkspaceSession', () => {
     ]);
   });
 
-  it('switches the organization under the exclusive session lock', async () => {
+  it('switches the organization without a lock of its own', async () => {
+    const result: Promise<WorkspaceResult<void>> = firstValueFrom(
+      session.switchOrganization('id-lumen'),
+    );
+    const request: TestRequest = http.expectOne({ method: 'PUT', url: '/v1/session/organization' });
+    expect(request.request.body).toEqual({ organizationId: 'id-lumen' });
+    request.flush({ organizationId: 'id-lumen', role: 'member' });
+
+    await expect(result).resolves.toEqual({ ok: true, value: undefined });
+  });
+
+  it('runs a read and a switch under one exclusive session lock', async () => {
     const modes: string[] = [];
     vi.stubGlobal('navigator', {
       locks: {
@@ -142,24 +153,23 @@ describe('WorkspaceSession', () => {
     });
 
     const result: Promise<WorkspaceResult<void>> = firstValueFrom(
-      session.switchOrganization('id-lumen'),
+      session.exclusive(() => session.switchOrganization('id-lumen')),
     );
     const request: TestRequest = await vi.waitFor(() =>
       http.expectOne({ method: 'PUT', url: '/v1/session/organization' }),
     );
-    expect(request.request.body).toEqual({ organizationId: 'id-lumen' });
     request.flush({ organizationId: 'id-lumen', role: 'member' });
 
     await expect(result).resolves.toEqual({ ok: true, value: undefined });
     expect(modes).toEqual(['exclusive']);
   });
 
-  it('reports a switch the browser cannot coordinate without sending it', async () => {
+  it('starts nothing when the browser cannot coordinate the session', async () => {
     vi.stubGlobal('navigator', {});
 
-    await expect(firstValueFrom(session.switchOrganization('id-lumen'))).resolves.toEqual({
-      ok: false,
-      problem: { status: 0, code: null },
-    });
+    await expect(
+      firstValueFrom(session.exclusive(() => session.switchOrganization('id-lumen'))),
+    ).resolves.toEqual({ ok: false, problem: { status: 0, code: null } });
+    http.expectNone('/v1/session/organization');
   });
 });

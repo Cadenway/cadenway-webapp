@@ -9,7 +9,7 @@ import {
   type WritableSignal,
 } from '@angular/core';
 import { type FieldTree, form, FormField, pattern, required, submit } from '@angular/forms/signals';
-import { Router } from '@angular/router';
+import { Router, RouterLink } from '@angular/router';
 import { CwAlert, CwAlertDescription } from '@cadenway/ui/components/alert';
 import { CwAvatar } from '@cadenway/ui/components/avatar';
 import { CwButton } from '@cadenway/ui/components/button';
@@ -105,6 +105,7 @@ interface TwoStepModel {
     FormField,
     CwSkeleton,
     NgIcon,
+    RouterLink,
   ],
   templateUrl: './two-step-page.component.html',
 })
@@ -155,6 +156,18 @@ export class TwoStepPage implements OnInit {
   protected readonly selected: WritableSignal<string> = signal('');
 
   /**
+   * Property shown
+   *
+   * @description
+   * The challenge the screen shows. It stays once the flow drops an expired challenge, so the
+   * screen keeps its frame and explains the expiry instead of falling back to its skeleton.
+   *
+   * @type {WritableSignal<TwoStepChallenge | null>}
+   * @readonly
+   */
+  protected readonly shown: WritableSignal<TwoStepChallenge | null> = signal(null);
+
+  /**
    * Property method
    *
    * @description
@@ -164,7 +177,7 @@ export class TwoStepPage implements OnInit {
    * @readonly
    */
   protected readonly method: Signal<TwoStepMethod> = computed(() => {
-    const methods: readonly TwoStepMethod[] = this.flow.challenge()?.methods ?? [];
+    const methods: readonly TwoStepMethod[] = this.shown()?.methods ?? [];
     const chosen: TwoStepMethod | undefined = methods.find(
       (item: TwoStepMethod) => item === this.selected(),
     );
@@ -234,6 +247,19 @@ export class TwoStepPage implements OnInit {
    * @readonly
    */
   protected readonly problem: WritableSignal<AuthProblem | null> = signal(null);
+
+  /**
+   * Property expired
+   *
+   * @description
+   * Whether the challenge expired: the answers give way to « Se reconnecter » (`/login`).
+   *
+   * @type {Signal<boolean>}
+   * @readonly
+   */
+  protected readonly expired: Signal<boolean> = computed(
+    () => this.problem()?.code === 'auth.challenge-expired',
+  );
 
   /**
    * Property message
@@ -309,6 +335,23 @@ export class TwoStepPage implements OnInit {
   };
   // #endregion
 
+  // #region Constructor
+  /**
+   * Constructor
+   *
+   * @description
+   * Drops the challenge when the person leaves the screen without answering it, so a stale
+   * challenge never comes back on a later visit.
+   *
+   * @constructor
+   */
+  public constructor() {
+    this.destroyRef.onDestroy(() => {
+      this.flow.cancelChallenge();
+    });
+  }
+  // #endregion
+
   // #region Methods
   /**
    * Method ngOnInit
@@ -329,7 +372,11 @@ export class TwoStepPage implements OnInit {
    * @returns {Promise<void>} Resolves once handled.
    */
   private async start(): Promise<void> {
-    if (!(await this.flow.loadChallenge()) && !this.destroyRef.destroyed) {
+    const pending: boolean = await this.flow.loadChallenge();
+    if (this.destroyRef.destroyed) return;
+    if (pending) {
+      this.shown.set(this.flow.challenge());
+    } else {
       await this.router.navigateByUrl('/login', { replaceUrl: true });
     }
   }

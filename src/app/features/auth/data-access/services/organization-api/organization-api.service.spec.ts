@@ -32,6 +32,23 @@ const atelierNord: Record<string, unknown> = {
 };
 
 /**
+ * Constant currentOrganization
+ *
+ * @description
+ * Atelier Nord as the current organization of the session.
+ *
+ * @type {Record<string, unknown>}
+ */
+const currentOrganization: Record<string, unknown> = {
+  ...atelierNord,
+  description: null,
+  website: null,
+  defaultLanguage: 'fr',
+  createdAt: '',
+  version: 1,
+};
+
+/**
  * Function http
  *
  * @description
@@ -162,24 +179,21 @@ describe('OrganizationApi', () => {
     await expect(created).resolves.toMatchObject({ slug: 'studio-nord', role: 'owner' });
   });
 
-  it('reads the current organization and uploads a logo in three steps', async () => {
+  it('enters the created organization, checks it is current, then uploads its logo', async () => {
     const api: OrganizationApi = TestBed.inject(OrganizationApi);
-
-    const current: Promise<{ readonly id: string; readonly slug: string }> = api.current();
-    http()
-      .expectOne('/v1/organization')
-      .flush({
-        ...atelierNord,
-        description: null,
-        website: null,
-        defaultLanguage: 'fr',
-        createdAt: '',
-        version: 1,
-      });
-    await expect(current).resolves.toEqual({ id: 'org-atelier-nord', slug: 'atelier-nord' });
-
     const logo: File = new File(['<svg/>'], 'logo.svg', { type: 'image/svg+xml' });
-    const upload: Promise<void> = api.uploadLogo(logo);
+
+    const entered: Promise<{ readonly logoFailed: boolean }> = api.enterCreated(
+      'org-atelier-nord',
+      logo,
+    );
+    await settle();
+    http()
+      .expectOne('/v1/session/organization')
+      .flush({ organizationId: 'org-atelier-nord', role: 'owner' });
+    await settle();
+    http().expectOne('/v1/organization').flush(currentOrganization);
+    await settle();
     const reserve: TestRequest = http().expectOne('/v1/organization/logo/uploads');
     expect(reserve.request.body).toEqual({ contentType: 'image/svg+xml', sizeBytes: logo.size });
     expect(reserve.request.headers.has('Idempotency-Key')).toBe(true);
@@ -198,6 +212,28 @@ describe('OrganizationApi', () => {
     const publish: TestRequest = http().expectOne('/v1/organization/logo');
     expect(publish.request.body).toEqual({ uploadId: 'upload-1' });
     publish.flush(null, { status: 204, statusText: 'No Content' });
-    await expect(upload).resolves.toBeUndefined();
+    await expect(entered).resolves.toEqual({ logoFailed: false });
+  });
+
+  it('does not upload the logo when another organization became current', async () => {
+    const entered: Promise<{ readonly logoFailed: boolean }> = TestBed.inject(
+      OrganizationApi,
+    ).enterCreated('org-studio', new File(['png'], 'logo.png', { type: 'image/png' }));
+    await settle();
+    http()
+      .expectOne('/v1/session/organization')
+      .flush({ organizationId: 'org-studio', role: 'owner' });
+    await settle();
+    http().expectOne('/v1/organization').flush(currentOrganization);
+
+    await expect(entered).resolves.toEqual({ logoFailed: true });
+    http().expectNone('/v1/organization/logo/uploads');
+  });
+
+  it('reads the current organization', async () => {
+    const current: Promise<{ readonly id: string; readonly slug: string }> =
+      TestBed.inject(OrganizationApi).current();
+    http().expectOne('/v1/organization').flush(currentOrganization);
+    await expect(current).resolves.toEqual({ id: 'org-atelier-nord', slug: 'atelier-nord' });
   });
 });

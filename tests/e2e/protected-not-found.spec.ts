@@ -69,6 +69,6 @@ test('unknown workspace addresses require a session', async ({ page }) => {
 
   await page.goto('/atelier-nord/lien/introuvable');
 
-  await expect(page).toHaveURL(/\/login\?returnUrl=%2Fatelier-nord%2Flien%2Fintrouvable$/u);
+  await expect(page).toHaveURL(/\/login\?next=%2Fatelier-nord%2Flien%2Fintrouvable$/u);
   await expect(page.getByRole('heading', { name: 'Page introuvable' })).toHaveCount(0);
 });

@@ -121,12 +121,36 @@ describe('OrganizationChoiceStore', () => {
     expect(store.choices()).toEqual([atelierNord]);
   });
 
+  it('flags a failed invitation list and reads it again on retry', async () => {
+    const listReceivedInvitations: Mock = vi
+      .fn()
+      .mockRejectedValueOnce(new HttpErrorResponse({ status: 503 }))
+      .mockResolvedValue([invitation]);
+    const store: OrganizationChoiceStore = await setup({ listReceivedInvitations });
+
+    expect(store.invitationsProblem()).toMatchObject({ status: 503 });
+    expect(store.choices()).toEqual([atelierNord]);
+    store.reloadInvitations();
+    await vi.advanceTimersByTimeAsync(0);
+    TestBed.tick();
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(store.invitationsProblem()).toBeNull();
+    expect(store.pendingInvitations()).toEqual([invitation]);
+  });
+
   it('switches the session and gives the workspace path', async () => {
     const choose: Mock = vi.fn(() => Promise.resolve());
     const store: OrganizationChoiceStore = await setup({ choose });
 
     await expect(store.choose(atelierNord)).resolves.toBe('/atelier-nord');
     expect(choose).toHaveBeenCalledWith('org-atelier-nord', false);
+  });
+
+  it('never gives a reserved slug as the workspace path', async () => {
+    const store: OrganizationChoiceStore = await setup({ choose: () => Promise.resolve() });
+
+    await expect(store.choose({ ...atelierNord, slug: 'login' })).resolves.toBe('/organizations');
   });
 
   it('keeps a refused switch as the failure of the choice', async () => {

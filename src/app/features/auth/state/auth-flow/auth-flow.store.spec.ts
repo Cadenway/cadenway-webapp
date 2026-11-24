@@ -89,7 +89,7 @@ describe('AuthFlowStore', () => {
     sessionStorage.clear();
   });
 
-  it('opens the session organization, remembers the account and keeps the preference', async () => {
+  it('opens the session organization and remembers the account only for a 30-day session', async () => {
     const signInWithPassword: Mock = vi.fn((): Promise<SignInOutcome> =>
       Promise.resolve({ kind: 'signed-in', account: camille }),
     );
@@ -101,6 +101,10 @@ describe('AuthFlowStore', () => {
       destination: '/atelier-nord',
     });
     expect(signInWithPassword).toHaveBeenCalledWith(camille.email, 'secret', false);
+    expect(TestBed.inject(RememberedAccountsService).accounts()).toEqual([]);
+
+    store.setRememberMe(true);
+    await store.signInWithPassword(camille.email, 'secret');
     expect(TestBed.inject(RememberedAccountsService).accounts()).toEqual([camille]);
   });
 
@@ -125,6 +129,18 @@ describe('AuthFlowStore', () => {
     });
   });
 
+  it('opens the chooser when the session organization has a reserved slug', async () => {
+    const store: AuthFlowStore = setup(
+      { signInWithPassword: () => Promise.resolve({ kind: 'signed-in', account: camille }) },
+      { current: () => Promise.resolve({ id: 'org-home', slug: 'home' }) },
+    );
+
+    await expect(store.signInWithPassword(camille.email, 'secret')).resolves.toEqual({
+      kind: 'signed-in',
+      destination: '/organizations',
+    });
+  });
+
   it('keeps a refused password as a problem with its remaining attempts', async () => {
     const store: AuthFlowStore = setup({
       signInWithPassword: vi.fn().mockRejectedValue(
@@ -141,7 +157,7 @@ describe('AuthFlowStore', () => {
     });
   });
 
-  it('keeps a challenge for the tab, answers it and reads it again after a reload', async () => {
+  it('keeps a challenge for the tab until the flow ends, and reads it again after a reload', async () => {
     const answerWithAuthenticatorApp: Mock = vi.fn(() => Promise.resolve(camille));
     const inspectChallenge: Mock = vi.fn(() => Promise.resolve(challenge));
     const store: AuthFlowStore = setup({
@@ -160,6 +176,8 @@ describe('AuthFlowStore', () => {
     expect(inspectChallenge).not.toHaveBeenCalled();
 
     TestBed.resetTestingModule();
+    expect(sessionStorage.getItem('cadenway-sign-in-challenge')).toBeNull();
+    sessionStorage.setItem('cadenway-sign-in-challenge', 'challenge-token');
     const reloaded: AuthFlowStore = setup({ answerWithAuthenticatorApp, inspectChallenge });
     await expect(reloaded.loadChallenge()).resolves.toBe(true);
     expect(inspectChallenge).toHaveBeenCalledWith('challenge-token');

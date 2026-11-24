@@ -15,7 +15,7 @@ import {
 } from '@shared/route-errors';
 
 import { ErrorRecoveryStore } from '../../../state/error-recovery/error-recovery.store';
-import { RouteErrorState } from '../../components/route-error-state/route-error-state.component';
+import { RouteErrorState } from '../route-error-state/route-error-state.component';
 
 /**
  * Type RouteErrorKind
@@ -67,7 +67,7 @@ function findProblem(error: unknown): ApiProblem | null {
 }
 
 /**
- * Component RouteErrorPage
+ * Component RouteErrorBoundary
  *
  * @description
  * The router's `errorComponent` (mockup `App.dc.html` lines 487-500 and 1499-1522, `ERR_PAGES`).
@@ -84,20 +84,22 @@ function findProblem(error: unknown): ApiProblem | null {
  *   « État des services » waits for a configured status page.
  *
  * The page derives the state and sends the writes through its own `ErrorRecoveryStore`, so each
- * failure starts over. `RouteErrorState` renders it in an `@defer (on immediate)` block: the page is
- * the router's default error component, part of the initial bundle, so the bricks, the Signal Forms
- * runtime and the icons load in their own chunk.
+ * failure starts over. `RouteErrorState` renders it in an `@defer (on immediate)` block: this
+ * component is the router's default error component, part of the initial bundle, so the bricks,
+ * the Signal Forms runtime and the icons load in their own chunk. While that chunk loads, a status
+ * line says the page is loading; when it cannot load (offline), a plain fallback says the page
+ * could not be loaded and offers « Réessayer », which runs the route again.
  */
 @Component({
-  selector: 'cw-route-error-page',
+  selector: 'cw-route-error-boundary',
   imports: [RouteErrorState],
   providers: [ErrorRecoveryStore],
   host: {
     class: 'flex min-h-0 flex-1 items-center justify-center overflow-y-auto px-4 py-10 sm:px-6',
   },
-  templateUrl: './route-error-page.component.html',
+  templateUrl: './route-error-boundary.component.html',
 })
-export class RouteErrorPage {
+export class RouteErrorBoundary {
   // #region Properties
   /**
    * Property error

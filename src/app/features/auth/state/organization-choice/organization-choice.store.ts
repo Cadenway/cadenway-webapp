@@ -9,6 +9,8 @@ import {
   withState,
 } from '@ngrx/signals';
 
+import { workspacePath } from '@core/routing';
+
 import { authProblem } from '../../utils/auth-problem/auth-problem.util';
 import { OrganizationApi } from '../../data-access/services/organization-api/organization-api.service';
 import type { AuthProblem } from '../../models/auth-problem/auth-problem.interface';
@@ -166,6 +168,18 @@ interface OrganizationChoiceStoreInstance {
   readonly loadProblem: Signal<AuthProblem | null>;
 
   /**
+   * Property invitationsProblem
+   *
+   * @description
+   * Problem of the failed invitation list, or null; the page shows it inline with Réessayer
+   * instead of an empty list.
+   *
+   * @type {Signal<AuthProblem | null>}
+   * @readonly
+   */
+  readonly invitationsProblem: Signal<AuthProblem | null>;
+
+  /**
    * Property pendingId
    *
    * @description
@@ -218,6 +232,14 @@ interface OrganizationChoiceStoreInstance {
    * Reads the organizations and the invitations again (Réessayer).
    */
   reload(): void;
+
+  /**
+   * Method reloadInvitations
+   *
+   * @description
+   * Reads the invitations again (Réessayer of their inline error).
+   */
+  reloadInvitations(): void;
 
   /**
    * Method choose
@@ -320,6 +342,10 @@ function createOrganizationChoiceStore(): Type<OrganizationChoiceStoreInstance> 
         const error: Error | undefined = store.organizations.error();
         return error === undefined ? null : authProblem(error.cause ?? error);
       },
+      invitationsProblem: (): AuthProblem | null => {
+        const error: Error | undefined = store.invitations.error();
+        return error === undefined ? null : authProblem(error.cause ?? error);
+      },
     })),
     withMethods((store) => {
       let refusal: { readonly id: string; readonly timer: ReturnType<typeof setTimeout> } | null =
@@ -349,6 +375,9 @@ function createOrganizationChoiceStore(): Type<OrganizationChoiceStoreInstance> 
           store.organizations.reload();
           store.invitations.reload();
         },
+        reloadInvitations(): void {
+          store.invitations.reload();
+        },
         async choose(organization: OrganizationChoice): Promise<string | null> {
           if (store.pendingId() !== null) return null;
           patchState(store, { pendingId: organization.id, failure: null });
@@ -358,7 +387,7 @@ function createOrganizationChoiceStore(): Type<OrganizationChoiceStoreInstance> 
               store.joined().some((item: OrganizationChoice) => item.id === organization.id),
             );
             patchState(store, { pendingId: null });
-            return `/${organization.slug}`;
+            return workspacePath(organization.slug);
           } catch (error: unknown) {
             patchState(store, {
               pendingId: null,

@@ -106,6 +106,8 @@ function chooser(): FakeChooser {
     store: {
       organizations: { isLoading: loading },
       loadProblem,
+      invitationsProblem: signal(null),
+      reloadInvitations: vi.fn(),
       choices: signal([atelierNord]),
       pendingInvitations: signal([invitation]),
       joined: signal([]),
@@ -193,6 +195,24 @@ describe('OrganizationsPage', () => {
       ?.click();
     await fixture.whenStable();
     expect(fake.store['reload']).toHaveBeenCalledOnce();
+  });
+
+  it('shows a failed invitation list inline with Réessayer instead of an empty list', async () => {
+    const fake: FakeChooser = chooser();
+    (fake.store['invitationsProblem'] as WritableSignal<AuthProblem | null>).set({
+      status: 503,
+      code: 'upstream.unavailable',
+      remainingAttempts: null,
+    });
+    const { host, fixture }: Awaited<ReturnType<typeof render>> = await render(fake);
+
+    const error: Element | null = host.querySelector('[data-testid="invitations-error"]');
+    expect(error?.textContent).toContain('Impossible de charger cette section');
+    expect(host.querySelector('[data-testid="invitation-invitation-lumen"]')).toBeNull();
+    expect(host.textContent).toContain('Atelier Nord');
+    error?.querySelector('button')?.click();
+    await fixture.whenStable();
+    expect(fake.store['reloadInvitations']).toHaveBeenCalledOnce();
   });
 
   it('returns to /login when the session is gone', async () => {

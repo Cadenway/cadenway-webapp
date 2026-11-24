@@ -1,0 +1,32 @@
+@defer (on immediate) {
+  <cw-route-error-state
+    [kind]="kind()"
+    [resource]="accessDenied()?.resource ?? null"
+    [task]="deletedTask()?.task ?? null"
+    [status]="status()"
+    [requestId]="requestId()"
+    [trashLink]="trashLink"
+    [accessRequest]="store.accessRequest()"
+    [restore]="store.restore()"
+    (retried)="retry()"
+    (accessRequested)="requestAccess($event)"
+    (restoreRequested)="restore()"
+  />
+} @placeholder {
+  <p role="status" class="text-sm text-muted-foreground" i18n="@@errors.boundary.loading">
+    Loading…
+  </p>
+} @error {
+  <div role="alert" class="flex max-w-sm flex-col items-center gap-3 text-center">
+    <h1 class="text-lg font-semibold" data-route-focus>
+      <ng-container i18n="@@errors.unavailable.title">Could not load this page</ng-container>
+    </h1>
+    <button
+      type="button"
+      class="inline-flex h-9 items-center rounded-lg border border-input px-4 text-sm font-medium hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+      (click)="retry()"
+    >
+      <ng-container i18n="@@errors.unavailable.retry">Retry</ng-container>
+    </button>
+  </div>
+}

@@ -36,7 +36,8 @@ const RESEND_SECONDS: number = 30;
  * Address verification after sign-up, the verification usage of `Otp.dc.html`
  * (`/signup/verify`). The code and the password of the sign-up (kept in the flow store's memory)
  * open the first session. Without a pending sign-up, for example after a reload, it returns to
- * `/signup`.
+ * `/signup`; a sign-up replaced by a newer one (`auth.sign-up-replaced`) returns to
+ * `/signup?reason=sign-up-replaced`, which asks the person to sign up again.
  */
 @Component({
   selector: 'cw-signup-verify-page',
@@ -145,6 +146,22 @@ export class SignupVerifyPage implements OnInit {
   protected readonly submitLabel: string = $localize`:@@auth.signup-verify.submit:Confirm my address`;
   // #endregion
 
+  // #region Constructor
+  /**
+   * Constructor
+   *
+   * @description
+   * Forgets the pending sign-up and its password when the person leaves without verifying.
+   *
+   * @constructor
+   */
+  public constructor() {
+    this.destroyRef.onDestroy(() => {
+      this.flow.abandonSignUp();
+    });
+  }
+  // #endregion
+
   // #region Methods
   /**
    * Method ngOnInit
@@ -208,6 +225,12 @@ export class SignupVerifyPage implements OnInit {
     const result: SessionResult = await this.flow.verifySignUp(code);
     this.checking.set(false);
     if (result.kind === 'failed') {
+      if (result.problem.code === 'auth.sign-up-replaced') {
+        if (!this.destroyRef.destroyed) {
+          await this.router.navigateByUrl('/signup?reason=sign-up-replaced', { replaceUrl: true });
+        }
+        return;
+      }
       if (result.problem.status === 422) {
         this.error.set(
           $localize`:@@auth.code.wrong:Wrong or expired code: check the last email you received.`,

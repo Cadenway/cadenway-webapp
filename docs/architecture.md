@@ -14,7 +14,7 @@ error and localization patterns below. Step 1 is in place:
   e-mail links and `/:org`, whose guards verify the session and switch the session to the
   organization the slug names, and whose resolver commits `WORKSPACE_CONTEXT`. `/:org` loads the
   app shell with the organization switcher, the Home skeleton and the 404 inside the shell.
-- Errors: the router runs with `withErrorBoundaries` and `RouteErrorPage`, which renders the not
+- Errors: the router runs with `withErrorBoundaries` and `RouteErrorBoundary`, which renders the not
   found, access denied, deleted task and unavailable states; Retry runs the route again with a
   same-URL reload navigation (`errors.routes.spec.ts`).
 - Auth is being rebuilt on the same patterns. The earlier Spaces and Task screens were removed; they
@@ -102,9 +102,11 @@ feature owns its workflow under `features/` with its own `FEATURE.md`.
   (`/f/:publicKey`). The `workspace` feature owns `/:org` (the organization slug), its session and slug
   guards, the context resolver, and the redirects of slug-less e-mail links (`/home`, `/account`,
   `/account/:section`, `/org/:section`). Every fixed first segment is a reserved organization slug,
-  refused by the organization service. The other features mount below it: `/:org/t/:taskKey`, `/:org/l/:listId/<view>`,
+  listed once in `RESERVED_SLUGS` (`@core/routing`, checked against the route tables by
+  `app.routes.spec.ts`); the application never navigates to `/<slug>` for one of them, and the
+  organization service will refuse them. The other features mount below it: `/:org/t/:taskKey`, `/:org/l/:listId/<view>`,
   `/:org/d/:docId`, `/:org/account/:section`, `/:org/organization/:section`.
-- `provideRouter(APP_ROUTES, withComponentInputBinding(), withRouterConfig({ paramsInheritanceStrategy:
+- `provideRouter(APP_ROUTES, withComponentInputBinding(), withAutoCleanupInjectors(), withRouterConfig({ paramsInheritanceStrategy:
 'always' }), withErrorBoundaries({ defaultErrorComponent, onError }))`: parameters, query parameters
   and `data` reach pages as signal inputs.
 - Guards and resolvers are functional and live in `http/`. A resolver fills the owning store and

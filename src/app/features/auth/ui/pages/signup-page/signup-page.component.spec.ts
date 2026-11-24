@@ -114,4 +114,17 @@ describe('SignupPage', () => {
     expect(host.querySelector('#su-email-help a')?.getAttribute('href')).toBe('/login');
     expect(navigate).not.toHaveBeenCalled();
   });
+
+  it('asks to sign up again after a replaced sign-up', async () => {
+    const { host, fixture }: Awaited<ReturnType<typeof render>> = await render({
+      ok: true,
+      value: undefined,
+    });
+    fixture.componentRef.setInput('reason', 'sign-up-replaced');
+    await fixture.whenStable();
+
+    expect(host.querySelector('cw-alert')?.textContent).toContain(
+      'Une inscription plus récente a remplacé celle-ci',
+    );
+  });
 });

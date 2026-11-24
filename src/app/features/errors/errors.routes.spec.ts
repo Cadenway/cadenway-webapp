@@ -29,7 +29,7 @@ import {
 import { ErrorRecovery } from './data-access/services/error-recovery/error-recovery.service';
 import { ERRORS_ROUTES } from './errors.routes';
 import type { RestoreOutcome } from './models/error-recovery/error-recovery.type';
-import { RouteErrorPage } from './ui/pages/route-error-page/route-error-page.component';
+import { RouteErrorBoundary } from './ui/components/route-error-boundary/route-error-boundary.component';
 
 /**
  * Constant loads
@@ -146,7 +146,7 @@ describe('ERRORS_ROUTES and the route error boundary', () => {
           ],
           withComponentInputBinding(),
           withRouterConfig({ paramsInheritanceStrategy: 'always' }),
-          withErrorBoundaries({ defaultErrorComponent: RouteErrorPage }),
+          withErrorBoundaries({ defaultErrorComponent: RouteErrorBoundary }),
         ),
         { provide: ErrorRecovery, useValue: recovery },
       ],

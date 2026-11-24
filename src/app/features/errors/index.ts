@@ -1,1 +1,1 @@
-export { RouteErrorPage } from './ui/pages/route-error-page/route-error-page.component';
+export { RouteErrorBoundary } from './ui/components/route-error-boundary/route-error-boundary.component';

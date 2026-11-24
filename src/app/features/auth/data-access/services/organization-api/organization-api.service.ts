@@ -12,7 +12,7 @@ import {
   type ReceivedInvitation as ReceivedInvitationDto,
   type ReceivedInvitationPage,
 } from '@cadenway/api-client';
-import { firstValueFrom } from 'rxjs';
+import { firstValueFrom, from } from 'rxjs';
 
 import { readProblem } from '@core/api';
 
@@ -293,6 +293,59 @@ export class OrganizationApi {
   }
 
   /**
+   * Method enterCreated
+   *
+   * @description
+   * Moves the session to an organization the caller has just created and uploads its logo, all
+   * under one exclusive session lock, so no other tab can switch the session in between and send
+   * the logo to another organization. The switch retries its `404` for a few seconds while the
+   * membership propagates. Before uploading, the session's current organization is read again and
+   * must be the created one; a logo that cannot be uploaded never undoes the creation.
+   *
+   * @param {string} organizationId - The created organization.
+   * @param {File | null} logo - A PNG or SVG image of at most 5 MiB, or null.
+   * @returns {Promise<{ readonly logoFailed: boolean }>} Whether a chosen logo was not uploaded;
+   * rejects when the session could not move to the organization.
+   */
+  public async enterCreated(
+    organizationId: string,
+    logo: File | null,
+  ): Promise<{ readonly logoFailed: boolean }> {
+    return firstValueFrom(
+      withSessionLock(() => from(this.enterCreatedUnlocked(organizationId, logo))),
+    );
+  }
+
+  /**
+   * Method enterCreatedUnlocked
+   *
+   * @description
+   * The sequence of `enterCreated`, run while the caller holds the exclusive session lock.
+   *
+   * @param {string} organizationId - The created organization.
+   * @param {File | null} logo - The logo, or null.
+   * @returns {Promise<{ readonly logoFailed: boolean }>} Whether a chosen logo was not uploaded.
+   */
+  private async enterCreatedUnlocked(
+    organizationId: string,
+    logo: File | null,
+  ): Promise<{ readonly logoFailed: boolean }> {
+    await retryOn(
+      () => firstValueFrom(this.organizations.switchOrganization({ organizationId })),
+      (status: number) => status === 404,
+      MEMBERSHIP_ATTEMPTS,
+    );
+    if (logo === null) return { logoFailed: false };
+    try {
+      if ((await this.current()).id !== organizationId) return { logoFailed: true };
+      await this.uploadLogo(logo);
+      return { logoFailed: false };
+    } catch {
+      return { logoFailed: true };
+    }
+  }
+
+  /**
    * Method uploadLogo
    *
    * @description
@@ -303,7 +356,7 @@ export class OrganizationApi {
    * @param {File} logo - A PNG or SVG image of at most 5 MiB.
    * @returns {Promise<void>} Resolves once the logo is published.
    */
-  public async uploadLogo(logo: File): Promise<void> {
+  private async uploadLogo(logo: File): Promise<void> {
     const upload: ProfileMediaUpload = await firstValueFrom(
       this.media.startOrganizationLogoUpload(
         {

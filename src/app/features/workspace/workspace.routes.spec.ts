@@ -164,6 +164,19 @@ interface SessionFake {
   readonly switchOrganization: ReturnType<
     typeof vi.fn<(id: string) => Observable<WorkspaceResult<void>>>
   >;
+
+  /**
+   * Property exclusive
+   *
+   * @description
+   * Runs the sequence the guard gives it, as the real lock does once granted.
+   *
+   * @type {ReturnType<typeof vi.fn<(operation: () => Observable<unknown>) => Observable<unknown>>>}
+   * @readonly
+   */
+  readonly exclusive: ReturnType<
+    typeof vi.fn<(operation: () => Observable<unknown>) => Observable<unknown>>
+  >;
   // #endregion
 }
 
@@ -176,6 +189,7 @@ describe('WORKSPACE_ROUTES', () => {
       currentOrganization: vi.fn(() => ok(atelierNord)),
       myOrganizations: vi.fn(() => ok([atelierNord, lumen])),
       switchOrganization: vi.fn(() => ok(undefined)),
+      exclusive: vi.fn((operation: () => Observable<unknown>) => operation()),
     };
     TestBed.configureTestingModule({
       providers: [
@@ -258,6 +272,30 @@ describe('WORKSPACE_ROUTES', () => {
     expect(TestBed.inject(Router).url).toBe('/atelier-nord');
   });
 
+  it('reads and switches the organization under one exclusive session lock', async () => {
+    await open('/lumen');
+
+    expect(session.exclusive).toHaveBeenCalledOnce();
+    expect(session.switchOrganization).toHaveBeenCalledWith(lumen.id);
+  });
+
+  it('never opens a reserved slug as a workspace', async () => {
+    await open('/f');
+
+    expect(TestBed.inject(Router).url).toBe('/organizations');
+    expect(session.currentOrganization).not.toHaveBeenCalled();
+    expect(session.switchOrganization).not.toHaveBeenCalled();
+  });
+
+  it('sends an e-mail link to the organization choice when the current slug is reserved', async () => {
+    session.currentOrganization.mockReturnValue(ok({ ...atelierNord, slug: 'home' }));
+    const router: Router = TestBed.inject(Router);
+
+    await router.navigateByUrl('/home');
+
+    expect(router.url).toBe('/organizations');
+  });
+
   it('sends an unknown slug to the organization choice', async () => {
     await open('/inconnue');
 
@@ -286,7 +324,7 @@ describe('WORKSPACE_ROUTES', () => {
 
     await open('/atelier-nord/missing');
 
-    expect(TestBed.inject(Router).url).toBe('/login?returnUrl=%2Fatelier-nord%2Fmissing');
+    expect(TestBed.inject(Router).url).toBe('/login?next=%2Fatelier-nord%2Fmissing');
   });
 
   it('sends an unavailable gateway to the organization choice', async () => {
@@ -326,6 +364,6 @@ describe('WORKSPACE_ROUTES', () => {
 
     await TestBed.inject(Router).navigateByUrl('/org/quotas');
 
-    expect(TestBed.inject(Router).url).toBe('/login?returnUrl=%2Forg%2Fquotas');
+    expect(TestBed.inject(Router).url).toBe('/login?next=%2Forg%2Fquotas');
   });
 });
