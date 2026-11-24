@@ -30,56 +30,68 @@
     <div
       class="relative mt-2 mr-2 mb-2 flex min-w-0 flex-1 overflow-hidden rounded-xl border border-border bg-background max-md:m-0 max-md:mb-14 max-md:rounded-none max-md:border-0"
     >
-      <div
-        class="flex h-full shrink-0 max-lg:absolute max-lg:inset-y-0 max-lg:left-0 max-lg:z-30 max-lg:data-[state=expanded]:shadow-md"
-        [attr.data-state]="sidebarState()"
+      <cw-sidebar
+        #sidebarRef="cwSidebar"
+        collapsible="offcanvas"
+        [state]="sidebarState.state()"
+        (stateChange)="sidebarState.sync($event)"
+        ariaLabel="Space navigation"
+        i18n-ariaLabel="@@layouts.app-shell.sidebar"
+        closeLabel="Close the sidebar"
+        i18n-closeLabel="@@layouts.app-shell.sidebar-close"
       >
-        <cw-sidebar
-          #spaceSidebar="cwSidebar"
-          collapsible="offcanvas"
-          [(state)]="sidebarState"
-          ariaLabel="Space navigation"
-          i18n-ariaLabel="@@layouts.app-shell.sidebar"
-          closeLabel="Close the sidebar"
-          i18n-closeLabel="@@layouts.app-shell.sidebar-close"
-        >
-          @if (sidebarHeader.length > 0) {
-            <cw-sidebar-header>
+        <cw-sidebar-header>
+          <div class="flex items-start gap-2">
+            <div class="flex min-w-0 flex-1 flex-col gap-2">
               @for (row of sidebarHeader; track row.id) {
                 <ng-container *ngComponentOutlet="row.component; inputs: row.inputs" />
               }
-            </cw-sidebar-header>
-          }
-          @for (section of sidebar; track section.id) {
-            <ng-container *ngComponentOutlet="section.component; inputs: section.inputs" />
-          }
-          @if (sidebarFooter.length > 0) {
-            <cw-sidebar-footer>
-              @for (row of sidebarFooter; track row.id) {
-                <ng-container *ngComponentOutlet="row.component; inputs: row.inputs" />
-              }
-            </cw-sidebar-footer>
-          }
-        </cw-sidebar>
-      </div>
+            </div>
+            <div class="flex h-11 shrink-0 items-center">
+              <button
+                cwButton
+                variant="ghost"
+                size="icon-sm"
+                aria-label="Collapse the sidebar"
+                i18n-aria-label="@@layouts.app-shell.sidebar-collapse"
+                aria-keyshortcuts="Control+B"
+                aria-expanded="true"
+                [attr.aria-controls]="sidebarRef.id"
+                data-testid="app-shell-sidebar-collapse"
+                (click)="sidebarState.toggle()"
+              >
+                <ng-icon name="phosphorSidebarSimpleBold" aria-hidden="true" />
+              </button>
+            </div>
+          </div>
+        </cw-sidebar-header>
+        @for (section of sidebar; track section.id) {
+          <ng-container *ngComponentOutlet="section.component; inputs: section.inputs" />
+        }
+        @if (sidebarFooter.length > 0) {
+          <cw-sidebar-footer>
+            @for (row of sidebarFooter; track row.id) {
+              <ng-container *ngComponentOutlet="row.component; inputs: row.inputs" />
+            }
+          </cw-sidebar-footer>
+        }
+      </cw-sidebar>
 
-      <main
-        id="main-content"
-        class="relative flex min-w-0 flex-1 flex-col"
-        aria-label="Main content"
-        i18n-aria-label="@@layouts.app-shell.main"
-      >
-        @if (spaceSidebar.collapsed()) {
+      <main class="relative flex min-w-0 flex-1 flex-col">
+        @if (!sidebarState.expanded() && !sidebarState.toggleClaimed()) {
           <div class="flex shrink-0 items-center px-4 pt-3 sm:px-6">
             <button
+              #expandToggle
               cwButton
               variant="ghost"
               size="icon-sm"
-              [cwSidebarToggle]="spaceSidebar"
-              expandLabel="Expand the sidebar"
-              i18n-expandLabel="@@layouts.app-shell.sidebar-expand"
-              collapseLabel="Collapse the sidebar"
-              i18n-collapseLabel="@@layouts.app-shell.sidebar-collapse"
+              aria-label="Expand the sidebar"
+              i18n-aria-label="@@layouts.app-shell.sidebar-expand"
+              aria-keyshortcuts="Control+B"
+              aria-expanded="false"
+              [attr.aria-controls]="sidebarRef.id"
+              data-testid="app-shell-sidebar-expand"
+              (click)="sidebarState.toggle()"
             >
               <ng-icon name="phosphorSidebarSimpleBold" aria-hidden="true" />
             </button>

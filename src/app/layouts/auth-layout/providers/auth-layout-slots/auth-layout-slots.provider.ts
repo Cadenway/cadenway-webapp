@@ -39,8 +39,11 @@ export interface AuthLayoutSlots {
  * Function provideAuthLayoutSlots
  *
  * @description
- * Registers the route's sign-in frame contributions as multi providers. The contributions are
- * built lazily in the route injector that mounts `AuthLayout`, and several calls add up.
+ * Registers sign-in frame contributions as multi providers. Call it in the `providers` of the route
+ * that loads `AuthLayout`: the layout reads its slots from that route's injector when it is
+ * created, so contributions in a child route's providers never reach it, and several calls in the
+ * same route add up. A routed page changes the shell through the core page-to-shell services
+ * instead.
  *
  * @param {AuthLayoutSlots} config - Contributions per slot.
  * @returns {EnvironmentProviders} Environment providers for the configured slots.

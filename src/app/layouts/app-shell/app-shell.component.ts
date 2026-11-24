@@ -1,5 +1,17 @@
 import { NgComponentOutlet } from '@angular/common';
-import { Component, DOCUMENT, inject, LOCALE_ID, signal, type WritableSignal } from '@angular/core';
+import {
+  afterNextRender,
+  Component,
+  DOCUMENT,
+  effect,
+  ElementRef,
+  inject,
+  Injector,
+  LOCALE_ID,
+  type Signal,
+  untracked,
+  viewChild,
+} from '@angular/core';
 import { RouterOutlet } from '@angular/router';
 import {
   CwAppRail,
@@ -8,18 +20,12 @@ import {
   CwAppRailSeparator,
 } from '@cadenway/ui/components/app-rail';
 import { CwButton } from '@cadenway/ui/components/button';
-import {
-  CwSidebar,
-  CwSidebarFooter,
-  CwSidebarHeader,
-  type CwSidebarState,
-  CwSidebarToggle,
-} from '@cadenway/ui/components/sidebar';
+import { CwSidebar, CwSidebarFooter, CwSidebarHeader } from '@cadenway/ui/components/sidebar';
 import { provideCwLocale, provideCwPhoneSheets } from '@cadenway/ui/core';
 import { NgIcon } from '@ng-icons/core';
-import { injectSlot, type SlotContribution } from '@shared/layout-slot';
+import { injectSlot, SHELL_SIDEBAR, type SlotContribution } from '@shared/layout-slot';
 
-import { SIDEBAR_OVERLAY_QUERY } from './constants/app-shell.constants';
+import { AppShellSidebar } from './services/app-shell-sidebar/app-shell-sidebar.service';
 import {
   APP_SHELL_BANNERS_SLOT,
   APP_SHELL_ORGANIZATION_SWITCHER_SLOT,
@@ -32,6 +38,17 @@ import {
 } from './slots';
 
 /**
+ * Constant FOCUSABLE
+ *
+ * @description
+ * Selector of the elements focus may move to inside the sidebar.
+ *
+ * @type {string}
+ */
+const FOCUSABLE: string =
+  'a[href], button:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+/**
  * Component AppShell
  *
  * @description
@@ -39,12 +56,15 @@ import {
  * applications rail (`nav[cwAppRail]`, a bottom tab bar below 768 px) holding the
  * `organizationSwitcher`, the `railNavigation` groups and the `railFooter` items, and the rounded
  * main panel. The panel holds the off-canvas space sidebar (`sidebarHeader`, `sidebar` and
- * `sidebarFooter`), which
- * starts closed below 1024 px and then covers the content, and the `main` landmark with the routed
- * screen; while the sidebar is closed, a toggle above the routed screen opens it. The `overlays`
- * render last. Contributions render in ascending order and an empty slot renders nothing. The
- * routed icons (`phosphorSidebarSimpleBold`) come from the route's `provideCadenwayIcons()`. The
- * layout provides the `@cadenway/ui` locale from `LOCALE_ID` and the phone sheets to its subtree.
+ * `sidebarFooter`) with the default `cw-sidebar` behavior, and the `main` landmark with the routed
+ * screen. The sidebar header always ends with a collapse button; while the sidebar is collapsed, an
+ * expand toggle sits above the routed screen unless a screen claimed it through `SHELL_SIDEBAR`.
+ * Opening with either toggle moves focus to the first control of the sidebar; any collapse that
+ * leaves focus in the sidebar or on the page body returns it to the opener, or else to the expand
+ * toggle. The `overlays` render last. Contributions render in ascending order and an empty slot
+ * renders nothing. The route provides the `phosphorSidebarSimpleBold` icon through
+ * `provideCadenwayIcons()`. The layout provides the `@cadenway/ui` locale from `LOCALE_ID`, the
+ * phone sheets and `AppShellSidebar` to its subtree.
  */
 @Component({
   selector: 'cw-app-shell',
@@ -57,12 +77,16 @@ import {
     CwSidebar,
     CwSidebarFooter,
     CwSidebarHeader,
-    CwSidebarToggle,
     NgComponentOutlet,
     NgIcon,
     RouterOutlet,
   ],
-  providers: [provideCwLocale(() => inject(LOCALE_ID)), provideCwPhoneSheets()],
+  providers: [
+    provideCwLocale(() => inject(LOCALE_ID)),
+    provideCwPhoneSheets(),
+    AppShellSidebar,
+    { provide: SHELL_SIDEBAR, useExisting: AppShellSidebar },
+  ],
   templateUrl: './app-shell.component.html',
 })
 export class AppShell {
@@ -169,30 +193,111 @@ export class AppShell {
    * Property sidebarState
    *
    * @description
-   * Expanded or collapsed state of the space sidebar, two-way bound to `cw-sidebar`. It starts
-   * collapsed below 1024 px, where the sidebar covers the content, and expanded otherwise or when
-   * the viewport cannot be queried.
+   * Sidebar state shared with `cw-sidebar` and the routed screens.
    *
-   * @type {WritableSignal<CwSidebarState>}
+   * @type {AppShellSidebar}
    * @readonly
    */
-  protected readonly sidebarState: WritableSignal<CwSidebarState> = signal<CwSidebarState>(
-    this.overlaidSidebar() ? 'collapsed' : 'expanded',
-  );
+  protected readonly sidebarState: AppShellSidebar = inject(AppShellSidebar);
+
+  /**
+   * Property spaceSidebar
+   *
+   * @description
+   * The rendered `cw-sidebar`, whose `nav` id locates the focus targets.
+   *
+   * @type {Signal<CwSidebar | undefined>}
+   * @readonly
+   */
+  private readonly spaceSidebar: Signal<CwSidebar | undefined> = viewChild(CwSidebar);
+
+  /**
+   * Property expandToggle
+   *
+   * @description
+   * The shell's expand toggle, rendered while the sidebar is collapsed and the toggle unclaimed.
+   *
+   * @type {Signal<ElementRef<HTMLButtonElement> | undefined>}
+   * @readonly
+   */
+  private readonly expandToggle: Signal<ElementRef<HTMLButtonElement> | undefined> = viewChild<
+    string,
+    ElementRef<HTMLButtonElement>
+  >('expandToggle', { read: ElementRef });
+
+  /**
+   * Property document
+   *
+   * @description
+   * Document holding the sidebar and the focused element.
+   *
+   * @type {Document}
+   * @readonly
+   */
+  private readonly document: Document = inject(DOCUMENT);
+
+  /**
+   * Property injector
+   *
+   * @description
+   * Injector scheduling the focus moves after rendering.
+   *
+   * @type {Injector}
+   * @readonly
+   */
+  private readonly injector: Injector = inject(Injector);
+  // #endregion
+
+  // #region Constructor
+  /**
+   * Constructor
+   *
+   * @description
+   * Moves focus after each sidebar state change, once the change is rendered; the initial state
+   * moves nothing.
+   *
+   * @constructor
+   */
+  public constructor() {
+    let initial: boolean = true;
+    effect((): void => {
+      const expanded: boolean = this.sidebarState.expanded();
+      if (initial) {
+        initial = false;
+        return;
+      }
+      untracked((): void => {
+        afterNextRender(
+          (): void => {
+            this.moveFocus(expanded);
+          },
+          { injector: this.injector },
+        );
+      });
+    });
+  }
   // #endregion
 
   // #region Methods
   /**
-   * Method overlaidSidebar
+   * Method moveFocus
    *
    * @description
-   * Tells whether the current viewport is narrower than 1024 px.
+   * After an opening by `toggle()`, focuses the first control of the sidebar. After a collapse that
+   * left focus in the sidebar or on the body, focuses the opener, or else the expand toggle.
    *
-   * @returns {boolean} True when the sidebar covers the content at this width.
+   * @param {boolean} expanded - State that was just rendered.
    */
-  private overlaidSidebar(): boolean {
-    const view: Window | null = inject(DOCUMENT).defaultView;
-    return typeof view?.matchMedia === 'function' && view.matchMedia(SIDEBAR_OVERLAY_QUERY).matches;
+  private moveFocus(expanded: boolean): void {
+    const id: string | undefined = this.spaceSidebar()?.id;
+    const nav: HTMLElement | null = id ? this.document.getElementById(id) : null;
+    if (expanded) {
+      if (this.sidebarState.takeFocusRequest()) nav?.querySelector<HTMLElement>(FOCUSABLE)?.focus();
+      return;
+    }
+    const active: Element | null = this.document.activeElement;
+    if (active && active !== this.document.body && !nav?.contains(active)) return;
+    (this.sidebarState.returnTarget() ?? this.expandToggle()?.nativeElement)?.focus();
   }
   // #endregion
 }

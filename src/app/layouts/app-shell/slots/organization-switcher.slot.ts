@@ -5,7 +5,8 @@ import type { SlotContribution } from '@shared/layout-slot';
  * Constant APP_SHELL_ORGANIZATION_SWITCHER_SLOT
  *
  * @description
- * Additive organization switcher rendered first in the rail, in a desktop-only rail group followed by a separator.
+ * Additive organization switcher rendered first in the rail, in a desktop-only rail group followed
+ * by a separator.
  *
  * @type {InjectionToken<readonly SlotContribution[]>}
  */

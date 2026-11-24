@@ -5,7 +5,8 @@ import type { SlotContribution } from '@shared/layout-slot';
  * Constant APP_SHELL_BANNERS_SLOT
  *
  * @description
- * Additive application-wide banners rendered above the rail and the main panel, such as the storage quota banner built on cw-banner with placement top.
+ * Additive application-wide banners rendered above the rail and the main panel, such as the storage
+ * quota banner built on cw-banner with placement top.
  *
  * @type {InjectionToken<readonly SlotContribution[]>}
  */

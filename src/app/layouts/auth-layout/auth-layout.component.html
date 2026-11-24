@@ -17,19 +17,8 @@
     }
   </header>
 
-  <main
-    class="flex flex-1 justify-center px-4 py-6 sm:items-center sm:py-10"
-    aria-label="Main content"
-    i18n-aria-label="@@layouts.auth-layout.main"
-  >
-    <div class="flex w-full max-w-[400px] flex-col gap-5">
-      <div
-        class="flex flex-col gap-6 rounded-xl border border-border bg-card p-6 sm:p-8"
-        data-testid="auth-layout-card"
-      >
-        <router-outlet class="hidden" />
-      </div>
-    </div>
+  <main class="flex flex-1 flex-col items-center px-4 py-6 sm:justify-center sm:py-10">
+    <router-outlet />
   </main>
 
   @if (footerLinks.length > 0) {

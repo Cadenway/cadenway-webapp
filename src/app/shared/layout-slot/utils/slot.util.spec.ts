@@ -100,6 +100,19 @@ describe('injectSlot', () => {
     ]);
   });
 
+  it('fails fast in development mode on a duplicate id', () => {
+    TestBed.configureTestingModule({
+      providers: slotProviders(TEST_SLOT, [
+        { useFactory: (): SlotContribution => contribution('search', 1) },
+        { useFactory: (): SlotContribution => contribution('search', 2) },
+      ]),
+    });
+
+    expect(() =>
+      TestBed.runInInjectionContext((): readonly SlotContribution[] => injectSlot(TEST_SLOT)),
+    ).toThrow('Duplicate contribution id "search" in InjectionToken TEST_SLOT.');
+  });
+
   it('returns an empty list for a slot nobody provides', () => {
     expect(
       TestBed.runInInjectionContext((): readonly SlotContribution[] => injectSlot(TEST_SLOT)),

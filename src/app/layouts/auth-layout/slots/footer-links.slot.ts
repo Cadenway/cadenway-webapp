@@ -5,7 +5,8 @@ import type { SlotContribution } from '@shared/layout-slot';
  * Constant AUTH_FOOTER_LINKS_SLOT
  *
  * @description
- * Additive entries of the sign-in footer, such as the workspace name and the privacy, terms and help links. The footer renders only when the slot has contributions.
+ * Additive entries of the sign-in footer, such as the workspace name and the privacy, terms and
+ * help links. The footer renders only when the slot has contributions.
  *
  * @type {InjectionToken<readonly SlotContribution[]>}
  */

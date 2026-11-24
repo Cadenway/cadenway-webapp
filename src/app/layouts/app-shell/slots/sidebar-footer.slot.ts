@@ -5,7 +5,8 @@ import type { SlotContribution } from '@shared/layout-slot';
  * Constant APP_SHELL_SIDEBAR_FOOTER_SLOT
  *
  * @description
- * Additive rows of the sidebar footer inside cw-sidebar-footer, such as the sprint progress and the trash and archives links.
+ * Additive rows of the sidebar footer inside cw-sidebar-footer, such as the sprint progress and the
+ * trash and archives links.
  *
  * @type {InjectionToken<readonly SlotContribution[]>}
  */

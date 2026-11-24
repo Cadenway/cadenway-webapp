@@ -5,7 +5,8 @@ import type { SlotContribution } from '@shared/layout-slot';
  * Constant APP_SHELL_OVERLAYS_SLOT
  *
  * @description
- * Additive application-wide overlays rendered after the shell, such as the command palette and the shortcuts dialog.
+ * Additive application-wide overlays rendered after the shell, such as the command palette and the
+ * shortcuts dialog.
  *
  * @type {InjectionToken<readonly SlotContribution[]>}
  */

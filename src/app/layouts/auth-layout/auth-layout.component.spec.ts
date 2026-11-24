@@ -108,7 +108,7 @@ describe('AuthLayout', () => {
     expect(labels(host)).toEqual([]);
   });
 
-  it('exposes the header, the named home link and the main landmark around the card outlet', async () => {
+  it('exposes the header, the named home link and the main landmark holding the outlet', async () => {
     const host: HTMLElement = await render({});
 
     const home: HTMLAnchorElement | null = host.querySelector('header a');
@@ -118,9 +118,7 @@ describe('AuthLayout', () => {
     expect(home?.getAttribute('href')).toBe('/');
     expect(host.querySelector('cw-logo')).not.toBeNull();
     const main: HTMLElement | null = host.querySelector('main');
-    expect(main?.getAttribute('aria-label')).toBe(
-      $localize`:@@layouts.auth-layout.main:Main content`,
-    );
-    expect(main?.querySelector('[data-testid="auth-layout-card"] router-outlet')).not.toBeNull();
+    expect(main?.hasAttribute('aria-label')).toBe(false);
+    expect(main?.querySelector(':scope > router-outlet')).not.toBeNull();
   });
 });

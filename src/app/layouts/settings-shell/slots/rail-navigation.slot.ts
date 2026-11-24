@@ -5,7 +5,8 @@ import type { SlotContribution } from '@shared/layout-slot';
  * Constant SETTINGS_SHELL_RAIL_NAVIGATION_SLOT
  *
  * @description
- * Additive rail navigation of the settings shell. Each contribution renders its own cw-app-rail-group, optionally preceded by a cw-app-rail-separator.
+ * Additive rail navigation of the settings shell. Each contribution renders its own cw-app-rail-
+ * group, optionally preceded by a cw-app-rail-separator.
  *
  * @type {InjectionToken<readonly SlotContribution[]>}
  */

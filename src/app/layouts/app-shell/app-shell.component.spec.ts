@@ -1,9 +1,17 @@
-import { ApplicationRef, Component, input, type InputSignal } from '@angular/core';
+import {
+  ApplicationRef,
+  Component,
+  DestroyRef,
+  inject,
+  input,
+  type InputSignal,
+} from '@angular/core';
 import { TestBed, type ComponentFixture } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
+import { RouterTestingHarness } from '@angular/router/testing';
 import { provideCadenwayIcons } from '@cadenway/icons';
-import type { SlotContribution } from '@shared/layout-slot';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { SHELL_SIDEBAR, type ShellSidebar, type SlotContribution } from '@shared/layout-slot';
+import { describe, expect, it } from 'vitest';
 
 import { AppShell } from './app-shell.component';
 import { provideAppShellSlots, type AppShellSlots } from './providers';
@@ -31,6 +39,63 @@ class SlotProbe {
    */
   public readonly label: InputSignal<string> = input('');
   // #endregion
+}
+
+/**
+ * Component ClaimingScreen
+ *
+ * @description
+ * Routed screen that renders the expand toggle itself, as the list screen does in its breadcrumb
+ * row.
+ */
+@Component({
+  selector: 'cw-claiming-screen',
+  template:
+    '<button type="button" data-testid="screen-toggle" (click)="sidebar?.toggle()">Toggle</button>',
+})
+class ClaimingScreen {
+  // #region Properties
+  /**
+   * Property sidebar
+   *
+   * @description
+   * Port to the hosting shell's sidebar.
+   *
+   * @type {ShellSidebar | null}
+   * @readonly
+   */
+  protected readonly sidebar: ShellSidebar | null = inject(SHELL_SIDEBAR, { optional: true });
+  // #endregion
+
+  // #region Constructor
+  /**
+   * Constructor
+   *
+   * @description
+   * Claims the toggle for the screen's lifetime.
+   *
+   * @constructor
+   */
+  public constructor() {
+    this.sidebar?.claimToggle(inject(DestroyRef));
+  }
+  // #endregion
+}
+
+/**
+ * Function routedElement
+ *
+ * @description
+ * Returns the element of the component the harness routed to.
+ *
+ * @param {RouterTestingHarness} harness - Harness after a navigation.
+ * @returns {HTMLElement} The routed component's element.
+ * @throws {Error} When the navigation rendered no component.
+ */
+function routedElement(harness: RouterTestingHarness): HTMLElement {
+  const element: HTMLElement | null = harness.routeNativeElement;
+  if (!element) throw new Error('Expected a routed component.');
+  return element;
 }
 
 /**
@@ -109,6 +174,35 @@ function landmark(host: HTMLElement, tag: string, name: string): HTMLElement | n
 }
 
 /**
+ * Function byTestId
+ *
+ * @description
+ * Finds an element by its `data-testid`.
+ *
+ * @param {ParentNode} root - Root to search.
+ * @param {string} id - Test id.
+ * @returns {HTMLElement | null} The element, or null.
+ */
+function byTestId(root: ParentNode, id: string): HTMLElement | null {
+  return root.querySelector<HTMLElement>(`[data-testid="${id}"]`);
+}
+
+/**
+ * Function click
+ *
+ * @description
+ * Focuses and clicks a button, as a keyboard user does, then waits for the application to settle.
+ *
+ * @param {HTMLElement | null} button - Button to activate.
+ * @returns {Promise<void>} Resolves once rendering and focus moves are done.
+ */
+async function click(button: HTMLElement | null): Promise<void> {
+  button?.focus();
+  button?.click();
+  await TestBed.inject(ApplicationRef).whenStable();
+}
+
+/**
  * Constant RAIL_NAME
  *
  * @description
@@ -129,10 +223,6 @@ const RAIL_NAME: string = $localize`:@@layouts.app-shell.rail:Applications`;
 const SIDEBAR_NAME: string = $localize`:@@layouts.app-shell.sidebar:Space navigation`;
 
 describe('AppShell', () => {
-  afterEach(() => {
-    Reflect.deleteProperty(document.defaultView ?? {}, 'matchMedia');
-  });
-
   it('renders every slot in order with its inputs, overlays last', async () => {
     const host: HTMLElement = await render({
       banners: [probe('banner-b', 2), probe('banner-a', 1)],
@@ -162,9 +252,7 @@ describe('AppShell', () => {
       'palette',
     ]);
     const rail: HTMLElement | null = landmark(host, 'nav', RAIL_NAME);
-    expect(
-      labels(rail?.querySelector('[data-testid="app-shell-organization-switcher"]') ?? null),
-    ).toEqual(['organizations']);
+    expect(labels(byTestId(host, 'app-shell-organization-switcher'))).toEqual(['organizations']);
     expect(labels(rail?.querySelector('cw-app-rail-footer') ?? null)).toEqual([
       'search',
       'theme',
@@ -181,55 +269,109 @@ describe('AppShell', () => {
     const host: HTMLElement = await render({});
 
     expect(labels(host)).toEqual([]);
-    expect(host.querySelector('[data-testid="app-shell-organization-switcher"]')).toBeNull();
+    expect(byTestId(host, 'app-shell-organization-switcher')).toBeNull();
     expect(host.querySelector('cw-app-rail-separator')).toBeNull();
     expect(host.querySelector('cw-app-rail-footer')).toBeNull();
-    expect(host.querySelector('cw-sidebar-header')).toBeNull();
     expect(host.querySelector('cw-sidebar-footer')).toBeNull();
   });
 
-  it('exposes the rail, the space navigation and the main landmark around the outlet', async () => {
+  it('exposes the rail, the space navigation and an unnamed main landmark around the outlet', async () => {
     const host: HTMLElement = await render({});
 
     expect(landmark(host, 'nav', RAIL_NAME)).not.toBeNull();
     expect(landmark(host, 'nav', SIDEBAR_NAME)).not.toBeNull();
-    const main: HTMLElement | null = landmark(
-      host,
-      'main',
-      $localize`:@@layouts.app-shell.main:Main content`,
-    );
+    const main: HTMLElement | null = host.querySelector('main');
+    expect(main?.hasAttribute('aria-label')).toBe(false);
     expect(main?.querySelector('router-outlet')).not.toBeNull();
   });
 
-  it('keeps the sidebar open from 1024 px, without the expand toggle', async () => {
+  it('starts expanded with a collapse control in the sidebar and no expand toggle', async () => {
     const host: HTMLElement = await render({});
+    const sidebar: HTMLElement | null = landmark(host, 'nav', SIDEBAR_NAME);
+    const collapse: HTMLElement | null = byTestId(host, 'app-shell-sidebar-collapse');
 
-    expect(landmark(host, 'nav', SIDEBAR_NAME)?.getAttribute('data-state')).toBe('expanded');
-    expect(host.querySelector('main button')).toBeNull();
+    expect(sidebar?.getAttribute('data-state')).toBe('expanded');
+    expect(collapse?.getAttribute('aria-label')).toBe(
+      $localize`:@@layouts.app-shell.sidebar-collapse:Collapse the sidebar`,
+    );
+    expect(sidebar?.contains(collapse)).toBe(true);
+    expect(byTestId(host, 'app-shell-sidebar-expand')).toBeNull();
   });
 
-  it('starts with the sidebar closed below 1024 px and opens it from the main panel', async () => {
-    Object.defineProperty(document.defaultView, 'matchMedia', {
-      configurable: true,
-      value: (query: string): Partial<MediaQueryList> => ({
-        matches: query === '(max-width: 1023.98px)',
-        media: query,
-        addEventListener: vi.fn(),
-        removeEventListener: vi.fn(),
-      }),
-    });
+  it('returns focus to the expand toggle on collapse and moves it into the sidebar on expand', async () => {
     const host: HTMLElement = await render({});
     const sidebar: HTMLElement | null = landmark(host, 'nav', SIDEBAR_NAME);
 
+    await click(byTestId(host, 'app-shell-sidebar-collapse'));
+
     expect(sidebar?.getAttribute('data-state')).toBe('collapsed');
-    const toggle: HTMLButtonElement | null = host.querySelector('main button');
-    expect(toggle?.getAttribute('aria-label')).toBe(
+    const expand: HTMLElement | null = byTestId(host, 'app-shell-sidebar-expand');
+    expect(expand?.getAttribute('aria-label')).toBe(
       $localize`:@@layouts.app-shell.sidebar-expand:Expand the sidebar`,
     );
+    expect(document.activeElement).toBe(expand);
 
-    toggle?.click();
-    await TestBed.inject(ApplicationRef).whenStable();
+    await click(expand);
 
     expect(sidebar?.getAttribute('data-state')).toBe('expanded');
+    expect(document.activeElement).toBe(byTestId(host, 'app-shell-sidebar-collapse'));
+  });
+});
+
+describe('AppShell routing', () => {
+  it('reads slots from the route that loads the shell only, never from its child routes', async () => {
+    TestBed.configureTestingModule({
+      providers: [
+        provideCadenwayIcons(),
+        provideRouter([
+          {
+            path: '',
+            component: AppShell,
+            providers: [provideAppShellSlots({ railFooter: [probe('from-shell-route', 0)] })],
+            children: [
+              {
+                path: 'child',
+                component: ClaimingScreen,
+                providers: [provideAppShellSlots({ railFooter: [probe('from-child-route', 1)] })],
+              },
+            ],
+          },
+        ]),
+      ],
+    });
+    const harness: RouterTestingHarness = await RouterTestingHarness.create('/child');
+    const host: HTMLElement = routedElement(harness);
+
+    expect(labels(host.querySelector('cw-app-rail-footer'))).toEqual(['from-shell-route']);
+    expect(byTestId(host, 'screen-toggle')).not.toBeNull();
+  });
+
+  it('lets a routed screen claim the toggle and returns focus to it', async () => {
+    TestBed.configureTestingModule({
+      providers: [
+        provideCadenwayIcons(),
+        provideRouter([
+          { path: '', component: AppShell, children: [{ path: '', component: ClaimingScreen }] },
+        ]),
+      ],
+    });
+    const harness: RouterTestingHarness = await RouterTestingHarness.create('/');
+    const host: HTMLElement = routedElement(harness);
+    const sidebar: HTMLElement | null = landmark(host, 'nav', SIDEBAR_NAME);
+    const screenToggle: HTMLElement | null = byTestId(host, 'screen-toggle');
+
+    await click(screenToggle);
+
+    expect(sidebar?.getAttribute('data-state')).toBe('collapsed');
+    expect(byTestId(host, 'app-shell-sidebar-expand')).toBeNull();
+
+    await click(screenToggle);
+
+    expect(sidebar?.getAttribute('data-state')).toBe('expanded');
+    expect(document.activeElement).toBe(byTestId(host, 'app-shell-sidebar-collapse'));
+
+    await click(byTestId(host, 'app-shell-sidebar-collapse'));
+
+    expect(document.activeElement).toBe(screenToggle);
   });
 });

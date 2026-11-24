@@ -1,11 +1,13 @@
 import { Component, input, type InputSignal } from '@angular/core';
-import { TestBed, type ComponentFixture } from '@angular/core/testing';
+import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
+import { RouterTestingHarness } from '@angular/router/testing';
 import { provideCadenwayIcons } from '@cadenway/icons';
 import type { SlotContribution } from '@shared/layout-slot';
 import { describe, expect, it } from 'vitest';
 
 import { provideSettingsShellSlots, type SettingsShellSlots } from './providers';
+import type { SettingsShellRouteData } from './models/settings-shell-route-data.interface';
 import { SettingsShell } from './settings-shell.component';
 
 /**
@@ -34,6 +36,22 @@ class SlotProbe {
 }
 
 /**
+ * Function routedElement
+ *
+ * @description
+ * Returns the element of the component the harness routed to.
+ *
+ * @param {RouterTestingHarness} harness - Harness after a navigation.
+ * @returns {HTMLElement} The routed component's element.
+ * @throws {Error} When the navigation rendered no component.
+ */
+function routedElement(harness: RouterTestingHarness): HTMLElement {
+  const element: HTMLElement | null = harness.routeNativeElement;
+  if (!element) throw new Error('Expected a routed component.');
+  return element;
+}
+
+/**
  * Function probe
  *
  * @description
@@ -58,19 +76,32 @@ function probe(id: string, order: number): { useFactory: () => SlotContribution 
  * Function render
  *
  * @description
- * Renders the shell with the given slot configuration and returns its host element.
+ * Mounts the shell as the routed component of a route with the given slots and `data`, and returns
+ * the rendered element.
  *
  * @param {SettingsShellSlots} slots - Contributions per slot.
- * @returns {Promise<HTMLElement>} The stable host element.
+ * @param {Partial<SettingsShellRouteData>} data - Route data of the shell route.
+ * @returns {Promise<HTMLElement>} The stable rendered element.
  */
-async function render(slots: SettingsShellSlots): Promise<HTMLElement> {
+async function render(
+  slots: SettingsShellSlots,
+  data: Partial<SettingsShellRouteData> = {},
+): Promise<HTMLElement> {
   TestBed.configureTestingModule({
-    imports: [SettingsShell],
-    providers: [provideRouter([]), provideCadenwayIcons(), provideSettingsShellSlots(slots)],
+    providers: [
+      provideCadenwayIcons(),
+      provideRouter([
+        {
+          path: '',
+          component: SettingsShell,
+          data,
+          providers: [provideSettingsShellSlots(slots)],
+        },
+      ]),
+    ],
   });
-  const fixture: ComponentFixture<SettingsShell> = TestBed.createComponent(SettingsShell);
-  await fixture.whenStable();
-  return fixture.nativeElement as HTMLElement;
+  const harness: RouterTestingHarness = await RouterTestingHarness.create('/');
+  return routedElement(harness);
 }
 
 /**
@@ -112,19 +143,22 @@ function landmark(host: HTMLElement, tag: string, name: string): HTMLElement | n
  * Constant NAVIGATION_NAME
  *
  * @description
- * Accessible name of the settings navigation in the loaded catalog.
+ * Accessible name the account route gives the settings navigation in these specs.
  *
  * @type {string}
  */
-const NAVIGATION_NAME: string = $localize`:@@layouts.settings-shell.navigation:Settings`;
+const NAVIGATION_NAME: string = 'Account settings';
 
 describe('SettingsShell', () => {
   it('renders the rail and the settings navigation in order with their inputs', async () => {
-    const host: HTMLElement = await render({
-      railNavigation: [probe('spaces', 2), probe('applications', 1)],
-      railFooter: [probe('avatar', 3), probe('search', 1)],
-      settingsNavigation: [probe('organization', 20), probe('back', 0), probe('account', 10)],
-    });
+    const host: HTMLElement = await render(
+      {
+        railNavigation: [probe('spaces', 2), probe('applications', 1)],
+        railFooter: [probe('avatar', 3), probe('search', 1)],
+        settingsNavigation: [probe('organization', 20), probe('back', 0), probe('account', 10)],
+      },
+      { settingsNavigationLabel: NAVIGATION_NAME },
+    );
 
     const rail: HTMLElement | null = landmark(
       host,
@@ -140,22 +174,29 @@ describe('SettingsShell', () => {
     ]);
   });
 
+  it('names the settings navigation from the route data only', async () => {
+    const host: HTMLElement = await render({ settingsNavigation: [probe('back', 0)] });
+
+    const navigation: HTMLElement | null = host.querySelector(
+      'nav:has([data-testid="slot-probe"])',
+    );
+    expect(navigation).not.toBeNull();
+    expect(navigation?.hasAttribute('aria-label')).toBe(false);
+  });
+
   it('renders nothing for empty slots', async () => {
-    const host: HTMLElement = await render({});
+    const host: HTMLElement = await render({}, { settingsNavigationLabel: NAVIGATION_NAME });
 
     expect(labels(host)).toEqual([]);
     expect(host.querySelector('cw-app-rail-footer')).toBeNull();
     expect(landmark(host, 'nav', NAVIGATION_NAME)).toBeNull();
   });
 
-  it('exposes the main landmark around the outlet', async () => {
+  it('exposes an unnamed main landmark around the outlet', async () => {
     const host: HTMLElement = await render({});
 
-    const main: HTMLElement | null = landmark(
-      host,
-      'main',
-      $localize`:@@layouts.settings-shell.main:Main content`,
-    );
+    const main: HTMLElement | null = host.querySelector('main');
+    expect(main?.hasAttribute('aria-label')).toBe(false);
     expect(main?.querySelector('router-outlet')).not.toBeNull();
   });
 });

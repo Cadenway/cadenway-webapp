@@ -5,7 +5,8 @@ import type { SlotContribution } from '@shared/layout-slot';
  * Constant SETTINGS_SHELL_RAIL_FOOTER_SLOT
  *
  * @description
- * Additive rail items pushed to the bottom of the settings rail inside cw-app-rail-footer, such as search, theme and the account avatar.
+ * Additive rail items pushed to the bottom of the settings rail inside cw-app-rail-footer, such as
+ * search, theme and the account avatar.
  *
  * @type {InjectionToken<readonly SlotContribution[]>}
  */

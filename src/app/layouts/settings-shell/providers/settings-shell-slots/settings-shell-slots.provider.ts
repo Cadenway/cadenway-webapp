@@ -54,8 +54,11 @@ export interface SettingsShellSlots {
  * Function provideSettingsShellSlots
  *
  * @description
- * Registers the route's settings shell contributions as multi providers. The contributions are
- * built lazily in the route injector that mounts `SettingsShell`, and several calls add up.
+ * Registers settings shell contributions as multi providers. Call it in the `providers` of the
+ * route that loads `SettingsShell`: the layout reads its slots from that route's injector when it
+ * is created, so contributions in a child route's providers never reach it, and several calls in
+ * the same route add up. A routed page changes the shell through the core page-to-shell services
+ * instead.
  *
  * @param {SettingsShellSlots} config - Contributions per slot.
  * @returns {EnvironmentProviders} Environment providers for the configured slots.
