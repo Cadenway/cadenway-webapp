@@ -23,10 +23,20 @@ export abstract class RouteError extends Error {
  * Class NotFoundRouteError
  *
  * @description
- * Describes a route failure for the boundary.
+ * A page throws this when its requested route resource cannot be found.
  */
 export class NotFoundRouteError extends RouteError {
   // #region Properties
+  /**
+   * Property name
+   *
+   * @description
+   * Stable error name for diagnostics.
+   * @type {string}
+   * @readonly
+   */
+  public override readonly name: string = 'NotFoundRouteError';
+
   /**
    * Property kind
    *
@@ -38,16 +48,39 @@ export class NotFoundRouteError extends RouteError {
    */
   public readonly kind: 'not-found' = 'not-found';
   // #endregion
+
+  // #region Constructor
+  /**
+   * Constructor
+   *
+   * @description
+   * Creates a missing resource failure.
+   * @constructor
+   */
+  public constructor() {
+    super('The requested resource was not found.');
+  }
+  // #endregion
 }
 
 /**
  * Class AccessDeniedRouteError
  *
  * @description
- * Describes a route failure for the boundary.
+ * A page throws this with the inaccessible space or list needed by the error view.
  */
 export class AccessDeniedRouteError extends RouteError {
   // #region Properties
+  /**
+   * Property name
+   *
+   * @description
+   * Stable error name for diagnostics.
+   * @type {string}
+   * @readonly
+   */
+  public override readonly name: string = 'AccessDeniedRouteError';
+
   /**
    * Property kind
    *
@@ -63,7 +96,7 @@ export class AccessDeniedRouteError extends RouteError {
    * Property resource
    *
    * @description
-   * Context needed by the route boundary.
+   * Inaccessible space or list and its owner, when known.
    *
    * @type {{ kind: 'space' | 'list'; id: string; name: string | null; ownerName: string | null }}
    * @readonly
@@ -81,10 +114,10 @@ export class AccessDeniedRouteError extends RouteError {
    * Constructor
    *
    * @description
-   * Stores the context for the boundary.
+   * Stores the inaccessible resource for the error view.
    *
    * @constructor
-   * @param {{ kind: 'space' | 'list'; id: string; name: string | null; ownerName: string | null }} resource - Context for the failure.
+   * @param {{ kind: 'space' | 'list'; id: string; name: string | null; ownerName: string | null }} resource - Inaccessible resource details.
    */
   public constructor(resource: {
     kind: 'space' | 'list';
@@ -92,7 +125,7 @@ export class AccessDeniedRouteError extends RouteError {
     name: string | null;
     ownerName: string | null;
   }) {
-    super('access-denied');
+    super('Access to the requested resource was denied.');
     this.resource = resource;
   }
   // #endregion
@@ -102,10 +135,20 @@ export class AccessDeniedRouteError extends RouteError {
  * Class DeletedTaskRouteError
  *
  * @description
- * Describes a route failure for the boundary.
+ * A task page throws this with the deleted task and trash entry needed for restoration.
  */
 export class DeletedTaskRouteError extends RouteError {
   // #region Properties
+  /**
+   * Property name
+   *
+   * @description
+   * Stable error name for diagnostics.
+   * @type {string}
+   * @readonly
+   */
+  public override readonly name: string = 'DeletedTaskRouteError';
+
   /**
    * Property kind
    *
@@ -121,7 +164,7 @@ export class DeletedTaskRouteError extends RouteError {
    * Property task
    *
    * @description
-   * Context needed by the route boundary.
+   * Deleted task key and display name.
    *
    * @type {{ key: string; name: string }}
    * @readonly
@@ -132,7 +175,7 @@ export class DeletedTaskRouteError extends RouteError {
    * Property trashEntryId
    *
    * @description
-   * Context needed by the route boundary.
+   * Trash entry identifier used to restore the task.
    *
    * @type {string}
    * @readonly
@@ -145,14 +188,14 @@ export class DeletedTaskRouteError extends RouteError {
    * Constructor
    *
    * @description
-   * Stores the context for the boundary.
+   * Stores the deleted task and its trash entry.
    *
    * @constructor
-   * @param {{ key: string; name: string }} task - Context for the failure.
-   * @param {string} trashEntryId - Context for the failure.
+   * @param {{ key: string; name: string }} task - Deleted task details.
+   * @param {string} trashEntryId - Identifier of the trash entry.
    */
   public constructor(task: { key: string; name: string }, trashEntryId: string) {
-    super('deleted-task');
+    super('The requested task has been deleted.');
     this.task = task;
     this.trashEntryId = trashEntryId;
   }
@@ -163,10 +206,20 @@ export class DeletedTaskRouteError extends RouteError {
  * Class UnavailableRouteError
  *
  * @description
- * Describes a route failure for the boundary.
+ * A page throws this with response diagnostics when its resource cannot be loaded.
  */
 export class UnavailableRouteError extends RouteError {
   // #region Properties
+  /**
+   * Property name
+   *
+   * @description
+   * Stable error name for diagnostics.
+   * @type {string}
+   * @readonly
+   */
+  public override readonly name: string = 'UnavailableRouteError';
+
   /**
    * Property kind
    *
@@ -182,7 +235,7 @@ export class UnavailableRouteError extends RouteError {
    * Property status
    *
    * @description
-   * Context needed by the route boundary.
+   * HTTP response status, or zero for a network failure.
    *
    * @type {number}
    * @readonly
@@ -193,7 +246,7 @@ export class UnavailableRouteError extends RouteError {
    * Property requestId
    *
    * @description
-   * Context needed by the route boundary.
+   * Response request identifier, when available.
    *
    * @type {string | null}
    * @readonly
@@ -206,19 +259,29 @@ export class UnavailableRouteError extends RouteError {
    * Constructor
    *
    * @description
-   * Stores the context for the boundary.
+   * Stores response diagnostics for the error view.
    *
    * @constructor
-   * @param {number} status - Context for the failure.
-   * @param {string | null} requestId - Context for the failure.
+   * @param {number} status - HTTP response status.
+   * @param {string | null} requestId - Response request identifier, if available.
    */
   public constructor(status: number, requestId: string | null) {
-    super('unavailable');
+    super('The requested resource is unavailable.');
     this.status = status;
     this.requestId = requestId;
   }
   // #endregion
 }
+
+/**
+ * Type KnownRouteError
+ *
+ * @description
+ * Route failures handled by the shared error boundary.
+ * @type {NotFoundRouteError | AccessDeniedRouteError | DeletedTaskRouteError | UnavailableRouteError}
+ */
+export type KnownRouteError =
+  NotFoundRouteError | AccessDeniedRouteError | DeletedTaskRouteError | UnavailableRouteError;
 
 /**
  * Function isRouteError
@@ -228,6 +291,11 @@ export class UnavailableRouteError extends RouteError {
  * @param {unknown} error - Value to inspect.
  * @returns {boolean} Whether the value is a route error.
  */
-export function isRouteError(error: unknown): error is RouteError {
-  return error instanceof RouteError;
+export function isRouteError(error: unknown): error is KnownRouteError {
+  return (
+    error instanceof NotFoundRouteError ||
+    error instanceof AccessDeniedRouteError ||
+    error instanceof DeletedTaskRouteError ||
+    error instanceof UnavailableRouteError
+  );
 }

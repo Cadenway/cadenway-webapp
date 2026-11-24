@@ -1,7 +1,7 @@
 import { HttpErrorResponse, HttpHeaders } from '@angular/common/http';
 import { describe, expect, it } from 'vitest';
 
-import { hasProblemCode, readProblem } from './problem.utils';
+import { hasProblemCode, readProblem, readProblemAsync } from './problem.utils';
 
 describe('readProblem', () => {
   it('reads typed fields and the request identifier', () => {
@@ -32,6 +32,19 @@ describe('readProblem', () => {
     expect(readProblem(new Error())).toBeNull();
     expect(
       readProblem(new HttpErrorResponse({ status: 500, error: { code: 4, details: [] } }))?.code,
+    ).toBeNull();
+  });
+  it('parses string and Blob bodies and ignores invalid JSON', async () => {
+    expect(readProblem(new HttpErrorResponse({ status: 400, error: '{"code":"BAD"}' }))?.code).toBe(
+      'BAD',
+    );
+    expect(readProblem(new HttpErrorResponse({ status: 400, error: '{' }))?.code).toBeNull();
+    const blob: Blob = new Blob(['{"code":"BLOB"}']);
+    expect(
+      (await readProblemAsync(new HttpErrorResponse({ status: 400, error: blob })))?.code,
+    ).toBe('BLOB');
+    expect(
+      (await readProblemAsync(new HttpErrorResponse({ status: 0, error: blob })))?.code,
     ).toBeNull();
   });
 });

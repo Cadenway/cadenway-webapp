@@ -1,10 +1,14 @@
 import { DestroyRef } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { describe, expect, it, vi, type Mock } from 'vitest';
+import { afterEach, describe, expect, it, vi, type Mock } from 'vitest';
 
 import { ShortcutsService } from './shortcuts.service';
 
 describe('ShortcutsService', () => {
+  afterEach(() => {
+    TestBed.resetTestingModule();
+    vi.restoreAllMocks();
+  });
   it('matches modifiers and uses the newest registration until destroyed', () => {
     const service: ShortcutsService = TestBed.inject(ShortcutsService);
     const first: Mock = vi.fn();
@@ -17,7 +21,7 @@ describe('ShortcutsService', () => {
       },
       destroyed: false,
     };
-    service.register({ keys: 'mod+k', handler: first }, scope);
+    const unregister: () => void = service.register({ keys: 'mod+k', handler: first }, scope);
     service.register({ keys: 'mod+k', handler: second }, scope);
     document.dispatchEvent(
       new KeyboardEvent('keydown', { key: 'k', ctrlKey: true, bubbles: true, cancelable: true }),
@@ -26,13 +30,14 @@ describe('ShortcutsService', () => {
     expect(first).not.toHaveBeenCalled();
     destroy();
     document.dispatchEvent(
-      new KeyboardEvent('keydown', { key: 'k', metaKey: true, bubbles: true }),
+      new KeyboardEvent('keydown', { key: 'k', ctrlKey: true, bubbles: true }),
     );
     expect(first).toHaveBeenCalledOnce();
     document.dispatchEvent(
       new KeyboardEvent('keydown', { key: 'k', ctrlKey: true, shiftKey: true }),
     );
     expect(first).toHaveBeenCalledOnce();
+    unregister();
   });
   it('ignores editable targets unless allowed', () => {
     const service: ShortcutsService = TestBed.inject(ShortcutsService);
@@ -71,5 +76,32 @@ describe('ShortcutsService', () => {
     input.dispatchEvent(prevented);
     expect(handler).toHaveBeenCalledOnce();
     input.remove();
+  });
+  it('handles layout keys, AltGr, repeats and the single-key preference', () => {
+    const service: ShortcutsService = TestBed.inject(ShortcutsService);
+    const handler: Mock = vi.fn();
+    const unregister: () => void = service.register(
+      { keys: 'mod+k', handler },
+      TestBed.inject(DestroyRef),
+    );
+    document.dispatchEvent(
+      new KeyboardEvent('keydown', { key: '\u043b', code: 'KeyK', ctrlKey: true }),
+    );
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', ctrlKey: true, repeat: true }));
+    expect(handler).toHaveBeenCalledOnce();
+    unregister();
+    const single: () => void = service.register({ keys: '@', handler }, TestBed.inject(DestroyRef));
+    const event: KeyboardEvent = new KeyboardEvent('keydown', {
+      key: '@',
+      ctrlKey: true,
+      altKey: true,
+    });
+    vi.spyOn(event, 'getModifierState').mockReturnValue(true);
+    document.dispatchEvent(event);
+    expect(handler).toHaveBeenCalledTimes(2);
+    service.setSingleKeyShortcutsEnabled(false);
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: '@' }));
+    expect(handler).toHaveBeenCalledTimes(2);
+    single();
   });
 });

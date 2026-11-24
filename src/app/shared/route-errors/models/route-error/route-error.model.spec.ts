@@ -23,6 +23,13 @@ describe('route errors', () => {
       'deleted-task',
       'unavailable',
     ]);
+    expect(errors.map((error) => error.name)).toEqual([
+      'NotFoundRouteError',
+      'AccessDeniedRouteError',
+      'DeletedTaskRouteError',
+      'UnavailableRouteError',
+    ]);
+    expect(errors.every((error) => error.message.length > 0)).toBe(true);
     expect(errors.every(isRouteError)).toBe(true);
     expect(isRouteError(new Error())).toBe(false);
   });

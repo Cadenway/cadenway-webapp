@@ -12,7 +12,7 @@ export interface ApiProblem {
    * Property status
    *
    * @description
-   * Field returned by the gateway, when available.
+   * HTTP response status, including zero for a network failure.
    *
    * @type {number}
    */
@@ -22,7 +22,7 @@ export interface ApiProblem {
    * Property code
    *
    * @description
-   * Field returned by the gateway, when available.
+   * Problem code from the response body, when it is a string.
    *
    * @type {string | null}
    */
@@ -32,7 +32,7 @@ export interface ApiProblem {
    * Property title
    *
    * @description
-   * Field returned by the gateway, when available.
+   * Problem title from the response body, when it is a string.
    *
    * @type {string | null}
    */
@@ -42,7 +42,7 @@ export interface ApiProblem {
    * Property detail
    *
    * @description
-   * Field returned by the gateway, when available.
+   * Problem detail from the response body, when it is a string.
    *
    * @type {string | null}
    */
@@ -52,7 +52,7 @@ export interface ApiProblem {
    * Property details
    *
    * @description
-   * Field returned by the gateway, when available.
+   * Structured details from the response body, when it is an object.
    *
    * @type {Readonly<Record<string, unknown>> | null}
    */
@@ -62,7 +62,7 @@ export interface ApiProblem {
    * Property requestId
    *
    * @description
-   * Field returned by the gateway, when available.
+   * Request identifier from the response header, or null for a network failure.
    *
    * @type {string | null}
    */
@@ -80,7 +80,14 @@ export interface ApiProblem {
  */
 export function readProblem(error: unknown): ApiProblem | null {
   if (!(error instanceof HttpErrorResponse)) return null;
-  const body: unknown = error.status === 0 ? null : error.error;
+  let body: unknown = error.status === 0 ? null : error.error;
+  if (typeof body === 'string') {
+    try {
+      body = JSON.parse(body) as unknown;
+    } catch {
+      body = null;
+    }
+  }
   const value: Record<string, unknown> =
     typeof body === 'object' && body !== null && !Array.isArray(body)
       ? (body as Record<string, unknown>)
@@ -97,6 +104,27 @@ export function readProblem(error: unknown): ApiProblem | null {
         : null,
     requestId: error.status === 0 ? null : error.headers.get('X-Request-Id'),
   };
+}
+
+/**
+ * Function readProblemAsync
+ *
+ * @description
+ * Reads problem fields, including JSON delivered as a Blob.
+ * @param {unknown} error - Failure to inspect.
+ * @returns {Promise<ApiProblem | null>} Parsed HTTP problem or null for another failure.
+ */
+export async function readProblemAsync(error: unknown): Promise<ApiProblem | null> {
+  if (!(error instanceof HttpErrorResponse) || error.status === 0 || !(error.error instanceof Blob))
+    return readProblem(error);
+  try {
+    const body: string = await error.error.text();
+    return readProblem(
+      new HttpErrorResponse({ error: body, status: error.status, headers: error.headers }),
+    );
+  } catch {
+    return readProblem(error);
+  }
 }
 
 /**

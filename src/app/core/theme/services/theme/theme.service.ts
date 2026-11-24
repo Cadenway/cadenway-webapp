@@ -48,10 +48,12 @@ export class ThemeService {
    * @description
    * System color scheme query.
    *
-   * @type {MediaQueryList}
+   * @type {MediaQueryList | undefined}
    * @readonly
    */
-  private readonly media: MediaQueryList = window.matchMedia('(prefers-color-scheme: dark)');
+  private readonly media: MediaQueryList | undefined = this.document.defaultView?.matchMedia(
+    '(prefers-color-scheme: dark)',
+  );
 
   /**
    * Property dark
@@ -62,7 +64,7 @@ export class ThemeService {
    * @type {WritableSignal<boolean>}
    * @readonly
    */
-  private readonly dark: WritableSignal<boolean> = signal(this.media.matches);
+  private readonly dark: WritableSignal<boolean> = signal(this.media?.matches ?? false);
 
   /**
    * Property selected
@@ -115,7 +117,7 @@ export class ThemeService {
    */
   public constructor() {
     const update: () => void = (): void => {
-      this.dark.set(this.media.matches);
+      this.dark.set(this.media?.matches ?? false);
       this.apply();
     };
     const storage: (event: StorageEvent) => void = (event: StorageEvent): void => {
@@ -124,10 +126,10 @@ export class ThemeService {
         this.apply();
       }
     };
-    this.media.addEventListener('change', update);
+    this.media?.addEventListener('change', update);
     this.document.defaultView?.addEventListener('storage', storage);
     this.destroyRef.onDestroy(() => {
-      this.media.removeEventListener('change', update);
+      this.media?.removeEventListener('change', update);
       this.document.defaultView?.removeEventListener('storage', storage);
     });
     this.apply();
@@ -147,8 +149,10 @@ export class ThemeService {
     preference: ThemePreference,
     origin?: { readonly x: number; readonly y: number },
   ): void {
+    const previous: ResolvedTheme = this.resolved();
+    this.selected.set(preference);
+    if (this.resolved() === previous) return;
     const change: () => void = (): void => {
-      this.selected.set(preference);
       try {
         if (preference === 'system')
           this.document.defaultView?.localStorage.removeItem('cadenway-theme');
@@ -167,25 +171,18 @@ export class ThemeService {
       change();
       return;
     }
-    const x: number = origin?.x ?? view.innerWidth / 2;
-    const y: number = origin?.y ?? view.innerHeight / 2;
-    const radius: number = Math.hypot(
-      Math.max(x, view.innerWidth - x),
-      Math.max(y, view.innerHeight - y),
-    );
+    const position: string = origin ? `${String(origin.x)}px ${String(origin.y)}px` : '50% 100%';
     const transition: ViewTransition = this.document.startViewTransition(change);
     void transition.ready
       .then(() =>
         this.document.documentElement.animate(
           {
-            clipPath: [
-              `circle(0px at ${String(x)}px ${String(y)}px)`,
-              `circle(${String(radius)}px at ${String(x)}px ${String(y)}px)`,
-            ],
+            clipPath: [`circle(0% at ${position})`, `circle(150% at ${position})`],
+            filter: ['blur(8px)', 'blur(0px)'],
           },
           {
-            duration: 400,
-            easing: 'cubic-bezier(0.16, 1, 0.3, 1)',
+            duration: 700,
+            easing: 'cubic-bezier(0.4, 0, 0.2, 1)',
             pseudoElement: '::view-transition-new(root)',
           },
         ),
@@ -209,7 +206,7 @@ export class ThemeService {
    *
    * @description
    * Reads a stored preference, tolerating inaccessible storage.
-   * @returns {ThemePreference} The resulting value.
+   * @returns {ThemePreference} Stored light or dark preference, or system when absent or inaccessible.
    */
   private read(): ThemePreference {
     try {

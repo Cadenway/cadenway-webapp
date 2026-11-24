@@ -12,7 +12,7 @@ import { ThemeService } from '../../services/theme/theme.service';
  *
  * @description
  * Starts theme synchronization during application initialization.
- * @returns {EnvironmentProviders} The resulting value.
+ * @returns {EnvironmentProviders} Providers that initialize document theme synchronization.
  */
 export function provideTheme(): EnvironmentProviders {
   return makeEnvironmentProviders([

@@ -104,10 +104,12 @@ export class RouteFocusService {
    * Method focus
    *
    * @description
-   * Focuses the first route target without scrolling.
+   * Focuses the innermost route target, or main, without scrolling.
    */
   private focus(): void {
-    const element: HTMLElement | null = this.document.querySelector('[data-route-focus]');
+    const targets: NodeListOf<HTMLElement> = this.document.querySelectorAll('[data-route-focus]');
+    const element: HTMLElement | null =
+      Array.from(targets).at(-1) ?? this.document.querySelector('main');
     if (!element) return;
     if (element.tabIndex < 0 && !element.hasAttribute('tabindex'))
       element.setAttribute('tabindex', '-1');

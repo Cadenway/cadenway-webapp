@@ -1,5 +1,14 @@
 import { TestBed } from '@angular/core/testing';
-import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+  type Mock,
+  type MockInstance,
+} from 'vitest';
 
 import { ThemeService } from './theme.service';
 
@@ -25,6 +34,8 @@ describe('ThemeService', () => {
     TestBed.resetTestingModule();
     vi.unstubAllGlobals();
     localStorage.clear();
+    Reflect.deleteProperty(document, 'startViewTransition');
+    Reflect.deleteProperty(document.documentElement, 'animate');
   });
   it('reads and writes the preference and updates the document', () => {
     localStorage.setItem('cadenway-theme', 'dark');
@@ -35,7 +46,7 @@ describe('ThemeService', () => {
     expect(localStorage.getItem('cadenway-theme')).toBe('light');
     expect(document.documentElement.dataset['theme']).toBe('light');
     service.set('system');
-    expect(localStorage.getItem('cadenway-theme')).toBeNull();
+    expect(service.preference()).toBe('system');
   });
   it('follows system and storage changes', () => {
     const service: ThemeService = TestBed.inject(ThemeService);
@@ -59,7 +70,6 @@ describe('ThemeService', () => {
     service.set('dark');
     expect(transition).not.toHaveBeenCalled();
     expect(service.resolved()).toBe('dark');
-    Reflect.deleteProperty(document, 'startViewTransition');
   });
   it('animates the new theme from the supplied origin', async () => {
     const animate: Mock = vi.fn();
@@ -81,17 +91,64 @@ describe('ThemeService', () => {
     expect(service.resolved()).toBe('dark');
     const args: unknown[] = animate.mock.calls[0] as unknown[];
     expect(args[0]).toEqual({
-      clipPath: [
-        'circle(0px at 10px 20px)',
-        `circle(${String(Math.hypot(Math.max(10, window.innerWidth - 10), Math.max(20, window.innerHeight - 20)))}px at 10px 20px)`,
-      ],
+      clipPath: ['circle(0% at 10px 20px)', 'circle(150% at 10px 20px)'],
+      filter: ['blur(8px)', 'blur(0px)'],
     });
     expect(args[1]).toEqual({
-      duration: 400,
-      easing: 'cubic-bezier(0.16, 1, 0.3, 1)',
+      duration: 700,
+      easing: 'cubic-bezier(0.4, 0, 0.2, 1)',
       pseudoElement: '::view-transition-new(root)',
     });
-    Reflect.deleteProperty(document, 'startViewTransition');
-    Reflect.deleteProperty(document.documentElement, 'animate');
+  });
+  it('uses the bottom center as the default origin', async () => {
+    const animate: Mock = vi.fn();
+    Object.defineProperty(document, 'startViewTransition', {
+      configurable: true,
+      value: (change: () => void) => {
+        change();
+        return { ready: Promise.resolve() };
+      },
+    });
+    Object.defineProperty(document.documentElement, 'animate', {
+      configurable: true,
+      value: animate,
+    });
+    TestBed.inject(ThemeService).set('dark');
+    await Promise.resolve();
+    expect(animate.mock.calls[0][0]).toEqual({
+      clipPath: ['circle(0% at 50% 100%)', 'circle(150% at 50% 100%)'],
+      filter: ['blur(8px)', 'blur(0px)'],
+    });
+  });
+  it('does not write or transition for an unchanged resolved theme', () => {
+    const transition: Mock = vi.fn();
+    Object.defineProperty(document, 'startViewTransition', {
+      configurable: true,
+      value: transition,
+    });
+    const write: MockInstance = vi.spyOn(Storage.prototype, 'setItem');
+    const service: ThemeService = TestBed.inject(ThemeService);
+    service.set('light');
+    expect(transition).not.toHaveBeenCalled();
+    expect(write).not.toHaveBeenCalled();
+    write.mockRestore();
+  });
+  it('computes consecutive toggles before transition callbacks run', () => {
+    const changes: (() => void)[] = [];
+    Object.defineProperty(document, 'startViewTransition', {
+      configurable: true,
+      value: (change: () => void) => {
+        changes.push(change);
+        return { ready: new Promise(() => undefined) };
+      },
+    });
+    const service: ThemeService = TestBed.inject(ThemeService);
+    service.toggle();
+    service.toggle();
+    expect(service.resolved()).toBe('light');
+    changes.forEach((change) => {
+      change();
+    });
+    expect(document.documentElement.dataset['theme']).toBe('light');
   });
 });

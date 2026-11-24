@@ -10,7 +10,8 @@ export interface Shortcut {
    * Property keys
    *
    * @description
-   * Lowercase key combination.
+   * Lowercase key, optionally preceded by `mod`, `alt`, or `shift` separated by `+`
+   * (for example `mod+k` or `shift+alt+x`). `mod` is Command on macOS and Control elsewhere.
    *
    * @type {string}
    */

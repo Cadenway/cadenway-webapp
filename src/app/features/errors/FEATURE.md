@@ -2,8 +2,9 @@
 
 ## Purpose
 
-The fallback for unknown workspace routes. Resource-specific failures belong to the feature that
-loads the resource.
+Renders the typed route errors of `@shared/route-errors` for every feature through the route
+`errorComponent`. Each feature decides when to throw them. The feature also owns the fallback for
+unknown workspace routes.
 
 ## Routes
 
