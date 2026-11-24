@@ -1,13 +1,88 @@
-<a
+<button
   cwAppRailItem
   variant="primary"
   desktopOnly
-  routerLink="/organizations"
-  [tooltip]="workspace().organization().name"
+  [cwMenuTriggerFor]="organizationMenu"
+  [tooltip]="workspace.organization().name"
   data-testid="organization-switcher"
+  (click)="store.load()"
+  (keydown)="store.load()"
 >
-  <span cwAppRailItemMedia>{{ workspace().organization().initials }}</span>
+  <span cwAppRailItemMedia>{{ workspace.organization().initials }}</span>
   <ng-container i18n="@@workspace.organization-switcher.label"
-    >Switch organization: {{ workspace().organization().name }}</ng-container
+    >Switch organization: {{ workspace.organization().name }}</ng-container
   >
-</a>
+</button>
+
+<cw-menu
+  #organizationMenu
+  side="right"
+  align="start"
+  ariaLabel="Organizations"
+  i18n-ariaLabel="@@workspace.organization-menu.aria-label"
+>
+  <cw-menu-label i18n="@@workspace.organization-menu.heading">Organizations</cw-menu-label>
+  @if (store.loading()) {
+    <div class="flex flex-col gap-1 px-2 py-1.5" data-testid="organization-menu-loading">
+      <div cwSkeleton class="h-8 w-56"></div>
+      <div cwSkeleton class="h-8 w-56"></div>
+    </div>
+  } @else if (store.failed()) {
+    <div class="flex items-center gap-2 px-2 py-1.5 text-sm" role="alert">
+      <span class="min-w-0 flex-1 text-muted-foreground" i18n="@@workspace.organization-menu.failed"
+        >The organizations could not be loaded.</span
+      >
+      <button
+        cwButton
+        type="button"
+        variant="outline"
+        size="sm"
+        (click)="store.retry()"
+        i18n="@@workspace.retry"
+      >
+        Retry
+      </button>
+    </div>
+  } @else {
+    <cw-menu-radio-group [value]="workspace.organization().id" (valueChange)="choose($event)">
+      @for (entry of store.entries(); track entry.id) {
+        <button cwMenuItemRadio [value]="entry.id">
+          <span
+            class="flex size-6 shrink-0 items-center justify-center rounded-md bg-sidebar-primary text-[10px] font-semibold text-sidebar-primary-foreground"
+            aria-hidden="true"
+            >{{ entry.initials }}</span
+          >
+          <span class="flex min-w-0 flex-1 flex-col">
+            <span class="truncate font-medium">{{ entry.name }}</span>
+            <span class="truncate text-xs text-muted-foreground">{{ meta(entry) }}</span>
+          </span>
+        </button>
+      }
+    </cw-menu-radio-group>
+  }
+  <cw-menu-separator />
+  <button cwMenuItem (triggered)="open('general')">
+    <ng-icon name="phosphorGearSixBold" aria-hidden="true" />
+    <ng-container i18n="@@workspace.organization-menu.settings">Organization settings</ng-container>
+  </button>
+  <button cwMenuItem (triggered)="open('members')">
+    <ng-icon name="phosphorUsersBold" aria-hidden="true" />
+    <ng-container i18n="@@workspace.organization-menu.members"
+      >Members and invitations</ng-container
+    >
+    @if (memberCount(); as count) {
+      <span class="ml-auto pl-4 text-xs text-muted-foreground tabular-nums">{{ count }}</span>
+    }
+  </button>
+  <button cwMenuItem (triggered)="open('billing')">
+    <ng-icon name="phosphorCreditCardBold" aria-hidden="true" />
+    <ng-container i18n="@@workspace.organization-menu.billing">Billing and quotas</ng-container>
+  </button>
+  <cw-menu-separator />
+  <button cwMenuItem (triggered)="organizations()">
+    <ng-icon name="phosphorPlusBold" aria-hidden="true" />
+    <ng-container i18n="@@workspace.organization-menu.create-or-join"
+      >Create or join an organization</ng-container
+    >
+  </button>
+</cw-menu>

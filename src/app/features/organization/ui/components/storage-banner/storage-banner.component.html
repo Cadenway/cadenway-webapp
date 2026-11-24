@@ -1,0 +1,37 @@
+@if (visible() && store.current(); as subscription) {
+  <cw-banner
+    #banner
+    tone="warning"
+    placement="top"
+    icon="phosphorWarningFill"
+    title="Storage nearly full"
+    i18n-title="@@organization.storage-banner.title"
+    [description]="description(subscription)"
+    closeLabel="Close the announcement"
+    i18n-closeLabel="@@organization.storage-banner.close"
+    data-testid="storage-banner"
+    (dismissed)="dismiss()"
+  >
+    <cw-banner-actions>
+      <button
+        cwButton
+        type="button"
+        variant="ghost"
+        size="sm"
+        class="max-sm:hidden"
+        (click)="banner.dismiss()"
+        i18n="@@organization.storage-banner.later"
+      >
+        Later
+      </button>
+      <a
+        cwButton
+        variant="outline"
+        size="sm"
+        [routerLink]="quotasLink()"
+        i18n="@@organization.storage-banner.manage"
+        >Manage quotas</a
+      >
+    </cw-banner-actions>
+  </cw-banner>
+}

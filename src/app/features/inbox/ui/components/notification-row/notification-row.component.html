@@ -1,0 +1,58 @@
+<button
+  type="button"
+  class="flex w-full items-start gap-3 rounded-md px-2.5 py-2.5 text-left transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none focus-visible:ring-inset"
+  data-testid="notification-row"
+  (click)="opened.emit()"
+>
+  <span class="relative mt-0.5 shrink-0" aria-hidden="true">
+    <span
+      class="flex size-7 items-center justify-center rounded-full bg-secondary text-[10px] leading-none font-semibold text-secondary-foreground"
+      >{{ notification().actorInitials }}</span
+    >
+    <span
+      class="absolute -right-1 -bottom-1 flex size-4 items-center justify-center rounded-full bg-popover ring-2 ring-popover"
+    >
+      <ng-icon
+        [name]="icon()"
+        class="size-3"
+        [class.text-primary]="notification().kind === 'mention'"
+        [class.text-muted-foreground]="notification().kind !== 'mention'"
+      />
+    </span>
+  </span>
+  <span class="flex min-w-0 flex-1 flex-col gap-1">
+    <span
+      class="text-sm leading-5"
+      [class.text-foreground]="!notification().read"
+      [class.text-muted-foreground]="notification().read"
+    >
+      @if (notification().actorName; as actor) {
+        <span class="font-medium text-foreground">{{ actor }}</span>
+      }
+      {{ verb() }}
+    </span>
+    @if (notification().taskKey; as key) {
+      <span class="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
+        <span class="shrink-0 font-mono">{{ key }}</span>
+        <span class="truncate">{{ notification().taskName }}</span>
+      </span>
+    }
+    @if (notification().excerpt; as excerpt) {
+      <span
+        class="line-clamp-2 border-l-2 border-border pl-2 text-xs leading-relaxed text-muted-foreground"
+        >{{ excerpt }}</span
+      >
+    }
+  </span>
+  <span class="flex shrink-0 flex-col items-end gap-2 pt-0.5">
+    <span class="text-xs whitespace-nowrap text-muted-foreground">{{ time() }}</span>
+    @if (!notification().read) {
+      <span
+        class="size-2 rounded-full bg-primary"
+        role="img"
+        aria-label="Unread"
+        i18n-aria-label="@@inbox.notification.unread"
+      ></span>
+    }
+  </span>
+</button>

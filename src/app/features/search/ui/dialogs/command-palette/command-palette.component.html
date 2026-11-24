@@ -1,0 +1,162 @@
+<cw-command-dialog
+  ariaLabel="Command palette"
+  i18n-ariaLabel="@@search.palette.label"
+  [open]="palette.isOpen()"
+  (openChange)="palette.setOpen($event)"
+  [shortcut]="false"
+  [filter]="filter"
+  [loading]="store.loading()"
+  (searchChange)="store.search($event)"
+>
+  <input
+    cwCommandInput
+    type="text"
+    aria-label="Search for a command, a task, a space"
+    i18n-aria-label="@@search.palette.input-label"
+    placeholder="Search for a command, a task, a space…"
+    i18n-placeholder="@@search.palette.placeholder"
+  />
+  <cw-command-list>
+    @if (recent().length > 0) {
+      <cw-command-group heading="Recent tasks" i18n-heading="@@search.palette.recent">
+        @for (task of recent(); track task.key) {
+          <cw-command-item [value]="task.name + ' ' + task.key" (selected)="openTask(task)">
+            <cw-status-icon [status]="task.status" />
+            <span class="truncate">{{ task.name }}</span>
+            <span class="ml-auto font-mono text-xs text-muted-foreground">{{ task.key }}</span>
+          </cw-command-item>
+        }
+      </cw-command-group>
+    }
+    <cw-command-group heading="Go to" i18n-heading="@@search.palette.go-to">
+      <cw-command-item value="Home" i18n-value="@@search.palette.home" (selected)="go([])">
+        <ng-icon name="phosphorHouseBold" class="text-muted-foreground" aria-hidden="true" />
+        <span i18n="@@search.palette.home">Home</span>
+      </cw-command-item>
+    </cw-command-group>
+    @if (store.lists().length > 0) {
+      <cw-command-group heading="Lists" i18n-heading="@@search.palette.lists">
+        @for (list of store.lists(); track list.listId) {
+          <cw-command-item
+            [value]="list.name"
+            [keywords]="serverResult"
+            (selected)="openList(list)"
+          >
+            <ng-icon
+              name="phosphorListBulletsBold"
+              class="text-muted-foreground"
+              aria-hidden="true"
+            />
+            <span class="truncate">{{ list.name }}</span>
+            @if (list.spaceName) {
+              <span class="ml-auto text-xs text-muted-foreground">{{ list.spaceName }}</span>
+            }
+          </cw-command-item>
+        }
+      </cw-command-group>
+    }
+    @if (store.tasks().length > 0) {
+      <cw-command-group heading="Tasks" i18n-heading="@@search.palette.tasks">
+        @for (task of store.tasks(); track task.key) {
+          <cw-command-item
+            [value]="task.name + ' ' + task.key"
+            [keywords]="serverResult"
+            (selected)="openTask(task)"
+          >
+            <cw-status-icon [status]="task.status" />
+            <span class="truncate">{{ task.name }}</span>
+            <span class="ml-auto font-mono text-xs text-muted-foreground">{{ task.key }}</span>
+          </cw-command-item>
+        }
+      </cw-command-group>
+    }
+    <cw-command-group heading="Settings" i18n-heading="@@search.palette.settings">
+      <cw-command-item
+        value="Profile and security"
+        i18n-value="@@search.palette.profile"
+        (selected)="go(['account', 'security'])"
+      >
+        <ng-icon name="phosphorUserCircleBold" class="text-muted-foreground" aria-hidden="true" />
+        <span i18n="@@search.palette.profile">Profile and security</span>
+        <span class="ml-auto text-xs text-muted-foreground" i18n="@@search.palette.account"
+          >Account</span
+        >
+      </cw-command-item>
+      <cw-command-item
+        value="Organization settings"
+        i18n-value="@@search.palette.organization"
+        (selected)="go(['organization', 'general'])"
+      >
+        <ng-icon name="phosphorGearSixBold" class="text-muted-foreground" aria-hidden="true" />
+        <span i18n="@@search.palette.organization">Organization settings</span>
+        <span class="ml-auto text-xs text-muted-foreground">{{
+          workspace.organization().name
+        }}</span>
+      </cw-command-item>
+      <cw-command-item
+        value="Billing and quotas"
+        i18n-value="@@search.palette.billing"
+        (selected)="go(['organization', 'billing'])"
+      >
+        <ng-icon name="phosphorCreditCardBold" class="text-muted-foreground" aria-hidden="true" />
+        <span i18n="@@search.palette.billing">Billing and quotas</span>
+        <span class="ml-auto text-xs text-muted-foreground">{{
+          workspace.organization().name
+        }}</span>
+      </cw-command-item>
+      <cw-command-item
+        value="Switch organization"
+        i18n-value="@@search.palette.organizations"
+        (selected)="chooseOrganization()"
+      >
+        <ng-icon
+          name="phosphorArrowsLeftRightBold"
+          class="text-muted-foreground"
+          aria-hidden="true"
+        />
+        <span i18n="@@search.palette.organizations">Switch organization</span>
+      </cw-command-item>
+    </cw-command-group>
+    <cw-command-group heading="Actions" i18n-heading="@@search.palette.actions">
+      <cw-command-item [value]="themeLabel()" (selected)="toggleTheme()">
+        <ng-icon
+          [name]="darkTheme() ? 'phosphorSunBold' : 'phosphorMoonBold'"
+          class="text-muted-foreground"
+          aria-hidden="true"
+        />
+        <span>{{ themeLabel() }}</span>
+      </cw-command-item>
+      <cw-command-item value="Sign out" i18n-value="@@search.palette.sign-out" (selected)="leave()">
+        <ng-icon name="phosphorSignOutBold" class="text-muted-foreground" aria-hidden="true" />
+        <span i18n="@@search.palette.sign-out">Sign out</span>
+      </cw-command-item>
+    </cw-command-group>
+    <cw-command-loading />
+    @if (!store.failed()) {
+      <cw-command-empty />
+    }
+  </cw-command-list>
+  @if (store.failed()) {
+    <div
+      class="flex items-center gap-2 border-t border-border px-3 py-2 text-sm"
+      role="alert"
+      data-testid="command-palette-error"
+    >
+      <ng-icon name="phosphorWarningCircleBold" class="text-destructive" aria-hidden="true" />
+      <span class="min-w-0 flex-1 text-muted-foreground" i18n="@@search.palette.failed"
+        >The search could not be completed.</span
+      >
+      <button
+        cwButton
+        type="button"
+        variant="outline"
+        size="sm"
+        (click)="store.retry()"
+        i18n="@@search.retry"
+      >
+        Retry
+      </button>
+    </div>
+  }
+  <cw-command-footer />
+</cw-command-dialog>

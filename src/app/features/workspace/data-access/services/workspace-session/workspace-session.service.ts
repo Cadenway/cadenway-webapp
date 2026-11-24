@@ -13,11 +13,13 @@ import { catchError, EMPTY, expand, map, type Observable, of, reduce } from 'rxj
 import { type ApiProblem, readProblem, SKIP_ORGANIZATION_PIN } from '@core/api';
 import { withSessionLock } from '@features/auth';
 
+import type { OrganizationMenuEntry } from '../../../models/organization-menu-entry/organization-menu-entry.interface';
 import type {
   WorkspaceOrganization,
   WorkspaceResult,
   WorkspaceUser,
 } from '../../../models/workspace-context/workspace-context.interface';
+import { toOrganizationMenuEntry } from '../../adapters/organization-menu-entry/organization-menu-entry.adapter';
 import {
   toWorkspaceOrganization,
   toWorkspaceUser,
@@ -127,20 +129,32 @@ export class WorkspaceSession {
    */
   public myOrganizations(): Observable<WorkspaceResult<readonly WorkspaceOrganization[]>> {
     return workspaceResult(
-      this.organizations.listMyOrganizations({ limit: 100 }).pipe(
-        expand((page: MyOrganizationPage) =>
-          page.nextCursor
-            ? this.organizations.listMyOrganizations({ cursor: page.nextCursor, limit: 100 })
-            : EMPTY,
+      this.allMyOrganizations().pipe(
+        map((organizations: readonly MyOrganization[]) =>
+          organizations.map((organization: MyOrganization) =>
+            toWorkspaceOrganization(organization),
+          ),
         ),
-        reduce(
-          (all: readonly WorkspaceOrganization[], page: MyOrganizationPage) => [
-            ...all,
-            ...page.items.map((organization: MyOrganization) =>
-              toWorkspaceOrganization(organization),
-            ),
-          ],
-          [] as readonly WorkspaceOrganization[],
+      ),
+    );
+  }
+
+  /**
+   * Method menuOrganizations
+   *
+   * @description
+   * Reads every page of the caller's organizations with their member counts, for the
+   * organizations menu.
+   *
+   * @returns {Observable<WorkspaceResult<readonly OrganizationMenuEntry[]>>} All organizations, or the problem of the first failing page.
+   */
+  public menuOrganizations(): Observable<WorkspaceResult<readonly OrganizationMenuEntry[]>> {
+    return workspaceResult(
+      this.allMyOrganizations().pipe(
+        map((organizations: readonly MyOrganization[]) =>
+          organizations.map((organization: MyOrganization) =>
+            toOrganizationMenuEntry(organization),
+          ),
         ),
       ),
     );
@@ -182,6 +196,28 @@ export class WorkspaceSession {
   ): Observable<WorkspaceResult<T>> {
     return withSessionLock(operation, 'exclusive').pipe(
       catchError(() => of<WorkspaceResult<T>>({ ok: false, problem: { status: 0, code: null } })),
+    );
+  }
+
+  /**
+   * Method allMyOrganizations
+   *
+   * @description
+   * Follows `nextCursor` until the last page of the caller's organizations.
+   *
+   * @returns {Observable<readonly MyOrganization[]>} Every listed organization, in page order.
+   */
+  private allMyOrganizations(): Observable<readonly MyOrganization[]> {
+    return this.organizations.listMyOrganizations({ limit: 100 }).pipe(
+      expand((page: MyOrganizationPage) =>
+        page.nextCursor
+          ? this.organizations.listMyOrganizations({ cursor: page.nextCursor, limit: 100 })
+          : EMPTY,
+      ),
+      reduce(
+        (all: readonly MyOrganization[], page: MyOrganizationPage) => [...all, ...page.items],
+        [] as readonly MyOrganization[],
+      ),
     );
   }
   // #endregion

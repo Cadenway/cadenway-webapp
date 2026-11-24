@@ -1,7 +1,5 @@
-import { inject } from '@angular/core';
 import type { SlotContribution, SlotFeature } from '@shared/layout-slot';
 
-import { WORKSPACE_CONTEXT } from '../../ports/workspace-context/workspace-context.token';
 import { OrganizationSwitcher } from '../../ui/components/organization-switcher/organization-switcher.component';
 
 /**
@@ -20,7 +18,6 @@ export function withOrganizationSwitcher(): SlotFeature<SlotContribution> {
       id: 'workspace.organization-switcher',
       order: 0,
       component: OrganizationSwitcher,
-      inputs: { workspace: inject(WORKSPACE_CONTEXT) },
     }),
   };
 }

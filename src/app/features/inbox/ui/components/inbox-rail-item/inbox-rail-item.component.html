@@ -1,0 +1,225 @@
+<cw-app-rail-group>
+  <button
+    cwAppRailItem
+    icon="phosphorTrayBold"
+    activeIcon="phosphorTrayBold"
+    [badge]="badge()"
+    [badgeLabel]="badgeLabel()"
+    [cwPopoverTrigger]="popover"
+    data-testid="inbox-rail-item"
+    i18n="@@inbox.rail.label"
+  >
+    Inbox
+  </button>
+</cw-app-rail-group>
+
+<cw-popover
+  #popover
+  side="right"
+  align="start"
+  size="lg"
+  ariaLabel="Inbox"
+  i18n-ariaLabel="@@inbox.title"
+  [open]="open()"
+  (openChange)="setOpen($event)"
+>
+  <div #popoverContent class="flex min-w-0 flex-col" data-testid="inbox-popover">
+    <div class="flex h-9 items-center gap-2 border-b border-border pb-2">
+      <p
+        class="min-w-0 truncate rounded-sm text-sm font-medium focus-visible:outline-none"
+        tabindex="-1"
+        data-inbox-heading
+        i18n="@@inbox.title"
+      >
+        Inbox
+      </p>
+      @if (unread() > 0) {
+        <span
+          class="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-secondary px-1.5 text-xs leading-none font-medium whitespace-nowrap text-secondary-foreground tabular-nums"
+          data-testid="inbox-unread-count"
+          >{{ unread() }}</span
+        >
+      }
+      <button
+        cwButton
+        type="button"
+        variant="ghost"
+        size="sm"
+        class="ml-auto shrink-0 gap-1 px-1.5 text-xs text-muted-foreground"
+        [disabled]="unread() === 0"
+        (click)="markAllRead()"
+      >
+        <ng-icon name="phosphorChecksBold" class="size-3.5" aria-hidden="true" />
+        <ng-container i18n="@@inbox.mark-all">Mark all as read</ng-container>
+      </button>
+    </div>
+
+    <cw-tabs variant="bar" size="sm" [value]="tab()" (valueChange)="tab.set($event)">
+      <cw-tabs-list
+        class="border-b border-border"
+        ariaLabel="Inbox content"
+        i18n-ariaLabel="@@inbox.tabs"
+      >
+        <button cwTab value="notifications" [count]="unread() > 0 ? unread() : undefined">
+          <ng-container i18n="@@inbox.tab-notifications">Notifications</ng-container>
+        </button>
+        <button
+          cwTab
+          value="reminders"
+          data-inbox-reminders-tab
+          [count]="store.pendingCount() > 0 ? store.pendingCount() : undefined"
+        >
+          <ng-container i18n="@@inbox.tab-reminders">Reminders</ng-container>
+        </button>
+      </cw-tabs-list>
+
+      @if (doNotDisturb()) {
+        <p
+          class="flex items-center gap-2 border-b border-border py-2 text-xs whitespace-nowrap text-muted-foreground"
+          data-testid="inbox-do-not-disturb"
+        >
+          <span
+            class="flex size-2.5 shrink-0 items-center justify-center rounded-full bg-grenat"
+            aria-hidden="true"
+            ><span class="h-[1.5px] w-1.5 rounded-full bg-background"></span
+          ></span>
+          <ng-container i18n="@@inbox.do-not-disturb"
+            >Do not disturb: notifications paused</ng-container
+          >
+        </p>
+      }
+
+      <cw-tab-panel value="notifications">
+        @if (store.notifications.isLoading() && !store.notifications.hasValue()) {
+          <div class="flex flex-col gap-2 p-2" data-testid="inbox-loading">
+            <div cwSkeleton class="h-14 w-full"></div>
+            <div cwSkeleton class="h-14 w-full"></div>
+            <div cwSkeleton class="h-14 w-full"></div>
+          </div>
+        } @else if (store.notifications.status() === 'error') {
+          <cw-empty>
+            <cw-empty-header>
+              <cw-empty-media tone="destructive">
+                <ng-icon name="phosphorWarningCircleBold" aria-hidden="true" />
+              </cw-empty-media>
+              <cw-empty-title i18n="@@inbox.notifications-failed"
+                >The notifications could not be loaded</cw-empty-title
+              >
+            </cw-empty-header>
+            <cw-empty-content>
+              <button
+                cwButton
+                type="button"
+                variant="outline"
+                size="sm"
+                (click)="store.notifications.reload()"
+                i18n="@@inbox.retry"
+              >
+                Retry
+              </button>
+            </cw-empty-content>
+          </cw-empty>
+        } @else if (store.notifications.hasValue()) {
+          @if (store.notifications.value().items.length === 0) {
+            <cw-empty>
+              <cw-empty-header>
+                <cw-empty-media>
+                  <ng-icon name="phosphorCheckCircleBold" aria-hidden="true" />
+                </cw-empty-media>
+                <cw-empty-title i18n="@@inbox.notifications-empty">No notifications</cw-empty-title>
+                <cw-empty-description i18n="@@inbox.notifications-empty-text"
+                  >Mentions, assignments and comments on your tasks will show
+                  here.</cw-empty-description
+                >
+              </cw-empty-header>
+            </cw-empty>
+          } @else {
+            <ul class="-mx-2 flex max-h-[26rem] flex-col gap-px overflow-y-auto py-1">
+              @for (notification of store.notifications.value().items; track notification.id) {
+                <li>
+                  <cw-notification-row
+                    [notification]="notification"
+                    [now]="now()"
+                    (opened)="openNotification(notification)"
+                  />
+                </li>
+              }
+            </ul>
+          }
+        }
+      </cw-tab-panel>
+
+      <cw-tab-panel value="reminders">
+        @if (store.reminders.isLoading() && !store.reminders.hasValue()) {
+          <div class="flex flex-col gap-2 p-2">
+            <div cwSkeleton class="h-14 w-full"></div>
+            <div cwSkeleton class="h-14 w-full"></div>
+          </div>
+        } @else if (store.reminders.status() === 'error') {
+          <cw-empty>
+            <cw-empty-header>
+              <cw-empty-media tone="destructive">
+                <ng-icon name="phosphorWarningCircleBold" aria-hidden="true" />
+              </cw-empty-media>
+              <cw-empty-title i18n="@@inbox.reminders-failed"
+                >The reminders could not be loaded</cw-empty-title
+              >
+            </cw-empty-header>
+            <cw-empty-content>
+              <button
+                cwButton
+                type="button"
+                variant="outline"
+                size="sm"
+                (click)="store.reminders.reload()"
+                i18n="@@inbox.retry"
+              >
+                Retry
+              </button>
+            </cw-empty-content>
+          </cw-empty>
+        } @else if (store.reminders.hasValue()) {
+          @if (store.reminders.value().items.length === 0) {
+            <cw-empty>
+              <cw-empty-header>
+                <cw-empty-media>
+                  <ng-icon name="phosphorCheckCircleBold" aria-hidden="true" />
+                </cw-empty-media>
+                <cw-empty-title i18n="@@inbox.reminders-empty">No pending reminders</cw-empty-title>
+                <cw-empty-description i18n="@@inbox.reminders-empty-text"
+                  >Schedule one from a task: the alarm at the top of the detail, or right-click the
+                  task.</cw-empty-description
+                >
+              </cw-empty-header>
+            </cw-empty>
+          } @else {
+            <ul class="-mx-2 flex max-h-[26rem] flex-col gap-px overflow-y-auto py-1">
+              @for (reminder of store.reminders.value().items; track reminder.id) {
+                <li>
+                  <cw-reminder-row
+                    [reminder]="reminder"
+                    [now]="now()"
+                    (opened)="openTask(reminder.taskKey)"
+                    (snoozed)="snooze(reminder)"
+                    (completed)="complete(reminder)"
+                  />
+                </li>
+              }
+            </ul>
+          }
+        }
+      </cw-tab-panel>
+    </cw-tabs>
+
+    <div class="border-t border-border pt-1">
+      <button
+        type="button"
+        class="flex h-8 w-full items-center justify-center gap-1.5 rounded-md text-xs font-medium whitespace-nowrap text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none focus-visible:ring-inset"
+        (click)="openHome()"
+      >
+        <ng-container i18n="@@inbox.see-all">Show everything on the home screen</ng-container>
+        <ng-icon name="phosphorArrowRightBold" class="size-3.5" aria-hidden="true" />
+      </button>
+    </div>
+  </div>
+</cw-popover>

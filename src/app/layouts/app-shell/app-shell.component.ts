@@ -21,6 +21,7 @@ import {
 } from '@cadenway/ui/components/app-rail';
 import { CwButton } from '@cadenway/ui/components/button';
 import { CwSidebar, CwSidebarFooter, CwSidebarHeader } from '@cadenway/ui/components/sidebar';
+import { CwToaster, provideCwToastLabels } from '@cadenway/ui/components/toast';
 import { provideCwLocale, provideCwPhoneSheets } from '@cadenway/ui/core';
 import { NgIcon } from '@ng-icons/core';
 import { injectSlot, SHELL_SIDEBAR, type SlotContribution } from '@shared/layout-slot';
@@ -61,7 +62,8 @@ const FOCUSABLE: string =
  * expand toggle sits above the routed screen unless a screen claimed it through `SHELL_SIDEBAR`.
  * Opening with either toggle moves focus to the first control of the sidebar; any collapse that
  * leaves focus in the sidebar or on the page body returns it to the opener, or else to the expand
- * toggle. The `overlays` render last. Contributions render in ascending order and an empty slot
+ * toggle. The `overlays` render last, then the one `cw-toaster` of the shell, where
+ * `CwToastService` shows the contributions' toasts. Contributions render in ascending order and an empty slot
  * renders nothing. The route provides the `phosphorSidebarSimpleBold` icon through
  * `provideCadenwayIcons()`. The layout provides the `@cadenway/ui` locale from `LOCALE_ID`, the
  * phone sheets and `AppShellSidebar` to its subtree.
@@ -77,6 +79,7 @@ const FOCUSABLE: string =
     CwSidebar,
     CwSidebarFooter,
     CwSidebarHeader,
+    CwToaster,
     NgComponentOutlet,
     NgIcon,
     RouterOutlet,
@@ -84,6 +87,13 @@ const FOCUSABLE: string =
   providers: [
     provideCwLocale(() => inject(LOCALE_ID)),
     provideCwPhoneSheets(),
+    provideCwToastLabels(() => ({
+      undo: $localize`:@@layouts.app-shell.toast-undo:Undo`,
+      close: $localize`:@@layouts.app-shell.toast-close:Close the notification`,
+      ariaLabel: $localize`:@@layouts.app-shell.toast-region:Notifications (F8)`,
+      older: (count: number): string =>
+        $localize`:@@layouts.app-shell.toast-older:+${count}:count: older`,
+    })),
     AppShellSidebar,
     { provide: SHELL_SIDEBAR, useExisting: AppShellSidebar },
   ],

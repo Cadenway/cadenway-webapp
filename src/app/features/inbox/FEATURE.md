@@ -3,20 +3,74 @@
 ## Purpose
 
 The inbox popover opened from the rail: notifications and reminders, unread counts, mark as read,
-snooze and complete. It owns the rail entry and its badge. Notification preferences belong to Account.
+snooze and complete. It owns the rail entry and its badge. Notification preferences belong to
+Account; the full inbox of the home screen belongs to Home.
 
 ## Routes
 
-None yet.
+None.
 
 ## Public entry points
 
-None yet.
+| Entry point | Consumers |
+| ----------- | --------- |
+| `providers` | workspace |
+
+`providers` publishes `withInbox()` (`railNavigation`, order 10).
 
 ## Dependencies
 
-None yet.
+- `@cadenway/api-client`: `InboxService` (`getInboxUnreadCount`, `listInboxNotifications`,
+  `markInboxNotificationsRead`, `markInboxNotificationRead`) and `RemindersService`
+  (`listReminders`, `snoozeReminder`, `completeReminder`) through `data-access/`.
+- Account's `ports/presence` (do-not-disturb), Workspace's `ports/workspace-context`.
+- `@cadenway/ui` (`app-rail`, `button`, `empty`, `popover`, `skeleton`, `tabs`, `toast`) and
+  `@cadenway/icons`.
 
 ## Invariants
 
-None yet.
+- `InboxStore` is provided by the rail item and keyed on the workspace's organization. A committed
+  organization switch clears the count and the lists at once and restarts the poll; any answer or
+  write result that belongs to the previous organization is ignored.
+- The unread count is read at once, every 60 seconds and when the window regains focus; a failed
+  poll keeps the last count. The notifications and the reminders are read at each opening of the
+  popover; a failed read shows an inline « Réessayer ».
+- Every write bumps a version: a poll answer or a notifications load that began before it is
+  dropped (a load is sent again, up to three times), so a stale badge never comes back after
+  « Tout marquer comme lu ».
+- « Tout marquer comme lu », opening a notification, « demain matin » (9 h tomorrow, local time) and
+  « Marquer comme fait » are optimistic. A refusal restores, on the current state, only the
+  notifications and the count that write changed and no other pending or confirmed write covers,
+  or only that reminder, and shows the inbox's error toast. Successful reminder actions confirm
+  with the mockup's toasts.
+- Focus: when a completed reminder's row disappears it moves to the row taking its place, or to the
+  « Rappels » tab; when « Tout marquer comme lu » becomes disabled it moves to the popover heading.
+- The badge is hidden at zero and while the person's presence is « Ne pas déranger », and the popover
+  then shows « Ne pas déranger : notifications en pause » (only for `do-not-disturb`; an unknown
+  presence shows nothing).
+- Opening a notification or a reminder opens `/<slug>/t/<key>`, which renders the 404 until step 5.
+- Known gaps: realtime personal notices are not pushed by the gateway yet, hence the polling; the
+  mockup also adds overdue reminders to the badge, which needs the reminders read with every poll and
+  is left out. The inbox and reminder operations do not declare `If-Organization-Match` (see
+  Workspace).
+
+## Copy not taken word for word from the mockup
+
+| Unit                                                                                                                                           | Reason                                                                                                                            |
+| ---------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| `inbox.verb.mention`                                                                                                                           | « vous a mentionnée » agrees with one reader; « a mentionné votre nom » is neutral.                                               |
+| `inbox.verb.status-changed`, `inbox.verb.other`                                                                                                | Contract cases the mockup does not draw: a status change without a status, and the `due-date`, `access` and `billing` categories. |
+| `inbox.notifications-empty`, `inbox.notifications-empty-text`                                                                                  | The mockup draws no empty notification list.                                                                                      |
+| `inbox.notifications-failed`, `inbox.reminders-failed`                                                                                         | The mockup draws no failed read.                                                                                                  |
+| `inbox.mark-all-failed`, `inbox.mark-read-failed`, `inbox.reminder.snooze-failed`, `inbox.reminder.complete-failed`, `inbox.write-failed-text` | The mockup draws no refused write.                                                                                                |
+| `inbox.time.tomorrow`, `inbox.time.at-time`                                                                                                    | Built on the mockup's « Aujourd’hui, 9 h » for tomorrow and for minutes.                                                          |
+
+## Copy not taken word for word from the mockup
+
+| Unit                                                                          | Reason                                                              |
+| ----------------------------------------------------------------------------- | ------------------------------------------------------------------- |
+| `inbox.notifications-empty`, `inbox.notifications-empty-text`                 | The mockup draws no empty notification list.                        |
+| `inbox.notifications-failed`, `inbox.reminders-failed`, `inbox.retry`         | The mockup draws no failed read.                                    |
+| `inbox.verb.other`, `inbox.verb.status-changed`                               | Contract categories the mockup does not draw.                       |
+| `inbox.mark-all-failed`, `inbox.reminder.*-failed`, `inbox.write-failed-text` | The mockup draws no refused write.                                  |
+| `inbox.time.*`                                                                | Built from the mockup's samples (« 12 min », « Lun. 9 nov., 9 h »). |
