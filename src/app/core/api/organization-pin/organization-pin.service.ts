@@ -22,6 +22,16 @@ export class OrganizationPin {
   private readonly value: WritableSignal<string | null> = signal<string | null>(null);
 
   /**
+   * Property switching
+   *
+   * @description
+   * Whether the session may be changing organization while old pages remain active.
+   *
+   * @type {boolean}
+   */
+  private switching: boolean = false;
+
+  /**
    * Property changes
    *
    * @description
@@ -31,6 +41,28 @@ export class OrganizationPin {
    * @readonly
    */
   private readonly changes: Subject<void> = new Subject<void>();
+
+  /**
+   * Property commits
+   *
+   * @description
+   * Synchronous notifications after the verified organization is committed.
+   *
+   * @type {Subject<void>}
+   * @readonly
+   */
+  private readonly commits: Subject<void> = new Subject<void>();
+
+  /**
+   * Property organizationChanges
+   *
+   * @description
+   * Emits after a different workspace organization is committed.
+   *
+   * @type {Observable<void>}
+   * @readonly
+   */
+  public readonly organizationChanges: Observable<void> = this.commits.asObservable();
 
   /**
    * Property current
@@ -65,7 +97,32 @@ export class OrganizationPin {
    * @param {string | null} organizationId - Expected organization, or null to clear it.
    */
   public set(organizationId: string | null): void {
+    const changed: boolean = this.value() !== organizationId;
     this.value.set(organizationId);
+    this.switching = false;
+    if (changed) this.commits.next();
+  }
+
+  /**
+   * Method beginSwitch
+   *
+   * @description
+   * Fences pinned requests until a verified context is committed or the workspace is destroyed.
+   */
+  public beginSwitch(): void {
+    this.switching = true;
+  }
+
+  /**
+   * Method isSwitching
+   *
+   * @description
+   * Checks whether a workspace session switch is in progress.
+   *
+   * @returns {boolean} Whether pinned requests must be refused locally.
+   */
+  public isSwitching(): boolean {
+    return this.switching;
   }
 
   /**

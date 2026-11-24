@@ -54,8 +54,8 @@ function envelope(value: unknown): value is Record<string, unknown> {
     UUID.test(value['id']) &&
     typeof value['type'] === 'string' &&
     typeof value['at'] === 'string' &&
-    /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?Z$/.test(value['at']) &&
-    !Number.isNaN(Date.parse(value['at'])) &&
+    /^\d{4}-\d\d-\d\d[Tt]\d\d:\d\d:\d\d(?:\.\d+)?(?:[Zz]|[+-]\d\d:\d\d)$/.test(value['at']) &&
+    !Number.isNaN(Date.parse(value['at'].replace(/:60(?=\.|[Zz]|[+-])/, ':59'))) &&
     Number.isSafeInteger(value['version']) &&
     (value['version'] as number) >= 1 &&
     record(value['data'])
@@ -80,7 +80,8 @@ export function heartbeatInterval(value: unknown, organization: string | null): 
   if (
     !organization ||
     !exactKeys(data, ['organizationId', 'sessionExpiresAt', 'heartbeatIntervalSeconds']) ||
-    data['organizationId'] !== organization ||
+    typeof data['organizationId'] !== 'string' ||
+    data['organizationId'].toLowerCase() !== organization.toLowerCase() ||
     typeof data['sessionExpiresAt'] !== 'string' ||
     Number.isNaN(Date.parse(data['sessionExpiresAt'])) ||
     typeof seconds !== 'number' ||

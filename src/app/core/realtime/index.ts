@@ -3,7 +3,11 @@ import { type Provider } from '@angular/core';
 import { RealtimeConnection } from './realtime-connection.service';
 
 export { RealtimeConnection } from './realtime-connection.service';
-export { REALTIME_ORGANIZATION, REALTIME_TICKET_SOURCE } from './realtime.token';
+export {
+  REALTIME_ORGANIZATION,
+  REALTIME_TERMINAL_FAILURE,
+  REALTIME_TICKET_SOURCE,
+} from './realtime.token';
 export type {
   MemberPresenceChange,
   PresenceStatus,

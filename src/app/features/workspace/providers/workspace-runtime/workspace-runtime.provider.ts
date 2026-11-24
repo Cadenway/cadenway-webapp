@@ -11,10 +11,19 @@ import { type ActivatedRouteSnapshot, Router } from '@angular/router';
 import { type Subscription } from 'rxjs';
 
 import { OrganizationPin } from '@core/api';
-import { provideRealtime, REALTIME_ORGANIZATION, REALTIME_TICKET_SOURCE } from '@core/realtime';
+import {
+  provideRealtime,
+  REALTIME_ORGANIZATION,
+  REALTIME_TERMINAL_FAILURE,
+  REALTIME_TICKET_SOURCE,
+} from '@core/realtime';
 
 import { WorkspaceRealtime } from '../../data-access/services/workspace-realtime/workspace-realtime.service';
 import type { WorkspaceContextPort } from '../../ports/workspace-context/workspace-context-port.interface';
+import {
+  organizationChoiceRedirect,
+  signInRedirect,
+} from '../../navigation/access-redirect/access-redirect.util';
 import { WORKSPACE_CONTEXT } from '../../ports/workspace-context/workspace-context.token';
 import { WorkspaceRevalidation } from './workspace-revalidation.service';
 
@@ -64,13 +73,31 @@ export function provideWorkspaceRuntime(): (Provider | EnvironmentProviders)[] {
         return computed(() => context.organization().id);
       },
     },
+    {
+      provide: REALTIME_TERMINAL_FAILURE,
+      useFactory: (): ((status: 401 | 403) => void) => {
+        const router: Router = inject(Router);
+        return (status: 401 | 403): void => {
+          void router.navigateByUrl(
+            status === 401
+              ? signInRedirect(router, router.url)
+              : organizationChoiceRedirect(router),
+          );
+        };
+      },
+    },
     provideEnvironmentInitializer(() => {
       const pin: OrganizationPin = inject(OrganizationPin);
       const router: Router = inject(Router);
       const revalidation: WorkspaceRevalidation = inject(WorkspaceRevalidation);
+      let recovering: boolean = false;
       const subscription: Subscription = pin.contextChanged.subscribe(() => {
+        if (recovering || router.currentNavigation()) return;
+        recovering = true;
         revalidation.request();
-        void router.navigateByUrl(router.url, { onSameUrlNavigation: 'reload' });
+        void router.navigateByUrl(router.url, { onSameUrlNavigation: 'reload' }).finally(() => {
+          recovering = false;
+        });
       });
       inject(DestroyRef).onDestroy(() => {
         subscription.unsubscribe();

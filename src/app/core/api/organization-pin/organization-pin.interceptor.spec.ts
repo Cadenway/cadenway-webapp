@@ -18,6 +18,7 @@ import { RuntimeConfigStore } from '@core/config';
 
 import { organizationPinInterceptor } from './organization-pin.interceptor';
 import { OrganizationPin } from './organization-pin.service';
+import { OrganizationSwitchPendingError } from './organization-switch-pending.error';
 import { SKIP_ORGANIZATION_PIN } from './organization-pin.token';
 
 describe('organizationPinInterceptor', () => {
@@ -85,6 +86,24 @@ describe('organizationPinInterceptor', () => {
     const request: TestRequest =
       TestBed.inject(HttpTestingController).expectOne('/v1/organization');
     expect(request.request.headers.has('If-Organization-Match')).toBe(false);
+    request.flush({});
+    await result;
+  });
+
+  it('refuses pinned requests locally during a session switch', async () => {
+    const pin: OrganizationPin = TestBed.inject(OrganizationPin);
+    pin.set('old-organization');
+    pin.beginSwitch();
+    const client: HttpClient = TestBed.inject(HttpClient);
+    const http: HttpTestingController = TestBed.inject(HttpTestingController);
+    await expect(firstValueFrom(client.patch('/v1/tasks/CAD-1', {}))).rejects.toBeInstanceOf(
+      OrganizationSwitchPendingError,
+    );
+    http.expectNone('/v1/tasks/CAD-1');
+    pin.set('new-organization');
+    const result: Promise<unknown> = firstValueFrom(client.get('/v1/tasks/CAD-1'));
+    const request: TestRequest = http.expectOne('/v1/tasks/CAD-1');
+    expect(request.request.headers.get('If-Organization-Match')).toBe('new-organization');
     request.flush({});
     await result;
   });

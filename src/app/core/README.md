@@ -34,8 +34,11 @@ The root transport provides Angular HTTP to the generated `@cadenway/api-client`
   `organization.context-changed`; the guard may explicitly read the actual session organization
   without the pin to recover.
 - Realtime uses one lazy connection per workspace, fresh tickets on reconnect and ref-counted rooms.
+  The route-scoped connection survives an in-place slug change and reconnects for the new organization.
   The gateway envelope does not identify the delivering room, so validated deduplicated changes are
   broadcast to every watch; consumers filter or refetch. A future contract should include the room.
+- Presence starts unknown: neither realtime hello nor a REST read returns the saved preference.
+  Only an explicit choice in this tab is sent or restored after reconnection.
 - The resolved theme is reflected in `data-theme` on the document element.
 - After a path change, focus moves to the innermost route focus target or `main` without scrolling;
   initial and query-only navigation leave focus alone.

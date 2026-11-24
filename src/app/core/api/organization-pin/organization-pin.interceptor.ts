@@ -12,6 +12,7 @@ import { RuntimeConfigStore } from '@core/config';
 import { hasProblemCode } from '../utils/problem/problem.utils';
 import { ORGANIZATION_PIN_OPERATIONS } from './organization-pin-operations.constant';
 import { OrganizationPin } from './organization-pin.service';
+import { OrganizationSwitchPendingError } from './organization-switch-pending.error';
 import { SKIP_ORGANIZATION_PIN } from './organization-pin.token';
 
 /**
@@ -41,6 +42,7 @@ export function organizationPinInterceptor(
       ([method, pattern]: readonly [string, RegExp]) =>
         method === request.method && pattern.test(path),
     );
+  if (supported && pin.isSwitching()) return throwError(() => new OrganizationSwitchPendingError());
   const outgoing: HttpRequest<unknown> =
     organizationId && supported
       ? request.clone({ setHeaders: { 'If-Organization-Match': organizationId } })

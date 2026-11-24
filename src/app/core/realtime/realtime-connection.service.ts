@@ -6,13 +6,19 @@ import {
   type Signal,
   type WritableSignal,
 } from '@angular/core';
+import { toObservable } from '@angular/core/rxjs-interop';
 import { EMPTY, Observable, Subject, type Subscription } from 'rxjs';
 import { io, type Socket } from 'socket.io-client';
 
+import { type ApiProblem, OrganizationPin, readProblem } from '@core/api';
 import { RuntimeConfigStore } from '@core/config';
 
 import { heartbeatInterval, parseChange, parsePresence } from './realtime-protocol.util';
-import { REALTIME_ORGANIZATION, REALTIME_TICKET_SOURCE } from './realtime.token';
+import {
+  REALTIME_ORGANIZATION,
+  REALTIME_TERMINAL_FAILURE,
+  REALTIME_TICKET_SOURCE,
+} from './realtime.token';
 import {
   type MemberPresenceChange,
   type PresenceStatus,
@@ -25,7 +31,6 @@ import {
  *
  * @description
  * A shared subscription and its current gateway admission.
- *
  */
 interface RoomEntry {
   // #region Properties
@@ -153,10 +158,66 @@ export class RealtimeConnection {
    * @description
    * Presence retained across reconnects.
    *
-   * @type {WritableSignal<PresenceStatus>}
+   * @type {WritableSignal<PresenceStatus | null>}
    * @readonly
    */
-  private readonly preference: WritableSignal<PresenceStatus> = signal<PresenceStatus>('online');
+  private readonly preference: WritableSignal<PresenceStatus | null> =
+    signal<PresenceStatus | null>(null);
+
+  /**
+   * Property pin
+   *
+   * @description
+   * Reports a gateway admission for the wrong organization.
+   *
+   * @type {OrganizationPin}
+   * @readonly
+   */
+  private readonly pin: OrganizationPin = inject(OrganizationPin);
+
+  /**
+   * Property terminalFailure
+   *
+   * @description
+   * Workspace-owned navigation after session or membership rejection.
+   *
+   * @type {((status: 401 | 403) => void) | null}
+   * @readonly
+   */
+  private readonly terminalFailure: ((status: 401 | 403) => void) | null = inject(
+    REALTIME_TERMINAL_FAILURE,
+    { optional: true },
+  );
+
+  /**
+   * Property boundOrganization
+   *
+   * @description
+   * Organization associated with the current or most recent connection attempt.
+   *
+   * @type {string | null}
+   */
+  private boundOrganization: string | null = null;
+
+  /**
+   * Property terminal
+   *
+   * @description
+   * Whether a terminal ticket rejection stopped reconnection.
+   *
+   * @type {boolean}
+   */
+  private terminal: boolean = false;
+
+  /**
+   * Property ticketTimer
+   *
+   * @description
+   * Deadline for the current ticket request.
+   *
+   * @type {ReturnType<typeof setTimeout> | undefined}
+   */
+  private ticketTimer: ReturnType<typeof setTimeout> | undefined = undefined;
 
   /**
    * Property rooms
@@ -201,6 +262,69 @@ export class RealtimeConnection {
    * @readonly
    */
   private readonly seen: Set<string> = new Set<string>();
+
+  /**
+   * Property roomQueue
+   *
+   * @description
+   * Serializes gateway room changes on the current socket.
+   *
+   * @type {Promise<void>}
+   */
+  private roomQueue: Promise<void> = Promise.resolve();
+
+  /**
+   * Property presencePending
+   *
+   * @description
+   * Serializes user presence changes on the current socket.
+   *
+   * @type {Promise<void> | undefined}
+   */
+  private presencePending: Promise<void> | undefined = undefined;
+
+  /**
+   * Property confirmedPresence
+   *
+   * @description
+   * Last status acknowledged for this tab.
+   *
+   * @type {PresenceStatus | null}
+   */
+  private confirmedPresence: PresenceStatus | null = null;
+
+  /**
+   * Property presenceHandledVersion
+   *
+   * @description
+   * Latest choice whose acknowledgement or final refusal has been processed.
+   *
+   * @type {number}
+   */
+  private presenceHandledVersion: number = 0;
+
+  /**
+   * Property presenceVersion
+   *
+   * @description
+   * Distinguishes a new choice from an earlier pending one.
+   *
+   * @type {number}
+   */
+  private presenceVersion: number = 0;
+
+  /**
+   * Property waits
+   *
+   * @description
+   * Cancellable retry delays for the current socket.
+   *
+   * @type {Map<ReturnType<typeof setTimeout>, () => void>}
+   */
+  private waits: Map<ReturnType<typeof setTimeout>, () => void> = new Map<
+    ReturnType<typeof setTimeout>,
+    () => void
+  >();
 
   /**
    * Property socket
@@ -310,10 +434,10 @@ export class RealtimeConnection {
    * @description
    * Current local presence preference.
    *
-   * @type {Signal<PresenceStatus>}
+   * @type {Signal<PresenceStatus | null>}
    * @readonly
    */
-  public readonly ownStatus: Signal<PresenceStatus> = this.preference.asReadonly();
+  public readonly ownStatus: Signal<PresenceStatus | null> = this.preference.asReadonly();
 
   /**
    * Property reconnected
@@ -353,6 +477,20 @@ export class RealtimeConnection {
    * @constructor
    */
   public constructor() {
+    const commits: Subscription = this.pin.organizationChanges.subscribe(() => {
+      this.organizationChanged(this.organization());
+    });
+    this.destroyRef.onDestroy(() => {
+      commits.unsubscribe();
+    });
+    const organizations: Subscription = toObservable(this.organization).subscribe(
+      (organization: string | null) => {
+        this.organizationChanged(organization);
+      },
+    );
+    this.destroyRef.onDestroy(() => {
+      organizations.unsubscribe();
+    });
     this.destroyRef.onDestroy(() => {
       this.destroy();
     });
@@ -383,8 +521,8 @@ export class RealtimeConnection {
         }
         entry = { room, changes: new Subject<RealtimeChange>(), count: 0, joined: false };
         this.rooms.set(key, entry);
-        if (this.state() === 'connected' && this.socket)
-          void this.join(key, entry, this.socket, this.generation);
+        if (this.heartbeat && this.socket)
+          void this.queueRoom(key, entry, this.socket, this.generation);
       }
       entry.count++;
       const current: RoomEntry = entry;
@@ -394,10 +532,12 @@ export class RealtimeConnection {
         subscription.unsubscribe();
         current.count--;
         if (current.count === 0 && this.rooms.get(key) === current) {
-          this.rooms.delete(key);
-          if (current.joined && this.socket)
-            void this.ack(this.socket, 'room:leave', current.room).catch(() => undefined);
-          current.changes.complete();
+          if (this.heartbeat && this.socket) {
+            void this.queueRoom(key, current, this.socket, this.generation);
+          } else {
+            this.rooms.delete(key);
+            current.changes.complete();
+          }
         }
       };
     });
@@ -413,9 +553,41 @@ export class RealtimeConnection {
    */
   public setPresence(status: PresenceStatus): void {
     this.preference.set(status);
+    this.presenceVersion++;
     if (!this.url) return;
     this.start();
-    if (this.state() === 'connected' && this.socket) this.socket.emit('presence:set', { status });
+    if (this.heartbeat && this.socket) void this.syncPresence(this.socket, this.generation);
+  }
+
+  /**
+   * Method organizationChanged
+   *
+   * @description
+   * Invalidates the old socket and reconnects watched rooms for the new workspace organization.
+   *
+   * @param {string | null} organization - Newly committed organization.
+   */
+  private organizationChanged(organization: string | null): void {
+    if (this.destroyed || !this.started || this.terminal || organization === this.boundOrganization)
+      return;
+    this.boundOrganization = organization;
+    this.generation++;
+    clearTimeout(this.retryTimer);
+    this.closeSocket();
+    this.seen.clear();
+    this.confirmedPresence = null;
+    for (const [key, entry] of this.rooms) {
+      entry.joined = false;
+      if (entry.count === 0) {
+        this.rooms.delete(key);
+        entry.changes.complete();
+      }
+    }
+    this.attempt = 0;
+    if (organization) {
+      this.state.set('reconnecting');
+      void this.connect();
+    } else this.state.set('disabled');
   }
 
   /**
@@ -427,6 +599,7 @@ export class RealtimeConnection {
   private start(): void {
     if (this.started || this.destroyed || !this.url) return;
     this.started = true;
+    this.boundOrganization = this.organization();
     void this.connect();
   }
 
@@ -441,8 +614,16 @@ export class RealtimeConnection {
   private async connect(): Promise<void> {
     const generation: number = ++this.generation;
     try {
-      const token: string = await this.ticket();
+      const token: string = await Promise.race([
+        this.ticket(),
+        new Promise<string>((_resolve, reject) => {
+          this.ticketTimer = setTimeout(() => {
+            reject(new Error('Realtime ticket timeout.'));
+          }, 10000);
+        }),
+      ]);
       if (this.destroyed || generation !== this.generation || !this.url) return;
+      clearTimeout(this.ticketTimer);
       const socket: Socket = io(new URL(this.url).origin, {
         auth: { token },
         autoConnect: false,
@@ -465,7 +646,23 @@ export class RealtimeConnection {
         if (generation === this.generation && this.heartbeat) this.receive(notice);
       });
       socket.connect();
-    } catch {
+    } catch (error: unknown) {
+      if (generation !== this.generation || this.destroyed) return;
+      clearTimeout(this.ticketTimer);
+      const problem: ApiProblem | null = readProblem(error);
+      if (
+        problem?.status === 401 ||
+        problem?.status === 403 ||
+        problem?.code === 'member.not-found' ||
+        problem?.code === 'organization.not-found'
+      ) {
+        this.terminal = true;
+        this.generation++;
+        this.closeSocket();
+        this.state.set('disabled');
+        this.terminalFailure?.(problem.status === 401 ? 401 : 403);
+        return;
+      }
       this.failed(generation);
     }
   }
@@ -484,12 +681,29 @@ export class RealtimeConnection {
   private async admit(socket: Socket, generation: number, hello: unknown): Promise<void> {
     const cadence: number | null = heartbeatInterval(hello, this.organization());
     if (cadence === null) {
+      if (
+        hello &&
+        typeof hello === 'object' &&
+        'data' in hello &&
+        hello.data &&
+        typeof hello.data === 'object' &&
+        'organizationId' in hello.data &&
+        typeof hello.data.organizationId === 'string' &&
+        this.organization() &&
+        hello.data.organizationId.toLowerCase() !== this.organization()?.toLowerCase()
+      ) {
+        this.generation++;
+        this.closeSocket();
+        this.state.set('disabled');
+        this.pin.notifyContextChanged();
+        return;
+      }
       this.failed(generation);
       return;
     }
     clearTimeout(this.admissionTimer);
     this.heartbeat = setInterval(() => socket.volatile.emit('presence:heartbeat', {}), cadence);
-    socket.emit('presence:set', { status: this.preference() });
+    const presence: Promise<void> = this.syncPresence(socket, generation);
     while (generation === this.generation) {
       const pending: [string, RoomEntry][] = [...this.rooms].filter(
         ([, entry]: [string, RoomEntry]) => !entry.joined,
@@ -497,12 +711,13 @@ export class RealtimeConnection {
       if (pending.length === 0) break;
       await Promise.all(
         pending.map(([key, entry]: [string, RoomEntry]) =>
-          this.join(key, entry, socket, generation),
+          this.queueRoom(key, entry, socket, generation),
         ),
       );
     }
-    if (generation !== this.generation || this.destroyed) return;
-    socket.emit('presence:set', { status: this.preference() });
+    if (generation !== this.generation) return;
+    await presence;
+    if (generation !== this.generation) return;
     this.state.set('connected');
     this.attempt = 0;
     if (this.everConnected) this.reconnects.next();
@@ -510,37 +725,160 @@ export class RealtimeConnection {
   }
 
   /**
-   * Method join
+   * Method queueRoom
    *
    * @description
-   * Joins a room and rejects its observers if the gateway refuses it.
+   * Serializes reconciliation of one room with all other room mutations on this socket.
    *
    * @param {string} key - Local room key.
-   * @param {RoomEntry} entry - Shared room state.
+   * @param {RoomEntry} entry - Reference-counted room state.
    * @param {Socket} socket - Current transport.
    * @param {number} generation - Identity of the connection attempt.
-   * @returns {Promise<void>} Completion of the join acknowledgement.
+   * @returns {Promise<void>} Completion of the queued reconciliation.
    */
-  private async join(
+  private queueRoom(
     key: string,
     entry: RoomEntry,
     socket: Socket,
     generation: number,
   ): Promise<void> {
-    try {
-      await this.ack(socket, 'room:join', entry.room);
-      if (generation !== this.generation) return;
-      if (this.rooms.get(key) !== entry) {
-        if (!this.rooms.has(key))
-          void this.ack(socket, 'room:leave', entry.room).catch(() => undefined);
+    const queued: Promise<void> = this.roomQueue.then(() =>
+      this.reconcileRoom(key, entry, socket, generation),
+    );
+    this.roomQueue = queued;
+    return queued;
+  }
+
+  /**
+   * Method reconcileRoom
+   *
+   * @description
+   * Retries transient failures and retains an unacknowledged leave in the local room count.
+   *
+   * @param {string} key - Local room key.
+   * @param {RoomEntry} entry - Reference-counted room state.
+   * @param {Socket} socket - Current transport.
+   * @param {number} generation - Identity of the connection attempt.
+   * @returns {Promise<void>} Completion of this reconciliation.
+   */
+  private async reconcileRoom(
+    key: string,
+    entry: RoomEntry,
+    socket: Socket,
+    generation: number,
+  ): Promise<void> {
+    let operation: boolean | null = null;
+    while (generation === this.generation && !this.destroyed && this.rooms.get(key) === entry) {
+      if (operation === null && entry.count === 0 && !entry.joined) {
+        this.rooms.delete(key);
+        entry.changes.complete();
         return;
       }
-      entry.joined = true;
-    } catch (error: unknown) {
-      if (generation !== this.generation || this.rooms.get(key) !== entry) return;
-      this.rooms.delete(key);
-      entry.changes.error(error);
+      if (operation === null && entry.count > 0 && entry.joined) return;
+      const joining: boolean = operation ?? entry.count > 0;
+      operation = joining;
+      try {
+        await this.ack(socket, joining ? 'room:join' : 'room:leave', entry.room);
+        if (generation !== this.generation) return;
+        entry.joined = joining;
+        operation = null;
+      } catch (error: unknown) {
+        if (generation !== this.generation) return;
+        if (
+          joining &&
+          error instanceof Error &&
+          ['room.not-found', 'request.invalid', 'room.limit-reached'].includes(error.message)
+        ) {
+          this.rooms.delete(key);
+          entry.changes.error(error);
+          return;
+        }
+        await this.wait(1000);
+      }
     }
+  }
+
+  /**
+   * Method syncPresence
+   *
+   * @description
+   * Sends a chosen preference once at a time, retries transient refusals and rolls back final ones.
+   *
+   * @param {Socket} socket - Admitted transport.
+   * @param {number} generation - Identity of the connection attempt.
+   * @returns {Promise<void>} Completion of pending preference changes.
+   */
+  private syncPresence(socket: Socket, generation: number): Promise<void> {
+    if (this.presencePending) return this.presencePending;
+    if (this.preference() === null) return Promise.resolve();
+    const pending: Promise<void> = this.applyPresence(socket, generation);
+    this.presencePending = pending;
+    void pending.then(() => {
+      if (this.presencePending === pending) {
+        this.presencePending = undefined;
+        if (
+          generation === this.generation &&
+          !this.destroyed &&
+          this.preference() !== null &&
+          this.presenceVersion !== this.presenceHandledVersion
+        )
+          void this.syncPresence(socket, generation);
+      }
+    });
+    return pending;
+  }
+
+  /**
+   * Method applyPresence
+   *
+   * @description
+   * Applies the latest choice while preserving a confirmed value across retries.
+   *
+   * @param {Socket} socket - Admitted transport.
+   * @param {number} generation - Identity of the connection attempt.
+   * @returns {Promise<void>} Completion of the latest presence change.
+   */
+  private async applyPresence(socket: Socket, generation: number): Promise<void> {
+    while (generation === this.generation && !this.destroyed) {
+      const status: PresenceStatus | null = this.preference();
+      if (status === null) return;
+      const version: number = this.presenceVersion;
+      try {
+        await this.ack(socket, 'presence:set', { status });
+        if (generation !== this.generation) return;
+        this.confirmedPresence = status;
+      } catch (error: unknown) {
+        if (generation !== this.generation) return;
+        if (!(error instanceof Error) || error.message === 'realtime.unavailable') {
+          await this.wait(1000);
+          continue;
+        }
+        if (version === this.presenceVersion) this.preference.set(this.confirmedPresence);
+      }
+      if (version === this.presenceVersion) {
+        this.presenceHandledVersion = version;
+        return;
+      }
+    }
+  }
+
+  /**
+   * Method wait
+   *
+   * @description
+   * Delays a retry and can be released immediately when the connection closes.
+   *
+   * @param {number} milliseconds - Delay before retry.
+   * @returns {Promise<void>} Completion or cancellation of the delay.
+   */
+  private wait(milliseconds: number): Promise<void> {
+    return new Promise((resolve) => {
+      const timer: ReturnType<typeof setTimeout> = setTimeout(() => {
+        this.waits.delete(timer);
+        resolve();
+      }, milliseconds);
+      this.waits.set(timer, resolve);
+    });
   }
 
   /**
@@ -551,12 +889,12 @@ export class RealtimeConnection {
    *
    * @param {Socket} socket - Current transport.
    * @param {string} event - Client event name.
-   * @param {RealtimeRoom} room - Room selection.
+   * @param {unknown} payload - Client event payload.
    * @returns {Promise<void>} Completion or acknowledgement failure.
    */
-  private ack(socket: Socket, event: string, room: RealtimeRoom): Promise<void> {
+  private ack(socket: Socket, event: string, payload: unknown): Promise<void> {
     return new Promise((resolve, reject) => {
-      socket.timeout(5000).emit(event, room, (error: Error | null, ack: unknown) => {
+      socket.timeout(5000).emit(event, payload, (error: Error | null, ack: unknown) => {
         if (error) {
           reject(new Error('realtime.unavailable'));
           return;
@@ -607,10 +945,16 @@ export class RealtimeConnection {
    * @param {number} generation - Identity of the failed attempt.
    */
   private failed(generation: number): void {
-    if (generation !== this.generation || this.destroyed) return;
+    if (generation !== this.generation) return;
     this.generation++;
     this.closeSocket();
-    for (const entry of this.rooms.values()) entry.joined = false;
+    for (const [key, entry] of this.rooms) {
+      entry.joined = false;
+      if (entry.count === 0) {
+        this.rooms.delete(key);
+        entry.changes.complete();
+      }
+    }
     this.state.set('reconnecting');
     const delays: readonly number[] = [1000, 2000, 5000, 10000, 30000];
     const delay: number = delays[Math.min(this.attempt++, delays.length - 1)] ?? 30000;
@@ -627,7 +971,16 @@ export class RealtimeConnection {
    */
   private closeSocket(): void {
     clearTimeout(this.admissionTimer);
+    clearTimeout(this.ticketTimer);
     clearInterval(this.heartbeat);
+    this.heartbeat = undefined;
+    for (const [timer, resolve] of this.waits) {
+      clearTimeout(timer);
+      resolve();
+    }
+    this.waits.clear();
+    this.roomQueue = Promise.resolve();
+    this.presencePending = undefined;
     this.socket?.removeAllListeners();
     this.socket?.disconnect();
     this.socket = undefined;

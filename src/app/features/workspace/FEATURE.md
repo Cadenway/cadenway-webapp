@@ -64,7 +64,10 @@ injects it as optional.
 - The resolver sets `OrganizationPin` after committing the verified context, before child resolvers;
   route destruction clears it. A `412 organization.context-changed` requests one same-URL guard and
   resolver rerun. Query-only navigation does not trigger revalidation. The guard's uncached current
-  organization read skips the pin so it can discover and switch the session under the lock.
+  organization read skips the pin so it can discover and switch the session under the lock. Before
+  a session switch the guard fences pinned requests locally until the resolver commits the new pin.
+- A session holds one current organization across tabs. Tabs on different organizations can take
+  turns switching the session; each committed workspace switch reconnects its realtime client.
 - The organization switcher links to `/organizations`; the organization menu of the mockup comes
   with the organization settings.
 - Guards and the resolver never reach the error boundary: they redirect with a `UrlTree` or a
