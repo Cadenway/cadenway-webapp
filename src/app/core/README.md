@@ -9,10 +9,13 @@ configured in `api/client/`. The shell belongs to
 
 ## Public entry points
 
-| Entry point    | Responsibility                                               |
-| -------------- | ------------------------------------------------------------ |
-| `@core/config` | The root `RuntimeConfigStore` and the `RuntimeConfig` model. |
-| `@core/api`    | The transport interceptor used by the root providers.        |
+| Entry point       | Responsibility                                               |
+| ----------------- | ------------------------------------------------------------ |
+| `@core/config`    | The root `RuntimeConfigStore` and the `RuntimeConfig` model. |
+| `@core/api`       | Transport interceptor and validated HTTP problem readers.    |
+| `@core/theme`     | Theme preference and document synchronization.               |
+| `@core/shortcuts` | Scoped keyboard shortcut registration.                       |
+| `@core/routing`   | Route title and focus infrastructure.                        |
 
 ## Dependencies
 
@@ -25,3 +28,8 @@ The root transport provides Angular HTTP to the generated `@cadenway/api-client`
   session and organization changes.
 - The API transport resolves generated relative paths against the configured gateway origin and
   uses the browser's session cookie there.
+- The resolved theme is reflected in `data-theme` on the document element.
+- After a path change, focus moves to the innermost route focus target or `main` without scrolling;
+  initial and query-only navigation leave focus alone.
+- Shortcuts ignore editable targets unless allowed, repeated and composing events; single-key
+  shortcuts can be disabled in memory. Registrations end with their owning scope.
