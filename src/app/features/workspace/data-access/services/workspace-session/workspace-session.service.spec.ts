@@ -8,6 +8,7 @@ import { TestBed } from '@angular/core/testing';
 import { firstValueFrom } from 'rxjs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import type { OrganizationMenuEntry } from '../../../models/organization-menu-entry/organization-menu-entry.interface';
 import type {
   WorkspaceOrganization,
   WorkspaceResult,
@@ -128,6 +129,41 @@ describe('WorkspaceSession', () => {
       'atelier-nord',
       'lumen',
     ]);
+  });
+
+  it('reads every page of the organizations menu with the member counts', async () => {
+    const result: Promise<WorkspaceResult<readonly OrganizationMenuEntry[]>> = firstValueFrom(
+      session.menuOrganizations(),
+    );
+    http
+      .expectOne((request) => request.url === '/v1/organizations' && !request.params.has('cursor'))
+      .flush({ items: [myOrganization('atelier-nord', 'Atelier Nord')], nextCursor: 'page-2' });
+    http
+      .expectOne((request) => request.params.get('cursor') === 'page-2')
+      .flush({ items: [myOrganization('lumen', 'Coopérative Lumen')], nextCursor: null });
+
+    const entries: WorkspaceResult<readonly OrganizationMenuEntry[]> = await result;
+    expect(entries.ok && entries.value.map((item) => [item.slug, item.memberCount])).toEqual([
+      ['atelier-nord', 5],
+      ['lumen', 5],
+    ]);
+  });
+
+  it('reports a failed organizations menu read as a problem', async () => {
+    const result: Promise<WorkspaceResult<readonly OrganizationMenuEntry[]>> = firstValueFrom(
+      session.menuOrganizations(),
+    );
+    http
+      .expectOne('/v1/organizations?limit=100')
+      .flush(
+        { type: 'about:blank', title: 'x', status: 503, code: 'upstream.unavailable' },
+        { status: 503, statusText: 'Service Unavailable' },
+      );
+
+    await expect(result).resolves.toEqual({
+      ok: false,
+      problem: { status: 503, code: 'upstream.unavailable' },
+    });
   });
 
   it('switches the organization without a lock of its own', async () => {

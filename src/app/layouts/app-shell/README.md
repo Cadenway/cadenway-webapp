@@ -28,6 +28,8 @@ The application frame of mockup `App.dc.html` (lines 17-300): the banners across
 | `sidebarFooter`        | `APP_SHELL_SIDEBAR_FOOTER_SLOT`        | `cw-sidebar-footer` (sprint progress, trash, archives)                 |
 | `overlays`             | `APP_SHELL_OVERLAYS_SLOT`              | After the shell (command palette, shortcuts dialog)                    |
 
+The shell renders one `cw-toaster` after the overlays, where contributions show their toasts through `CwToastService`; its texts use the `@@layouts.app-shell.toast-*` ids.
+
 Contributions render in ascending `order` through `NgComponentOutlet` with their `inputs`. An empty slot renders nothing, its wrapper included. A rail or sidebar contribution gives its host `class: 'contents'`, so its items join the brick's flex layout.
 
 Every contribution goes in the `providers` of the route that loads `AppShell`; a child route cannot add to a slot. Page-level additions go through the core page-to-shell services (see the [slot contract](../../shared/layout-slot/README.md#contract)).

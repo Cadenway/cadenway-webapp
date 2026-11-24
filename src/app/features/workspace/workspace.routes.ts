@@ -2,6 +2,15 @@ import type { Type } from '@angular/core';
 import type { Routes } from '@angular/router';
 import { provideCadenwayIcons } from '@cadenway/icons';
 
+import { providePresence, withUserMenu } from '@features/account/providers';
+import { withHomeRailItem } from '@features/home/providers';
+import { withInbox } from '@features/inbox/providers';
+import { withPlanSummary, withStorageBanner } from '@features/organization/providers';
+import {
+  withCommandPalette,
+  withSearchButton,
+  withSearchRailItem,
+} from '@features/search/providers';
 import type { AppShell } from '@layouts/app-shell';
 import { provideAppShellSlots } from '@layouts/app-shell/providers';
 
@@ -10,6 +19,11 @@ import { sessionGuard } from './http/guards/session/session.guard';
 import { slugRedirectGuard } from './http/guards/slug-redirect/slug-redirect.guard';
 import { workspaceResolver } from './http/resolvers/workspace/workspace.resolver';
 import { withOrganizationSwitcher } from './providers/organization-switcher/organization-switcher.provider';
+import {
+  withShortcutsButton,
+  withShortcutsDialog,
+  withThemeRailItem,
+} from './providers/shell/shell.provider';
 import { provideWorkspaceContext } from './providers/workspace-context/workspace-context.provider';
 
 /**
@@ -45,7 +59,16 @@ export const WORKSPACE_ROUTES: Routes = [
     providers: [
       provideCadenwayIcons(),
       provideWorkspaceContext(),
-      provideAppShellSlots({ organizationSwitcher: [withOrganizationSwitcher()] }),
+      providePresence(),
+      provideAppShellSlots({
+        banners: [withStorageBanner()],
+        organizationSwitcher: [withOrganizationSwitcher()],
+        railNavigation: [withHomeRailItem(), withInbox()],
+        railFooter: [withSearchRailItem(), withThemeRailItem(), withUserMenu()],
+        sidebarHeader: [withSearchButton()],
+        sidebarFooter: [withPlanSummary(), withShortcutsButton()],
+        overlays: [withCommandPalette(), withShortcutsDialog()],
+      }),
     ],
     loadComponent: async (): Promise<Type<AppShell>> =>
       (await import('@layouts/app-shell')).AppShell,

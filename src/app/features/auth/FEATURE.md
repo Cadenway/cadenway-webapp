@@ -35,13 +35,15 @@ its children matches falls through to the next application route.
 
 ## Public entry points
 
-| Entry point   | Consumers |
-| ------------- | --------- |
-| `auth.routes` | app       |
-| `.`           | workspace |
+| Entry point   | Consumers                  |
+| ------------- | -------------------------- |
+| `auth.routes` | app                        |
+| `.`           | workspace, account, search |
 
 `.` exports `withSessionLock`, the cross-tab session lock that serializes organization switches with
-the session cookie.
+the session cookie, and `SignOut`, which closes the session under that lock and opens
+`/logged-out?reason=signed-out` with a replacing navigation (the account menu and the command
+palette use it; a refusal resolves `false` and leaves the page as it was).
 
 ## Dependencies
 

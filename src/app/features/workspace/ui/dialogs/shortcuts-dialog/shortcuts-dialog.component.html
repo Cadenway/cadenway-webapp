@@ -1,0 +1,40 @@
+<cw-dialog [open]="help.isOpen()" (openChange)="help.setOpen($event)">
+  <cw-dialog-header>
+    <h2 cwDialogTitle i18n="@@workspace.shortcuts.title">Keyboard shortcuts</h2>
+    <p cwDialogDescription i18n="@@workspace.shortcuts.description">
+      Press “?” at any time to show this help.
+    </p>
+  </cw-dialog-header>
+  <div class="flex max-h-[60vh] flex-col gap-4 overflow-y-auto">
+    @for (group of groups; track group.title) {
+      <section class="flex flex-col gap-1">
+        <h3 class="text-xs font-medium text-muted-foreground">{{ group.title }}</h3>
+        <dl class="flex flex-col">
+          @for (entry of group.entries; track entry.label) {
+            <div
+              class="flex items-center justify-between gap-4 border-b border-border py-2 last:border-b-0"
+            >
+              <dt class="text-sm">{{ entry.label }}</dt>
+              <dd class="flex shrink-0 items-center gap-1">
+                @for (key of entry.keys; track $index) {
+                  <kbd cwKbd>{{ key }}</kbd>
+                }
+              </dd>
+            </div>
+          }
+        </dl>
+      </section>
+    }
+  </div>
+  <cw-dialog-footer>
+    <button
+      cwButton
+      cwDialogClose
+      type="button"
+      variant="outline"
+      i18n="@@workspace.shortcuts.close-dialog"
+    >
+      Close
+    </button>
+  </cw-dialog-footer>
+</cw-dialog>

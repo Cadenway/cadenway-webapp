@@ -57,7 +57,7 @@ test('an unknown workspace address shows a 404 in the shell with a way back home
   await expect(page.getByRole('heading', { name: 'Page introuvable' })).toBeVisible();
   await expect(page).toHaveURL(/\/atelier-nord\/lien\/introuvable$/u);
   await expect(
-    page.getByRole('link', { name: 'Changer d’organisation : Atelier Nord' }),
+    page.getByRole('button', { name: 'Changer d’organisation : Atelier Nord' }),
   ).toBeVisible();
   await page.getByRole('link', { name: 'Retour à l’accueil' }).click();
   await expect(page).toHaveURL(/\/atelier-nord$/u);

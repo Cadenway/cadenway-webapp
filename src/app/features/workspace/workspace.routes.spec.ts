@@ -8,7 +8,10 @@ import {
 } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { type Observable, of } from 'rxjs';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+import { BillingApi } from '@features/organization/data-access/services/billing-api/billing-api.service';
+import { InboxApi } from '@features/inbox/data-access/services/inbox-api/inbox-api.service';
 
 import { WorkspaceSession } from './data-access/services/workspace-session/workspace-session.service';
 import type {
@@ -203,8 +206,30 @@ describe('WORKSPACE_ROUTES', () => {
           withRouterConfig({ paramsInheritanceStrategy: 'always' }),
         ),
         { provide: WorkspaceSession, useValue: session },
+        { provide: InboxApi, useValue: { unreadCount: () => of(2) } },
+        {
+          provide: BillingApi,
+          useValue: {
+            subscription: () =>
+              Promise.resolve({
+                plan: 'team',
+                seatsUsed: 18,
+                seatsLimit: 25,
+                storageUsedBytes: 92_400_000_000,
+                storageLimitBytes: 100_000_000_000,
+              }),
+          },
+        },
       ],
     });
+    vi.stubGlobal(
+      'matchMedia',
+      vi.fn(() => ({ matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn() })),
+    );
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
   });
 
   /**
@@ -229,13 +254,37 @@ describe('WORKSPACE_ROUTES', () => {
 
     const element: HTMLElement = harness.fixture.nativeElement as HTMLElement;
     expect(element.querySelector('h1')?.textContent.trim()).toBe('Bonjour Camille');
-    const switcher: HTMLAnchorElement | null = element.querySelector(
+    const switcher: HTMLButtonElement | null = element.querySelector(
       '[data-testid="organization-switcher"]',
     );
-    expect(switcher?.getAttribute('href')).toBe('/organizations');
+    expect(switcher?.getAttribute('aria-haspopup')).toBe('menu');
     expect(switcher?.textContent).toContain('AN');
     expect(switcher?.textContent).toContain('Changer d’organisation : Atelier Nord');
     expect(session.switchOrganization).not.toHaveBeenCalled();
+  });
+
+  it('binds every shell contribution on the workspace route', async () => {
+    const harness: RouterTestingHarness = await open('/atelier-nord');
+    await harness.fixture.whenStable();
+    harness.detectChanges();
+
+    const element: HTMLElement = harness.fixture.nativeElement as HTMLElement;
+    for (const id of [
+      'home-rail-item',
+      'inbox-rail-item',
+      'search-rail-item',
+      'theme-rail-item',
+      'user-menu-trigger',
+      'search-button',
+      'plan-summary',
+      'shortcuts-button',
+      'storage-banner',
+    ]) {
+      expect(element.querySelector(`[data-testid="${id}"]`), id).not.toBeNull();
+    }
+    expect(
+      element.querySelector('[data-testid="home-rail-item"]')?.getAttribute('aria-current'),
+    ).toBe('page');
   });
 
   it('switches the session to another organization of the person named by the slug', async () => {

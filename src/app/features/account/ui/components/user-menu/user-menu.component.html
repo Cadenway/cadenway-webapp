@@ -1,0 +1,100 @@
+<button
+  #trigger
+  cwAppRailItem
+  [cwMenuTriggerFor]="accountMenu"
+  [tooltip]="label()"
+  data-testid="user-menu-trigger"
+>
+  <span cwAppRailItemMedia class="relative inline-flex">
+    <cw-avatar [name]="workspace().user().name" />
+    <cw-presence-dot
+      class="absolute -right-0.5 -bottom-0.5 size-3 ring-2 ring-canvas"
+      [status]="presence.ownStatus()"
+    />
+  </span>
+  {{ label() }}
+</button>
+
+<cw-menu
+  #accountMenu
+  side="right"
+  align="end"
+  ariaLabel="Account"
+  i18n-ariaLabel="@@account.user-menu.aria-label"
+>
+  <div class="flex items-center gap-2 px-2 py-1.5">
+    <span class="relative inline-flex shrink-0">
+      <cw-avatar [name]="workspace().user().name" />
+      <cw-presence-dot
+        class="absolute -right-0.5 -bottom-0.5 size-3 ring-2 ring-popover"
+        [status]="presence.ownStatus()"
+      />
+    </span>
+    <span class="flex min-w-0 flex-col">
+      <span class="truncate font-medium">{{ workspace().user().name }}</span>
+      <span class="truncate text-xs text-muted-foreground">{{ workspace().user().email }}</span>
+    </span>
+  </div>
+  <cw-menu-separator />
+  <button cwMenuItem [cwMenuTriggerFor]="statusMenu" data-testid="user-menu-status">
+    <span class="flex size-4 shrink-0 items-center justify-center" aria-hidden="true">
+      <cw-presence-dot class="size-2.5" [status]="presence.ownStatus()" />
+    </span>
+    <ng-container i18n="@@account.user-menu.status">Status</ng-container>
+    <span class="ml-auto pl-6 text-xs text-muted-foreground">{{ current().label }}</span>
+  </button>
+  <cw-menu-separator />
+  <button cwMenuItem (triggered)="open('profile')">
+    <ng-icon name="phosphorUserCircleBold" aria-hidden="true" />
+    <ng-container i18n="@@account.user-menu.profile">My profile</ng-container>
+  </button>
+  <button cwMenuItem (triggered)="open('security')">
+    <ng-icon name="phosphorShieldCheckBold" aria-hidden="true" />
+    <ng-container i18n="@@account.user-menu.security">Security and sign-ins</ng-container>
+  </button>
+  <button cwMenuItem (triggered)="open('notifications')">
+    <ng-icon name="phosphorBellBold" aria-hidden="true" />
+    <ng-container i18n="@@account.user-menu.notifications">Notifications</ng-container>
+  </button>
+  <cw-menu-separator />
+  <button cwMenuItem [cwMenuTriggerFor]="themeMenu">
+    <ng-icon
+      [name]="theme.resolved() === 'dark' ? 'phosphorMoonBold' : 'phosphorSunBold'"
+      aria-hidden="true"
+    />
+    <ng-container i18n="@@account.user-menu.theme">Theme</ng-container>
+    <span class="ml-auto pl-6 text-xs text-muted-foreground">{{ themeName() }}</span>
+  </button>
+  <cw-menu-separator />
+  <button cwMenuItem (triggered)="leave()" data-testid="user-menu-sign-out">
+    <ng-icon name="phosphorSignOutBold" aria-hidden="true" />
+    <ng-container i18n="@@account.user-menu.sign-out">Sign out</ng-container>
+  </button>
+</cw-menu>
+
+<cw-menu #statusMenu side="right" ariaLabel="Status" i18n-ariaLabel="@@account.user-menu.status">
+  <cw-menu-radio-group [value]="presence.ownStatus()" (valueChange)="choosePresence($event)">
+    @for (option of presenceOptions; track option.status) {
+      <button cwMenuItemRadio [value]="option.status" [title]="option.hint">
+        <cw-presence-dot class="size-2.5" [status]="option.status" />
+        <span class="flex min-w-0 flex-col">
+          <span>{{ option.label }}</span>
+          <span class="text-xs text-muted-foreground">{{ option.hint }}</span>
+        </span>
+      </button>
+    }
+  </cw-menu-radio-group>
+</cw-menu>
+
+<cw-menu #themeMenu side="right" ariaLabel="Theme" i18n-ariaLabel="@@account.user-menu.theme">
+  <cw-menu-radio-group [value]="theme.resolved()" (valueChange)="chooseTheme($event)">
+    <button cwMenuItemRadio value="light">
+      <ng-icon name="phosphorSunBold" aria-hidden="true" />
+      <ng-container i18n="@@account.user-menu.theme-light">Light</ng-container>
+    </button>
+    <button cwMenuItemRadio value="dark">
+      <ng-icon name="phosphorMoonBold" aria-hidden="true" />
+      <ng-container i18n="@@account.user-menu.theme-dark">Dark</ng-container>
+    </button>
+  </cw-menu-radio-group>
+</cw-menu>

@@ -1,0 +1,66 @@
+<div
+  class="flex items-start gap-3 rounded-md px-2.5 py-2.5 transition-colors hover:bg-muted"
+  data-testid="reminder-row"
+>
+  <span
+    class="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-full"
+    [class.bg-grenat/10]="late()"
+    [class.bg-primary/10]="!late()"
+    aria-hidden="true"
+  >
+    <ng-icon
+      name="phosphorAlarmBold"
+      class="size-3.5"
+      [class.text-grenat]="late()"
+      [class.text-primary]="!late()"
+    />
+  </span>
+  <button
+    type="button"
+    class="flex min-w-0 flex-1 flex-col gap-1 rounded-sm text-left focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+    (click)="opened.emit()"
+  >
+    <span
+      class="text-sm leading-5 font-medium"
+      [class.text-grenat-text]="late()"
+      [class.text-foreground]="!late()"
+      >{{ when() }}</span
+    >
+    <span class="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
+      <span class="shrink-0 font-mono">{{ reminder().taskKey }}</span>
+      <span class="truncate">{{ reminder().taskName }}</span>
+    </span>
+    @if (reminder().note; as note) {
+      <span
+        class="line-clamp-2 border-l-2 border-border pl-2 text-xs leading-relaxed text-muted-foreground"
+        >{{ note }}</span
+      >
+    }
+  </button>
+  <span class="flex shrink-0 items-center gap-0.5">
+    <button
+      cwButton
+      type="button"
+      variant="ghost"
+      size="icon-sm"
+      [attr.aria-label]="snoozeLabel()"
+      title="Postpone to tomorrow morning"
+      i18n-title="@@inbox.reminder.snooze"
+      (click)="snoozed.emit()"
+    >
+      <ng-icon name="phosphorClockClockwiseBold" aria-hidden="true" />
+    </button>
+    <button
+      cwButton
+      type="button"
+      variant="ghost"
+      size="icon-sm"
+      [attr.aria-label]="doneLabel()"
+      title="Mark as done"
+      i18n-title="@@inbox.reminder.done"
+      (click)="completed.emit()"
+    >
+      <ng-icon name="phosphorCheckBold" aria-hidden="true" />
+    </button>
+  </span>
+</div>
