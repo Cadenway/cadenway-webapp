@@ -1,0 +1,108 @@
+<div
+  class="flex h-screen flex-col overflow-hidden bg-canvas font-sans text-sm text-foreground antialiased"
+>
+  @for (banner of banners; track banner.id) {
+    <ng-container *ngComponentOutlet="banner.component; inputs: banner.inputs" />
+  }
+
+  <div class="flex min-h-0 flex-1">
+    <nav cwAppRail ariaLabel="Applications" i18n-ariaLabel="@@layouts.app-shell.rail">
+      @if (organizationSwitcher.length > 0) {
+        <cw-app-rail-group desktopOnly data-testid="app-shell-organization-switcher">
+          @for (switcher of organizationSwitcher; track switcher.id) {
+            <ng-container *ngComponentOutlet="switcher.component; inputs: switcher.inputs" />
+          }
+        </cw-app-rail-group>
+        <cw-app-rail-separator />
+      }
+      @for (group of railNavigation; track group.id) {
+        <ng-container *ngComponentOutlet="group.component; inputs: group.inputs" />
+      }
+      @if (railFooter.length > 0) {
+        <cw-app-rail-footer>
+          @for (item of railFooter; track item.id) {
+            <ng-container *ngComponentOutlet="item.component; inputs: item.inputs" />
+          }
+        </cw-app-rail-footer>
+      }
+    </nav>
+
+    <div
+      class="relative mt-2 mr-2 mb-2 flex min-w-0 flex-1 overflow-hidden rounded-xl border border-border bg-background max-md:m-0 max-md:mb-14 max-md:rounded-none max-md:border-0"
+    >
+      <cw-sidebar
+        #sidebarRef="cwSidebar"
+        collapsible="offcanvas"
+        [state]="sidebarState.state()"
+        (stateChange)="sidebarState.sync($event)"
+        ariaLabel="Space navigation"
+        i18n-ariaLabel="@@layouts.app-shell.sidebar"
+        closeLabel="Close the sidebar"
+        i18n-closeLabel="@@layouts.app-shell.sidebar-close"
+      >
+        <cw-sidebar-header>
+          <div class="flex items-start gap-2">
+            <div class="flex min-w-0 flex-1 flex-col gap-2">
+              @for (row of sidebarHeader; track row.id) {
+                <ng-container *ngComponentOutlet="row.component; inputs: row.inputs" />
+              }
+            </div>
+            <div class="flex h-11 shrink-0 items-center">
+              <button
+                cwButton
+                variant="ghost"
+                size="icon-sm"
+                aria-label="Collapse the sidebar"
+                i18n-aria-label="@@layouts.app-shell.sidebar-collapse"
+                aria-keyshortcuts="Control+B"
+                aria-expanded="true"
+                [attr.aria-controls]="sidebarRef.id"
+                data-testid="app-shell-sidebar-collapse"
+                (click)="sidebarState.toggle()"
+              >
+                <ng-icon name="phosphorSidebarSimpleBold" aria-hidden="true" />
+              </button>
+            </div>
+          </div>
+        </cw-sidebar-header>
+        @for (section of sidebar; track section.id) {
+          <ng-container *ngComponentOutlet="section.component; inputs: section.inputs" />
+        }
+        @if (sidebarFooter.length > 0) {
+          <cw-sidebar-footer>
+            @for (row of sidebarFooter; track row.id) {
+              <ng-container *ngComponentOutlet="row.component; inputs: row.inputs" />
+            }
+          </cw-sidebar-footer>
+        }
+      </cw-sidebar>
+
+      <main class="relative flex min-w-0 flex-1 flex-col">
+        @if (!sidebarState.expanded() && !sidebarState.toggleClaimed()) {
+          <div class="flex shrink-0 items-center px-4 pt-3 sm:px-6">
+            <button
+              #expandToggle
+              cwButton
+              variant="ghost"
+              size="icon-sm"
+              aria-label="Expand the sidebar"
+              i18n-aria-label="@@layouts.app-shell.sidebar-expand"
+              aria-keyshortcuts="Control+B"
+              aria-expanded="false"
+              [attr.aria-controls]="sidebarRef.id"
+              data-testid="app-shell-sidebar-expand"
+              (click)="sidebarState.toggle()"
+            >
+              <ng-icon name="phosphorSidebarSimpleBold" aria-hidden="true" />
+            </button>
+          </div>
+        }
+        <router-outlet />
+      </main>
+    </div>
+  </div>
+
+  @for (overlay of overlays; track overlay.id) {
+    <ng-container *ngComponentOutlet="overlay.component; inputs: overlay.inputs" />
+  }
+</div>

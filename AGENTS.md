@@ -33,7 +33,7 @@ src/app/
 ├─ features/         # auth, workspace, account, organization, spaces, task, intake, home,
 │                    # my-tasks, inbox, search, onboarding, goals, docs, dashboards, trash,
 │                    # archives and errors
-├─ layouts/          # application shells and their slots, when implemented
+├─ layouts/          # auth-layout, app-shell, settings-shell and their slots
 └─ shared/           # generic non-visual helpers, when needed
 ```
 

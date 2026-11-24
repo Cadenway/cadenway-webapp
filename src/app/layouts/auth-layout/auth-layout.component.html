@@ -1,0 +1,33 @@
+<div class="flex min-h-screen flex-col bg-canvas font-sans text-sm text-foreground antialiased">
+  <header class="flex h-14 items-center justify-between gap-4 px-4 sm:px-6">
+    <a
+      routerLink="/"
+      aria-label="Cadenway, sign-in page"
+      i18n-aria-label="@@layouts.auth-layout.home-link"
+      class="flex items-center gap-2 rounded-md focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-canvas focus-visible:outline-none"
+    >
+      <cw-logo variant="lockup" [size]="24" decorative />
+    </a>
+    @if (headerActions.length > 0) {
+      <div class="flex items-center gap-2" data-testid="auth-layout-header-actions">
+        @for (action of headerActions; track action.id) {
+          <ng-container *ngComponentOutlet="action.component; inputs: action.inputs" />
+        }
+      </div>
+    }
+  </header>
+
+  <main class="flex flex-1 flex-col items-center px-4 py-6 sm:justify-center sm:py-10">
+    <router-outlet />
+  </main>
+
+  @if (footerLinks.length > 0) {
+    <footer
+      class="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 px-6 py-4 text-xs text-muted-foreground"
+    >
+      @for (link of footerLinks; track link.id) {
+        <ng-container *ngComponentOutlet="link.component; inputs: link.inputs" />
+      }
+    </footer>
+  }
+</div>
