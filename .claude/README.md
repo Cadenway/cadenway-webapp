@@ -61,7 +61,7 @@ check that writes files. No agent delegates further.
 | `cw-web-performance-reviewer` | Bundle, lazy loading, rendering cost. | sonnet | high | Read-only |
 | `cw-web-api-contract-reviewer` | Data access against the contracts. | opus | high | Read-only |
 | `cw-web-motion-reviewer` | Animation timings and reduced motion. | sonnet | medium | Read-only |
-| `cw-web-copy-reviewer` | French copy against the mockup. | sonnet | medium | Read-only |
+| `cw-web-copy-reviewer` | Copy and its French translation against the mockup. | sonnet | medium | Read-only |
 | `cw-web-github-maintainer` | Workflows, templates and community files in .github/. | sonnet | medium | Assigned writes |
 
 ## Commands
@@ -88,7 +88,7 @@ check that writes files. No agent delegates further.
 | `/cw-perf-review` | Review performance. | `cw-web-performance-reviewer` |
 | `/cw-contract-review` | Check data access against the contracts. | `cw-web-api-contract-reviewer` |
 | `/cw-motion-review` | Review animations. | `cw-web-motion-reviewer` |
-| `/cw-copy-review` | Check French copy against the mockup. | `cw-web-copy-reviewer` |
+| `/cw-copy-review` | Check the copy and its French translation against the mockup. | `cw-web-copy-reviewer` |
 | `/cw-github` | Change workflows, templates or community files in .github/. | `cw-web-github-maintainer` |
 | `/cw-quality` | Run the local quality gate, stopping at the first failure. | runs the commands itself |
 

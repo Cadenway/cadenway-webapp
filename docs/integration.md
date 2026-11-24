@@ -40,7 +40,7 @@ Source: `cw-api-client-data-access` ([Claude](../.claude/skills/cw-api-client-da
 
 - The client is configured once in `core/api/` (base URL from `config.json`, auth, trace id).
 - A service method returns display models, never DTOs.
-- The task detail aggregate may be partial (`partial: ['gitLinks']`): show the part that arrived and an
+- The task detail aggregate may be partial (`partial: ['comments']`): show the part that arrived and an
   inline error for the missing one.
 
 ## Status Interactions
