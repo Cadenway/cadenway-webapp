@@ -9,3 +9,9 @@
 @import '@cadenway/tokens/tokens.css';
 @import '@cadenway/tokens/theme.css';
 @source '../node_modules/@cadenway/ui';
+
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}

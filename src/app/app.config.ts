@@ -9,6 +9,8 @@ import { provideRouter, withComponentInputBinding } from '@angular/router';
 
 import { apiClientInterceptor } from '@core/api';
 import { RuntimeConfigStore } from '@core/config';
+import { provideAppRouting } from '@core/routing';
+import { provideTheme } from '@core/theme';
 
 import { APP_ROUTES } from './app.routes';
 
@@ -27,5 +29,7 @@ export const appConfig: ApplicationConfig = {
     provideAppInitializer(() => inject(RuntimeConfigStore).load()),
     provideHttpClient(withInterceptors([apiClientInterceptor])),
     provideRouter(APP_ROUTES, withComponentInputBinding()),
+    provideTheme(),
+    provideAppRouting(),
   ],
 };

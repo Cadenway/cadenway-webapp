@@ -17,7 +17,7 @@ export const ERRORS_ROUTES: Routes = [
     providers: provideCadenwayIcons(),
     canActivate: [requireOrganization],
     runGuardsAndResolvers: 'always',
-    title: 'Page introuvable — Cadenway',
+    title: 'Page introuvable',
     loadComponent: () =>
       import('./ui/pages/not-found-page/not-found-page.component').then(
         (entry) => entry.NotFoundPage,

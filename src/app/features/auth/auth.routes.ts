@@ -16,7 +16,7 @@ export const AUTH_ROUTES: Routes = [
   {
     path: 'connexion',
     providers: provideCadenwayIcons(),
-    title: 'Connexion — Cadenway',
+    title: 'Connexion',
     data: { federatedContinuation: false },
     loadComponent: () =>
       import('./ui/pages/sign-in-page/sign-in-page.component').then(
@@ -26,7 +26,7 @@ export const AUTH_ROUTES: Routes = [
   {
     path: 'auth/federated/continue',
     providers: provideCadenwayIcons(),
-    title: 'Connexion SSO — Cadenway',
+    title: 'Connexion SSO',
     data: { federatedContinuation: true },
     loadComponent: () =>
       import('./ui/pages/sign-in-page/sign-in-page.component').then(
@@ -36,7 +36,7 @@ export const AUTH_ROUTES: Routes = [
   {
     path: 'organisations',
     providers: provideCadenwayIcons(),
-    title: 'Organisations — Cadenway',
+    title: 'Organisations',
     loadComponent: () =>
       import('./ui/pages/organization-choice-page/organization-choice-page.component').then(
         (entry: { OrganizationChoicePage: Type<unknown> }) => entry.OrganizationChoicePage,
@@ -45,7 +45,7 @@ export const AUTH_ROUTES: Routes = [
   {
     path: 'accueil',
     providers: provideCadenwayIcons(),
-    title: 'Accueil — Cadenway',
+    title: 'Accueil',
     resolve: { workspace: resolveWorkspaceAccess },
     runGuardsAndResolvers: 'always',
     loadComponent: () =>
