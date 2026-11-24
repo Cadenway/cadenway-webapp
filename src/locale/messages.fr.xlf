@@ -7,7 +7,7 @@
         <target>Compte</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/account/ui/components/user-menu/user-menu.component.html</context>
-          <context context-type="linenumber">23</context>
+          <context context-type="linenumber">25</context>
         </context-group>
       </trans-unit>
       <trans-unit id="account.user-menu.status" datatype="html">
@@ -15,11 +15,11 @@
         <target>Statut</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/account/ui/components/user-menu/user-menu.component.html</context>
-          <context context-type="linenumber">43,44</context>
+          <context context-type="linenumber">49,50</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/account/ui/components/user-menu/user-menu.component.html</context>
-          <context context-type="linenumber">75</context>
+          <context context-type="linenumber">81</context>
         </context-group>
       </trans-unit>
       <trans-unit id="account.user-menu.profile" datatype="html">
@@ -27,7 +27,7 @@
         <target>Mon profil</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/account/ui/components/user-menu/user-menu.component.html</context>
-          <context context-type="linenumber">49,51</context>
+          <context context-type="linenumber">55,57</context>
         </context-group>
       </trans-unit>
       <trans-unit id="account.user-menu.security" datatype="html">
@@ -35,7 +35,7 @@
         <target>Sécurité et connexions</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/account/ui/components/user-menu/user-menu.component.html</context>
-          <context context-type="linenumber">53,55</context>
+          <context context-type="linenumber">59,61</context>
         </context-group>
       </trans-unit>
       <trans-unit id="account.user-menu.notifications" datatype="html">
@@ -43,7 +43,7 @@
         <target>Notifications</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/account/ui/components/user-menu/user-menu.component.html</context>
-          <context context-type="linenumber">57,59</context>
+          <context context-type="linenumber">63,65</context>
         </context-group>
       </trans-unit>
       <trans-unit id="account.user-menu.theme" datatype="html">
@@ -51,11 +51,11 @@
         <target>Thème</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/account/ui/components/user-menu/user-menu.component.html</context>
-          <context context-type="linenumber">65,66</context>
+          <context context-type="linenumber">71,72</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/account/ui/components/user-menu/user-menu.component.html</context>
-          <context context-type="linenumber">89</context>
+          <context context-type="linenumber">98</context>
         </context-group>
       </trans-unit>
       <trans-unit id="account.user-menu.sign-out" datatype="html">
@@ -63,7 +63,7 @@
         <target>Se déconnecter</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/account/ui/components/user-menu/user-menu.component.html</context>
-          <context context-type="linenumber">71,75</context>
+          <context context-type="linenumber">77,81</context>
         </context-group>
       </trans-unit>
       <trans-unit id="account.user-menu.theme-light" datatype="html">
@@ -71,11 +71,11 @@
         <target>Clair</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/account/ui/components/user-menu/user-menu.component.html</context>
-          <context context-type="linenumber">93,95</context>
+          <context context-type="linenumber">102,104</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/account/ui/components/user-menu/user-menu.component.ts</context>
-          <context context-type="linenumber">306</context>
+          <context context-type="linenumber">310</context>
         </context-group>
       </trans-unit>
       <trans-unit id="account.user-menu.theme-dark" datatype="html">
@@ -83,11 +83,11 @@
         <target>Sombre</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/account/ui/components/user-menu/user-menu.component.html</context>
-          <context context-type="linenumber">97,99</context>
+          <context context-type="linenumber">106,108</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/account/ui/components/user-menu/user-menu.component.ts</context>
-          <context context-type="linenumber">305</context>
+          <context context-type="linenumber">309</context>
         </context-group>
       </trans-unit>
       <trans-unit id="account.user-menu.status-online" datatype="html">
@@ -203,11 +203,19 @@
         </context-group>
       </trans-unit>
       <trans-unit id="account.user-menu.label" datatype="html">
-        <source>Account of <x id="name" equiv-text="this.workspace().user().name"/>, status: <x id="status" equiv-text="this.current().label"/></source>
+        <source>Account of <x id="name" equiv-text="name"/>, status: <x id="status" equiv-text="current.label"/></source>
         <target>Compte de <x id="name" equiv-text="this.workspace().user().name"/>, statut : <x id="status" equiv-text="this.current().label"/></target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/account/ui/components/user-menu/user-menu.component.ts</context>
-          <context context-type="linenumber">291</context>
+          <context context-type="linenumber">294</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="account.user-menu.label-no-status" datatype="html">
+        <source>Account of <x id="name" equiv-text="name"/></source>
+        <target>Compte de <x id="name" equiv-text="name"/></target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/account/ui/components/user-menu/user-menu.component.ts</context>
+          <context context-type="linenumber">295</context>
         </context-group>
       </trans-unit>
       <trans-unit id="account.user-menu.status-toast" datatype="html">
@@ -215,7 +223,7 @@
         <target>Statut : <x id="status" equiv-text="option.label"/></target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/account/ui/components/user-menu/user-menu.component.ts</context>
-          <context context-type="linenumber">328</context>
+          <context context-type="linenumber">332</context>
         </context-group>
       </trans-unit>
       <trans-unit id="account.user-menu.status-toast-text" datatype="html">
@@ -223,7 +231,7 @@
         <target><x id="hint" equiv-text="option.hint"/>.</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/account/ui/components/user-menu/user-menu.component.ts</context>
-          <context context-type="linenumber">329</context>
+          <context context-type="linenumber">333</context>
         </context-group>
       </trans-unit>
       <trans-unit id="account.user-menu.sign-out-failed" datatype="html">
@@ -231,7 +239,7 @@
         <target>Impossible de vous déconnecter</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/account/ui/components/user-menu/user-menu.component.ts</context>
-          <context context-type="linenumber">373</context>
+          <context context-type="linenumber">377</context>
         </context-group>
       </trans-unit>
       <trans-unit id="account.user-menu.sign-out-failed-text" datatype="html">
@@ -239,7 +247,7 @@
         <target>Le serveur n’a pas répondu. Réessayez dans un instant.</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/account/ui/components/user-menu/user-menu.component.ts</context>
-          <context context-type="linenumber">374</context>
+          <context context-type="linenumber">378</context>
         </context-group>
       </trans-unit>
       <trans-unit id="auth.code.aria-label" datatype="html">

@@ -22,19 +22,21 @@ Until then the menu's links open the 404 inside the shell.
 - `providers` publishes `withUserMenu()` (the `railFooter` contribution, order 20) and
   `providePresence()`, which provides `PRESENCE` on the `/:org` route.
 - `ports/presence` publishes `PRESENCE` (`PresencePort`: `ownStatus`, `setPresence`) and
-  `PresenceStatus` (`online`, `away`, `do-not-disturb`, `invisible`), the subset of
-  `RealtimeConnection` (`@core/realtime`) the shell needs.
+  `PresenceStatus` (re-exported from `@core/realtime`), the subset of `RealtimeConnection` the
+  shell needs.
 
 ## Dependencies
 
-- Auth's `.` entry (`SignOut`), Workspace's `ports/workspace-context`, `@core/theme`.
+- Auth's `.` entry (`SignOut`), Workspace's `ports/workspace-context`, `@core/realtime`,
+  `@core/theme`.
 - `@cadenway/ui` (`app-rail`, `avatar`, `menu`, `toast`) and `@cadenway/icons`.
 
 ## Invariants
 
-- `providePresence()` binds the in-memory `LocalPresence` (starting at `online`, forgotten with the
-  workspace, not sent to anyone) until the realtime connection is bound to `PRESENCE` with
-  `{ provide: PRESENCE, useExisting: RealtimeConnection }`.
+- `providePresence()` binds `PRESENCE` to the workspace's `RealtimeConnection` (provided by
+  Workspace's runtime on `/:org`). `ownStatus` is null until the person chooses a presence in this
+  tab, since the gateway keeps the saved preference and `hello` does not return it: until then the
+  rail button names the person only, the presence dots are hidden and « Statut » checks nothing.
 - Choosing a presence closes the menu and confirms with the toast « Statut : <presence> ».
 - The theme submenu drives `ThemeService`; the transition spreads from the account button.
 - A refused sign-out keeps the page and shows an error toast.

@@ -1,16 +1,16 @@
-import { signal } from '@angular/core';
+import { signal, type WritableSignal } from '@angular/core';
 import { type ComponentFixture, TestBed } from '@angular/core/testing';
 import { Router } from '@angular/router';
 import { provideCadenwayIcons } from '@cadenway/icons';
 import { CwToastService } from '@cadenway/ui/components/toast';
 import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 
+import type { PresenceStatus } from '@core/realtime';
 import { ThemeService } from '@core/theme';
 import { SignOut } from '@features/auth';
 import type { WorkspaceContextPort } from '@features/workspace/ports/workspace-context';
 
 import { PRESENCE } from '../../../ports/presence/presence.token';
-import { LocalPresence } from '../../../services/local-presence/local-presence.service';
 import { UserMenu } from './user-menu.component';
 
 /**
@@ -64,9 +64,15 @@ describe('UserMenu', () => {
   let navigate: Mock<(commands: readonly unknown[]) => Promise<boolean>>;
   let toasts: { show: Mock; error: Mock };
   let theme: { set: Mock; resolved: () => 'light' | 'dark' };
+  let status: WritableSignal<PresenceStatus | null>;
+  let setPresence: Mock<(next: PresenceStatus) => void>;
   let fixture: ComponentFixture<UserMenu>;
 
   beforeEach(async () => {
+    status = signal<PresenceStatus | null>(null);
+    setPresence = vi.fn((next: PresenceStatus) => {
+      status.set(next);
+    });
     run = vi.fn(() => Promise.resolve(true));
     navigate = vi.fn(() => Promise.resolve(true));
     toasts = { show: vi.fn(), error: vi.fn() };
@@ -75,8 +81,7 @@ describe('UserMenu', () => {
       imports: [UserMenu],
       providers: [
         provideCadenwayIcons(),
-        LocalPresence,
-        { provide: PRESENCE, useExisting: LocalPresence },
+        { provide: PRESENCE, useValue: { ownStatus: status, setPresence } },
         { provide: SignOut, useValue: { run } },
         { provide: Router, useValue: { navigate } },
         { provide: CwToastService, useValue: toasts },
@@ -106,11 +111,24 @@ describe('UserMenu', () => {
     return trigger;
   }
 
-  it('names the person and their presence, and shows their address in the menu', async () => {
+  it('names the person without a presence until one is chosen in this tab', async () => {
     const trigger: HTMLButtonElement = await openMenu();
 
-    expect(trigger.textContent).toContain('Compte de Camille Martin, statut : Actif');
+    expect(trigger.textContent).toContain('Compte de Camille Martin');
+    expect(trigger.textContent).not.toContain('statut');
+    expect(trigger.querySelector('cw-presence-dot')).toBeNull();
     expect(document.body.textContent).toContain('camille.martin@ateliernord.fr');
+    item('Statut').click();
+    await fixture.whenStable();
+    expect(document.querySelector('[role="menuitemradio"][aria-checked="true"]')).toBeNull();
+  });
+
+  it('names the chosen presence and draws its dot', async () => {
+    status.set('away');
+    const trigger: HTMLButtonElement = await openMenu();
+
+    expect(trigger.textContent).toContain('Compte de Camille Martin, statut : Absent');
+    expect(trigger.querySelector('cw-presence-dot')?.getAttribute('data-status')).toBe('away');
   });
 
   it('sets the presence from « Statut » and confirms it', async () => {
@@ -121,7 +139,7 @@ describe('UserMenu', () => {
     item('Ne pas déranger').click();
     await fixture.whenStable();
 
-    expect(TestBed.inject(LocalPresence).ownStatus()).toBe('do-not-disturb');
+    expect(setPresence).toHaveBeenCalledExactlyOnceWith('do-not-disturb');
     expect(toasts.show).toHaveBeenCalledWith('Statut : Ne pas déranger', {
       description: 'Notifications en pause.',
     });

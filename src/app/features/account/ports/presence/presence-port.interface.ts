@@ -1,6 +1,6 @@
 import type { Signal } from '@angular/core';
 
-import type { PresenceStatus } from '../../models/presence-status/presence-status.type';
+import type { PresenceStatus } from '@core/realtime';
 
 /**
  * Interface PresencePort
@@ -16,12 +16,13 @@ export interface PresencePort {
    * Property ownStatus
    *
    * @description
-   * Presence currently chosen by the person.
+   * Presence the person chose in this tab, or null until they choose one: the gateway keeps the
+   * saved preference and the connection's `hello` does not return it.
    *
-   * @type {Signal<PresenceStatus>}
+   * @type {Signal<PresenceStatus | null>}
    * @readonly
    */
-  readonly ownStatus: Signal<PresenceStatus>;
+  readonly ownStatus: Signal<PresenceStatus | null>;
   // #endregion
 
   // #region Methods
@@ -29,7 +30,7 @@ export interface PresencePort {
    * Method setPresence
    *
    * @description
-   * Chooses a presence; `ownStatus` follows at once.
+   * Chooses a presence and sends it to the gateway; `ownStatus` follows at once.
    *
    * @param {PresenceStatus} status - The chosen presence.
    */

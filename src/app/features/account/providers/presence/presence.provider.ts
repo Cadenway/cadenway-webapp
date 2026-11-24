@@ -1,18 +1,19 @@
 import type { Provider } from '@angular/core';
 
+import { RealtimeConnection } from '@core/realtime';
+
 import { PRESENCE } from '../../ports/presence/presence.token';
-import { LocalPresence } from '../../services/local-presence/local-presence.service';
 
 /**
  * Function providePresence
  *
  * @description
- * Provides `PRESENCE` for one workspace. Give it to the `/:org` route, next to the shell slots,
- * so the account menu and the inbox share the person's presence. It binds the in-memory
- * `LocalPresence` until the realtime connection of `@core/realtime` takes its place.
+ * Binds `PRESENCE` to the workspace's realtime connection. Give it to the `/:org` route, after the
+ * workspace runtime that provides `RealtimeConnection`, so the account menu and the inbox share
+ * the person's presence.
  *
- * @returns {Provider[]} The presence and its port.
+ * @returns {Provider[]} The presence port.
  */
 export function providePresence(): Provider[] {
-  return [LocalPresence, { provide: PRESENCE, useExisting: LocalPresence }];
+  return [{ provide: PRESENCE, useExisting: RealtimeConnection }];
 }

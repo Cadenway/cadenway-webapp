@@ -1,6 +1,8 @@
 import { inject } from '@angular/core';
 import { RedirectCommand, type ResolveFn, Router } from '@angular/router';
 
+import { OrganizationPin } from '@core/api';
+
 import type { WorkspaceContext } from '../../../models/workspace-context/workspace-context.interface';
 import { organizationChoiceRedirect } from '../../../navigation/access-redirect/access-redirect.util';
 import { WorkspaceContextStore } from '../../../state/workspace-context/workspace-context.store';
@@ -19,5 +21,6 @@ import { WorkspaceContextStore } from '../../../state/workspace-context/workspac
 export const workspaceResolver: ResolveFn<WorkspaceContext> = ():
   WorkspaceContext | RedirectCommand => {
   const context: WorkspaceContext | null = inject(WorkspaceContextStore).commit();
+  if (context) inject(OrganizationPin).set(context.organization.id);
   return context ?? new RedirectCommand(organizationChoiceRedirect(inject(Router)));
 };

@@ -22,11 +22,11 @@ import {
 import { CwToastService } from '@cadenway/ui/components/toast';
 import { NgIcon } from '@ng-icons/core';
 
+import type { PresenceStatus } from '@core/realtime';
 import { ThemeService } from '@core/theme';
 import { SignOut } from '@features/auth';
 import type { WorkspaceContextPort } from '@features/workspace/ports/workspace-context';
 
-import type { PresenceStatus } from '../../../models/presence-status/presence-status.type';
 import type { PresencePort } from '../../../ports/presence/presence-port.interface';
 import { PRESENCE } from '../../../ports/presence/presence.token';
 import { PresenceDot } from '../presence-dot/presence-dot.component';
@@ -265,31 +265,35 @@ export class UserMenu {
    * Property current
    *
    * @description
-   * The option of the current presence.
+   * The option of the presence chosen in this tab, or null before a choice: the saved preference
+   * is not known here, so nothing is checked and no dot is drawn until then.
    *
-   * @type {Signal<PresenceOption>}
+   * @type {Signal<PresenceOption | null>}
    * @readonly
    */
-  protected readonly current: Signal<PresenceOption> = computed(
-    (): PresenceOption =>
+  protected readonly current: Signal<PresenceOption | null> = computed(
+    (): PresenceOption | null =>
       PRESENCE_OPTIONS.find(
         (option: PresenceOption) => option.status === this.presence.ownStatus(),
-      ) ?? PRESENCE_OPTIONS[0],
+      ) ?? null,
   );
 
   /**
    * Property label
    *
    * @description
-   * Accessible name and tooltip of the rail button: the person and their presence.
+   * Accessible name and tooltip of the rail button: the person and, once chosen, their presence.
    *
    * @type {Signal<string>}
    * @readonly
    */
-  protected readonly label: Signal<string> = computed(
-    (): string =>
-      $localize`:@@account.user-menu.label:Account of ${this.workspace().user().name}:name:, status: ${this.current().label}:status:`,
-  );
+  protected readonly label: Signal<string> = computed((): string => {
+    const current: PresenceOption | null = this.current();
+    const name: string = this.workspace().user().name;
+    return current
+      ? $localize`:@@account.user-menu.label:Account of ${name}:name:, status: ${current.label}:status:`
+      : $localize`:@@account.user-menu.label-no-status:Account of ${name}:name:`;
+  });
 
   /**
    * Property themeName

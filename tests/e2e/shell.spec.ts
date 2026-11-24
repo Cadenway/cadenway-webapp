@@ -172,7 +172,7 @@ test('the shell renders its rail, sidebar and banner', async ({ page }) => {
   await expect(rail.getByRole('button', { name: /Boîte de réception/ })).toBeVisible();
   await expect(rail.getByRole('button', { name: /Rechercher/ })).toBeVisible();
   await expect(
-    rail.getByRole('button', { name: /Compte de Camille Martin, statut : Actif/ }),
+    rail.getByRole('button', { name: 'Compte de Camille Martin', exact: true }),
   ).toBeVisible();
   await expect(page.getByRole('link', { name: 'Plan Équipe · 18 / 25 sièges' })).toBeVisible();
   await expect(page.getByText('Stockage presque plein')).toBeVisible();

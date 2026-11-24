@@ -1,3 +1,4 @@
+import { HttpContext } from '@angular/common/http';
 import { inject, Service } from '@angular/core';
 import {
   AuthService,
@@ -9,7 +10,7 @@ import {
 } from '@cadenway/api-client';
 import { catchError, EMPTY, expand, map, type Observable, of, reduce } from 'rxjs';
 
-import { type ApiProblem, readProblem } from '@core/api';
+import { type ApiProblem, readProblem, SKIP_ORGANIZATION_PIN } from '@core/api';
 import { withSessionLock } from '@features/auth';
 
 import type { OrganizationMenuEntry } from '../../../models/organization-menu-entry/organization-menu-entry.interface';
@@ -110,7 +111,10 @@ export class WorkspaceSession {
   public currentOrganization(): Observable<WorkspaceResult<WorkspaceOrganization>> {
     return workspaceResult(
       this.organizations
-        .getCurrentOrganization({ cache: 'no-store' })
+        .getCurrentOrganization({
+          cache: 'no-store',
+          context: new HttpContext().set(SKIP_ORGANIZATION_PIN, true),
+        })
         .pipe(map((organization: Organization) => toWorkspaceOrganization(organization))),
     );
   }

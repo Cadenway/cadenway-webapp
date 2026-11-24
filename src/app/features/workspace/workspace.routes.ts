@@ -25,6 +25,10 @@ import {
   withThemeRailItem,
 } from './providers/shell/shell.provider';
 import { provideWorkspaceContext } from './providers/workspace-context/workspace-context.provider';
+import {
+  provideWorkspaceRuntime,
+  shouldRevalidateWorkspace,
+} from './providers/workspace-runtime/workspace-runtime.provider';
 
 /**
  * Constant WORKSPACE_ROUTES
@@ -55,10 +59,11 @@ export const WORKSPACE_ROUTES: Routes = [
     path: ':org',
     canActivate: [sessionGuard, organizationGuard],
     resolve: { workspaceContext: workspaceResolver },
-    runGuardsAndResolvers: 'pathParamsChange',
+    runGuardsAndResolvers: shouldRevalidateWorkspace,
     providers: [
       provideCadenwayIcons(),
       provideWorkspaceContext(),
+      ...provideWorkspaceRuntime(),
       providePresence(),
       provideAppShellSlots({
         banners: [withStorageBanner()],

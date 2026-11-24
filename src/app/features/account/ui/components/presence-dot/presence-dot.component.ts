@@ -1,6 +1,6 @@
 import { Component, input, type InputSignal } from '@angular/core';
 
-import type { PresenceStatus } from '../../../models/presence-status/presence-status.type';
+import type { PresenceStatus } from '@core/realtime';
 
 /**
  * Component PresenceDot

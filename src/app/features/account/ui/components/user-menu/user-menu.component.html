@@ -7,10 +7,12 @@
 >
   <span cwAppRailItemMedia class="relative inline-flex">
     <cw-avatar [name]="workspace().user().name" />
-    <cw-presence-dot
-      class="absolute -right-0.5 -bottom-0.5 size-3 ring-2 ring-canvas"
-      [status]="presence.ownStatus()"
-    />
+    @if (presence.ownStatus(); as status) {
+      <cw-presence-dot
+        class="absolute -right-0.5 -bottom-0.5 size-3 ring-2 ring-canvas"
+        [status]="status"
+      />
+    }
   </span>
   {{ label() }}
 </button>
@@ -25,10 +27,12 @@
   <div class="flex items-center gap-2 px-2 py-1.5">
     <span class="relative inline-flex shrink-0">
       <cw-avatar [name]="workspace().user().name" />
-      <cw-presence-dot
-        class="absolute -right-0.5 -bottom-0.5 size-3 ring-2 ring-popover"
-        [status]="presence.ownStatus()"
-      />
+      @if (presence.ownStatus(); as status) {
+        <cw-presence-dot
+          class="absolute -right-0.5 -bottom-0.5 size-3 ring-2 ring-popover"
+          [status]="status"
+        />
+      }
     </span>
     <span class="flex min-w-0 flex-col">
       <span class="truncate font-medium">{{ workspace().user().name }}</span>
@@ -38,10 +42,12 @@
   <cw-menu-separator />
   <button cwMenuItem [cwMenuTriggerFor]="statusMenu" data-testid="user-menu-status">
     <span class="flex size-4 shrink-0 items-center justify-center" aria-hidden="true">
-      <cw-presence-dot class="size-2.5" [status]="presence.ownStatus()" />
+      @if (presence.ownStatus(); as status) {
+        <cw-presence-dot class="size-2.5" [status]="status" />
+      }
     </span>
     <ng-container i18n="@@account.user-menu.status">Status</ng-container>
-    <span class="ml-auto pl-6 text-xs text-muted-foreground">{{ current().label }}</span>
+    <span class="ml-auto pl-6 text-xs text-muted-foreground">{{ current()?.label }}</span>
   </button>
   <cw-menu-separator />
   <button cwMenuItem (triggered)="open('profile')">
@@ -73,7 +79,10 @@
 </cw-menu>
 
 <cw-menu #statusMenu side="right" ariaLabel="Status" i18n-ariaLabel="@@account.user-menu.status">
-  <cw-menu-radio-group [value]="presence.ownStatus()" (valueChange)="choosePresence($event)">
+  <cw-menu-radio-group
+    [value]="presence.ownStatus() ?? undefined"
+    (valueChange)="choosePresence($event)"
+  >
     @for (option of presenceOptions; track option.status) {
       <button cwMenuItemRadio [value]="option.status" [title]="option.hint">
         <cw-presence-dot class="size-2.5" [status]="option.status" />
