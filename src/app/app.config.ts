@@ -9,7 +9,6 @@ import { provideRouter, withComponentInputBinding } from '@angular/router';
 
 import { apiClientInterceptor } from '@core/api';
 import { RuntimeConfigStore } from '@core/config';
-import { provideAppLocale } from '@core/locale';
 
 import { APP_ROUTES } from './app.routes';
 
@@ -24,7 +23,6 @@ import { APP_ROUTES } from './app.routes';
 export const appConfig: ApplicationConfig = {
   providers: [
     provideBrowserGlobalErrorListeners(),
-    provideAppLocale(),
     // The REST gateway address must be known before anything calls the API.
     provideAppInitializer(() => inject(RuntimeConfigStore).load()),
     provideHttpClient(withInterceptors([apiClientInterceptor])),

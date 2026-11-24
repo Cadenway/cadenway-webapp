@@ -86,7 +86,8 @@
               "optimization": false,
               "extractLicenses": false,
               "sourceMap": true,
-              "localize": ["fr"]
+              "localize": ["fr"],
+              "i18nMissingTranslation": "warning"
             },
             "source": {
               "optimization": false,
