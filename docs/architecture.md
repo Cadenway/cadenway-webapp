@@ -67,8 +67,9 @@ Create folders when they have code. Other feature concerns use `services/`, `acc
 feature owns its workflow under `features/` with its own `FEATURE.md`.
 
 - `APP_ROUTES` owns prefixes, redirects and lazy feature entries. The feature route file owns its
-  layout, guards and scoped providers. A layout reads data via published ports and composes
-  widgets from documented public feature entries.
+  layout, guards and scoped providers. A layout never imports a feature: it declares slots,
+  and the feature root routes bind the features' `with<Thing>()` contributions to them (see Layouts
+  and slots).
 - Cross-boundary imports use `@app`, `@core`, `@features`, `@layouts`, `@shared` or `@env`.
   An app-wide concern publishes its supported symbols through its `index.ts`. Keep private relative
   imports within their concern. Features list entry points and consumers in a
@@ -91,8 +92,9 @@ feature owns its workflow under `features/` with its own `FEATURE.md`.
 - Paths are English. Public entries belong to `auth` (`/login`, `/login/code`, `/signup`, `/forgot`,
   `/reset`, `/invite/:invitationId`, `/organizations`, `/auth/federated/continue`) and to `intake`
   (`/f/:publicKey`). The `workspace` feature owns `/:org` (the organization slug), its session and slug
-  guards, the context resolver, and the redirects of slug-less e-mail links (`/home`, `/account/:section`,
-  `/org/:section`). The other features mount below it: `/:org/t/:taskKey`, `/:org/l/:listId/<view>`,
+  guards, the context resolver, and the redirects of slug-less e-mail links (`/home`, `/account`,
+  `/account/:section`, `/org/:section`). Every fixed first segment is a reserved organization slug,
+  refused by the organization service. The other features mount below it: `/:org/t/:taskKey`, `/:org/l/:listId/<view>`,
   `/:org/d/:docId`, `/:org/account/:section`, `/:org/organization/:section`.
 - `provideRouter(APP_ROUTES, withComponentInputBinding(), withRouterConfig({ paramsInheritanceStrategy:
 'always' }), withErrorBoundaries({ defaultErrorComponent, onError }))`: parameters, query parameters
@@ -115,12 +117,15 @@ Layouts never import features. Features fill them in three ways:
 
 ## Errors and loading
 
-- Reads use `rxResource` in the store's `withProps`. When a loader fails, the route's error boundary
-  renders `errorComponent`. The error is typed: not found, access denied, deleted task, or unavailable
-  (with Retry). Page and view routes set it, so the shell and the page header stay. Partial failures
-  (`TaskDetail.partial`, shell widgets) stay inline.
-- Writes are store methods with optimistic updates, `If-Match` versions and undo toasts. Feedback
-  toasts are driven by `@ngrx/signals/events`.
+- Reads use `rxResource` in the store's `withProps`. A page's primary read that fails (its resource loader rejects) is caught by the route's error
+  boundary: `errorComponent` replaces the page content with the typed state, which is not found,
+  access denied (with an access request), deleted task (with Restore) or unavailable (with Retry,
+  `Réessayer` in French, which runs the route again). A secondary or partial read (a shell widget,
+  a popover, `TaskDetail.partial`) keeps an inline error whose Retry calls its `reload()`. Guards and
+  resolvers never reach the boundary: they redirect with a `UrlTree` or a `RedirectCommand`.
+  Page and view routes set `errorComponent`, so the shell and the page header stay.
+- Writes are store methods with optimistic updates, `If-Match` versions and undo toasts. A feature that
+  drives its feedback toasts through `@ngrx/signals/events` records that decision in its `FEATURE.md`.
 - `withErrorBoundaries` is a developer preview in Angular 22.3; its retry and reset behavior is
   covered by route specs.
 

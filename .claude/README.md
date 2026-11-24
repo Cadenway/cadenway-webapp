@@ -50,7 +50,7 @@ check that writes files. No agent delegates further.
 | `cw-web-state-builder` | NgRx SignalStore state, optimistic updates, fast-click handling. | opus | high | Assigned writes |
 | `cw-web-realtime-builder` | WebSocket client and pushed changes. | sonnet | high | Assigned writes |
 | `cw-web-routing-builder` | Routes, guards, lazy loading, error pages. | opus | high | Assigned writes |
-| `cw-web-ui-consumer` | Compose from @cadenway/ui; relay missing bricks. | sonnet | high | Assigned writes |
+| `cw-web-ui-consumer` | Compose from @cadenway/ui; specify missing generic bricks. | sonnet | high | Assigned writes |
 | `cw-web-test-writer` | Component, state and service tests. | sonnet | high | Assigned writes |
 | `cw-web-e2e-runner` | Playwright scenarios of the mockup flows. | sonnet | high | Assigned writes |
 | `cw-web-design-reviewer` | Visual fidelity to the mockup. | sonnet | high | Read-only |
@@ -77,7 +77,7 @@ check that writes files. No agent delegates further.
 | `/cw-state` | Build feature state with NgRx SignalStore. | `cw-web-state-builder` |
 | `/cw-realtime` | Connect pushed changes from the realtime gateway. | `cw-web-realtime-builder` |
 | `/cw-route` | Change routes, guards or error pages. | `cw-web-routing-builder` |
-| `/cw-ui` | Compose from @cadenway/ui or request a missing brick. | `cw-web-ui-consumer` |
+| `/cw-ui` | Compose from @cadenway/ui or specify a missing generic brick. | `cw-web-ui-consumer` |
 | `/cw-test` | Write unit or component tests. | `cw-web-test-writer` |
 | `/cw-e2e` | Write or run a Playwright scenario. | `cw-web-e2e-runner` |
 | `/cw-design-review` | Compare a screen with the mockup. | `cw-web-design-reviewer` |
@@ -122,7 +122,7 @@ See [skills/](skills/) for the complete inventory, including the technology guid
 | `cw-context` | What Cadenway is, where the mockup, the integration guide and the repository map live, the product vocabulary (spaces, lists, sprints, tasks, statuses, milestones) and the multi-repository ownership rules. |
 | `cw-mockup` | Where the mockup lives (docs/maquette/source and the live artifact), what each artboard covers, how to read a .dc.html file and its properties, and which guide section maps each screen to Angular components. |
 | `cw-angular22-conventions` | The Angular 22 conventions this app follows: file role suffixes and class names without a Component suffix, cw- selectors, signal inputs, outputs and models, control flow, OnPush default, Signal Forms, @Service(), resource APIs. |
-| `cw-ui-consumer` | Which @cadenway/ui brick to use for each mockup pattern, how to import tokens and icons, and how to request a missing brick from cadenway-design-system. |
+| `cw-ui-consumer` | Which @cadenway/ui brick to use for each mockup pattern, how to import tokens, icons and brick labels, and how to add a missing brick to cadenway-design-system. |
 | `cw-api-client-data-access` | How a feature reaches the API: generated client, data-access services, pure adapters to display models, loading and error states, partial aggregates. |
 | `cw-signal-forms` | How to build a Cadenway form with Signal Forms: model signal, schema rules, field binding, messages from the mockup, submit and focus behavior. |
 | `cw-overlay-placement` | The placement, sizing and dismissal rules of every menu, popover and dialog in Cadenway, from the mockup and the guide. |

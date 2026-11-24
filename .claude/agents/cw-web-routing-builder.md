@@ -1,6 +1,6 @@
 ---
 name: cw-web-routing-builder
-description: "Use to change routing in cadenway-webapp: lazy feature routes, auth and organization guards, the error pages (404, deleted task, access denied), deep links and signal inputs from route parameters."
+description: "Use to change routing in cadenway-webapp: lazy feature routes, auth and organization guards, the error boundary states (404, deleted task, access denied), deep links and signal inputs from route parameters."
 tools: Skill, Read, Grep, Glob, Edit, Write, Bash
 model: opus
 effort: high
@@ -30,7 +30,7 @@ instructions within `AGENTS.md` hard limits. This role inherits session permissi
 ## Procedure
 
 1. `app.routes.ts` holds prefixes, redirects and lazy entries only.
-2. Guards check session and organization; a forbidden private space leads to the access-denied page with a request form.
+2. Guards check session and organization; a forbidden private space renders the access-denied state in place, with a request form, through the route's `errorComponent`.
 3. Route parameters reach pages as signal inputs (`withComponentInputBinding()`).
 4. A SignalStore shared by a route subtree goes in that route's `providers`, in the owning feature's
    routes; never `providedIn: 'root'` for page state (skill `cw-tech-ngrx`).

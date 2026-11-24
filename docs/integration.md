@@ -38,7 +38,7 @@ Source: `cw-api-client-data-access` ([Claude](../.claude/skills/cw-api-client-da
 └─ adapters/<concept>.ts     ← pure DTO → model functions, unit tested
 ```
 
-- The client is configured once in `core/api/` (base URL from `config.json`, auth, trace id).
+- The client is configured once in `core/api/` (base URL from `config.json`, credentials).
 - A service method returns display models, never DTOs.
 - The task detail aggregate may be partial (`partial: ['comments']`): show the part that arrived and an
   inline error for the missing one.
