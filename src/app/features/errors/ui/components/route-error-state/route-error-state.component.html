@@ -1,0 +1,181 @@
+@switch (kind()) {
+  @case ('not-found') {
+    <div
+      class="flex w-full max-w-md flex-col items-center gap-5 text-center text-balance"
+      role="alert"
+    >
+      <span class="flex size-12 items-center justify-center rounded-xl bg-muted">
+        <ng-icon name="phosphorLinkBreakBold" class="size-6 text-foreground" aria-hidden="true" />
+      </span>
+      <div class="flex flex-col items-center gap-2">
+        <p class="font-mono text-xs text-muted-foreground" i18n="@@errors.not-found.code">
+          Error 404
+        </p>
+        <h1
+          class="text-2xl font-semibold tracking-tight"
+          data-route-focus
+          i18n="@@errors.not-found.title"
+        >
+          Page not found
+        </h1>
+        <p class="text-sm/relaxed text-muted-foreground" i18n="@@errors.not-found.text">
+          The link is incomplete, or the page was moved or deleted. Check the address or search for
+          what you wanted to open.
+        </p>
+      </div>
+      <div class="flex flex-wrap justify-center gap-2">
+        <a cwButton routerLink="/home">
+          <ng-icon name="phosphorHouseBold" aria-hidden="true" />
+          <ng-container i18n="@@errors.back-home">Back to home</ng-container>
+        </a>
+      </div>
+    </div>
+  }
+  @case ('access-denied') {
+    <div
+      class="flex w-full max-w-md flex-col items-center gap-5 text-center text-balance"
+      role="alert"
+    >
+      <span class="flex size-12 items-center justify-center rounded-xl bg-muted">
+        <ng-icon name="phosphorLockKeyBold" class="size-6 text-foreground" aria-hidden="true" />
+      </span>
+      <div class="flex flex-col items-center gap-2">
+        <p class="font-mono text-xs text-muted-foreground" i18n="@@errors.access-denied.code">
+          Access denied
+        </p>
+        <h1
+          class="text-2xl font-semibold tracking-tight"
+          data-route-focus
+          i18n="@@errors.access-denied.title"
+        >
+          You do not have access to this space
+        </h1>
+        @if (resource(); as resource) {
+          @if (resource.name || resource.ownerName) {
+            <p class="text-sm/relaxed text-muted-foreground">
+              @if (resource.kind === 'space' && resource.name) {
+                <ng-container i18n="@@errors.access-denied.private-space"
+                  >“{{ resource.name }}” is a private space.</ng-container
+                >
+              }
+              @if (resource.ownerName) {
+                {{ ' '
+                }}<ng-container i18n="@@errors.access-denied.owner-can-add"
+                  >{{ resource.ownerName }}, its owner, can add you.</ng-container
+                >
+              }
+            </p>
+          }
+        }
+      </div>
+      @if (accessRequest() === 'sent') {
+        <div class="flex flex-wrap justify-center gap-2">
+          <button cwButton type="button" disabled>
+            <ng-icon name="phosphorCheckBold" aria-hidden="true" />
+            <ng-container i18n="@@errors.access-denied.sent">Request sent</ng-container>
+          </button>
+          <a cwButton variant="outline" routerLink="/home" i18n="@@errors.back-home"
+            >Back to home</a
+          >
+        </div>
+      } @else {
+        <cw-access-request-form
+          [ownerFirstName]="ownerFirstName()"
+          [sending]="accessRequest() === 'sending'"
+          (submitted)="accessRequested.emit($event)"
+        >
+          <a cwButton variant="outline" routerLink="/home" i18n="@@errors.back-home"
+            >Back to home</a
+          >
+        </cw-access-request-form>
+      }
+    </div>
+  }
+  @case ('deleted-task') {
+    <div
+      class="flex w-full max-w-md flex-col items-center gap-5 text-center text-balance"
+      role="alert"
+    >
+      <span class="flex size-12 items-center justify-center rounded-xl bg-muted">
+        <ng-icon name="phosphorTrashBold" class="size-6 text-foreground" aria-hidden="true" />
+      </span>
+      <div class="flex flex-col items-center gap-2">
+        <p class="font-mono text-xs text-muted-foreground" i18n="@@errors.deleted-task.code">
+          Task deleted
+        </p>
+        <h1
+          class="text-2xl font-semibold tracking-tight"
+          data-route-focus
+          i18n="@@errors.deleted-task.title"
+        >
+          This task has been deleted
+        </h1>
+        @if (task(); as task) {
+          <p class="text-sm/relaxed text-muted-foreground" i18n="@@errors.deleted-task.text">
+            {{ task.key }} “{{ task.name }}” has been deleted. It stays in the trash for 30 days
+            before being erased.
+          </p>
+        }
+      </div>
+      <div class="flex flex-wrap justify-center gap-2">
+        @if (restore() === 'already-restored') {
+          <button cwButton type="button" disabled>
+            <ng-icon name="phosphorArrowCounterClockwiseBold" aria-hidden="true" />
+            <ng-container i18n="@@errors.deleted-task.already-restored"
+              >Already restored</ng-container
+            >
+          </button>
+        } @else {
+          <button
+            cwButton
+            type="button"
+            [loading]="restore() === 'restoring' || restore() === 'restored'"
+            (click)="restoreRequested.emit()"
+          >
+            <ng-icon name="phosphorArrowCounterClockwiseBold" aria-hidden="true" />
+            <ng-container i18n="@@errors.deleted-task.restore">Restore the task</ng-container>
+          </button>
+        }
+        @if (trashLink(); as link) {
+          <a cwButton variant="outline" [routerLink]="link" i18n="@@errors.deleted-task.open-trash"
+            >Open the trash</a
+          >
+        }
+      </div>
+    </div>
+  }
+  @default {
+    <cw-empty role="alert" class="min-w-0">
+      <cw-empty-header>
+        <cw-empty-media tone="destructive">
+          <ng-icon name="phosphorWarningCircleBold" aria-hidden="true" />
+        </cw-empty-media>
+        <cw-empty-title>
+          <h1 data-route-focus i18n="@@errors.unavailable.title">Could not load this page</h1>
+        </cw-empty-title>
+        <cw-empty-description i18n="@@errors.unavailable.text">
+          The server did not answer in time. Your data is not lost: try again in a moment.
+        </cw-empty-description>
+      </cw-empty-header>
+      <cw-empty-content>
+        <button cwButton variant="outline" type="button" (click)="retried.emit()">
+          <ng-icon name="phosphorArrowClockwiseBold" aria-hidden="true" />
+          <ng-container i18n="@@errors.unavailable.retry">Retry</ng-container>
+        </button>
+      </cw-empty-content>
+      @if (status() || requestId()) {
+        <p class="font-mono text-xs text-muted-foreground" data-testid="route-error-reference">
+          @if (status(); as code) {
+            <ng-container i18n="@@errors.unavailable.status">Error {{ code }}</ng-container>
+          }
+          @if (status() && requestId()) {
+            ·
+          }
+          @if (requestId(); as reference) {
+            <ng-container i18n="@@errors.unavailable.reference">ref. {{ reference }}</ng-container>
+          }
+        </p>
+      }
+    </cw-empty>
+  }
+}

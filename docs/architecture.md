@@ -4,13 +4,21 @@
 
 ## Status
 
-The checkout has an Angular application shell, runtime configuration, and a protected workspace
-entry. The Auth feature opens a password session with optional authenticator verification and
-selects the current organization before private Spaces and Task routes load.
-
 The application is being rebuilt from the mockup and the backend, following the routing, layout,
-error and localization patterns below. Screens still on the earlier structure are replaced feature by
-feature.
+error and localization patterns below. Step 1 is in place:
+
+- Core: runtime configuration, the API client transport and problem readers, theme, shortcuts, and
+  route titles and focus. Realtime is rebuilt in step 3.
+- Layouts: the auth, app and settings shells with their route-bound slots.
+- Routing: `APP_ROUTES` mounts Auth, then Workspace, then the 404. Workspace owns the slug-less
+  e-mail links and `/:org`, whose guards verify the session and switch the session to the
+  organization the slug names, and whose resolver commits `WORKSPACE_CONTEXT`. `/:org` loads the
+  app shell with the organization switcher, the Home skeleton and the 404 inside the shell.
+- Errors: the router runs with `withErrorBoundaries` and `RouteErrorPage`, which renders the not
+  found, access denied, deleted task and unavailable states; Retry runs the route again with a
+  same-URL reload navigation (`errors.routes.spec.ts`).
+- Auth is being rebuilt on the same patterns. The earlier Spaces and Task screens were removed; they
+  are rebuilt in steps 4a and 5.
 
 ## Purpose and target structure
 
@@ -100,7 +108,7 @@ feature owns its workflow under `features/` with its own `FEATURE.md`.
 'always' }), withErrorBoundaries({ defaultErrorComponent, onError }))`: parameters, query parameters
   and `data` reach pages as signal inputs.
 - Guards and resolvers are functional and live in `http/`. A resolver fills the owning store and
-  publishes it through a port (`WORKSPACE_CONTEXT_PORT`); pages read the port, not a resolved input.
+  publishes it through a port (`WORKSPACE_CONTEXT`); pages read the port, not a resolved input.
 
 ## Layouts and slots
 

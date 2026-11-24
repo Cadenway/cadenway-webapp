@@ -2,46 +2,21 @@
 
 ## Purpose
 
-The list page, the views of a space and the space overview.
+The list page, the views of a space and the space overview. The feature is rebuilt from the mockup
+and the backend in steps 4a and 5; the earlier screens were removed.
 
 ## Routes
 
-- `/espaces` lists the spaces visible in the current organization.
-- `/espaces/:spaceId/listes` lists the visible lists of that space.
-- `/espaces/:spaceId/listes/:listId` reads a list or sprint and its tasks. The
-  `?vue=tableau` option opens its status board and keeps the same header.
-- All three routes use the application's authenticated organization boundary. Collections use the
-  opaque `cursor` supplied by the generated client.
+None yet.
 
 ## Public entry points
 
-| Entry point     | Consumers |
-| --------------- | --------- |
-| `spaces.routes` | app       |
+None yet.
 
 ## Dependencies
 
-- The generated Spaces, Lists and Task Queries clients read the current organization.
-  The generated Task client writes status changes with the observed version and expected organization.
-- The auth feature verifies an active organization before every navigator route loads.
-  List and board reads send its expected organization with each request. Deploy API Gateway's
-  organization precondition support for these reads before releasing this client. Multi-request
-  reads take a shared, cancellable session lock so they cannot mix two users of one organization.
-  Board writes take the exclusive lock used by organization switching.
-- Task links use the task feature's `/taches/:taskKey` route.
+None yet.
 
 ## Invariants
 
-- An unavailable request is distinct from a successfully loaded empty collection.
-- A list deep link must match the list's actual space before its tasks are read. Archived lists are
-  omitted from this view.
-- The navigator keeps no organization-specific cache across route changes.
-- The board uses a page-scoped `SprintBoardStore`. It reads only the initially populated visible
-  groups and caps each group's rendered page at twelve cards. Pagination is per status.
-- Cross-column drag and the keyboard status selector share one pending write per task. The
-  precondition is the task's last confirmed version. Undo uses the version returned by that write.
-  A version conflict rolls back and reloads the board. An organization mismatch discards the
-  pending changes and the previous board and asks the caller to choose their organization.
-- Hidden statuses are excluded. Cancelled and completed groups are read-only on the board.
-  The cancellation reason and recurring successor belong to their separate workflows. Sorting
-  inside a column follows the API's creation order.
+None yet.

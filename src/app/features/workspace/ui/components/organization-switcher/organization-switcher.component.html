@@ -1,0 +1,13 @@
+<a
+  cwAppRailItem
+  variant="primary"
+  desktopOnly
+  routerLink="/organizations"
+  [tooltip]="workspace().organization().name"
+  data-testid="organization-switcher"
+>
+  <span cwAppRailItemMedia>{{ workspace().organization().initials }}</span>
+  <ng-container i18n="@@workspace.organization-switcher.label"
+    >Switch organization: {{ workspace().organization().name }}</ng-container
+  >
+</a>
