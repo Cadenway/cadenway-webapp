@@ -7,7 +7,9 @@ The application frame of mockup `App.dc.html` (lines 17-300): the banners across
 ## Sidebar
 
 - **Behavior.** The sidebar keeps the default `cw-sidebar` behavior. It starts expanded, pushes the content from 768 px, and is a drawer with a backdrop below 768 px.
-- **Pending:** the 768-1023 px overlay of the mockup (`max-lg:absolute`, closed by default) is not reproduced. A layout cannot restyle a brick, so it waits for the tablet overlay input of `cw-sidebar` in the next `@cadenway/ui` release.
+- From 768 to 1023 px the expanded sidebar floats over the content (`overlayBelow="lg"`, closed by
+  default, Escape or an outside click closes it), and its backdrop stays inside the main panel
+  (`backdrop="container"`), clear of the phone tab bar.
 - **Toggles.** The sidebar header always ends with a collapse button. While the sidebar is collapsed, an expand toggle sits above the routed screen.
 - **Focus.** Opening with a toggle moves focus to the first control of the sidebar. A collapse that leaves focus in the sidebar returns it to the control that opened it, or else to the expand toggle.
 - **Screen toggle.** A screen can render the expand toggle itself through `SHELL_SIDEBAR` and `claimToggle(destroyRef)` (see [the port](../../shared/layout-slot/README.md#shell-sidebar-port)). `AppShellSidebar`, provided by the shell, holds this state.

@@ -1,0 +1,34 @@
+<div class="flex w-full flex-col gap-2 text-left">
+  <label for="access-request-message" class="text-sm font-medium">
+    @if (ownerFirstName(); as owner) {
+      <ng-container i18n="@@errors.access-denied.message-label"
+        >Message for {{ owner }}
+        <span class="font-normal text-muted-foreground">(optional)</span></ng-container
+      >
+    } @else {
+      <ng-container i18n="@@errors.access-denied.message-label-anonymous"
+        >Message <span class="font-normal text-muted-foreground">(optional)</span></ng-container
+      >
+    }
+  </label>
+  <textarea
+    id="access-request-message"
+    cwTextarea
+    rows="3"
+    class="resize-none"
+    [formField]="requestForm.message"
+  ></textarea>
+</div>
+<div class="flex flex-wrap justify-center gap-2">
+  <button
+    cwButton
+    type="button"
+    [loading]="sending()"
+    [disabled]="requestForm().invalid()"
+    (click)="submit()"
+  >
+    <ng-icon name="phosphorPaperPlaneTiltBold" aria-hidden="true" />
+    <ng-container i18n="@@errors.access-denied.request">Request access</ng-container>
+  </button>
+  <ng-content />
+</div>

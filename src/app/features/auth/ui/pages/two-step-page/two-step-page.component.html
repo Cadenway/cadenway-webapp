@@ -1,0 +1,211 @@
+<div class="flex w-full max-w-[420px] flex-col gap-5">
+  @if (shown(); as challenge) {
+    <cw-card class="gap-6 p-6 sm:p-8">
+      <div class="flex flex-col gap-4">
+        <div class="flex items-center gap-3">
+          <div class="flex size-10 items-center justify-center rounded-lg bg-muted text-foreground">
+            <ng-icon name="phosphorShieldCheckBold" class="size-5" aria-hidden="true" />
+          </div>
+          <div class="flex min-w-0 items-center gap-2 rounded-full bg-muted py-1 ps-1 pe-3">
+            <cw-avatar size="xs" [name]="challenge.name" />
+            <span class="truncate text-xs text-muted-foreground">{{ challenge.email }}</span>
+          </div>
+        </div>
+        <div class="flex flex-col gap-1">
+          <h1 class="text-2xl font-semibold tracking-tight" i18n="@@auth.two-step.heading">
+            Two-step verification
+          </h1>
+          <p class="text-sm text-muted-foreground">{{ descriptions[method()] }}</p>
+        </div>
+      </div>
+
+      @if (message(); as alert) {
+        <cw-alert variant="destructive" role="alert">
+          <cw-alert-description>{{ alert }}</cw-alert-description>
+        </cw-alert>
+      }
+
+      @if (expired()) {
+        <a
+          cwButton
+          class="w-full"
+          routerLink="/login"
+          [replaceUrl]="true"
+          i18n="@@auth.two-step.sign-in-again"
+          >Sign in again</a
+        >
+      } @else {
+        <cw-tabs [value]="method()" (valueChange)="selected.set($event); problem.set(null)">
+          <cw-tabs-list
+            class="w-full"
+            ariaLabel="Verification method"
+            i18n-ariaLabel="@@auth.two-step.methods"
+          >
+            @for (item of challenge.methods; track item) {
+              <button cwTab type="button" class="flex-1" [value]="item">
+                <ng-icon [name]="icons[item]" aria-hidden="true" />
+                {{ labels[item] }}
+              </button>
+            }
+          </cw-tabs-list>
+
+          <cw-tab-panel value="authenticator-app">
+            <form class="flex flex-col gap-4 pt-4" novalidate (submit)="verifyApp($event)">
+              <div class="flex flex-col gap-2">
+                <label
+                  for="mfa-app-code"
+                  class="text-sm leading-none font-medium"
+                  i18n="@@auth.two-step.app-label"
+                  >App code</label
+                >
+                <cw-input-otp
+                  [id]="'mfa-app-code'"
+                  ariaLabel="App code"
+                  i18n-ariaLabel="@@auth.two-step.app-label"
+                  [formField]="twoStepForm.appCode"
+                >
+                  <cw-input-otp-group>
+                    <cw-input-otp-slot [index]="0" />
+                    <cw-input-otp-slot [index]="1" />
+                    <cw-input-otp-slot [index]="2" />
+                  </cw-input-otp-group>
+                  <cw-input-otp-separator />
+                  <cw-input-otp-group>
+                    <cw-input-otp-slot [index]="3" />
+                    <cw-input-otp-slot [index]="4" />
+                    <cw-input-otp-slot [index]="5" />
+                  </cw-input-otp-group>
+                </cw-input-otp>
+                <p class="text-xs text-muted-foreground" i18n="@@auth.two-step.app-hint">
+                  The code changes every 30 seconds. Google Authenticator, 1Password, Aegis or
+                  Bitwarden work.
+                </p>
+              </div>
+              <div class="flex items-center gap-2">
+                <cw-checkbox [id]="'mfa-trust'" [formField]="twoStepForm.trustDevice" />
+                <label
+                  for="mfa-trust"
+                  class="text-sm leading-none font-medium select-none"
+                  i18n="@@auth.two-step.trust"
+                  >Trust this device for 30 days</label
+                >
+              </div>
+              <button
+                cwButton
+                type="submit"
+                class="w-full"
+                [disabled]="twoStepForm.appCode().invalid() || busy()"
+                [loading]="busy()"
+                i18n="@@auth.two-step.verify-app"
+              >
+                Verify ({{ filled() }} / 6)
+              </button>
+            </form>
+          </cw-tab-panel>
+
+          <cw-tab-panel value="security-key">
+            <div class="flex flex-col gap-4 pt-4">
+              <div
+                class="flex flex-col items-center gap-2 rounded-lg border border-dashed border-border p-4 text-center"
+              >
+                <ng-icon
+                  name="phosphorFingerprintBold"
+                  class="size-6 text-muted-foreground"
+                  aria-hidden="true"
+                />
+                @if (busy()) {
+                  <p class="text-sm" aria-live="polite" i18n="@@auth.two-step.key-waiting">
+                    Touch your key or confirm with biometrics…
+                  </p>
+                } @else {
+                  @if (challenge.securityKeys.length === 1) {
+                    <p class="text-sm text-muted-foreground" i18n="@@auth.two-step.key-one">
+                      1 registered key: {{ keys(challenge) }}.
+                    </p>
+                  } @else {
+                    <p class="text-sm text-muted-foreground" i18n="@@auth.two-step.keys">
+                      {{ challenge.securityKeys.length }} registered keys: {{ keys(challenge) }}.
+                    </p>
+                  }
+                }
+              </div>
+              <button
+                cwButton
+                type="button"
+                class="w-full"
+                [disabled]="busy()"
+                [attr.aria-busy]="busy()"
+                (click)="useKey()"
+              >
+                <ng-icon name="phosphorKeyBold" aria-hidden="true" />
+                <span i18n="@@auth.two-step.use-key">Use my security key</span>
+              </button>
+            </div>
+          </cw-tab-panel>
+
+          <cw-tab-panel value="backup-code">
+            <form class="flex flex-col gap-4 pt-4" novalidate (submit)="verifyBackup($event)">
+              <div class="flex flex-col gap-2">
+                <label
+                  for="mfa-backup"
+                  class="text-sm leading-none font-medium"
+                  i18n="@@auth.two-step.backup-label"
+                  >Backup code</label
+                >
+                <input
+                  cwInput
+                  id="mfa-backup"
+                  type="text"
+                  autocomplete="one-time-code"
+                  placeholder="XXXX-XXXX"
+                  class="font-mono tracking-widest"
+                  [formField]="twoStepForm.backupCode"
+                  (input)="formatBackup()"
+                />
+                @if (challenge.backupCodesRemaining === 1) {
+                  <p class="text-xs text-muted-foreground" i18n="@@auth.two-step.backup-left-one">
+                    You have 1 unused code left. Remember to generate new ones from your profile.
+                  </p>
+                } @else {
+                  <p class="text-xs text-muted-foreground" i18n="@@auth.two-step.backup-left">
+                    You have {{ challenge.backupCodesRemaining }} unused codes left. Remember to
+                    generate new ones from your profile.
+                  </p>
+                }
+              </div>
+              <button
+                cwButton
+                type="submit"
+                class="w-full"
+                [disabled]="twoStepForm.backupCode().invalid() || busy()"
+                [loading]="busy()"
+                i18n="@@auth.two-step.verify-backup"
+              >
+                Verify the code
+              </button>
+            </form>
+          </cw-tab-panel>
+        </cw-tabs>
+      }
+
+      <div class="flex flex-col gap-2 border-t border-border pt-4">
+        <p class="text-xs text-muted-foreground" i18n="@@auth.two-step.no-method">
+          No access to any method anymore? Ask your organization's administrator for a reset.
+        </p>
+        <button
+          cwButton
+          type="button"
+          variant="ghost"
+          size="sm"
+          class="self-start"
+          (click)="useAnotherAccount()"
+          i18n="@@auth.two-step.other-account"
+        >
+          Use another account
+        </button>
+      </div>
+    </cw-card>
+  } @else {
+    <div cwSkeleton class="h-80 w-full rounded-xl"></div>
+  }
+</div>

@@ -1,7 +1,10 @@
-<div
-  class="flex h-screen overflow-hidden bg-canvas font-sans text-sm text-foreground antialiased max-md:pb-14"
->
-  <nav cwAppRail ariaLabel="Applications" i18n-ariaLabel="@@layouts.settings-shell.rail">
+<div class="flex h-screen overflow-hidden bg-canvas font-sans text-sm text-foreground antialiased">
+  <nav
+    cwAppRail
+    phoneLayout="column"
+    ariaLabel="Applications"
+    i18n-ariaLabel="@@layouts.settings-shell.rail"
+  >
     @for (group of railNavigation; track group.id) {
       <ng-container *ngComponentOutlet="group.component; inputs: group.inputs" />
     }
@@ -15,7 +18,7 @@
   </nav>
 
   <div
-    class="mt-2 mr-2 mb-2 flex min-w-0 flex-1 flex-wrap content-start overflow-y-auto rounded-xl border border-border bg-background max-md:ml-2 md:flex-nowrap md:content-stretch md:overflow-hidden"
+    class="mt-2 mr-2 mb-2 flex min-w-0 flex-1 flex-wrap content-start overflow-y-auto rounded-xl border border-border bg-background md:flex-nowrap md:content-stretch md:overflow-hidden"
   >
     @if (settingsNavigation.length > 0) {
       <nav

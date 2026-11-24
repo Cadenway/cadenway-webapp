@@ -28,6 +28,24 @@ describe('parseRuntimeConfig', () => {
     });
   });
 
+  it('keeps an optional public site address without its trailing slash', () => {
+    expect(
+      parseRuntimeConfig({ apiUrl: localConfig.apiUrl, siteUrl: 'https://cadenway.localhost/' }),
+    ).toEqual({ apiUrl: localConfig.apiUrl, siteUrl: 'https://cadenway.localhost' });
+  });
+
+  it('refuses a public site address that is not an HTTP URL without credentials', () => {
+    for (const siteUrl of [
+      '',
+      'cadenway.localhost',
+      'javascript:alert(1)',
+      'https://a:b@x.test',
+      4,
+    ]) {
+      expect(() => parseRuntimeConfig({ apiUrl: localConfig.apiUrl, siteUrl })).toThrow(TypeError);
+    }
+  });
+
   it('refuses a missing REST address or an invalid configured address', () => {
     expect(() => parseRuntimeConfig({ realtimeUrl: localConfig.realtimeUrl })).toThrow(TypeError);
     expect(() => parseRuntimeConfig({ ...localConfig, realtimeUrl: '' })).toThrow(TypeError);

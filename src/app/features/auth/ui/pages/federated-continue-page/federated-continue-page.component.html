@@ -1,0 +1,23 @@
+<div class="flex w-full max-w-[400px] flex-col gap-5">
+  <cw-card class="gap-6 p-6 sm:p-8">
+    <h1 class="text-2xl font-semibold tracking-tight" i18n="@@auth.federated.heading">
+      Signing in
+    </h1>
+    @if (refused()) {
+      <cw-alert variant="destructive" role="alert">
+        <cw-alert-description i18n="@@auth.federated.refused"
+          >This sign-in method cannot be used.</cw-alert-description
+        >
+      </cw-alert>
+      <a cwButton variant="ghost" class="w-full" routerLink="/login" [replaceUrl]="true">
+        <ng-icon name="phosphorArrowLeftBold" aria-hidden="true" />
+        <span i18n="@@auth.sso.other-methods">Other sign-in methods</span>
+      </a>
+    } @else {
+      <p role="status" class="flex items-center gap-2 text-sm text-muted-foreground">
+        <svg cwSpinner class="size-4" aria-hidden="true"></svg>
+        <span i18n="@@auth.federated.pending">Signing in…</span>
+      </p>
+    }
+  </cw-card>
+</div>

@@ -1,0 +1,194 @@
+<div class="flex w-full max-w-[420px] flex-col gap-5">
+  <cw-card class="gap-6 p-6 sm:p-8">
+    <div class="flex flex-col gap-1">
+      <h1 class="text-2xl font-semibold tracking-tight" i18n="@@auth.signup.heading">
+        Create an account
+      </h1>
+      <p class="text-sm text-muted-foreground" i18n="@@auth.signup.lead">
+        Your account gives you access to the organizations that invite you.
+      </p>
+    </div>
+
+    @if (reason() === 'sign-up-replaced') {
+      <cw-alert variant="warning" role="status">
+        <cw-alert-description i18n="@@auth.signup.replaced"
+          >A newer sign-up replaced this one: sign up again to receive a new
+          code.</cw-alert-description
+        >
+      </cw-alert>
+    }
+    @if (problem()) {
+      <cw-alert variant="destructive" role="alert">
+        <cw-alert-description i18n="@@auth.login.unavailable"
+          >Sign-in is unavailable. Try again in a moment.</cw-alert-description
+        >
+      </cw-alert>
+    }
+
+    <cw-provider-buttons [busy]="flow.federatedStarting()" (selected)="startProvider($event)" />
+
+    <div
+      class="flex items-center gap-3 text-xs text-muted-foreground"
+      role="separator"
+      aria-label="or"
+      i18n-aria-label="@@auth.login.or"
+    >
+      <div class="h-px flex-1 bg-border"></div>
+      <span i18n="@@auth.login.with-email">or with your email address</span>
+      <div class="h-px flex-1 bg-border"></div>
+    </div>
+
+    <form class="flex flex-col gap-4" novalidate (submit)="create($event)">
+      <div class="flex flex-col gap-2">
+        <label for="su-name" class="text-sm leading-none font-medium" i18n="@@auth.signup.name"
+          >Full name</label
+        >
+        <input
+          cwInput
+          id="su-name"
+          type="text"
+          autocomplete="name"
+          placeholder="Camille Martin"
+          [formField]="signupForm.name"
+        />
+        @if (signupForm.name().touched() && signupForm.name().invalid()) {
+          <p class="text-xs font-medium text-destructive">
+            {{ signupForm.name().errors()[0]?.message }}
+          </p>
+        }
+      </div>
+      <div class="flex flex-col gap-2">
+        <label for="su-email" class="text-sm leading-none font-medium" i18n="@@auth.signup.email"
+          >Work email address</label
+        >
+        <input
+          cwInput
+          id="su-email"
+          type="email"
+          autocomplete="email"
+          placeholder="camille.martin@ateliernord.fr"
+          aria-describedby="su-email-help"
+          [formField]="signupForm.email"
+        />
+        @if (emailTaken()) {
+          <p
+            id="su-email-help"
+            class="flex items-center gap-1 text-xs font-medium text-destructive"
+          >
+            <ng-icon name="phosphorWarningCircleFill" class="size-3.5" aria-hidden="true" />
+            <span i18n="@@auth.signup.email-taken-link"
+              >An account already uses this address:
+              <a routerLink="/login" class="font-medium underline underline-offset-4">sign in</a
+              >.</span
+            >
+          </p>
+        } @else if (signupForm.email().touched() && signupForm.email().invalid()) {
+          <p id="su-email-help" class="text-xs font-medium text-destructive">
+            {{ signupForm.email().errors()[0]?.message }}
+          </p>
+        } @else {
+          <p
+            id="su-email-help"
+            class="text-xs text-muted-foreground"
+            i18n="@@auth.signup.email-hint"
+          >
+            We will send you a code to confirm the address.
+          </p>
+        }
+      </div>
+      <div class="flex flex-col gap-2">
+        <div class="flex items-center justify-between gap-2">
+          <label
+            for="su-password"
+            class="text-sm leading-none font-medium"
+            i18n="@@auth.signup.password"
+            >Password</label
+          >
+          <cw-password-strength-level [for]="strength" />
+        </div>
+        <div class="relative flex items-center">
+          <input
+            cwInput
+            id="su-password"
+            class="pe-9"
+            autocomplete="new-password"
+            placeholder="12 characters minimum"
+            i18n-placeholder="@@auth.signup.password-placeholder"
+            [type]="showPassword() ? 'text' : 'password'"
+            [attr.aria-describedby]="strength.rulesId"
+            [formField]="signupForm.password"
+          />
+          <button
+            cwButton
+            type="button"
+            variant="ghost"
+            size="icon-xs"
+            class="absolute end-1.5 text-muted-foreground"
+            [attr.aria-label]="showPassword() ? hideLabel : showLabel"
+            [attr.aria-pressed]="showPassword()"
+            (click)="showPassword.set(!showPassword())"
+          >
+            <ng-icon
+              [name]="showPassword() ? 'phosphorEyeSlashBold' : 'phosphorEyeBold'"
+              aria-hidden="true"
+            />
+          </button>
+        </div>
+        <cw-password-strength #strength [value]="model().password" [minLength]="12" />
+        @if (signupForm.password().touched() && signupForm.password().invalid()) {
+          <p class="text-xs font-medium text-destructive" role="alert">
+            {{ signupForm.password().errors()[0]?.message }}
+          </p>
+        }
+      </div>
+      <div class="flex flex-col gap-2">
+        <div class="flex items-start gap-2">
+          <cw-checkbox class="mt-0.5" [id]="'su-terms'" [formField]="signupForm.acceptTerms" />
+          @if (siteUrl; as site) {
+            <label for="su-terms" class="text-sm leading-5 select-none" i18n="@@auth.signup.terms"
+              >I accept Cadenway's
+              <a
+                [href]="site + '/terms'"
+                class="font-medium text-primary underline-offset-4 hover:underline"
+                >terms of use</a
+              >
+              and
+              <a
+                [href]="site + '/privacy'"
+                class="font-medium text-primary underline-offset-4 hover:underline"
+                >privacy policy</a
+              >.</label
+            >
+          } @else {
+            <label
+              for="su-terms"
+              class="text-sm leading-5 select-none"
+              i18n="@@auth.signup.terms-plain"
+              >I accept Cadenway's terms of use and privacy policy.</label
+            >
+          }
+        </div>
+        @if (signupForm.acceptTerms().touched() && signupForm.acceptTerms().invalid()) {
+          <p role="alert" class="flex items-center gap-1 text-xs font-medium text-destructive">
+            <ng-icon name="phosphorWarningCircleFill" class="size-3.5" aria-hidden="true" />
+            {{ signupForm.acceptTerms().errors()[0]?.message }}
+          </p>
+        }
+      </div>
+      <button
+        cwButton
+        type="submit"
+        class="w-full"
+        [disabled]="signupForm().invalid() || signupForm().submitting()"
+        [loading]="signupForm().submitting()"
+        i18n="@@auth.signup.submit"
+      >
+        Create my account
+      </button>
+    </form>
+  </cw-card>
+  <p class="text-center text-sm text-muted-foreground" i18n="@@auth.signup.invitation">
+    Received an invitation? Open the link in the email: the organization will be joined
+    automatically.
+  </p>
+</div>

@@ -1,0 +1,77 @@
+<div class="flex w-full max-w-[400px] flex-col gap-5">
+  <cw-card class="gap-6 p-6 sm:p-8">
+    <div class="flex flex-col gap-4">
+      <div class="flex size-10 items-center justify-center rounded-lg bg-muted text-foreground">
+        <ng-icon name="phosphorPasswordBold" class="size-5" aria-hidden="true" />
+      </div>
+      <div class="flex flex-col gap-1">
+        <h1 class="text-2xl font-semibold tracking-tight" i18n="@@auth.code-sign-in.heading">
+          Sign in with a code
+        </h1>
+        @if (sentTo(); as address) {
+          <p class="text-sm text-muted-foreground" i18n="@@auth.code.sent-to">
+            We sent a 6-digit code to
+            <span class="font-medium text-foreground">{{ address }}</span
+            >. It expires in 10 minutes.
+          </p>
+        }
+      </div>
+    </div>
+
+    @if (unavailable()) {
+      <cw-alert variant="destructive" role="alert">
+        <cw-alert-description i18n="@@auth.login.unavailable"
+          >Sign-in is unavailable. Try again in a moment.</cw-alert-description
+        >
+      </cw-alert>
+    }
+
+    @if (sentTo() === null) {
+      <form class="flex flex-col gap-4" novalidate (submit)="askCode($event)">
+        <div class="flex flex-col gap-2">
+          <label for="code-email" class="text-sm leading-none font-medium" i18n="@@auth.login.email"
+            >Email address</label
+          >
+          <input
+            cwInput
+            id="code-email"
+            type="email"
+            autocomplete="email"
+            placeholder="camille.martin@ateliernord.fr"
+            [formField]="emailForm.email"
+          />
+          @if (emailForm.email().touched() && emailForm.email().invalid()) {
+            <p class="text-xs font-medium text-destructive">
+              {{ emailForm.email().errors()[0]?.message }}
+            </p>
+          }
+        </div>
+        <button
+          cwButton
+          type="submit"
+          class="w-full"
+          [disabled]="emailForm().invalid() || emailForm().submitting()"
+          [loading]="emailForm().submitting()"
+        >
+          <ng-icon name="phosphorEnvelopeSimpleBold" aria-hidden="true" />
+          <span i18n="@@auth.login.code">Get a sign-in code by email</span>
+        </button>
+        <a cwButton variant="ghost" class="w-full" routerLink="/login">
+          <ng-icon name="phosphorArrowLeftBold" aria-hidden="true" />
+          <span i18n="@@auth.back-to-login">Back to sign-in</span>
+        </a>
+      </form>
+    } @else {
+      <cw-code-form
+        backLink="/login"
+        [submitLabel]="submitLabel"
+        [resendIn]="countdown.running() ? countdown.label() : null"
+        [resent]="resent()"
+        [error]="error()"
+        [busy]="checking()"
+        (codeSubmitted)="verify($event)"
+        (resendRequested)="resend()"
+      />
+    }
+  </cw-card>
+</div>

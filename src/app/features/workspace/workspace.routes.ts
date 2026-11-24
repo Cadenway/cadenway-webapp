@@ -1,0 +1,65 @@
+import type { Type } from '@angular/core';
+import type { Routes } from '@angular/router';
+import { provideCadenwayIcons } from '@cadenway/icons';
+
+import type { AppShell } from '@layouts/app-shell';
+import { provideAppShellSlots } from '@layouts/app-shell/providers';
+
+import { organizationGuard } from './http/guards/organization/organization.guard';
+import { sessionGuard } from './http/guards/session/session.guard';
+import { slugRedirectGuard } from './http/guards/slug-redirect/slug-redirect.guard';
+import { workspaceResolver } from './http/resolvers/workspace/workspace.resolver';
+import { withOrganizationSwitcher } from './providers/organization-switcher/organization-switcher.provider';
+import { provideWorkspaceContext } from './providers/workspace-context/workspace-context.provider';
+
+/**
+ * Constant WORKSPACE_ROUTES
+ *
+ * @description
+ * The organization-scoped workspace. The slug-less addresses of backend e-mails redirect to the
+ * session's current organization first. Then `/:org` verifies the session and the slug (switching
+ * the session to another organization of the caller when needed), commits the workspace context,
+ * and mounts the application shell with its slot contributions; the screens of the other features
+ * mount below it, and an unknown address below a slug renders the 404 inside the shell.
+ *
+ * @type {Routes}
+ */
+export const WORKSPACE_ROUTES: Routes = [
+  { path: 'home', canActivate: [slugRedirectGuard([])], children: [] },
+  { path: 'account', canActivate: [slugRedirectGuard(['account', 'profile'])], children: [] },
+  {
+    path: 'account/:section',
+    canActivate: [slugRedirectGuard(['account', ':section'])],
+    children: [],
+  },
+  {
+    path: 'org/:section',
+    canActivate: [slugRedirectGuard(['organization', ':section'])],
+    children: [],
+  },
+  {
+    path: ':org',
+    canActivate: [sessionGuard, organizationGuard],
+    resolve: { workspaceContext: workspaceResolver },
+    runGuardsAndResolvers: 'pathParamsChange',
+    providers: [
+      provideCadenwayIcons(),
+      provideWorkspaceContext(),
+      provideAppShellSlots({ organizationSwitcher: [withOrganizationSwitcher()] }),
+    ],
+    loadComponent: async (): Promise<Type<AppShell>> =>
+      (await import('@layouts/app-shell')).AppShell,
+    children: [
+      {
+        path: '',
+        loadChildren: async (): Promise<Routes> =>
+          (await import('@features/home/home.routes')).HOME_ROUTES,
+      },
+      {
+        path: '**',
+        loadChildren: async (): Promise<Routes> =>
+          (await import('@features/errors/errors.routes')).ERRORS_ROUTES,
+      },
+    ],
+  },
+];

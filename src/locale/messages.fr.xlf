@@ -2,6 +2,2328 @@
 <xliff version="1.2" xmlns="urn:oasis:names:tc:xliff:document:1.2">
   <file source-language="en" target-language="fr" datatype="plaintext" original="ng2.template">
     <body>
+      <trans-unit id="auth.code.aria-label" datatype="html">
+        <source>One-time code</source>
+        <target>Code à usage unique</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/auth.routes.ts</context>
+          <context context-type="linenumber">38</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.password.meter" datatype="html">
+        <source>Password strength</source>
+        <target>Robustesse du mot de passe</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/auth.routes.ts</context>
+          <context context-type="linenumber">41</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.password.level-0" datatype="html">
+        <source>Too short</source>
+        <target>Trop court</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/auth.routes.ts</context>
+          <context context-type="linenumber">43</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.password.level-1" datatype="html">
+        <source>Weak</source>
+        <target>Faible</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/auth.routes.ts</context>
+          <context context-type="linenumber">44</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.password.level-2" datatype="html">
+        <source>Fair</source>
+        <target>Moyen</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/auth.routes.ts</context>
+          <context context-type="linenumber">45</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.password.level-3" datatype="html">
+        <source>Good</source>
+        <target>Bon</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/auth.routes.ts</context>
+          <context context-type="linenumber">46</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.password.level-4" datatype="html">
+        <source>Excellent</source>
+        <target>Excellent</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/auth.routes.ts</context>
+          <context context-type="linenumber">47</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.password.met" datatype="html">
+        <source>: met</source>
+        <target> : respecté</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/auth.routes.ts</context>
+          <context context-type="linenumber">49</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.password.unmet" datatype="html">
+        <source>: not met</source>
+        <target> : non respecté</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/auth.routes.ts</context>
+          <context context-type="linenumber">50</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.password.min-length" datatype="html">
+        <source><x id="count" equiv-text="count"/> characters minimum</source>
+        <target><x id="count" equiv-text="count"/> caractères minimum</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/auth.routes.ts</context>
+          <context context-type="linenumber">52</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.password.mixed-case" datatype="html">
+        <source>Upper and lower case</source>
+        <target>Majuscules et minuscules</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/auth.routes.ts</context>
+          <context context-type="linenumber">53</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.password.digit" datatype="html">
+        <source>At least one digit</source>
+        <target>Au moins un chiffre</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/auth.routes.ts</context>
+          <context context-type="linenumber">54</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.password.symbol" datatype="html">
+        <source>At least one symbol</source>
+        <target>Au moins un symbole</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/auth.routes.ts</context>
+          <context context-type="linenumber">55</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.login.title" datatype="html">
+        <source>Sign in</source>
+        <target>Connexion</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/auth.routes.ts</context>
+          <context context-type="linenumber">64</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.sso.title" datatype="html">
+        <source>SSO sign-in</source>
+        <target>Connexion SSO</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/auth.routes.ts</context>
+          <context context-type="linenumber">70</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.code-sign-in.title" datatype="html">
+        <source>Sign in with a code</source>
+        <target>Se connecter avec un code</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/auth.routes.ts</context>
+          <context context-type="linenumber">76</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.two-step.title" datatype="html">
+        <source>Two-step verification</source>
+        <target>Vérification en deux étapes</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/auth.routes.ts</context>
+          <context context-type="linenumber">82</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.signup.title" datatype="html">
+        <source>Create an account</source>
+        <target>Créer un compte</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/auth.routes.ts</context>
+          <context context-type="linenumber">88</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.signup-verify.title" datatype="html">
+        <source>Confirm your email address</source>
+        <target>Confirmez votre adresse e-mail</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/auth.routes.ts</context>
+          <context context-type="linenumber">94</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.forgot.title" datatype="html">
+        <source>Forgot password</source>
+        <target>Mot de passe oublié</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/auth.routes.ts</context>
+          <context context-type="linenumber">101</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.reset.title" datatype="html">
+        <source>Choose a new password</source>
+        <target>Choisir un nouveau mot de passe</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/auth.routes.ts</context>
+          <context context-type="linenumber">107</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.logged-out.route-title" datatype="html">
+        <source>Signed out</source>
+        <target>Déconnexion</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/auth.routes.ts</context>
+          <context context-type="linenumber">113</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.organizations.title" datatype="html">
+        <source>Choose an organization</source>
+        <target>Choisir une organisation</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/auth.routes.ts</context>
+          <context context-type="linenumber">119</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.organization-create.title" datatype="html">
+        <source>Create an organization</source>
+        <target>Créer une organisation</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/auth.routes.ts</context>
+          <context context-type="linenumber">127</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.federated.title" datatype="html">
+        <source>Signing in</source>
+        <target>Connexion</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/auth.routes.ts</context>
+          <context context-type="linenumber">140</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.layout.privacy" datatype="html">
+        <source>Privacy</source>
+        <target>Confidentialité</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/components/legal-links/legal-links.component.ts</context>
+          <context context-type="linenumber">19,22</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.layout.terms" datatype="html">
+        <source>Terms of use</source>
+        <target>Conditions d'utilisation</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/components/legal-links/legal-links.component.ts</context>
+          <context context-type="linenumber">25,28</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.layout.help" datatype="html">
+        <source>Help</source>
+        <target>Aide</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/components/legal-links/legal-links.component.ts</context>
+          <context context-type="linenumber">32,36</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.layout.theme-light" datatype="html">
+        <source>Switch to the light theme</source>
+        <target>Passer au thème clair</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/components/theme-toggle/theme-toggle.component.ts</context>
+          <context context-type="linenumber">68</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.layout.theme-dark" datatype="html">
+        <source>Switch to the dark theme</source>
+        <target>Passer au thème sombre</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/components/theme-toggle/theme-toggle.component.ts</context>
+          <context context-type="linenumber">69</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.code.label" datatype="html">
+        <source>Verification code</source>
+        <target>Code de vérification</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/forms/code-form/code-form.component.html</context>
+          <context context-type="linenumber">4,6</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/forms/code-form/code-form.component.html</context>
+          <context context-type="linenumber">8,9</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.code.resend-in" datatype="html">
+        <source>Resend the code in <x id="INTERPOLATION" equiv-text="{{ time }}"/></source>
+        <target>Renvoyer le code dans <x id="INTERPOLATION" equiv-text="{{ time }}"/></target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/forms/code-form/code-form.component.html</context>
+          <context context-type="linenumber">56,57</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.code.resend" datatype="html">
+        <source>Resend the code</source>
+        <target>Renvoyer le code</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/forms/code-form/code-form.component.html</context>
+          <context context-type="linenumber">58,61</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.code.change-address" datatype="html">
+        <source>Change the address</source>
+        <target>Modifier l'adresse</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/forms/code-form/code-form.component.html</context>
+          <context context-type="linenumber">65,69</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/forgot-page/forgot-page.component.html</context>
+          <context context-type="linenumber">67,69</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.code.resent" datatype="html">
+        <source>New code sent; the previous one no longer works.</source>
+        <target>Nouveau code envoyé ; le précédent ne fonctionne plus.</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/forms/code-form/code-form.component.html</context>
+          <context context-type="linenumber">71,75</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.code-sign-in.heading" datatype="html">
+        <source> Sign in with a code </source>
+        <target>Se connecter avec un code</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/code-sign-in-page/code-sign-in-page.component.html</context>
+          <context context-type="linenumber">9,11</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.code.sent-to" datatype="html">
+        <source> We sent a 6-digit code to <x id="START_TAG_SPAN" ctype="x-span" equiv-text="&lt;span class=&quot;font-medium text-foreground&quot;&gt;"/><x id="INTERPOLATION" equiv-text="{{ address }}"/><x id="CLOSE_TAG_SPAN" ctype="x-span" equiv-text="&lt;/span
+            &gt;"/>. It expires in 10 minutes. </source>
+        <target>Nous avons envoyé un code à 6 chiffres à <x id="START_TAG_SPAN" ctype="x-span" equiv-text="&lt;span class=&quot;font-medium text-foreground&quot;&gt;"/><x id="INTERPOLATION" equiv-text="{{ address }}"/><x id="CLOSE_TAG_SPAN" ctype="x-span" equiv-text="&lt;/span
+            &gt;"/>. Il expire dans 10 minutes.</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/code-sign-in-page/code-sign-in-page.component.html</context>
+          <context context-type="linenumber">13,17</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/signup-verify-page/signup-verify-page.component.html</context>
+          <context context-type="linenumber">13,17</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.login.unavailable" datatype="html">
+        <source>Sign-in is unavailable. Try again in a moment.</source>
+        <target>Connexion indisponible. Réessayez dans un instant.</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/code-sign-in-page/code-sign-in-page.component.html</context>
+          <context context-type="linenumber">24,26</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/login-page/login-page.component.html</context>
+          <context context-type="linenumber">56,58</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/signup-page/signup-page.component.html</context>
+          <context context-type="linenumber">23,25</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/signup-verify-page/signup-verify-page.component.html</context>
+          <context context-type="linenumber">24,26</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/sso-page/sso-page.component.html</context>
+          <context context-type="linenumber">13,15</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/two-step-page/two-step-page.component.ts</context>
+          <context context-type="linenumber">288</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.login.email" datatype="html">
+        <source>Email address</source>
+        <target>Adresse e-mail</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/code-sign-in-page/code-sign-in-page.component.html</context>
+          <context context-type="linenumber">33,35</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/forgot-page/forgot-page.component.html</context>
+          <context context-type="linenumber">92,94</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/login-page/login-page.component.html</context>
+          <context context-type="linenumber">90,92</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.login.code" datatype="html">
+        <source>Get a sign-in code by email</source>
+        <target>Recevoir un code de connexion par e-mail</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/code-sign-in-page/code-sign-in-page.component.html</context>
+          <context context-type="linenumber">57,59</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/login-page/login-page.component.html</context>
+          <context context-type="linenumber">202,204</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.back-to-login" datatype="html">
+        <source>Back to sign-in</source>
+        <target>Retour à la connexion</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/code-sign-in-page/code-sign-in-page.component.html</context>
+          <context context-type="linenumber">61,63</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/forgot-page/forgot-page.component.html</context>
+          <context context-type="linenumber">71,73</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/forgot-page/forgot-page.component.html</context>
+          <context context-type="linenumber">127,129</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/reset-page/reset-page.component.html</context>
+          <context context-type="linenumber">41,43</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/reset-page/reset-page.component.html</context>
+          <context context-type="linenumber">217,219</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.login.email-invalid" datatype="html">
+        <source>Enter the email address of your account, for example camille.martin@ateliernord.fr.</source>
+        <target>Saisissez l'adresse e-mail de votre compte, par exemple camille.martin@ateliernord.fr.</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/code-sign-in-page/code-sign-in-page.component.ts</context>
+          <context context-type="linenumber">182</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/forgot-page/forgot-page.component.ts</context>
+          <context context-type="linenumber">115</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/login-page/login-page.component.ts</context>
+          <context context-type="linenumber">175</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/signup-page/signup-page.component.ts</context>
+          <context context-type="linenumber">212</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.code-sign-in.submit" datatype="html">
+        <source>Sign in</source>
+        <target>Se connecter</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/code-sign-in-page/code-sign-in-page.component.ts</context>
+          <context context-type="linenumber">196</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.code.wrong" datatype="html">
+        <source>Wrong or expired code: check the last email you received.</source>
+        <target>Code incorrect ou expiré : vérifiez le dernier e-mail reçu.</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/code-sign-in-page/code-sign-in-page.component.ts</context>
+          <context context-type="linenumber">277</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/signup-verify-page/signup-verify-page.component.ts</context>
+          <context context-type="linenumber">236</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.federated.heading" datatype="html">
+        <source> Signing in </source>
+        <target>Connexion</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/federated-continue-page/federated-continue-page.component.html</context>
+          <context context-type="linenumber">4,6</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.federated.refused" datatype="html">
+        <source>This sign-in method cannot be used.</source>
+        <target>Cette méthode de connexion ne peut pas être utilisée.</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/federated-continue-page/federated-continue-page.component.html</context>
+          <context context-type="linenumber">9,11</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.sso.other-methods" datatype="html">
+        <source>Other sign-in methods</source>
+        <target>Autres méthodes de connexion</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/federated-continue-page/federated-continue-page.component.html</context>
+          <context context-type="linenumber">14,17</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/sso-page/sso-page.component.html</context>
+          <context context-type="linenumber">55,58</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.federated.pending" datatype="html">
+        <source>Signing in…</source>
+        <target>Connexion…</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/federated-continue-page/federated-continue-page.component.html</context>
+          <context context-type="linenumber">19,22</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.forgot.unavailable" datatype="html">
+        <source>The link could not be sent. Try again in a moment.</source>
+        <target>Le lien n’a pas pu partir. Réessayez dans un instant.</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/forgot-page/forgot-page.component.html</context>
+          <context context-type="linenumber">6,8</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.forgot.sent-heading" datatype="html">
+        <source> Check your email </source>
+        <target>Vérifiez vos e-mails</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/forgot-page/forgot-page.component.html</context>
+          <context context-type="linenumber">17,19</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.forgot.sent-lead" datatype="html">
+        <source> If an account exists for <x id="START_TAG_SPAN" ctype="x-span" equiv-text="&lt;span class=&quot;font-medium text-foreground&quot;&gt;"/><x id="INTERPOLATION" equiv-text="{{ address }}"/><x id="CLOSE_TAG_SPAN" ctype="x-span" equiv-text="&lt;/span
+            &gt;"/>, a reset link has just been sent. It stays valid for 30 minutes. </source>
+        <target>Si un compte existe pour <x id="START_TAG_SPAN" ctype="x-span" equiv-text="&lt;span class=&quot;font-medium text-foreground&quot;&gt;"/><x id="INTERPOLATION" equiv-text="{{ address }}"/><x id="CLOSE_TAG_SPAN" ctype="x-span" equiv-text="&lt;/span
+            &gt;"/>, un lien de réinitialisation vient de partir. Il reste valable 30 minutes.</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/forgot-page/forgot-page.component.html</context>
+          <context context-type="linenumber">20,24</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.forgot.spam" datatype="html">
+        <source>Nothing received? Look in your spam folder.</source>
+        <target>Rien reçu ? Regardez dans les courriers indésirables.</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/forgot-page/forgot-page.component.html</context>
+          <context context-type="linenumber">29,31</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.forgot.once" datatype="html">
+        <source>The link works only once.</source>
+        <target>Le lien ne fonctionne qu'une fois.</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/forgot-page/forgot-page.component.html</context>
+          <context context-type="linenumber">37,39</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.forgot.resend-in" datatype="html">
+        <source>Resend the email in <x id="INTERPOLATION" equiv-text="{{ countdown.label() }}"/></source>
+        <target>Renvoyer l'e-mail dans <x id="INTERPOLATION" equiv-text="{{ countdown.label() }}"/></target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/forgot-page/forgot-page.component.html</context>
+          <context context-type="linenumber">51,52</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.forgot.resend" datatype="html">
+        <source>Resend the email</source>
+        <target>Renvoyer l'e-mail</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/forgot-page/forgot-page.component.html</context>
+          <context context-type="linenumber">53,55</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.forgot.resent" datatype="html">
+        <source>A new link has just been sent; the previous one no longer works.</source>
+        <target>Un nouveau lien vient de partir ; le précédent ne fonctionne plus.</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/forgot-page/forgot-page.component.html</context>
+          <context context-type="linenumber">60,62</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.forgot.heading" datatype="html">
+        <source> Forgot password </source>
+        <target>Mot de passe oublié</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/forgot-page/forgot-page.component.html</context>
+          <context context-type="linenumber">82,84</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.forgot.lead" datatype="html">
+        <source> Enter the address of your account: we will send you a link to choose a new password. </source>
+        <target>Indiquez l'adresse de votre compte : nous vous enverrons un lien pour choisir un nouveau mot de passe.</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/forgot-page/forgot-page.component.html</context>
+          <context context-type="linenumber">85,87</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.forgot.submit" datatype="html">
+        <source> Send the reset link </source>
+        <target>Envoyer le lien de réinitialisation</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/forgot-page/forgot-page.component.html</context>
+          <context context-type="linenumber">123,125</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.forgot.provider" datatype="html">
+        <source> Do you sign in with Google or GitHub? <x id="START_LINK" ctype="x-a" equiv-text="&lt;a
+      routerLink=&quot;/login&quot;
+      class=&quot;rounded-sm font-medium text-primary underline-offset-4 hover:underline&quot;
+      &gt;"/>Use that provider<x id="CLOSE_LINK" ctype="x-a" equiv-text="&lt;/a
+    &gt;"/>: no password is needed. </source>
+        <target>Vous vous connectez avec Google ou GitHub ? <x id="START_LINK" ctype="x-a" equiv-text="&lt;a
+      routerLink=&quot;/login&quot;
+      class=&quot;rounded-sm font-medium text-primary underline-offset-4 hover:underline&quot;
+      &gt;"/>Utilisez ce fournisseur<x id="CLOSE_LINK" ctype="x-a" equiv-text="&lt;/a
+    &gt;"/> : aucun mot de passe n'est nécessaire.</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/forgot-page/forgot-page.component.html</context>
+          <context context-type="linenumber">133,141</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.logged-out.expired-title" datatype="html">
+        <source> Session expired </source>
+        <target>Session expirée</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/logged-out-page/logged-out-page.component.html</context>
+          <context context-type="linenumber">24,26</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.logged-out.expired-body" datatype="html">
+        <source> Sign in again to pick up where you left off. </source>
+        <target>Reconnectez-vous pour reprendre où vous en étiez.</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/logged-out-page/logged-out-page.component.html</context>
+          <context context-type="linenumber">27,30</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.logged-out.all-title" datatype="html">
+        <source> Signed out of all devices </source>
+        <target>Déconnecté de tous les appareils</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/logged-out-page/logged-out-page.component.html</context>
+          <context context-type="linenumber">32,34</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.logged-out.all-body" datatype="html">
+        <source> The sessions open on your account were closed and the API tokens kept. Sign in again on this device. </source>
+        <target>Les sessions ouvertes sur votre compte ont été fermées et les jetons d’API conservés. Reconnectez-vous sur cet appareil.</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/logged-out-page/logged-out-page.component.html</context>
+          <context context-type="linenumber">35,37</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.logged-out.title" datatype="html">
+        <source> You are signed out </source>
+        <target>Vous êtes déconnecté</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/logged-out-page/logged-out-page.component.html</context>
+          <context context-type="linenumber">41,43</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.logged-out.greeting" datatype="html">
+        <source>See you soon, <x id="INTERPOLATION" equiv-text="{{ name }}"/>.</source>
+        <target>À bientôt, <x id="INTERPOLATION" equiv-text="{{ name }}"/>.</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/logged-out-page/logged-out-page.component.html</context>
+          <context context-type="linenumber">45,46</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.logged-out.body" datatype="html">
+        <source>Your session is closed on this browser; your other devices stay signed in.</source>
+        <target>Votre session est fermée sur ce navigateur ; vos autres appareils restent connectés.</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/logged-out-page/logged-out-page.component.html</context>
+          <context context-type="linenumber">48,50</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.logged-out.remembered" datatype="html">
+        <source> Accounts remembered on this device </source>
+        <target>Comptes mémorisés sur cet appareil</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/logged-out-page/logged-out-page.component.html</context>
+          <context context-type="linenumber">59,61</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.logged-out.sign-in" datatype="html">
+        <source> Sign in </source>
+        <target>Se connecter</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/logged-out-page/logged-out-page.component.html</context>
+          <context context-type="linenumber">78,79</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.logged-out.forgotten" datatype="html">
+        <source><x id="INTERPOLATION" equiv-text="{{ last.account.email }}"/> is no longer remembered on this device.</source>
+        <target><x id="INTERPOLATION" equiv-text="{{ last.account.email }}"/> n’est plus mémorisé sur cet appareil.</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/logged-out-page/logged-out-page.component.html</context>
+          <context context-type="linenumber">103,105</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.undo" datatype="html">
+        <source>Undo</source>
+        <target>Annuler</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/logged-out-page/logged-out-page.component.html</context>
+          <context context-type="linenumber">107,108</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/organizations-page/organizations-page.component.html</context>
+          <context context-type="linenumber">125,126</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.logged-out.reconnect" datatype="html">
+        <source> Sign in again </source>
+        <target>Se reconnecter</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/logged-out-page/logged-out-page.component.html</context>
+          <context context-type="linenumber">120,122</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.logged-out.other-account" datatype="html">
+        <source>Use another account</source>
+        <target>Utiliser un autre compte</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/logged-out-page/logged-out-page.component.html</context>
+          <context context-type="linenumber">124,127</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.logged-out.sign-in-as" datatype="html">
+        <source>Sign in with <x id="email" equiv-text="account.email"/></source>
+        <target>Se connecter avec <x id="email" equiv-text="account.email"/></target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/logged-out-page/logged-out-page.component.ts</context>
+          <context context-type="linenumber">133</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.logged-out.forget" datatype="html">
+        <source>Forget <x id="email" equiv-text="account.email"/> on this device</source>
+        <target>Oublier <x id="email" equiv-text="account.email"/> sur cet appareil</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/logged-out-page/logged-out-page.component.ts</context>
+          <context context-type="linenumber">146</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.login.heading" datatype="html">
+        <source>Sign in</source>
+        <target>Se connecter</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/login-page/login-page.component.html</context>
+          <context context-type="linenumber">4,5</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.login.lead" datatype="html">
+        <source>Access your workspaces.</source>
+        <target>Accédez à vos espaces de travail.</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/login-page/login-page.component.html</context>
+          <context context-type="linenumber">5,8</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.login.invalid-title" datatype="html">
+        <source>Wrong email or password.</source>
+        <target>E-mail ou mot de passe incorrect.</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/login-page/login-page.component.html</context>
+          <context context-type="linenumber">12,14</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.login.invalid-check" datatype="html">
+        <source>Check what you typed.</source>
+        <target>Vérifiez votre saisie.</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/login-page/login-page.component.html</context>
+          <context context-type="linenumber">15,16</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.login.invalid-attempt-one" datatype="html">
+        <source>You have 1 attempt left before the temporary lockout.</source>
+        <target>Il vous reste 1 tentative avant le verrouillage temporaire.</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/login-page/login-page.component.html</context>
+          <context context-type="linenumber">19,21</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.login.invalid-attempts" datatype="html">
+        <source>You have <x id="INTERPOLATION" equiv-text="{{ attempts }}"/> attempts left before the temporary lockout.</source>
+        <target>Il vous reste <x id="INTERPOLATION" equiv-text="{{ attempts }}"/> tentatives avant le verrouillage temporaire.</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/login-page/login-page.component.html</context>
+          <context context-type="linenumber">23,24</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.login.locked-title" datatype="html">
+        <source>Account locked for 15 minutes.</source>
+        <target>Compte verrouillé pendant 15 minutes.</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/login-page/login-page.component.html</context>
+          <context context-type="linenumber">33,35</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.login.locked-text" datatype="html">
+        <source>Too many failed attempts. <x id="START_LINK" ctype="x-a" equiv-text="&lt;a
+              routerLink=&quot;/forgot&quot;
+              class=&quot;rounded-sm font-medium underline underline-offset-4 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none&quot;
+              &gt;"/>Reset your password<x id="CLOSE_LINK" ctype="x-a" equiv-text="&lt;/a
+            &gt;"/> to unlock it right away.</source>
+        <target>Trop de tentatives échouées. <x id="START_LINK" ctype="x-a" equiv-text="&lt;a
+              routerLink=&quot;/forgot&quot;
+              class=&quot;rounded-sm font-medium underline underline-offset-4 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none&quot;
+              &gt;"/>Réinitialisez votre mot de passe<x id="CLOSE_LINK" ctype="x-a" equiv-text="&lt;/a
+            &gt;"/> pour le débloquer tout de suite.</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/login-page/login-page.component.html</context>
+          <context context-type="linenumber">36,42</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.login.unverified" datatype="html">
+        <source>Confirm your email address before signing in.</source>
+        <target>Vérifiez votre adresse e-mail avant de vous connecter.</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/login-page/login-page.component.html</context>
+          <context context-type="linenumber">49,51</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.login.sso" datatype="html">
+        <source>Continue with company SSO</source>
+        <target>Continuer avec le SSO de l'entreprise</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/login-page/login-page.component.html</context>
+          <context context-type="linenumber">72,74</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.login.or" datatype="html">
+        <source>or</source>
+        <target>ou</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/login-page/login-page.component.html</context>
+          <context context-type="linenumber">80</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/signup-page/signup-page.component.html</context>
+          <context context-type="linenumber">34</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.login.with-email" datatype="html">
+        <source>or with your email address</source>
+        <target>ou avec votre adresse e-mail</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/login-page/login-page.component.html</context>
+          <context context-type="linenumber">83,84</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/signup-page/signup-page.component.html</context>
+          <context context-type="linenumber">37,38</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.login.prefilled" datatype="html">
+        <source>Account remembered on this device: enter its password.</source>
+        <target>Compte mémorisé sur cet appareil : saisissez son mot de passe.</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/login-page/login-page.component.html</context>
+          <context context-type="linenumber">112,114</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.login.password" datatype="html">
+        <source>Password</source>
+        <target>Mot de passe</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/login-page/login-page.component.html</context>
+          <context context-type="linenumber">123,126</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.login.forgot" datatype="html">
+        <source>Forgot password?</source>
+        <target>Mot de passe oublié ?</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/login-page/login-page.component.html</context>
+          <context context-type="linenumber">130,133</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.login.password-placeholder" datatype="html">
+        <source>Your password</source>
+        <target>Votre mot de passe</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/login-page/login-page.component.html</context>
+          <context context-type="linenumber">139,140</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.login.remember" datatype="html">
+        <source>Stay signed in for 30 days</source>
+        <target>Rester connecté pendant 30 jours</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/login-page/login-page.component.html</context>
+          <context context-type="linenumber">181,184</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.login.submit" datatype="html">
+        <source> Sign in </source>
+        <target>Se connecter</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/login-page/login-page.component.html</context>
+          <context context-type="linenumber">192,194</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.login.no-account" datatype="html">
+        <source>No account yet?</source>
+        <target>Pas encore de compte ?</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/login-page/login-page.component.html</context>
+          <context context-type="linenumber">208,210</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.login.create-account" datatype="html">
+        <source>Create an account</source>
+        <target>Créer un compte</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/login-page/login-page.component.html</context>
+          <context context-type="linenumber">213,217</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.login.email-required" datatype="html">
+        <source>Enter the email address of your account, for example camille.martin@ateliernord.fr.</source>
+        <target>Saisissez l'adresse e-mail de votre compte, par exemple camille.martin@ateliernord.fr.</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/login-page/login-page.component.ts</context>
+          <context context-type="linenumber">172</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.login.password-required" datatype="html">
+        <source>Enter your password.</source>
+        <target>Saisissez votre mot de passe.</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/login-page/login-page.component.ts</context>
+          <context context-type="linenumber">178</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.password.show" datatype="html">
+        <source>Show the password</source>
+        <target>Afficher le mot de passe</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/login-page/login-page.component.ts</context>
+          <context context-type="linenumber">202</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/signup-page/signup-page.component.ts</context>
+          <context context-type="linenumber">243</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.password.hide" datatype="html">
+        <source>Hide the password</source>
+        <target>Masquer le mot de passe</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/login-page/login-page.component.ts</context>
+          <context context-type="linenumber">213</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/signup-page/signup-page.component.ts</context>
+          <context context-type="linenumber">254</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.login.password-wrong" datatype="html">
+        <source>Wrong password: check the capital letters.</source>
+        <target>Mot de passe incorrect : vérifiez les majuscules.</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/login-page/login-page.component.ts</context>
+          <context context-type="linenumber">312</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.organization-create.back" datatype="html">
+        <source>My organizations</source>
+        <target>Mes organisations</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/organization-create-page/organization-create-page.component.html</context>
+          <context context-type="linenumber">6,8</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.organization-create.heading" datatype="html">
+        <source> Create an organization </source>
+        <target>Créer une organisation</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/organization-create-page/organization-create-page.component.html</context>
+          <context context-type="linenumber">10,12</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.organization-create.lead" datatype="html">
+        <source> An organization brings together your spaces, members and billing. You will be its owner. </source>
+        <target>Une organisation regroupe vos espaces, membres et facturation. Vous en serez propriétaire.</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/organization-create-page/organization-create-page.component.html</context>
+          <context context-type="linenumber">13,16</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.organizations.action-failed" datatype="html">
+        <source>The action is unavailable. Try again in a moment.</source>
+        <target>L’action est indisponible. Réessayez dans un instant.</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/organization-create-page/organization-create-page.component.html</context>
+          <context context-type="linenumber">21,23</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/organizations-page/organizations-page.component.ts</context>
+          <context context-type="linenumber">170</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.organization-create.logo" datatype="html">
+        <source>Logo</source>
+        <target>Logo</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/organization-create-page/organization-create-page.component.html</context>
+          <context context-type="linenumber">42,44</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.organization-create.logo-replace" datatype="html">
+        <source>Replace</source>
+        <target>Remplacer</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/organization-create-page/organization-create-page.component.html</context>
+          <context context-type="linenumber">62,64</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.organization-create.logo-import" datatype="html">
+        <source>Import</source>
+        <target>Importer</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/organization-create-page/organization-create-page.component.html</context>
+          <context context-type="linenumber">64,67</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.organization-create.logo-remove" datatype="html">
+        <source>Remove</source>
+        <target>Retirer</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/organization-create-page/organization-create-page.component.html</context>
+          <context context-type="linenumber">76,78</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.organization-create.logo-meta" datatype="html">
+        <source><x id="INTERPOLATION" equiv-text="{{ chosen.file.name }}"/> · <x id="INTERPOLATION_1" equiv-text="{{ logoSize(chosen.file) }}"/> KB</source>
+        <target><x id="INTERPOLATION" equiv-text="{{ chosen.file.name }}"/> · <x id="INTERPOLATION_1" equiv-text="{{ logoSize(chosen.file) }}"/> Ko</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/organization-create-page/organization-create-page.component.html</context>
+          <context context-type="linenumber">83,84</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.organization-create.logo-hint" datatype="html">
+        <source>Square PNG or SVG, 512 px recommended</source>
+        <target>PNG ou SVG carré, 512 px conseillés</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/organization-create-page/organization-create-page.component.html</context>
+          <context context-type="linenumber">90,93</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.organization-create.logo-error" datatype="html">
+        <source>This file is not a usable image: choose a PNG or an SVG.</source>
+        <target>Ce fichier n’est pas une image utilisable : choisissez un PNG ou un SVG.</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/organization-create-page/organization-create-page.component.html</context>
+          <context context-type="linenumber">98,101</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.organization-create.name" datatype="html">
+        <source>Organization name</source>
+        <target>Nom de l'organisation</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/organization-create-page/organization-create-page.component.html</context>
+          <context context-type="linenumber">110,113</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.organization-create.address" datatype="html">
+        <source>Address</source>
+        <target>Adresse</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/organization-create-page/organization-create-page.component.html</context>
+          <context context-type="linenumber">133,136</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.organization-create.address-hint" datatype="html">
+        <source> Generated from the name; it can be changed later in the settings. </source>
+        <target>Générée à partir du nom ; modifiable ensuite dans les réglages.</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/organization-create-page/organization-create-page.component.html</context>
+          <context context-type="linenumber">148,152</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.organization-create.size" datatype="html">
+        <source>Team size</source>
+        <target>Taille de l'équipe</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/organization-create-page/organization-create-page.component.html</context>
+          <context context-type="linenumber">157,160</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/organization-create-page/organization-create-page.component.html</context>
+          <context context-type="linenumber">161,162</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.organization-create.people" datatype="html">
+        <source>ppl</source>
+        <target>pers.</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/organization-create-page/organization-create-page.component.html</context>
+          <context context-type="linenumber">171,173</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/organization-create-page/organization-create-page.component.html</context>
+          <context context-type="linenumber">183,185</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/organization-create-page/organization-create-page.component.html</context>
+          <context context-type="linenumber">195,197</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/organization-create-page/organization-create-page.component.html</context>
+          <context context-type="linenumber">207,209</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.organization-create.use" datatype="html">
+        <source>Main use</source>
+        <target>Usage principal</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/organization-create-page/organization-create-page.component.html</context>
+          <context context-type="linenumber">221,223</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.organization-create.invite" datatype="html">
+        <source>Invite colleagues</source>
+        <target>Inviter des collègues</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/organization-create-page/organization-create-page.component.html</context>
+          <context context-type="linenumber">234,235</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.organization-create.optional" datatype="html">
+        <source>(optional)</source>
+        <target>(facultatif)</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/organization-create-page/organization-create-page.component.html</context>
+          <context context-type="linenumber">236,239</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.organization-create.invite-placeholder" datatype="html">
+        <source>adresse@exemple.fr, autre@exemple.fr</source>
+        <target>adresse@exemple.fr, autre@exemple.fr</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/organization-create-page/organization-create-page.component.html</context>
+          <context context-type="linenumber">243,244</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.organization-create.invite-hint" datatype="html">
+        <source> They will receive an email; Member role by default. </source>
+        <target>Ils recevront un e-mail ; rôle Membre par défaut.</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/organization-create-page/organization-create-page.component.html</context>
+          <context context-type="linenumber">254,259</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.organization-create.plan" datatype="html">
+        <source> Free plan to start: 5 members and 2 GB of storage. Move to the Team plan at any time from Billing. </source>
+        <target>Plan Gratuit au départ : 5 membres et 2 Go de stockage. Passez au plan Équipe à tout moment depuis Facturation.</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/organization-create-page/organization-create-page.component.html</context>
+          <context context-type="linenumber">264,267</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.organization-create.submit" datatype="html">
+        <source> Create the organization </source>
+        <target>Créer l'organisation</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/organization-create-page/organization-create-page.component.html</context>
+          <context context-type="linenumber">277,280</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.organization-create.slug-invalid" datatype="html">
+        <source>This name gives no valid address: use at least 2 letters or digits.</source>
+        <target>Ce nom ne donne pas d’adresse valide : utilisez au moins 2 lettres ou chiffres.</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/organization-create-page/organization-create-page.component.ts</context>
+          <context context-type="linenumber">229</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.organization-create.slug-placeholder" datatype="html">
+        <source>your-organization</source>
+        <target>votre-organisation</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/organization-create-page/organization-create-page.component.ts</context>
+          <context context-type="linenumber">240</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.organization-create.name-required" datatype="html">
+        <source>Enter the name of the organization.</source>
+        <target>Saisissez le nom de l'organisation.</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/organization-create-page/organization-create-page.component.ts</context>
+          <context context-type="linenumber">269</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.organization-create.invites-invalid" datatype="html">
+        <source>Check the addresses: one of them is not an email address.</source>
+        <target>Vérifiez les adresses : l’une d’elles n’est pas une adresse e-mail.</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/organization-create-page/organization-create-page.component.ts</context>
+          <context context-type="linenumber">280</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.organization-create.size-small" datatype="html">
+        <source>Small team</source>
+        <target>Petite équipe</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/organization-create-page/organization-create-page.component.ts</context>
+          <context context-type="linenumber">349</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.organization-create.size-team" datatype="html">
+        <source>Team</source>
+        <target>Équipe</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/organization-create-page/organization-create-page.component.ts</context>
+          <context context-type="linenumber">355</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.organization-create.size-teams" datatype="html">
+        <source>Several teams</source>
+        <target>Plusieurs équipes</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/organization-create-page/organization-create-page.component.ts</context>
+          <context context-type="linenumber">361</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.organization-create.size-company" datatype="html">
+        <source>Company</source>
+        <target>Entreprise</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/organization-create-page/organization-create-page.component.ts</context>
+          <context context-type="linenumber">367</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.organization-create.use-product" datatype="html">
+        <source>Product and engineering</source>
+        <target>Produit et ingénierie</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/organization-create-page/organization-create-page.component.ts</context>
+          <context context-type="linenumber">384</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.organization-create.use-agency" datatype="html">
+        <source>Agency and client projects</source>
+        <target>Agence et projets clients</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/organization-create-page/organization-create-page.component.ts</context>
+          <context context-type="linenumber">388</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.organization-create.use-marketing" datatype="html">
+        <source>Marketing and content</source>
+        <target>Marketing et contenus</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/organization-create-page/organization-create-page.component.ts</context>
+          <context context-type="linenumber">392</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.organization-create.use-operations" datatype="html">
+        <source>Operations and support</source>
+        <target>Opérations et support</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/organization-create-page/organization-create-page.component.ts</context>
+          <context context-type="linenumber">396</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.organization-create.use-other" datatype="html">
+        <source>Other</source>
+        <target>Autre</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/organization-create-page/organization-create-page.component.ts</context>
+          <context context-type="linenumber">398</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.organization-create.logo-alt" datatype="html">
+        <source>Logo preview: <x id="name" equiv-text="file.name"/></source>
+        <target>Aperçu du logo : <x id="name" equiv-text="file.name"/></target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/organization-create-page/organization-create-page.component.ts</context>
+          <context context-type="linenumber">468</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.organization-create.slug-reserved" datatype="html">
+        <source>This address is reserved: choose another name.</source>
+        <target>Cette adresse est réservée : choisissez un autre nom.</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/organization-create-page/organization-create-page.component.ts</context>
+          <context context-type="linenumber">524</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.organization-create.slug-taken" datatype="html">
+        <source>This address is already used: choose another name.</source>
+        <target>Cette adresse est déjà utilisée : choisissez un autre nom.</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/organization-create-page/organization-create-page.component.ts</context>
+          <context context-type="linenumber">529</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.organization-create.invites-limit" datatype="html">
+        <source>Too many invitations today: invite fewer people, or invite them later from the settings.</source>
+        <target>Trop d’invitations aujourd’hui : invitez moins de personnes, ou invitez-les plus tard depuis les réglages.</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/organization-create-page/organization-create-page.component.ts</context>
+          <context context-type="linenumber">534</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.organizations.heading" datatype="html">
+        <source> Choose an organization </source>
+        <target>Choisir une organisation</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/organizations-page/organizations-page.component.html</context>
+          <context context-type="linenumber">6,8</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.organizations.signed-in-as" datatype="html">
+        <source> Signed in as <x id="START_TAG_SPAN" ctype="x-span" equiv-text="&lt;span class=&quot;font-medium text-foreground&quot;&gt;"/><x id="INTERPOLATION" equiv-text="{{ account.email }}"/><x id="CLOSE_TAG_SPAN" ctype="x-span" equiv-text="&lt;/span
+            &gt;"/>. </source>
+        <target>Connecté en tant que <x id="START_TAG_SPAN" ctype="x-span" equiv-text="&lt;span class=&quot;font-medium text-foreground&quot;&gt;"/><x id="INTERPOLATION" equiv-text="{{ account.email }}"/><x id="CLOSE_TAG_SPAN" ctype="x-span" equiv-text="&lt;/span
+            &gt;"/>.</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/organizations-page/organizations-page.component.html</context>
+          <context context-type="linenumber">13,16</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.organizations.sign-out" datatype="html">
+        <source>Sign out</source>
+        <target>Se déconnecter</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/organizations-page/organizations-page.component.html</context>
+          <context context-type="linenumber">27,31</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.organizations.sign-out-failed" datatype="html">
+        <source>The session could not be closed. Try again.</source>
+        <target>Impossible de fermer la session. Réessayez.</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/organizations-page/organizations-page.component.html</context>
+          <context context-type="linenumber">34,36</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.organizations.invitations-failed" datatype="html">
+        <source>This section could not be loaded</source>
+        <target>Impossible de charger cette section</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/organizations-page/organizations-page.component.html</context>
+          <context context-type="linenumber">48,51</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.retry" datatype="html">
+        <source> Retry </source>
+        <target>Réessayer</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/organizations-page/organizations-page.component.html</context>
+          <context context-type="linenumber">58,59</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/organizations-page/organizations-page.component.html</context>
+          <context context-type="linenumber">168,169</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.organizations.invitation-pending" datatype="html">
+        <source> Pending invitation </source>
+        <target>Invitation en attente</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/organizations-page/organizations-page.component.html</context>
+          <context context-type="linenumber">69,71</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.organizations.invited-by" datatype="html">
+        <source><x id="INTERPOLATION" equiv-text="{{ item.inviterName }}"/> invites you as <x id="INTERPOLATION_1" equiv-text="{{ roles[item.role] }}"/> · expires on <x id="INTERPOLATION_2" equiv-text="{{ item.expiresAt | date: &apos;d MMM&apos; }}"/></source>
+        <target><x id="INTERPOLATION" equiv-text="{{ item.inviterName }}"/> vous invite comme <x id="INTERPOLATION_1" equiv-text="{{ roles[item.role] }}"/> · expire le <x id="INTERPOLATION_2" equiv-text="{{ item.expiresAt | date: &apos;d MMM&apos; }}"/></target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/organizations-page/organizations-page.component.html</context>
+          <context context-type="linenumber">84,86</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.organizations.refuse" datatype="html">
+        <source> Refuse </source>
+        <target>Refuser</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/organizations-page/organizations-page.component.html</context>
+          <context context-type="linenumber">98,100</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.organizations.accept" datatype="html">
+        <source> Accept </source>
+        <target>Accepter</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/organizations-page/organizations-page.component.html</context>
+          <context context-type="linenumber">109,111</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.organizations.mine" datatype="html">
+        <source> Your organizations </source>
+        <target>Vos organisations</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/organizations-page/organizations-page.component.html</context>
+          <context context-type="linenumber">136,138</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.organizations.loading" datatype="html">
+        <source>Loading your organizations</source>
+        <target>Chargement de vos organisations</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/organizations-page/organizations-page.component.html</context>
+          <context context-type="linenumber">141,143</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.organizations.load-failed-title" datatype="html">
+        <source>This page could not be loaded</source>
+        <target>Impossible de charger cette page</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/organizations-page/organizations-page.component.html</context>
+          <context context-type="linenumber">153,155</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.organizations.load-failed-text" datatype="html">
+        <source>The server did not answer in time. Your data is not lost: try again in a moment.</source>
+        <target>Le serveur n’a pas répondu à temps. Vos données ne sont pas perdues : réessayez dans un instant.</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/organizations-page/organizations-page.component.html</context>
+          <context context-type="linenumber">156,158</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.organizations.new" datatype="html">
+        <source>New</source>
+        <target>Nouveau</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/organizations-page/organizations-page.component.html</context>
+          <context context-type="linenumber">187,189</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.organizations.meta" datatype="html">
+        <source><x id="INTERPOLATION" equiv-text="{{ roles[organization.role] }}"/> · <x id="INTERPOLATION_1" equiv-text="{{ organization.memberCount }}"/> members · <x id="INTERPOLATION_2" equiv-text="{{ plan(organization.plan) }}"/> plan</source>
+        <target><x id="INTERPOLATION" equiv-text="{{ roles[organization.role] }}"/> · <x id="INTERPOLATION_1" equiv-text="{{ organization.memberCount }}"/> membres · plan <x id="INTERPOLATION_2" equiv-text="{{ plan(organization.plan) }}"/></target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/organizations-page/organizations-page.component.html</context>
+          <context context-type="linenumber">191,193</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.organizations.create" datatype="html">
+        <source>Create an organization</source>
+        <target>Créer une organisation</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/organizations-page/organizations-page.component.html</context>
+          <context context-type="linenumber">210,212</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.organizations.join-hint" datatype="html">
+        <source> To join an existing organization, ask one of its administrators for an invitation. </source>
+        <target>Pour rejoindre une organisation existante, demandez une invitation à l'un de ses administrateurs.</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/organizations-page/organizations-page.component.html</context>
+          <context context-type="linenumber">213,217</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.organizations.mfa-required" datatype="html">
+        <source>This organization requires two-step verification.</source>
+        <target>Cette organisation exige la vérification en deux étapes.</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/organizations-page/organizations-page.component.ts</context>
+          <context context-type="linenumber">165</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.organizations.gone" datatype="html">
+        <source>This organization is no longer available. Refresh the list.</source>
+        <target>Cette organisation n’est plus accessible. Actualisez la liste.</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/organizations-page/organizations-page.component.ts</context>
+          <context context-type="linenumber">168</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.role.owner" datatype="html">
+        <source>Owner</source>
+        <target>Propriétaire</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/organizations-page/organizations-page.component.ts</context>
+          <context context-type="linenumber">183</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.role.admin" datatype="html">
+        <source>Administrator</source>
+        <target>Administrateur</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/organizations-page/organizations-page.component.ts</context>
+          <context context-type="linenumber">184</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.role.member" datatype="html">
+        <source>Member</source>
+        <target>Membre</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/organizations-page/organizations-page.component.ts</context>
+          <context context-type="linenumber">185</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.role.guest" datatype="html">
+        <source>Guest</source>
+        <target>Invité</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/organizations-page/organizations-page.component.ts</context>
+          <context context-type="linenumber">186</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.plan.free" datatype="html">
+        <source>Free</source>
+        <target>Gratuit</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/organizations-page/organizations-page.component.ts</context>
+          <context context-type="linenumber">199</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.plan.team" datatype="html">
+        <source>Team</source>
+        <target>Équipe</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/organizations-page/organizations-page.component.ts</context>
+          <context context-type="linenumber">200</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.plan.enterprise" datatype="html">
+        <source>Enterprise</source>
+        <target>Entreprise</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/organizations-page/organizations-page.component.ts</context>
+          <context context-type="linenumber">201</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.organizations.refused" datatype="html">
+        <source>Invitation from <x id="organization" equiv-text="invitation.organizationName"/> refused. <x id="inviter" equiv-text="invitation.inviterName"/> can send you a new one.</source>
+        <target>Invitation de <x id="organization" equiv-text="invitation.organizationName"/> refusée. <x id="inviter" equiv-text="invitation.inviterName"/> pourra vous en envoyer une nouvelle.</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/organizations-page/organizations-page.component.ts</context>
+          <context context-type="linenumber">280</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.reset.unavailable" datatype="html">
+        <source>The password could not be changed. Try again in a moment.</source>
+        <target>Le mot de passe n’a pas pu être modifié. Réessayez dans un instant.</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/reset-page/reset-page.component.html</context>
+          <context context-type="linenumber">6,8</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.reset.loading" datatype="html">
+        <source>Checking the link</source>
+        <target>Vérification du lien</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/reset-page/reset-page.component.html</context>
+          <context context-type="linenumber">13,14</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.reset.expired-heading" datatype="html">
+        <source> This link has expired </source>
+        <target>Ce lien a expiré</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/reset-page/reset-page.component.html</context>
+          <context context-type="linenumber">28,30</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.reset.expired-lead" datatype="html">
+        <source> A reset link stays valid for 30 minutes and works only once. Ask for a new one. </source>
+        <target>Un lien de réinitialisation reste valable 30 minutes et ne sert qu'une fois. Demandez-en un nouveau.</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/reset-page/reset-page.component.html</context>
+          <context context-type="linenumber">31,33</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.reset.new-link" datatype="html">
+        <source>Ask for a new link</source>
+        <target>Demander un nouveau lien</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/reset-page/reset-page.component.html</context>
+          <context context-type="linenumber">37,39</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.reset.done-heading" datatype="html">
+        <source> Password changed </source>
+        <target>Mot de passe modifié</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/reset-page/reset-page.component.html</context>
+          <context context-type="linenumber">55,57</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.reset.done-closed-one" datatype="html">
+        <source>Your other session was closed.</source>
+        <target>Votre autre session a été fermée.</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/reset-page/reset-page.component.html</context>
+          <context context-type="linenumber">59,60</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.reset.done-closed" datatype="html">
+        <source>Your <x id="INTERPOLATION" equiv-text="{{ done.closedSessionCount }}"/> other sessions were closed.</source>
+        <target>Vos <x id="INTERPOLATION" equiv-text="{{ done.closedSessionCount }}"/> autres sessions ont été fermées.</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/reset-page/reset-page.component.html</context>
+          <context context-type="linenumber">62,63</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.reset.done-open" datatype="html">
+        <source>Your other sessions stay open.</source>
+        <target>Vos autres sessions restent ouvertes.</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/reset-page/reset-page.component.html</context>
+          <context context-type="linenumber">65,67</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.reset.done-email" datatype="html">
+        <source>A confirmation email has just been sent to <x id="INTERPOLATION" equiv-text="{{ done.email }}"/>.</source>
+        <target>Un e-mail de confirmation vient de partir vers <x id="INTERPOLATION" equiv-text="{{ done.email }}"/>.</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/reset-page/reset-page.component.html</context>
+          <context context-type="linenumber">68,69</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.reset.sign-in" datatype="html">
+        <source> Sign in </source>
+        <target>Se connecter</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/reset-page/reset-page.component.html</context>
+          <context context-type="linenumber">80,82</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.reset.heading" datatype="html">
+        <source> Choose a new password </source>
+        <target>Choisir un nouveau mot de passe</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/reset-page/reset-page.component.html</context>
+          <context context-type="linenumber">91,93</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.reset.for-account" datatype="html">
+        <source> For the account <x id="START_TAG_SPAN" ctype="x-span" equiv-text="&lt;span class=&quot;font-medium text-foreground&quot;&gt;"/><x id="INTERPOLATION" equiv-text="{{ account.email }}"/><x id="CLOSE_TAG_SPAN" ctype="x-span" equiv-text="&lt;/span
+                &gt;"/>. </source>
+        <target>Pour le compte <x id="START_TAG_SPAN" ctype="x-span" equiv-text="&lt;span class=&quot;font-medium text-foreground&quot;&gt;"/><x id="INTERPOLATION" equiv-text="{{ account.email }}"/><x id="CLOSE_TAG_SPAN" ctype="x-span" equiv-text="&lt;/span
+                &gt;"/>.</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/reset-page/reset-page.component.html</context>
+          <context context-type="linenumber">95,97</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.reset.new" datatype="html">
+        <source>New password</source>
+        <target>Nouveau mot de passe</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/reset-page/reset-page.component.html</context>
+          <context context-type="linenumber">105,107</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.signup.password-placeholder" datatype="html">
+        <source>12 characters minimum</source>
+        <target>12 caractères minimum</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/reset-page/reset-page.component.html</context>
+          <context context-type="linenumber">115,116</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/signup-page/signup-page.component.html</context>
+          <context context-type="linenumber">115,116</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.reset.confirm" datatype="html">
+        <source>Confirm the password</source>
+        <target>Confirmer le mot de passe</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/reset-page/reset-page.component.html</context>
+          <context context-type="linenumber">150,152</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.reset.match" datatype="html">
+        <source>The passwords match.</source>
+        <target>Les mots de passe correspondent.</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/reset-page/reset-page.component.html</context>
+          <context context-type="linenumber">174,176</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.reset.close-others" datatype="html">
+        <source>Close my other sessions</source>
+        <target>Fermer mes autres sessions</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/reset-page/reset-page.component.html</context>
+          <context context-type="linenumber">189,191</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.reset.device-one" datatype="html">
+        <source> 1 signed-in device will be signed out. </source>
+        <target>1 appareil connecté sera déconnecté.</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/reset-page/reset-page.component.html</context>
+          <context context-type="linenumber">194,195</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.reset.devices" datatype="html">
+        <source> <x id="INTERPOLATION" equiv-text="{{ account.sessionCount }}"/> signed-in devices will be signed out. </source>
+        <target><x id="INTERPOLATION" equiv-text="{{ account.sessionCount }}"/> appareils connectés seront déconnectés.</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/reset-page/reset-page.component.html</context>
+          <context context-type="linenumber">198,199</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.reset.submit" datatype="html">
+        <source> Save the password </source>
+        <target>Enregistrer le mot de passe</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/reset-page/reset-page.component.html</context>
+          <context context-type="linenumber">213,214</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.reset.show" datatype="html">
+        <source>Show the passwords</source>
+        <target>Afficher les mots de passe</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/reset-page/reset-page.component.ts</context>
+          <context context-type="linenumber">218</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.reset.hide" datatype="html">
+        <source>Hide the passwords</source>
+        <target>Masquer les mots de passe</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/reset-page/reset-page.component.ts</context>
+          <context context-type="linenumber">229</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.signup.password-short" datatype="html">
+        <source>Choose a password of at least 12 characters.</source>
+        <target>Choisissez un mot de passe de 12 caractères minimum.</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/reset-page/reset-page.component.ts</context>
+          <context context-type="linenumber">256</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/reset-page/reset-page.component.ts</context>
+          <context context-type="linenumber">346</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/signup-page/signup-page.component.ts</context>
+          <context context-type="linenumber">215</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/signup-page/signup-page.component.ts</context>
+          <context context-type="linenumber">317</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.reset.confirm-missing" datatype="html">
+        <source>Type the password again to confirm it.</source>
+        <target>Saisissez de nouveau le mot de passe pour le confirmer.</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/reset-page/reset-page.component.ts</context>
+          <context context-type="linenumber">260</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.reset.mismatch" datatype="html">
+        <source>The two passwords differ: type the same one.</source>
+        <target>Les deux mots de passe diffèrent : saisissez le même.</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/reset-page/reset-page.component.ts</context>
+          <context context-type="linenumber">266</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.signup.password-compromised" datatype="html">
+        <source>This password appears in a list of compromised passwords: choose another one.</source>
+        <target>Ce mot de passe figure dans une liste de mots de passe compromis : choisissez-en un autre.</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/reset-page/reset-page.component.ts</context>
+          <context context-type="linenumber">351</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/signup-page/signup-page.component.ts</context>
+          <context context-type="linenumber">322</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.signup.heading" datatype="html">
+        <source> Create an account </source>
+        <target>Créer un compte</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/signup-page/signup-page.component.html</context>
+          <context context-type="linenumber">5,7</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.signup.lead" datatype="html">
+        <source> Your account gives you access to the organizations that invite you. </source>
+        <target>Votre compte vous donne accès aux organisations qui vous invitent.</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/signup-page/signup-page.component.html</context>
+          <context context-type="linenumber">8,12</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.signup.replaced" datatype="html">
+        <source>A newer sign-up replaced this one: sign up again to receive a new code.</source>
+        <target>Une inscription plus récente a remplacé celle-ci : inscrivez-vous de nouveau pour recevoir un nouveau code.</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/signup-page/signup-page.component.html</context>
+          <context context-type="linenumber">15,17</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.signup.name" datatype="html">
+        <source>Full name</source>
+        <target>Nom complet</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/signup-page/signup-page.component.html</context>
+          <context context-type="linenumber">44,46</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.signup.email" datatype="html">
+        <source>Work email address</source>
+        <target>Adresse e-mail professionnelle</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/signup-page/signup-page.component.html</context>
+          <context context-type="linenumber">62,64</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.signup.email-taken-link" datatype="html">
+        <source>An account already uses this address: <x id="START_LINK" ctype="x-a" equiv-text="&lt;a routerLink=&quot;/login&quot; class=&quot;font-medium underline underline-offset-4&quot;&gt;"/>sign in<x id="CLOSE_LINK" ctype="x-a" equiv-text="&lt;/a
+              &gt;"/>.</source>
+        <target>Un compte existe déjà avec cette adresse : <x id="START_LINK" ctype="x-a" equiv-text="&lt;a routerLink=&quot;/login&quot; class=&quot;font-medium underline underline-offset-4&quot;&gt;"/>connectez-vous<x id="CLOSE_LINK" ctype="x-a" equiv-text="&lt;/a
+              &gt;"/>.</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/signup-page/signup-page.component.html</context>
+          <context context-type="linenumber">80,83</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.signup.email-hint" datatype="html">
+        <source> We will send you a code to confirm the address. </source>
+        <target>Nous vous enverrons un code pour confirmer l'adresse.</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/signup-page/signup-page.component.html</context>
+          <context context-type="linenumber">95,98</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.signup.password" datatype="html">
+        <source>Password</source>
+        <target>Mot de passe</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/signup-page/signup-page.component.html</context>
+          <context context-type="linenumber">105,107</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.signup.terms" datatype="html">
+        <source>I accept Cadenway&apos;s <x id="START_LINK" ctype="x-a" equiv-text="&lt;a
+                [href]=&quot;site + &apos;/terms&apos;&quot;
+                class=&quot;font-medium text-primary underline-offset-4 hover:underline&quot;
+                &gt;"/>terms of use<x id="CLOSE_LINK" ctype="x-a" equiv-text="&lt;/a
+              &gt;"/> and <x id="START_LINK_1" equiv-text="&lt;a
+                [href]=&quot;site + &apos;/privacy&apos;&quot;
+                class=&quot;font-medium text-primary underline-offset-4 hover:underline&quot;
+                &gt;"/>privacy policy<x id="CLOSE_LINK" ctype="x-a" equiv-text="&lt;/a
+              &gt;"/>.</source>
+        <target>J'accepte les <x id="START_LINK" ctype="x-a" equiv-text="&lt;a
+                [href]=&quot;site + &apos;/terms&apos;&quot;
+                class=&quot;font-medium text-primary underline-offset-4 hover:underline&quot;
+                &gt;"/>conditions d'utilisation<x id="CLOSE_LINK" ctype="x-a" equiv-text="&lt;/a
+              &gt;"/> et la <x id="START_LINK_1" equiv-text="&lt;a
+                [href]=&quot;site + &apos;/privacy&apos;&quot;
+                class=&quot;font-medium text-primary underline-offset-4 hover:underline&quot;
+                &gt;"/>politique de confidentialité<x id="CLOSE_LINK" ctype="x-a" equiv-text="&lt;/a
+              &gt;"/> de Cadenway.</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/signup-page/signup-page.component.html</context>
+          <context context-type="linenumber">149,161</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.signup.terms-plain" datatype="html">
+        <source>I accept Cadenway&apos;s terms of use and privacy policy.</source>
+        <target>J'accepte les conditions d'utilisation et la politique de confidentialité de Cadenway.</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/signup-page/signup-page.component.html</context>
+          <context context-type="linenumber">167,170</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.signup.submit" datatype="html">
+        <source> Create my account </source>
+        <target>Créer mon compte</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/signup-page/signup-page.component.html</context>
+          <context context-type="linenumber">186,188</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.signup.invitation" datatype="html">
+        <source> Received an invitation? Open the link in the email: the organization will be joined automatically. </source>
+        <target>Vous avez reçu une invitation ? Ouvrez le lien de l'e-mail : l'organisation sera rejointe automatiquement.</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/signup-page/signup-page.component.html</context>
+          <context context-type="linenumber">191,195</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.signup.name-required" datatype="html">
+        <source>Enter your full name.</source>
+        <target>Saisissez votre nom complet.</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/signup-page/signup-page.component.ts</context>
+          <context context-type="linenumber">211</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.signup.terms-required" datatype="html">
+        <source>Accept the terms to create your account.</source>
+        <target>Acceptez les conditions pour créer votre compte.</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/signup-page/signup-page.component.ts</context>
+          <context context-type="linenumber">219</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.signup.email-taken" datatype="html">
+        <source>An account already uses this address: sign in.</source>
+        <target>Un compte existe déjà avec cette adresse : connectez-vous.</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/signup-page/signup-page.component.ts</context>
+          <context context-type="linenumber">312</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.signup-verify.heading" datatype="html">
+        <source> Confirm your email address </source>
+        <target>Confirmez votre adresse e-mail</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/signup-verify-page/signup-verify-page.component.html</context>
+          <context context-type="linenumber">9,11</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.signup-verify.submit" datatype="html">
+        <source>Confirm my address</source>
+        <target>Confirmer mon adresse</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/signup-verify-page/signup-verify-page.component.ts</context>
+          <context context-type="linenumber">146</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.sso.heading" datatype="html">
+        <source>SSO sign-in</source>
+        <target>Connexion SSO</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/sso-page/sso-page.component.html</context>
+          <context context-type="linenumber">4,5</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.sso.lead" datatype="html">
+        <source> Enter your work address: we redirect you to your organization&apos;s identity provider (SAML 2.0 or OpenID Connect). </source>
+        <target>Saisissez votre adresse professionnelle : nous vous redirigeons vers le fournisseur d'identité de votre organisation (SAML 2.0 ou OpenID Connect).</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/sso-page/sso-page.component.html</context>
+          <context context-type="linenumber">6,9</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.sso.email" datatype="html">
+        <source>Work email</source>
+        <target>E-mail professionnel</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/sso-page/sso-page.component.html</context>
+          <context context-type="linenumber">20,22</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.sso.placeholder" datatype="html">
+        <source>prenom.nom@entreprise.fr</source>
+        <target>prenom.nom@entreprise.fr</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/sso-page/sso-page.component.html</context>
+          <context context-type="linenumber">27,28</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.sso.submit" datatype="html">
+        <source> Continue with SSO </source>
+        <target>Continuer avec le SSO</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/sso-page/sso-page.component.html</context>
+          <context context-type="linenumber">51,53</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.sso.email-invalid" datatype="html">
+        <source>Enter your work address, for example prenom.nom@ateliernord.fr.</source>
+        <target>Saisissez votre adresse professionnelle, par exemple prenom.nom@ateliernord.fr.</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/sso-page/sso-page.component.ts</context>
+          <context context-type="linenumber">79</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.sso.no-sso" datatype="html">
+        <source>No SSO is set up for “<x id="domain" equiv-text="domain"/>”: use another sign-in method.</source>
+        <target>Aucun SSO n’est configuré pour « <x id="domain" equiv-text="domain"/> » : utilisez une autre méthode de connexion.</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/sso-page/sso-page.component.ts</context>
+          <context context-type="linenumber">138</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.two-step.heading" datatype="html">
+        <source> Two-step verification </source>
+        <target>Vérification en deux étapes</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/two-step-page/two-step-page.component.html</context>
+          <context context-type="linenumber">16,18</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.two-step.sign-in-again" datatype="html">
+        <source>Sign in again</source>
+        <target>Se reconnecter</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/two-step-page/two-step-page.component.html</context>
+          <context context-type="linenumber">35,38</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.two-step.methods" datatype="html">
+        <source>Verification method</source>
+        <target>Méthode de vérification</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/two-step-page/two-step-page.component.html</context>
+          <context context-type="linenumber">41,42</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.two-step.app-label" datatype="html">
+        <source>App code</source>
+        <target>Code de l'application</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/two-step-page/two-step-page.component.html</context>
+          <context context-type="linenumber">59,61</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/two-step-page/two-step-page.component.html</context>
+          <context context-type="linenumber">63,64</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.two-step.app-hint" datatype="html">
+        <source> The code changes every 30 seconds. Google Authenticator, 1Password, Aegis or Bitwarden work. </source>
+        <target>Le code change toutes les 30 secondes. Google Authenticator, 1Password, Aegis ou Bitwarden conviennent.</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/two-step-page/two-step-page.component.html</context>
+          <context context-type="linenumber">80,82</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.two-step.trust" datatype="html">
+        <source>Trust this device for 30 days</source>
+        <target>Faire confiance à cet appareil pendant 30 jours</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/two-step-page/two-step-page.component.html</context>
+          <context context-type="linenumber">90,92</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.two-step.verify-app" datatype="html">
+        <source> Verify (<x id="INTERPOLATION" equiv-text="{{ filled() }}"/> / 6) </source>
+        <target>Vérifier (<x id="INTERPOLATION" equiv-text="{{ filled() }}"/> / 6)</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/two-step-page/two-step-page.component.html</context>
+          <context context-type="linenumber">101,102</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.two-step.key-waiting" datatype="html">
+        <source> Touch your key or confirm with biometrics… </source>
+        <target>Touchez votre clé ou validez avec la biométrie…</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/two-step-page/two-step-page.component.html</context>
+          <context context-type="linenumber">118,119</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.two-step.key-one" datatype="html">
+        <source> 1 registered key: <x id="INTERPOLATION" equiv-text="{{ keys(challenge) }}"/>. </source>
+        <target>1 clé enregistrée : <x id="INTERPOLATION" equiv-text="{{ keys(challenge) }}"/>.</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/two-step-page/two-step-page.component.html</context>
+          <context context-type="linenumber">123,124</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.two-step.keys" datatype="html">
+        <source> <x id="INTERPOLATION" equiv-text="{{ challenge.securityKeys.length }}"/> registered keys: <x id="INTERPOLATION_1" equiv-text="{{ keys(challenge) }}"/>. </source>
+        <target><x id="INTERPOLATION" equiv-text="{{ challenge.securityKeys.length }}"/> clés enregistrées : <x id="INTERPOLATION_1" equiv-text="{{ keys(challenge) }}"/>.</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/two-step-page/two-step-page.component.html</context>
+          <context context-type="linenumber">127,128</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.two-step.use-key" datatype="html">
+        <source>Use my security key</source>
+        <target>Utiliser ma clé de sécurité</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/two-step-page/two-step-page.component.html</context>
+          <context context-type="linenumber">141,143</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.two-step.backup-label" datatype="html">
+        <source>Backup code</source>
+        <target>Code de secours</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/two-step-page/two-step-page.component.html</context>
+          <context context-type="linenumber">153,155</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.two-step.backup-left-one" datatype="html">
+        <source> You have 1 unused code left. Remember to generate new ones from your profile. </source>
+        <target>Il vous reste 1 code inutilisé. Pensez à en générer de nouveaux depuis votre profil.</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/two-step-page/two-step-page.component.html</context>
+          <context context-type="linenumber">167,169</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.two-step.backup-left" datatype="html">
+        <source> You have <x id="INTERPOLATION" equiv-text="{{ challenge.backupCodesRemaining }}"/> unused codes left. Remember to generate new ones from your profile. </source>
+        <target>Il vous reste <x id="INTERPOLATION" equiv-text="{{ challenge.backupCodesRemaining }}"/> codes inutilisés. Pensez à en générer de nouveaux depuis votre profil.</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/two-step-page/two-step-page.component.html</context>
+          <context context-type="linenumber">171,172</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.two-step.verify-backup" datatype="html">
+        <source> Verify the code </source>
+        <target>Vérifier le code</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/two-step-page/two-step-page.component.html</context>
+          <context context-type="linenumber">184,186</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.two-step.no-method" datatype="html">
+        <source> No access to any method anymore? Ask your organization&apos;s administrator for a reset. </source>
+        <target>Plus accès à aucune méthode ? Demandez une réinitialisation à l'administrateur de votre organisation.</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/two-step-page/two-step-page.component.html</context>
+          <context context-type="linenumber">193,195</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.two-step.other-account" datatype="html">
+        <source> Use another account </source>
+        <target>Utiliser un autre compte</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/two-step-page/two-step-page.component.html</context>
+          <context context-type="linenumber">204,207</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.two-step.code-invalid" datatype="html">
+        <source>Wrong code. Check the code of your app.</source>
+        <target>Code incorrect. Vérifiez le code de votre application.</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/two-step-page/two-step-page.component.ts</context>
+          <context context-type="linenumber">278</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.two-step.key-refused" datatype="html">
+        <source>This key was not recognized.</source>
+        <target>Clé non reconnue.</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/two-step-page/two-step-page.component.ts</context>
+          <context context-type="linenumber">280</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/two-step-page/two-step-page.component.ts</context>
+          <context context-type="linenumber">287</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.two-step.locked" datatype="html">
+        <source>Too many attempts. Try again later.</source>
+        <target>Trop de tentatives. Réessayez plus tard.</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/two-step-page/two-step-page.component.ts</context>
+          <context context-type="linenumber">282</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.two-step.expired" datatype="html">
+        <source>The verification expired. Sign in again.</source>
+        <target>La vérification a expiré. Connectez-vous à nouveau.</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/two-step-page/two-step-page.component.ts</context>
+          <context context-type="linenumber">284</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.two-step.lead-app" datatype="html">
+        <source>Enter the 6-digit code shown by your authenticator app.</source>
+        <target>Saisissez le code à 6 chiffres affiché par votre application d'authentification.</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/two-step-page/two-step-page.component.ts</context>
+          <context context-type="linenumber">302</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.two-step.lead-key" datatype="html">
+        <source>Use a security key or the biometrics registered on this account (WebAuthn).</source>
+        <target>Utilisez une clé de sécurité ou la biométrie enregistrée sur ce compte (WebAuthn).</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/two-step-page/two-step-page.component.ts</context>
+          <context context-type="linenumber">303</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.two-step.lead-backup" datatype="html">
+        <source>Enter one of your backup codes. Each code works only once.</source>
+        <target>Saisissez un de vos codes de secours. Chaque code ne sert qu’une fois.</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/two-step-page/two-step-page.component.ts</context>
+          <context context-type="linenumber">304</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.two-step.tab-app" datatype="html">
+        <source>App</source>
+        <target>Application</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/two-step-page/two-step-page.component.ts</context>
+          <context context-type="linenumber">317</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.two-step.tab-key" datatype="html">
+        <source>Security key</source>
+        <target>Clé de sécurité</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/two-step-page/two-step-page.component.ts</context>
+          <context context-type="linenumber">318</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="auth.two-step.tab-backup" datatype="html">
+        <source>Backup code</source>
+        <target>Code de secours</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/ui/pages/two-step-page/two-step-page.component.ts</context>
+          <context context-type="linenumber">319</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="errors.not-found.route-title" datatype="html">
+        <source>Page not found</source>
+        <target>Page introuvable</target>
+      </trans-unit>
+      <trans-unit id="errors.boundary.loading" datatype="html">
+        <source> Loading… </source>
+        <target>Chargement…</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/errors/ui/components/route-error-boundary/route-error-boundary.component.html</context>
+          <context context-type="linenumber">17,20</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="errors.unavailable.title" datatype="html">
+        <source>Could not load this page</source>
+        <target>Impossible de charger cette page</target>
+      </trans-unit>
+      <trans-unit id="errors.unavailable.retry" datatype="html">
+        <source>Retry</source>
+        <target>Réessayer</target>
+      </trans-unit>
+      <trans-unit id="errors.not-found.code" datatype="html">
+        <source> Error 404 </source>
+        <target>Erreur 404</target>
+      </trans-unit>
+      <trans-unit id="errors.not-found.title" datatype="html">
+        <source> Page not found </source>
+        <target>Page introuvable</target>
+      </trans-unit>
+      <trans-unit id="errors.not-found.text" datatype="html">
+        <source> The link is incomplete, or the page was moved or deleted. Check the address or search for what you wanted to open. </source>
+        <target>Le lien est incomplet, ou la page a été déplacée ou supprimée. Vérifiez l’adresse ou cherchez ce que vous vouliez ouvrir.</target>
+      </trans-unit>
+      <trans-unit id="errors.back-home" datatype="html">
+        <source>Back to home</source>
+        <target>Retour à l’accueil</target>
+      </trans-unit>
+      <trans-unit id="errors.access-denied.code" datatype="html">
+        <source> Access denied </source>
+        <target>Accès refusé</target>
+      </trans-unit>
+      <trans-unit id="errors.access-denied.title" datatype="html">
+        <source> You do not have access to this space </source>
+        <target>Vous n’avez pas accès à cet espace</target>
+      </trans-unit>
+      <trans-unit id="errors.access-denied.private-space" datatype="html">
+        <source>“<x id="INTERPOLATION" equiv-text="{{ resource.name }}"/>” is a private space.</source>
+        <target>« <x id="INTERPOLATION" equiv-text="{{ resource.name }}"/> » est un espace privé.</target>
+      </trans-unit>
+      <trans-unit id="errors.access-denied.owner-can-add" datatype="html">
+        <source><x id="INTERPOLATION" equiv-text="{{ resource.ownerName }}"/>, its owner, can add you.</source>
+        <target><x id="INTERPOLATION" equiv-text="{{ resource.ownerName }}"/>, sa propriétaire, peut vous y ajouter.</target>
+      </trans-unit>
+      <trans-unit id="errors.access-denied.sent" datatype="html">
+        <source>Request sent</source>
+        <target>Demande envoyée</target>
+      </trans-unit>
+      <trans-unit id="errors.deleted-task.code" datatype="html">
+        <source> Task deleted </source>
+        <target>Tâche supprimée</target>
+      </trans-unit>
+      <trans-unit id="errors.deleted-task.title" datatype="html">
+        <source> This task has been deleted </source>
+        <target>Cette tâche a été supprimée</target>
+      </trans-unit>
+      <trans-unit id="errors.deleted-task.text" datatype="html">
+        <source> <x id="INTERPOLATION" equiv-text="{{ task.key }}"/> “<x id="INTERPOLATION_1" equiv-text="{{ task.name }}"/>” has been deleted. It stays in the trash for 30 days before being erased. </source>
+        <target><x id="INTERPOLATION" equiv-text="{{ task.key }}"/> « <x id="INTERPOLATION_1" equiv-text="{{ task.name }}"/> » a été supprimée. Elle reste 30 jours dans la corbeille avant d’être effacée.</target>
+      </trans-unit>
+      <trans-unit id="errors.deleted-task.already-restored" datatype="html">
+        <source>Already restored</source>
+        <target>Déjà restaurée</target>
+      </trans-unit>
+      <trans-unit id="errors.deleted-task.restore" datatype="html">
+        <source>Restore the task</source>
+        <target>Restaurer la tâche</target>
+      </trans-unit>
+      <trans-unit id="errors.deleted-task.open-trash" datatype="html">
+        <source>Open the trash</source>
+        <target>Ouvrir la corbeille</target>
+      </trans-unit>
+      <trans-unit id="errors.unavailable.text" datatype="html">
+        <source> The server did not answer in time. Your data is not lost: try again in a moment. </source>
+        <target>Le serveur n’a pas répondu à temps. Vos données ne sont pas perdues : réessayez dans un instant.</target>
+      </trans-unit>
+      <trans-unit id="errors.unavailable.status" datatype="html">
+        <source>Error <x id="INTERPOLATION" equiv-text="{{ code }}"/></source>
+        <target>Erreur <x id="INTERPOLATION" equiv-text="{{ code }}"/></target>
+      </trans-unit>
+      <trans-unit id="errors.unavailable.reference" datatype="html">
+        <source>ref. <x id="INTERPOLATION" equiv-text="{{ reference }}"/></source>
+        <target>réf. <x id="INTERPOLATION" equiv-text="{{ reference }}"/></target>
+      </trans-unit>
+      <trans-unit id="errors.access-denied.message-label" datatype="html">
+        <source>Message for <x id="INTERPOLATION" equiv-text="{{ owner }}"/> <x id="START_TAG_SPAN" ctype="x-span" equiv-text="&lt;span class=&quot;font-normal text-muted-foreground&quot;&gt;"/>(optional)<x id="CLOSE_TAG_SPAN" ctype="x-span" equiv-text="&lt;/span&gt;"/></source>
+        <target>Message pour <x id="INTERPOLATION" equiv-text="{{ owner }}"/> <x id="START_TAG_SPAN" ctype="x-span" equiv-text="&lt;span class=&quot;font-normal text-muted-foreground&quot;&gt;"/>(facultatif)<x id="CLOSE_TAG_SPAN" ctype="x-span" equiv-text="&lt;/span&gt;"/></target>
+      </trans-unit>
+      <trans-unit id="errors.access-denied.message-label-anonymous" datatype="html">
+        <source>Message <x id="START_TAG_SPAN" ctype="x-span" equiv-text="&lt;span class=&quot;font-normal text-muted-foreground&quot;&gt;"/>(optional)<x id="CLOSE_TAG_SPAN" ctype="x-span" equiv-text="&lt;/span&gt;"/></source>
+        <target>Message <x id="START_TAG_SPAN" ctype="x-span" equiv-text="&lt;span class=&quot;font-normal text-muted-foreground&quot;&gt;"/>(facultatif)<x id="CLOSE_TAG_SPAN" ctype="x-span" equiv-text="&lt;/span&gt;"/></target>
+      </trans-unit>
+      <trans-unit id="errors.access-denied.request" datatype="html">
+        <source>Request access</source>
+        <target>Demander l’accès</target>
+      </trans-unit>
+      <trans-unit id="home.route.title" datatype="html">
+        <source>Home</source>
+        <target>Accueil</target>
+      </trans-unit>
+      <trans-unit id="home.header.greeting" datatype="html">
+        <source> Hello <x id="INTERPOLATION" equiv-text="{{ firstName() }}"/> </source>
+        <target>Bonjour <x id="INTERPOLATION" equiv-text="{{ firstName() }}"/></target>
+      </trans-unit>
+      <trans-unit id="home.notice.logo-upload-failed" datatype="html">
+        <source>The organization was created, but its logo could not be uploaded. You can add it later from the organization settings.</source>
+        <target>L’organisation a été créée, mais son logo n’a pas pu être importé. Vous pourrez l’ajouter plus tard depuis les réglages de l’organisation.</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/home/ui/pages/home-page/home-page.component.html</context>
+          <context context-type="linenumber">23,26</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="home.notice.close" datatype="html">
+        <source>Close</source>
+        <target>Fermer</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/home/ui/pages/home-page/home-page.component.ts</context>
+          <context context-type="linenumber">82</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="workspace.organization-switcher.label" datatype="html">
+        <source>Switch organization: <x id="INTERPOLATION" equiv-text="{{ workspace().organization().name }}"/></source>
+        <target>Changer d’organisation : <x id="INTERPOLATION" equiv-text="{{ workspace().organization().name }}"/></target>
+      </trans-unit>
+      <trans-unit id="layouts.app-shell.rail" datatype="html">
+        <source>Applications</source>
+        <target>Applications</target>
+      </trans-unit>
+      <trans-unit id="layouts.app-shell.sidebar" datatype="html">
+        <source>Space navigation</source>
+        <target>Navigation des espaces</target>
+      </trans-unit>
+      <trans-unit id="layouts.app-shell.sidebar-close" datatype="html">
+        <source>Close the sidebar</source>
+        <target>Fermer la barre latérale</target>
+      </trans-unit>
+      <trans-unit id="layouts.app-shell.sidebar-collapse" datatype="html">
+        <source>Collapse the sidebar</source>
+        <target>Replier la barre latérale</target>
+      </trans-unit>
+      <trans-unit id="layouts.app-shell.sidebar-expand" datatype="html">
+        <source>Expand the sidebar</source>
+        <target>Déplier la barre latérale</target>
+      </trans-unit>
+      <trans-unit id="layouts.auth-layout.home-link" datatype="html">
+        <source>Cadenway, sign-in page</source>
+        <target>Cadenway, page de connexion</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/layouts/auth-layout/auth-layout.component.html</context>
+          <context context-type="linenumber">5,6</context>
+        </context-group>
+      </trans-unit>
     </body>
   </file>
 </xliff>

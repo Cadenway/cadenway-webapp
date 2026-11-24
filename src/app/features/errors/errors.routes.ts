@@ -1,26 +1,27 @@
+import type { Type } from '@angular/core';
 import type { Routes } from '@angular/router';
 import { provideCadenwayIcons } from '@cadenway/icons';
 
-import { requireOrganization } from '@features/auth';
+import { NotFoundRouteError } from '@shared/route-errors';
 
 /**
  * Constant ERRORS_ROUTES
  *
  * @description
- * Protects the application fallback with the same access check as other workspace routes.
+ * The 404 of an unknown address, mounted after the known routes at the root and inside a
+ * workspace, where it renders in the shell. The page keeps the unknown address in the browser and
+ * makes no lookup; its `error` input comes from the route `data`.
  *
  * @type {Routes}
  */
 export const ERRORS_ROUTES: Routes = [
   {
-    path: '',
+    path: '**',
     providers: provideCadenwayIcons(),
-    canActivate: [requireOrganization],
-    runGuardsAndResolvers: 'always',
-    title: 'Page introuvable',
-    loadComponent: () =>
-      import('./ui/pages/not-found-page/not-found-page.component').then(
-        (entry) => entry.NotFoundPage,
-      ),
+    title: $localize`:@@errors.not-found.route-title:Page not found`,
+    data: { error: new NotFoundRouteError() },
+    loadComponent: async (): Promise<Type<unknown>> =>
+      (await import('./ui/components/route-error-boundary/route-error-boundary.component'))
+        .RouteErrorBoundary,
   },
 ];

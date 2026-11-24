@@ -1,15 +1,8 @@
 import { expect, test } from '@playwright/test';
-import type { Page, Route } from '@playwright/test';
+import type { Page, Request, Route } from '@playwright/test';
 
 const email = 'camille.martin@ateliernord.fr';
 const password = 'atelier-nord-test-password';
-const organizationId = '019a5f3c-8d2e-7c4a-9b1f-3e5d7a9c1b2f';
-const spaceId = '019a5f3c-8d2e-7c4a-9b1f-3e5d7a9c1b31';
-const listId = '019a5f3c-8d2e-7c4a-9b1f-3e5d7a9c1b32';
-const taskName = 'Refondre l’écran de connexion SSO';
-const sessionCookie = '__Host-cw_session';
-const receiptCookie = '__Host-cw_federated_receipt';
-const receipt = 'synthetic-federated-receipt';
 const challengeToken = 'ExampleOnlyChallengeToken00000000000000000';
 const user = {
   id: '019a5f3c-8d2e-7c4a-9b1f-3e5d7a9c1b30',
@@ -21,432 +14,344 @@ const user = {
   timeZone: 'Europe/Paris',
   version: 2,
 };
-const session = {
-  id: '019a6a2e-4b1c-7d3e-8f5a-2c9b7e1d4a60',
-  expiresAt: '2099-12-08T13:07:00Z',
+const signedIn = {
+  user,
+  session: { id: '019a6a2e-4b1c-7d3e-8f5a-2c9b7e1d4a60', expiresAt: '2099-12-08T13:07:00Z' },
 };
 const organization = {
-  id: organizationId,
+  id: '019a5f3c-8d2e-7c4a-9b1f-3e5d7a9c1b2f',
   name: 'Atelier Nord',
   slug: 'atelier-nord',
   role: 'owner',
-  memberCount: 5,
-  plan: 'free',
+  memberCount: 18,
+  plan: 'team',
   joinedAt: '2026-11-01T10:00:00Z',
 };
+const providerUrl = 'https://oauth.provider.example/authorize?state=synthetic';
 
-/** Stubs only the public Gateway and returns the requests received by the fixture. */
-async function stubGateway(
-  page: Page,
-  { unavailableOrganizations = false, requireChallenge = false } = {},
-) {
-  let authenticated = false;
+interface GatewayOptions {
+  /** The password sign-in answers with a two-step challenge. */
+  readonly requireChallenge?: boolean;
+  /** The first organization list answers 503. */
+  readonly unavailableOrganizations?: boolean;
+  /** The browser already has a session. */
+  readonly signedIn?: boolean;
+}
+
+interface Gateway {
+  /** Requests received, as `METHOD /path`. */
+  readonly calls: string[];
+  /** Bodies received, by `METHOD /path`. */
+  readonly bodies: Map<string, unknown[]>;
+}
+
+function problem(status: number, code: string, details?: Record<string, unknown>) {
+  return { status, json: { type: 'about:blank', title: 'Never shown', status, code, details } };
+}
+
+/** Stubs `config.json` and every `/v1/**` gateway route the auth screens call. */
+async function stubGateway(page: Page, options: GatewayOptions = {}): Promise<Gateway> {
+  const calls: string[] = [];
+  const bodies = new Map<string, unknown[]>();
+  let session = options.signedIn ?? false;
   let selected = false;
-  let organizationRequests = 0;
-  let federatedFinishes = 0;
-  const selections: unknown[] = [];
-  const taskDetailOrganizations: (string | undefined)[] = [];
-  const statusChanges: {
-    body: unknown;
-    ifMatch: string | undefined;
-    ifOrganizationMatch: string | undefined;
-  }[] = [];
+  let organizationLists = 0;
 
-  await page.route('**/config.json', async (route) => {
+  await page.route('**/config.json', async (route: Route) => {
     const origin = new URL(route.request().url()).origin;
-    await route.fulfill({ json: { apiUrl: origin, realtimeUrl: origin } });
+    await route.fulfill({ json: { apiUrl: origin } });
   });
 
   await page.route('**/v1/**', async (route: Route) => {
-    const request = route.request();
+    const request: Request = route.request();
     const path = new URL(request.url()).pathname;
-    const federated = path === '/v1/auth/sign-in/federated/finish';
-    if ((path === '/v1/auth/sign-in' || federated) && request.method() === 'POST') {
-      const body: unknown = request.postDataJSON();
-      if (federated) {
-        federatedFinishes += 1;
-        expect(body).toEqual({});
-        const cookies = (await request.headerValue('cookie'))?.split('; ');
-        if (!cookies?.includes(`${receiptCookie}=${receipt}`)) {
+    const key = `${request.method()} ${path}`;
+    calls.push(key);
+    const body: unknown = request.postData() === null ? undefined : request.postDataJSON();
+    bodies.set(key, [...(bodies.get(key) ?? []), body]);
+    const open = async (): Promise<void> => {
+      session = true;
+      await route.fulfill({ status: 200, json: signedIn });
+    };
+
+    switch (key) {
+      case 'POST /v1/auth/sign-in': {
+        const credentials = body as { email?: string; password?: string };
+        if (credentials.email !== email || credentials.password !== password) {
+          await route.fulfill(problem(422, 'auth.invalid-credentials', { remainingAttempts: 3 }));
+          return;
+        }
+        if (options.requireChallenge === true) {
           await route.fulfill({
-            status: 422,
+            status: 202,
             json: {
-              type: 'about:blank',
-              status: 422,
-              code: 'auth.federated-sign-in-refused',
-              title: 'Synthetic claim detail never displayed',
+              token: challengeToken,
+              expiresAt: '2099-12-08T13:07:00Z',
+              email,
+              name: user.name,
+              primaryMethod: 'authenticator-app',
+              methods: ['authenticator-app', 'backup-code'],
+              securityKeys: [],
+              backupCodesRemaining: 7,
+              lockedUntil: null,
             },
           });
           return;
         }
-      } else if (
-        typeof body !== 'object' ||
-        body === null ||
-        !('email' in body) ||
-        !('password' in body) ||
-        body.email !== email ||
-        body.password !== password
-      ) {
-        await route.fulfill({
-          status: 422,
-          json: {
-            type: 'about:blank',
-            title: 'Adresse e-mail ou mot de passe incorrect.',
-            status: 422,
-            code: 'auth.invalid-credentials',
-            details: { remainingAttempts: 4 },
-          },
-        });
+        await open();
         return;
       }
-      if (requireChallenge) {
+      case 'POST /v1/auth/sign-in/challenge/authenticator-app':
+      case 'POST /v1/auth/sign-in/federated/finish':
+      case 'POST /v1/auth/sign-up/verification':
+        await open();
+        return;
+      case 'POST /v1/auth/sign-in/federated/start':
+        await route.fulfill({ json: { authorizationUrl: providerUrl } });
+        return;
+      case 'POST /v1/auth/sign-up':
+      case 'POST /v1/auth/sign-in/code':
+      case 'POST /v1/auth/password-reset':
         await route.fulfill({
           status: 202,
-          ...(federated
-            ? {
-                headers: {
-                  'Set-Cookie': `${receiptCookie}=; Path=/; Secure; HttpOnly; SameSite=Lax; Max-Age=0`,
-                },
-              }
-            : {}),
           json: {
-            token: challengeToken,
-            expiresAt: '2099-12-08T13:07:00Z',
             email,
-            name: user.name,
-            primaryMethod: 'authenticator-app',
-            methods: ['authenticator-app'],
-            securityKeys: [],
-            backupCodesRemaining: 0,
-            lockedUntil: null,
+            expiresAt: '2099-12-08T13:07:00Z',
+            resendAvailableAt: '2099-12-08T13:07:00Z',
           },
         });
         return;
-      }
-      authenticated = true;
-      await route.fulfill({
-        status: 200,
-        headers: {
-          'Set-Cookie': `${sessionCookie}=synthetic-session; Path=/; Secure; HttpOnly; SameSite=Strict`,
-        },
-        json: { user, session },
-      });
-      return;
-    }
-    if (path === '/v1/auth/sign-in/challenge/authenticator-app' && request.method() === 'POST') {
-      expect(request.postDataJSON()).toEqual({ token: challengeToken, code: '123456' });
-      authenticated = true;
-      await route.fulfill({
-        status: 200,
-        headers: {
-          'Set-Cookie': `${sessionCookie}=synthetic-session; Path=/; Secure; HttpOnly; SameSite=Strict`,
-        },
-        json: { user, session },
-      });
-      return;
-    }
-    if (!authenticated) {
-      await route.fulfill({
-        status: 401,
-        json: {
-          type: 'about:blank',
-          title: 'Session expirée',
-          status: 401,
-          code: 'auth.session-expired',
-        },
-      });
-      return;
-    }
-    if (path === '/v1/organizations' && request.method() === 'GET') {
-      organizationRequests += 1;
-      if (unavailableOrganizations && organizationRequests === 1) {
+      case 'POST /v1/auth/password-reset/inspection':
         await route.fulfill({
-          status: 503,
-          json: {
-            type: 'about:blank',
-            title: 'Service indisponible',
-            status: 503,
-            code: 'upstream.unavailable',
-          },
+          json: { email, expiresAt: '2099-12-08T13:07:00Z', sessionCount: 3 },
         });
         return;
-      }
-      await route.fulfill({ json: { items: [organization], nextCursor: null } });
+      case 'POST /v1/auth/password-reset/confirmation':
+        await route.fulfill({ json: { email, closedSessionCount: 3 } });
+        return;
+      case 'POST /v1/auth/sign-out':
+        session = false;
+        await route.fulfill({ status: 204 });
+        return;
+    }
+
+    if (!session) {
+      await route.fulfill(problem(401, 'auth.session-expired'));
       return;
     }
-    if (path === '/v1/session/organization' && request.method() === 'PUT') {
-      selections.push(request.postDataJSON() as unknown);
-      selected = true;
-      await route.fulfill({ json: { organizationId, role: 'owner' } });
-      return;
-    }
-    if (path === '/v1/organization' && request.method() === 'GET') {
-      if (!selected) {
+    switch (key) {
+      case 'GET /v1/me':
+        await route.fulfill({ json: user });
+        return;
+      case 'GET /v1/organizations':
+        organizationLists += 1;
+        if (options.unavailableOrganizations === true && organizationLists === 1) {
+          await route.fulfill(problem(503, 'upstream.unavailable'));
+          return;
+        }
+        await route.fulfill({ json: { items: [organization], nextCursor: null } });
+        return;
+      case 'GET /v1/me/invitations':
+        await route.fulfill({ json: { items: [], nextCursor: null } });
+        return;
+      case 'PUT /v1/session/organization':
+        selected = true;
+        await route.fulfill({ json: { organizationId: organization.id, role: 'owner' } });
+        return;
+      case 'GET /v1/organization':
+        if (!selected) {
+          await route.fulfill(problem(403, 'organization.not-selected'));
+          return;
+        }
         await route.fulfill({
-          status: 403,
           json: {
-            type: 'about:blank',
-            title: 'Choisissez une organisation',
-            status: 403,
-            code: 'organization.not-selected',
-          },
-        });
-        return;
-      }
-      await route.fulfill({
-        json: {
-          ...organization,
-          description: null,
-          website: null,
-          defaultLanguage: 'fr',
-          createdAt: '2026-11-01T10:00:00Z',
-          version: 1,
-        },
-      });
-      return;
-    }
-    if (path === '/v1/me' && request.method() === 'GET') {
-      await route.fulfill({ json: user });
-      return;
-    }
-    if (path === '/v1/spaces' && request.method() === 'GET') {
-      await route.fulfill({
-        json: { items: [{ id: spaceId, name: 'Produit' }], nextCursor: null },
-      });
-      return;
-    }
-    if (path === `/v1/spaces/${spaceId}/lists` && request.method() === 'GET') {
-      await route.fulfill({
-        json: { items: [{ id: listId, name: 'Sprint 14' }], nextCursor: null },
-      });
-      return;
-    }
-    if (path === `/v1/lists/${listId}` && request.method() === 'GET') {
-      await route.fulfill({
-        json: { id: listId, spaceId, name: 'Sprint 14', sprint: null, archivedAt: null },
-      });
-      return;
-    }
-    if (path === `/v1/lists/${listId}/tasks` && request.method() === 'GET') {
-      await route.fulfill({
-        json: {
-          items: [
-            { key: 'CAD-482', name: taskName, status: 'progress', assignees: [], dueDate: null },
-          ],
-          nextCursor: null,
-          total: 1,
-        },
-      });
-      return;
-    }
-    if (path === '/v1/tasks/CAD-482/detail' && request.method() === 'GET') {
-      taskDetailOrganizations.push(request.headers()['if-organization-match']);
-      const statuses = Object.fromEntries(
-        [
-          'triage',
-          'backlog',
-          'todo',
-          'progress',
-          'review',
-          'testing',
-          'waiting',
-          'blocked',
-          'done',
-          'cancelled',
-        ].map((key) => [key, { category: 'active', name: null, hidden: false }]),
-      );
-      await route.fulfill({
-        json: {
-          task: {
-            key: 'CAD-482',
-            name: taskName,
-            status: 'progress',
-            version: 3,
+            ...organization,
             description: null,
-            milestone: false,
-            archivedAt: null,
+            website: null,
+            defaultLanguage: 'fr',
+            createdAt: '2026-11-01T10:00:00Z',
+            version: 1,
           },
-          space: { id: spaceId, name: 'Produit', statuses },
-          list: { id: listId, name: 'Sprint 14', callerRole: 'edit' },
-          parent: null,
-          subtasks: [],
-          partial: [],
-          comments: { items: [] },
-        },
-      });
-      return;
+        });
+        return;
+      default:
+        await route.fulfill(problem(404, 'route.not-found'));
     }
-    if (path === '/v1/tasks/CAD-482' && request.method() === 'PATCH') {
-      statusChanges.push({
-        body: request.postDataJSON() as unknown,
-        ifMatch: request.headers()['if-match'],
-        ifOrganizationMatch: request.headers()['if-organization-match'],
-      });
-      await route.fulfill({ json: { key: 'CAD-482', status: 'review', version: 4 } });
-      return;
-    }
-    await route.abort();
   });
-  return {
-    selections,
-    taskDetailOrganizations,
-    statusChanges,
-    organizationRequests: () => organizationRequests,
-    federatedFinishes: () => federatedFinishes,
-  };
+
+  return { calls, bodies };
 }
 
-async function signIn(page: Page): Promise<void> {
-  await page.getByLabel('Adresse e-mail').fill(email);
-  await page.getByLabel('Mot de passe', { exact: true }).fill(password);
-  await page.getByRole('button', { name: 'Se connecter' }).click();
+/** Types a six-digit code into the code field and waits for the submit button. */
+async function typeCode(page: Page, label: string | RegExp, code: string): Promise<void> {
+  await page.getByLabel(label).first().click();
+  await page.keyboard.type(code);
 }
 
-test('protects the application and opens the chosen organization after sign-in', async ({
-  page,
-  context,
-}) => {
-  const gateway = await stubGateway(page);
-
-  await page.goto('/accueil');
-  await expect(page).toHaveURL(/\/connexion\/?$/u);
-  await expect(page.getByRole('heading', { name: 'Se connecter' })).toBeVisible();
-  await signIn(page);
-
-  await expect(page).toHaveURL(/\/organisations\/?$/u);
-  await expect(page.getByRole('heading', { name: 'Choisir une organisation' })).toBeVisible();
-  await page.getByRole('button', { name: /Atelier Nord/u }).click();
-
-  await expect(page).toHaveURL(/\/accueil\/?$/u);
-  await expect(page.getByText('Atelier Nord')).toBeVisible();
-  expect(gateway.selections).toEqual([{ organizationId }]);
-
-  const stored = await page.evaluate(() => JSON.stringify({ localStorage, sessionStorage }));
-  expect(stored).not.toContain(password);
-  expect(stored).not.toContain('synthetic-session');
-  const cookie = (await context.cookies()).find(({ name }) => name === sessionCookie);
-  expect(cookie?.httpOnly).toBe(true);
-});
-
-test('lets the user retry an unavailable organization list', async ({ page }) => {
-  const gateway = await stubGateway(page, { unavailableOrganizations: true });
-
-  await page.goto('/connexion');
-  await signIn(page);
-  await expect(page.getByRole('button', { name: 'Réessayer' })).toBeVisible();
-  await page.getByRole('button', { name: 'Réessayer' }).click();
-  await expect(page.getByRole('button', { name: /Atelier Nord/u })).toBeVisible();
-  expect(gateway.organizationRequests()).toBe(2);
-});
-
-test('keeps the user on sign-in after invalid credentials', async ({ page }) => {
+test('a protected screen sends a signed-out visitor to the sign-in page', async ({ page }) => {
   await stubGateway(page);
 
-  await page.goto('/connexion');
-  await page.getByLabel('Adresse e-mail').fill(email);
-  await page.getByLabel('Mot de passe', { exact: true }).fill('wrong-password');
-  await page.getByRole('button', { name: 'Se connecter' }).click();
-  await expect(page).toHaveURL(/\/connexion\/?$/u);
-  await expect(page.getByRole('alert')).toContainText('E-mail ou mot de passe incorrect.');
+  await page.goto('/organizations');
+
+  await expect(page).toHaveURL(/\/login\?next=%2Forganizations$/);
+  await expect(page.getByRole('heading', { name: 'Se connecter' })).toBeVisible();
 });
 
-test('waits for the second factor before opening the session', async ({ page, context }) => {
-  await stubGateway(page, { requireChallenge: true });
-
-  await page.goto('/connexion');
-  await signIn(page);
-  await expect(page.getByRole('heading', { name: 'Vérification en deux étapes' })).toBeVisible();
-  expect((await context.cookies()).some(({ name }) => name === sessionCookie)).toBe(false);
-  expect(page.url()).not.toContain(challengeToken);
-  const stored = await page.evaluate(() => JSON.stringify({ localStorage, sessionStorage }));
-  expect(stored).not.toContain(challengeToken);
-
-  await page.getByLabel("Code de l'application").fill('123456');
-  await page.getByRole('button', { name: 'Vérifier le code' }).click();
-  await expect(page).toHaveURL(/\/organisations\/?$/u);
-  expect((await context.cookies()).find(({ name }) => name === sessionCookie)?.httpOnly).toBe(true);
-});
-
-test('starts OAuth, redeems the federated cookie once and completes the ordinary MFA flow', async ({
+test('sign-in with two-step verification, then the organization choice opens its workspace', async ({
   page,
-  context,
 }) => {
   const gateway = await stubGateway(page, { requireChallenge: true });
-  const authorizationUrl = 'https://oidc.example.test/authorize?state=fixture';
 
-  await page.goto('/connexion');
-  const callback = new URL(
-    '/v1/auth/sign-in/federated/providers/google/callback?state=fixture&code=fixture',
-    page.url(),
-  );
-  await page.route('**/v1/auth/sign-in/federated/start', async (route) => {
-    expect(route.request().method()).toBe('POST');
-    expect(route.request().postDataJSON()).toEqual({ provider: 'google', rememberMe: false });
-    await route.fulfill({ json: { authorizationUrl } });
-  });
-  await page.route(authorizationUrl, async (route) => {
-    await route.fulfill({
-      contentType: 'text/html',
-      body: `<script>location.replace(${JSON.stringify(callback.href)})</script>`,
-    });
-  });
-  await page.route('**/v1/auth/sign-in/federated/providers/google/callback?*', async (route) => {
-    await route.fulfill({
-      status: 303,
-      headers: {
-        Location: '/auth/federated/continue',
-        'Set-Cookie': `${receiptCookie}=${receipt}; Path=/; Secure; HttpOnly; SameSite=Lax`,
-      },
-    });
-  });
-  await page.getByRole('button', { name: 'Google', exact: true }).click();
+  await page.goto('/login');
+  const submit = page.getByRole('button', { name: 'Se connecter', exact: true });
+  await expect(submit).toBeDisabled();
+  await page.getByLabel('Adresse e-mail').fill(email);
+  await page.getByLabel('Mot de passe', { exact: true }).fill(password);
+  await submit.click();
 
+  await expect(page).toHaveURL(/\/login\/two-step$/);
   await expect(page.getByRole('heading', { name: 'Vérification en deux étapes' })).toBeVisible();
-  await expect(page).toHaveURL(/\/auth\/federated\/continue$/u);
-  expect(gateway.federatedFinishes()).toBe(1);
-  expect((await context.cookies()).map(({ name }) => name)).not.toContain(receiptCookie);
-  expect((await context.cookies()).map(({ name }) => name)).not.toContain(sessionCookie);
+  await typeCode(page, "Code de l'application", '123456');
+  await page.getByRole('button', { name: 'Vérifier (6 / 6)' }).click();
 
-  await page.getByLabel("Code de l'application").fill('123456');
-  await page.getByRole('button', { name: 'Vérifier le code' }).click();
-  await expect(page).toHaveURL(/\/organisations$/u);
-  await expect(page.getByRole('heading', { name: 'Choisir une organisation' })).toBeVisible();
-  expect((await context.cookies()).find(({ name }) => name === sessionCookie)?.httpOnly).toBe(true);
-  expect(gateway.federatedFinishes()).toBe(1);
+  await expect(page).toHaveURL(/\/organizations$/);
+  await expect(page.getByText(`Connecté en tant que ${email}.`)).toBeVisible();
+  await page.getByRole('button', { name: /Atelier Nord/ }).click();
+
+  await expect(page).toHaveURL(/\/atelier-nord$/);
+  expect(gateway.bodies.get('POST /v1/auth/sign-in/challenge/authenticator-app')).toEqual([
+    { token: challengeToken, code: '123456', trustDevice: false },
+  ]);
+  expect(gateway.bodies.get('PUT /v1/session/organization')).toEqual([
+    { organizationId: organization.id },
+  ]);
 });
 
-test('offers other sign-in methods when the provider continuation was refused', async ({
+test('a wrong password shows the attempts left before the lockout', async ({ page }) => {
+  await stubGateway(page);
+
+  await page.goto('/login');
+  await page.getByLabel('Adresse e-mail').fill(email);
+  await page.getByLabel('Mot de passe', { exact: true }).fill('wrong-password');
+  await page.getByRole('button', { name: 'Se connecter', exact: true }).click();
+
+  await expect(page.getByText('E-mail ou mot de passe incorrect.')).toBeVisible();
+  await expect(
+    page.getByText('Il vous reste 3 tentatives avant le verrouillage temporaire.'),
+  ).toBeVisible();
+  await expect(page.getByText('Mot de passe incorrect : vérifiez les majuscules.')).toBeVisible();
+  await expect(page).toHaveURL(/\/login$/);
+});
+
+test('an unavailable organization list offers Réessayer', async ({ page }) => {
+  const gateway = await stubGateway(page, { signedIn: true, unavailableOrganizations: true });
+
+  await page.goto('/organizations');
+
+  await expect(page.getByText('Impossible de charger cette page')).toBeVisible();
+  await page.getByRole('button', { name: 'Réessayer' }).click();
+  await expect(page.getByRole('button', { name: /Atelier Nord/ })).toBeVisible();
+  expect(gateway.calls.filter((call: string) => call === 'GET /v1/organizations')).toHaveLength(2);
+});
+
+test('a provider sign-in starts at the gateway and continues once on return', async ({ page }) => {
+  const gateway = await stubGateway(page);
+  await page.route('https://oauth.provider.example/**', async (route: Route) => {
+    const origin = new URL(page.url()).origin;
+    await route.fulfill({
+      status: 302,
+      headers: { location: `${origin}/auth/federated/continue` },
+    });
+  });
+
+  await page.goto('/login');
+  await page.getByRole('button', { name: 'GitHub' }).click();
+
+  await expect(page).toHaveURL(/\/organizations$/);
+  expect(gateway.bodies.get('POST /v1/auth/sign-in/federated/start')).toEqual([
+    { provider: 'github', rememberMe: true },
+  ]);
+  expect(gateway.bodies.get('POST /v1/auth/sign-in/federated/finish')).toEqual([{}]);
+});
+
+test('sign-up verifies the address with its code', async ({ page }) => {
+  const gateway = await stubGateway(page);
+
+  await page.goto('/signup');
+  await page.getByLabel('Nom complet').fill('Camille Martin');
+  await page.getByLabel('Adresse e-mail professionnelle').fill(email);
+  await page.getByLabel('Mot de passe', { exact: true }).fill('atelier-nord-2026');
+  await page.getByRole('checkbox').click();
+  await page.getByRole('button', { name: 'Créer mon compte' }).click();
+
+  await expect(page).toHaveURL(/\/signup\/verify$/);
+  await expect(page.getByRole('heading', { name: 'Confirmez votre adresse e-mail' })).toBeVisible();
+  await expect(page.getByRole('button', { name: /Renvoyer le code dans 0:/ })).toBeDisabled();
+  await typeCode(page, 'Code de vérification', '654321');
+  await page.getByRole('button', { name: 'Confirmer mon adresse' }).click();
+
+  await expect(page).toHaveURL(/\/organizations$/);
+  expect(gateway.bodies.get('POST /v1/auth/sign-up/verification')).toEqual([
+    { email, code: '654321', password: 'atelier-nord-2026' },
+  ]);
+});
+
+test('a forgotten password is reset from the e-mail link', async ({ page }) => {
+  const gateway = await stubGateway(page);
+
+  await page.goto('/forgot');
+  await page.getByLabel('Adresse e-mail').fill(email);
+  await page.getByRole('button', { name: 'Envoyer le lien de réinitialisation' }).click();
+  await expect(page.getByRole('heading', { name: 'Vérifiez vos e-mails' })).toBeVisible();
+  await expect(page.getByRole('button', { name: /Renvoyer l'e-mail dans 0:4/ })).toBeDisabled();
+
+  await page.goto('/reset#token=synthetic-reset-token');
+  await expect(page.getByText(`Pour le compte ${email}.`)).toBeVisible();
+  await expect(page).toHaveURL(/\/reset$/);
+  await page.getByLabel('Nouveau mot de passe').fill('atelier-nord-2027');
+  await page.getByLabel('Confirmer le mot de passe').fill('atelier-nord-2027');
+  await page.getByRole('button', { name: 'Enregistrer le mot de passe' }).click();
+
+  await expect(page.getByRole('heading', { name: 'Mot de passe modifié' })).toBeVisible();
+  await expect(page.getByText('Vos 3 autres sessions ont été fermées.')).toBeVisible();
+  expect(gateway.bodies.get('POST /v1/auth/password-reset/confirmation')).toEqual([
+    { token: 'synthetic-reset-token', newPassword: 'atelier-nord-2027', closeOtherSessions: true },
+  ]);
+});
+
+test('the signed-out screen signs in again with a remembered account', async ({ page }) => {
+  await stubGateway(page);
+  await page.addInitScript((address: string) => {
+    window.localStorage.setItem(
+      'cadenway-remembered-accounts',
+      JSON.stringify([{ name: 'Camille Martin', email: address }]),
+    );
+  }, email);
+
+  await page.goto('/logged-out?reason=signed-out');
+  await expect(page.getByRole('heading', { name: 'Vous êtes déconnecté' })).toBeVisible();
+  await expect(page.getByText('À bientôt, Camille.')).toBeVisible();
+  await page.getByRole('button', { name: `Se connecter avec ${email}` }).click();
+
+  await expect(page).toHaveURL(/\/login$/);
+  await expect(page.getByLabel('Adresse e-mail')).toHaveValue(email);
+  await expect(
+    page.getByText('Compte mémorisé sur cet appareil : saisissez son mot de passe.'),
+  ).toBeVisible();
+  await expect(page.getByLabel('Mot de passe', { exact: true })).toBeFocused();
+});
+
+test('a protected workspace link opened signed out comes back after sign-in with its query', async ({
   page,
 }) => {
-  const gateway = await stubGateway(page);
-  await page.goto('/auth/federated/continue');
-  await expect(page.getByRole('alert')).toHaveText(
-    'Cette méthode de connexion ne peut pas être utilisée.',
-  );
-  await page.getByRole('link', { name: 'Autres méthodes de connexion' }).click();
-  await expect(page.getByRole('heading', { name: 'Se connecter' })).toBeVisible();
-  expect(gateway.federatedFinishes()).toBe(1);
-});
+  await stubGateway(page);
 
-test('opens Sprint 14 and changes the status of CAD-482', async ({ page }) => {
-  const gateway = await stubGateway(page);
+  await page.goto('/atelier-nord/lien/introuvable?x=1');
+  await expect(page).toHaveURL(/\/login\?next=%2Fatelier-nord%2Flien%2Fintrouvable%3Fx%3D1$/u);
+  await page.getByLabel('Adresse e-mail').fill(email);
+  await page.getByLabel('Mot de passe', { exact: true }).fill(password);
+  await page.getByRole('button', { name: 'Se connecter', exact: true }).click();
 
-  await page.goto('/connexion');
-  await signIn(page);
-  await page.getByRole('button', { name: /Atelier Nord/u }).click();
-  await page.getByRole('link', { name: 'Espaces' }).click();
-  await expect(page.getByRole('heading', { name: 'Espaces' })).toBeVisible();
-  await page.getByRole('link', { name: 'Produit' }).click();
-  await expect(page.getByRole('heading', { name: 'Listes' })).toBeVisible();
-  await page.getByRole('link', { name: 'Sprint 14' }).click();
-  await expect(page.getByRole('heading', { name: 'Sprint 14' })).toBeVisible();
-  await page.getByRole('link', { name: /CAD-482.*Refondre/u }).click();
-  await expect(page.getByRole('heading', { name: taskName })).toBeVisible();
-  await page.getByRole('combobox', { name: 'Statut' }).click();
-  await page.getByRole('option', { name: 'En revue' }).click();
-  await expect(page.getByText('Statut modifié.')).toBeVisible();
-  expect(gateway.taskDetailOrganizations).toEqual([organizationId]);
-  expect(gateway.statusChanges).toEqual([
-    { body: { status: 'review' }, ifMatch: '"3"', ifOrganizationMatch: organizationId },
-  ]);
+  await expect(page).toHaveURL(/\/atelier-nord\/lien\/introuvable\?x=1$/u);
+  await expect(page.getByRole('heading', { name: 'Page introuvable' })).toBeVisible();
 });

@@ -1,0 +1,140 @@
+<div class="flex w-full max-w-[400px] flex-col gap-5">
+  <cw-card class="gap-6 p-6 sm:p-8">
+    @if (unavailable()) {
+      <cw-alert variant="destructive" role="alert">
+        <cw-alert-description i18n="@@auth.forgot.unavailable"
+          >The link could not be sent. Try again in a moment.</cw-alert-description
+        >
+      </cw-alert>
+    }
+    @if (sentTo(); as address) {
+      <div class="flex flex-col gap-4" aria-live="polite">
+        <div class="flex size-10 items-center justify-center rounded-lg bg-muted text-foreground">
+          <ng-icon name="phosphorEnvelopeSimpleOpenBold" class="size-5" aria-hidden="true" />
+        </div>
+        <div class="flex flex-col gap-1">
+          <h1 class="text-2xl font-semibold tracking-tight" i18n="@@auth.forgot.sent-heading">
+            Check your email
+          </h1>
+          <p class="text-sm text-muted-foreground" i18n="@@auth.forgot.sent-lead">
+            If an account exists for
+            <span class="font-medium text-foreground">{{ address }}</span
+            >, a reset link has just been sent. It stays valid for 30 minutes.
+          </p>
+        </div>
+      </div>
+      <ul class="flex flex-col gap-2 text-sm text-muted-foreground">
+        <li class="flex items-start gap-2">
+          <ng-icon name="phosphorTrayBold" class="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+          <span i18n="@@auth.forgot.spam">Nothing received? Look in your spam folder.</span>
+        </li>
+        <li class="flex items-start gap-2">
+          <ng-icon
+            name="phosphorShieldCheckBold"
+            class="mt-0.5 size-4 shrink-0"
+            aria-hidden="true"
+          />
+          <span i18n="@@auth.forgot.once">The link works only once.</span>
+        </li>
+      </ul>
+      <div class="flex flex-col gap-3">
+        <button
+          cwButton
+          type="button"
+          variant="outline"
+          class="w-full"
+          [disabled]="countdown.running()"
+          (click)="resend()"
+        >
+          <ng-icon name="phosphorArrowClockwiseBold" aria-hidden="true" />
+          @if (countdown.running()) {
+            <span i18n="@@auth.forgot.resend-in">Resend the email in {{ countdown.label() }}</span>
+          } @else {
+            <span i18n="@@auth.forgot.resend">Resend the email</span>
+          }
+        </button>
+        @if (resent()) {
+          <p role="status" class="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <ng-icon name="phosphorCheckCircleBold" class="size-3.5" aria-hidden="true" />
+            <span i18n="@@auth.forgot.resent"
+              >A new link has just been sent; the previous one no longer works.</span
+            >
+          </p>
+        }
+        <div class="flex items-center justify-between gap-2">
+          <button cwButton type="button" variant="ghost" size="sm" (click)="edit()">
+            <ng-icon name="phosphorPencilSimpleBold" aria-hidden="true" />
+            <span i18n="@@auth.code.change-address">Change the address</span>
+          </button>
+          <a cwButton variant="ghost" size="sm" routerLink="/login">
+            <ng-icon name="phosphorArrowLeftBold" aria-hidden="true" />
+            <span i18n="@@auth.back-to-login">Back to sign-in</span>
+          </a>
+        </div>
+      </div>
+    } @else {
+      <div class="flex flex-col gap-4">
+        <div class="flex size-10 items-center justify-center rounded-lg bg-muted text-foreground">
+          <ng-icon name="phosphorKeyBold" class="size-5" aria-hidden="true" />
+        </div>
+        <div class="flex flex-col gap-1">
+          <h1 class="text-2xl font-semibold tracking-tight" i18n="@@auth.forgot.heading">
+            Forgot password
+          </h1>
+          <p class="text-sm text-muted-foreground" i18n="@@auth.forgot.lead">
+            Enter the address of your account: we will send you a link to choose a new password.
+          </p>
+        </div>
+      </div>
+      <form class="flex flex-col gap-4" novalidate (submit)="send($event)">
+        <div class="flex flex-col gap-2">
+          <label for="fp-email" class="text-sm leading-none font-medium" i18n="@@auth.login.email"
+            >Email address</label
+          >
+          <input
+            cwInput
+            id="fp-email"
+            type="text"
+            inputmode="email"
+            autocomplete="email"
+            spellcheck="false"
+            placeholder="camille.martin@ateliernord.fr"
+            aria-describedby="fp-email-help"
+            [formField]="forgotForm.email"
+          />
+          @if (forgotForm.email().touched() && forgotForm.email().invalid()) {
+            <p
+              id="fp-email-help"
+              class="flex items-center gap-1 text-xs font-medium text-destructive"
+            >
+              <ng-icon name="phosphorWarningCircleFill" class="size-3.5" aria-hidden="true" />
+              {{ forgotForm.email().errors()[0]?.message }}
+            </p>
+          }
+        </div>
+        <button
+          cwButton
+          type="submit"
+          class="w-full"
+          [disabled]="forgotForm().invalid() || forgotForm().submitting()"
+          [loading]="forgotForm().submitting()"
+          i18n="@@auth.forgot.submit"
+        >
+          Send the reset link
+        </button>
+        <a cwButton variant="ghost" class="w-full" routerLink="/login">
+          <ng-icon name="phosphorArrowLeftBold" aria-hidden="true" />
+          <span i18n="@@auth.back-to-login">Back to sign-in</span>
+        </a>
+      </form>
+    }
+  </cw-card>
+  <p class="text-center text-sm text-muted-foreground" i18n="@@auth.forgot.provider">
+    Do you sign in with Google or GitHub?
+    <a
+      routerLink="/login"
+      class="rounded-sm font-medium text-primary underline-offset-4 hover:underline"
+      >Use that provider</a
+    >: no password is needed.
+  </p>
+</div>

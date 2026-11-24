@@ -1,0 +1,59 @@
+<div class="flex w-full max-w-[400px] flex-col gap-5">
+  <cw-card class="gap-6 p-6 sm:p-8">
+    <div class="flex flex-col gap-1">
+      <h1 class="text-2xl font-semibold tracking-tight" i18n="@@auth.sso.heading">SSO sign-in</h1>
+      <p class="text-sm text-muted-foreground" i18n="@@auth.sso.lead">
+        Enter your work address: we redirect you to your organization's identity provider (SAML 2.0
+        or OpenID Connect).
+      </p>
+    </div>
+    @if (unavailable()) {
+      <cw-alert variant="destructive" role="alert">
+        <cw-alert-description i18n="@@auth.login.unavailable"
+          >Sign-in is unavailable. Try again in a moment.</cw-alert-description
+        >
+      </cw-alert>
+    }
+    <form class="flex flex-col gap-4" novalidate (submit)="continue($event)">
+      <div class="flex flex-col gap-2">
+        <label for="sso-email" class="text-sm leading-none font-medium" i18n="@@auth.sso.email"
+          >Work email</label
+        >
+        <input
+          cwInput
+          id="sso-email"
+          type="email"
+          autocomplete="email"
+          placeholder="prenom.nom@entreprise.fr"
+          i18n-placeholder="@@auth.sso.placeholder"
+          aria-describedby="sso-email-help"
+          [formField]="ssoForm.email"
+        />
+        @if (ssoForm.email().touched() && ssoForm.email().invalid()) {
+          <p
+            id="sso-email-help"
+            role="alert"
+            class="flex items-center gap-1 text-xs font-medium text-destructive"
+          >
+            <ng-icon name="phosphorWarningCircleFill" class="size-3.5" aria-hidden="true" />
+            {{ ssoForm.email().errors()[0]?.message }}
+          </p>
+        }
+      </div>
+      <button
+        cwButton
+        type="submit"
+        class="w-full"
+        [disabled]="ssoForm().invalid() || ssoForm().submitting()"
+        [loading]="ssoForm().submitting()"
+        i18n="@@auth.sso.submit"
+      >
+        Continue with SSO
+      </button>
+      <a cwButton variant="ghost" class="w-full" routerLink="/login">
+        <ng-icon name="phosphorArrowLeftBold" aria-hidden="true" />
+        <span i18n="@@auth.sso.other-methods">Other sign-in methods</span>
+      </a>
+    </form>
+  </cw-card>
+</div>

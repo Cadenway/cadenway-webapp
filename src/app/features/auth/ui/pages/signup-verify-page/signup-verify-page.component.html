@@ -1,0 +1,40 @@
+<div class="flex w-full max-w-[400px] flex-col gap-5">
+  <cw-card class="gap-6 p-6 sm:p-8">
+    <div class="flex flex-col gap-4">
+      <div class="flex size-10 items-center justify-center rounded-lg bg-muted text-foreground">
+        <ng-icon name="phosphorEnvelopeSimpleBold" class="size-5" aria-hidden="true" />
+      </div>
+      <div class="flex flex-col gap-1">
+        <h1 class="text-2xl font-semibold tracking-tight" i18n="@@auth.signup-verify.heading">
+          Confirm your email address
+        </h1>
+        @if (flow.signUpEmail(); as address) {
+          <p class="text-sm text-muted-foreground" i18n="@@auth.code.sent-to">
+            We sent a 6-digit code to
+            <span class="font-medium text-foreground">{{ address }}</span
+            >. It expires in 10 minutes.
+          </p>
+        }
+      </div>
+    </div>
+
+    @if (unavailable()) {
+      <cw-alert variant="destructive" role="alert">
+        <cw-alert-description i18n="@@auth.login.unavailable"
+          >Sign-in is unavailable. Try again in a moment.</cw-alert-description
+        >
+      </cw-alert>
+    }
+
+    <cw-code-form
+      backLink="/signup"
+      [submitLabel]="submitLabel"
+      [resendIn]="countdown.running() ? countdown.label() : null"
+      [resent]="resent()"
+      [error]="error()"
+      [busy]="checking()"
+      (codeSubmitted)="verify($event)"
+      (resendRequested)="resend()"
+    />
+  </cw-card>
+</div>

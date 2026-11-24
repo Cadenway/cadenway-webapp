@@ -31,9 +31,9 @@ Without a label, the navigation has no `aria-label`.
 - A rail contribution gives its host `class: 'contents'`, so its items join the brick's flex layout.
 - The routed section owns its centred column: `max-w-3xl` for the account, `max-w-4xl` for the organization.
 
-## Phone deviation
+## Phones
 
-`Compte.dc.html` keeps the rail as a column on every width. Below 768 px, `nav[cwAppRail]` becomes a bottom tab bar for now. To keep the panel clear of the tab bar, the frame keeps `max-md:pb-14` and the panel keeps `max-md:ml-2`. Both go once the rail's phone-column option ships in `@cadenway/ui`.
+As in `Compte.dc.html`, the rail stays a 56 px column on every width (`phoneLayout="column"`).
 
 ## Public entries
 
