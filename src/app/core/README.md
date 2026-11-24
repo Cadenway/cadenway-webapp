@@ -13,6 +13,7 @@ configured in `api/client/`. The shell belongs to
 | -------------- | ------------------------------------------------------------ |
 | `@core/config` | The root `RuntimeConfigStore` and the `RuntimeConfig` model. |
 | `@core/api`    | The transport interceptor used by the root providers.        |
+| `@core/locale` | `provideAppLocale()`: `LOCALE_ID` from the translated build. |
 
 ## Dependencies
 
@@ -25,3 +26,4 @@ The root transport provides Angular HTTP to the generated `@cadenway/api-client`
   session and organization changes.
 - The API transport resolves generated relative paths against the configured gateway origin and
   uses the browser's session cookie there.
+- `LOCALE_ID` follows `$localize.locale`: French in the served build, English in the source build.

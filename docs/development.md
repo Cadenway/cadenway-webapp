@@ -49,7 +49,8 @@ narrowest check that covers the change first, then widen:
 | State, services                 | `pnpm test --include <area>`, then `pnpm test:coverage`                    |
 | Routes, guards                  | `pnpm build`                                                               |
 | Browser flows                   | `pnpm e2e <spec>`                                                          |
-| Copy                            | `cw-web-copy-reviewer` against the mockup                                  |
+| Copy                            | `pnpm i18n:extract`, the `fr` units in `src/locale/messages.fr.xlf`, then  |
+|                                 | `pnpm i18n:check` and `cw-web-copy-reviewer` against the mockup            |
 | Docs or agent instructions only | Scoped formatting and link review                                          |
 
 Report the commands you actually ran and their results; a check you did not run is reported as not
@@ -66,9 +67,14 @@ pnpm test:lint
 pnpm lint
 pnpm typecheck
 pnpm test:architecture
+pnpm i18n:check
 pnpm test:coverage
 pnpm build
 ```
+
+`pnpm build` and `pnpm start` produce the French translation (`localize: ["fr"]`), served at the
+root; a missing translation fails the build. The `source` configuration builds the untranslated
+English source and is used by `ng extract-i18n`.
 
 For a focused check, run `pnpm test --include "<glob>"` with one spec glob.
 
