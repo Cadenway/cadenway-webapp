@@ -1,0 +1,210 @@
+@let list = store.list.value();
+@if (list) {
+  <div class="flex shrink-0 flex-col gap-3 px-4 pt-3 sm:px-6">
+    <cw-list-header
+      [list]="list"
+      [space]="space()"
+      [spaceFailed]="!!store.space.error()"
+      [countsFailed]="!!store.counts.error()"
+      [spaceLink]="spaceLink(list)"
+      [counts]="store.counts.hasValue() ? store.counts.value().counts : null"
+      [sprintRange]="sprintRange(list)"
+      [favorite]="favorite()"
+      [exportDisabled]="!!savedView() && view.savedView()?.id !== savedView()"
+      [members]="store.members.hasValue() ? store.members.value() : null"
+      [showSidebarToggle]="sidebar !== null && !sidebar.expanded()"
+      [saving]="renaming()"
+      [(editing)]="editing"
+      (sidebarToggled)="sidebar?.toggle()"
+      (renamed)="rename($event)"
+      (favoriteToggled)="toggleFavorite(list)"
+      (duplicated)="duplicate()"
+      (exported)="exportCsv()"
+      (linkCopied)="copyLink(list)"
+      (archived)="archive(list)"
+      (deleteRequested)="deleteOpen.set(true)"
+    />
+
+    @if (store.space.error()) {
+      <div role="alert">
+        <span i18n="@@spaces.secondary.space-failed">The space could not be loaded.</span>
+        <button
+          cwButton
+          variant="outline"
+          size="xs"
+          (click)="store.space.reload()"
+          i18n="@@spaces.retry"
+        >
+          Retry
+        </button>
+      </div>
+    }
+    @if (store.counts.error()) {
+      <div role="alert">
+        <span i18n="@@spaces.secondary.counts-failed">The counts could not be loaded.</span>
+        <button
+          cwButton
+          variant="outline"
+          size="xs"
+          (click)="store.counts.reload()"
+          i18n="@@spaces.retry"
+        >
+          Retry
+        </button>
+      </div>
+    }
+    @if (store.members.error()) {
+      <div role="alert">
+        <span i18n="@@spaces.secondary.grants-failed">The list members could not be loaded.</span>
+        <button
+          cwButton
+          variant="outline"
+          size="xs"
+          (click)="store.members.reload()"
+          i18n="@@spaces.retry"
+        >
+          Retry
+        </button>
+      </div>
+    }
+    @if (store.organizationMembers.error()) {
+      <div role="alert">
+        <span i18n="@@spaces.secondary.members-failed">The members could not be loaded.</span>
+        <button
+          cwButton
+          variant="outline"
+          size="xs"
+          (click)="store.organizationMembers.reload()"
+          i18n="@@spaces.retry"
+        >
+          Retry
+        </button>
+      </div>
+    }
+    @if (store.labels.error()) {
+      <div role="alert">
+        <span i18n="@@spaces.secondary.labels-failed">The labels could not be loaded.</span>
+        <button
+          cwButton
+          variant="outline"
+          size="xs"
+          (click)="store.labels.reload()"
+          i18n="@@spaces.retry"
+        >
+          Retry
+        </button>
+      </div>
+    }
+
+    @if (store.savedViews.error()) {
+      <p role="alert" i18n="@@spaces.saved.read-failed">Saved views could not be loaded.</p>
+      <button cwButton variant="outline" (click)="store.savedViews.reload()" i18n="@@spaces.retry">
+        Retry
+      </button>
+    } @else if (store.savedViews.isLoading()) {
+      <div cwSkeleton class="h-9 w-full" aria-busy="true"></div>
+    } @else {
+      <cw-view-tabs
+        [layouts]="layouts"
+        [layout]="view.layout()"
+        [savedViews]="store.savedViews.hasValue() ? store.savedViews.value() : []"
+        [activeViewId]="view.savedView()?.id ?? null"
+        [modified]="view.modified()"
+        [canEdit]="
+          canEdit() &&
+          store.savedViews.hasValue() &&
+          (!savedView() || view.savedView()?.id === savedView())
+        "
+        (layoutPicked)="pickLayout($event)"
+        (savedPicked)="pickSaved($event)"
+        (saveRequested)="openSaveDialog()"
+        (settingsSaved)="saveSettings()"
+        (reverted)="revert($event)"
+        (renameRequested)="openRenameDialog($event)"
+        (duplicated)="duplicateView($event)"
+        (deleted)="deleteView($event)"
+      />
+    }
+
+    @if (!savedView() || view.savedView()?.id === savedView()) {
+      <cw-view-tools
+        [config]="view.config()"
+        [statuses]="statuses()"
+        [labels]="store.labels.hasValue() ? store.labels.value() : []"
+        [people]="people()"
+        [search]="view.search()"
+        [milestonesOnly]="view.milestonesOnly()"
+        [milestoneCount]="store.milestoneCount.hasValue() ? store.milestoneCount.value() : null"
+        [taskTotal]="store.counts.hasValue() ? store.counts.value().counts.total : null"
+        [savedView]="view.savedView()"
+        [modified]="view.modified()"
+        [canSave]="view.canSave() && canEdit()"
+        [saveDisabled]="!store.savedViews.hasValue()"
+        (milestonesToggled)="view.toggleMilestones()"
+        (filterToggled)="view.toggleFilter($event.field, $event.value)"
+        (filterCleared)="view.clearFilter($event)"
+        (filtersCleared)="view.clearFilters()"
+        (sortChanged)="view.setSort($event)"
+        (sortDirectionToggled)="view.toggleSortDirection()"
+        (groupChanged)="view.setGroupBy($event)"
+        (subtasksChanged)="view.setSubtasks($event)"
+        (searchChanged)="view.setSearch($event)"
+        (saveRequested)="openSaveDialog()"
+        (savedReverted)="view.revert()"
+        (savedUpdated)="saveSettings()"
+      />
+    }
+  </div>
+
+  @if (!savedView() || view.savedView()?.id === savedView()) {
+    <div class="relative flex min-h-0 flex-1 flex-col">
+      <router-outlet />
+    </div>
+  }
+
+  <cw-save-view-dialog
+    [(open)]="dialogOpen"
+    [mode]="dialogView() ? 'rename' : 'create'"
+    [summary]="dialogSummary()"
+    [placeholder]="dialogPlaceholder()"
+    [layoutIcon]="dialogIcon()"
+    [layoutName]="layoutNames[dialogLayout()]"
+    [initialName]="dialogView()?.name ?? ''"
+    [initialIcon]="dialogView()?.icon ?? null"
+    [pending]="dialogPending()"
+    (submitted)="submitDialog($event)"
+  />
+
+  <cw-alert-dialog
+    variant="destructive"
+    size="sm"
+    [(open)]="deleteOpen"
+    [confirmText]="list.name"
+    [pending]="deleting()"
+    data-testid="list-delete-dialog"
+    (confirm)="confirmDelete(list)"
+  >
+    <cw-alert-dialog-media>
+      <ng-icon name="phosphorWarningCircleFill" aria-hidden="true" />
+    </cw-alert-dialog-media>
+    <h2 cwAlertDialogTitle>{{ deleteTitle(list) }}</h2>
+    <p cwAlertDialogDescription>{{ deleteText() }}</p>
+    <button cwButton cwAlertDialogCancel variant="outline" i18n="@@spaces.cancel">Cancel</button>
+    <button
+      cwButton
+      cwAlertDialogAction
+      variant="destructive"
+      [loading]="deleting()"
+      data-testid="list-delete-confirm"
+    >
+      <ng-container i18n="@@spaces.header.delete">Delete the list</ng-container>
+    </button>
+  </cw-alert-dialog>
+} @else {
+  <div class="flex flex-col gap-3 px-4 pt-3 sm:px-6" aria-busy="true" data-testid="list-loading">
+    <div cwSkeleton class="h-4 w-40"></div>
+    <div cwSkeleton class="h-8 w-64"></div>
+    <div cwSkeleton class="h-4 w-56"></div>
+    <div cwSkeleton class="h-9 w-full"></div>
+  </div>
+}

@@ -1,0 +1,120 @@
+<cw-tabs variant="bar" [value]="value()" (valueChange)="pick($event)">
+  <div class="flex min-w-0 items-center gap-1 border-b border-border">
+    <cw-tabs-list ariaLabel="Views" i18n-ariaLabel="@@spaces.views.label" data-testid="view-tabs">
+      @for (layout of layouts(); track layout) {
+        <button cwTab [value]="layout" [active]="value() === layout">
+          <ng-icon [name]="layoutIcon(layout)" aria-hidden="true" />
+          {{ layoutNames[layout] }}
+        </button>
+      }
+      @for (view of savedViews(); track view.id) {
+        <button
+          cwTab
+          [value]="'saved:' + view.id"
+          [active]="value() === 'saved:' + view.id"
+          [cwContextMenuTriggerFor]="viewMenu"
+          (opened)="menuView.set(view)"
+          data-testid="saved-view-tab"
+        >
+          <ng-icon [name]="viewIcon(view)" aria-hidden="true" />
+          <span class="max-w-40 truncate">{{ view.name }}</span>
+          @if (view.id === activeViewId() && modified()) {
+            <span class="size-1.5 shrink-0 rounded-full bg-balise" aria-hidden="true"></span>
+            <span class="sr-only" i18n="@@spaces.saved.modified-suffix">, modified</span>
+          }
+        </button>
+      }
+    </cw-tabs-list>
+    @if (activeView(); as view) {
+      <button
+        cwButton
+        type="button"
+        variant="ghost"
+        size="icon-xs"
+        [cwMenuTriggerFor]="viewMenu"
+        [attr.aria-label]="optionsLabel(view)"
+        data-testid="saved-view-options"
+        (click)="menuView.set(view)"
+      >
+        <ng-icon name="phosphorDotsThreeBold" aria-hidden="true" />
+      </button>
+    }
+    <button
+      cwButton
+      type="button"
+      variant="ghost"
+      size="sm"
+      class="text-muted-foreground"
+      [cwMenuTriggerFor]="addMenu"
+      data-testid="view-menu"
+    >
+      <ng-icon name="phosphorPlusBold" aria-hidden="true" />
+      <ng-container i18n="@@spaces.views.menu">View</ng-container>
+    </button>
+  </div>
+</cw-tabs>
+
+<cw-menu #addMenu ariaLabel="Add a view" i18n-ariaLabel="@@spaces.views.add">
+  <cw-menu-label i18n="@@spaces.views.title">Views of the list</cw-menu-label>
+  @for (layout of layouts(); track layout) {
+    <button cwMenuItem (triggered)="layoutPicked.emit(layout)">
+      <ng-icon [name]="layoutIcon(layout)" aria-hidden="true" />
+      {{ layoutNames[layout] }}
+      <cw-menu-shortcut i18n="@@spaces.views.added">Added</cw-menu-shortcut>
+    </button>
+  }
+  <cw-menu-separator />
+  <button
+    cwMenuItem
+    [disabled]="!canEdit()"
+    data-testid="view-save-current"
+    (triggered)="saveRequested.emit()"
+  >
+    <ng-icon name="phosphorBookmarkSimpleBold" aria-hidden="true" />
+    <ng-container i18n="@@spaces.views.save-current">Save the current view…</ng-container>
+  </button>
+</cw-menu>
+
+<cw-menu #viewMenu ariaLabel="Saved view" i18n-ariaLabel="@@spaces.saved.menu">
+  @if (menuView(); as view) {
+    @if (view.id !== activeViewId()) {
+      <button cwMenuItem (triggered)="savedPicked.emit(view)">
+        <ng-icon name="phosphorArrowSquareOutBold" aria-hidden="true" />
+        <ng-container i18n="@@spaces.saved.open">Open</ng-container>
+      </button>
+    } @else if (modified()) {
+      <button cwMenuItem [disabled]="!canEdit()" (triggered)="settingsSaved.emit(view)">
+        <ng-icon name="phosphorFloppyDiskBold" aria-hidden="true" />
+        <ng-container i18n="@@spaces.saved.save-changes">Save the changes</ng-container>
+      </button>
+      <button cwMenuItem (triggered)="reverted.emit(view)">
+        <ng-icon name="phosphorArrowCounterClockwiseBold" aria-hidden="true" />
+        <ng-container i18n="@@spaces.saved.revert">Revert</ng-container>
+      </button>
+    }
+    <button
+      cwMenuItem
+      [disabled]="!canEdit()"
+      data-testid="saved-view-rename"
+      (triggered)="renameRequested.emit(view)"
+    >
+      <ng-icon name="phosphorPencilSimpleBold" aria-hidden="true" />
+      <ng-container i18n="@@spaces.saved.rename">Rename</ng-container>
+    </button>
+    <button cwMenuItem [disabled]="!canEdit()" (triggered)="duplicated.emit(view)">
+      <ng-icon name="phosphorCopyBold" aria-hidden="true" />
+      <ng-container i18n="@@spaces.saved.duplicate">Duplicate</ng-container>
+    </button>
+    <cw-menu-separator />
+    <button
+      cwMenuItem
+      variant="destructive"
+      [disabled]="!canEdit()"
+      data-testid="saved-view-delete"
+      (triggered)="deleted.emit(view)"
+    >
+      <ng-icon name="phosphorTrashBold" aria-hidden="true" />
+      <ng-container i18n="@@spaces.saved.delete">Delete the view</ng-container>
+    </button>
+  }
+</cw-menu>

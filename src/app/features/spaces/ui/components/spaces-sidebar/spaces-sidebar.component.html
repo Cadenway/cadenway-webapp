@@ -1,0 +1,135 @@
+@if (navigation.favorites.error()) {
+  <div role="alert">
+    <span i18n="@@spaces.secondary.favorites-failed">The favorites could not be loaded.</span>
+    <button
+      cwButton
+      variant="outline"
+      size="xs"
+      (click)="navigation.favorites.reload()"
+      i18n="@@spaces.retry"
+    >
+      Retry
+    </button>
+  </div>
+}
+@if (favorites().length > 0) {
+  <cw-sidebar-group
+    label="Favorites"
+    i18n-label="@@spaces.sidebar.favorites"
+    data-testid="sidebar-favorites"
+  >
+    @for (favorite of favorites(); track favorite.id) {
+      <a
+        cwSidebarItem
+        [icon]="
+          favorite.kind === 'saved-view' ? 'phosphorFunnelSimpleBold' : 'phosphorListBulletsBold'
+        "
+        [routerLink]="favoriteLink(favorite)"
+        [queryParams]="favoriteQuery(favorite)"
+        routerLinkActive
+        #favoriteActive="routerLinkActive"
+        [routerLinkActiveOptions]="{
+          paths: 'exact',
+          queryParams: 'exact',
+          fragment: 'ignored',
+          matrixParams: 'ignored',
+        }"
+        [active]="favoriteActive.isActive"
+        >{{ favorite.name }}</a
+      >
+    }
+  </cw-sidebar-group>
+}
+
+<cw-sidebar-group label="Spaces" i18n-label="@@spaces.sidebar.spaces" data-testid="sidebar-spaces">
+  @if (navigation.spaces.status() === 'error') {
+    <div
+      class="flex flex-col items-start gap-2 px-2 py-1 text-xs text-muted-foreground"
+      role="alert"
+    >
+      <span i18n="@@spaces.sidebar.failed">The spaces could not be loaded.</span>
+      <button
+        cwButton
+        type="button"
+        variant="outline"
+        size="xs"
+        (click)="navigation.spaces.reload()"
+        i18n="@@spaces.retry"
+      >
+        Retry
+      </button>
+    </div>
+  } @else if (!navigation.spaces.hasValue()) {
+    <div
+      class="flex flex-col gap-1.5 px-2 py-1"
+      aria-busy="true"
+      data-testid="sidebar-spaces-loading"
+    >
+      <div cwSkeleton class="h-6 w-3/4"></div>
+      <div cwSkeleton class="h-6 w-2/3"></div>
+      <div cwSkeleton class="h-6 w-1/2"></div>
+    </div>
+  } @else {
+    @for (view of spaces(); track view.space.id) {
+      <cw-sidebar-space
+        [name]="view.space.name"
+        [icon]="view.icon"
+        [color]="view.color"
+        [count]="view.total"
+        [expanded]="navigation.expanded()[view.space.id] === true"
+        (expandedChange)="setExpanded(view.space.id, $event)"
+      >
+        <a
+          cwSidebarSpaceAction
+          cwButton
+          variant="ghost"
+          size="icon-xs"
+          [routerLink]="['/', slug(), 'spaces', view.space.id]"
+          [attr.aria-label]="overviewLabel(view.space)"
+          [attr.title]="overviewLabel(view.space)"
+        >
+          <ng-icon name="phosphorSquaresFourBold" class="size-3.5" aria-hidden="true" />
+        </a>
+        @if (navigation.overviews.hasValue() && !navigation.overviews.value()[view.space.id]) {
+          <div role="alert">
+            <span i18n="@@spaces.secondary.overview-failed">The lists could not be loaded.</span>
+            <button
+              cwButton
+              variant="outline"
+              size="xs"
+              (click)="navigation.overviews.reload()"
+              i18n="@@spaces.retry"
+            >
+              Retry
+            </button>
+          </div>
+        }
+        @for (summary of view.lists; track summary.list.id) {
+          <a
+            cwSidebarItem
+            [icon]="listIcon(summary)"
+            [count]="summary.counts.total"
+            [routerLink]="['/', slug(), 'l', summary.list.id]"
+            routerLinkActive
+            #listActive="routerLinkActive"
+            [active]="listActive.isActive"
+            >{{ summary.list.name }}</a
+          >
+        }
+      </cw-sidebar-space>
+    }
+  }
+</cw-sidebar-group>
+
+@if (tips().length > 0) {
+  <cw-sidebar-tips
+    class="mt-auto"
+    [tip]="tips()[tipPosition()]"
+    [link]="['/', slug(), ...tips()[tipPosition()].path]"
+    [position]="tipPosition() + 1"
+    [count]="tips().length"
+    (previous)="moveTip(-1)"
+    (next)="moveTip(1)"
+    (dismissed)="dismissTips()"
+  />
+}

@@ -1,0 +1,175 @@
+<div class="flex items-center gap-2">
+  @if (showSidebarToggle()) {
+    <button
+      cwButton
+      type="button"
+      variant="ghost"
+      size="icon-sm"
+      class="-ml-1"
+      aria-label="Expand the sidebar"
+      i18n-aria-label="@@spaces.header.sidebar-expand"
+      aria-keyshortcuts="Control+B"
+      aria-expanded="false"
+      data-testid="list-sidebar-expand"
+      (click)="sidebarToggled.emit()"
+    >
+      <ng-icon name="phosphorSidebarSimpleBold" aria-hidden="true" />
+    </button>
+  }
+  <nav cwBreadcrumb size="sm" ariaLabel="Breadcrumb" i18n-ariaLabel="@@spaces.header.breadcrumb">
+    <a cwBreadcrumbLink [routerLink]="spaceLink()" data-testid="list-breadcrumb-space">
+      @if (space(); as current) {
+        <span
+          class="flex size-4 shrink-0 items-center justify-center rounded-[3px] text-[9px] font-semibold"
+          aria-hidden="true"
+        >
+          @if (spaceIcon(current); as name) {
+            <ng-icon [name]="name" class="size-2.5" />
+          } @else {
+            {{ current.name.charAt(0).toUpperCase() }}
+          }
+        </span>
+        {{ current.name }}
+      } @else if (!spaceFailed()) {
+        <span cwSkeleton class="inline-block h-3 w-16"></span>
+      }
+    </a>
+    <span cwBreadcrumbPage class="max-w-48 truncate">{{ list().name }}</span>
+  </nav>
+</div>
+
+<header class="flex flex-wrap items-start gap-x-4 gap-y-2">
+  <div class="flex min-w-0 flex-1 flex-col gap-1">
+    <div class="flex items-center gap-2">
+      <span
+        class="inline-flex size-8 shrink-0 items-center justify-center rounded-lg border border-border bg-background"
+        [class]="tone()"
+        aria-hidden="true"
+        ><ng-icon [name]="icon()" class="size-[18px]"
+      /></span>
+      <h1
+        class="min-w-0 truncate text-2xl font-semibold tracking-tight"
+        tabindex="-1"
+        data-route-focus
+      >
+        <cw-inline-edit
+          [value]="list().name"
+          [(editing)]="editing"
+          required
+          [maxLength]="100"
+          [saving]="saving()"
+          [readonly]="!list().canEdit"
+          [ariaLabel]="renameLabel()"
+          data-testid="list-title"
+          (save)="save($event)"
+        />
+      </h1>
+      <button
+        cwButton
+        type="button"
+        variant="ghost"
+        size="icon-sm"
+        [class]="favorite() ? 'text-foreground' : 'text-muted-foreground'"
+        [attr.aria-pressed]="favorite()"
+        [attr.aria-label]="favoriteLabel()"
+        data-testid="list-favorite"
+        (click)="favoriteToggled.emit()"
+      >
+        <ng-icon [name]="favorite() ? 'phosphorStarFill' : 'phosphorStarBold'" aria-hidden="true" />
+      </button>
+    </div>
+    @if (counts(); as current) {
+      <p class="text-sm text-muted-foreground" data-testid="list-description">
+        @if (sprintRange(); as range) {
+          <ng-container i18n="@@spaces.header.sprint-range">Sprint of {{ range }} · </ng-container>
+        }
+        <ng-container i18n="@@spaces.header.task-count">{current.total, plural,
+          =1 {1 task}
+          other {{{ current.total }} tasks}
+        }</ng-container>
+        ·
+        <ng-container i18n="@@spaces.header.done">{{ percent() }} % done</ng-container>
+      </p>
+    } @else if (!countsFailed()) {
+      <div cwSkeleton class="h-5 w-56"></div>
+    }
+    @if (list().sprint?.goal; as goal) {
+      <p class="flex items-center gap-1.5 text-sm text-muted-foreground" data-testid="list-goal">
+        <ng-icon name="phosphorTargetBold" class="size-4 shrink-0" aria-hidden="true" />
+        <span class="truncate">{{ goal }}</span>
+      </p>
+    }
+  </div>
+  <div class="flex items-center gap-2">
+    @if (members(); as people) {
+      @if (people.items.length > 0) {
+        <cw-avatar-group
+          size="sm"
+          [max]="4"
+          [ariaLabel]="membersLabel()"
+          data-testid="list-members"
+        >
+          @for (member of people.items; track member.userId) {
+            <cw-avatar [name]="member.name" size="sm" />
+          }
+        </cw-avatar-group>
+      }
+    }
+    <button
+      cwButton
+      type="button"
+      variant="ghost"
+      size="icon-sm"
+      [cwMenuTriggerFor]="listMenu"
+      aria-label="More actions on the list"
+      i18n-aria-label="@@spaces.header.more"
+      data-testid="list-more"
+    >
+      <ng-icon name="phosphorDotsThreeBold" aria-hidden="true" />
+    </button>
+  </div>
+</header>
+
+<cw-menu #listMenu align="end" ariaLabel="List actions" i18n-ariaLabel="@@spaces.header.menu">
+  <button cwMenuItem [disabled]="!list().canEdit" (triggered)="editing.set(true)">
+    <ng-icon name="phosphorPencilSimpleBold" aria-hidden="true" />
+    {{ renameLabel() }}
+  </button>
+  <button cwMenuItem [disabled]="!list().canEdit" (triggered)="duplicated.emit()">
+    <ng-icon name="phosphorCopyBold" aria-hidden="true" />
+    <ng-container i18n="@@spaces.header.duplicate">Duplicate with the tasks</ng-container>
+  </button>
+  <button
+    cwMenuItem
+    [disabled]="exportDisabled()"
+    data-testid="list-export"
+    (triggered)="exported.emit()"
+  >
+    <ng-icon name="phosphorDownloadSimpleBold" aria-hidden="true" />
+    <ng-container i18n="@@spaces.header.export">Export as CSV</ng-container>
+  </button>
+  <button cwMenuItem (triggered)="linkCopied.emit()">
+    <ng-icon name="phosphorLinkSimpleBold" aria-hidden="true" />
+    <ng-container i18n="@@spaces.header.copy-link">Copy the link</ng-container>
+  </button>
+  <cw-menu-separator />
+  <button
+    cwMenuItem
+    variant="destructive"
+    [disabled]="!list().canEdit || list().archived"
+    (triggered)="archived.emit()"
+  >
+    <ng-icon name="phosphorArchiveBold" aria-hidden="true" />
+    <ng-container i18n="@@spaces.header.archive">Archive the list</ng-container>
+  </button>
+  <button
+    cwMenuItem
+    variant="destructive"
+    [disabled]="!list().canEdit"
+    data-testid="list-delete"
+    (triggered)="deleteRequested.emit()"
+  >
+    <ng-icon name="phosphorTrashBold" aria-hidden="true" />
+    <ng-container i18n="@@spaces.header.delete">Delete the list</ng-container>
+  </button>
+</cw-menu>

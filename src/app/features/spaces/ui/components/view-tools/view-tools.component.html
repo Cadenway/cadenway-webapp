@@ -1,0 +1,333 @@
+<cw-toolbar
+  size="sm"
+  ariaLabel="View tools"
+  i18n-ariaLabel="@@spaces.tools.label"
+  data-testid="view-tools"
+>
+  <button
+    cwButton
+    cwToolbarItem
+    type="button"
+    size="sm"
+    [variant]="milestonesOnly() ? 'secondary' : 'outline'"
+    [attr.aria-pressed]="milestonesOnly()"
+    title="Show milestones only"
+    i18n-title="@@spaces.tools.milestones-title"
+    data-testid="view-milestones"
+    (click)="milestonesToggled.emit()"
+  >
+    <ng-icon name="phosphorFlagBold" aria-hidden="true" />
+    <ng-container i18n="@@spaces.tools.milestones">Milestones</ng-container>
+    @if (milestoneCount() !== null) {
+      <span class="text-muted-foreground tabular-nums">{{ milestoneCount() }}</span>
+    }
+  </button>
+  <button
+    cwButton
+    cwToolbarItem
+    pinned
+    type="button"
+    variant="outline"
+    size="sm"
+    [cwPopoverTrigger]="filterPopover"
+    data-testid="view-filter"
+  >
+    <ng-icon name="phosphorFunnelSimpleBold" aria-hidden="true" />
+    <ng-container i18n="@@spaces.tools.filter">Filter</ng-container>
+    @if (filterCount() > 0) {
+      <span
+        class="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-foreground px-1 text-[10px] leading-none font-medium text-background tabular-nums"
+        >{{ filterCount() }}</span
+      >
+    }
+  </button>
+  <button
+    cwButton
+    cwToolbarItem
+    type="button"
+    variant="outline"
+    size="sm"
+    [cwMenuTriggerFor]="sortMenu"
+    data-testid="view-sort"
+  >
+    <ng-icon
+      [name]="
+        config().sort.direction === 'asc'
+          ? 'phosphorSortAscendingBold'
+          : 'phosphorSortDescendingBold'
+      "
+      aria-hidden="true"
+    />
+    {{ sortLabel() }}
+  </button>
+  <button
+    cwButton
+    cwToolbarItem
+    type="button"
+    variant="outline"
+    size="sm"
+    [cwMenuTriggerFor]="groupMenu"
+    data-testid="view-group"
+  >
+    <ng-icon name="phosphorStackBold" aria-hidden="true" />
+    {{ groupLabel() }}
+  </button>
+  <cw-toolbar-spacer />
+  <div class="relative flex items-center">
+    <ng-icon
+      name="phosphorMagnifyingGlassBold"
+      class="pointer-events-none absolute left-2.5 size-3.5 text-muted-foreground"
+      aria-hidden="true"
+    />
+    <input
+      cwInput
+      size="sm"
+      type="search"
+      class="w-40 pl-8 sm:w-52"
+      aria-label="Search the list"
+      i18n-aria-label="@@spaces.tools.search-label"
+      placeholder="Search"
+      i18n-placeholder="@@spaces.tools.search"
+      data-testid="view-search"
+      [value]="search()"
+      (input)="onSearch($event)"
+    />
+  </div>
+  <button
+    cwButton
+    cwToolbarItem
+    pinned
+    type="button"
+    size="sm"
+    data-testid="view-create-task"
+    (click)="taskCreated.emit()"
+  >
+    <ng-icon name="phosphorPlusBold" aria-hidden="true" />
+    <ng-container i18n="@@spaces.tools.create-task">Create a task</ng-container>
+  </button>
+</cw-toolbar>
+
+<div
+  role="region"
+  aria-label="Active filters"
+  i18n-aria-label="@@spaces.chips.label"
+  class="flex flex-wrap items-center gap-1.5"
+  data-testid="view-chips"
+>
+  @for (chip of chips(); track chip.field) {
+    <div
+      class="inline-flex h-7 items-center overflow-hidden rounded-md border border-input text-xs"
+      data-testid="view-chip"
+    >
+      <span class="flex items-center gap-1 px-2 font-medium">
+        <ng-icon [name]="chip.icon" class="size-3.5 text-muted-foreground" aria-hidden="true" />{{
+          chip.name
+        }}
+      </span>
+      <span class="flex items-center border-l border-input px-2 text-muted-foreground">{{
+        chip.operator
+      }}</span>
+      <span class="flex max-w-48 items-center truncate border-l border-input px-2 font-medium">{{
+        chip.values
+      }}</span>
+      <button
+        cwButton
+        type="button"
+        variant="ghost"
+        size="icon-xs"
+        class="rounded-none border-l border-input"
+        [attr.aria-label]="removeLabel(chip)"
+        (click)="filterCleared.emit(chip.field)"
+      >
+        <ng-icon name="phosphorXBold" class="size-3" aria-hidden="true" />
+      </button>
+    </div>
+  }
+  <button cwButton type="button" variant="ghost" size="xs" (click)="filterOpen.set(true)">
+    <ng-icon name="phosphorPlusBold" aria-hidden="true" />
+    <ng-container i18n="@@spaces.chips.add">Filter</ng-container>
+  </button>
+  @if (chips().length === 0) {
+    @if (taskTotal() !== null) {
+      <span class="text-xs whitespace-nowrap text-muted-foreground tabular-nums"
+        ><ng-container i18n="@@spaces.chips.no-filter">No filter</ng-container> ·
+        <ng-container i18n="@@spaces.chips.task-count">{taskTotal(), plural,
+          =1 {1 task}
+          other {{{ taskTotal() }} tasks}
+        }</ng-container></span
+      >
+    }
+  } @else {
+    <button
+      cwButton
+      type="button"
+      variant="ghost"
+      size="xs"
+      data-testid="view-clear-filters"
+      (click)="filtersCleared.emit()"
+      i18n="@@spaces.chips.clear"
+    >
+      Clear all
+    </button>
+  }
+  @if (savedView(); as view) {
+    @if (modified()) {
+      <div
+        class="flex items-center gap-1 rounded-md border border-border px-1"
+        role="group"
+        aria-label="Modified saved view"
+        i18n-aria-label="@@spaces.saved.modified-group"
+        data-testid="view-modified"
+      >
+        <span
+          class="flex items-center gap-1.5 px-1 text-xs whitespace-nowrap text-muted-foreground"
+          [attr.title]="modifiedHint(view)"
+          ><span class="size-1.5 shrink-0 rounded-full bg-balise" aria-hidden="true"></span
+          ><ng-container i18n="@@spaces.saved.modified">Modified</ng-container></span
+        >
+        <button cwButton type="button" variant="ghost" size="xs" (click)="savedReverted.emit()">
+          <ng-icon name="phosphorArrowCounterClockwiseBold" aria-hidden="true" />
+          <ng-container i18n="@@spaces.saved.revert">Revert</ng-container>
+        </button>
+        <button
+          cwButton
+          type="button"
+          variant="ghost"
+          size="xs"
+          data-testid="view-save-settings"
+          (click)="savedUpdated.emit()"
+        >
+          <ng-icon name="phosphorFloppyDiskBold" aria-hidden="true" />
+          <ng-container i18n="@@spaces.saved.save">Save</ng-container>
+        </button>
+      </div>
+    }
+  }
+  <button
+    cwButton
+    type="button"
+    variant="outline"
+    size="xs"
+    [cwMenuTriggerFor]="subtaskMenu"
+    data-testid="view-subtasks"
+  >
+    <ng-icon name="phosphorTreeStructureBold" aria-hidden="true" />
+    <ng-container i18n="@@spaces.subtasks.button">Subtasks</ng-container
+    ><span class="text-muted-foreground">: {{ subtaskShort() }}</span>
+  </button>
+  @if (canSave()) {
+    <button
+      cwButton
+      type="button"
+      variant="outline"
+      size="xs"
+      class="ml-auto"
+      data-testid="view-save"
+      [disabled]="saveDisabled()"
+      (click)="saveRequested.emit()"
+    >
+      <ng-icon name="phosphorBookmarkSimpleBold" aria-hidden="true" />
+      <ng-container i18n="@@spaces.saved.save-view">Save the view</ng-container>
+    </button>
+  }
+</div>
+
+<cw-popover
+  #filterPopover
+  side="bottom"
+  align="start"
+  ariaLabel="Filters"
+  i18n-ariaLabel="@@spaces.filter.dialog"
+  [open]="filterOpen()"
+  (openChange)="filterOpen.set($event)"
+>
+  <div class="flex max-h-[28rem] flex-col gap-3 overflow-y-auto" data-testid="view-filter-dialog">
+    @for (section of sections(); track section.field) {
+      @if (section.options.length > 0) {
+        <fieldset class="flex flex-col gap-0.5">
+          <legend class="mb-1 text-xs font-medium text-muted-foreground">
+            {{ section.title }}
+          </legend>
+          @for (option of section.options; track option.value; let index = $index) {
+            <div class="flex items-center gap-2 rounded-md px-1.5 py-1 hover:bg-muted">
+              <cw-checkbox
+                [id]="checkboxId(section.field, index)"
+                [checked]="isChecked(section.field, option.value)"
+                (checkedChange)="filterToggled.emit({ field: section.field, value: option.value })"
+              />
+              <label
+                class="flex min-w-0 flex-1 cursor-pointer items-center gap-2 text-sm"
+                [for]="checkboxId(section.field, index)"
+              >
+                @if (section.field === 'status') {
+                  <cw-status-icon [status]="asStatus(option.value)" size="3.5" />
+                }
+                <span class="truncate">{{ option.label }}</span>
+              </label>
+            </div>
+          }
+        </fieldset>
+      }
+    }
+    <div class="flex items-center justify-end border-t border-border pt-2">
+      <button
+        cwButton
+        type="button"
+        variant="ghost"
+        size="xs"
+        (click)="filtersCleared.emit()"
+        i18n="@@spaces.chips.clear"
+      >
+        Clear all
+      </button>
+    </div>
+  </div>
+</cw-popover>
+
+<cw-menu #sortMenu ariaLabel="Sort" i18n-ariaLabel="@@spaces.sort.menu">
+  <cw-menu-label i18n="@@spaces.sort.title">Sort by</cw-menu-label>
+  <cw-menu-radio-group [value]="config().sort.field" (valueChange)="pickSort($event)">
+    @for (option of sortOptions; track option.value) {
+      <button cwMenuItemRadio [value]="option.value">{{ option.label }}</button>
+    }
+  </cw-menu-radio-group>
+  <cw-menu-separator />
+  <button cwMenuItem (triggered)="sortDirectionToggled.emit()">
+    <ng-icon
+      [name]="
+        config().sort.direction === 'asc'
+          ? 'phosphorSortAscendingBold'
+          : 'phosphorSortDescendingBold'
+      "
+      aria-hidden="true"
+    />
+    @if (config().sort.direction === 'asc') {
+      <ng-container i18n="@@spaces.sort.ascending">Order: Ascending</ng-container>
+    } @else {
+      <ng-container i18n="@@spaces.sort.descending">Order: Descending</ng-container>
+    }
+  </button>
+</cw-menu>
+
+<cw-menu #groupMenu ariaLabel="Group" i18n-ariaLabel="@@spaces.group.menu">
+  <cw-menu-label i18n="@@spaces.group.title">Group by</cw-menu-label>
+  <cw-menu-radio-group [value]="groupValue()" (valueChange)="pickGroup($event)">
+    @for (option of groupOptions; track option.value) {
+      <button cwMenuItemRadio [value]="option.value">{{ option.label }}</button>
+    }
+  </cw-menu-radio-group>
+</cw-menu>
+
+<cw-menu #subtaskMenu ariaLabel="Subtask display" i18n-ariaLabel="@@spaces.subtasks.menu">
+  <cw-menu-radio-group [value]="config().subtasks" (valueChange)="pickSubtasks($event)">
+    @for (mode of subtaskModes; track mode.value) {
+      <button cwMenuItemRadio [value]="mode.value">
+        <ng-icon [name]="mode.icon" aria-hidden="true" />
+        <span class="flex flex-col">
+          <span>{{ mode.label }}</span>
+          <span class="text-xs text-muted-foreground">{{ mode.hint }}</span>
+        </span>
+      </button>
+    }
+  </cw-menu-radio-group>
+</cw-menu>

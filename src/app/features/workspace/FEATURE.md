@@ -27,12 +27,13 @@ belong to Auth.
   | ---------------------- | ---------------------------------------------------------------------------- |
   | `banners`              | Organization's storage banner                                                |
   | `organizationSwitcher` | Workspace's organizations menu                                               |
-  | `railNavigation`       | Home's « Accueil », Inbox's « Boîte de réception »                           |
+  | `railNavigation`       | Home's « Accueil », Inbox's « Boîte de réception », Spaces' « Espaces »      |
   | `railFooter`           | Search's « Rechercher », Workspace's theme button, Account's menu            |
   | `sidebarHeader`        | Search's « Rechercher… » button                                              |
-  | `sidebarFooter`        | Organization's plan line, Workspace's « Raccourcis clavier »                 |
+  | `sidebar`              | Spaces' favorites, spaces accordion and tips                                 |
+  | `sidebarFooter`        | Spaces' sprint progress, Organization's plan line, « Raccourcis clavier »    |
   | `overlays`             | Search's command palette, Workspace's shortcuts dialog, Task's create dialog |
-  - `''` mounts `HOME_ROUTES`.
+  - `''` mounts `HOME_ROUTES`, then `SPACES_ROUTES` (`spaces/:spaceId`, `l/:listId`).
   - `**` mounts `ERRORS_ROUTES`, so an unknown address renders the 404 inside the shell.
 
 - Redirect targets owned by Auth: `/login?next=<url>` for a `401`, `/organizations` for an
@@ -40,10 +41,10 @@ belong to Auth.
 
 ## Public entry points
 
-| Entry point               | Consumers                                                |
-| ------------------------- | -------------------------------------------------------- |
-| `workspace.routes`        | app                                                      |
-| `ports/workspace-context` | home, errors, account, search, inbox, organization, task |
+| Entry point               | Consumers                                                        |
+| ------------------------- | ---------------------------------------------------------------- |
+| `workspace.routes`        | app                                                              |
+| `ports/workspace-context` | home, errors, account, search, inbox, organization, spaces, task |
 
 `ports/workspace-context` publishes `WORKSPACE_CONTEXT` (`WorkspaceContextPort`: `user`,
 `organization`, `role` and `can(role)`) and the `WorkspaceUser`, `WorkspaceOrganization` and
@@ -56,8 +57,9 @@ injects it as optional.
   (`cache: 'no-store'`), `listMyOrganizations` (every cursor page) and `switchOrganization`, and
   `RealtimeService.issueRealtimeTicket` for single-use connection tickets.
 - Auth's `withSessionLock` (`@features/auth`), in exclusive mode around the organization switch.
-- The `providers` entries of Account, Home, Inbox, Organization, Search and Task, and Organization's
-  `utils/plan-label`, bound on `/:org`.
+- The `providers` entries of Account, Home, Inbox, Organization, Search, Spaces (including
+  `provideSpacesNavigation()`) and Task, and Organization's `utils/plan-label`, bound on `/:org`.
+- Spaces' `spaces.routes`, mounted under `/:org`.
 - `@core/shortcuts` (`?`) and `@core/theme`.
 - `@layouts/app-shell` and `@layouts/app-shell/providers` for the shell and its slots.
 - `@cadenway/ui` (`app-rail`, `button`, `dialog`, `kbd`, `menu`, `skeleton`) and `@cadenway/icons`.

@@ -1,0 +1,362 @@
+import { TestBed } from '@angular/core/testing';
+import { type Observable, Subject } from 'rxjs';
+import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
+
+import { type RealtimeChange, RealtimeConnection } from '@core/realtime';
+import { AccessDeniedRouteError } from '@shared/route-errors';
+
+import { ListsApi } from '../../data-access/services/lists-api/lists-api.service';
+import { SpacesApi } from '../../data-access/services/spaces-api/spaces-api.service';
+import type { SavedView } from '../../models/saved-view/saved-view.interface';
+import type { ListSummary, TaskList } from '../../models/task-list/task-list.interface';
+import { DEFAULT_VIEW_CONFIG } from '../../utils/list-view-query/list-view-query.util';
+import { ListPageStore } from './list-page.store';
+
+/**
+ * Constant sprint14
+ *
+ * @description
+ * The mockup's « Sprint 14 ».
+ *
+ * @type {TaskList}
+ */
+const sprint14: TaskList = {
+  id: 'l-sprint14',
+  spaceId: 'sp-produit',
+  name: 'Sprint 14',
+  icon: 'lightning',
+  color: 'violet',
+  sprint: { startDate: '2026-11-03', endDate: '2026-11-17', goal: null },
+  archived: false,
+  canEdit: true,
+  version: 4,
+};
+
+/**
+ * Constant bugsCritiques
+ *
+ * @description
+ * A saved view of the list.
+ *
+ * @type {SavedView}
+ */
+const bugsCritiques: SavedView = {
+  id: 'sv-bugs',
+  listId: 'l-sprint14',
+  name: 'Bugs critiques',
+  icon: 'bug',
+  layout: 'list',
+  config: DEFAULT_VIEW_CONFIG,
+  version: 1,
+};
+
+/**
+ * Type ApiFake
+ *
+ * @description
+ * Mocks of the list page's data-access methods, by name.
+ *
+ * @type {Record<string, Mock>}
+ */
+type ApiFake = Record<string, Mock>;
+
+describe('ListPageStore', () => {
+  let api: ApiFake;
+  let notices: Subject<RealtimeChange>;
+  let watch: Mock;
+  let store: InstanceType<typeof ListPageStore>;
+
+  beforeEach(() => {
+    notices = new Subject<RealtimeChange>();
+    watch = vi.fn((): Observable<RealtimeChange> => notices.asObservable());
+    api = {
+      list: vi.fn(() => Promise.resolve(sprint14)),
+      counts: vi.fn(() =>
+        Promise.resolve({
+          list: sprint14,
+          counts: { total: 98, open: 70, done: 24, cancelled: 2, late: 3 },
+        }),
+      ),
+      milestoneCount: vi.fn(() => Promise.resolve(2)),
+      listMembers: vi.fn(() => Promise.resolve({ items: [], total: 0 })),
+      organizationMembers: vi.fn(() => Promise.resolve([{ userId: 'u1', name: 'Inès Robert' }])),
+      labels: vi.fn(() => Promise.resolve(['Auth', 'Front'])),
+      savedViews: vi.fn(() => Promise.resolve([bugsCritiques])),
+      rename: vi.fn(),
+      duplicate: vi.fn(),
+      exportCsv: vi.fn(),
+      archive: vi.fn(),
+      remove: vi.fn(),
+      createSavedView: vi.fn(),
+      updateSavedView: vi.fn(),
+      duplicateSavedView: vi.fn(),
+      deleteSavedView: vi.fn(),
+      bulk: vi.fn(),
+    };
+    TestBed.configureTestingModule({
+      providers: [
+        ListPageStore,
+        { provide: ListsApi, useValue: api },
+        {
+          provide: SpacesApi,
+          useValue: { space: vi.fn(() => Promise.resolve({ id: 'sp-produit' })) },
+        },
+        { provide: RealtimeConnection, useValue: { watch } },
+      ],
+    });
+    store = TestBed.inject(ListPageStore);
+  });
+
+  /**
+   * Function loaded
+   *
+   * @description
+   * Binds Sprint 14 and waits for its reads.
+   *
+   * @returns {Promise<void>} Resolves once the list and its counts are read.
+   */
+  async function loaded(): Promise<void> {
+    store.load('l-sprint14');
+    await expect.poll(() => store.list.hasValue() && store.counts.hasValue()).toBe(true);
+    await expect.poll(() => store.savedViews.hasValue()).toBe(true);
+  }
+
+  it('keeps the typed route error of a failed primary read', async () => {
+    api['list'].mockRejectedValueOnce(
+      new AccessDeniedRouteError({ kind: 'list', id: 'l-x', name: null, ownerName: null }),
+    );
+    store.load('l-x');
+    await expect.poll(() => store.list.status()).toBe('error');
+    expect(store.list.error()).toBeInstanceOf(AccessDeniedRouteError);
+  });
+
+  it('watches the list room and reads the counts again on a notice', async () => {
+    await loaded();
+    expect(watch).toHaveBeenCalledWith({ kind: 'list', listId: 'l-sprint14' });
+    const calls: number = api['counts'].mock.calls.length;
+
+    notices.next({
+      id: 'n1',
+      type: 'task.updated',
+      at: '2026-11-08T09:00:00Z',
+      data: { listId: 'l-sprint14' },
+    });
+    await expect.poll(() => api['counts'].mock.calls.length).toBe(calls + 1);
+    expect(api['milestoneCount']).toHaveBeenCalledTimes(2);
+  });
+
+  it('ignores unrelated notices and debounces matching notices', async () => {
+    await loaded();
+    const notice: RealtimeChange = {
+      id: 'n1',
+      type: 'task.updated',
+      at: '2026-11-08T09:00:00Z',
+      data: { listId: 'other' },
+    };
+    notices.next(notice);
+    await new Promise<void>((resolve) => {
+      setTimeout(resolve, 350);
+    });
+    expect(api['counts']).toHaveBeenCalledTimes(1);
+    notices.next({ ...notice, data: { listId: 'l-sprint14' } });
+    notices.next({ ...notice, data: { spaceId: 'sp-produit' } });
+    await expect.poll(() => api['counts'].mock.calls.length).toBe(2);
+    expect(api['milestoneCount']).toHaveBeenCalledTimes(2);
+  });
+
+  it('retains counts and queues one refresh while a read is running', async () => {
+    await loaded();
+    const original: ListSummary | undefined = store.counts.value();
+    let finish: (value: unknown) => void = () => undefined;
+    api['counts'].mockReturnValueOnce(
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+    );
+    store.refreshCounts();
+    await expect.poll(() => api['counts'].mock.calls.length).toBe(2);
+    store.refreshCounts();
+    store.refreshCounts();
+    expect(store.counts.value()).toEqual(original);
+    finish(original);
+    await expect.poll(() => api['counts'].mock.calls.length).toBe(3);
+  });
+
+  it('shows a new name at once and restores it when the rename is refused', async () => {
+    await loaded();
+    let refuse: (reason: unknown) => void = () => undefined;
+    api['rename'].mockReturnValueOnce(
+      new Promise((_resolve, reject) => {
+        refuse = reject;
+      }),
+    );
+
+    const pending: Promise<boolean> = store.rename('Sprint 15');
+    expect(store.list.value()?.name).toBe('Sprint 15');
+    refuse(new Error('list.version-mismatch'));
+
+    expect(await pending).toBe(false);
+    expect(store.list.value()?.name).toBe('Sprint 14');
+  });
+
+  it('removes a saved view at once and puts it back when the deletion is refused', async () => {
+    await loaded();
+    api['deleteSavedView'].mockRejectedValueOnce(new Error('saved-view.list-archived'));
+
+    const pending: Promise<boolean> = store.deleteView(bugsCritiques);
+    expect(store.savedViews.value()).toEqual([]);
+
+    expect(await pending).toBe(false);
+    expect(store.savedViews.value()).toEqual([bugsCritiques]);
+  });
+
+  it('keeps the saved views read pending or failed when a creation completes', async () => {
+    let resolveViews: (views: readonly SavedView[]) => void = () => undefined;
+    api['savedViews'].mockReturnValueOnce(
+      new Promise<readonly SavedView[]>((resolve) => {
+        resolveViews = resolve;
+      }),
+    );
+    store.load('l-sprint14');
+    await expect.poll(() => store.savedViews.isLoading()).toBe(true);
+    const created: SavedView = { ...bugsCritiques, id: 'sv-new' };
+    api['createSavedView'].mockResolvedValue(created);
+    expect(
+      await store.createView({ name: 'New', icon: null }, 'list', DEFAULT_VIEW_CONFIG),
+    ).toEqual(created);
+    expect(store.savedViews.isLoading()).toBe(true);
+    resolveViews([bugsCritiques, created]);
+    await expect.poll(() => store.savedViews.hasValue()).toBe(true);
+    expect(store.savedViews.value()).toEqual([bugsCritiques, created]);
+
+    api['savedViews'].mockRejectedValueOnce(new Error('unavailable'));
+    store.savedViews.reload();
+    await expect.poll(() => store.savedViews.status()).toBe('error');
+    expect(
+      await store.createView({ name: 'New', icon: null }, 'list', DEFAULT_VIEW_CONFIG),
+    ).toEqual(created);
+    expect(store.savedViews.status()).toBe('error');
+    expect(store.savedViews.error()).toBeTruthy();
+  });
+
+  it('does not overwrite a failed read when a creation finishes after it', async () => {
+    await loaded();
+    let finish: (view: SavedView) => void = () => undefined;
+    api['createSavedView'].mockReturnValueOnce(
+      new Promise<SavedView>((resolve) => {
+        finish = resolve;
+      }),
+    );
+    const pending: Promise<SavedView | null> = store.createView(
+      { name: 'New', icon: null },
+      'list',
+      DEFAULT_VIEW_CONFIG,
+    );
+    api['savedViews'].mockRejectedValueOnce(new Error('unavailable'));
+    store.savedViews.reload();
+    await expect.poll(() => store.savedViews.status()).toBe('error');
+    finish({ ...bugsCritiques, id: 'sv-new' });
+    await pending;
+    expect(store.savedViews.status()).toBe('error');
+  });
+
+  it('restores only the deleted view when other writes succeed before its refusal', async () => {
+    const second: SavedView = { ...bugsCritiques, id: 'sv-second', name: 'Second' };
+    const third: SavedView = { ...bugsCritiques, id: 'sv-third', name: 'Third' };
+    api['savedViews'].mockResolvedValueOnce([bugsCritiques, second, third]);
+    await loaded();
+    let refuse: (reason: unknown) => void = () => undefined;
+    api['deleteSavedView'].mockReturnValueOnce(
+      new Promise<void>((_resolve, reject) => {
+        refuse = reject;
+      }),
+    );
+    const deleting: Promise<boolean> = store.deleteView(second);
+    const renamed: SavedView = { ...third, name: 'Updated' };
+    const created: SavedView = { ...third, id: 'sv-new', name: 'New' };
+    api['updateSavedView'].mockResolvedValueOnce(renamed);
+    api['createSavedView'].mockResolvedValueOnce(created);
+    await store.renameView(third, { name: 'Updated', icon: null });
+    await store.createView({ name: 'New', icon: null }, 'list', DEFAULT_VIEW_CONFIG);
+    refuse(new Error('unavailable'));
+    expect(await deleting).toBe(false);
+    expect(store.savedViews.value()).toEqual([bugsCritiques, second, renamed, created]);
+  });
+
+  it('appends a created view and its duplicate after its source', async () => {
+    await loaded();
+    const created: SavedView = { ...bugsCritiques, id: 'sv-2', name: 'Mes tâches' };
+    const copy: SavedView = { ...bugsCritiques, id: 'sv-3', name: 'Bugs critiques (copie)' };
+    api['createSavedView'].mockResolvedValueOnce(created);
+    api['duplicateSavedView'].mockResolvedValueOnce(copy);
+
+    expect(
+      await store.createView({ name: 'Mes tâches', icon: null }, 'list', DEFAULT_VIEW_CONFIG),
+    ).toBe(created);
+    expect(await store.duplicateView(bugsCritiques)).toBe(copy);
+    expect(store.savedViews.value()?.map((view: SavedView) => view.id)).toEqual([
+      'sv-bugs',
+      'sv-3',
+      'sv-2',
+    ]);
+  });
+
+  it('does not apply a saved view write after switching lists', async () => {
+    await loaded();
+    let finishDuplicate: (view: SavedView) => void = () => undefined;
+    let finishUpdate: (view: SavedView) => void = () => undefined;
+    api['duplicateSavedView'].mockReturnValueOnce(
+      new Promise<SavedView>((resolve) => {
+        finishDuplicate = resolve;
+      }),
+    );
+    api['updateSavedView'].mockReturnValueOnce(
+      new Promise<SavedView>((resolve) => {
+        finishUpdate = resolve;
+      }),
+    );
+    const duplicate: Promise<SavedView | null> = store.duplicateView(bugsCritiques);
+    const update: Promise<SavedView | null> = store.renameView(bugsCritiques, {
+      name: 'Changed',
+      icon: null,
+    });
+    api['savedViews'].mockResolvedValueOnce([]);
+    store.load('l-other');
+    await expect
+      .poll(() => store.savedViews.hasValue() && store.savedViews.value().length === 0)
+      .toBe(true);
+    finishDuplicate({ ...bugsCritiques, id: 'copy' });
+    finishUpdate({ ...bugsCritiques, name: 'Changed' });
+    await Promise.all([duplicate, update]);
+    expect(store.savedViews.value()).toEqual([]);
+  });
+
+  it('reads the counts again after a bulk action and reports a refusal', async () => {
+    await loaded();
+    const calls: number = api['counts'].mock.calls.length;
+    api['bulk'].mockResolvedValueOnce(3);
+
+    expect(await store.bulk([{ taskKey: 'CAD-482' }], { type: 'done' })).toBe(3);
+    await expect.poll(() => api['counts'].mock.calls.length).toBe(calls + 1);
+
+    api['bulk'].mockRejectedValueOnce(new Error('request.version-mismatch'));
+    expect(await store.bulk([{ taskKey: 'CAD-482' }], { type: 'trash' })).toBeNull();
+    expect(await store.bulk([], { type: 'trash' })).toBe(0);
+  });
+
+  it('reports the list writes', async () => {
+    await loaded();
+    api['archive'].mockResolvedValueOnce(undefined);
+    api['remove'].mockRejectedValueOnce(new Error('access.role-insufficient'));
+    api['duplicate'].mockResolvedValueOnce({ list: { ...sprint14, id: 'l-copy' }, taskCount: 98 });
+    api['exportCsv'].mockResolvedValueOnce({ fileName: 'sprint-14.csv', content: 'a\nb' });
+
+    expect(await store.archive()).toBe(true);
+    expect(await store.remove()).toBe(false);
+    expect((await store.duplicate())?.taskCount).toBe(98);
+    expect((await store.exportCsv({ level: 'roots', sort: 'manual' }))?.fileName).toBe(
+      'sprint-14.csv',
+    );
+    expect(api['exportCsv']).toHaveBeenCalledWith(sprint14, { level: 'roots', sort: 'manual' });
+  });
+});
