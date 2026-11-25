@@ -181,7 +181,7 @@ describe('ListPageStore', () => {
   ])('reads the counts again when a task joins or leaves the list (%s)', async (type) => {
     await loaded();
 
-    notices.next({ id: type, type, at: '2026-11-08T09:00:00Z', data: { taskId: 'CAD-483' } });
+    notices.next({ id: type, type, at: '2026-11-08T09:00:00Z', data: { taskKey: 'CAD-483' } });
 
     await expect.poll(() => api['counts'].mock.calls.length).toBe(2);
   });

@@ -631,11 +631,11 @@ describe('ListRowsStore', () => {
       },
     ],
     ['git.links-changed.v1', { taskId: '019a6000-0000-7000-8000-000000000002' }],
-    ['task.created.v1', { taskId: '019a6000-0000-7000-8000-000000000002' }],
-    ['task.archived.v1', { taskId: '019a6000-0000-7000-8000-000000000002' }],
-    ['task.unarchived.v1', { taskId: '019a6000-0000-7000-8000-000000000002' }],
-    ['task.trashed.v1', { taskId: '019a6000-0000-7000-8000-000000000002' }],
-    ['task.restored.v1', { taskId: '019a6000-0000-7000-8000-000000000002' }],
+    ['task.created.v1', { taskKey: 'CAD-482' }],
+    ['task.archived.v1', { taskKey: 'CAD-482' }],
+    ['task.unarchived.v1', { taskKey: 'CAD-482' }],
+    ['task.trashed.v1', { taskKey: 'CAD-482' }],
+    ['task.restored.v1', { taskKey: 'CAD-482' }],
   ])('reloads for a parsed %s notice without a list id', async (type, data) => {
     const store: InstanceType<typeof ListRowsStore> = setup(flat);
     await settle();
@@ -655,6 +655,24 @@ describe('ListRowsStore', () => {
     await settle();
     expect(page).toHaveBeenCalledTimes(2);
     expect(store.rows()).toHaveLength(1);
+  });
+
+  it('rejects a membership notice whose data is not the task key alone', () => {
+    for (const data of [
+      { taskId: '019a6000-0000-7000-8000-000000000002' },
+      { taskKey: 'cad-482' },
+      { taskKey: 'CAD-482', listId: 'sprint-14' },
+    ]) {
+      expect(
+        parseChange({
+          id: '019a6000-0000-7000-8000-000000000001',
+          type: 'task.created.v1',
+          at: '2026-11-08T09:00:00Z',
+          version: 1,
+          data,
+        }),
+      ).toBeNull();
+    }
   });
 
   it('reads the rows again while notices keep arriving faster than 300 ms', async () => {

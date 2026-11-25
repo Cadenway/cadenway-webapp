@@ -17,6 +17,16 @@ import type {
 const UUID: RegExp = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
+ * Constant TASK_KEY
+ *
+ * @description
+ * A task key (`CAD-482`), as the realtime contract's `taskMembership` notice data carries it.
+ *
+ * @type {RegExp}
+ */
+const TASK_KEY: RegExp = /^[A-Z]{2,5}-[1-9][0-9]{0,8}$/;
+
+/**
  * Function record
  *
  * @description
@@ -103,7 +113,8 @@ export function heartbeatInterval(value: unknown, organization: string | null): 
  * Constant TASK_MEMBERSHIP_NOTICES
  *
  * @description
- * The notices that tell a list room a task joined or left it; their data is the task id alone.
+ * The notices that tell a list room a task joined or left it; their data is the task key alone,
+ * since a trashed task can no longer be authorized by itself.
  *
  * @type {ReadonlySet<string>}
  */
@@ -128,6 +139,12 @@ export function parseChange(value: unknown): RealtimeChange | null {
   if (!envelope(value) || !record(value['data'])) return null;
   const data: Record<string, unknown> = value['data'];
   const type: unknown = value['type'];
+  if (typeof type === 'string' && TASK_MEMBERSHIP_NOTICES.has(type)) {
+    const taskKey: unknown = data['taskKey'];
+    return exactKeys(data, ['taskKey']) && typeof taskKey === 'string' && TASK_KEY.test(taskKey)
+      ? { id: value['id'] as string, type, at: value['at'] as string, data }
+      : null;
+  }
   const taskId: unknown = data['taskId'];
   if (typeof taskId !== 'string' || !UUID.test(taskId)) return null;
   if (type === 'task.updated.v1' || type === 'task.status-changed.v1') {
@@ -145,12 +162,7 @@ export function parseChange(value: unknown): RealtimeChange | null {
       !UUID.test(data['commentId'])
     )
       return null;
-  } else if (
-    (type !== 'git.links-changed.v1' &&
-      !(typeof type === 'string' && TASK_MEMBERSHIP_NOTICES.has(type))) ||
-    !exactKeys(data, ['taskId'])
-  )
-    return null;
+  } else if (type !== 'git.links-changed.v1' || !exactKeys(data, ['taskId'])) return null;
   return { id: value['id'] as string, type: type, at: value['at'] as string, data };
 }
 
