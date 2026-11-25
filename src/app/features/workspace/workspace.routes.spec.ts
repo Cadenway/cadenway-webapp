@@ -19,7 +19,7 @@ import {
 } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { BillingService, InboxService, RealtimeService } from '@cadenway/api-client';
-import { filter, firstValueFrom, type Observable, of, Subject, throwError } from 'rxjs';
+import { filter, firstValueFrom, Observable, of, Subject, throwError } from 'rxjs';
 import { io, type Socket } from 'socket.io-client';
 import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 
@@ -381,6 +381,167 @@ describe('WORKSPACE_ROUTES', () => {
       clock.mockRestore();
     },
   );
+
+  it.each(['current organization', 'organization lookup'] as const)(
+    'does not switch after a recovery is superseded during the locked %s read',
+    async (stage: 'current organization' | 'organization lookup') => {
+      const harness: RouterTestingHarness = await open('/atelier-nord');
+      const router: Router = TestBed.inject(Router);
+      const pin: OrganizationPin = TestBed.inject(OrganizationPin);
+      const focus: Mock<() => boolean> = vi.spyOn(document, 'hasFocus').mockReturnValue(true);
+      const clock: Mock<() => number> = vi.spyOn(Date, 'now');
+      const current: Subject<WorkspaceResult<WorkspaceOrganization>> = new Subject<
+        WorkspaceResult<WorkspaceOrganization>
+      >();
+      const lookup: Subject<WorkspaceResult<readonly WorkspaceOrganization[]>> = new Subject<
+        WorkspaceResult<readonly WorkspaceOrganization[]>
+      >();
+      const settled: Subject<void> = new Subject<void>();
+      session.exclusive.mockImplementation(
+        (operation: () => Observable<unknown>) =>
+          new Observable((subscriber) => {
+            operation().subscribe({
+              next: (value: unknown) => {
+                subscriber.next(value);
+              },
+              error: (error: unknown) => {
+                subscriber.error(error);
+              },
+              complete: () => {
+                subscriber.complete();
+                settled.next();
+              },
+            });
+          }),
+      );
+      if (stage === 'current organization')
+        session.currentOrganization.mockReturnValueOnce(current);
+      else {
+        session.currentOrganization.mockReturnValueOnce(ok(lumen));
+        session.myOrganizations.mockReturnValueOnce(lookup);
+      }
+      session.currentOrganization.mockReturnValue(ok(lumen));
+      const cancelled: Promise<NavigationCancel> = firstValueFrom(
+        router.events.pipe(
+          filter((event): event is NavigationCancel => event instanceof NavigationCancel),
+        ),
+      );
+      pin.notifyContextChanged();
+      await vi.waitFor(() => {
+        if (stage === 'current organization')
+          expect(session.currentOrganization).toHaveBeenCalledTimes(2);
+        else expect(session.myOrganizations).toHaveBeenCalledOnce();
+      });
+      const superseding: Promise<boolean> = router.navigateByUrl('/atelier-nord?task=CAD-1');
+      await cancelled;
+      expect(await superseding).toBe(true);
+      const finished: Promise<void> = firstValueFrom(settled);
+      if (stage === 'current organization') {
+        current.next({ ok: true, value: lumen });
+        current.complete();
+      } else {
+        lookup.next({ ok: true, value: [atelierNord, lumen] });
+        lookup.complete();
+      }
+      await finished;
+      expect(session.switchOrganization).not.toHaveBeenCalled();
+      expect(pin.stale()).toBe(true);
+      expect(pin.isSwitching()).toBe(false);
+      focus.mockReturnValue(false);
+      clock.mockReturnValue(Date.now() + 2000);
+      const verified: Promise<void> = firstValueFrom(pin.organizationVerified);
+      focus.mockReturnValue(true);
+      window.dispatchEvent(new Event('focus'));
+      await verified;
+      await harness.fixture.whenStable();
+      expect(session.switchOrganization).toHaveBeenCalledExactlyOnceWith(atelierNord.id);
+      expect(pin.stale()).toBe(false);
+      clock.mockRestore();
+      settled.complete();
+    },
+  );
+
+  it('finishes a dispatched recovery switch even when navigation is superseded', async () => {
+    await open('/atelier-nord');
+    const router: Router = TestBed.inject(Router);
+    const pin: OrganizationPin = TestBed.inject(OrganizationPin);
+    const focus: Mock<() => boolean> = vi.spyOn(document, 'hasFocus').mockReturnValue(true);
+    const write: Subject<WorkspaceResult<void>> = new Subject<WorkspaceResult<void>>();
+    const settled: Subject<void> = new Subject<void>();
+    session.exclusive.mockImplementation(
+      (operation: () => Observable<unknown>) =>
+        new Observable((subscriber) => {
+          operation().subscribe({
+            next: (value: unknown) => {
+              subscriber.next(value);
+            },
+            error: (error: unknown) => {
+              subscriber.error(error);
+            },
+            complete: () => {
+              subscriber.complete();
+              settled.next();
+            },
+          });
+        }),
+    );
+    session.currentOrganization.mockReturnValue(ok(lumen));
+    session.switchOrganization.mockReturnValueOnce(write);
+    pin.notifyContextChanged();
+    await vi.waitFor(() => {
+      expect(session.switchOrganization).toHaveBeenCalledOnce();
+    });
+    const finished: Promise<void> = firstValueFrom(settled);
+    const superseding: Promise<boolean> = router.navigateByUrl('/atelier-nord?task=CAD-1');
+    expect(await superseding).toBe(true);
+    focus.mockReturnValue(false);
+    write.next({ ok: true, value: undefined });
+    write.complete();
+    await finished;
+    expect(session.switchOrganization).toHaveBeenCalledExactlyOnceWith(atelierNord.id);
+    expect(pin.stale()).toBe(true);
+    settled.complete();
+  });
+
+  it('lets an explicit organization switch finish after navigation is superseded during its read', async () => {
+    await open('/atelier-nord');
+    const router: Router = TestBed.inject(Router);
+    const read: Subject<WorkspaceResult<WorkspaceOrganization>> = new Subject<
+      WorkspaceResult<WorkspaceOrganization>
+    >();
+    const settled: Subject<void> = new Subject<void>();
+    session.exclusive.mockImplementation(
+      (operation: () => Observable<unknown>) =>
+        new Observable((subscriber) => {
+          operation().subscribe({
+            next: (value: unknown) => {
+              subscriber.next(value);
+            },
+            error: (error: unknown) => {
+              subscriber.error(error);
+            },
+            complete: () => {
+              subscriber.complete();
+              settled.next();
+            },
+          });
+        }),
+    );
+    session.currentOrganization.mockReturnValueOnce(read);
+    const cancelledNavigation: Promise<boolean> = router.navigateByUrl('/lumen');
+    await vi.waitFor(() => {
+      expect(session.currentOrganization).toHaveBeenCalledTimes(2);
+    });
+    const superseding: Promise<boolean> = router.navigateByUrl('/atelier-nord?task=CAD-1');
+    expect(await cancelledNavigation).toBe(false);
+    expect(await superseding).toBe(true);
+    const finished: Promise<void> = firstValueFrom(settled);
+    read.next({ ok: true, value: atelierNord });
+    read.complete();
+    await finished;
+    expect(session.switchOrganization).toHaveBeenCalledExactlyOnceWith(lumen.id);
+    settled.complete();
+  });
 
   it('allows an explicit organization navigation while the document is unfocused', async () => {
     const harness: RouterTestingHarness = await open('/atelier-nord');
