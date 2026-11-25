@@ -10,6 +10,7 @@ import { OrganizationPin, OrganizationSwitchPendingError } from '@core/api';
 import { RuntimeConfigStore } from '@core/config';
 
 import {
+  type RealtimeChange,
   provideRealtime,
   REALTIME_ORGANIZATION,
   REALTIME_TERMINAL_FAILURE,
@@ -392,6 +393,39 @@ describe('RealtimeConnection', () => {
     expect(
       socket.emit.mock.calls.filter((args: unknown[]) => args[0] === 'room:leave'),
     ).toHaveLength(1);
+  });
+
+  it('keeps two notices of one move, which share their id but not their type', async () => {
+    const { connection, sockets }: { connection: RealtimeConnection; sockets: FakeSocket[] } =
+      setup();
+    const received: Mock = vi.fn();
+    const watch: Subscription = connection
+      .watch({ kind: 'list', listId: 'l-sprint14' })
+      .subscribe(received);
+    await flush();
+    sockets[0].trigger('hello', hello);
+    await flush();
+    const moved: Record<string, unknown> = {
+      id: '019a6000-0000-7000-8000-000000000009',
+      type: 'task.moved.v1',
+      at: '2026-11-08T09:00:00Z',
+      version: 5,
+      data: { taskKey: 'CAD-482' },
+    };
+
+    sockets[0].trigger('change', {
+      ...moved,
+      type: 'task.updated.v1',
+      data: { taskId: '019a6000-0000-7000-8000-000000000002', changed: ['listId'] },
+    });
+    sockets[0].trigger('change', moved);
+    sockets[0].trigger('change', moved);
+
+    expect(received.mock.calls.map((call: unknown[]) => (call[0] as RealtimeChange).type)).toEqual([
+      'task.updated.v1',
+      'task.moved.v1',
+    ]);
+    watch.unsubscribe();
   });
 
   it('reconnects with a new ticket, rejoins, and adopts the saved presence', async () => {
