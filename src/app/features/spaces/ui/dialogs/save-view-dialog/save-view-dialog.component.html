@@ -1,0 +1,95 @@
+<cw-dialog [(open)]="open" [pending]="pending()" data-testid="save-view-dialog">
+  <cw-dialog-header>
+    <h2 cwDialogTitle>
+      @if (mode() === 'rename') {
+        <ng-container i18n="@@spaces.save-view.rename-title">Rename the view</ng-container>
+      } @else {
+        <ng-container i18n="@@spaces.save-view.title">Save the view</ng-container>
+      }
+    </h2>
+    <p cwDialogDescription>{{ summary() }}</p>
+  </cw-dialog-header>
+  <form
+    class="flex flex-col gap-4"
+    novalidate
+    (submit)="$event.preventDefault(); submit(nameField)"
+  >
+    <div class="flex flex-col gap-1.5">
+      <label for="save-view-name" class="text-sm font-medium" i18n="@@spaces.save-view.name"
+        >Name</label
+      >
+      <input
+        #nameField
+        id="save-view-name"
+        cwInput
+        type="text"
+        autocomplete="off"
+        [placeholder]="placeholder()"
+        [formField]="viewForm.name"
+        [attr.aria-describedby]="
+          viewForm.name().touched() && viewForm.name().invalid() ? 'save-view-name-error' : null
+        "
+        data-testid="save-view-name"
+      />
+      @if (viewForm.name().touched() && viewForm.name().invalid()) {
+        <p id="save-view-name-error" class="text-xs text-destructive">
+          @for (error of viewForm.name().errors(); track error.kind) {
+            {{ error.message }}
+          }
+        </p>
+      }
+    </div>
+    <div class="flex flex-col gap-1.5">
+      <span id="save-view-icon-label" class="text-sm font-medium" i18n="@@spaces.save-view.icon"
+        >Icon</span
+      >
+      <cw-toggle-group
+        type="single"
+        variant="outline"
+        size="sm"
+        class="flex-wrap"
+        ariaLabel="Icon"
+        i18n-ariaLabel="@@spaces.save-view.icon"
+        [value]="icon()"
+        (valueChange)="pickIcon($event)"
+      >
+        <button
+          cwToggleGroupItem
+          value="default"
+          [attr.aria-label]="layoutName()"
+          [attr.title]="layoutName()"
+        >
+          <ng-icon [name]="layoutIcon()" aria-hidden="true" />
+        </button>
+        @for (choice of icons; track choice.value) {
+          <button
+            cwToggleGroupItem
+            [value]="choice.value"
+            [attr.aria-label]="choice.label"
+            [attr.title]="choice.label"
+          >
+            <ng-icon [name]="choice.name" aria-hidden="true" />
+          </button>
+        }
+      </cw-toggle-group>
+    </div>
+    <cw-dialog-footer>
+      <button cwButton cwDialogClose type="button" variant="outline">
+        <ng-container i18n="@@spaces.cancel">Cancel</ng-container>
+      </button>
+      <button
+        cwButton
+        type="submit"
+        [loading]="pending()"
+        [disabled]="!model().name.trim()"
+        data-testid="save-view-submit"
+      >
+        @if (mode() === 'rename') {
+          <ng-container i18n="@@spaces.save-view.rename-submit">Save</ng-container>
+        } @else {
+          <ng-container i18n="@@spaces.save-view.submit">Save the view</ng-container>
+        }
+      </button>
+    </cw-dialog-footer>
+  </form>
+</cw-dialog>

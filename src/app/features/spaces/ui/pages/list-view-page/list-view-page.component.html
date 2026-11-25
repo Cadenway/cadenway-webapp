@@ -1,0 +1,38 @@
+<section
+  class="flex min-h-0 flex-1 flex-col px-4 pt-2 pb-4 sm:px-6"
+  aria-label="Tasks"
+  i18n-aria-label="@@spaces.list-view.region"
+  data-testid="list-rows-placeholder"
+></section>
+
+<div class="pointer-events-none absolute inset-x-0 bottom-4 z-20 flex justify-center px-4">
+  <cw-bulk-bar
+    [count]="selection().length"
+    [people]="people()"
+    [targets]="targets()"
+    [pending]="pending()"
+    (doneMarked)="markDone()"
+    (assigned)="assign($event)"
+    (moved)="move($event)"
+    (deleted)="confirmDelete.set(true)"
+    (cleared)="selection.set([])"
+  />
+</div>
+
+<cw-alert-dialog
+  variant="destructive"
+  size="sm"
+  [(open)]="confirmDelete"
+  [items]="selectedItems()"
+  [pending]="pending()"
+  (confirm)="trash()"
+>
+  <h2 cwAlertDialogTitle>{{ deleteTitle() }}</h2>
+  <p cwAlertDialogDescription i18n="@@spaces.bulk.delete-text">
+    The selected tasks go to the trash with their subtasks, where they stay 30 days.
+  </p>
+  <button cwButton cwAlertDialogCancel variant="outline" i18n="@@spaces.cancel">Cancel</button>
+  <button cwButton cwAlertDialogAction variant="destructive" [loading]="pending()">
+    {{ deleteAction() }}
+  </button>
+</cw-alert-dialog>

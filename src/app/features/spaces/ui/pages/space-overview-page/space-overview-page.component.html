@@ -1,0 +1,194 @@
+@let space = store.space.value();
+@let overview = store.overview.value();
+<div class="mx-auto flex w-full max-w-5xl flex-col gap-6 px-4 py-6 sm:px-6">
+  @if (space && overview) {
+    <header class="flex flex-wrap items-start gap-3">
+      <span
+        class="flex size-10 shrink-0 items-center justify-center rounded-lg border border-border bg-background text-base font-semibold"
+        [class]="spaceTone(space)"
+        aria-hidden="true"
+      >
+        @if (spaceIcon(space); as icon) {
+          <ng-icon [name]="icon" class="size-5" />
+        } @else {
+          {{ space.name.charAt(0).toUpperCase() }}
+        }
+      </span>
+      <div class="flex min-w-0 flex-1 flex-col gap-0.5">
+        <h1
+          class="flex min-w-0 items-center gap-2 text-2xl font-semibold tracking-tight"
+          tabindex="-1"
+          data-route-focus
+        >
+          <span class="truncate">{{ space.name }}</span>
+          @if (space.private) {
+            <ng-icon
+              name="phosphorLockSimpleBold"
+              class="size-4 shrink-0 text-muted-foreground"
+              role="img"
+              aria-label="Private space"
+              i18n-aria-label="@@spaces.private"
+            />
+          }
+        </h1>
+        <p class="text-sm text-muted-foreground" data-testid="space-meta">
+          <ng-container i18n="@@spaces.overview.list-count">{overview.lists.length, plural,
+            =1 {1 list}
+            other {{{ overview.lists.length }} lists}
+          }</ng-container>
+          ·
+          <ng-container i18n="@@spaces.overview.task-count">{overview.taskCount, plural,
+            =1 {1 task}
+            other {{{ overview.taskCount }} tasks}
+          }</ng-container>
+        </p>
+        @if (space.description) {
+          <p class="text-sm text-muted-foreground">{{ space.description }}</p>
+        }
+      </div>
+      <button
+        cwButton
+        type="button"
+        variant="ghost"
+        size="icon"
+        [attr.aria-pressed]="favorite()"
+        [attr.aria-label]="favorite() ? removeFavoriteLabel : addFavoriteLabel"
+        [attr.title]="favorite() ? removeFavoriteLabel : addFavoriteLabel"
+        data-testid="space-favorite"
+        (click)="toggleFavorite(space)"
+      >
+        <ng-icon
+          [name]="favorite() ? 'phosphorStarFill' : 'phosphorStarBold'"
+          [class.text-foreground]="favorite()"
+          aria-hidden="true"
+        />
+      </button>
+    </header>
+
+    @if (overview.lists.length > 0) {
+      <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3" data-testid="space-lists">
+        @for (summary of overview.lists; track summary.list.id) {
+          <cw-list-card
+            [summary]="summary"
+            [range]="range(summary)"
+            [link]="['/', slug(), 'l', summary.list.id]"
+          />
+        }
+      </div>
+    } @else {
+      <cw-empty variant="outline" data-testid="space-empty">
+        <cw-empty-header>
+          <cw-empty-media>
+            <ng-icon name="phosphorListBulletsBold" aria-hidden="true" />
+          </cw-empty-media>
+          <cw-empty-title i18n="@@spaces.overview.empty-title"
+            >No list in this space</cw-empty-title
+          >
+          <cw-empty-description i18n="@@spaces.overview.empty-text"
+            >Create a list to hold the tasks of the space.</cw-empty-description
+          >
+        </cw-empty-header>
+      </cw-empty>
+    }
+
+    @if (store.milestones.status() === 'error') {
+      <cw-empty size="sm" data-testid="space-milestones-failed">
+        <cw-empty-header>
+          <cw-empty-media tone="destructive">
+            <ng-icon name="phosphorWarningCircleBold" aria-hidden="true" />
+          </cw-empty-media>
+          <cw-empty-title i18n="@@spaces.overview.milestones-failed"
+            >The milestones could not be loaded</cw-empty-title
+          >
+        </cw-empty-header>
+        <cw-empty-content>
+          <button
+            cwButton
+            type="button"
+            variant="outline"
+            size="sm"
+            (click)="store.milestones.reload()"
+            i18n="@@spaces.retry"
+          >
+            Retry
+          </button>
+        </cw-empty-content>
+      </cw-empty>
+    } @else if (store.milestones.hasValue() && store.milestones.value().items.length > 0) {
+      <section class="flex flex-col gap-2" aria-labelledby="space-milestones-title">
+        <h2 id="space-milestones-title" class="flex items-center gap-2 text-sm font-semibold">
+          <ng-container i18n="@@spaces.overview.milestones">Milestones</ng-container>
+          <span
+            class="rounded-full bg-secondary px-1.5 text-xs leading-5 font-medium text-muted-foreground tabular-nums"
+            >{{ store.milestones.value().total }}</span
+          >
+        </h2>
+        <ul class="overflow-hidden rounded-lg border border-border">
+          @for (milestone of store.milestones.value().items; track milestone.key) {
+            <li class="border-b border-border last:border-b-0">
+              <a
+                [routerLink]="['/', slug(), 't', milestone.key]"
+                class="flex w-full items-center gap-3 px-3 py-2.5 text-left text-sm transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none focus-visible:ring-inset"
+              >
+                <cw-status-icon [status]="milestone.status" milestone size="4" />
+                <span class="min-w-0 flex-1 truncate font-medium">{{ milestone.name }}</span>
+                <span class="hidden truncate text-xs text-muted-foreground sm:inline">{{
+                  listName(overview, milestone)
+                }}</span>
+                <span
+                  class="text-xs whitespace-nowrap tabular-nums"
+                  [class]="isLate(milestone) ? 'text-grenat-text' : 'text-muted-foreground'"
+                  >{{ milestoneDate(milestone) }}</span
+                >
+                <span
+                  class="text-xs whitespace-nowrap"
+                  [class]="
+                    isLate(milestone)
+                      ? 'text-grenat-text'
+                      : milestone.status === 'done'
+                        ? 'text-jade-text'
+                        : 'text-muted-foreground'
+                  "
+                >
+                  @if (isLate(milestone)) {
+                    <ng-container i18n="@@spaces.milestone.late">Late</ng-container>
+                  } @else {
+                    @switch (milestone.status) {
+                      @case ('blocked') {
+                        <ng-container i18n="@@spaces.milestone.at-risk">At risk</ng-container>
+                      }
+                      @case ('done') {
+                        <ng-container i18n="@@spaces.milestone.reached">Reached</ng-container>
+                      }
+                      @case ('cancelled') {
+                        <ng-container i18n="@@spaces.milestone.cancelled">Cancelled</ng-container>
+                      }
+                      @default {
+                        <ng-container i18n="@@spaces.milestone.upcoming">Upcoming</ng-container>
+                      }
+                    }
+                  }
+                </span>
+              </a>
+            </li>
+          }
+        </ul>
+      </section>
+    }
+  } @else {
+    <div class="flex flex-col gap-6" aria-busy="true" data-testid="space-overview-loading">
+      <div class="flex items-center gap-3">
+        <div cwSkeleton class="size-10 rounded-lg"></div>
+        <div class="flex flex-1 flex-col gap-2">
+          <div cwSkeleton class="h-7 w-48"></div>
+          <div cwSkeleton class="h-4 w-32"></div>
+        </div>
+      </div>
+      <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <div cwSkeleton class="h-32 rounded-xl"></div>
+        <div cwSkeleton class="h-32 rounded-xl"></div>
+        <div cwSkeleton class="h-32 rounded-xl"></div>
+      </div>
+    </div>
+  }
+</div>

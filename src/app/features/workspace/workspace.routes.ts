@@ -15,6 +15,12 @@ import {
   withSearchButton,
   withSearchRailItem,
 } from '@features/search/providers';
+import {
+  provideSpacesNavigation,
+  withSpacesRailItem,
+  withSpacesSidebar,
+  withSprintProgress,
+} from '@features/spaces/providers';
 import type { AppShell } from '@layouts/app-shell';
 import { provideAppShellSlots } from '@layouts/app-shell/providers';
 
@@ -70,13 +76,15 @@ export const WORKSPACE_ROUTES: Routes = [
       ...provideWorkspaceRuntime(),
       providePresence(),
       provideOrganizationUsage(),
+      provideSpacesNavigation(),
       provideAppShellSlots({
         banners: [withStorageBanner()],
         organizationSwitcher: [withOrganizationSwitcher()],
-        railNavigation: [withHomeRailItem(), withInbox()],
+        railNavigation: [withHomeRailItem(), withInbox(), withSpacesRailItem()],
         railFooter: [withSearchRailItem(), withThemeRailItem(), withUserMenu()],
         sidebarHeader: [withSearchButton()],
-        sidebarFooter: [withPlanSummary(), withShortcutsButton()],
+        sidebar: [withSpacesSidebar()],
+        sidebarFooter: [withSprintProgress(), withPlanSummary(), withShortcutsButton()],
         overlays: [withCommandPalette(), withShortcutsDialog()],
       }),
     ],
@@ -87,6 +95,11 @@ export const WORKSPACE_ROUTES: Routes = [
         path: '',
         loadChildren: async (): Promise<Routes> =>
           (await import('@features/home/home.routes')).HOME_ROUTES,
+      },
+      {
+        path: '',
+        loadChildren: async (): Promise<Routes> =>
+          (await import('@features/spaces/spaces.routes')).SPACES_ROUTES,
       },
       {
         path: '**',
