@@ -1,4 +1,4 @@
-import { provideHttpClient, withInterceptors } from '@angular/common/http';
+import { HttpErrorResponse, provideHttpClient, withInterceptors } from '@angular/common/http';
 import {
   HttpTestingController,
   provideHttpClientTesting,
@@ -830,21 +830,69 @@ describe('InboxStore', () => {
     TestBed.tick();
   });
 
-  it('defers recovery to reconnect and avoids repeated verification retries', async () => {
+  it('recovers a first passive 412 without another fenced request', async () => {
     const pin: OrganizationPin = TestBed.inject(OrganizationPin);
     pin.set('atelier-nord');
-    await opened();
+    const store: InstanceType<typeof InboxStore> = await opened();
+    api.notifications.mockRejectedValueOnce(
+      new HttpErrorResponse({
+        status: 412,
+        error: { code: 'organization.context-changed' },
+      }),
+    );
+    notices.next({ type: 'notification.created.v1' });
+    await vi.advanceTimersByTimeAsync(300);
+    TestBed.tick();
+    await vi.waitFor(() => {
+      expect(store.notifications.status()).toBe('error');
+    });
+    api.notifications.mockClear();
+    pin.set('atelier-nord');
+    TestBed.tick();
+    await vi.waitFor(() => {
+      TestBed.tick();
+      expect(store.notifications.hasValue()).toBe(true);
+    });
+    expect(api.notifications).toHaveBeenCalledTimes(1);
+    expect(api.notifications).toHaveBeenCalledWith(true);
+  });
+
+  it('recovers while reconnecting and skips the same reads on connection', async () => {
+    const pin: OrganizationPin = TestBed.inject(OrganizationPin);
+    pin.set('atelier-nord');
+    const store: InstanceType<typeof InboxStore> = await opened();
     api.unreadCount.mockReturnValue(throwError(() => new OrganizationSwitchPendingError()));
-    window.dispatchEvent(new Event('focus'));
+    api.notifications.mockRejectedValue(new OrganizationSwitchPendingError());
+    api.pendingReminders.mockRejectedValue(new OrganizationSwitchPendingError());
     connectionStatus.set('reconnecting');
     TestBed.tick();
+    connectionStatus.set('connected');
+    TestBed.tick();
+    await vi.advanceTimersByTimeAsync(0);
+    TestBed.tick();
+    expect(store.notifications.status()).toBe('error');
+    expect(store.reminders.status()).toBe('error');
+    connectionStatus.set('reconnecting');
+    TestBed.tick();
+    await vi.advanceTimersByTimeAsync(0);
+    api.unreadCount.mockReturnValue(of(3));
+    api.notifications.mockResolvedValue({ items: [mention], unreadCount: 3 });
+    api.pendingReminders.mockResolvedValue(reminders);
     api.unreadCount.mockClear();
     api.notifications.mockClear();
     api.pendingReminders.mockClear();
     pin.set('atelier-nord');
-    expect(api.unreadCount).not.toHaveBeenCalled();
-    expect(api.notifications).not.toHaveBeenCalled();
-    expect(api.pendingReminders).not.toHaveBeenCalled();
+    TestBed.tick();
+    await vi.waitFor(() => {
+      TestBed.tick();
+      expect(store.notifications.hasValue()).toBe(true);
+      expect(store.reminders.hasValue()).toBe(true);
+      expect(store.unreadCount()).toBe(3);
+    });
+    expect(connectionStatus()).toBe('reconnecting');
+    expect(api.unreadCount).toHaveBeenCalledTimes(1);
+    expect(api.notifications).toHaveBeenCalledTimes(1);
+    expect(api.pendingReminders).toHaveBeenCalledTimes(1);
     connectionStatus.set('connected');
     TestBed.tick();
     await vi.advanceTimersByTimeAsync(0);
@@ -852,8 +900,24 @@ describe('InboxStore', () => {
     expect(api.unreadCount).toHaveBeenCalledTimes(1);
     expect(api.notifications).toHaveBeenCalledTimes(1);
     expect(api.pendingReminders).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not cycle verification after a refused recovery read', async () => {
+    const pin: OrganizationPin = TestBed.inject(OrganizationPin);
+    pin.set('atelier-nord');
+    await opened();
+    api.unreadCount.mockReturnValue(throwError(() => new OrganizationSwitchPendingError()));
+    window.dispatchEvent(new Event('focus'));
     api.unreadCount.mockClear();
-    api.unreadCount.mockReturnValueOnce(throwError(() => new Error('412 context changed')));
+    api.unreadCount.mockReturnValueOnce(
+      throwError(
+        () =>
+          new HttpErrorResponse({
+            status: 412,
+            error: { code: 'organization.context-changed' },
+          }),
+      ),
+    );
     pin.set('atelier-nord');
     expect(api.unreadCount).toHaveBeenCalledTimes(1);
     window.dispatchEvent(new Event('focus'));

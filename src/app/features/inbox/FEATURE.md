@@ -40,8 +40,9 @@ None.
   reminder with `getReminder`; a failed read is retried once before refreshing the reminders list.
   The badge and reminders are read after reconnect because notices are not replayed. Personal notices require `REALTIME_PERSONAL_NOTICES_ENABLED` on the gateway.
   Reminders are read on load, and both lists are refreshed on opening; failed list reads show an
-  inline « Réessayer ». Verification retries locally fenced passive reads for the followed organization, once per verified
-  revision. Reconnection handles its own refresh, and pending writes settle before their reads resume.
+  inline « Réessayer ». Verification retries passive reads refused by an organization mismatch or local fence, once per
+  verified revision, even while realtime reconnects. A later connection skips those retries, and
+  pending writes settle before their reads resume.
 - Every write bumps a version: a poll answer or a notifications load that began before it is
   dropped (a load is sent again, up to three times), so a stale badge never comes back after
   « Tout marquer comme lu ».
