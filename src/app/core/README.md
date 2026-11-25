@@ -37,10 +37,12 @@ The root transport provides Angular HTTP to the generated `@cadenway/api-client`
   The route-scoped connection survives an in-place slug change and reconnects for the new organization.
   The gateway envelope does not identify the delivering room, so validated deduplicated changes are
   broadcast to every watch; consumers filter or refetch. A future contract should include the room.
-- Presence starts unknown until the paginated snapshot returns the saved preference; a choice in
-  this tab takes precedence and is restored after reconnection. The snapshot reconciles concurrent
-  notices, and an absent member is offline. Whether guests should see presence remains a product
+- Presence starts unknown until the paginated snapshot returns the saved preference. An
+  unacknowledged choice in this tab takes precedence and is retried after reconnection. The
+  snapshot reconciles concurrent notices, and an absent member is offline. Whether guests should see presence remains a product
   question; the gateway currently sends both snapshots and notices to them.
+- Socket acknowledgement types are local: generated `@cadenway/contracts` 0.41.0
+  `events/realtime-gateway.ts` describes producer facts, not socket acknowledgements.
 - Personal `notification.created.v1` and `reminder.due.v1` notices are validated and deduplicated
   by their envelope ID. They are invalidations, not replayed data; consumers refetch after reconnect.
   Delivery requires `REALTIME_PERSONAL_NOTICES_ENABLED` on the gateway.

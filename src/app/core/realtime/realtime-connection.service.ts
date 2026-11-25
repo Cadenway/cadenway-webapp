@@ -267,9 +267,9 @@ export class RealtimeConnection {
    * @description
    * Notices received during the current snapshot, or null outside reconciliation.
    *
-   * @type {MemberPresenceChange[] | null}
+   * @type {Map<string, MemberPresenceChange['status']> | null}
    */
-  private snapshotNotices: MemberPresenceChange[] | null = null;
+  private snapshotNotices: Map<string, MemberPresenceChange['status']> | null = null;
 
   /**
    * Property personal
@@ -343,6 +343,16 @@ export class RealtimeConnection {
    * @type {number}
    */
   private presenceHandledVersion: number = 0;
+
+  /**
+   * Property presenceSuccessVersion
+   *
+   * @description
+   * Latest choice confirmed by a presence write, fencing older snapshot replies.
+   *
+   * @type {number}
+   */
+  private presenceSuccessVersion: number = 0;
 
   /**
    * Property presenceVersion
@@ -473,7 +483,7 @@ export class RealtimeConnection {
    * Property ownStatus
    *
    * @description
-   * Current local presence preference.
+   * Saved preference or the latest pending local choice.
    *
    * @type {Signal<PresenceStatus | null>}
    * @readonly
@@ -646,6 +656,10 @@ export class RealtimeConnection {
     this.seen.clear();
     this.presenceMap.set(new Map());
     this.confirmedPresence = null;
+    this.preference.set(null);
+    this.presenceVersion = 0;
+    this.presenceHandledVersion = 0;
+    this.presenceSuccessVersion = 0;
     for (const [key, entry] of this.rooms) {
       entry.joined = false;
       if (entry.count === 0) {
@@ -881,7 +895,8 @@ export class RealtimeConnection {
    */
   private syncPresence(socket: Socket, generation: number): Promise<void> {
     if (this.presencePending) return this.presencePending;
-    if (this.preference() === null || this.presenceVersion === 0) return Promise.resolve();
+    if (this.preference() === null || this.presenceVersion === this.presenceHandledVersion)
+      return Promise.resolve();
     const pending: Promise<void> = this.applyPresence(socket, generation);
     this.presencePending = pending;
     void pending.then(() => {
@@ -918,6 +933,7 @@ export class RealtimeConnection {
         await this.ack(socket, 'presence:set', { status });
         if (generation !== this.generation) return;
         this.confirmedPresence = status;
+        this.presenceSuccessVersion = version;
       } catch (error: unknown) {
         if (generation !== this.generation) return;
         if (!(error instanceof Error) || error.message === 'realtime.unavailable') {
@@ -951,15 +967,17 @@ export class RealtimeConnection {
       string,
       Exclude<PresenceStatus, 'invisible'>
     >();
-    this.snapshotNotices = [];
+    this.snapshotNotices = new Map();
+    let failures: number = 0;
     while (generation === this.generation && !this.destroyed) {
       if (cursor === null) {
         if (firstSent) await this.wait(Math.max(0, 5000 - (Date.now() - lastFirst)));
         if (generation !== this.generation) return;
-        lastFirst = Date.now();
         firstSent = true;
         members = new Map();
       }
+      const firstPage: boolean = cursor === null;
+      const successVersion: number = this.presenceSuccessVersion;
       const result: unknown = await new Promise((resolve) => {
         socket
           .timeout(5000)
@@ -972,6 +990,7 @@ export class RealtimeConnection {
           );
       });
       if (generation !== this.generation) return;
+      if (firstPage) lastFirst = Date.now();
       const page: ReturnType<typeof parsePresencePage> = parsePresencePage(result);
       if (!page) {
         if (
@@ -981,21 +1000,23 @@ export class RealtimeConnection {
           result.code === 'request.invalid'
         )
           cursor = null;
-        else await this.wait(1000);
+        const delays: readonly number[] = [5000, 10000, 30000, 60000];
+        const base: number = delays[Math.min(failures++, delays.length - 1)] ?? 60000;
+        await this.wait(Math.max(5000, Math.round(base * (0.8 + Math.random() * 0.4))));
         continue;
       }
-      if (this.presenceVersion === 0) {
+      if (successVersion === this.presenceSuccessVersion) {
         this.confirmedPresence = page.status;
-        this.preference.set(page.status);
+        if (this.presenceVersion === this.presenceHandledVersion) this.preference.set(page.status);
       }
       for (const member of page.members) {
-        if (member.status !== 'offline') members.set(member.memberId, member.status);
+        members.set(member.memberId, member.status);
       }
       cursor = page.nextCursor;
       if (cursor !== null) continue;
-      for (const notice of this.snapshotNotices) {
-        if (notice.status === 'offline') members.delete(notice.memberId);
-        else members.set(notice.memberId, notice.status);
+      for (const [memberId, status] of this.snapshotNotices) {
+        if (status === 'offline') members.delete(memberId);
+        else members.set(memberId, status);
       }
       this.snapshotNotices = null;
       this.presenceMap.set(members);
@@ -1093,8 +1114,8 @@ export class RealtimeConnection {
     if (this.seen.size === 128) this.seen.delete(this.seen.values().next().value ?? '');
     this.seen.add(notice.id);
     if (presence) {
-      if (this.snapshotNotices) this.snapshotNotices.push(presence);
-      else this.applyPresenceNotice(presence);
+      this.snapshotNotices?.set(presence.memberId, presence.status);
+      this.applyPresenceNotice(presence);
       this.presence.next(presence);
     }
     if (personal) this.personal.next(personal);

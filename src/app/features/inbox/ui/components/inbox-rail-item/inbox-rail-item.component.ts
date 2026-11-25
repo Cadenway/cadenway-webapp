@@ -46,7 +46,8 @@ import { ReminderRow } from '../reminder-row/reminder-row.component';
  *
  * @description
  * The « Boîte de réception » item of the rail and its popover (mockup `App.dc.html` lines 39-43
- * and 139-174). The item's badge counts the unread notifications (refreshed by realtime notices, reconnects, focus and a five-minute fallback poll) and is hidden while the person's presence is « Ne pas déranger ». The popover has the
+ * and 139-174). The badge counts unread notifications, refreshed by realtime, focus and polling.
+ * It is hidden while the person's presence is « Ne pas déranger ». The popover has the
  * title with the unread count, « Tout marquer comme lu » (disabled with nothing to read), the
  * « Notifications » and « Rappels » tabs with their counts, the do-not-disturb notice, the rows,
  * the empty states, skeletons while loading, an inline error with « Réessayer », and « Tout

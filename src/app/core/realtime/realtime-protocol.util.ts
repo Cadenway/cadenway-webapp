@@ -1,4 +1,10 @@
-import type { MemberPresenceChange, PersonalNotice, RealtimeChange } from './realtime.types';
+import type {
+  MemberPresenceChange,
+  PersonalNotice,
+  PresencePage,
+  PresenceStatus,
+  RealtimeChange,
+} from './realtime.types';
 
 /**
  * Constant UUID
@@ -161,13 +167,9 @@ export function parsePresence(value: unknown): MemberPresenceChange | null {
  * Validates a snapshot page from the gateway before using its cursor or members.
  *
  * @param {unknown} value - Untrusted acknowledgement.
- * @returns {{ status: import('./realtime.types').PresenceStatus; members: MemberPresenceChange[]; nextCursor: string | null } | null} Validated page or null.
+ * @returns {PresencePage | null} Validated page or null.
  */
-export function parsePresencePage(value: unknown): {
-  status: import('./realtime.types').PresenceStatus;
-  members: MemberPresenceChange[];
-  nextCursor: string | null;
-} | null {
+export function parsePresencePage(value: unknown): PresencePage | null {
   if (
     !record(value) ||
     value['ok'] !== true ||
@@ -190,7 +192,7 @@ export function parsePresencePage(value: unknown): {
     members.length > 100
   )
     return null;
-  const parsed: MemberPresenceChange[] = [];
+  const parsed: { memberId: string; status: Exclude<PresenceStatus, 'invisible'> }[] = [];
   for (const member of members as unknown[]) {
     if (
       !record(member) ||

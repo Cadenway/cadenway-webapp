@@ -34,9 +34,8 @@ Until then the menu's links open the 404 inside the shell.
 ## Invariants
 
 - `providePresence()` binds `PRESENCE` to the workspace's `RealtimeConnection` (provided by
-  Workspace's runtime on `/:org`). `ownStatus` is null until the presence snapshot returns the saved preference or the person chooses
-  a presence in this tab: until then the
-  rail button names the person only, the presence dots are hidden and « Statut » checks nothing.
+  Workspace's runtime on `/:org`). `ownStatus` is null until the presence snapshot returns the
+  saved preference or the person chooses a presence in this tab. Until then the rail button names the person only, the presence dots are hidden and « Statut » checks nothing.
 - Choosing a presence closes the menu and confirms with the toast « Statut : <presence> ». When the
   gateway refuses it and `ownStatus` returns to the confirmed value, an error toast says so.
 - When realtime is disabled (`status()` is `disabled`, no `realtimeUrl`), « Statut » is disabled with

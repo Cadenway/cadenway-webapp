@@ -117,3 +117,44 @@ export interface RealtimeChange {
 export type PersonalNotice =
   | { type: 'notification.created.v1' }
   | { type: 'reminder.due.v1'; reminderId: string; taskId: string };
+
+/**
+ * Interface PresencePage
+ *
+ * @description
+ * A validated snapshot acknowledgement; members contain only visible statuses.
+ *
+ */
+export interface PresencePage {
+  // #region Properties
+  /**
+   * Property status
+   *
+   * @description
+   * The caller's saved preference.
+   *
+   * @type {PresenceStatus}
+   */
+  status: PresenceStatus;
+
+  /**
+   * Property members
+   *
+   * @description
+   * Visible members of this page.
+   *
+   * @type {readonly { memberId: string; status: Exclude<PresenceStatus, 'invisible'> }[]}
+   */
+  members: readonly { memberId: string; status: Exclude<PresenceStatus, 'invisible'> }[];
+
+  /**
+   * Property nextCursor
+   *
+   * @description
+   * Socket-bound continuation or null on the last page.
+   *
+   * @type {string | null}
+   */
+  nextCursor: string | null;
+  // #endregion
+}

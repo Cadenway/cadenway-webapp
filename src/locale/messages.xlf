@@ -2605,56 +2605,56 @@
         <source><x id="count" equiv-text="this.unread()"/> unread</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/inbox/ui/components/inbox-rail-item/inbox-rail-item.component.ts</context>
-          <context context-type="linenumber">259</context>
+          <context context-type="linenumber">260</context>
         </context-group>
       </trans-unit>
       <trans-unit id="inbox.mark-all-failed" datatype="html">
         <source>The notifications could not be marked as read</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/inbox/ui/components/inbox-rail-item/inbox-rail-item.component.ts</context>
-          <context context-type="linenumber">295</context>
+          <context context-type="linenumber">296</context>
         </context-group>
       </trans-unit>
       <trans-unit id="inbox.mark-read-failed" datatype="html">
         <source>The notification could not be marked as read</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/inbox/ui/components/inbox-rail-item/inbox-rail-item.component.ts</context>
-          <context context-type="linenumber">312</context>
+          <context context-type="linenumber">313</context>
         </context-group>
       </trans-unit>
       <trans-unit id="inbox.reminder.snoozed" datatype="html">
         <source>Reminder postponed</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/inbox/ui/components/inbox-rail-item/inbox-rail-item.component.ts</context>
-          <context context-type="linenumber">354</context>
+          <context context-type="linenumber">355</context>
         </context-group>
       </trans-unit>
       <trans-unit id="inbox.reminder.snooze-failed" datatype="html">
         <source>The reminder could not be postponed</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/inbox/ui/components/inbox-rail-item/inbox-rail-item.component.ts</context>
-          <context context-type="linenumber">359</context>
+          <context context-type="linenumber">360</context>
         </context-group>
       </trans-unit>
       <trans-unit id="inbox.reminder.completed" datatype="html">
         <source>Reminder done</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/inbox/ui/components/inbox-rail-item/inbox-rail-item.component.ts</context>
-          <context context-type="linenumber">380</context>
+          <context context-type="linenumber">381</context>
         </context-group>
       </trans-unit>
       <trans-unit id="inbox.reminder.complete-failed" datatype="html">
         <source>The reminder could not be marked as done</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/inbox/ui/components/inbox-rail-item/inbox-rail-item.component.ts</context>
-          <context context-type="linenumber">386</context>
+          <context context-type="linenumber">387</context>
         </context-group>
       </trans-unit>
       <trans-unit id="inbox.write-failed-text" datatype="html">
         <source>The server did not answer. Try again in a moment.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/inbox/ui/components/inbox-rail-item/inbox-rail-item.component.ts</context>
-          <context context-type="linenumber">430</context>
+          <context context-type="linenumber">431</context>
         </context-group>
       </trans-unit>
       <trans-unit id="inbox.notification.unread" datatype="html">

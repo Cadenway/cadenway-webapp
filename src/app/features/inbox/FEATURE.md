@@ -33,13 +33,13 @@ None.
 - `InboxStore` is provided by the rail item and keyed on the workspace's organization. A committed
   organization switch clears the count and the lists at once and restarts the poll; any answer or
   write result that belongs to the previous organization is ignored.
-- The unread count is read at once, on window focus and every five minutes as a fallback; a failed
-  read keeps the last count. A notification notice refreshes the badge and the open notification
-  list. A due-reminder notice first revalidates the reminder with `getReminder`; only a successful
-  read refreshes the reminders. The badge and reminders are read after reconnect because notices are
-  not replayed. Personal notices require `REALTIME_PERSONAL_NOTICES_ENABLED` on the gateway.
+- The unread count is read at once, on window focus, every minute while realtime is disconnected,
+  and every five minutes while connected; a failed read keeps the last count. A notification notice
+  refreshes the badge and the open notification list. A due-reminder notice first revalidates the
+  reminder with `getReminder`; a failed read is retried once before refreshing the reminders list.
+  The badge and reminders are read after reconnect because notices are not replayed. Personal notices require `REALTIME_PERSONAL_NOTICES_ENABLED` on the gateway.
   Reminders are read on load, and both lists are refreshed on opening; failed list reads show an
-  inline � R�essayer �.
+  inline « Réessayer ».
 - Every write bumps a version: a poll answer or a notifications load that began before it is
   dropped (a load is sent again, up to three times), so a stale badge never comes back after
   « Tout marquer comme lu ».
@@ -54,11 +54,8 @@ None.
   then shows « Ne pas déranger : notifications en pause » (only for `do-not-disturb`; an unknown
   presence shows nothing).
 - Opening a notification or a reminder opens `/<slug>/t/<key>`, which renders the 404 until step 5.
-- Known gap: the mockup also adds overdue reminders to the badge; that is left out. The inbox and reminder operations do not declare `If-Organization-Match` (see
-  Workspace).
-
-The product question of whether guests should see presence remains open; the gateway currently
-sends presence snapshots and transitions to guests.
+- Known gap: the mockup also adds overdue reminders to the badge; that is left out. The inbox
+  and reminder operations do not declare `If-Organization-Match` (see Workspace).
 
 ## Copy not taken word for word from the mockup
 

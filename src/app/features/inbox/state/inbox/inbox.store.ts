@@ -1,5 +1,6 @@
 import {
   computed,
+  DestroyRef,
   DOCUMENT,
   inject,
   resource,
@@ -7,7 +8,7 @@ import {
   type Signal,
   type Type,
 } from '@angular/core';
-import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { takeUntilDestroyed, toObservable } from '@angular/core/rxjs-interop';
 import {
   patchState,
   signalMethod,
@@ -20,10 +21,19 @@ import {
 } from '@ngrx/signals';
 import { rxMethod } from '@ngrx/signals/rxjs-interop';
 import {
+  auditTime,
   catchError,
+  debounceTime,
+  defer,
+  distinctUntilChanged,
+  filter,
+  groupBy,
   EMPTY,
   fromEvent,
   merge,
+  mergeMap,
+  of,
+  retry,
   type Observable,
   pipe,
   Subject,
@@ -122,17 +132,6 @@ interface InboxState {
    * @readonly
    */
   readonly _isOpen: boolean;
-
-  /**
-   * Property _reminderRefresh
-   *
-   * @description
-   * Revision requesting a fresh reminder page, including while an earlier read is in flight.
-   *
-   * @type {number}
-   * @readonly
-   */
-  readonly _reminderRefresh: number;
 
   /**
    * Property _version
@@ -324,7 +323,6 @@ const initialState: InboxState = {
   _organizationId: null,
   _openings: 0,
   _isOpen: false,
-  _reminderRefresh: 0,
   _version: 0,
   _badgeVersion: 0,
 };
@@ -383,17 +381,16 @@ function createInboxStore(): Type<InboxStoreInstance> {
     withProps((store) => {
       const api: InboxApi = inject(InboxApi);
       const workspace: WorkspaceContextPort = inject(WORKSPACE_CONTEXT);
-      const opened: () => { organizationId: string; opening: number } | undefined = () => {
+      const opened: () => { organizationId: string } | undefined = () => {
         const organizationId: string | null = store._organizationId();
-        return store._openings() > 0 && organizationId !== null
-          ? { organizationId, opening: store._openings() }
-          : undefined;
+        return store._openings() > 0 && organizationId !== null ? { organizationId } : undefined;
       };
       return {
         _api: api,
         _workspace: workspace,
         _window: inject(DOCUMENT).defaultView,
         _realtime: inject(RealtimeConnection, { optional: true }),
+        _destroyRef: inject(DestroyRef),
         _refreshBadge: new Subject<void>(),
         notifications: resource({
           params: opened,
@@ -421,11 +418,9 @@ function createInboxStore(): Type<InboxStoreInstance> {
           },
         }),
         reminders: resource({
-          params: (): { organizationId: string; refresh: number } | undefined => {
+          params: (): { organizationId: string } | undefined => {
             const organizationId: string | null = store._organizationId();
-            return organizationId
-              ? { organizationId, refresh: store._reminderRefresh() }
-              : undefined;
+            return organizationId ? { organizationId } : undefined;
           },
           loader: (): Promise<InboxReminderPage> => api.pendingReminders(),
         }),
@@ -444,6 +439,17 @@ function createInboxStore(): Type<InboxStoreInstance> {
       let reminderWrites: number = 0;
       let reminderRefreshPending: boolean = false;
       let notificationRefreshPending: boolean = false;
+      let notificationReloadQueued: boolean = false;
+      let reminderReloadQueued: boolean = false;
+
+      const reloadNotifications: () => void = (): void => {
+        if (store.notifications.isLoading()) notificationReloadQueued = true;
+        else store.notifications.reload();
+      };
+      const reloadReminders: () => void = (): void => {
+        if (store.reminders.isLoading()) reminderReloadQueued = true;
+        else store.reminders.reload();
+      };
 
       const refreshNotifications: () => void = (): void => {
         if (claims.size > 0) {
@@ -451,7 +457,7 @@ function createInboxStore(): Type<InboxStoreInstance> {
           return;
         }
         store._refreshBadge.next();
-        if (store._isOpen()) patchState(store, { _openings: store._openings() + 1 });
+        if (store._isOpen()) reloadNotifications();
       };
 
       const refreshReminders: () => void = (): void => {
@@ -459,7 +465,7 @@ function createInboxStore(): Type<InboxStoreInstance> {
           reminderRefreshPending = true;
           return;
         }
-        patchState(store, { _reminderRefresh: store._reminderRefresh() + 1 });
+        reloadReminders();
       };
 
       const bump: () => void = (): void => {
@@ -560,49 +566,70 @@ function createInboxStore(): Type<InboxStoreInstance> {
       };
 
       return {
+        _drainReloads: signalMethod<{ notifications: boolean; reminders: boolean }>(
+          (loading): void => {
+            if (!loading.notifications && notificationReloadQueued) {
+              notificationReloadQueued = false;
+              if (store._isOpen()) reloadNotifications();
+            }
+            if (!loading.reminders && reminderReloadQueued) {
+              reminderReloadQueued = false;
+              reloadReminders();
+            }
+          },
+        ),
         _notice(notice: PersonalNotice): void {
           if (notice.type === 'notification.created.v1') {
             refreshNotifications();
             return;
           }
           const organizationAtStart: number = organizationVersion;
-          void store._api
-            .reminder(notice.reminderId)
-            .then(() => {
+          defer(() =>
+            organizationAtStart === organizationVersion
+              ? store._api.reminder(notice.reminderId)
+              : EMPTY,
+          )
+            .pipe(
+              retry({ count: 1, delay: 1000 }),
+              catchError(() => of(null)),
+              takeUntilDestroyed(store._destroyRef),
+            )
+            .subscribe(() => {
               if (organizationAtStart === organizationVersion) refreshReminders();
-            })
-            .catch(() => undefined);
+            });
         },
-        _reconnected(): void {
-          refreshNotifications();
+        _connected(): void {
           refreshReminders();
         },
-        _poll: rxMethod<string>(
+        _poll: rxMethod<{ organizationId: string; connected: boolean }>(
           pipe(
-            switchMap((organizationId: string) => {
-              const triggers: Observable<unknown>[] = [timer(0, POLL_MS), store._refreshBadge];
-              if (store._window) triggers.push(fromEvent(store._window, 'focus'));
-              return merge(...triggers).pipe(
-                switchMap(() => {
-                  const version: number = store._version();
-                  return store._api.unreadCount().pipe(
-                    catchError(() => EMPTY),
-                    tap((unreadCount: number) => {
-                      if (
-                        sameOrganization(organizationId) &&
-                        version === store._version() &&
-                        claims.size === 0
-                      ) {
-                        patchState(store, {
-                          unreadCount,
-                          _badgeVersion: store._badgeVersion() + 1,
-                        });
-                      }
-                    }),
-                  );
-                }),
-              );
-            }),
+            switchMap(
+              ({ organizationId, connected }: { organizationId: string; connected: boolean }) => {
+                const interval: number = connected ? POLL_MS : 60_000;
+                const triggers: Observable<unknown>[] = [timer(0, interval), store._refreshBadge];
+                if (store._window) triggers.push(fromEvent(store._window, 'focus'));
+                return merge(...triggers).pipe(
+                  switchMap(() => {
+                    const version: number = store._version();
+                    return store._api.unreadCount().pipe(
+                      catchError(() => EMPTY),
+                      tap((unreadCount: number) => {
+                        if (
+                          sameOrganization(organizationId) &&
+                          version === store._version() &&
+                          claims.size === 0
+                        ) {
+                          patchState(store, {
+                            unreadCount,
+                            _badgeVersion: store._badgeVersion() + 1,
+                          });
+                        }
+                      }),
+                    );
+                  }),
+                );
+              },
+            ),
           ),
         ),
         _followOrganization: signalMethod<string>((organizationId: string): void => {
@@ -611,6 +638,8 @@ function createInboxStore(): Type<InboxStoreInstance> {
           reminderWrites = 0;
           reminderRefreshPending = false;
           notificationRefreshPending = false;
+          notificationReloadQueued = false;
+          reminderReloadQueued = false;
           claims = new Map<number, ReadClaim>();
           confirmedIds = new Set<string>();
           confirmedAll = false;
@@ -622,7 +651,9 @@ function createInboxStore(): Type<InboxStoreInstance> {
           });
         }),
         open(): void {
-          patchState(store, { _openings: store._openings() + 1, _isOpen: true });
+          const previouslyOpened: boolean = store._openings() > 0;
+          patchState(store, { _openings: 1, _isOpen: true });
+          if (previouslyOpened) reloadNotifications();
           refreshReminders();
         },
         close(): void {
@@ -697,16 +728,51 @@ function createInboxStore(): Type<InboxStoreInstance> {
         const organizationId: Signal<string> = computed(
           (): string => store._workspace.organization().id,
         );
+        store._drainReloads(
+          computed(() => ({
+            notifications: store.notifications.isLoading(),
+            reminders: store.reminders.isLoading(),
+          })),
+        );
         store._followOrganization(organizationId);
-        store._poll(organizationId);
-        store._realtime?.personalNotices
-          .pipe(takeUntilDestroyed())
+        const status: Observable<string> = store._realtime
+          ? toObservable(store._realtime.status).pipe(distinctUntilChanged())
+          : of('disabled');
+        store._poll(
+          computed(() => ({
+            organizationId: organizationId(),
+            connected: store._realtime?.status() === 'connected',
+          })),
+        );
+        status
+          .pipe(
+            filter((value: string) => value === 'connected'),
+            takeUntilDestroyed(),
+          )
+          .subscribe(() => {
+            store._connected();
+          });
+        const personalNotices: Observable<PersonalNotice> =
+          store._realtime?.personalNotices ?? EMPTY;
+        toObservable(organizationId)
+          .pipe(
+            switchMap(() =>
+              personalNotices.pipe(
+                groupBy(
+                  (notice: PersonalNotice) =>
+                    notice.type === 'notification.created.v1' ? notice.type : notice.reminderId,
+                  {
+                    duration: (group) => group.pipe(debounceTime(1000)),
+                  },
+                ),
+                mergeMap((group) => group.pipe(auditTime(300))),
+              ),
+            ),
+            takeUntilDestroyed(),
+          )
           .subscribe((notice: PersonalNotice) => {
             store._notice(notice);
           });
-        store._realtime?.reconnected.pipe(takeUntilDestroyed()).subscribe(() => {
-          store._reconnected();
-        });
       },
     }),
   );
