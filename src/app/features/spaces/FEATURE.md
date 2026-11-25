@@ -103,7 +103,8 @@ breadcrumb, dialog, inline edit, toolbar).
     Subtask creation is offered only when loaded ancestry proves the depth limit is not reached.
     It watches the list's realtime room and reads again in place 300 ms after the last notice of
     the list; the status store keeps pending and in-flight changes over what it reads. A
-    task created in the list (`TaskCreate.created`) and a bulk action read the rows again.
+    task created in the list (`TaskCreate.created`), a completed local status write and a bulk action
+    read the rows again.
   - `TaskStatusChangesStore` (Task), route-scoped on `list`, so pending
     changes die with the view.
   - `SpaceOverviewStore`, page-scoped on `SpaceOverviewPage`.
@@ -133,7 +134,9 @@ breadcrumb, dialog, inline edit, toolbar).
   task's shown version, through `ListPageStore.bulk`, in chunks of 50 `executeBulkTaskAction` calls
   one after the other. Each chunk has an idempotency key, reused for one retry after an uncertain
   response. Each send and retry checks the starting organization and the store's lifetime; when
-  either changes, remaining tasks are reported as not sent. An unresolved response is reported as
+  either changes, remaining tasks are reported as not sent. A confirmed action keeps sending its
+  selected tasks after navigation to another list; only an organization change or page destruction
+  stops the remaining chunks. An unresolved response is reported as
   unknown and triggers a reload; a refused chunk stays selected and a second toast counts it. The
   row menu uses the same bulk path for a selected group, including a shared cancellation reason.
 - Under 768 px the table hides the assignees, priority, labels and actions columns.

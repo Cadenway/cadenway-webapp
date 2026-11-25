@@ -34,6 +34,7 @@ import {
   filter,
   type Observable,
   pipe,
+  Subject,
   switchMap,
   tap,
 } from 'rxjs';
@@ -105,7 +106,7 @@ const ENTER_MS: number = 520;
  * Constant NOTICE_DEBOUNCE_MS
  *
  * @description
- * Quiet time after the last realtime notice of the list before the rows are read again, in
+ * Quiet time after the last realtime notice or completed status write of the list before the rows are read again, in
  * milliseconds.
  *
  * @type {number}
@@ -817,6 +818,7 @@ function createListRowsStore(): Type<ListRowsStoreInstance> {
       });
       return {
         _api: api,
+        _reloadRequests: new Subject<void>(),
         _params: params,
         _status: inject(TaskStatusChangesStore),
         _reduceMotion: inject(MediaMatcher).matchMedia('(prefers-reduced-motion: reduce)').matches,
@@ -1155,9 +1157,8 @@ function createListRowsStore(): Type<ListRowsStoreInstance> {
                 (!('listId' in data) || data.listId === listId)
               );
             }),
-            debounceTime(NOTICE_DEBOUNCE_MS),
             tap((): void => {
-              reload();
+              store._reloadRequests.next();
             }),
           ),
         ),
@@ -1235,7 +1236,25 @@ function createListRowsStore(): Type<ListRowsStoreInstance> {
           ),
         );
         store._syncChildren(store._visibleChildren);
+        const reloads: { unsubscribe: () => void } = store._reloadRequests
+          .pipe(debounceTime(NOTICE_DEBOUNCE_MS))
+          .subscribe((): void => {
+            store.reload();
+          });
         store._watch(computed((): string | null => store._params()?.listId ?? null));
+        const completions: { unsubscribe: () => void } = store._status.completed.subscribe(
+          ({
+            task,
+            organizationId,
+          }: {
+            task: TaskSummary;
+            organizationId: string | null;
+          }): void => {
+            const params: RowsParams | undefined = store._params();
+            if (task.listId === params?.listId && organizationId === params.organizationId)
+              store._reloadRequests.next();
+          },
+        );
         const changes: { unsubscribe: () => void } = store._status.changed.subscribe(
           (change: TaskStatusChange): void => {
             store._entered(change);
@@ -1253,6 +1272,9 @@ function createListRowsStore(): Type<ListRowsStoreInstance> {
         );
         destroyRef.onDestroy((): void => {
           changes.unsubscribe();
+          completions.unsubscribe();
+          reloads.unsubscribe();
+          store._reloadRequests.complete();
           created.unsubscribe();
           for (const timer of timers) clearTimeout(timer);
         });

@@ -5,6 +5,7 @@ import { CwToastService } from '@cadenway/ui/components/toast';
 import { type Observable, of, Subject, throwError } from 'rxjs';
 import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 
+import { OrganizationPin } from '@core/api';
 import { type RealtimeChange, RealtimeConnection } from '@core/realtime';
 import { parseChange } from '@core/realtime/realtime-protocol.util';
 import { TaskStatusChangesStore, type TaskSummary } from '@features/task';
@@ -441,6 +442,41 @@ describe('ListRowsStore', () => {
     await vi.advanceTimersByTimeAsync(520);
     TestBed.tick();
     expect(rowOf(store, 'CAD-482')?.entering).toBe(false);
+  });
+
+  it('refreshes filtered rows and group counts after a status write without realtime', async () => {
+    notices.complete();
+    const response: Subject<TaskSummary> = new Subject<TaskSummary>();
+    changeStatus.mockReturnValue(response);
+    let matchesFilter: boolean = true;
+    groups.mockImplementation(() =>
+      Promise.resolve([{ value: 'todo', count: matchesFilter ? 1 : 0 }]),
+    );
+    page.mockImplementation(() => Promise.resolve(pageOf(matchesFilter ? [cad482] : [])));
+    const filteredQuery: ListTaskQuery = { ...query, status: ['todo'] };
+    const store: InstanceType<typeof ListRowsStore> = setup({
+      listId: 'sprint-14',
+      query: filteredQuery,
+      groupQuery: { groupBy: 'status', query: filteredQuery },
+    });
+    TestBed.inject(OrganizationPin).set(organization().id);
+    await settle();
+    expect(store.rows()).toHaveLength(1);
+    expect(store.groupCount('todo')).toBe(1);
+
+    TestBed.inject(TaskStatusChangesStore).request(cad482, 'progress');
+    await vi.advanceTimersByTimeAsync(800);
+    await settle();
+    expect(groups).toHaveBeenCalledTimes(1);
+
+    matchesFilter = false;
+    response.next({ ...cad482, status: 'progress', version: 4 });
+    response.complete();
+    await vi.advanceTimersByTimeAsync(300);
+    await settle();
+    expect(store.rows()).toHaveLength(0);
+    expect(store.groupCount('todo')).toBe(0);
+    expect(groups).toHaveBeenCalledTimes(2);
   });
 
   it('moves the row immediately when reduced motion is requested', async () => {

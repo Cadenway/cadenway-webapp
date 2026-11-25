@@ -466,6 +466,17 @@ interface TaskStatusChangesInstance {
    * @readonly
    */
   readonly changed: Observable<TaskStatusChange>;
+
+  /**
+   * Property completed
+   *
+   * @description
+   * Emits the affected task and organization after a status write succeeds or fails.
+   *
+   * @type {Observable<{ task: TaskSummary; organizationId: string | null }>}
+   * @readonly
+   */
+  readonly completed: Observable<{ task: TaskSummary; organizationId: string | null }>;
   // #endregion
 
   // #region Methods
@@ -585,10 +596,18 @@ function createTaskStatusChanges(): Type<TaskStatusChangesInstance> {
     withState(initialState),
     withProps(() => {
       const changes: Subject<TaskStatusChange> = new Subject<TaskStatusChange>();
+      const completions: Subject<{ task: TaskSummary; organizationId: string | null }> =
+        new Subject<{ task: TaskSummary; organizationId: string | null }>();
       inject(DestroyRef).onDestroy(() => {
         changes.complete();
+        completions.complete();
       });
-      return { _changes: changes, changed: changes.asObservable() };
+      return {
+        _changes: changes,
+        changed: changes.asObservable(),
+        _completions: completions,
+        completed: completions.asObservable(),
+      };
     }),
     withMethods(
       (store, api: TaskApi = inject(TaskApi), toasts: CwToastService = inject(CwToastService)) => {
@@ -753,6 +772,7 @@ function createTaskStatusChanges(): Type<TaskStatusChangesInstance> {
                           },
                   }));
                   if (destroyRef.destroyed) return;
+                  store._completions.next({ task, organizationId: pending.organizationId });
                   const batch: boolean =
                     status === 'cancelled' &&
                     !isUndo &&
@@ -779,6 +799,8 @@ function createTaskStatusChanges(): Type<TaskStatusChangesInstance> {
                 },
                 error: (error: unknown): void => {
                   restore();
+                  if (!destroyRef.destroyed)
+                    store._completions.next({ task, organizationId: pending.organizationId });
                   const batch: boolean = status === 'cancelled' && !isUndo && finishBatch(id);
                   if (
                     !batch &&

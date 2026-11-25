@@ -33,7 +33,8 @@ the 404 meanwhile).
 - `TaskStatusChangesStore`, a SignalStore the consumer provides on its route: `request(task, status,
 options?)`, `requestCancel(tasks, options?)`, `pendingStatus(taskId)`, `displayedStatus(task)`,
   `settledStatus(task)`, `settledTask(task)`, `undo(taskId)`, `cancelRequest` with
-  `confirmCancel(cancellation)` and `keepTask()`, and the `changed` stream; `STATUS_SETTLE_MS` (460).
+  `confirmCancel(cancellation)` and `keepTask()`, the `changed` stream, and the `completed` stream
+  after each write succeeds or fails; `STATUS_SETTLE_MS` (460).
 - `TaskCreate` (root): `open(options?)`, `useDefaults(defaults, destroyRef)`, `close()`, `isOpen`,
   `options`, `created`.
 - Presentational components, inputs and outputs only: `cw-task-status-picker`,

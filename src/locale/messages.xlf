@@ -5902,84 +5902,84 @@
         <source>Could not cancel <x id="count" equiv-text="failedCount"/> task</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/task/state/task-status-changes/task-status-changes.store.ts</context>
-          <context context-type="linenumber">622</context>
+          <context context-type="linenumber">641</context>
         </context-group>
       </trans-unit>
       <trans-unit id="task.status-change.cancel-failed-count" datatype="html">
         <source>Could not cancel <x id="count" equiv-text="failedCount"/> tasks</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/task/state/task-status-changes/task-status-changes.store.ts</context>
-          <context context-type="linenumber">623</context>
+          <context context-type="linenumber">642</context>
         </context-group>
       </trans-unit>
       <trans-unit id="task.status-change.cancelled-one" datatype="html">
         <source><x id="count" equiv-text="count"/> task cancelled</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/task/state/task-status-changes/task-status-changes.store.ts</context>
-          <context context-type="linenumber">630</context>
+          <context context-type="linenumber">649</context>
         </context-group>
       </trans-unit>
       <trans-unit id="task.status-change.cancelled-many" datatype="html">
         <source><x id="count" equiv-text="count"/> tasks cancelled</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/task/state/task-status-changes/task-status-changes.store.ts</context>
-          <context context-type="linenumber">631</context>
+          <context context-type="linenumber">650</context>
         </context-group>
       </trans-unit>
       <trans-unit id="task.status-change.failed" datatype="html">
         <source>Could not change the status</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/task/state/task-status-changes/task-status-changes.store.ts</context>
-          <context context-type="linenumber">651</context>
+          <context context-type="linenumber">670</context>
         </context-group>
       </trans-unit>
       <trans-unit id="task.status-change.failed-text" datatype="html">
         <source>The server did not answer. Try again in a moment.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/task/state/task-status-changes/task-status-changes.store.ts</context>
-          <context context-type="linenumber">652</context>
+          <context context-type="linenumber">671</context>
         </context-group>
       </trans-unit>
       <trans-unit id="task.status-change.cancelled" datatype="html">
         <source><x id="key" equiv-text="task.key"/> cancelled</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/task/state/task-status-changes/task-status-changes.store.ts</context>
-          <context context-type="linenumber">665</context>
+          <context context-type="linenumber">684</context>
         </context-group>
       </trans-unit>
       <trans-unit id="task.status-change.moved" datatype="html">
         <source><x id="key" equiv-text="task.key"/> moved to <x id="status" equiv-text="labelOf(task, to)"/></source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/task/state/task-status-changes/task-status-changes.store.ts</context>
-          <context context-type="linenumber">666</context>
+          <context context-type="linenumber">685</context>
         </context-group>
       </trans-unit>
       <trans-unit id="task.status-change.reason" datatype="html">
         <source>Reason: <x id="reason" equiv-text="CANCEL_REASON_LABELS[reason]"/>.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/task/state/task-status-changes/task-status-changes.store.ts</context>
-          <context context-type="linenumber">669</context>
+          <context context-type="linenumber">688</context>
         </context-group>
       </trans-unit>
       <trans-unit id="task.status-change.from" datatype="html">
         <source>From <x id="status" equiv-text="labelOf(task, from)"/>.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/task/state/task-status-changes/task-status-changes.store.ts</context>
-          <context context-type="linenumber">670</context>
+          <context context-type="linenumber">689</context>
         </context-group>
       </trans-unit>
       <trans-unit id="task.status-change.conflict" datatype="html">
         <source><x id="key" equiv-text="task.key"/> changed elsewhere</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/task/state/task-status-changes/task-status-changes.store.ts</context>
-          <context context-type="linenumber">771</context>
+          <context context-type="linenumber">791</context>
         </context-group>
       </trans-unit>
       <trans-unit id="task.status-change.conflict-text" datatype="html">
         <source>Its latest status is shown: <x id="status" equiv-text="labelOf(task, saved.status)"/>.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/task/state/task-status-changes/task-status-changes.store.ts</context>
-          <context context-type="linenumber">773</context>
+          <context context-type="linenumber">793</context>
         </context-group>
       </trans-unit>
       <trans-unit id="task.due.today" datatype="html">
