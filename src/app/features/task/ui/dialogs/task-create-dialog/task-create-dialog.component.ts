@@ -265,8 +265,9 @@ function addDays(date: Date, days: number): Date {
  * assignees (the current user by default), the due date, the priority (« Moyenne ») and the
  * labels. « Créer la tâche » or Ctrl Entrée creates the task with an `Idempotency-Key`, then a
  * toast offers « Ouvrir » towards `/<slug>/t/<key>`; « Créer d'autres tâches » keeps the dialog
- * open with an empty name. Escape closes an open menu first, then the dialog. It provides its own
- * `TaskCreateStore`.
+ * open with an empty name. Escape closes an open menu first, then the dialog. An empty name only
+ * disables « Créer la tâche », as in the mockup: the footer's error summary, an alert, shows once a
+ * field was left or a creation was refused. It provides its own `TaskCreateStore`.
  */
 @Component({
   selector: 'cw-task-create-dialog',

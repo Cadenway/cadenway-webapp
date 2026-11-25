@@ -254,7 +254,7 @@
   </div>
 
   <cw-dialog-footer>
-    @if (createForm().errorSummary().length > 0) {
+    @if (createForm().touched() && createForm().errorSummary().length > 0) {
       <div role="alert" class="text-xs text-destructive">
         @for (error of createForm().errorSummary(); track $index) {
           <p>{{ error.message }}</p>

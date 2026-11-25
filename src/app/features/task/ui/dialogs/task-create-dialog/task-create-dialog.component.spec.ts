@@ -407,6 +407,21 @@ describe('TaskCreateDialog', () => {
     },
   );
 
+  it('opens without announcing the empty name, which only disables « Créer la tâche »', async () => {
+    TestBed.inject(TaskCreate).open({ listId: 'sprint-14' });
+    await fixture.whenStable();
+
+    expect(buttonNamed('Créer la tâche')?.disabled).toBe(true);
+    expect(document.querySelector('[role="dialog"] [role="alert"]')).toBeNull();
+    const field: HTMLInputElement | null = document.querySelector('#task-create-name');
+    field?.dispatchEvent(new Event('blur'));
+    await fixture.whenStable();
+
+    expect(document.querySelector('[role="dialog"] [role="alert"]')?.textContent).toContain(
+      'Saisissez le nom de la tâche.',
+    );
+  });
+
   it('keeps a name validation issue in the form', async () => {
     create.mockReturnValueOnce(
       throwError(
