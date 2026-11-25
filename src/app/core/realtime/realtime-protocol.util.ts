@@ -100,6 +100,22 @@ export function heartbeatInterval(value: unknown, organization: string | null): 
 }
 
 /**
+ * Constant TASK_MEMBERSHIP_NOTICES
+ *
+ * @description
+ * The notices that tell a list room a task joined or left it; their data is the task id alone.
+ *
+ * @type {ReadonlySet<string>}
+ */
+const TASK_MEMBERSHIP_NOTICES: ReadonlySet<string> = new Set([
+  'task.created.v1',
+  'task.archived.v1',
+  'task.unarchived.v1',
+  'task.trashed.v1',
+  'task.restored.v1',
+]);
+
+/**
  * Function parseChange
  *
  * @description
@@ -129,7 +145,12 @@ export function parseChange(value: unknown): RealtimeChange | null {
       !UUID.test(data['commentId'])
     )
       return null;
-  } else if (type !== 'git.links-changed.v1' || !exactKeys(data, ['taskId'])) return null;
+  } else if (
+    (type !== 'git.links-changed.v1' &&
+      !(typeof type === 'string' && TASK_MEMBERSHIP_NOTICES.has(type))) ||
+    !exactKeys(data, ['taskId'])
+  )
+    return null;
   return { id: value['id'] as string, type: type, at: value['at'] as string, data };
 }
 

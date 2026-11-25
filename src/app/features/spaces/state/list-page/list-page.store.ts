@@ -665,14 +665,21 @@ function createListPageStore(): Type<ListPageStoreInstance> {
  * Constant COUNTED_TASK_NOTICES
  *
  * @description
- * The task notices that can change the counts or the milestone count. A comment or Git link
- * notice cannot, and the socket hands notices of every watched room to every watch.
+ * The task notices that can change the counts or the milestone count: an update, a status change,
+ * and a task joining or leaving the list (created, archived, unarchived, trashed, restored). A
+ * comment or Git link notice cannot, and the socket hands notices of every watched room to every
+ * watch.
  *
  * @type {ReadonlySet<string>}
  */
 const COUNTED_TASK_NOTICES: ReadonlySet<string> = new Set([
   'task.updated.v1',
   'task.status-changed.v1',
+  'task.created.v1',
+  'task.archived.v1',
+  'task.unarchived.v1',
+  'task.trashed.v1',
+  'task.restored.v1',
 ]);
 
 /**

@@ -109,8 +109,9 @@ breadcrumb, dialog, inline edit, toolbar).
     levels deep; closed and folded parents are pruned and stale answers are ignored. « Dépliées » opens every parent and a mode change
     forgets the parents opened by hand; « À part » reads `level: all` and shows the parent's key.
     Subtask creation is offered only when loaded ancestry proves the depth limit is not reached.
-    It watches the list's realtime room and reads again in place 300 ms after the last notice of
-    the list; the status store keeps pending and in-flight changes over what it reads. A
+    It watches the list's realtime room and reads again in place 300 ms after the first notice of
+    a window, once per window (a task created, archived, unarchived, trashed or restored by another
+    member included); the status store keeps pending and in-flight changes over what it reads. A
     task created in the list (`TaskCreate.created`), a completed local status write and a bulk action
     read the rows again.
   - `TaskStatusChangesStore` (Task), route-scoped on `list`, so pending

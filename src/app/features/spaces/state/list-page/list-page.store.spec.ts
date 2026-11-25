@@ -172,6 +172,20 @@ describe('ListPageStore', () => {
     await expect.poll(() => api['counts'].mock.calls.length).toBe(2);
   });
 
+  it.each([
+    'task.created.v1',
+    'task.archived.v1',
+    'task.unarchived.v1',
+    'task.trashed.v1',
+    'task.restored.v1',
+  ])('reads the counts again when a task joins or leaves the list (%s)', async (type) => {
+    await loaded();
+
+    notices.next({ id: type, type, at: '2026-11-08T09:00:00Z', data: { taskId: 'CAD-483' } });
+
+    await expect.poll(() => api['counts'].mock.calls.length).toBe(2);
+  });
+
   it('ignores the comment and Git link notices, which cannot change the counts', async () => {
     await loaded();
 

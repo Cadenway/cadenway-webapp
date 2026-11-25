@@ -631,6 +631,11 @@ describe('ListRowsStore', () => {
       },
     ],
     ['git.links-changed.v1', { taskId: '019a6000-0000-7000-8000-000000000002' }],
+    ['task.created.v1', { taskId: '019a6000-0000-7000-8000-000000000002' }],
+    ['task.archived.v1', { taskId: '019a6000-0000-7000-8000-000000000002' }],
+    ['task.unarchived.v1', { taskId: '019a6000-0000-7000-8000-000000000002' }],
+    ['task.trashed.v1', { taskId: '019a6000-0000-7000-8000-000000000002' }],
+    ['task.restored.v1', { taskId: '019a6000-0000-7000-8000-000000000002' }],
   ])('reloads for a parsed %s notice without a list id', async (type, data) => {
     const store: InstanceType<typeof ListRowsStore> = setup(flat);
     await settle();
@@ -650,6 +655,23 @@ describe('ListRowsStore', () => {
     await settle();
     expect(page).toHaveBeenCalledTimes(2);
     expect(store.rows()).toHaveLength(1);
+  });
+
+  it('reads the rows again while notices keep arriving faster than 300 ms', async () => {
+    setup(flat);
+    await settle();
+    for (let sent: number = 0; sent < 8; sent++) {
+      notices.next({
+        id: `n${String(sent)}`,
+        type: 'task.updated.v1',
+        at: '2026-11-08T09:00:00Z',
+        data: { taskId: '019a6000-0000-7000-8000-000000000002', changed: ['name'] },
+      });
+      await vi.advanceTimersByTimeAsync(100);
+      await settle();
+    }
+
+    expect(page.mock.calls.length).toBeGreaterThan(2);
   });
 
   it('ignores a notice that names a different list', async () => {
