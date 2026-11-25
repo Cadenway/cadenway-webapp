@@ -69,7 +69,8 @@ breadcrumb, dialog, inline edit, toolbar).
     one overview per space read at most four at a time (a failed one offers Retry), the favorites and the
     open spaces. Keyed on the committed organization id: a switch closes every space and
     reads again. A task created from this tab (`TaskCreate.created`) reads the overview of its
-    list's space again, one creation after the other; a failed read keeps the previous counts.
+    list's space again, one creation after the other; a failed read keeps the previous counts,
+    and an unknown space or a full read in flight makes every overview be read again after it.
     Favorites change optimistically and a refusal restores the previous list. The
     current sprint is the first sprint, in sidebar order, whose dates hold the caller's today.
   - `ListPageStore`, route-scoped on `l/:listId`: the list (primary read) and its space, counts,

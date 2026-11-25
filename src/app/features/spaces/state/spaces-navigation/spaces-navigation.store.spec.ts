@@ -318,6 +318,37 @@ describe('SpacesNavigationStore', () => {
     expect(store.overviews.value()?.['sp-produit']?.taskCount).toBe(30);
   });
 
+  it('reads every overview again when the space of the created task is unknown', async () => {
+    await expect.poll(() => store.overviews.hasValue()).toBe(true);
+    const reads: number = api.overview.mock.calls.length;
+
+    creations.next({ key: 'CAD-483', listId: 'l-elsewhere', status: 'todo', subtasks: 0 });
+
+    await expect.poll(() => api.overview.mock.calls.length).toBe(reads * 2);
+  });
+
+  it('reads every overview once more after a read in flight during a creation', async () => {
+    const pending: ((value: SpaceOverview) => void)[] = [];
+    const answer: ((spaceId: string) => Promise<SpaceOverview>) | undefined =
+      api.overview.getMockImplementation();
+    if (!answer) throw new Error('No overview fake');
+    api.overview.mockImplementation(
+      (): Promise<SpaceOverview> =>
+        new Promise((resolve: (value: SpaceOverview) => void) => {
+          pending.push(resolve);
+        }),
+    );
+    TestBed.tick();
+    await expect.poll(() => pending.length).toBe(2);
+    const reads: number = api.overview.mock.calls.length;
+
+    creations.next({ key: 'CAD-483', listId: 'l-backlog', status: 'todo', subtasks: 0 });
+    api.overview.mockImplementation(answer);
+    for (const resolve of pending) resolve(await answer('sp-produit'));
+
+    await expect.poll(() => api.overview.mock.calls.length).toBe(reads + 2);
+  });
+
   it('reads the spaces again on refresh', async () => {
     await expect.poll(() => store.spaces.hasValue()).toBe(true);
     store.refresh();

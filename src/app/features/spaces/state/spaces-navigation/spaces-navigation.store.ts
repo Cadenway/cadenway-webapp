@@ -289,6 +289,10 @@ function createSpacesNavigationStore(): Type<SpacesNavigationStoreInstance> {
         string,
         { desired: boolean; confirmed: Favorite | undefined; promise: Promise<boolean> }
       >();
+      // Reads every overview again, or once more after the read in flight.
+      const reloadOverviews: () => void = (): void => {
+        if (!store.overviews.reload() && store.overviews.isLoading()) overviewRefreshQueued = true;
+      };
       return {
         _flushRefresh: signalMethod<string>((status: string): void => {
           if (status !== 'loading' && status !== 'reloading' && refreshQueued) {
@@ -300,22 +304,34 @@ function createSpacesNavigationStore(): Type<SpacesNavigationStoreInstance> {
           pipe(
             concatMap((task: CreatedTask): Observable<SpaceOverview> => {
               const organizationId: string | null = store._organizationId();
-              const spaceId: string | undefined = store.overviews.hasValue()
-                ? Object.values(store.overviews.value()).find((overview: SpaceOverview): boolean =>
-                    overview.lists.some(
-                      (summary: ListSummary): boolean => summary.list.id === task.listId,
-                    ),
-                  )?.spaceId
-                : undefined;
-              if (spaceId === undefined) return EMPTY;
+              const before: Readonly<Record<string, SpaceOverview>> | undefined =
+                !store.overviews.isLoading() && store.overviews.hasValue()
+                  ? store.overviews.value()
+                  : undefined;
+              const spaceId: string | undefined =
+                before === undefined
+                  ? undefined
+                  : Object.values(before).find((overview: SpaceOverview): boolean =>
+                      overview.lists.some(
+                        (summary: ListSummary): boolean => summary.list.id === task.listId,
+                      ),
+                    )?.spaceId;
+              if (before === undefined || spaceId === undefined) {
+                reloadOverviews();
+                return EMPTY;
+              }
               return from(store._api.overview(spaceId, todayIso())).pipe(
                 tapResponse({
                   next: (overview: SpaceOverview): void => {
                     if (store._organizationId() !== organizationId) return;
-                    if (store.overviews.isLoading()) {
-                      overviewRefreshQueued = true;
-                    } else if (store.overviews.hasValue()) {
-                      store.overviews.set({ ...store.overviews.value(), [spaceId]: overview });
+                    if (
+                      store.overviews.isLoading() ||
+                      !store.overviews.hasValue() ||
+                      store.overviews.value() !== before
+                    ) {
+                      reloadOverviews();
+                    } else {
+                      store.overviews.set({ ...before, [spaceId]: overview });
                     }
                   },
                   error: (): void => undefined,
@@ -342,8 +358,7 @@ function createSpacesNavigationStore(): Type<SpacesNavigationStoreInstance> {
         },
         refresh(): void {
           if (!store.spaces.reload() && store.spaces.isLoading()) refreshQueued = true;
-          if (!store.overviews.reload() && store.overviews.isLoading())
-            overviewRefreshQueued = true;
+          reloadOverviews();
         },
         favoriteOf(kind: FavoriteKind, targetId: string): Favorite | undefined {
           return currentFavorites().find(
@@ -439,9 +454,10 @@ function createSpacesNavigationStore(): Type<SpacesNavigationStoreInstance> {
  * sidebar, the sprint progress and the list screens share one read. Keyed on the organization
  * id committed by the workspace. A switch closes every space and reads again. At most four
  * overviews run at once; a failed read offers an inline retry. A task created from this tab reads
- * the overview of its list's space again, and only that one, one creation after the other so an
- * older answer never overwrites a newer one: a failed read keeps the previous counts, and a read
- * while every overview is being read again queues one more full read.
+ * the overview of its list's space again, and only that one, one creation after the other: a
+ * failed read keeps the previous counts. When that space is unknown, the overviews are loading, or
+ * they changed while the space was read, every overview is read again instead (after the read in
+ * flight), so an answer never overwrites a newer one and no creation is missed.
  * Favorites change optimistically; a refusal restores the previous list.
  *
  * @type {ReturnType<typeof createSpacesNavigationStore>}
