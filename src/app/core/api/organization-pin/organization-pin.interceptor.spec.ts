@@ -19,7 +19,7 @@ import { RuntimeConfigStore } from '@core/config';
 import { organizationPinInterceptor } from './organization-pin.interceptor';
 import { OrganizationPin } from './organization-pin.service';
 import { OrganizationSwitchPendingError } from './organization-switch-pending.error';
-import { SKIP_ORGANIZATION_PIN } from './organization-pin.token';
+import { PASSIVE_REQUEST, SKIP_ORGANIZATION_PIN } from './organization-pin.token';
 
 describe('organizationPinInterceptor', () => {
   beforeEach(() =>
@@ -108,6 +108,86 @@ describe('organizationPinInterceptor', () => {
     await result;
   });
 
+  it('pins a realtime ticket and reports its context mismatch', async () => {
+    const pin: OrganizationPin = TestBed.inject(OrganizationPin);
+    pin.set('organization-id');
+    const changed: Mock<() => void> = vi.fn();
+    pin.contextChanged.subscribe(changed);
+    const response: Promise<unknown> = firstValueFrom(
+      TestBed.inject(HttpClient).post('/v1/realtime/tickets', {}),
+    );
+    const request: TestRequest =
+      TestBed.inject(HttpTestingController).expectOne('/v1/realtime/tickets');
+    expect(request.request.headers.get('If-Organization-Match')).toBe('organization-id');
+    request.flush(
+      { code: 'organization.context-changed' },
+      { status: 412, statusText: 'Precondition Failed' },
+    );
+    await expect(response).rejects.toBeInstanceOf(HttpErrorResponse);
+    expect(changed).toHaveBeenCalledOnce();
+    pin.beginSwitch();
+    await expect(
+      firstValueFrom(TestBed.inject(HttpClient).post('/v1/realtime/tickets', {})),
+    ).rejects.toBeInstanceOf(OrganizationSwitchPendingError);
+    TestBed.inject(HttpTestingController).expectNone('/v1/realtime/tickets');
+  });
+
+  it('marks passive mismatches stale and fences later passive requests until verification', async () => {
+    const pin: OrganizationPin = TestBed.inject(OrganizationPin);
+    const changed: Mock<() => void> = vi.fn();
+    const verified: Mock<() => void> = vi.fn();
+    pin.set('organization-id');
+    pin.contextChanged.subscribe(changed);
+    pin.organizationVerified.subscribe(verified);
+    const http: HttpClient = TestBed.inject(HttpClient);
+    const testing: HttpTestingController = TestBed.inject(HttpTestingController);
+    const context: HttpContext = new HttpContext().set(PASSIVE_REQUEST, true);
+    const response: Promise<unknown> = firstValueFrom(http.get('/v1/tasks/CAD-1', { context }));
+    testing
+      .expectOne('/v1/tasks/CAD-1')
+      .flush(
+        { code: 'organization.context-changed' },
+        { status: 412, statusText: 'Precondition Failed' },
+      );
+    await expect(response).rejects.toBeInstanceOf(HttpErrorResponse);
+    expect(pin.stale()).toBe(true);
+    expect(changed).toHaveBeenCalledOnce();
+    await expect(firstValueFrom(http.get('/v1/tasks/CAD-1', { context }))).rejects.toBeInstanceOf(
+      OrganizationSwitchPendingError,
+    );
+    testing.expectNone('/v1/tasks/CAD-1');
+    pin.set('organization-id');
+    expect(pin.stale()).toBe(false);
+    expect(verified).toHaveBeenCalledOnce();
+    const resumed: Promise<unknown> = firstValueFrom(http.get('/v1/tasks/CAD-1', { context }));
+    testing.expectOne('/v1/tasks/CAD-1').flush({});
+    await resumed;
+  });
+
+  it.each([false, true])(
+    'ignores a mismatch from before a verified commit (passive: %s)',
+    async (passive: boolean) => {
+      const pin: OrganizationPin = TestBed.inject(OrganizationPin);
+      pin.set('organization-id');
+      const changed: Mock<() => void> = vi.fn();
+      pin.contextChanged.subscribe(changed);
+      const context: HttpContext = new HttpContext().set(PASSIVE_REQUEST, passive);
+      const response: Promise<unknown> = firstValueFrom(
+        TestBed.inject(HttpClient).get('/v1/tasks/CAD-1', { context }),
+      );
+      const request: TestRequest =
+        TestBed.inject(HttpTestingController).expectOne('/v1/tasks/CAD-1');
+      pin.set('new-organization');
+      request.flush(
+        { code: 'organization.context-changed' },
+        { status: 412, statusText: 'Precondition Failed' },
+      );
+      await expect(response).rejects.toBeInstanceOf(HttpErrorResponse);
+      expect(pin.stale()).toBe(false);
+      expect(changed).not.toHaveBeenCalled();
+    },
+  );
+
   it('reports only a context-changed 412 and preserves the error', async () => {
     const pin: OrganizationPin = TestBed.inject(OrganizationPin);
     pin.set('organization-id');
@@ -124,5 +204,6 @@ describe('organizationPinInterceptor', () => {
       );
     await expect(response).rejects.toBeInstanceOf(HttpErrorResponse);
     expect(changed).toHaveBeenCalledOnce();
+    expect(pin.stale()).toBe(true);
   });
 });

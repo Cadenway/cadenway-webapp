@@ -382,6 +382,12 @@ function createInboxStore(): Type<InboxStoreInstance> {
     withState(initialState),
     withProps((store) => {
       const api: InboxApi = inject(InboxApi);
+      const reloadKinds: { notifications: boolean | null; reminders: boolean | null } = {
+        notifications: null,
+        reminders: null,
+      };
+      let notificationsOrganization: string | null = null;
+      let remindersOrganization: string | null = null;
       const workspace: WorkspaceContextPort = inject(WORKSPACE_CONTEXT);
       const opened: () => { organizationId: string } | undefined = () => {
         const organizationId: string | null = store._organizationId();
@@ -394,6 +400,7 @@ function createInboxStore(): Type<InboxStoreInstance> {
         _realtime: inject(RealtimeConnection, { optional: true }),
         _destroyRef: inject(DestroyRef),
         _refreshBadge: new Subject<void>(),
+        _reloadKinds: reloadKinds,
         notifications: resource({
           params: opened,
           loader: async ({
@@ -401,11 +408,17 @@ function createInboxStore(): Type<InboxStoreInstance> {
           }: {
             params: { organizationId: string };
           }): Promise<InboxNotificationPage> => {
+            const passive: boolean =
+              reloadKinds.notifications ??
+              (notificationsOrganization !== null &&
+                notificationsOrganization !== params.organizationId);
+            notificationsOrganization = params.organizationId;
+            reloadKinds.notifications = null;
             let page: InboxNotificationPage | undefined;
             for (let attempt: number = 0; attempt < LOAD_ATTEMPTS; attempt += 1) {
               const version: number = store._version();
               const badgeVersion: number = store._badgeVersion();
-              page = await api.notifications();
+              page = await api.notifications(passive);
               if (version !== store._version()) continue;
               if (
                 params.organizationId === store._organizationId() &&
@@ -424,7 +437,17 @@ function createInboxStore(): Type<InboxStoreInstance> {
             const organizationId: string | null = store._organizationId();
             return organizationId ? { organizationId } : undefined;
           },
-          loader: (): Promise<InboxReminderPage> => api.pendingReminders(),
+          loader: ({
+            params,
+          }: {
+            params: { organizationId: string };
+          }): Promise<InboxReminderPage> => {
+            const passive: boolean =
+              remindersOrganization !== params.organizationId || (reloadKinds.reminders ?? false);
+            remindersOrganization = params.organizationId;
+            reloadKinds.reminders = null;
+            return api.pendingReminders(passive);
+          },
         }),
       };
     }),
@@ -439,18 +462,26 @@ function createInboxStore(): Type<InboxStoreInstance> {
       let sequence: number = 0;
       let organizationVersion: number = 0;
       let reminderWrites: number = 0;
-      let reminderRefreshPending: boolean = false;
+      let reminderRefreshPending: boolean | null = null;
       let notificationRefreshPending: boolean = false;
-      let notificationReloadQueued: boolean = false;
-      let reminderReloadQueued: boolean = false;
+      let notificationReloadQueued: boolean | null = null;
+      let reminderReloadQueued: boolean | null = null;
 
-      const reloadNotifications: () => void = (): void => {
-        if (store.notifications.isLoading()) notificationReloadQueued = true;
-        else store.notifications.reload();
+      const reloadNotifications: (passive?: boolean) => void = (passive: boolean = false): void => {
+        if (store.notifications.isLoading())
+          notificationReloadQueued = (notificationReloadQueued ?? true) && passive;
+        else {
+          store._reloadKinds.notifications = passive;
+          store.notifications.reload();
+        }
       };
-      const reloadReminders: () => void = (): void => {
-        if (store.reminders.isLoading()) reminderReloadQueued = true;
-        else store.reminders.reload();
+      const reloadReminders: (passive?: boolean) => void = (passive: boolean = false): void => {
+        if (store.reminders.isLoading())
+          reminderReloadQueued = (reminderReloadQueued ?? true) && passive;
+        else {
+          store._reloadKinds.reminders = passive;
+          store.reminders.reload();
+        }
       };
 
       const refreshNotifications: () => void = (): void => {
@@ -459,15 +490,15 @@ function createInboxStore(): Type<InboxStoreInstance> {
           return;
         }
         store._refreshBadge.next();
-        if (store._isOpen()) reloadNotifications();
+        if (store._isOpen()) reloadNotifications(true);
       };
 
-      const refreshReminders: () => void = (): void => {
+      const refreshReminders: (passive?: boolean) => void = (passive: boolean = true): void => {
         if (reminderWrites > 0) {
-          reminderRefreshPending = true;
+          reminderRefreshPending = (reminderRefreshPending ?? true) && passive;
           return;
         }
-        reloadReminders();
+        reloadReminders(passive);
       };
 
       const bump: () => void = (): void => {
@@ -559,9 +590,10 @@ function createInboxStore(): Type<InboxStoreInstance> {
         } finally {
           if (organizationAtStart === organizationVersion) {
             reminderWrites--;
-            if (reminderWrites === 0 && reminderRefreshPending) {
-              reminderRefreshPending = false;
-              refreshReminders();
+            if (reminderWrites === 0 && reminderRefreshPending !== null) {
+              const passive: boolean = reminderRefreshPending;
+              reminderRefreshPending = null;
+              refreshReminders(passive);
             }
           }
         }
@@ -570,13 +602,15 @@ function createInboxStore(): Type<InboxStoreInstance> {
       return {
         _drainReloads: signalMethod<{ notifications: boolean; reminders: boolean }>(
           (loading): void => {
-            if (!loading.notifications && notificationReloadQueued) {
-              notificationReloadQueued = false;
-              if (store._isOpen()) reloadNotifications();
+            if (!loading.notifications && notificationReloadQueued !== null) {
+              const passive: boolean = notificationReloadQueued;
+              notificationReloadQueued = null;
+              if (store._isOpen()) reloadNotifications(passive);
             }
-            if (!loading.reminders && reminderReloadQueued) {
-              reminderReloadQueued = false;
-              reloadReminders();
+            if (!loading.reminders && reminderReloadQueued !== null) {
+              const passive: boolean = reminderReloadQueued;
+              reminderReloadQueued = null;
+              reloadReminders(passive);
             }
           },
         ),
@@ -604,7 +638,7 @@ function createInboxStore(): Type<InboxStoreInstance> {
           refreshReminders();
           if (!store._isOpen()) return;
           if (claims.size > 0) notificationRefreshPending = true;
-          else reloadNotifications();
+          else reloadNotifications(true);
         },
         _poll: rxMethod<{ organizationId: string; connected: boolean }>(
           pipe(
@@ -638,10 +672,12 @@ function createInboxStore(): Type<InboxStoreInstance> {
           if (sameOrganization(organizationId)) return;
           organizationVersion++;
           reminderWrites = 0;
-          reminderRefreshPending = false;
+          reminderRefreshPending = null;
           notificationRefreshPending = false;
-          notificationReloadQueued = false;
-          reminderReloadQueued = false;
+          notificationReloadQueued = null;
+          reminderReloadQueued = null;
+          store._reloadKinds.notifications = null;
+          store._reloadKinds.reminders = null;
           claims = new Map<number, ReadClaim>();
           confirmedIds = new Set<string>();
           confirmedAll = false;
@@ -654,9 +690,10 @@ function createInboxStore(): Type<InboxStoreInstance> {
         }),
         open(): void {
           const previouslyOpened: boolean = store._openings() > 0;
+          if (!previouslyOpened) store._reloadKinds.notifications = false;
           patchState(store, { _openings: 1, _isOpen: true });
           if (previouslyOpened) reloadNotifications();
-          refreshReminders();
+          refreshReminders(false);
         },
         close(): void {
           patchState(store, { _isOpen: false });

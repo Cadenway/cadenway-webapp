@@ -3,6 +3,27 @@ import type { Router, UrlTree } from '@angular/router';
 import type { WorkspaceProblem } from '../../models/workspace-context/workspace-context.interface';
 
 /**
+ * Function isTransientWorkspaceProblem
+ *
+ * @description
+ * Identifies unavailable or timed-out gateway responses that recovery can retry, while preserving
+ * authentication and access decisions.
+ *
+ * @param {WorkspaceProblem} problem - Gateway or transport failure.
+ * @returns {boolean} Whether the failure can be retried without leaving the workspace.
+ */
+export function isTransientWorkspaceProblem(problem: WorkspaceProblem): boolean {
+  if (problem.status === 401 || problem.status === 403 || problem.status === 404) return false;
+  return (
+    problem.status === 0 ||
+    problem.status === 408 ||
+    problem.status >= 500 ||
+    problem.code?.endsWith('.unavailable') === true ||
+    problem.code?.endsWith('.timeout') === true
+  );
+}
+
+/**
  * Function signInRedirect
  *
  * @description

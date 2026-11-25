@@ -1,8 +1,16 @@
+import { provideHttpClient, withInterceptors } from '@angular/common/http';
+import {
+  HttpTestingController,
+  provideHttpClientTesting,
+  type TestRequest,
+} from '@angular/common/http/testing';
 import { signal, type WritableSignal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { type Observable, of, Subject, throwError } from 'rxjs';
 
 import { RealtimeConnection, type PersonalNotice } from '@core/realtime';
+import { OrganizationPin, organizationPinInterceptor, PASSIVE_REQUEST } from '@core/api';
+import { RuntimeConfigStore } from '@core/config';
 import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 
 import {
@@ -340,6 +348,17 @@ describe('InboxStore', () => {
     return store;
   }
 
+  it('marks automatic loads passive when the workspace organization changes', async () => {
+    await opened();
+    current.set(workspaceOrganization('lumen'));
+    TestBed.tick();
+    await vi.waitFor(() => {
+      TestBed.tick();
+      expect(api.pendingReminders).toHaveBeenLastCalledWith(true);
+      expect(api.notifications).toHaveBeenLastCalledWith(true);
+    });
+  });
+
   it('polls the unread count at once, every minute and when the window regains focus', async () => {
     const store: InstanceType<typeof InboxStore> = TestBed.inject(InboxStore);
     TestBed.tick();
@@ -371,6 +390,7 @@ describe('InboxStore', () => {
     await vi.waitFor(() => {
       expect(api.notifications).toHaveBeenCalledTimes(count + 1);
     });
+    expect(api.notifications).toHaveBeenLastCalledWith(true);
     expect(store.unreadCount()).toBe(4);
     store.close();
     notices.next({ type: 'notification.created.v1' });
@@ -398,6 +418,7 @@ describe('InboxStore', () => {
     await vi.waitFor(() => {
       expect(api.pendingReminders).toHaveBeenCalledTimes(count + 1);
     });
+    expect(api.pendingReminders).toHaveBeenLastCalledWith(true);
     api.reminder.mockRejectedValueOnce(new Error('not found'));
     api.reminder.mockRejectedValueOnce(new Error('not found again'));
     notices.next({ type: 'reminder.due.v1', reminderId: 'r2', taskId: 't2' });
@@ -761,5 +782,61 @@ describe('InboxStore', () => {
     all.reject(new Error('unavailable'));
     await everything;
     expect(store.unreadCount()).toBe(5);
+  });
+});
+
+describe('InboxStore passive requests', () => {
+  afterEach(() => {
+    TestBed.resetTestingModule();
+    vi.useRealTimers();
+  });
+
+  it('marks an initial reminders mismatch stale', async () => {
+    vi.useFakeTimers();
+    TestBed.configureTestingModule({
+      providers: [
+        provideHttpClient(withInterceptors([organizationPinInterceptor])),
+        provideHttpClientTesting(),
+        InboxStore,
+        {
+          provide: RuntimeConfigStore,
+          useValue: { config: () => ({ apiUrl: 'https://api.example.test' }) },
+        },
+        {
+          provide: WORKSPACE_CONTEXT,
+          useValue: { organization: signal({ id: 'organization-a' }) },
+        },
+      ],
+    });
+    const pin: OrganizationPin = TestBed.inject(OrganizationPin);
+    pin.set('organization-a');
+    const changed: Mock<() => void> = vi.fn();
+    pin.contextChanged.subscribe(changed);
+    const store: InstanceType<typeof InboxStore> = TestBed.inject(InboxStore);
+    TestBed.tick();
+    await vi.advanceTimersByTimeAsync(0);
+    TestBed.tick();
+    const http: HttpTestingController = TestBed.inject(HttpTestingController);
+    const reminders: TestRequest = http.expectOne((request) => request.url === '/v1/reminders');
+    expect(reminders.request.context.get(PASSIVE_REQUEST)).toBe(true);
+    expect(reminders.request.headers.get('If-Organization-Match')).toBe('organization-a');
+    const badge: TestRequest = http.expectOne('/v1/inbox/unread-count');
+    badge.flush({ unreadCount: 0 });
+    reminders.flush(
+      { code: 'organization.context-changed' },
+      { status: 412, statusText: 'Precondition Failed' },
+    );
+    await vi.advanceTimersByTimeAsync(0);
+    TestBed.tick();
+    expect(pin.stale()).toBe(true);
+    expect(changed).toHaveBeenCalledOnce();
+    expect(store.reminders.error()).toBeDefined();
+    pin.set('organization-a');
+    store.reminders.reload();
+    TestBed.tick();
+    const retry: TestRequest = http.expectOne((request) => request.url === '/v1/reminders');
+    expect(retry.request.context.get(PASSIVE_REQUEST)).toBe(false);
+    retry.flush({ items: [], pendingCount: 0 });
+    http.verify();
   });
 });

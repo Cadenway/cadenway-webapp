@@ -13,7 +13,7 @@ import { hasProblemCode } from '../utils/problem/problem.utils';
 import { ORGANIZATION_PIN_OPERATIONS } from './organization-pin-operations.constant';
 import { OrganizationPin } from './organization-pin.service';
 import { OrganizationSwitchPendingError } from './organization-switch-pending.error';
-import { SKIP_ORGANIZATION_PIN } from './organization-pin.token';
+import { PASSIVE_REQUEST, SKIP_ORGANIZATION_PIN } from './organization-pin.token';
 
 /**
  * Function organizationPinInterceptor
@@ -32,6 +32,7 @@ export function organizationPinInterceptor(
 ): Observable<HttpEvent<unknown>> {
   const pin: OrganizationPin = inject(OrganizationPin);
   const organizationId: string | null = pin.current();
+  const revision: number = pin.revision();
   if (!organizationId || request.context.get(SKIP_ORGANIZATION_PIN)) return next(request);
   const gateway: URL = new URL(inject(RuntimeConfigStore).config().apiUrl);
   const url: URL = new URL(request.url, gateway);
@@ -42,7 +43,8 @@ export function organizationPinInterceptor(
       ([method, pattern]: readonly [string, RegExp]) =>
         method === request.method && pattern.test(path),
     );
-  if (supported && pin.isSwitching()) return throwError(() => new OrganizationSwitchPendingError());
+  if (supported && (pin.isSwitching() || (request.context.get(PASSIVE_REQUEST) && pin.stale())))
+    return throwError(() => new OrganizationSwitchPendingError());
   const outgoing: HttpRequest<unknown> =
     organizationId && supported
       ? request.clone({ setHeaders: { 'If-Organization-Match': organizationId } })
@@ -52,6 +54,7 @@ export function organizationPinInterceptor(
       if (
         organizationId &&
         supported &&
+        revision === pin.revision() &&
         error instanceof HttpErrorResponse &&
         error.status === 412 &&
         hasProblemCode(error, 'organization.context-changed')
