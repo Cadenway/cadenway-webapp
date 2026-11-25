@@ -1,131 +1,135 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
+import { ɵparseTranslation as parseTranslation } from '@angular/localize';
+
 /**
- * Interface CatalogUnit
+ * Interface Catalog
  *
  * @description
- * One translation unit of an XLIFF 1.2 catalog: its id and the inner XML of its target, if any.
+ * A message catalog in Angular's JSON translation format.
  */
-interface CatalogUnit {
+interface Catalog {
   // #region Properties
   /**
-   * Property id
+   * Property locale
    *
    * @description
-   * The `@@` id of the message.
+   * Locale of the messages: `en` for the extracted source, `fr` for the translation.
    *
    * @type {string}
    * @readonly
    */
-  readonly id: string;
+  readonly locale: string;
 
   /**
-   * Property target
+   * Property translations
    *
    * @description
-   * Inner XML of the `<target>` element, or `null` when the unit has none.
+   * Message text by `@@` id, placeholders written `{$NAME}` and ICU expressions inline.
    *
-   * @type {string | null}
+   * @type {Readonly<Record<string, string>>}
    * @readonly
    */
-  readonly target: string | null;
+  readonly translations: Readonly<Record<string, string>>;
   // #endregion
 }
 
 /**
- * Function readUnits
+ * Function readCatalog
  *
  * @description
- * Lists the translation units of an XLIFF 1.2 document in document order.
+ * Reads a catalog of `src/locale/`.
  *
- * @param {string} xliff - The catalog contents.
- * @returns {readonly CatalogUnit[]} The units with their target.
+ * @param {string} name - File name inside `src/locale/`.
+ * @returns {Catalog} The parsed catalog.
  */
-function readUnits(xliff: string): readonly CatalogUnit[] {
-  return [...xliff.matchAll(/<trans-unit\s+id="([^"]+)"[^>]*>([\s\S]*?)<\/trans-unit>/g)].map(
-    ([, id, body]: RegExpExecArray): CatalogUnit => ({
-      id,
-      target: /<target(?:\s[^>]*)?>([\s\S]*?)<\/target>/.exec(body)?.[1] ?? null,
-    }),
+function readCatalog(name: string): Catalog {
+  return JSON.parse(readFileSync(resolve(process.cwd(), 'src/locale', name), 'utf8')) as Catalog;
+}
+
+/**
+ * Function placeholders
+ *
+ * @description
+ * Lists the names a message must keep in every translation: its `{$NAME}` placeholders and the
+ * variables and interpolations of its ICU expressions.
+ *
+ * @param {string} text - Message text in the JSON format.
+ * @returns {string} The sorted names, comma-separated.
+ */
+function placeholders(text: string): string {
+  const icu: readonly string[] = [...text.matchAll(/\{([A-Z][A-Z0-9_]*)[,}]/g)].map(
+    ([, name]: RegExpExecArray): string => name,
   );
+  return [...new Set([...parseTranslation(text).placeholderNames, ...icu])].sort().join(',');
 }
 
 /**
  * Function findCatalogProblems
  *
  * @description
- * Compares the French catalog with the source catalog: every source message needs a French unit
- * with a non-empty target, and the French catalog keeps no unit for a removed message. Angular
- * only warns about a unit without a target and silently renders an empty one.
+ * Compares the French catalog with the extracted source catalog: every source message needs a
+ * non-empty French text with the same placeholders, and the French catalog keeps no text for a
+ * removed message. At runtime a missing translation silently falls back to English.
  *
- * @param {string} source - The extracted source catalog (`messages.xlf`).
- * @param {string} french - The French catalog (`messages.fr.xlf`).
+ * @param {Catalog} source - The extracted source catalog (`messages.json`).
+ * @param {Catalog} french - The French catalog (`messages.fr.json`).
  * @returns {readonly string[]} One readable problem per faulty message id.
  */
-function findCatalogProblems(source: string, french: string): readonly string[] {
-  const translations: ReadonlyMap<string, string | null> = new Map(
-    readUnits(french).map((unit: CatalogUnit): [string, string | null] => [unit.id, unit.target]),
-  );
-  const sourceIds: ReadonlySet<string> = new Set(
-    readUnits(source).map((unit: CatalogUnit): string => unit.id),
-  );
-  const problems: string[] = [];
-  for (const id of sourceIds) {
-    const target: string | null | undefined = translations.get(id);
-    if (target === undefined) problems.push(`${id}: no French unit`);
-    else if (target === null) problems.push(`${id}: no French target`);
-    else if (target.trim() === '') problems.push(`${id}: empty French target`);
+function findCatalogProblems(source: Catalog, french: Catalog): readonly string[] {
+  const problems: string[] = french.locale === 'fr' ? [] : ['catalog: locale is not fr'];
+  for (const [id, text] of Object.entries(source.translations)) {
+    const target: string | undefined = Object.hasOwn(french.translations, id)
+      ? french.translations[id]
+      : undefined;
+    if (target === undefined) problems.push(`${id}: no French text`);
+    else if (target.trim() === '') problems.push(`${id}: empty French text`);
+    else if (placeholders(target) !== placeholders(text)) {
+      problems.push(`${id}: placeholders differ from the source`);
+    }
   }
-  for (const id of translations.keys()) {
-    if (!sourceIds.has(id)) problems.push(`${id}: French unit without a source message`);
+  for (const id of Object.keys(french.translations)) {
+    if (!Object.hasOwn(source.translations, id)) {
+      problems.push(`${id}: French text without a source message`);
+    }
   }
   return problems;
 }
 
-/**
- * Function catalog
- *
- * @description
- * Wraps units in an XLIFF 1.2 document, as the extractor writes them.
- *
- * @param {string} units - The `<trans-unit>` elements.
- * @returns {string} The catalog contents.
- */
-function catalog(units: string): string {
-  return `<xliff version="1.2"><file source-language="en"><body>${units}</body></file></xliff>`;
-}
-
 describe('French message catalog', () => {
-  it('translates every source message with a non-empty target and keeps no orphan unit', () => {
-    const source: string = readFileSync(resolve(process.cwd(), 'src/locale/messages.xlf'), 'utf8');
-    const french: string = readFileSync(
-      resolve(process.cwd(), 'src/locale/messages.fr.xlf'),
-      'utf8',
-    );
-
-    expect(findCatalogProblems(source, french)).toEqual([]);
+  it('translates every source message with the same placeholders and keeps no orphan text', () => {
+    expect(
+      findCatalogProblems(readCatalog('messages.json'), readCatalog('messages.fr.json')),
+    ).toEqual([]);
   });
 
-  it('reports missing, target-less, empty and orphan French units', () => {
-    const source: string = catalog(
-      '<trans-unit id="a.one"><source>One</source></trans-unit>' +
-        '<trans-unit id="a.two"><source>Two</source></trans-unit>' +
-        '<trans-unit id="a.three"><source>Three</source></trans-unit>' +
-        '<trans-unit id="a.four"><source>Four <x id="INTERPOLATION"/></source></trans-unit>',
-    );
-    const french: string = catalog(
-      '<trans-unit id="a.two"><source>Two</source></trans-unit>' +
-        '<trans-unit id="a.three"><source>Three</source><target> </target></trans-unit>' +
-        '<trans-unit id="a.four"><source>Four</source><target><x id="INTERPOLATION"/></target></trans-unit>' +
-        '<trans-unit id="a.gone"><source>Gone</source><target>Parti</target></trans-unit>',
-    );
+  it('reports missing, empty, mismatched and orphan French texts', () => {
+    const source: Catalog = {
+      locale: 'en',
+      translations: {
+        'a.one': 'One',
+        'a.two': 'Two',
+        'a.three': 'Three {$name}',
+        'a.four': '{VAR_PLURAL, plural, =1 {one} other {{INTERPOLATION} items}}',
+      },
+    };
+    const french: Catalog = {
+      locale: 'fr',
+      translations: {
+        'a.two': ' ',
+        'a.three': 'Trois',
+        'a.four': '{VAR_PLURAL, plural, =1 {un} other {plusieurs}}',
+        'a.gone': 'Parti',
+      },
+    };
 
     expect(findCatalogProblems(source, french)).toEqual([
-      'a.one: no French unit',
-      'a.two: no French target',
-      'a.three: empty French target',
-      'a.gone: French unit without a source message',
+      'a.one: no French text',
+      'a.two: empty French text',
+      'a.three: placeholders differ from the source',
+      'a.four: placeholders differ from the source',
+      'a.gone: French text without a source message',
     ]);
   });
 });

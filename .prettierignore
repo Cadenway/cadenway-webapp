@@ -14,3 +14,6 @@ docs/maquette/
 # Agent tooling: .codex mirrors .claude byte for byte, so neither is reformatted.
 .claude/
 .codex/
+
+# Written by `pnpm i18n:extract` and compared byte for byte by `pnpm i18n:check`.
+src/locale/messages.json
