@@ -4,7 +4,7 @@ import { Router } from '@angular/router';
 import { provideCadenwayIcons } from '@cadenway/icons';
 import { CwToastService } from '@cadenway/ui/components/toast';
 import { of } from 'rxjs';
-import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 
 import { PRESENCE, type PresenceStatus } from '@features/account/ports/presence';
 import {
@@ -114,6 +114,8 @@ describe('InboxRailItem', () => {
   let fixture: ComponentFixture<InboxRailItem>;
 
   beforeEach(async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date(2026, 10, 9, 12, 0, 0));
     status = signal<PresenceStatus>('online');
     notifications = vi.fn(() => Promise.resolve(page()));
     navigate = vi.fn(() => Promise.resolve(true));
@@ -143,6 +145,10 @@ describe('InboxRailItem', () => {
     });
     fixture = TestBed.createComponent(InboxRailItem);
     await fixture.whenStable();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   /**
