@@ -91,7 +91,13 @@ export function advanceGroup(
 ): GroupProgress[] {
   return groups.map((group: GroupProgress): GroupProgress =>
     group.value === value
-      ? { ...group, cursor: page.nextCursor, started: true, done: page.nextCursor === null }
+      ? {
+          ...group,
+          count: group.count ?? page.total,
+          cursor: page.nextCursor,
+          started: true,
+          done: page.nextCursor === null,
+        }
       : group,
   );
 }

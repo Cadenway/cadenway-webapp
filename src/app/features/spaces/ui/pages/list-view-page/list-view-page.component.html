@@ -16,7 +16,8 @@
     density="default"
     groupBy="group"
     [page]="null"
-    [data]="rows.rows()"
+    [data]="tableRows()"
+    [nearEndThreshold]="rows.nearEndThreshold()"
     [trackBy]="rowId"
     [rowLabel]="rowLabel"
     [groupLabel]="groupLabel"
@@ -162,7 +163,12 @@
       </ng-template>
     </cw-data-table-column>
 
-    <cw-data-table-column key="due" header="Due date" i18n-header="@@spaces.rows.due" [width]="120">
+    <cw-data-table-column
+      key="due"
+      header="Due date"
+      i18n-header="@@spaces.rows.due"
+      [width]="dueWidth()"
+    >
       <ng-template cwCell [cwCellOf]="rows.rows()" let-row>
         <cw-task-due-date [due]="row.task.due" [status]="row.status" />
       </ng-template>

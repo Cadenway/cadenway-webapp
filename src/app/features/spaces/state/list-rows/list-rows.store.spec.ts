@@ -237,6 +237,7 @@ describe('ListRowsStore', () => {
     expect(store.initialLoading()).toBe(false);
     expect(store.rows()).toHaveLength(LIST_PAGE_SIZE);
     expect(store.rows()[0].group).toBe('all');
+    expect(store.groupCount('all')).toBe(LIST_PAGE_SIZE);
     expect(groups).not.toHaveBeenCalled();
 
     store.loadMore();
@@ -254,6 +255,39 @@ describe('ListRowsStore', () => {
     store.loadMore();
     await settle();
     expect(page).toHaveBeenCalledTimes(2);
+  });
+
+  it('continues after a page containing only already loaded tasks', async () => {
+    const first: TaskSummary[] = Array.from({ length: LIST_PAGE_SIZE }, (_, index) =>
+      task(`CAD-${String(index)}`, 'todo'),
+    );
+    page
+      .mockResolvedValueOnce(pageOf(first, 'next'))
+      .mockResolvedValueOnce(pageOf([first[0]], 'last'))
+      .mockResolvedValueOnce(pageOf([task('CAD-new', 'todo')]));
+    const store: InstanceType<typeof ListRowsStore> = setup(flat);
+    await settle();
+    store.loadMore();
+    await settle();
+    expect(page).toHaveBeenCalledTimes(3);
+    expect(store.rows()).toHaveLength(LIST_PAGE_SIZE + 1);
+  });
+
+  it('includes unread group lines in the near-end threshold', async () => {
+    groups.mockResolvedValue([
+      { value: 'todo', count: 50 },
+      { value: 'progress', count: 1 },
+      { value: 'cancelled', count: 1 },
+    ]);
+    page.mockResolvedValue(
+      pageOf(
+        Array.from({ length: LIST_PAGE_SIZE }, (_, index) => task(`CAD-${String(index)}`, 'todo')),
+        'next',
+      ),
+    );
+    const store: InstanceType<typeof ListRowsStore> = setup(byStatus);
+    await settle();
+    expect(store.nearEndThreshold()).toBe(13);
   });
 
   it('reads each group with its value as a filter and folds « Annulé » by default', async () => {
@@ -490,6 +524,8 @@ describe('ListRowsStore', () => {
       TestBed.inject(TaskStatusChangesStore).request(cad482, 'progress');
       TestBed.tick();
       expect(rowOf(store, 'CAD-482')).toMatchObject({ status: 'progress', group: 'progress' });
+      expect(store.groupCount('todo')).toBe(0);
+      expect(store.groupCount('progress')).toBe(1);
       expect(changeStatus).not.toHaveBeenCalled();
     } finally {
       vi.unstubAllGlobals();

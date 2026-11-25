@@ -1,3 +1,4 @@
+import { BreakpointObserver } from '@angular/cdk/layout';
 import { signal } from '@angular/core';
 import { type ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideRouter, Router } from '@angular/router';
@@ -269,6 +270,17 @@ describe('ListViewPage', () => {
     expect(table.rowMotion()?.({ entering: false })).toBeNull();
   });
 
+  it('uses the mockup due-date width on phones', async () => {
+    TestBed.overrideProvider(BreakpointObserver, {
+      useValue: { observe: () => of({ matches: true, breakpoints: {} }) },
+    });
+    const fixture: ComponentFixture<ListViewPage> = await render();
+    const columns: NodeListOf<HTMLTableColElement> = (
+      fixture.nativeElement as HTMLElement
+    ).querySelectorAll('col');
+    expect(columns[3].style.width).toBe('88px');
+  });
+
   it('shows the empty state instead of groups when a search has no matches', async () => {
     groups.mockResolvedValue([]);
     const view: InstanceType<typeof ListViewStore> = TestBed.inject(ListViewStore);
@@ -280,6 +292,69 @@ describe('ListViewPage', () => {
     expect((fixture.nativeElement as HTMLElement).textContent).toContain(
       'Aucune tâche ne correspond',
     );
+  });
+
+  it('keeps workflow order and shows only the five default empty status groups', async () => {
+    groups.mockResolvedValue(
+      [
+        'triage',
+        'progress',
+        'review',
+        'testing',
+        'todo',
+        'blocked',
+        'waiting',
+        'backlog',
+        'done',
+        'cancelled',
+      ].map((value) => ({ value, count: 0 })),
+    );
+    const fixture: ComponentFixture<ListViewPage> = await render();
+    const table: CwDataTable<unknown> = fixture.debugElement.query(By.directive(CwDataTable))
+      .componentInstance as CwDataTable<unknown>;
+    expect(table.groups().map((group) => group.value)).toEqual([
+      'progress',
+      'review',
+      'todo',
+      'blocked',
+      'done',
+    ]);
+  });
+
+  it('hides empty groups when a search has results', async () => {
+    groups.mockResolvedValue([
+      { value: 'progress', count: 0 },
+      { value: 'todo', count: 1 },
+      { value: 'done', count: 0 },
+    ]);
+    TestBed.inject(ListViewStore).setSearch('SSO');
+    const fixture: ComponentFixture<ListViewPage> = await render();
+    const table: CwDataTable<unknown> = fixture.debugElement.query(By.directive(CwDataTable))
+      .componentInstance as CwDataTable<unknown>;
+    expect(table.groups().map((group) => group.value)).toEqual(['todo']);
+  });
+
+  it('shows only the selected status and its add row', async () => {
+    groups.mockResolvedValue([{ value: 'todo', count: 1 }]);
+    TestBed.inject(ListViewStore).toggleFilter('status', 'todo');
+    const fixture: ComponentFixture<ListViewPage> = await render();
+    const table: CwDataTable<unknown> = fixture.debugElement.query(By.directive(CwDataTable))
+      .componentInstance as CwDataTable<unknown>;
+    expect(table.groups().map((group) => group.value)).toEqual(['todo']);
+    expect(
+      (fixture.nativeElement as HTMLElement).querySelectorAll('button').length,
+    ).toBeGreaterThan(0);
+    expect(
+      [...(fixture.nativeElement as HTMLElement).querySelectorAll('button')].filter(
+        (element) => element.textContent.trim() === 'Ajouter une tâche',
+      ),
+    ).toHaveLength(1);
+  });
+
+  it('shows the unfiltered empty state when no declared group is visible', async () => {
+    groups.mockResolvedValue([{ value: 'triage', count: 0 }]);
+    const fixture: ComponentFixture<ListViewPage> = await render();
+    expect((fixture.nativeElement as HTMLElement).textContent).toContain('Aucune tâche');
   });
 
   it('renders visible tasks after a full hidden status group', async () => {
@@ -577,6 +652,7 @@ describe('ListViewPage', () => {
   });
 
   it('shows empty groups and creates a task with the selected status', async () => {
+    groups.mockResolvedValue([{ value: 'todo', count: 0 }]);
     page.mockResolvedValue({ items: [], nextCursor: null, total: 0 });
     const open: MockInstance = vi.spyOn(TestBed.inject(TaskCreate), 'open');
     await render();
@@ -613,7 +689,7 @@ describe('ListViewPage', () => {
     await fixture.whenStable();
 
     expect(page.mock.calls.length).toBeGreaterThan(calls);
-    expect(page).toHaveBeenLastCalledWith(
+    expect(page).toHaveBeenCalledWith(
       'sprint-14',
       expect.anything(),
       expect.objectContaining({ value: 'todo' }),
