@@ -99,34 +99,62 @@ export function provideWorkspaceRuntime(): (Provider | EnvironmentProviders)[] {
       const router: Router = inject(Router);
       const revalidation: WorkspaceRevalidation = inject(WorkspaceRevalidation);
       let recovering: boolean = false;
-      let staleRecoveryRequested: boolean = false;
+      let disposed: boolean = false;
+      let retryAttempts: number = 0;
+      let retryAfter: number = 0;
+      let retryTimer: ReturnType<typeof setTimeout> | undefined;
       const document: Document = inject(DOCUMENT);
       const recover: () => void = () => {
         if (recovering || router.currentNavigation()) return;
         recovering = true;
         revalidation.request();
-        void router.navigateByUrl(router.url, { onSameUrlNavigation: 'reload' }).finally(() => {
+        const finish: () => void = () => {
+          if (disposed) return;
           recovering = false;
+          if (pin.stale()) {
+            const delay: number = Math.min(1000 * 2 ** Math.min(retryAttempts++, 5), 30000);
+            retryAfter = Date.now() + delay;
+            clearTimeout(retryTimer);
+            retryTimer = setTimeout(() => {
+              retryTimer = undefined;
+              foreground();
+            }, delay);
+          }
           foreground();
-        });
+        };
+        void router
+          .navigateByUrl(router.url, { onSameUrlNavigation: 'reload' })
+          .then(finish, finish);
       };
       const subscription: Subscription = pin.contextChanged.subscribe(recover);
       const foreground: () => void = () => {
         if (
           pin.stale() &&
-          !staleRecoveryRequested &&
+          !disposed &&
           !recovering &&
           !router.currentNavigation() &&
           document.visibilityState === 'visible' &&
           document.hasFocus()
         ) {
-          staleRecoveryRequested = true;
+          const delay: number = retryAfter - Date.now();
+          if (delay > 0) {
+            retryTimer ??= setTimeout(() => {
+              retryTimer = undefined;
+              foreground();
+            }, delay);
+            return;
+          }
+          clearTimeout(retryTimer);
+          retryTimer = undefined;
           recover();
         }
       };
       const staleSubscription: Subscription = pin.becameStale.subscribe(foreground);
       const verifiedSubscription: Subscription = pin.organizationVerified.subscribe(() => {
-        staleRecoveryRequested = false;
+        retryAttempts = 0;
+        retryAfter = 0;
+        clearTimeout(retryTimer);
+        retryTimer = undefined;
       });
       const navigationSubscription: Subscription = router.events.subscribe((event) => {
         if (
@@ -141,6 +169,8 @@ export function provideWorkspaceRuntime(): (Provider | EnvironmentProviders)[] {
       document.addEventListener('visibilitychange', foreground);
       document.defaultView?.addEventListener('focus', foreground);
       inject(DestroyRef).onDestroy(() => {
+        disposed = true;
+        clearTimeout(retryTimer);
         document.removeEventListener('visibilitychange', foreground);
         document.defaultView?.removeEventListener('focus', foreground);
         subscription.unsubscribe();

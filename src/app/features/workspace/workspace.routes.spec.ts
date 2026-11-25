@@ -1,8 +1,10 @@
-import { HttpContext, HttpErrorResponse, HttpRequest } from '@angular/common/http';
+import { HttpContext, HttpErrorResponse, HttpResponse, HttpRequest } from '@angular/common/http';
 import { Component } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import {
+  NavigationCancel,
   NavigationEnd,
+  NavigationError,
   provideRouter,
   Router,
   withAutoCleanupInjectors,
@@ -415,6 +417,113 @@ describe('WORKSPACE_ROUTES', () => {
     await harness.fixture.whenStable();
     expect(session.currentOrganization).toHaveBeenCalledTimes(2);
     expect(pin.stale()).toBe(false);
+  });
+
+  it.each(['cancelled', 'superseded', 'failed'] as const)(
+    'retries a %s stale recovery and resumes passive requests',
+    async (outcome: 'cancelled' | 'superseded' | 'failed') => {
+      TestBed.overrideProvider(RuntimeConfigStore, {
+        useValue: { config: () => ({ apiUrl: 'https://api.example.test' }) },
+      });
+      const guard: Mock<() => boolean> = vi.fn(() => true);
+      const router: Router = TestBed.inject(Router);
+      router.resetConfig(
+        router.config.map((route) =>
+          route.path === ':org'
+            ? { ...route, canActivate: [...(route.canActivate ?? []), guard] }
+            : route,
+        ),
+      );
+      const harness: RouterTestingHarness = await open('/atelier-nord');
+      const pin: OrganizationPin = TestBed.inject(OrganizationPin);
+      const focus: Mock<() => boolean> = vi.spyOn(document, 'hasFocus').mockReturnValue(true);
+      vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible');
+      const clock: Mock<() => number> = vi.spyOn(Date, 'now');
+      const navigationSpy: Mock = vi.spyOn(router, 'navigateByUrl');
+      const pending: Subject<WorkspaceResult<WorkspaceUser>> = new Subject<
+        WorkspaceResult<WorkspaceUser>
+      >();
+      if (outcome === 'cancelled') guard.mockReturnValueOnce(false);
+      if (outcome === 'failed')
+        session.currentUser.mockReturnValueOnce(throwError(() => new Error('Navigation failed')));
+      if (outcome === 'superseded') session.currentUser.mockReturnValueOnce(pending);
+      const failedNavigation: Promise<NavigationCancel | NavigationError> = firstValueFrom(
+        router.events.pipe(
+          filter(
+            (event): event is NavigationCancel | NavigationError =>
+              event instanceof NavigationCancel || event instanceof NavigationError,
+          ),
+        ),
+      );
+      pin.markStale();
+      focus.mockReturnValue(false);
+      if (outcome === 'superseded') {
+        await vi.waitFor(() => {
+          expect(session.currentUser).toHaveBeenCalledTimes(2);
+        });
+        await router.navigateByUrl('/atelier-nord?tab=next');
+      }
+      const event: NavigationCancel | NavigationError = await failedNavigation;
+      expect(event).toBeInstanceOf(outcome === 'failed' ? NavigationError : NavigationCancel);
+      await vi.waitFor(() => {
+        expect(navigationSpy).toHaveBeenCalled();
+      });
+      await vi.waitFor(() => {
+        expect(router.currentNavigation()).toBeNull();
+      });
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(pin.stale()).toBe(true);
+      clock.mockReturnValue(Date.now() + 2000);
+      const verification: Promise<NavigationEnd> = firstValueFrom(
+        router.events.pipe(
+          filter((event): event is NavigationEnd => event instanceof NavigationEnd),
+        ),
+      );
+      focus.mockReturnValue(true);
+      window.dispatchEvent(new Event('focus'));
+      await verification;
+      await harness.fixture.whenStable();
+      expect(pin.stale()).toBe(false);
+      const next: Mock = vi.fn(() => of(new HttpResponse({ status: 200 })));
+      const response: Promise<unknown> = TestBed.runInInjectionContext(() =>
+        firstValueFrom(
+          organizationPinInterceptor(
+            new HttpRequest('GET', '/v1/tasks/CAD-1', {
+              context: new HttpContext().set(PASSIVE_REQUEST, true),
+            }),
+            next,
+          ),
+        ),
+      );
+      await expect(response).resolves.toBeInstanceOf(HttpResponse);
+      expect(next).toHaveBeenCalledOnce();
+      clock.mockRestore();
+    },
+  );
+
+  it('backs off repeated failed recoveries while the tab remains focused', async () => {
+    await open('/atelier-nord');
+    const router: Router = TestBed.inject(Router);
+    const pin: OrganizationPin = TestBed.inject(OrganizationPin);
+    vi.spyOn(document, 'hasFocus').mockReturnValue(true);
+    vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible');
+    vi.useFakeTimers();
+    const navigation: Mock = vi.spyOn(router, 'navigateByUrl').mockResolvedValue(false);
+    pin.markStale();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(navigation).toHaveBeenCalledTimes(1);
+    window.dispatchEvent(new Event('focus'));
+    await vi.advanceTimersByTimeAsync(999);
+    expect(navigation).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(navigation).toHaveBeenCalledTimes(2);
+    await vi.advanceTimersByTimeAsync(1999);
+    expect(navigation).toHaveBeenCalledTimes(2);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(navigation).toHaveBeenCalledTimes(3);
+    TestBed.resetTestingModule();
+    vi.useRealTimers();
   });
 
   it('coalesces multiple context changes into one revalidation', async () => {
