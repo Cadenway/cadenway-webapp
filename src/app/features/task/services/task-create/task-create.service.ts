@@ -1,4 +1,12 @@
-import { computed, inject, Service, signal, type Signal, type WritableSignal } from '@angular/core';
+import {
+  computed,
+  type DestroyRef,
+  inject,
+  Service,
+  signal,
+  type Signal,
+  type WritableSignal,
+} from '@angular/core';
 import { type Observable, Subject } from 'rxjs';
 
 import { ShellOverlay } from '@shared/layout-slot';
@@ -65,6 +73,20 @@ export class TaskCreate {
   private readonly creations: Subject<CreatedTask> = new Subject<CreatedTask>();
 
   /**
+   * Property defaults
+   *
+   * @description
+   * Presets of an opening without options (the `N` shortcut), given by the screen that shows a
+   * list; null when no screen gives any.
+   *
+   * @type {WritableSignal<(() => TaskCreateOptions) | null>}
+   * @readonly
+   */
+  private readonly defaults: WritableSignal<(() => TaskCreateOptions) | null> = signal<
+    (() => TaskCreateOptions) | null
+  >(null);
+
+  /**
    * Property isOpen
    *
    * @description
@@ -105,18 +127,35 @@ export class TaskCreate {
    * Method open
    *
    * @description
-   * Opens the dialog with presets, unless another shell overlay is open.
+   * Opens the dialog with presets, unless another shell overlay is open. Without options it starts
+   * from the defaults of the screen that gave some (`useDefaults`), else from nothing.
    *
    * @param {TaskCreateOptions} [options] - Destination list, status, due date or parent key.
    * @returns {boolean} Whether the dialog opened.
    */
   public open(
-    options: TaskCreateOptions &
-      ({ parentKey: string; listId: string } | { parentKey?: never }) = {},
+    options?: TaskCreateOptions & ({ parentKey: string; listId: string } | { parentKey?: never }),
   ): boolean {
     if (this.overlay.anyOpen()) return false;
-    this.presets.set(options);
+    this.presets.set(options ?? this.defaults()?.() ?? {});
     return this.overlay.open(TASK_CREATE_DIALOG);
+  }
+
+  /**
+   * Method useDefaults
+   *
+   * @description
+   * Gives the presets of an opening without options while a screen lives: the list view makes
+   * `N` create in its list. The last screen to call wins; its destruction removes its defaults.
+   *
+   * @param {() => TaskCreateOptions} defaults - Presets read at each opening.
+   * @param {DestroyRef} destroyRef - Lifetime of the screen.
+   */
+  public useDefaults(defaults: () => TaskCreateOptions, destroyRef: DestroyRef): void {
+    this.defaults.set(defaults);
+    destroyRef.onDestroy((): void => {
+      if (this.defaults() === defaults) this.defaults.set(null);
+    });
   }
 
   /**

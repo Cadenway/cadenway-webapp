@@ -18,7 +18,18 @@ import {
   withRouterConfig,
 } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
-import { BillingService, InboxService, RealtimeService } from '@cadenway/api-client';
+import {
+  AccessService,
+  ArchivesService,
+  BillingService,
+  InboxService,
+  ListsService,
+  MembersService,
+  RealtimeService,
+  SpacesService,
+  TaskQueriesService,
+  TasksService,
+} from '@cadenway/api-client';
 import { filter, firstValueFrom, Observable, of, Subject, throwError } from 'rxjs';
 import { io, type Socket } from 'socket.io-client';
 import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
@@ -205,6 +216,17 @@ interface SessionFake {
   // #endregion
 }
 
+/**
+ * Constant RECONNECT_WAIT
+ *
+ * @description
+ * Wait options of the realtime reconnect scenario: a CI runner with coverage needs more than the
+ * 1 s default to load the routes and walk the two admissions; the scenario itself gets 20 s.
+ *
+ * @type {{ timeout: number }}
+ */
+const RECONNECT_WAIT: { timeout: number } = { timeout: 10_000 };
+
 describe('WORKSPACE_ROUTES', () => {
   let session: SessionFake;
 
@@ -249,7 +271,13 @@ describe('WORKSPACE_ROUTES', () => {
     });
     vi.stubGlobal(
       'matchMedia',
-      vi.fn(() => ({ matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn() })),
+      vi.fn(() => ({
+        matches: false,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+      })),
     );
   });
 
@@ -286,6 +314,62 @@ describe('WORKSPACE_ROUTES', () => {
     expect(switcher?.textContent).toContain('AN');
     expect(switcher?.textContent).toContain('Changer d’organisation : Atelier Nord');
     expect(session.switchOrganization).not.toHaveBeenCalled();
+  });
+
+  it('renders the list grid inside the workspace route', async () => {
+    const list: Record<string, unknown> = {
+      id: 'sprint-14',
+      spaceId: 'produit',
+      name: 'Sprint 14',
+      icon: null,
+      color: null,
+      sprint: null,
+      version: 1,
+    };
+    const counts: Record<string, number> = { total: 0, open: 0, done: 0, cancelled: 0, late: 0 };
+    const empty: { items: readonly never[]; nextCursor: null; total: number } = {
+      items: [],
+      nextCursor: null,
+      total: 0,
+    };
+    TestBed.configureTestingModule({
+      providers: [
+        {
+          provide: ListsService,
+          useValue: {
+            getList: () => of(list),
+            getListCounts: () => of({ list, counts }),
+            listSavedViews: () => of(empty),
+          },
+        },
+        {
+          provide: SpacesService,
+          useValue: {
+            getSpace: () => of({ id: 'produit', name: 'Produit', statuses: {} }),
+            listSpaces: () => of(empty),
+            listFavorites: () => of(empty),
+          },
+        },
+        {
+          provide: TaskQueriesService,
+          useValue: {
+            countTaskGroups: () => of({ ...empty, groupBy: 'status' }),
+            queryListTasks: () => of(empty),
+          },
+        },
+        { provide: TasksService, useValue: { listLabels: () => of(empty) } },
+        { provide: MembersService, useValue: { listMembers: () => of(empty) } },
+        { provide: AccessService, useValue: { listListGrants: () => of(empty) } },
+        { provide: ArchivesService, useValue: {} },
+      ],
+    });
+    const harness: RouterTestingHarness = await open('/atelier-nord/l/sprint-14/list');
+    await vi.waitFor(() => {
+      harness.detectChanges();
+      expect(
+        (harness.fixture.nativeElement as HTMLElement).querySelector('[role="grid"]'),
+      ).not.toBeNull();
+    });
   });
 
   it('binds every shell contribution on the workspace route', async () => {
@@ -1231,7 +1315,8 @@ describe('WORKSPACE_ROUTES', () => {
       .subscribe();
     await vi.waitFor(() => {
       expect(handlers).toHaveLength(1);
-    });
+      expect(handlers[0].has('hello')).toBe(true);
+    }, RECONNECT_WAIT);
     handlers[0].get('hello')?.({
       id: '019a7005-6f7a-7b8c-9d0e-1f2a3b4c5d4f',
       type: 'connection.ready.v1',
@@ -1243,14 +1328,19 @@ describe('WORKSPACE_ROUTES', () => {
         heartbeatIntervalSeconds: 10,
       },
     });
-    await harness.fixture.whenStable();
+    await vi.waitFor(() => {
+      expect(joins).toHaveLength(1);
+    }, RECONNECT_WAIT);
     await harness.navigateByUrl('/lumen');
     await harness.fixture.whenStable();
     expect(disconnects[0]).toHaveBeenCalledOnce();
     await vi.waitFor(() => {
       expect(tickets).toHaveBeenCalledTimes(2);
-    });
-    expect(handlers).toHaveLength(2);
+    }, RECONNECT_WAIT);
+    await vi.waitFor(() => {
+      expect(handlers).toHaveLength(2);
+      expect(handlers[1].has('hello')).toBe(true);
+    }, RECONNECT_WAIT);
     handlers[1].get('hello')?.({
       id: '019a7005-6f7a-7b8c-9d0e-1f2a3b4c5d4f',
       type: 'connection.ready.v1',
@@ -1264,10 +1354,10 @@ describe('WORKSPACE_ROUTES', () => {
     });
     await vi.waitFor(() => {
       expect(joins).toHaveLength(2);
-    });
+    }, RECONNECT_WAIT);
     expect(joins[1]).toEqual({ kind: 'task', taskKey: 'CAD-1' });
     watch.unsubscribe();
-  });
+  }, 20_000);
 
   it('switches when the session has no current organization and the slug matches one', async () => {
     session.currentOrganization.mockReturnValue(

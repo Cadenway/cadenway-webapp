@@ -1,21 +1,331 @@
+@let snapshot = rows.hasCurrentSnapshot() ? undefined : rows.primary.value();
 <section
   class="flex min-h-0 flex-1 flex-col px-4 pt-2 pb-4 sm:px-6"
   aria-label="Tasks"
   i18n-aria-label="@@spaces.list-view.region"
-  data-testid="list-rows-placeholder"
-></section>
+  data-testid="list-rows"
+>
+  <cw-data-table
+    class="flex min-h-0 flex-1 flex-col"
+    virtual
+    manual
+    selectable
+    editable
+    groupAddable
+    density="default"
+    groupBy="group"
+    [page]="null"
+    [data]="rows.rows()"
+    [trackBy]="rowId"
+    [rowLabel]="rowLabel"
+    [groupLabel]="groupLabel"
+    [groupOrder]="rows.groupOrder()"
+    [collapsed]="rows.collapsed()"
+    [columnVisibility]="columnVisibility()"
+    [loading]="
+      (!snapshot && !rows.hasCurrentSnapshot() && rows.primary.isLoading()) || rows.seekingRows()
+    "
+    [ariaLabel]="tableLabel()"
+    [(selection)]="tableSelection"
+    (collapsedChange)="rows.setCollapsed($event)"
+    (rowOpen)="open($event.task)"
+    (groupAdd)="addInGroup($event)"
+  >
+    <ng-template cwDataTableGroup let-key>
+      @switch (rows.groupBy()) {
+        @case ('status') {
+          <cw-status-icon [status]="statusOf(key)" size="4" />
+        }
+        @case ('priority') {
+          <cw-priority-icon [priority]="priorityOf(key)" size="4" />
+        }
+        @case ('assignee') {
+          <span
+            class="flex size-5 items-center justify-center rounded-full bg-secondary text-[9px] leading-none font-semibold text-secondary-foreground"
+            aria-hidden="true"
+            >{{ groupInitials(key) }}</span
+          >
+        }
+        @default {
+          <ng-icon
+            name="phosphorListBulletsBold"
+            class="text-muted-foreground"
+            aria-hidden="true"
+          />
+        }
+      }
+      <span class="truncate font-medium">{{ groupLabel(key) }}</span>
+    </ng-template>
+
+    <cw-data-table-column
+      key="name"
+      header="Name"
+      i18n-header="@@spaces.rows.name"
+      [minWidth]="256"
+    >
+      <ng-template cwCell [cwCellOf]="rows.rows()" let-row>
+        <span
+          class="flex min-w-0 items-center gap-0.5 motion-reduce:animate-none"
+          [class.pl-6]="row.depth === 1"
+          [class.pl-12]="row.depth === 2"
+          [class.animate-row-in]="row.entering"
+          [attr.data-task-row]="row.task.key"
+          [cwContextMenuTriggerFor]="rowMenu"
+          (opened)="menuRow.set(row)"
+        >
+          @if (row.expandable) {
+            <button
+              type="button"
+              class="-ml-1.5 inline-flex size-5 shrink-0 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+              [attr.aria-expanded]="row.expanded"
+              [attr.aria-label]="subtasksLabel(row)"
+              [title]="subtasksLabel(row)"
+              (click)="rows.toggleSubtasks(row.task.key)"
+            >
+              <ng-icon
+                name="phosphorCaretRightBold"
+                size="0.75rem"
+                class="transition-transform duration-200 motion-reduce:transition-none"
+                [class.rotate-90]="row.expanded"
+                aria-hidden="true"
+              />
+            </button>
+          } @else {
+            <span class="-ml-1.5 size-5 shrink-0" aria-hidden="true"></span>
+          }
+          <cw-task-title-cell
+            class="flex-1"
+            [task]="row.task"
+            [status]="row.status"
+            [showParent]="separate()"
+            (opened)="open(row.task)"
+          />
+          @if (row.canAddSubtask) {
+            <button
+              cwButton
+              type="button"
+              variant="ghost"
+              size="icon-xs"
+              [attr.aria-label]="addSubtaskLabel(row)"
+              [title]="addSubtaskLabel(row)"
+              (click)="addSubtask(row)"
+            >
+              <ng-icon name="phosphorTreeStructureBold" aria-hidden="true" />
+            </button>
+          }
+          @if (row.childrenFailed) {
+            <span class="flex shrink-0 items-center gap-1 text-xs" role="alert">
+              <span class="text-muted-foreground" i18n="@@spaces.rows.subtasks-failed"
+                >Subtasks not loaded.</span
+              >
+              <button
+                cwButton
+                type="button"
+                variant="outline"
+                size="xs"
+                (click)="rows.retrySubtasks(row.task.key)"
+              >
+                {{ retryLabel }}
+              </button>
+            </span>
+          }
+        </span>
+      </ng-template>
+    </cw-data-table-column>
+
+    <cw-data-table-column
+      key="assignees"
+      header="Assignees"
+      i18n-header="@@spaces.rows.assignees"
+      [width]="136"
+    >
+      <ng-template cwCell [cwCellOf]="rows.rows()" let-row>
+        <span class="flex -space-x-1">
+          @for (person of rowPeople(row); track person.id) {
+            <span
+              class="flex size-6 items-center justify-center rounded-full bg-secondary text-[10px] font-semibold text-secondary-foreground ring-2 ring-background"
+              [title]="person.name"
+              >{{ person.initials }}</span
+            >
+          }
+          @if (row.task.assigneeIds.length === 0) {
+            <span
+              class="flex size-6 items-center justify-center rounded-full border border-dashed border-input text-muted-foreground"
+              [title]="groupLabel('none')"
+              ><ng-icon name="phosphorUserBold" aria-hidden="true"
+            /></span>
+          }
+        </span>
+      </ng-template>
+    </cw-data-table-column>
+
+    <cw-data-table-column key="due" header="Due date" i18n-header="@@spaces.rows.due" [width]="120">
+      <ng-template cwCell [cwCellOf]="rows.rows()" let-row>
+        <cw-task-due-date [due]="row.task.due" [status]="row.status" />
+      </ng-template>
+    </cw-data-table-column>
+
+    <cw-data-table-column
+      key="priority"
+      header="Priority"
+      i18n-header="@@spaces.rows.priority"
+      [width]="120"
+    >
+      <ng-template cwCell [cwCellOf]="rows.rows()" let-row>
+        <span class="flex items-center gap-1.5 text-xs"
+          ><cw-priority-icon [priority]="row.task.priority" size="3.5" />{{
+            priorityLabel(row.task.priority)
+          }}</span
+        >
+      </ng-template>
+    </cw-data-table-column>
+
+    <cw-data-table-column
+      key="labels"
+      header="Labels"
+      i18n-header="@@spaces.rows.labels"
+      [width]="160"
+    >
+      <ng-template cwCell [cwCellOf]="rows.rows()" let-row>
+        <cw-task-label-chips [labels]="row.task.labels" />
+      </ng-template>
+    </cw-data-table-column>
+
+    <cw-data-table-column
+      key="actions"
+      header="Actions"
+      i18n-header="@@spaces.rows.actions-header"
+      headerHidden
+      [width]="48"
+    >
+      <ng-template cwCell [cwCellOf]="rows.rows()" let-row>
+        <button
+          cwButton
+          type="button"
+          variant="ghost"
+          size="icon-sm"
+          class="text-muted-foreground"
+          [cwMenuTriggerFor]="rowMenu"
+          [attr.aria-label]="actionsLabel(row)"
+          (click)="menuRow.set(row)"
+        >
+          <ng-icon name="phosphorDotsThreeBold" aria-hidden="true" />
+        </button>
+      </ng-template>
+    </cw-data-table-column>
+
+    <div cwDataTableEmpty>
+      @if (rows.empty()) {
+        <cw-empty size="sm" role="status">
+          <cw-empty-header>
+            <cw-empty-media>
+              <ng-icon name="phosphorTrayBold" aria-hidden="true" />
+            </cw-empty-media>
+            @if (filtered()) {
+              <cw-empty-title i18n="@@spaces.rows.no-match">No task matches</cw-empty-title>
+            } @else {
+              <cw-empty-title i18n="@@spaces.rows.empty">No task</cw-empty-title>
+            }
+          </cw-empty-header>
+          @if (view.search().trim() !== '') {
+            <button
+              cwButton
+              type="button"
+              variant="outline"
+              size="sm"
+              (click)="view.setSearch('')"
+              i18n="@@spaces.rows.clear-search"
+            >
+              Clear the search
+            </button>
+          } @else if (!filtered()) {
+            <button
+              cwButton
+              type="button"
+              variant="outline"
+              size="sm"
+              (click)="create()"
+              i18n="@@spaces.rows.add"
+            >
+              Add a task
+            </button>
+          }
+        </cw-empty>
+      }
+    </div>
+  </cw-data-table>
+
+  @if (rows.hasCurrentSnapshot() && rows.primary.error()) {
+    <div class="flex items-center gap-2 pt-2 text-sm" role="alert">
+      <span i18n="@@spaces.rows.reload-failed">The tasks could not be refreshed.</span>
+      <button cwButton type="button" variant="outline" size="xs" (click)="rows.reload()">
+        {{ retryLabel }}
+      </button>
+    </div>
+  }
+  @if (rows.moreFailed()) {
+    <div class="flex items-center gap-2 pt-2 text-sm" role="alert">
+      <span i18n="@@spaces.rows.more-failed">The next tasks could not be loaded.</span>
+      <button cwButton type="button" variant="outline" size="xs" (click)="rows.retryMore()">
+        {{ retryLabel }}
+      </button>
+    </div>
+  }
+</section>
+
+<cw-menu #rowMenu ariaLabel="Task actions" i18n-ariaLabel="@@spaces.rows.menu">
+  <cw-menu-label>{{ menuTitle() }}</cw-menu-label>
+  @if (menuTasks().length === 1) {
+    <button cwMenuItem type="button" (triggered)="open(menuTasks()[0])">
+      <ng-icon name="phosphorArrowSquareOutBold" aria-hidden="true" />
+      <ng-container i18n="@@spaces.rows.open">Open</ng-container>
+      <cw-menu-shortcut i18n="@@spaces.rows.open-key">Enter</cw-menu-shortcut>
+    </button>
+    <cw-menu-separator />
+  }
+  <button cwMenuItem type="button" [cwMenuTriggerFor]="statusMenu">
+    <ng-icon name="phosphorCircleHalfBold" aria-hidden="true" />
+    <ng-container i18n="@@spaces.rows.status">Status</ng-container>
+  </button>
+</cw-menu>
+
+<cw-menu #statusMenu ariaLabel="Status" i18n-ariaLabel="@@spaces.rows.status">
+  @for (option of menuStatuses(); track option.key) {
+    <button
+      cwMenuItem
+      type="button"
+      [selected]="option.key === menuStatus()"
+      (triggered)="setStatus(menuTasks(), option.key)"
+    >
+      <cw-status-icon [status]="option.key" size="4" />
+      <span>{{ option.label }}</span>
+    </button>
+  }
+</cw-menu>
+
+<cw-task-cancel-dialog
+  [taskKeys]="statusChanges.cancelRequest()?.taskKeys ?? null"
+  (confirmed)="statusChanges.confirmCancel($event)"
+  (kept)="statusChanges.keepTask()"
+/>
+
+<cw-task-cancel-dialog
+  [taskKeys]="bulkCancelKeys()"
+  (confirmed)="confirmBulkCancel($event)"
+  (kept)="bulkCancelTasks.set(null)"
+/>
 
 <div class="pointer-events-none absolute inset-x-0 bottom-4 z-20 flex justify-center px-4">
   <cw-bulk-bar
     [count]="selection().length"
-    [people]="people()"
+    [people]="bulkPeople()"
     [targets]="targets()"
     [pending]="pending()"
     (doneMarked)="markDone()"
     (assigned)="assign($event)"
     (moved)="move($event)"
     (deleted)="confirmDelete.set(true)"
-    (cleared)="selection.set([])"
+    (cleared)="clearSelection()"
   />
 </div>
 

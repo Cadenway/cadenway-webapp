@@ -4,10 +4,11 @@
 
 The spaces of a workspace and their lists: the spaces part of the shell (the « Espaces » rail item,
 the sidebar's favorites, spaces accordion and suggestions, the sprint progress of its footer), the
-space overview and the frame of a list page (header, view tabs and saved views, view tools and active
-filters, the selection bar) with its view configuration. Step 4a builds the frame and the « Liste »
-view's placeholder; the task rows, pickers and creation belong to Task and are wired in the next
-pass; the eight other views and the space, list, share, status and automation dialogs come in step 4b.
+space overview, the frame of a list page (header, view tabs and saved views, view tools and active
+filters, the selection bar) with its view configuration, and the « Liste » view: its grouped,
+virtualized task rows, read page by page. The cells, pickers, status interaction and create dialog
+belong to Task, which the rows compose; the task detail opened from a row comes in step 5; the
+eight other views and the space, list, share, status and automation dialogs come in step 4b.
 
 ## Routes
 
@@ -17,8 +18,11 @@ breadcrumb, dialog, inline edit, toolbar).
 
 - `spaces/:spaceId` loads `SpaceOverviewPage` (« Vue d’ensemble »).
 - `l/:listId` loads `ListPage` and provides `ListPageStore` and `ListViewStore` to its views; `''`
-  redirects to `list`, which loads `ListViewPage`. `?savedView=<id>` applies a saved view of the
-  list.
+  redirects to `list`, which loads `ListViewPage` and provides `ListRowsStore`, Task's
+  `TaskStatusChangesStore`, `ListTasksApi` (so it can read the workspace-scoped user for `me`),
+  and the English texts of `cw-data-table`.
+  `?savedView=<id>` applies a saved view of the list; `?task=<KEY>` is set when a row opens (the
+  detail host that reads it comes in step 5).
 - Failed primary reads render the router's default error component, `RouteErrorBoundary`, in the
   failing route's outlet: a failed view keeps the list header.
 
@@ -44,12 +48,17 @@ breadcrumb, dialog, inline edit, toolbar).
   `ListsService` (`getList`, `getListCounts`, `updateList`, `duplicateList`, `exportListTasks`,
   `deleteList`, `listSavedViews`, `createSavedView`, `updateSavedView`, `duplicateSavedView`,
   `deleteSavedView`), `ArchivesService.archiveList`, `AccessService.listListGrants`,
-  `MembersService.listMembers`, `TasksService` (`listLabels`, `executeBulkTaskAction`) and
-  `TaskQueriesService.queryListTasks` (the milestone count).
+  `MembersService.listMembers`, `TasksService` (`listLabels`, `executeBulkTaskAction`,
+  `listSubtasks`) and `TaskQueriesService` (`queryListTasks` for the rows and the milestone count,
+  `countTaskGroups` for the groups). Every rows read bypasses the HTTP cache.
+- Task (`@features/task`): `TaskSummary`, `TaskStatusChangesStore`,
+  `TaskCreate`, `cw-task-title-cell`,
+  `cw-task-due-date`, `cw-task-label-chips`, `cw-task-cancel-dialog`, `personOf` and the status
+  rules.
 - `@core/api` (problem readers), `@core/realtime` (`watch({ kind: 'list' })`), `@shared/layout-slot`
   (`SlotFeature`, `SHELL_SIDEBAR`) and `@shared/route-errors`.
 - `@cadenway/ui` (`alert-dialog`, `app-rail`, `avatar`, `breadcrumb`, `button`, `checkbox`,
-  `context-menu`, `dialog`, `empty`, `inline-edit`, `input`, `menu`, `popover`, `progress`,
+  `context-menu`, `data-table`, `dialog`, `empty`, `priority-icon`, `inline-edit`, `input`, `menu`, `popover`, `progress`,
   `sidebar`, `skeleton`, `status-icon`, `tabs`, `toast`, `toggle-group`, `toolbar`) and
   `@cadenway/icons`.
 
@@ -71,6 +80,33 @@ breadcrumb, dialog, inline edit, toolbar).
     grouped) for the rows. A saved view applies over the standard tab, which gets its configuration
     back when the view is left; the search, « Jalons » and the subtask display stay local and never
     make a saved view « Modifiée ». Another list starts over from the default configuration.
+  - `ListRowsStore`, route-scoped on `list`: the rows of the « Liste » view. Grouping is a filter:
+    the primary read takes `countTaskGroups`, then cursor pages of each group in the gateway's
+    order, until 50 tasks of open groups are read; `loadMore` reads the next page when the table
+    nears its end. When the grouped field is filtered, only selected group values are shown and
+    each group is read with its value as a server-side filter. A task assigned to several people
+    appears only in the selected assignee groups; `me` resolves to the signed-in user. A folded group (« Annulé » by default when
+    grouping by status) reads its first page only, so its header shows, and reads on when opened.
+    Hidden status groups do not consume the initial loading target or pagination reads. When no
+    renderable rows remain, the store reads visible groups until a row is available or every
+    visible group is exhausted; a failed continuation offers Retry instead of an empty state.
+    Another query reads again and keeps the rows until the answer (superseded reads are aborted);
+    another list or organization (`WORKSPACE_CONTEXT`) empties them at once and drops late answers.
+    A first primary read fails to the route's error boundary; a failed background refresh, next
+    page or subtask read offers « Réessayer » in place. A row is filed under the task's settled status, so it joins its new
+    group 460 ms after the last click (`STATUS_SETTLE_MS`), or immediately with reduced motion,
+    while the icon and word change at once. The row retains focus when it moves. Grouping by
+    assignee uses the gateway's order for each group, including a task with several assignees.
+    Subtasks are read under visible opened parents (`listSubtasks`, four reads at a time), two
+    levels deep; closed and folded parents are pruned and stale answers are ignored. « Dépliées » opens every parent and a mode change
+    forgets the parents opened by hand; « À part » reads `level: all` and shows the parent's key.
+    Subtask creation is offered only when loaded ancestry proves the depth limit is not reached.
+    It watches the list's realtime room and reads again in place 300 ms after the last notice of
+    the list; the status store keeps pending and in-flight changes over what it reads. A
+    task created in the list (`TaskCreate.created`), a completed local status write and a bulk action
+    read the rows again.
+  - `TaskStatusChangesStore` (Task), route-scoped on `list`, so pending
+    changes die with the view.
   - `SpaceOverviewStore`, page-scoped on `SpaceOverviewPage`.
 - Route errors: the gateway answers `404 space.not-found` or `list.not-found` for a deleted
   resource and for a private one the caller does not see alike, and the access request never
@@ -85,15 +121,31 @@ breadcrumb, dialog, inline edit, toolbar).
 - Deleting a list asks for its typed name (`cw-alert-dialog` with `confirmText`), then opens the
   home screen; archiving opens the space overview. The export downloads the gateway's CSV with the
   view's filters, sort and level.
-- « Créer une tâche » emits `taskCreated` from `ViewTools`; the next pass opens the task feature's
-  creation dialog. `ListViewPage` holds the selection the rows pass fills.
+- « Créer une tâche » (`ViewTools.taskCreated`), each group's « + » (with the group's status when
+  grouping by status), the empty state's « Ajouter une tâche » and `N` (`TaskCreate.useDefaults`)
+  open the create dialog in the open list.
+- A row: the status icon moves the task to its next status; the people and priority pickers edit
+  in place with `If-Match`; a click on the name or Enter opens `?task=<KEY>` with
+  `queryParamsHandling: 'merge'`; the « … » button and the right click open the menu of the task,
+  or of the selection when the row belongs to a selection of several tasks, whose « Statut » sets
+  any status; « Annulé » asks the reason once through `cw-task-cancel-dialog`
+  (`requestCancel(tasks)`). The status store's toasts offer « Annuler ».
+- `ListViewPage` holds the table's selection; the selection bar sends it explicitly, with each
+  task's shown version, through `ListPageStore.bulk`, in chunks of 50 `executeBulkTaskAction` calls
+  one after the other. Each chunk has an idempotency key, reused for one retry after an uncertain
+  response. Each send and retry checks the starting organization and the store's lifetime; when
+  either changes, remaining tasks are reported as not sent. A confirmed action keeps sending its
+  selected tasks after navigation to another list; only an organization change or page destruction
+  stops the remaining chunks. An unresolved response is reported as
+  unknown and triggers a reload; a refused chunk stays selected and a second toast counts it. The
+  row menu uses the same bulk path for a selected group, including a shared cancellation reason.
+- Under 768 px the table hides the assignees, priority, labels and actions columns.
 
-## Gateway follow-up
+## Organization pin
 
 `listSpaces`, `getSpaceOverview`, favorites, `getListCounts`, saved views, `listLabels`,
-`listMembers` and `listListGrants` are not yet pinned by the gateway. They await B20
-(`cadenway-api-contracts#118`, then the gateway); afterward the webapp adds them to
-`ORGANIZATION_PIN_OPERATIONS`.
+`listMembers` and `listListGrants` carry `If-Organization-Match` since contracts 0.42.0 (B20): the
+gateway checks them and `ORGANIZATION_PIN_OPERATIONS` lists them.
 
 ## Known gaps
 
@@ -106,10 +158,30 @@ breadcrumb, dialog, inline edit, toolbar).
   no earlier tab is active (NG0950): `ViewTabs` activates a saved view's tab only from the render
   after its creation. To fix in the design system.
 - « Modifier la liste » uses inline editing until the list edit dialog in step 4b.
-- Bulk selections over 50 must be chunked in the rows pass.
 - Realtime notices without a list or space id cannot be attributed to the open list and do not
   refresh its counts; the notice contract needs to include that context.
-- The filter dialog does not count the visible tasks (« n sur m tâches »): the rows pass reads them.
+- The filter dialog does not count the visible tasks (« n sur m tâches »): the rows store, provided
+  on the `list` view, is not reachable from the list page's tools yet.
+- `cw-data-table` (`@cadenway/ui` 0.7.0) gaps, to add in the design system:
+  - the group header draws the count of the loaded rows, not the `countTaskGroups` count, and a
+    group shows only once one of its rows is loaded, so the empty default groups of `App.dc.html`
+    and the full count of a group read in part do not show (it needs a group count input and
+    declared groups);
+  - no output tells that the virtual window nears its end: the page listens to the scroller in the
+    capture phase and finds it from the grid;
+  - no per-row class, so the row-in motion plays on the name cell only;
+  - under 768 px it turns the rows into cards instead of the mockup's three-column grid;
+  - the « + » of a group sits in the group header, where `App.dc.html` draws a trailing
+    « Ajouter une tâche » row.
+- The row's status icon and name open the task; the row menu changes its status. Assignees,
+  priority, due date and labels are display only. A row can create a subtask with its parent key.
+- The row menu holds « Ouvrir » and « Statut » only; « Priorité », « Assigner », « Déplacer vers »,
+  the reminder, « Dupliquer », the copies and « Supprimer » come with the context menus of step 4b.
+- A row's status icon does not animate from the previous status (`from` is not tracked).
+- Creating from a priority or assignee group presets only the list: `TaskCreateOptions` has no
+  priority or assignee preset.
+- `queryListTasks` items are mapped by `list-task.adapter`, a copy of Task's `task-summary`
+  adapter: a DTO adapter cannot be published across features.
 
 ## Copy not taken word for word from the mockup
 
@@ -120,7 +192,10 @@ breadcrumb, dialog, inline edit, toolbar).
 | `spaces.saved-view.missing`                                                                                                    | The mockup does not show a missing saved-view address.                     |
 | `spaces.save-view.name-required`                                                                                               | The mockup disables the save button rather than showing an error.          |
 | `spaces.list.export-failed`                                                                                                    | Taken from the mockup's « Export impossible ici » title only.              |
-| `spaces.labels.*`                                                                                                              | The bricks' own French defaults, which the mockup does not show as copy.   |
+| `spaces.labels.*`, `spaces.table.*`                                                                                            | The bricks' own French defaults, which the mockup does not show as copy.   |
+| `spaces.rows.more-failed`, `spaces.rows.subtasks-failed`                                                                       | The mockup draws no failed read.                                           |
+| `spaces.bulk.partial*`                                                                                                         | The mockup draws no refused chunk of a bulk action.                        |
+| `spaces.rows.empty`, `spaces.rows.add`                                                                                         | The empty list without filters, from the board's « Aucune tâche ».         |
 | `spaces.sidebar.overview`                                                                                                      | The mockup's « Vue d’ensemble de … », with the space name.                 |
 | `spaces.list-view.region`, `spaces.sprint-progress.label`, `spaces.saved.modified-group`                                       | Accessible names of regions the mockup names differently or does not name. |
 | `spaces.route.overview`, `spaces.route.list`                                                                                   | Route titles.                                                              |

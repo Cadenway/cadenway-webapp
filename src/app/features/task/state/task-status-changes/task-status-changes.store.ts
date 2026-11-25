@@ -466,6 +466,17 @@ interface TaskStatusChangesInstance {
    * @readonly
    */
   readonly changed: Observable<TaskStatusChange>;
+
+  /**
+   * Property completed
+   *
+   * @description
+   * Emits the affected task and organization after a status write succeeds or fails.
+   *
+   * @type {Observable<{ task: TaskSummary; organizationId: string | null }>}
+   * @readonly
+   */
+  readonly completed: Observable<{ task: TaskSummary; organizationId: string | null }>;
   // #endregion
 
   // #region Methods
@@ -503,6 +514,18 @@ interface TaskStatusChangesInstance {
    * @returns {StatusKey} The status to group by.
    */
   settledStatus(task: TaskSummary): StatusKey;
+
+  /**
+   * Method settledTask
+   *
+   * @description
+   * The task with its settled status, reason and version while the store's write is in flight or
+   * newer than the caller's copy, so the next write of another field goes against that version.
+   *
+   * @param {TaskSummary} task - The caller's copy of the task.
+   * @returns {TaskSummary} The task as its settled status change left it.
+   */
+  settledTask(task: TaskSummary): TaskSummary;
 
   /**
    * Method request
@@ -573,10 +596,18 @@ function createTaskStatusChanges(): Type<TaskStatusChangesInstance> {
     withState(initialState),
     withProps(() => {
       const changes: Subject<TaskStatusChange> = new Subject<TaskStatusChange>();
+      const completions: Subject<{ task: TaskSummary; organizationId: string | null }> =
+        new Subject<{ task: TaskSummary; organizationId: string | null }>();
       inject(DestroyRef).onDestroy(() => {
         changes.complete();
+        completions.complete();
       });
-      return { _changes: changes, changed: changes.asObservable() };
+      return {
+        _changes: changes,
+        changed: changes.asObservable(),
+        _completions: completions,
+        completed: completions.asObservable(),
+      };
     }),
     withMethods(
       (store, api: TaskApi = inject(TaskApi), toasts: CwToastService = inject(CwToastService)) => {
@@ -741,6 +772,7 @@ function createTaskStatusChanges(): Type<TaskStatusChangesInstance> {
                           },
                   }));
                   if (destroyRef.destroyed) return;
+                  store._completions.next({ task, organizationId: pending.organizationId });
                   const batch: boolean =
                     status === 'cancelled' &&
                     !isUndo &&
@@ -767,6 +799,8 @@ function createTaskStatusChanges(): Type<TaskStatusChangesInstance> {
                 },
                 error: (error: unknown): void => {
                   restore();
+                  if (!destroyRef.destroyed)
+                    store._completions.next({ task, organizationId: pending.organizationId });
                   const batch: boolean = status === 'cancelled' && !isUndo && finishBatch(id);
                   if (
                     !batch &&
@@ -910,6 +944,17 @@ function createTaskStatusChanges(): Type<TaskStatusChangesInstance> {
             return store._pending()[task.id]?.status ?? settledStatus(task);
           },
           settledStatus,
+          settledTask(task: TaskSummary): TaskSummary {
+            const entry: SettledStatus | null = settledOf(store._settled(), task);
+            return entry
+              ? {
+                  ...task,
+                  status: entry.status,
+                  cancelReason: entry.cancelReason,
+                  version: Math.max(entry.version, task.version),
+                }
+              : task;
+          },
           request(task: TaskSummary, status: StatusKey, options?: readonly StatusOption[]): void {
             if (batches.has(task.id)) finishBatch(task.id);
             patchState(store, (state: TaskStatusChangesState) => ({

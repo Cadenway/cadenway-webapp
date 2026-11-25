@@ -28,78 +28,48 @@
     @if (store.space.error()) {
       <div role="alert">
         <span i18n="@@spaces.secondary.space-failed">The space could not be loaded.</span>
-        <button
-          cwButton
-          variant="outline"
-          size="xs"
-          (click)="store.space.reload()"
-          i18n="@@spaces.retry"
-        >
-          Retry
+        <button cwButton variant="outline" size="xs" (click)="store.space.reload()">
+          {{ retryLabel }}
         </button>
       </div>
     }
     @if (store.counts.error()) {
       <div role="alert">
         <span i18n="@@spaces.secondary.counts-failed">The counts could not be loaded.</span>
-        <button
-          cwButton
-          variant="outline"
-          size="xs"
-          (click)="store.counts.reload()"
-          i18n="@@spaces.retry"
-        >
-          Retry
+        <button cwButton variant="outline" size="xs" (click)="store.counts.reload()">
+          {{ retryLabel }}
         </button>
       </div>
     }
     @if (store.members.error()) {
       <div role="alert">
         <span i18n="@@spaces.secondary.grants-failed">The list members could not be loaded.</span>
-        <button
-          cwButton
-          variant="outline"
-          size="xs"
-          (click)="store.members.reload()"
-          i18n="@@spaces.retry"
-        >
-          Retry
+        <button cwButton variant="outline" size="xs" (click)="store.members.reload()">
+          {{ retryLabel }}
         </button>
       </div>
     }
     @if (store.organizationMembers.error()) {
       <div role="alert">
         <span i18n="@@spaces.secondary.members-failed">The members could not be loaded.</span>
-        <button
-          cwButton
-          variant="outline"
-          size="xs"
-          (click)="store.organizationMembers.reload()"
-          i18n="@@spaces.retry"
-        >
-          Retry
+        <button cwButton variant="outline" size="xs" (click)="store.organizationMembers.reload()">
+          {{ retryLabel }}
         </button>
       </div>
     }
     @if (store.labels.error()) {
       <div role="alert">
         <span i18n="@@spaces.secondary.labels-failed">The labels could not be loaded.</span>
-        <button
-          cwButton
-          variant="outline"
-          size="xs"
-          (click)="store.labels.reload()"
-          i18n="@@spaces.retry"
-        >
-          Retry
+        <button cwButton variant="outline" size="xs" (click)="store.labels.reload()">
+          {{ retryLabel }}
         </button>
       </div>
     }
 
     @if (store.savedViews.error()) {
       <p role="alert" i18n="@@spaces.saved.read-failed">Saved views could not be loaded.</p>
-      <button cwButton variant="outline" (click)="store.savedViews.reload()" i18n="@@spaces.retry">
-        Retry
+      <button cwButton variant="outline" (click)="store.savedViews.reload()">
+        {{ retryLabel }}
       </button>
     } @else if (store.savedViews.isLoading()) {
       <div cwSkeleton class="h-9 w-full" aria-busy="true"></div>
@@ -149,6 +119,7 @@
         (groupChanged)="view.setGroupBy($event)"
         (subtasksChanged)="view.setSubtasks($event)"
         (searchChanged)="view.setSearch($event)"
+        (taskCreated)="createTask()"
         (saveRequested)="openSaveDialog()"
         (savedReverted)="view.revert()"
         (savedUpdated)="saveSettings()"

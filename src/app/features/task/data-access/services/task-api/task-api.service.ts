@@ -2,7 +2,7 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { inject, Service } from '@angular/core';
 import { TasksService, type UpdateTaskClientResult } from '@cadenway/api-client';
 import type { StatusKey } from '@cadenway/contracts';
-import { catchError, map, type Observable, throwError } from 'rxjs';
+import { catchError, map, type MonoTypeOperatorFunction, type Observable, throwError } from 'rxjs';
 
 import { hasProblemCode } from '@core/api';
 
@@ -10,6 +10,41 @@ import type { TaskSummary } from '../../../models/task-summary/task-summary.inte
 import type { TaskCancellation } from '../../../models/task-status-change/task-status-change.interface';
 import { TaskVersionConflict } from '../../../models/task-write-error/task-write-error.model';
 import { toTaskSummary } from '../../adapters/task-summary/task-summary.adapter';
+
+/**
+ * Function ifMatch
+ *
+ * @description
+ * The `If-Match` precondition of a write made against a task version.
+ *
+ * @param {number} version - Task version the write was made against.
+ * @returns {Record<string, string>} The header.
+ */
+function ifMatch(version: number): Record<string, string> {
+  return { 'If-Match': `"${version.toString()}"` };
+}
+
+/**
+ * Function versionConflicts
+ *
+ * @description
+ * Turns a `412` other than an organization change into `TaskVersionConflict`, so the caller
+ * reads the task again; any other error passes unchanged.
+ *
+ * @param {string} taskKey - Key of the written task.
+ * @returns {MonoTypeOperatorFunction<T>} The operator.
+ */
+function versionConflicts<T>(taskKey: string): MonoTypeOperatorFunction<T> {
+  return catchError((error: unknown) =>
+    throwError(() =>
+      error instanceof HttpErrorResponse &&
+      error.status === 412 &&
+      !hasProblemCode(error, 'organization.context-changed')
+        ? new TaskVersionConflict(taskKey)
+        : error,
+    ),
+  );
+}
 
 /**
  * Service TaskApi
@@ -64,19 +99,11 @@ export class TaskApi {
               cancelNote: cancellation.note === '' ? null : cancellation.note,
             }
           : { status },
-        { headers: { 'If-Match': `"${version.toString()}"` } },
+        { headers: ifMatch(version) },
       )
       .pipe(
         map((task: UpdateTaskClientResult) => toTaskSummary(task)),
-        catchError((error: unknown) =>
-          throwError(() =>
-            error instanceof HttpErrorResponse &&
-            error.status === 412 &&
-            !hasProblemCode(error, 'organization.context-changed')
-              ? new TaskVersionConflict(taskKey)
-              : error,
-          ),
-        ),
+        versionConflicts(taskKey),
       );
   }
 

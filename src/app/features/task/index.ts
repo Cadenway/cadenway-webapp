@@ -28,3 +28,4 @@ export {
   pickableStatuses,
   statusLabel,
 } from './utils/task-status/task-status.util';
+export { initialsOf, personOf } from './utils/person/person.util';

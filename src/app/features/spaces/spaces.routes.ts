@@ -8,8 +8,13 @@ import { provideCwInlineEditLabels } from '@cadenway/ui/components/inline-edit';
 import { provideCwStatusLabels } from '@cadenway/ui/components/status-icon';
 import { provideCwToolbarLabels } from '@cadenway/ui/components/toolbar';
 
+import { TaskStatusChangesStore } from '@features/task';
+
+import { LIST_TABLE_TEXTS } from './constants/data-table-texts/data-table-texts.constants';
 import { statusLabels } from './constants/view-labels/view-labels.constants';
+import { ListTasksApi } from './data-access/services/list-tasks-api/list-tasks-api.service';
 import { ListPageStore } from './state/list-page/list-page.store';
+import { ListRowsStore } from './state/list-rows/list-rows.store';
 import { ListViewStore } from './state/list-view/list-view.store';
 
 /**
@@ -19,8 +24,11 @@ import { ListViewStore } from './state/list-view/list-view.store';
  * The spaces screens below `/:org`: `spaces/:spaceId` is the space overview, `l/:listId` the list
  * frame with one child per view segment (only `list`, the default, in step 4a; `?savedView=`
  * applies a saved view). The list route provides the list's `ListPageStore` and `ListViewStore`
- * to its views. The default error boundary renders a failed primary read in the failing route's
- * outlet, so a failed view keeps the list header. The bricks' texts are the English source copy.
+ * to its views; the `list` view provides its rows (`ListRowsStore`) with the task feature's
+ * status store and rows data access, so they can use the workspace context and pending changes
+ * die with the view. The default error
+ * boundary renders a failed primary read in the failing route's outlet, so a failed view keeps
+ * the list header. The bricks' texts are the English source copy.
  *
  * @type {Routes}
  */
@@ -83,6 +91,7 @@ export const SPACES_ROUTES: Routes = [
           { path: '', pathMatch: 'full', redirectTo: 'list' },
           {
             path: 'list',
+            providers: [TaskStatusChangesStore, ListTasksApi, ListRowsStore, LIST_TABLE_TEXTS],
             loadComponent: async (): Promise<Type<unknown>> =>
               (await import('./ui/pages/list-view-page/list-view-page.component')).ListViewPage,
           },

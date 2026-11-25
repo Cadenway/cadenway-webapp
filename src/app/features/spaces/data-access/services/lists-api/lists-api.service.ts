@@ -1,4 +1,4 @@
-import type { HttpResponse } from '@angular/common/http';
+import { HttpErrorResponse, type HttpResponse } from '@angular/common/http';
 import { inject, Service } from '@angular/core';
 import {
   AccessService,
@@ -118,6 +118,19 @@ function fileNameOf(disposition: string | null): string | null {
   const encoded: string | undefined = /filename\*=UTF-8''([^;]+)/iu.exec(disposition)?.[1];
   if (encoded) return decodeURIComponent(encoded);
   return /filename="?([^";]+)"?/iu.exec(disposition)?.[1] ?? null;
+}
+
+/**
+ * Function isUncertainBulkFailure
+ *
+ * @description
+ * Distinguishes a missing or server response from a deterministic refusal.
+ *
+ * @param {unknown} error - The failed request.
+ * @returns {boolean} Whether the request may have been applied.
+ */
+export function isUncertainBulkFailure(error: unknown): boolean {
+  return !(error instanceof HttpErrorResponse) || error.status === 0 || error.status >= 500;
 }
 
 /**
@@ -535,11 +548,18 @@ export class ListsApi {
    *
    * @param {readonly BulkSelection[]} selection - Selected tasks, 1 to 50.
    * @param {BulkAction} action - Action.
+   * @param {string} idempotencyKey - Stable key for retries of this chunk.
    * @returns {Promise<number>} Task rows affected, subtrees included.
    */
-  public async bulk(selection: readonly BulkSelection[], action: BulkAction): Promise<number> {
+  public async bulk(
+    selection: readonly BulkSelection[],
+    action: BulkAction,
+    idempotencyKey: string,
+  ): Promise<number> {
     const result: BulkTaskResult = await firstValueFrom(
-      this.tasks.executeBulkTaskAction(toBulkTaskAction(selection, action)),
+      this.tasks.executeBulkTaskAction(toBulkTaskAction(selection, action), {
+        headers: { 'Idempotency-Key': idempotencyKey },
+      }),
     );
     return result.affectedCount;
   }

@@ -1,3 +1,4 @@
+import { SPACES_RETRY } from '../../../constants/data-table-texts/data-table-texts.constants';
 import {
   Component,
   computed,
@@ -70,6 +71,17 @@ import { ListCard } from '../../components/list-card/list-card.component';
 })
 export class SpaceOverviewPage {
   // #region Properties
+  /**
+   * Property retryLabel
+   *
+   * @description
+   * Label for retrying a failed read.
+   *
+   * @type {string}
+   * @readonly
+   */
+  protected readonly retryLabel: string = SPACES_RETRY;
+
   /**
    * Property spaceId
    *

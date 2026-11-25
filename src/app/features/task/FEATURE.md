@@ -26,22 +26,24 @@ the 404 meanwhile).
 `.` publishes:
 
 - Models: `TaskSummary` (`id` is the key, `version` is the `If-Match` precondition), `TaskProgress`,
-  `StatusOption`, `Person`, `TaskStatusChange`, `TaskCancellation`, `TaskCancelRequest`, `TaskCreateOptions`,
-  `CreatedTask`; the words `STATUS_LABELS` and `PRIORITY_LABELS`; the rules `nextStatus`,
-  `isClosedStatus`, `statusLabel`, `pickableStatuses` and `defaultStatusOptions`.
+  `StatusOption`, `Person`, `TaskStatusChange`, `TaskCancellation`, `TaskCancelRequest`,
+  `TaskCreateOptions`, `CreatedTask`; the words `STATUS_LABELS` and
+  `PRIORITY_LABELS`; the rules `nextStatus`, `isClosedStatus`, `statusLabel`, `pickableStatuses` and
+  `defaultStatusOptions`; `initialsOf` and `personOf(userId, name)` for members another feature read.
 - `TaskStatusChangesStore`, a SignalStore the consumer provides on its route: `request(task, status,
-options?)`, `requestCancel(tasks, options?)`, `pendingStatus(taskId)`, `displayedStatus(task)`, `settledStatus(task)`, `undo(taskId)`,
-  `cancelRequest` with `confirmCancel(cancellation)` and `keepTask()`, and the `changed` stream;
-  `STATUS_SETTLE_MS` (460).
-- `TaskCreate` (root): `open(options?)`, `close()`, `isOpen`, `options`, `created`.
+options?)`, `requestCancel(tasks, options?)`, `pendingStatus(taskId)`, `displayedStatus(task)`,
+  `settledStatus(task)`, `settledTask(task)`, `undo(taskId)`, `cancelRequest` with
+  `confirmCancel(cancellation)` and `keepTask()`, the `changed` stream, and the `completed` stream
+  after each write succeeds or fails; `STATUS_SETTLE_MS` (460).
+- `TaskCreate` (root): `open(options?)`, `useDefaults(defaults, destroyRef)`, `close()`, `isOpen`,
+  `options`, `created`.
 - Presentational components, inputs and outputs only: `cw-task-status-picker`,
   `cw-task-priority-picker`, `cw-task-people-picker`, `cw-task-label-picker`, `cw-task-due-date`,
   `cw-task-label-chips`, `cw-task-title-cell` and `cw-task-cancel-dialog`.
 
 ## Dependencies
 
-- `@cadenway/api-client` through `data-access/`: `TasksService.updateTask` (with `If-Match`),
-  `getTask`, `createTask` and `createSubtask` (with `Idempotency-Key`), `listLabels`;
+- `@cadenway/api-client` through `data-access/`: `TasksService.updateTask` (status with `If-Match`), `getTask`, `createTask` and `createSubtask` (with `Idempotency-Key`), `listLabels`;
   `SpacesService.listSpaces`, `getSpace` (`cache: 'no-store'`), `listTaskTemplates`;
   `ListsService.listLists`; `MembersService.listMembers` (owners, admins and members). Every
   collection is read to its last cursor page.
@@ -77,7 +79,9 @@ options?)`, `requestCancel(tasks, options?)`, `pendingStatus(taskId)`, `displaye
   its write is in flight or its version is newer than the caller's task, so a refetched task wins.
 - `TaskCreate` (root) only holds whether the dialog is open and its presets, through
   `ShellOverlay`, so it never opens over the command palette or the shortcuts dialog. `N` opens it
-  outside fields while the shell lives; Ctrl Entrée creates while it is open.
+  outside fields while the shell lives, with the defaults of the screen that gave some
+  (`useDefaults`: the « Liste » view gives its list) until that screen is destroyed; Ctrl Entrée
+  creates while it is open.
 - `TaskCreateStore` is provided by the create dialog. It reads the destinations, the people and the
   labels the first time the dialog opens; the statuses, the next key and the templates follow the
   chosen list's space, and the next key is read again after each creation. Failed reads expose
@@ -93,21 +97,6 @@ options?)`, `requestCancel(tasks, options?)`, `pendingStatus(taskId)`, `displaye
   mockup's built-in templates (Bug, Fonctionnalité, Mise en production) appear only when the space
   returns them from `listTaskTemplates`; avatars draw initials (members give an avatar id, no
   address).
-- The copy of the entries no screen mounts yet (`TaskStatusChangesStore` toasts, `cw-task-title-cell`,
-  `cw-task-due-date`) is extracted once a consumer mounts them: their units are `task.status-change.*`,
-  `task.title-cell.*` and `task.due.*`, with the French below.
-
-| Unit                                                                                | French                                                                                           |
-| ----------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
-| `task.status-change.moved`, `task.status-change.from`                               | « {key} passée en {status} », « Depuis {status}. »                                               |
-| `task.status-change.cancelled`, `task.status-change.reason`                         | « {key} annulée », « Motif : {reason}. »                                                         |
-| `task.status-change.cancelled-one`, `task.status-change.cancelled-many`             | « {count} tâche annulée », « {count} tâches annulées »                                           |
-| `task.status-change.cancel-failed-one`, `task.status-change.cancel-failed-count`    | « Impossible d’annuler {count} tâche », « Impossible d’annuler {count} tâches »                  |
-| `task.status-change.failed`, `task.status-change.failed-text`                       | « Impossible de modifier le statut », « Le serveur n’a pas répondu. Réessayez dans un instant. » |
-| `task.status-change.conflict`, `task.status-change.conflict-text`                   | « {key} modifiée ailleurs », « Son dernier statut est affiché : {status}. »                      |
-| `task.title-cell.advance`, `task.title-cell.parent`                                 | « {status} · passer à « {next} » », « Sous-tâche de {key} »                                      |
-| `task.title-cell.subtasks`, `task.title-cell.checklist`, `task.title-cell.comments` | « Sous-tâches terminées », « Checklist », « Commentaires »                                       |
-| `task.due.today`, `task.due.tomorrow`, `task.due.late`, `task.due.none`             | « Aujourd’hui », « Demain », « (en retard) », « Sans échéance »                                  |
 
 ## Copy not taken word for word from the mockup
 

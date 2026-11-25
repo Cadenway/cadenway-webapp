@@ -9,8 +9,10 @@ import {
   withRouterConfig,
 } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
+import { TaskQueriesService, TasksService } from '@cadenway/api-client';
 import { provideCadenwayIcons } from '@cadenway/icons';
 import { CwToastService } from '@cadenway/ui/components/toast';
+import { of } from 'rxjs';
 import { beforeEach, describe, expect, it, type Mock, type MockInstance, vi } from 'vitest';
 
 import { RouteErrorBoundary } from '@features/errors/ui/components/route-error-boundary/route-error-boundary.component';
@@ -129,9 +131,27 @@ describe('ListPage', () => {
         SpacesNavigationStore,
         {
           provide: WORKSPACE_CONTEXT,
-          useValue: { organization: () => ({ id: 'org-1', slug: 'atelier-nord' }) },
+          useValue: {
+            organization: () => ({ id: 'org-1', slug: 'atelier-nord' }),
+            user: () => ({ id: 'u1' }),
+          },
         },
         { provide: ListsApi, useValue: api },
+        {
+          provide: TaskQueriesService,
+          useValue: {
+            countTaskGroups: vi.fn(() =>
+              of({
+                items: [{ value: 'todo', count: 0 }],
+                nextCursor: null,
+                total: 0,
+                groupBy: 'status',
+              }),
+            ),
+            queryListTasks: vi.fn(() => of({ items: [], nextCursor: null, total: 0 })),
+          },
+        },
+        { provide: TasksService, useValue: {} },
         {
           provide: SpacesApi,
           useValue: {
@@ -186,7 +206,7 @@ describe('ListPage', () => {
     await expect.poll(() => find('list-breadcrumb-space')?.textContent ?? '').toContain('Produit');
     expect(find('list-description')?.textContent).toContain('3 tâches');
     expect(find('list-description')?.textContent).toContain('0 % terminé');
-    expect(find('list-rows-placeholder')).not.toBeNull();
+    expect(find('list-rows')).not.toBeNull();
     expect(find('view-tabs')?.textContent).toContain('Liste');
     expect(find('view-group')?.textContent).toContain('Grouper : statut');
     expect(find('view-chips')?.textContent).toContain('Aucun filtre');
@@ -239,7 +259,7 @@ describe('ListPage', () => {
       })
       .toBe('/atelier-nord/l/l-bugs/list?keep=yes#section');
     expect(find('view-filter')).not.toBeNull();
-    expect(find('list-rows-placeholder')).not.toBeNull();
+    expect(find('list-rows')).not.toBeNull();
     expect(info).toHaveBeenCalledExactlyOnceWith("Cette vue n'existe plus");
     expect(navigate).toHaveBeenCalledWith(
       [],
@@ -363,7 +383,7 @@ describe('ListPage', () => {
       })
       .toContain('Impossible de charger les vues enregistrées');
     expect(find('view-filter')).toBeNull();
-    expect(find('list-rows-placeholder')).toBeNull();
+    expect(find('list-rows')).toBeNull();
     find('list-more')?.click();
     harness.detectChanges();
     await expect.poll(() => find('list-export')).not.toBeNull();

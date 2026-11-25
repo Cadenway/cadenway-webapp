@@ -1,3 +1,4 @@
+import { SPACES_RETRY } from '../../../constants/data-table-texts/data-table-texts.constants';
 import {
   Component,
   computed,
@@ -27,6 +28,7 @@ import { CwSkeleton } from '@cadenway/ui/components/skeleton';
 import { CwToastService } from '@cadenway/ui/components/toast';
 import { NgIcon } from '@ng-icons/core';
 
+import { TaskCreate } from '@features/task';
 import { SHELL_SIDEBAR, type ShellSidebar } from '@shared/layout-slot';
 
 import { layoutLabels, statusLabels } from '../../../constants/view-labels/view-labels.constants';
@@ -126,6 +128,17 @@ function csvRecordCount(content: string): number {
 export class ListPage {
   // #region Properties
   /**
+   * Property retryLabel
+   *
+   * @description
+   * Label for retrying a failed read.
+   *
+   * @type {string}
+   * @readonly
+   */
+  protected readonly retryLabel: string = SPACES_RETRY;
+
+  /**
    * Property listId
    *
    * @description
@@ -202,6 +215,17 @@ export class ListPage {
    * @readonly
    */
   private readonly toasts: CwToastService = inject(CwToastService);
+
+  /**
+   * Property taskCreate
+   *
+   * @description
+   * The task create dialog, which « Créer une tâche » opens in this list.
+   *
+   * @type {TaskCreate}
+   * @readonly
+   */
+  private readonly taskCreate: TaskCreate = inject(TaskCreate);
 
   /**
    * Property router
@@ -572,6 +596,16 @@ export class ListPage {
     return list.sprint
       ? formatSprintRange(list.sprint.startDate, list.sprint.endDate, this.locale)
       : null;
+  }
+
+  /**
+   * Method createTask
+   *
+   * @description
+   * « Créer une tâche » of the view tools: opens the create dialog in this list.
+   */
+  protected createTask(): void {
+    this.taskCreate.open({ listId: this.listId() });
   }
 
   /**
