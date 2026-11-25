@@ -927,7 +927,11 @@ function createListRowsStore(): Type<ListRowsStoreInstance> {
               }
             }
           }
-          return rows;
+          const selected: readonly string[] | undefined =
+            grouping === null ? undefined : store._params()?.query[grouping];
+          if (!selected?.length) return rows;
+          const groups: ReadonlySet<string> = new Set(store._groups().map((group) => group.value));
+          return rows.filter((row) => groups.has(row.group));
         },
       };
     }),

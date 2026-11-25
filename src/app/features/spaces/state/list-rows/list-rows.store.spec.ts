@@ -478,6 +478,39 @@ describe('ListRowsStore', () => {
     expect(rowOf(store, 'CAD-482')?.entering).toBe(false);
   });
 
+  it('continues a filtered group after its last row moves and shows empty when exhausted', async () => {
+    const first: TaskSummary = task('CAD-470', 'cancelled');
+    const second: TaskSummary = task('CAD-471', 'cancelled');
+    const response: Subject<TaskSummary> = new Subject<TaskSummary>();
+    changeStatus.mockReturnValue(response);
+    groups.mockResolvedValue([{ value: 'cancelled', count: 2 }]);
+    page.mockResolvedValueOnce(pageOf([first], 'next')).mockResolvedValueOnce(pageOf([second]));
+    const filteredQuery: ListTaskQuery = { ...query, status: ['cancelled'] };
+    const store: InstanceType<typeof ListRowsStore> = setup({
+      listId: 'sprint-14',
+      query: filteredQuery,
+      groupQuery: { groupBy: 'status', query: filteredQuery },
+    });
+    await settle();
+    expect(store.rows().map((row) => row.task.key)).toEqual(['CAD-470']);
+
+    const status: InstanceType<typeof TaskStatusChangesStore> =
+      TestBed.inject(TaskStatusChangesStore);
+    status.request(first, 'todo');
+    await vi.advanceTimersByTimeAsync(460);
+    await settle();
+    expect(page).toHaveBeenCalledTimes(2);
+    expect(store.rows().map((row) => row.task.key)).toEqual(['CAD-471']);
+    expect(store.empty()).toBe(false);
+
+    status.request(second, 'todo');
+    await vi.advanceTimersByTimeAsync(460);
+    await settle();
+    expect(store.rows()).toEqual([]);
+    expect(store.seekingRows()).toBe(false);
+    expect(store.empty()).toBe(true);
+  });
+
   it('refreshes filtered rows and group counts after a status write without realtime', async () => {
     notices.complete();
     const response: Subject<TaskSummary> = new Subject<TaskSummary>();
