@@ -118,9 +118,10 @@ breadcrumb, dialog, inline edit, toolbar).
     read the rows again.
   - `TaskStatusChangesStore` (Task), route-scoped on `list`, so pending
     changes die with the view.
-  - `SpaceOverviewStore`, page-scoped on `SpaceOverviewPage`. Its lists follow the sidebar's
-    overview of the same space once it changes after the page's read began (a value received during
-    that read applies when it ends), so both show the same counts.
+  - `SpaceOverviewStore`, page-scoped on `SpaceOverviewPage`. Its lists come from the sidebar's
+    overview of the same space, after any sidebar read in flight, and follow it once it changes;
+    the page reads on its own only when the sidebar has no value for the space (a sidebar value
+    received during that read applies when it ends), so both show the same counts.
 - Route errors: the gateway answers `404 space.not-found` or `list.not-found` for a deleted
   resource and for a private one the caller does not see alike, and the access request never
   reveals which; that answer renders « Accès refusé » with « Demander l’accès ». Any other `404` or

@@ -182,11 +182,7 @@ describe('SpaceOverviewPage', () => {
     await expect.poll(() => text(harness, 'list-card')).toContain('34 tâches');
   });
 
-  it('keeps its own fresher read over the sidebar value it started from', async () => {
-    const navigation: InstanceType<typeof SpacesNavigationStore> =
-      TestBed.inject(SpacesNavigationStore);
-    await expect.poll(() => navigation.overviews.hasValue()).toBe(true);
-    const reads: number = api['overview'].mock.calls.length;
+  it('waits for the sidebar first read instead of racing it with its own', async () => {
     let finish: (value: SpaceOverview) => void = () => undefined;
     api['overview'].mockImplementationOnce(
       () =>
@@ -194,25 +190,52 @@ describe('SpaceOverviewPage', () => {
           finish = resolve;
         }),
     );
-    api['overview'].mockResolvedValueOnce({
-      ...overview,
-      taskCount: 33,
-      lists: [{ ...overview.lists[0], counts: { ...overview.lists[0].counts, total: 33 } }],
-    });
-    navigation.overviews.reload();
-    await expect.poll(() => navigation.overviews.isLoading()).toBe(true);
+    TestBed.inject(SpacesNavigationStore);
+    await expect.poll(() => api['overview'].mock.calls.length).toBe(1);
 
     const created: Promise<RouterTestingHarness> = RouterTestingHarness.create(
       '/atelier-nord/spaces/sp-design',
     );
-    await expect.poll(() => api['overview'].mock.calls.length).toBe(reads + 2);
+    await expect.poll(() => api['space'].mock.calls.length).toBe(1);
     TestBed.tick();
-    finish(overview);
+    finish({
+      ...overview,
+      taskCount: 33,
+      lists: [{ ...overview.lists[0], counts: { ...overview.lists[0].counts, total: 33 } }],
+    });
     const harness: RouterTestingHarness = await created;
 
     await expect.poll(() => text(harness, 'list-card')).toContain('33 tâches');
+    expect(api['overview']).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows the sidebar value at once while the sidebar reads again, then its newer one', async () => {
+    const navigation: InstanceType<typeof SpacesNavigationStore> =
+      TestBed.inject(SpacesNavigationStore);
+    await expect.poll(() => navigation.overviews.hasValue()).toBe(true);
+    let finish: (value: SpaceOverview) => void = () => undefined;
+    api['overview'].mockImplementationOnce(
+      () =>
+        new Promise<SpaceOverview>((resolve: (value: SpaceOverview) => void) => {
+          finish = resolve;
+        }),
+    );
+    navigation.overviews.reload();
+    await expect.poll(() => navigation.overviews.isLoading()).toBe(true);
+    const created: Promise<RouterTestingHarness> = RouterTestingHarness.create(
+      '/atelier-nord/spaces/sp-design',
+    );
+    await expect.poll(() => api['space'].mock.calls.length).toBe(1);
     TestBed.tick();
-    expect(text(harness, 'list-card')).toContain('33 tâches');
+    finish({
+      ...overview,
+      taskCount: 33,
+      lists: [{ ...overview.lists[0], counts: { ...overview.lists[0].counts, total: 33 } }],
+    });
+    const harness: RouterTestingHarness = await created;
+
+    await expect.poll(() => text(harness, 'list-card')).toContain('33 tâches');
+    expect(api['overview']).toHaveBeenCalledTimes(2);
   });
 
   it('retries a failed primary space read through the route boundary', async () => {

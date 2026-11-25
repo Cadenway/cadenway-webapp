@@ -17,6 +17,9 @@ import {
   withState,
 } from '@ngrx/signals';
 
+import { toObservable } from '@angular/core/rxjs-interop';
+import { filter, firstValueFrom, fromEvent, type Observable, takeUntil } from 'rxjs';
+
 import { SpacesApi } from '../../data-access/services/spaces-api/spaces-api.service';
 import type { MilestonePage } from '../../models/milestone/milestone.interface';
 import type { Space } from '../../models/space/space.interface';
@@ -140,6 +143,9 @@ function createSpaceOverviewStore(): Type<SpaceOverviewStoreInstance> {
         return spaceId === null ? undefined : { spaceId };
       };
       const following: { baseline: SpaceOverview | undefined } = { baseline: undefined };
+      const navigationStatus: Observable<ResourceStatus> = toObservable(
+        navigation.overviews.status,
+      );
       return {
         _navigation: navigation,
         _following: following,
@@ -155,22 +161,30 @@ function createSpaceOverviewStore(): Type<SpaceOverviewStoreInstance> {
         }),
         overview: resource({
           params: bySpace,
-          loader: ({
+          loader: async ({
             params,
             abortSignal,
           }: {
             params: { spaceId: string };
             abortSignal: AbortSignal;
           }): Promise<SpaceOverview> => {
+            // A sidebar read in flight is waited for, so the page and the sidebar never race two
+            // reads of one space: the page reads on its own only when the sidebar has no value
+            // for it, and any later sidebar value is then newer than the page's.
+            await firstValueFrom(
+              navigationStatus.pipe(
+                filter(
+                  (status: ResourceStatus): boolean =>
+                    status !== 'loading' && status !== 'reloading',
+                ),
+                takeUntil(fromEvent(abortSignal, 'abort')),
+              ),
+            );
             const current: SpaceOverview | undefined = navigation.overviews.hasValue()
               ? navigation.overviews.value()[params.spaceId]
               : undefined;
             following.baseline = current;
-            return (navigation.overviews.status() === 'resolved' ||
-              navigation.overviews.status() === 'local') &&
-              current !== undefined
-              ? Promise.resolve(current)
-              : api.overview(params.spaceId, todayIso(), abortSignal);
+            return current ?? api.overview(params.spaceId, todayIso(), abortSignal);
           },
         }),
         milestones: resource({
