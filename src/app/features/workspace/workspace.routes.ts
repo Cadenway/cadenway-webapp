@@ -15,6 +15,7 @@ import {
   withSearchButton,
   withSearchRailItem,
 } from '@features/search/providers';
+import { withTaskCreate } from '@features/task/providers';
 import type { AppShell } from '@layouts/app-shell';
 import { provideAppShellSlots } from '@layouts/app-shell/providers';
 
@@ -77,7 +78,7 @@ export const WORKSPACE_ROUTES: Routes = [
         railFooter: [withSearchRailItem(), withThemeRailItem(), withUserMenu()],
         sidebarHeader: [withSearchButton()],
         sidebarFooter: [withPlanSummary(), withShortcutsButton()],
-        overlays: [withCommandPalette(), withShortcutsDialog()],
+        overlays: [withCommandPalette(), withShortcutsDialog(), withTaskCreate()],
       }),
     ],
     loadComponent: async (): Promise<Type<AppShell>> =>

@@ -1,0 +1,75 @@
+<button
+  type="button"
+  class="inline-flex size-6 shrink-0 items-center justify-center rounded-md transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+  [attr.aria-label]="statusName()"
+  [title]="statusName()"
+  (click)="clickStatus($event)"
+>
+  <cw-status-icon [status]="shown()" [from]="from()" [milestone]="task().milestone" size="4" />
+</button>
+<button
+  type="button"
+  class="flex w-full min-w-0 items-center gap-2 rounded-md px-1 py-1 text-left focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none focus-visible:ring-inset"
+  (click)="opened.emit()"
+>
+  <span
+    class="truncate font-medium"
+    [class.text-muted-foreground]="shown() === 'done' || shown() === 'cancelled'"
+    [class.line-through]="shown() === 'cancelled'"
+    >{{ task().name }}</span
+  >
+  <span class="shrink-0 font-mono text-xs text-muted-foreground max-md:hidden">{{
+    task().key
+  }}</span>
+  @if (recurrenceTitle()) {
+    <ng-icon
+      name="phosphorRepeatBold"
+      class="shrink-0 text-muted-foreground"
+      size="0.875rem"
+      role="img"
+      [attr.aria-label]="recurrenceTitle()"
+      [title]="recurrenceTitle()"
+    />
+  }
+  @if (showParent() && task().parentKey; as parentKey) {
+    <span
+      class="inline-flex shrink-0 items-center gap-1 rounded-md border border-border px-1.5 text-xs leading-5 text-muted-foreground"
+      title="Subtask of {{ parentKey }}"
+      i18n-title="@@task.title-cell.parent"
+    >
+      <ng-icon name="phosphorArrowBendLeftUpBold" size="0.75rem" aria-hidden="true" />{{
+        parentKey
+      }}
+    </span>
+  }
+  @if (task().subtasks.total > 0) {
+    <span
+      class="flex shrink-0 items-center gap-1 text-xs whitespace-nowrap text-muted-foreground tabular-nums max-md:hidden"
+      title="Subtasks done"
+      i18n-title="@@task.title-cell.subtasks"
+    >
+      <ng-icon name="phosphorTreeStructureBold" size="0.875rem" aria-hidden="true" />{{
+        task().subtasks.closed
+      }}/{{ task().subtasks.total }}
+    </span>
+  } @else if (task().checklist.total > 0) {
+    <span
+      class="flex shrink-0 items-center gap-1 text-xs whitespace-nowrap text-muted-foreground tabular-nums max-md:hidden"
+      title="Checklist"
+      i18n-title="@@task.title-cell.checklist"
+    >
+      <ng-icon name="phosphorListChecksBold" size="0.875rem" aria-hidden="true" />{{
+        task().checklist.closed
+      }}/{{ task().checklist.total }}
+    </span>
+  }
+  @if (task().comments; as comments) {
+    <span
+      class="flex shrink-0 items-center gap-1 text-xs whitespace-nowrap text-muted-foreground tabular-nums max-md:hidden"
+      title="Comments"
+      i18n-title="@@task.title-cell.comments"
+    >
+      <ng-icon name="phosphorChatCircleBold" size="0.875rem" aria-hidden="true" />{{ comments }}
+    </span>
+  }
+</button>
