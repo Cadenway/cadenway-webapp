@@ -33,8 +33,9 @@ None.
 - `InboxStore` is provided by the rail item and keyed on the workspace's organization. A committed
   organization switch clears the count and the lists at once and restarts the poll; any answer or
   write result that belongs to the previous organization is ignored.
-- The unread count is read at once, on window focus, every minute while realtime is disconnected,
-  and every five minutes while connected; a failed read keeps the last count. A notification notice
+- The unread count is read at once, on window focus, on every transition to connected and every
+  minute, connected or not, because notices only flow once the gateway enables them; a failed read
+  keeps the last count. A notification notice
   refreshes the badge and the open notification list. A due-reminder notice first revalidates the
   reminder with `getReminder`; a failed read is retried once before refreshing the reminders list.
   The badge and reminders are read after reconnect because notices are not replayed. Personal notices require `REALTIME_PERSONAL_NOTICES_ENABLED` on the gateway.

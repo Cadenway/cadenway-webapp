@@ -340,14 +340,14 @@ describe('InboxStore', () => {
     return store;
   }
 
-  it('polls the unread count at once, every five minutes and when the window regains focus', async () => {
+  it('polls the unread count at once, every minute and when the window regains focus', async () => {
     const store: InstanceType<typeof InboxStore> = TestBed.inject(InboxStore);
     TestBed.tick();
     await vi.advanceTimersByTimeAsync(0);
     expect(store.unreadCount()).toBe(1);
 
     api.unreadCount.mockReturnValue(of(3));
-    expect(POLL_MS).toBe(300_000);
+    expect(POLL_MS).toBe(60_000);
     await vi.advanceTimersByTimeAsync(POLL_MS - 1);
     expect(api.unreadCount).toHaveBeenCalledTimes(1);
     await vi.advanceTimersByTimeAsync(1);
@@ -425,10 +425,11 @@ describe('InboxStore', () => {
     });
   });
 
-  it('refetches badge and reminders after reconnect', async () => {
+  it('refetches badge, reminders and the open notification list after reconnect', async () => {
     const store: InstanceType<typeof InboxStore> = await opened();
     await vi.advanceTimersByTimeAsync(0);
     const count: number = api.pendingReminders.mock.calls.length;
+    const listCount: number = api.notifications.mock.calls.length;
     api.unreadCount.mockReturnValue(of(7));
     api.notifications.mockResolvedValue({ items: [mention], unreadCount: 7 });
     connectionStatus.set('reconnecting');
@@ -439,7 +440,12 @@ describe('InboxStore', () => {
     await vi.waitFor(() => {
       expect(api.pendingReminders).toHaveBeenCalledTimes(count + 1);
     });
+    await vi.waitFor(() => {
+      TestBed.tick();
+      expect(api.notifications).toHaveBeenCalledTimes(listCount + 1);
+    });
     expect(store.unreadCount()).toBe(7);
+    expect(store.notifications.value()?.items).toEqual([mention]);
   });
 
   it('discards a due-reminder answer after switching organizations', async () => {
@@ -531,7 +537,7 @@ describe('InboxStore', () => {
     expect(api.reminder).toHaveBeenCalledTimes(1);
   });
 
-  it('polls every minute while disconnected and refreshes on first admission', async () => {
+  it('polls every minute, connected or not, and refreshes on first admission', async () => {
     connectionStatus.set('connecting');
     const store: InstanceType<typeof InboxStore> = TestBed.inject(InboxStore);
     TestBed.tick();
@@ -554,7 +560,7 @@ describe('InboxStore', () => {
     });
     const count: number = api.unreadCount.mock.calls.length;
     await vi.advanceTimersByTimeAsync(60_000);
-    expect(api.unreadCount).toHaveBeenCalledTimes(count);
+    expect(api.unreadCount).toHaveBeenCalledTimes(count + 1);
   });
 
   it('keeps the last count when a poll fails', async () => {

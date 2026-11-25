@@ -63,11 +63,13 @@ import type {
  * Constant POLL_MS
  *
  * @description
- * Fallback interval of the unread badge polling, in milliseconds.
+ * Interval of the unread badge polling, in milliseconds. It stays at one minute even while
+ * realtime is connected: personal notices only flow once the gateway enables them, which the
+ * client cannot observe.
  *
  * @type {number}
  */
-export const POLL_MS: number = 300_000;
+export const POLL_MS: number = 60_000;
 
 /**
  * Constant LOAD_ATTEMPTS
@@ -600,36 +602,36 @@ function createInboxStore(): Type<InboxStoreInstance> {
         },
         _connected(): void {
           refreshReminders();
+          if (!store._isOpen()) return;
+          if (claims.size > 0) notificationRefreshPending = true;
+          else reloadNotifications();
         },
         _poll: rxMethod<{ organizationId: string; connected: boolean }>(
           pipe(
-            switchMap(
-              ({ organizationId, connected }: { organizationId: string; connected: boolean }) => {
-                const interval: number = connected ? POLL_MS : 60_000;
-                const triggers: Observable<unknown>[] = [timer(0, interval), store._refreshBadge];
-                if (store._window) triggers.push(fromEvent(store._window, 'focus'));
-                return merge(...triggers).pipe(
-                  switchMap(() => {
-                    const version: number = store._version();
-                    return store._api.unreadCount().pipe(
-                      catchError(() => EMPTY),
-                      tap((unreadCount: number) => {
-                        if (
-                          sameOrganization(organizationId) &&
-                          version === store._version() &&
-                          claims.size === 0
-                        ) {
-                          patchState(store, {
-                            unreadCount,
-                            _badgeVersion: store._badgeVersion() + 1,
-                          });
-                        }
-                      }),
-                    );
-                  }),
-                );
-              },
-            ),
+            switchMap(({ organizationId }: { organizationId: string; connected: boolean }) => {
+              const triggers: Observable<unknown>[] = [timer(0, POLL_MS), store._refreshBadge];
+              if (store._window) triggers.push(fromEvent(store._window, 'focus'));
+              return merge(...triggers).pipe(
+                switchMap(() => {
+                  const version: number = store._version();
+                  return store._api.unreadCount().pipe(
+                    catchError(() => EMPTY),
+                    tap((unreadCount: number) => {
+                      if (
+                        sameOrganization(organizationId) &&
+                        version === store._version() &&
+                        claims.size === 0
+                      ) {
+                        patchState(store, {
+                          unreadCount,
+                          _badgeVersion: store._badgeVersion() + 1,
+                        });
+                      }
+                    }),
+                  );
+                }),
+              );
+            }),
           ),
         ),
         _followOrganization: signalMethod<string>((organizationId: string): void => {
@@ -785,7 +787,7 @@ function createInboxStore(): Type<InboxStoreInstance> {
  * The inbox of the rail, provided by its rail item so it lives with the shell. Everything is keyed
  * on the workspace's organization: a committed switch clears the count and the lists at once and
  * restarts the poll, and any answer or write result of the previous organization is ignored. The
- * unread count is refreshed by notices, reconnects, focus and a five-minute fallback poll; the
+ * unread count is refreshed by notices, reconnects, focus and a one-minute poll; the
  * notifications and reminders are refreshed on opening. Every write bumps a
  * version, so a poll answer or a notifications load that began before it is dropped. Writes are
  * optimistic; a refusal restores only what that write changed and no other write covers, on the
