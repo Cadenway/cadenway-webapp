@@ -43,6 +43,49 @@ import { isWithin, todayIso } from '../../utils/calendar-date/calendar-date.util
 const OVERVIEW_PAGE_TIMEOUT_MS: number = 10_000;
 
 /**
+ * Interface OverviewReadOrder
+ *
+ * @description
+ * The order in which space overview reads begin, so a reader of a space overview can tell whether
+ * a value the sidebar holds comes from a read begun before or after its own.
+ */
+export interface OverviewReadOrder {
+  // #region Methods
+  /**
+   * Method next
+   *
+   * @description
+   * Takes the place of a read that begins now; every later read gets a higher number.
+   *
+   * @returns {number} The read's place in the order.
+   */
+  next(): number;
+
+  /**
+   * Method of
+   *
+   * @description
+   * The place of the read that returned an overview the sidebar holds.
+   *
+   * @param {SpaceOverview} overview - The overview, as the sidebar holds it.
+   * @returns {number | undefined} Its place, or undefined when no recorded read returned it.
+   */
+  of(overview: SpaceOverview): number | undefined;
+
+  /**
+   * Method record
+   *
+   * @description
+   * Records the place of the read that returned an overview.
+   *
+   * @param {SpaceOverview} overview - The overview the read returned.
+   * @param {number} order - The read's place from `next`.
+   */
+  record(overview: SpaceOverview, order: number): void;
+  // #endregion
+}
+
+/**
  * Interface SpacesNavigationState
  *
  * @description
@@ -114,6 +157,17 @@ interface SpacesNavigationStoreInstance {
    * @readonly
    */
   readonly overviews: ResourceRef<Readonly<Record<string, SpaceOverview>> | undefined>;
+
+  /**
+   * Property overviewOrder
+   *
+   * @description
+   * The order of the space overview reads, which the space overview page compares with its own.
+   *
+   * @type {OverviewReadOrder}
+   * @readonly
+   */
+  readonly overviewOrder: OverviewReadOrder;
 
   /**
    * Property favorites
@@ -227,10 +281,20 @@ function createSpacesNavigationStore(): Type<SpacesNavigationStoreInstance> {
         loader: ({ abortSignal }: { abortSignal: AbortSignal }): Promise<readonly Space[]> =>
           api.spaces(abortSignal),
       });
+      const readOrders: WeakMap<SpaceOverview, number> = new WeakMap<SpaceOverview, number>();
+      let lastOrder: number = 0;
+      const overviewOrder: OverviewReadOrder = {
+        next: (): number => ++lastOrder,
+        of: (overview: SpaceOverview): number | undefined => readOrders.get(overview),
+        record: (overview: SpaceOverview, order: number): void => {
+          readOrders.set(overview, order);
+        },
+      };
       return {
         _api: api,
         _workspace: inject(WORKSPACE_CONTEXT),
         _taskCreate: inject(TaskCreate),
+        overviewOrder,
         spaces,
         overviews: resource({
           params: () =>
@@ -248,16 +312,20 @@ function createSpacesNavigationStore(): Type<SpacesNavigationStoreInstance> {
             const byId: Record<string, SpaceOverview> = {};
             for (let offset: number = 0; offset < params.ids.length; offset += 4) {
               abortSignal.throwIfAborted();
+              const batch: readonly string[] = params.ids.slice(offset, offset + 4);
+              const batchOrders: readonly number[] = batch.map((): number => overviewOrder.next());
               const settled: PromiseSettledResult<SpaceOverview>[] = await Promise.allSettled(
-                params.ids
-                  .slice(offset, offset + 4)
-                  .map((id: string): Promise<SpaceOverview> =>
-                    api.overview(id, today, abortSignal, OVERVIEW_PAGE_TIMEOUT_MS),
-                  ),
+                batch.map((id: string): Promise<SpaceOverview> =>
+                  api.overview(id, today, abortSignal, OVERVIEW_PAGE_TIMEOUT_MS),
+                ),
               );
-              for (const result of settled) {
-                if (result.status === 'fulfilled') byId[result.value.spaceId] = result.value;
-              }
+              settled.forEach(
+                (result: PromiseSettledResult<SpaceOverview>, index: number): void => {
+                  if (result.status !== 'fulfilled') return;
+                  byId[result.value.spaceId] = result.value;
+                  overviewOrder.record(result.value, batchOrders[index]);
+                },
+              );
             }
             return byId;
           },
@@ -333,12 +401,14 @@ function createSpacesNavigationStore(): Type<SpacesNavigationStoreInstance> {
                 reloadOverviews();
                 return EMPTY;
               }
+              const order: number = store.overviewOrder.next();
               return from(
                 store._api.overview(spaceId, todayIso(), undefined, OVERVIEW_PAGE_TIMEOUT_MS),
               ).pipe(
                 tapResponse({
                   next: (overview: SpaceOverview): void => {
                     if (store._organizationId() !== organizationId) return;
+                    store.overviewOrder.record(overview, order);
                     if (
                       store.overviews.isLoading() ||
                       !store.overviews.hasValue() ||

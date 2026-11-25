@@ -17,9 +17,6 @@ import {
   withState,
 } from '@ngrx/signals';
 
-import { toObservable } from '@angular/core/rxjs-interop';
-import { filter, firstValueFrom, fromEvent, type Observable, takeUntil } from 'rxjs';
-
 import { SpacesApi } from '../../data-access/services/spaces-api/spaces-api.service';
 import type { MilestonePage } from '../../models/milestone/milestone.interface';
 import type { Space } from '../../models/space/space.interface';
@@ -142,10 +139,10 @@ function createSpaceOverviewStore(): Type<SpaceOverviewStoreInstance> {
         const spaceId: string | null = store.spaceId();
         return spaceId === null ? undefined : { spaceId };
       };
-      const following: { baseline: SpaceOverview | undefined } = { baseline: undefined };
-      const navigationStatus: Observable<ResourceStatus> = toObservable(
-        navigation.overviews.status,
-      );
+      const following: { baseline: SpaceOverview | undefined; own: number | undefined } = {
+        baseline: undefined,
+        own: undefined,
+      };
       return {
         _navigation: navigation,
         _following: following,
@@ -161,30 +158,24 @@ function createSpaceOverviewStore(): Type<SpaceOverviewStoreInstance> {
         }),
         overview: resource({
           params: bySpace,
-          loader: async ({
+          loader: ({
             params,
             abortSignal,
           }: {
             params: { spaceId: string };
             abortSignal: AbortSignal;
           }): Promise<SpaceOverview> => {
-            // A sidebar read in flight is waited for, so the page and the sidebar never race two
-            // reads of one space: the page reads on its own only when the sidebar has no value
-            // for it, and any later sidebar value is then newer than the page's.
-            await firstValueFrom(
-              navigationStatus.pipe(
-                filter(
-                  (status: ResourceStatus): boolean =>
-                    status !== 'loading' && status !== 'reloading',
-                ),
-                takeUntil(fromEvent(abortSignal, 'abort')),
-              ),
-            );
+            // The sidebar's value of the space, even while it reads again, is shown at once and
+            // followed; the page reads on its own only when the sidebar has none, and then
+            // ignores any sidebar value read before its own read began.
             const current: SpaceOverview | undefined = navigation.overviews.hasValue()
               ? navigation.overviews.value()[params.spaceId]
               : undefined;
             following.baseline = current;
-            return current ?? api.overview(params.spaceId, todayIso(), abortSignal);
+            following.own = current === undefined ? navigation.overviewOrder.next() : undefined;
+            return current !== undefined
+              ? Promise.resolve(current)
+              : api.overview(params.spaceId, todayIso(), abortSignal);
           },
         }),
         milestones: resource({
@@ -223,6 +214,10 @@ function createSpaceOverviewStore(): Type<SpaceOverviewStoreInstance> {
               return;
             }
             if (next.spaceId !== store.spaceId()) return;
+            const own: number | undefined = store._following.own;
+            if (own !== undefined && (store._navigation.overviewOrder.of(next) ?? 0) < own) {
+              return;
+            }
             if (store.overview.isLoading()) pending = next;
             else apply(next);
           },

@@ -139,19 +139,17 @@ describe('SpaceOverviewPage', () => {
       TestBed.inject(SpacesNavigationStore);
     await expect.poll(() => navigation.overviews.hasValue()).toBe(true);
 
-    navigation.overviews.set({
-      ...navigation.overviews.value(),
-      'sp-design': {
-        ...overview,
-        taskCount: 33,
-        lists: [{ ...overview.lists[0], counts: { ...overview.lists[0].counts, total: 33 } }],
-      },
+    api['overview'].mockResolvedValueOnce({
+      ...overview,
+      taskCount: 33,
+      lists: [{ ...overview.lists[0], counts: { ...overview.lists[0].counts, total: 33 } }],
     });
+    navigation.overviews.reload();
 
     await expect.poll(() => text(harness, 'list-card')).toContain('33 tâches');
   });
 
-  it('keeps a sidebar overview that changes while the page reads its own', async () => {
+  it('keeps a sidebar overview read after its own began, even while its own runs', async () => {
     const navigation: InstanceType<typeof SpacesNavigationStore> =
       TestBed.inject(SpacesNavigationStore);
     let answer: (value: SpaceOverview) => void = () => undefined;
@@ -168,13 +166,19 @@ describe('SpaceOverviewPage', () => {
     );
     await expect.poll(() => api['overview'].mock.calls.length).toBe(2);
 
-    navigation.overviews.set({
-      'sp-design': {
-        ...overview,
-        taskCount: 34,
-        lists: [{ ...overview.lists[0], counts: { ...overview.lists[0].counts, total: 34 } }],
-      },
+    api['overview'].mockResolvedValueOnce({
+      ...overview,
+      taskCount: 34,
+      lists: [{ ...overview.lists[0], counts: { ...overview.lists[0].counts, total: 34 } }],
     });
+    navigation.overviews.reload();
+    await expect
+      .poll(() =>
+        navigation.overviews.hasValue()
+          ? (navigation.overviews.value()['sp-design'] as SpaceOverview | undefined)?.taskCount
+          : undefined,
+      )
+      .toBe(34);
     TestBed.tick();
     answer(overview);
     const harness: RouterTestingHarness = await created;
@@ -182,7 +186,7 @@ describe('SpaceOverviewPage', () => {
     await expect.poll(() => text(harness, 'list-card')).toContain('34 tâches');
   });
 
-  it('waits for the sidebar first read instead of racing it with its own', async () => {
+  it('keeps its own read over a sidebar read begun before it', async () => {
     let finish: (value: SpaceOverview) => void = () => undefined;
     api['overview'].mockImplementationOnce(
       () =>
@@ -190,23 +194,54 @@ describe('SpaceOverviewPage', () => {
           finish = resolve;
         }),
     );
-    TestBed.inject(SpacesNavigationStore);
+    const navigation: InstanceType<typeof SpacesNavigationStore> =
+      TestBed.inject(SpacesNavigationStore);
     await expect.poll(() => api['overview'].mock.calls.length).toBe(1);
 
     const created: Promise<RouterTestingHarness> = RouterTestingHarness.create(
       '/atelier-nord/spaces/sp-design',
     );
-    await expect.poll(() => api['space'].mock.calls.length).toBe(1);
+    await expect.poll(() => api['overview'].mock.calls.length).toBe(2);
     TestBed.tick();
     finish({
       ...overview,
-      taskCount: 33,
-      lists: [{ ...overview.lists[0], counts: { ...overview.lists[0].counts, total: 33 } }],
+      taskCount: 30,
+      lists: [{ ...overview.lists[0], counts: { ...overview.lists[0].counts, total: 30 } }],
     });
     const harness: RouterTestingHarness = await created;
+    await expect
+      .poll(() =>
+        navigation.overviews.hasValue()
+          ? (navigation.overviews.value()['sp-design'] as SpaceOverview | undefined)?.taskCount
+          : undefined,
+      )
+      .toBe(30);
 
-    await expect.poll(() => text(harness, 'list-card')).toContain('33 tâches');
-    expect(api['overview']).toHaveBeenCalledTimes(1);
+    expect(text(harness, 'list-card')).toContain('32 tâches');
+  });
+
+  it('reads on its own instead of waiting for a slow sidebar read of another space', async () => {
+    const other: Space = { ...design, id: 'sp-marketing', name: 'Marketing' };
+    let release: (value: SpaceOverview) => void = () => undefined;
+    api['spaces'].mockResolvedValue([design, other]);
+    api['overview'].mockImplementation((spaceId: string) =>
+      spaceId === other.id
+        ? new Promise<SpaceOverview>((resolve: (value: SpaceOverview) => void) => {
+            release = resolve;
+          })
+        : Promise.resolve(overview),
+    );
+    TestBed.inject(SpacesNavigationStore);
+    await expect.poll(() => api['overview'].mock.calls.length).toBe(2);
+
+    const created: Promise<RouterTestingHarness> = RouterTestingHarness.create(
+      '/atelier-nord/spaces/sp-design',
+    );
+    await expect.poll(() => api['overview'].mock.calls.length).toBe(3);
+    release({ ...overview, spaceId: other.id, taskCount: 0, lists: [] });
+    const harness: RouterTestingHarness = await created;
+
+    await expect.poll(() => text(harness, 'list-card')).toContain('32 tâches');
   });
 
   it('shows the sidebar value at once while the sidebar reads again, then its newer one', async () => {
