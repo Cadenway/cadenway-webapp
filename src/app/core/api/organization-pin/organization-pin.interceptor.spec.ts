@@ -197,5 +197,6 @@ describe('organizationPinInterceptor', () => {
       );
     await expect(response).rejects.toBeInstanceOf(HttpErrorResponse);
     expect(changed).toHaveBeenCalledOnce();
+    expect(pin.stale()).toBe(true);
   });
 });

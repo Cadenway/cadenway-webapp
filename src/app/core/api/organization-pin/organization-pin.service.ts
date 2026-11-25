@@ -57,7 +57,7 @@ export class OrganizationPin {
    * Property staleValue
    *
    * @description
-   * Whether a passive request discovered that the session context changed.
+   * Whether a request discovered that the session context changed.
    *
    * @type {WritableSignal<boolean>}
    * @readonly
@@ -232,9 +232,10 @@ export class OrganizationPin {
    * Method notifyContextChanged
    *
    * @description
-   * Reports a gateway rejection to workspace recovery listeners.
+   * Marks the context stale and reports an active rejection to workspace recovery listeners.
    */
   public notifyContextChanged(): void {
+    this.markStale();
     this.changes.next();
   }
   // #endregion

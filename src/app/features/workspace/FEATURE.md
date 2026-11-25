@@ -92,10 +92,10 @@ injects it as optional.
   connection. The gateway notice envelope does not name the delivering room: changes are broadcast
   to every active watch, whose consumer filters or refetches. A later contract should add the room.
 - The resolver sets `OrganizationPin` after committing the verified context, before child resolvers;
-  route destruction clears it. An active `412 organization.context-changed` requests one same-URL
-  guard and resolver rerun. A passive mismatch marks the context stale; a visible, focused tab
-  requests recovery immediately, otherwise it waits for foreground focus or visibility. Passive
-  requests wait for the next verified commit. Query-only navigation
+  route destruction clears it. An active or passive `412 organization.context-changed` marks the
+  context stale and fences passive requests until the next verified commit. An active mismatch requests
+  a same-URL guard and resolver rerun, including after an in-progress navigation; a passive mismatch
+  waits until the tab is visible and focused. Failed recovery retries with bounded backoff. Query-only navigation
   does not trigger revalidation. The guard's uncached current organization read skips the pin so it can discover and switch the session under the lock. Before
   a session switch the guard fences pinned requests locally until the resolver commits the new pin.
 - A session holds one current organization across tabs. Passive work in a stale tab cannot switch it

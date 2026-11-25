@@ -99,6 +99,7 @@ export function provideWorkspaceRuntime(): (Provider | EnvironmentProviders)[] {
       const router: Router = inject(Router);
       const revalidation: WorkspaceRevalidation = inject(WorkspaceRevalidation);
       let recovering: boolean = false;
+      let activeRecoveryPending: boolean = false;
       let disposed: boolean = false;
       let retryAttempts: number = 0;
       let retryAfter: number = 0;
@@ -126,15 +127,17 @@ export function provideWorkspaceRuntime(): (Provider | EnvironmentProviders)[] {
           .navigateByUrl(router.url, { onSameUrlNavigation: 'reload' })
           .then(finish, finish);
       };
-      const subscription: Subscription = pin.contextChanged.subscribe(recover);
+      const subscription: Subscription = pin.contextChanged.subscribe(() => {
+        activeRecoveryPending = true;
+        recover();
+      });
       const foreground: () => void = () => {
         if (
           pin.stale() &&
           !disposed &&
           !recovering &&
           !router.currentNavigation() &&
-          document.visibilityState === 'visible' &&
-          document.hasFocus()
+          (activeRecoveryPending || (document.visibilityState === 'visible' && document.hasFocus()))
         ) {
           const delay: number = retryAfter - Date.now();
           if (delay > 0) {
@@ -151,6 +154,7 @@ export function provideWorkspaceRuntime(): (Provider | EnvironmentProviders)[] {
       };
       const staleSubscription: Subscription = pin.becameStale.subscribe(foreground);
       const verifiedSubscription: Subscription = pin.organizationVerified.subscribe(() => {
+        activeRecoveryPending = false;
         retryAttempts = 0;
         retryAfter = 0;
         clearTimeout(retryTimer);

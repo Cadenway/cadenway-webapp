@@ -17,7 +17,12 @@ import { filter, firstValueFrom, type Observable, of, Subject, throwError } from
 import { io, type Socket } from 'socket.io-client';
 import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 
-import { OrganizationPin, organizationPinInterceptor, PASSIVE_REQUEST } from '@core/api';
+import {
+  OrganizationPin,
+  organizationPinInterceptor,
+  OrganizationSwitchPendingError,
+  PASSIVE_REQUEST,
+} from '@core/api';
 import { RuntimeConfigStore } from '@core/config';
 import { REALTIME_TERMINAL_FAILURE, RealtimeConnection } from '@core/realtime';
 
@@ -340,6 +345,87 @@ describe('WORKSPACE_ROUTES', () => {
     expect(pin.isSwitching()).toBe(false);
   });
 
+  it('recovers an active mismatch after an unrelated navigation finishes', async () => {
+    TestBed.overrideProvider(RuntimeConfigStore, {
+      useValue: { config: () => ({ apiUrl: 'https://api.example.test' }) },
+    });
+    const router: Router = TestBed.inject(Router);
+    const pending: Subject<boolean> = new Subject<boolean>();
+    const guard: Mock<() => Observable<boolean>> = vi
+      .fn(() => of(true))
+      .mockReturnValueOnce(pending);
+    router.resetConfig(
+      router.config.map((route) =>
+        route.path === ':org'
+          ? {
+              ...route,
+              children: [
+                { path: 'slow', canActivate: [guard], component: AuthStub },
+                ...(route.children ?? []),
+              ],
+            }
+          : route,
+      ),
+    );
+    const harness: RouterTestingHarness = await open('/atelier-nord');
+    vi.spyOn(document, 'hasFocus').mockReturnValue(false);
+    vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('hidden');
+    const pin: OrganizationPin = TestBed.inject(OrganizationPin);
+    const navigation: Promise<boolean> = router.navigateByUrl('/atelier-nord/slow');
+    await vi.waitFor(() => {
+      expect(guard).toHaveBeenCalledOnce();
+      expect(router.currentNavigation()).not.toBeNull();
+    });
+    const active: Promise<unknown> = TestBed.runInInjectionContext(() =>
+      firstValueFrom(
+        organizationPinInterceptor(new HttpRequest('GET', '/v1/tasks/CAD-1'), () =>
+          throwError(
+            () =>
+              new HttpErrorResponse({
+                status: 412,
+                error: { code: 'organization.context-changed' },
+              }),
+          ),
+        ),
+      ),
+    );
+    await expect(active).rejects.toBeInstanceOf(HttpErrorResponse);
+    expect(pin.stale()).toBe(true);
+    const next: Mock = vi.fn(() => of(new HttpResponse({ status: 200 })));
+    const passive: Promise<unknown> = TestBed.runInInjectionContext(() =>
+      firstValueFrom(
+        organizationPinInterceptor(
+          new HttpRequest('GET', '/v1/tasks/CAD-1', {
+            context: new HttpContext().set(PASSIVE_REQUEST, true),
+          }),
+          next,
+        ),
+      ),
+    );
+    await expect(passive).rejects.toBeInstanceOf(OrganizationSwitchPendingError);
+    expect(next).not.toHaveBeenCalled();
+    session.currentOrganization.mockReturnValue(ok(lumen));
+    const verified: Promise<void> = firstValueFrom(pin.organizationVerified);
+    pending.next(true);
+    pending.complete();
+    expect(await navigation).toBe(true);
+    await verified;
+    await harness.fixture.whenStable();
+    expect(session.switchOrganization).toHaveBeenCalledWith(atelierNord.id);
+    expect(pin.stale()).toBe(false);
+    const resumed: Promise<unknown> = TestBed.runInInjectionContext(() =>
+      firstValueFrom(
+        organizationPinInterceptor(
+          new HttpRequest('GET', '/v1/tasks/CAD-1', {
+            context: new HttpContext().set(PASSIVE_REQUEST, true),
+          }),
+          next,
+        ),
+      ),
+    );
+    await expect(resumed).resolves.toBeInstanceOf(HttpResponse);
+  });
+
   it('revalidates a passive mismatch that arrives while already focused', async () => {
     TestBed.overrideProvider(RuntimeConfigStore, {
       useValue: { config: () => ({ apiUrl: 'https://api.example.test' }) },
@@ -419,9 +505,15 @@ describe('WORKSPACE_ROUTES', () => {
     expect(pin.stale()).toBe(false);
   });
 
-  it.each(['cancelled', 'superseded', 'failed'] as const)(
-    'retries a %s stale recovery and resumes passive requests',
-    async (outcome: 'cancelled' | 'superseded' | 'failed') => {
+  it.each([
+    ['cancelled', false],
+    ['superseded', false],
+    ['failed', false],
+    ['cancelled', true],
+    ['failed', true],
+  ] as const)(
+    'retries a %s recovery (active: %s) and resumes passive requests',
+    async (outcome: 'cancelled' | 'superseded' | 'failed', active: boolean) => {
       TestBed.overrideProvider(RuntimeConfigStore, {
         useValue: { config: () => ({ apiUrl: 'https://api.example.test' }) },
       });
@@ -455,7 +547,22 @@ describe('WORKSPACE_ROUTES', () => {
           ),
         ),
       );
-      pin.markStale();
+      if (active) {
+        const mismatch: Promise<unknown> = TestBed.runInInjectionContext(() =>
+          firstValueFrom(
+            organizationPinInterceptor(new HttpRequest('GET', '/v1/tasks/CAD-1'), () =>
+              throwError(
+                () =>
+                  new HttpErrorResponse({
+                    status: 412,
+                    error: { code: 'organization.context-changed' },
+                  }),
+              ),
+            ),
+          ),
+        );
+        await expect(mismatch).rejects.toBeInstanceOf(HttpErrorResponse);
+      } else pin.markStale();
       focus.mockReturnValue(false);
       if (outcome === 'superseded') {
         await vi.waitFor(() => {
@@ -474,13 +581,26 @@ describe('WORKSPACE_ROUTES', () => {
       await Promise.resolve();
       await Promise.resolve();
       expect(pin.stale()).toBe(true);
+      const fencedNext: Mock = vi.fn(() => of(new HttpResponse({ status: 200 })));
+      const fenced: Promise<unknown> = TestBed.runInInjectionContext(() =>
+        firstValueFrom(
+          organizationPinInterceptor(
+            new HttpRequest('GET', '/v1/tasks/CAD-1', {
+              context: new HttpContext().set(PASSIVE_REQUEST, true),
+            }),
+            fencedNext,
+          ),
+        ),
+      );
+      await expect(fenced).rejects.toBeInstanceOf(OrganizationSwitchPendingError);
+      expect(fencedNext).not.toHaveBeenCalled();
       clock.mockReturnValue(Date.now() + 2000);
       const verification: Promise<NavigationEnd> = firstValueFrom(
         router.events.pipe(
           filter((event): event is NavigationEnd => event instanceof NavigationEnd),
         ),
       );
-      focus.mockReturnValue(true);
+      if (!active) focus.mockReturnValue(true);
       window.dispatchEvent(new Event('focus'));
       await verification;
       await harness.fixture.whenStable();
