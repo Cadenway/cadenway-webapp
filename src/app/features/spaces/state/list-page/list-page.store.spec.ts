@@ -210,6 +210,79 @@ describe('ListPageStore', () => {
     expect(store.savedViews.value()).toEqual([bugsCritiques]);
   });
 
+  it('keeps the saved views read pending or failed when a creation completes', async () => {
+    let resolveViews: (views: readonly SavedView[]) => void = () => undefined;
+    api['savedViews'].mockReturnValueOnce(
+      new Promise<readonly SavedView[]>((resolve) => {
+        resolveViews = resolve;
+      }),
+    );
+    store.load('l-sprint14');
+    await expect.poll(() => store.savedViews.isLoading()).toBe(true);
+    const created: SavedView = { ...bugsCritiques, id: 'sv-new' };
+    api['createSavedView'].mockResolvedValue(created);
+    expect(
+      await store.createView({ name: 'New', icon: null }, 'list', DEFAULT_VIEW_CONFIG),
+    ).toEqual(created);
+    expect(store.savedViews.isLoading()).toBe(true);
+    resolveViews([bugsCritiques, created]);
+    await expect.poll(() => store.savedViews.hasValue()).toBe(true);
+    expect(store.savedViews.value()).toEqual([bugsCritiques, created]);
+
+    api['savedViews'].mockRejectedValueOnce(new Error('unavailable'));
+    store.savedViews.reload();
+    await expect.poll(() => store.savedViews.status()).toBe('error');
+    expect(
+      await store.createView({ name: 'New', icon: null }, 'list', DEFAULT_VIEW_CONFIG),
+    ).toEqual(created);
+    expect(store.savedViews.status()).toBe('error');
+    expect(store.savedViews.error()).toBeTruthy();
+  });
+
+  it('does not overwrite a failed read when a creation finishes after it', async () => {
+    await loaded();
+    let finish: (view: SavedView) => void = () => undefined;
+    api['createSavedView'].mockReturnValueOnce(
+      new Promise<SavedView>((resolve) => {
+        finish = resolve;
+      }),
+    );
+    const pending: Promise<SavedView | null> = store.createView(
+      { name: 'New', icon: null },
+      'list',
+      DEFAULT_VIEW_CONFIG,
+    );
+    api['savedViews'].mockRejectedValueOnce(new Error('unavailable'));
+    store.savedViews.reload();
+    await expect.poll(() => store.savedViews.status()).toBe('error');
+    finish({ ...bugsCritiques, id: 'sv-new' });
+    await pending;
+    expect(store.savedViews.status()).toBe('error');
+  });
+
+  it('restores only the deleted view when other writes succeed before its refusal', async () => {
+    const second: SavedView = { ...bugsCritiques, id: 'sv-second', name: 'Second' };
+    const third: SavedView = { ...bugsCritiques, id: 'sv-third', name: 'Third' };
+    api['savedViews'].mockResolvedValueOnce([bugsCritiques, second, third]);
+    await loaded();
+    let refuse: (reason: unknown) => void = () => undefined;
+    api['deleteSavedView'].mockReturnValueOnce(
+      new Promise<void>((_resolve, reject) => {
+        refuse = reject;
+      }),
+    );
+    const deleting: Promise<boolean> = store.deleteView(second);
+    const renamed: SavedView = { ...third, name: 'Updated' };
+    const created: SavedView = { ...third, id: 'sv-new', name: 'New' };
+    api['updateSavedView'].mockResolvedValueOnce(renamed);
+    api['createSavedView'].mockResolvedValueOnce(created);
+    await store.renameView(third, { name: 'Updated', icon: null });
+    await store.createView({ name: 'New', icon: null }, 'list', DEFAULT_VIEW_CONFIG);
+    refuse(new Error('unavailable'));
+    expect(await deleting).toBe(false);
+    expect(store.savedViews.value()).toEqual([bugsCritiques, second, renamed, created]);
+  });
+
   it('appends a created view and its duplicate after its source', async () => {
     await loaded();
     const created: SavedView = { ...bugsCritiques, id: 'sv-2', name: 'Mes tâches' };

@@ -279,6 +279,17 @@ export class ViewTools {
   public readonly canSave: InputSignal<boolean> = input(false);
 
   /**
+   * Property saveDisabled
+   *
+   * @description
+   * Whether saving a new view is unavailable while its collection is unresolved.
+   *
+   * @type {InputSignal<boolean>}
+   * @readonly
+   */
+  public readonly saveDisabled: InputSignal<boolean> = input(false);
+
+  /**
    * Property milestonesToggled
    *
    * @description

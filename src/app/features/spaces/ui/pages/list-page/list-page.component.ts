@@ -519,7 +519,9 @@ export class ListPage {
       previousList = listId;
     });
 
+    let missingView: string | null = null;
     effect((): void => {
+      const listId: string = this.listId();
       const wanted: string | undefined = this.savedView();
       const views: readonly SavedView[] | undefined = this.store.savedViews.hasValue()
         ? this.store.savedViews.value()
@@ -527,15 +529,29 @@ export class ListPage {
       untracked((): void => {
         const applied: SavedView | null = this.view.savedView();
         if (!wanted) {
+          missingView = null;
           if (applied) this.view.leaveSaved();
           return;
         }
-        if (!views) return;
+        if (!views || this.store.listId() !== listId) return;
         const found: SavedView | undefined = views.find((item: SavedView) => item.id === wanted);
         if (!found) {
           if (applied) this.view.leaveSaved();
-        } else if (applied?.id !== found.id) {
-          this.view.applySaved(found);
+          const key: string = `${listId}:${wanted}`;
+          if (missingView !== key) {
+            missingView = key;
+            this.toasts.info($localize`:@@spaces.saved-view.missing:This view no longer exists`);
+            void this.router.navigate([], {
+              relativeTo: this.route,
+              queryParams: { savedView: null },
+              queryParamsHandling: 'merge',
+              preserveFragment: true,
+              replaceUrl: true,
+            });
+          }
+        } else {
+          missingView = null;
+          if (applied?.id !== found.id) this.view.applySaved(found);
         }
       });
     });
@@ -904,7 +920,13 @@ export class ListPage {
    */
   protected async deleteView(saved: SavedView): Promise<void> {
     const applied: boolean = this.view.savedView()?.id === saved.id;
-    if (applied) this.pickLayout('list');
+    if (applied) {
+      await this.router.navigate(['list'], {
+        relativeTo: this.route,
+        queryParams: { savedView: null },
+        queryParamsHandling: 'merge',
+      });
+    }
     if (!(await this.store.deleteView(saved))) {
       this.toasts.error($localize`:@@spaces.saved.delete-failed:The view could not be deleted`);
       return;

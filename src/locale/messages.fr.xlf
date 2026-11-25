@@ -6216,6 +6216,10 @@
           <context context-type="linenumber">27,29</context>
         </context-group>
       </trans-unit>
+      <trans-unit id="spaces.saved-view.missing" datatype="html">
+        <source>This view no longer exists</source>
+        <target>Cette vue n'existe plus</target>
+      </trans-unit>
       <trans-unit id="spaces.saved.read-failed" datatype="html">
         <source>Saved views could not be loaded.</source>
         <target>Impossible de charger les vues enregistrées.</target>

@@ -532,7 +532,9 @@ function createListPageStore(): Type<ListPageStoreInstance> {
           const created: SavedView | null = await attempt(() =>
             store._api.createSavedView(listId, { ...draft, layout, config }),
           );
-          if (created && store.listId() === listId) store.savedViews.set([...views(), created]);
+          if (created && store.listId() === listId && store.savedViews.hasValue()) {
+            store.savedViews.set([...store.savedViews.value(), created]);
+          }
           return created;
         },
         async renameView(view: SavedView, draft: SavedViewDraft): Promise<SavedView | null> {
@@ -562,13 +564,19 @@ function createListPageStore(): Type<ListPageStoreInstance> {
         },
         async deleteView(view: SavedView): Promise<boolean> {
           const before: readonly SavedView[] = views();
-          store.savedViews.set(before.filter((item: SavedView): boolean => item.id !== view.id));
+          const index: number = before.findIndex((item: SavedView): boolean => item.id === view.id);
+          if (index >= 0) {
+            store.savedViews.set(before.filter((item: SavedView): boolean => item.id !== view.id));
+          }
           try {
             await store._api.deleteSavedView(view);
             return true;
           } catch {
-            if (store.listId() === view.listId && !views().some((item) => item.id === view.id)) {
-              store.savedViews.set(before);
+            if (index >= 0 && store.listId() === view.listId && store.savedViews.hasValue()) {
+              const current: readonly SavedView[] = store.savedViews.value();
+              if (!current.some((item: SavedView): boolean => item.id === view.id)) {
+                store.savedViews.set([...current.slice(0, index), view, ...current.slice(index)]);
+              }
             }
             return false;
           }

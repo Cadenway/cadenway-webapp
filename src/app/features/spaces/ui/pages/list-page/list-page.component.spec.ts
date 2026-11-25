@@ -2,6 +2,7 @@ import { WORKSPACE_CONTEXT } from '@features/workspace/ports/workspace-context';
 
 import { TestBed } from '@angular/core/testing';
 import {
+  Router,
   provideRouter,
   withComponentInputBinding,
   withErrorBoundaries,
@@ -113,6 +114,7 @@ describe('ListPage', () => {
       ),
       archive: vi.fn(() => Promise.reject(new Error('access.role-insufficient'))),
       createSavedView: vi.fn(),
+      deleteSavedView: vi.fn(() => Promise.resolve(undefined)),
     };
     spaceRead = vi.fn(() => Promise.resolve(produit));
     TestBed.configureTestingModule({
@@ -218,6 +220,96 @@ describe('ListPage', () => {
     find('view-chip')?.querySelector<HTMLButtonElement>('button')?.click();
     harness.detectChanges();
     await expect.poll(() => find('view-modified')).not.toBeNull();
+  });
+
+  it('clears a missing saved view with replaceUrl and restores the standard list', async () => {
+    const router: Router = TestBed.inject(Router);
+    const navigate: MockInstance<Router['navigate']> = vi.spyOn(router, 'navigate');
+    const info: MockInstance<CwToastService['info']> = vi.spyOn(
+      TestBed.inject(CwToastService),
+      'info',
+    );
+    const harness: RouterTestingHarness = await open(
+      '/atelier-nord/l/l-bugs/list?savedView=deleted&keep=yes#section',
+    );
+    await expect
+      .poll(() => {
+        harness.detectChanges();
+        return router.url;
+      })
+      .toBe('/atelier-nord/l/l-bugs/list?keep=yes#section');
+    expect(find('view-filter')).not.toBeNull();
+    expect(find('list-rows-placeholder')).not.toBeNull();
+    expect(info).toHaveBeenCalledExactlyOnceWith("Cette vue n'existe plus");
+    expect(navigate).toHaveBeenCalledWith(
+      [],
+      expect.objectContaining({ replaceUrl: true, queryParams: { savedView: null } }),
+    );
+  });
+
+  it('does not report a missing view when the user deletes the applied view', async () => {
+    const info: MockInstance<CwToastService['info']> = vi.spyOn(
+      TestBed.inject(CwToastService),
+      'info',
+    );
+    const harness: RouterTestingHarness = await open(
+      '/atelier-nord/l/l-bugs/list?savedView=sv-bugs',
+    );
+    await expect
+      .poll(() => {
+        harness.detectChanges();
+        return find('saved-view-options');
+      })
+      .not.toBeNull();
+    find('saved-view-options')?.click();
+    harness.detectChanges();
+    await expect.poll(() => find('saved-view-delete')).not.toBeNull();
+    find('saved-view-delete')?.click();
+    await expect
+      .poll(() => {
+        harness.detectChanges();
+        return api['deleteSavedView'].mock.calls.length;
+      })
+      .toBe(1);
+    expect(TestBed.inject(Router).url).not.toContain('savedView=');
+    expect(info).not.toHaveBeenCalled();
+  });
+
+  it('disables saving while saved views load or fail, and enables it after retry', async () => {
+    let rejectViews: (reason: unknown) => void = () => undefined;
+    api['savedViews'].mockReturnValueOnce(
+      new Promise<readonly SavedView[]>((_resolve, reject) => {
+        rejectViews = reject;
+      }),
+    );
+    const harness: RouterTestingHarness = await open('/atelier-nord/l/l-bugs');
+    find('view-group')?.click();
+    harness.detectChanges();
+    const priority: HTMLButtonElement | undefined = [
+      ...document.querySelectorAll<HTMLButtonElement>('[role="menuitemradio"]'),
+    ].find((item) => item.textContent.includes('Priorité'));
+    priority?.click();
+    harness.detectChanges();
+    await expect.poll(() => find('view-save')).not.toBeNull();
+    expect(find('view-save')?.hasAttribute('disabled')).toBe(true);
+    rejectViews(new Error('unavailable'));
+    await expect
+      .poll(() => {
+        harness.detectChanges();
+        return harness.routeNativeElement?.textContent;
+      })
+      .toContain('Impossible de charger les vues enregistrées');
+    expect(find('view-save')?.hasAttribute('disabled')).toBe(true);
+    [...document.querySelectorAll<HTMLButtonElement>('button')]
+      .find((button) => button.textContent.includes('Réessayer'))
+      ?.click();
+    await expect
+      .poll(() => {
+        harness.detectChanges();
+        return find('view-save')?.hasAttribute('disabled');
+      })
+      .toBe(false);
+    expect(api['savedViews']).toHaveBeenCalledTimes(2);
   });
 
   it('resolves a saved assignee id to the member name', async () => {

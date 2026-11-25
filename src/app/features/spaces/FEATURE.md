@@ -117,6 +117,7 @@ breadcrumb, dialog, inline edit, toolbar).
 | ------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------- |
 | `spaces.retry`, `spaces.sidebar.failed`, `spaces.overview.milestones-failed`, `spaces.secondary.*`, `spaces.saved.read-failed` | The mockup draws no failed read.                                           |
 | `spaces.favorite.failed`, `spaces.list.*-failed`, `spaces.saved.failed`, `spaces.saved.delete-failed`, `spaces.bulk.failed`    | The mockup draws no refused write.                                         |
+| `spaces.saved-view.missing`                                                                                                    | The mockup does not show a missing saved-view address.                     |
 | `spaces.save-view.name-required`                                                                                               | The mockup disables the save button rather than showing an error.          |
 | `spaces.list.export-failed`                                                                                                    | Taken from the mockup's « Export impossible ici » title only.              |
 | `spaces.labels.*`                                                                                                              | The bricks' own French defaults, which the mockup does not show as copy.   |

@@ -223,6 +223,7 @@
       size="xs"
       class="ml-auto"
       data-testid="view-save"
+      [disabled]="saveDisabled()"
       (click)="saveRequested.emit()"
     >
       <ng-icon name="phosphorBookmarkSimpleBold" aria-hidden="true" />

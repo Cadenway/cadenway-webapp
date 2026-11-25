@@ -110,7 +110,11 @@
         [savedViews]="store.savedViews.hasValue() ? store.savedViews.value() : []"
         [activeViewId]="view.savedView()?.id ?? null"
         [modified]="view.modified()"
-        [canEdit]="canEdit() && (!savedView() || view.savedView()?.id === savedView())"
+        [canEdit]="
+          canEdit() &&
+          store.savedViews.hasValue() &&
+          (!savedView() || view.savedView()?.id === savedView())
+        "
         (layoutPicked)="pickLayout($event)"
         (savedPicked)="pickSaved($event)"
         (saveRequested)="openSaveDialog()"
@@ -135,6 +139,7 @@
         [savedView]="view.savedView()"
         [modified]="view.modified()"
         [canSave]="view.canSave() && canEdit()"
+        [saveDisabled]="!store.savedViews.hasValue()"
         (milestonesToggled)="view.toggleMilestones()"
         (filterToggled)="view.toggleFilter($event.field, $event.value)"
         (filterCleared)="view.clearFilter($event)"
