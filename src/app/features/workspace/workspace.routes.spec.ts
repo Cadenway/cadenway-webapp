@@ -190,6 +190,17 @@ interface SessionFake {
   // #endregion
 }
 
+/**
+ * Constant RECONNECT_WAIT
+ *
+ * @description
+ * Wait options of the realtime reconnect scenario: a CI runner needs more than the 1 s default to
+ * walk the two admissions.
+ *
+ * @type {{ timeout: number }}
+ */
+const RECONNECT_WAIT: { timeout: number } = { timeout: 5000 };
+
 describe('WORKSPACE_ROUTES', () => {
   let session: SessionFake;
 
@@ -457,7 +468,7 @@ describe('WORKSPACE_ROUTES', () => {
     await vi.waitFor(() => {
       expect(handlers).toHaveLength(1);
       expect(handlers[0].has('hello')).toBe(true);
-    });
+    }, RECONNECT_WAIT);
     handlers[0].get('hello')?.({
       id: '019a7005-6f7a-7b8c-9d0e-1f2a3b4c5d4f',
       type: 'connection.ready.v1',
@@ -471,17 +482,17 @@ describe('WORKSPACE_ROUTES', () => {
     });
     await vi.waitFor(() => {
       expect(joins).toHaveLength(1);
-    });
+    }, RECONNECT_WAIT);
     await harness.navigateByUrl('/lumen');
     await harness.fixture.whenStable();
     expect(disconnects[0]).toHaveBeenCalledOnce();
     await vi.waitFor(() => {
       expect(tickets).toHaveBeenCalledTimes(2);
-    });
+    }, RECONNECT_WAIT);
     await vi.waitFor(() => {
       expect(handlers).toHaveLength(2);
       expect(handlers[1].has('hello')).toBe(true);
-    });
+    }, RECONNECT_WAIT);
     handlers[1].get('hello')?.({
       id: '019a7005-6f7a-7b8c-9d0e-1f2a3b4c5d4f',
       type: 'connection.ready.v1',
@@ -495,7 +506,7 @@ describe('WORKSPACE_ROUTES', () => {
     });
     await vi.waitFor(() => {
       expect(joins).toHaveLength(2);
-    });
+    }, RECONNECT_WAIT);
     expect(joins[1]).toEqual({ kind: 'task', taskKey: 'CAD-1' });
     watch.unsubscribe();
   });

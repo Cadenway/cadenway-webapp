@@ -81,8 +81,10 @@ breadcrumb, dialog, inline edit, toolbar).
     make a saved view « Modifiée ». Another list starts over from the default configuration.
   - `ListRowsStore`, route-scoped on `list`: the rows of the « Liste » view. Grouping is a filter:
     the primary read takes `countTaskGroups`, then cursor pages of each group in the gateway's
-    order with the group's value in the filters, until 50 tasks of open groups are read; `loadMore`
-    reads the next page when the table nears its end. A folded group (« Annulé » by default when
+    order, until 50 tasks of open groups are read; `loadMore` reads the next page when the table
+    nears its end. Existing filters on the grouped field are retained: the data-access service
+    checks membership locally and skips pages without matching members, so a multi-assignee task
+    appears in each matching group without widening the view's filters. A folded group (« Annulé » by default when
     grouping by status) reads its first page only, so its header shows, and reads on when opened.
     Another query reads again and keeps the rows until the answer (superseded reads are aborted);
     another list or organization (`WORKSPACE_CONTEXT`) empties them at once and drops late answers.

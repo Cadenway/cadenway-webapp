@@ -80,8 +80,18 @@ describe('list task adapter', () => {
     });
   });
 
-  it('reads a group with its value in place of the grouped filter', () => {
-    expect(withGroup(query, { groupBy: 'status', value: 'progress' }).status).toEqual(['progress']);
+  it('retains existing filters while adding an unfiltered group value', () => {
+    expect(withGroup(query, { groupBy: 'status', value: 'progress' }).status).toEqual([
+      'todo',
+      'progress',
+    ]);
+    expect(
+      withGroup({ ...query, priority: ['haute'] }, { groupBy: 'priority', value: 'basse' })
+        .priority,
+    ).toEqual(['haute']);
+    expect(
+      withGroup({ ...query, assignee: ['a'] }, { groupBy: 'assignee', value: 'b' }).assignee,
+    ).toEqual(['a']);
     expect(withGroup(query, { groupBy: 'assignee', value: 'none' }).assignee).toEqual(['none']);
     expect(withGroup(query, null)).toBe(query);
   });

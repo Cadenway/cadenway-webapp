@@ -118,7 +118,8 @@ export class ListTasksApi {
    * Method page
    *
    * @description
-   * Reads one cursor page of the tasks of the view, restricted to one group when given.
+   * Reads tasks in the view's order, retaining its filters and checking group membership locally.
+   * Pages with no matching group members are skipped until a match or the last cursor.
    *
    * @param {string} listId - The list.
    * @param {ListTaskQuery} query - The view's query.
@@ -138,13 +139,32 @@ export class ListTasksApi {
     signal?: AbortSignal,
   ): Promise<ListTaskPage> {
     try {
-      const page: TaskSummaryPage = await abortableRead(
-        this.queries.queryListTasks(listId, toListTasksQuery(query, group, cursor, limit), {
-          cache: 'no-store',
-        }),
-        signal,
-      );
-      return toListTaskPage(page);
+      let nextCursor: string | null = cursor;
+      for (;;) {
+        const page: TaskSummaryPage = await abortableRead(
+          this.queries.queryListTasks(listId, toListTasksQuery(query, group, nextCursor, limit), {
+            cache: 'no-store',
+          }),
+          signal,
+        );
+        const mapped: ListTaskPage = toListTaskPage(page);
+        const items: readonly TaskSummary[] = group
+          ? mapped.items.filter((task: TaskSummary): boolean => {
+              switch (group.groupBy) {
+                case 'status':
+                  return task.status === group.value;
+                case 'priority':
+                  return task.priority === group.value;
+                case 'assignee':
+                  return group.value === 'none'
+                    ? task.assigneeIds.length === 0
+                    : task.assigneeIds.includes(group.value);
+              }
+            })
+          : mapped.items;
+        if (items.length > 0 || mapped.nextCursor === null) return { ...mapped, items };
+        nextCursor = mapped.nextCursor;
+      }
     } catch (error: unknown) {
       throw toRouteError(error, 'list', listId);
     }
