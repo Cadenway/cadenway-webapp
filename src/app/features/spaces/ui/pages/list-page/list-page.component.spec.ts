@@ -15,6 +15,7 @@ import { beforeEach, describe, expect, it, type Mock, type MockInstance, vi } fr
 
 import { RouteErrorBoundary } from '@features/errors/ui/components/route-error-boundary/route-error-boundary.component';
 
+import { ListTasksApi } from '../../../data-access/services/list-tasks-api/list-tasks-api.service';
 import { ListsApi } from '../../../data-access/services/lists-api/lists-api.service';
 import { SpacesApi } from '../../../data-access/services/spaces-api/spaces-api.service';
 import type { SavedView } from '../../../models/saved-view/saved-view.interface';
@@ -133,6 +134,14 @@ describe('ListPage', () => {
         },
         { provide: ListsApi, useValue: api },
         {
+          provide: ListTasksApi,
+          useValue: {
+            groups: vi.fn(() => Promise.resolve([{ value: 'todo', count: 0 }])),
+            page: vi.fn(() => Promise.resolve({ items: [], nextCursor: null, total: 0 })),
+            subtasks: vi.fn(() => Promise.resolve([])),
+          },
+        },
+        {
           provide: SpacesApi,
           useValue: {
             space: spaceRead,
@@ -186,7 +195,7 @@ describe('ListPage', () => {
     await expect.poll(() => find('list-breadcrumb-space')?.textContent ?? '').toContain('Produit');
     expect(find('list-description')?.textContent).toContain('3 tâches');
     expect(find('list-description')?.textContent).toContain('0 % terminé');
-    expect(find('list-rows-placeholder')).not.toBeNull();
+    expect(find('list-rows')).not.toBeNull();
     expect(find('view-tabs')?.textContent).toContain('Liste');
     expect(find('view-group')?.textContent).toContain('Grouper : statut');
     expect(find('view-chips')?.textContent).toContain('Aucun filtre');
@@ -239,7 +248,7 @@ describe('ListPage', () => {
       })
       .toBe('/atelier-nord/l/l-bugs/list?keep=yes#section');
     expect(find('view-filter')).not.toBeNull();
-    expect(find('list-rows-placeholder')).not.toBeNull();
+    expect(find('list-rows')).not.toBeNull();
     expect(info).toHaveBeenCalledExactlyOnceWith("Cette vue n'existe plus");
     expect(navigate).toHaveBeenCalledWith(
       [],
@@ -363,7 +372,7 @@ describe('ListPage', () => {
       })
       .toContain('Impossible de charger les vues enregistrées');
     expect(find('view-filter')).toBeNull();
-    expect(find('list-rows-placeholder')).toBeNull();
+    expect(find('list-rows')).toBeNull();
     find('list-more')?.click();
     harness.detectChanges();
     await expect.poll(() => find('list-export')).not.toBeNull();

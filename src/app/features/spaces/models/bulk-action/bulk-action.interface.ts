@@ -44,3 +44,58 @@ export type BulkAction =
   | { readonly type: 'assign'; readonly userId: string }
   | { readonly type: 'move'; readonly listId: string }
   | { readonly type: 'trash' };
+
+/**
+ * Constant BULK_CHUNK_SIZE
+ *
+ * @description
+ * Tasks one `executeBulkTaskAction` call takes at most; a larger selection is sent in several
+ * calls, each one atomic.
+ *
+ * @type {number}
+ */
+export const BULK_CHUNK_SIZE: number = 50;
+
+/**
+ * Interface BulkOutcome
+ *
+ * @description
+ * What a bulk action changed: each chunk of the selection succeeds or fails as a whole, so a
+ * selection over 50 tasks may change in part.
+ */
+export interface BulkOutcome {
+  // #region Properties
+  /**
+   * Property affected
+   *
+   * @description
+   * Task rows the succeeded chunks changed, subtrees included.
+   *
+   * @type {number}
+   * @readonly
+   */
+  readonly affected: number;
+
+  /**
+   * Property done
+   *
+   * @description
+   * Selected tasks of the succeeded chunks.
+   *
+   * @type {readonly BulkSelection[]}
+   * @readonly
+   */
+  readonly done: readonly BulkSelection[];
+
+  /**
+   * Property failed
+   *
+   * @description
+   * Selected tasks of the refused chunks, unchanged.
+   *
+   * @type {readonly BulkSelection[]}
+   * @readonly
+   */
+  readonly failed: readonly BulkSelection[];
+  // #endregion
+}

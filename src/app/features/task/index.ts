@@ -13,6 +13,10 @@ export {
   type TaskCancelRequest,
   TaskStatusChangesStore,
 } from './state/task-status-changes/task-status-changes.store';
+export {
+  type TaskFieldChange,
+  TaskFieldChangesStore,
+} from './state/task-field-changes/task-field-changes.store';
 export { TaskDueDate } from './ui/components/task-due-date/task-due-date.component';
 export { TaskLabelChips } from './ui/components/task-label-chips/task-label-chips.component';
 export { TaskLabelPicker } from './ui/components/task-label-picker/task-label-picker.component';
@@ -28,3 +32,4 @@ export {
   pickableStatuses,
   statusLabel,
 } from './utils/task-status/task-status.util';
+export { initialsOf, personOf } from './utils/person/person.util';

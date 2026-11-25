@@ -1,3 +1,4 @@
+import { DestroyRef } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { describe, expect, it } from 'vitest';
 
@@ -32,6 +33,30 @@ describe('TaskCreate', () => {
     taskCreate.open({ listId: 'sprint-14', parentKey: 'CAD-482' });
     expect(taskCreate.open()).toBe(false);
     expect(taskCreate.options()).toEqual({ listId: 'sprint-14', parentKey: 'CAD-482' });
+  });
+
+  it('opens without options in the list the current screen gives, until it is destroyed', () => {
+    const taskCreate: TaskCreate = TestBed.inject(TaskCreate);
+    const callbacks: (() => void)[] = [];
+    const screen: DestroyRef = {
+      destroyed: false,
+      onDestroy: (callback: () => void) => {
+        callbacks.push(callback);
+        return () => undefined;
+      },
+    };
+    taskCreate.useDefaults(() => ({ listId: 'sprint-14' }), screen);
+
+    taskCreate.open();
+    expect(taskCreate.options()).toEqual({ listId: 'sprint-14' });
+    taskCreate.close();
+    taskCreate.open({ listId: 'backlog' });
+    expect(taskCreate.options()).toEqual({ listId: 'backlog' });
+    taskCreate.close();
+
+    for (const callback of callbacks) callback();
+    taskCreate.open();
+    expect(taskCreate.options()).toEqual({});
   });
 
   it('announces the created tasks', () => {

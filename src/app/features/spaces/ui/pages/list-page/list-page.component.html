@@ -149,6 +149,7 @@
         (groupChanged)="view.setGroupBy($event)"
         (subtasksChanged)="view.setSubtasks($event)"
         (searchChanged)="view.setSearch($event)"
+        (taskCreated)="createTask()"
         (saveRequested)="openSaveDialog()"
         (savedReverted)="view.revert()"
         (savedUpdated)="saveSettings()"

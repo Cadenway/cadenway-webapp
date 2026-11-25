@@ -505,6 +505,18 @@ interface TaskStatusChangesInstance {
   settledStatus(task: TaskSummary): StatusKey;
 
   /**
+   * Method settledTask
+   *
+   * @description
+   * The task with its settled status, reason and version while the store's write is in flight or
+   * newer than the caller's copy, so the next write of another field goes against that version.
+   *
+   * @param {TaskSummary} task - The caller's copy of the task.
+   * @returns {TaskSummary} The task as its settled status change left it.
+   */
+  settledTask(task: TaskSummary): TaskSummary;
+
+  /**
    * Method request
    *
    * @description
@@ -910,6 +922,17 @@ function createTaskStatusChanges(): Type<TaskStatusChangesInstance> {
             return store._pending()[task.id]?.status ?? settledStatus(task);
           },
           settledStatus,
+          settledTask(task: TaskSummary): TaskSummary {
+            const entry: SettledStatus | null = settledOf(store._settled(), task);
+            return entry
+              ? {
+                  ...task,
+                  status: entry.status,
+                  cancelReason: entry.cancelReason,
+                  version: Math.max(entry.version, task.version),
+                }
+              : task;
+          },
           request(task: TaskSummary, status: StatusKey, options?: readonly StatusOption[]): void {
             if (batches.has(task.id)) finishBatch(task.id);
             patchState(store, (state: TaskStatusChangesState) => ({

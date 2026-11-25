@@ -24,7 +24,12 @@ import { type RealtimeChange, RealtimeConnection } from '@core/realtime';
 
 import { type ListExport, ListsApi } from '../../data-access/services/lists-api/lists-api.service';
 import { SpacesApi } from '../../data-access/services/spaces-api/spaces-api.service';
-import type { BulkAction, BulkSelection } from '../../models/bulk-action/bulk-action.interface';
+import {
+  BULK_CHUNK_SIZE,
+  type BulkAction,
+  type BulkOutcome,
+  type BulkSelection,
+} from '../../models/bulk-action/bulk-action.interface';
 import type { ListMember, ListMembers } from '../../models/list-member/list-member.interface';
 import type {
   ListTaskQuery,
@@ -307,13 +312,15 @@ export interface ListPageStoreInstance {
    * Method bulk
    *
    * @description
-   * Applies an action of the selection bar, then reads the counts again.
+   * Applies an action of the selection bar in chunks of 50 tasks, one `executeBulkTaskAction`
+   * call after the other (each chunk succeeds or fails as a whole), then reads the counts again
+   * when a chunk changed something.
    *
    * @param {readonly BulkSelection[]} selection - Selected tasks.
    * @param {BulkAction} action - Action.
-   * @returns {Promise<number | null>} Rows affected, or null when refused (nothing changed).
+   * @returns {Promise<BulkOutcome>} What changed and what was refused.
    */
-  bulk(selection: readonly BulkSelection[], action: BulkAction): Promise<number | null>;
+  bulk(selection: readonly BulkSelection[], action: BulkAction): Promise<BulkOutcome>;
   // #endregion
 }
 
@@ -581,14 +588,22 @@ function createListPageStore(): Type<ListPageStoreInstance> {
             return false;
           }
         },
-        async bulk(
-          selection: readonly BulkSelection[],
-          action: BulkAction,
-        ): Promise<number | null> {
-          if (selection.length === 0) return 0;
-          const affected: number | null = await attempt(() => store._api.bulk(selection, action));
-          if (affected !== null) reloadCounts();
-          return affected;
+        async bulk(selection: readonly BulkSelection[], action: BulkAction): Promise<BulkOutcome> {
+          let affected: number = 0;
+          const done: BulkSelection[] = [];
+          const failed: BulkSelection[] = [];
+          for (let start: number = 0; start < selection.length; start += BULK_CHUNK_SIZE) {
+            const chunk: readonly BulkSelection[] = selection.slice(start, start + BULK_CHUNK_SIZE);
+            const changed: number | null = await attempt(() => store._api.bulk(chunk, action));
+            if (changed === null) {
+              failed.push(...chunk);
+            } else {
+              affected += changed;
+              done.push(...chunk);
+            }
+          }
+          if (done.length > 0) reloadCounts();
+          return { affected, done, failed };
         },
       };
     }),

@@ -27,6 +27,7 @@ import { CwSkeleton } from '@cadenway/ui/components/skeleton';
 import { CwToastService } from '@cadenway/ui/components/toast';
 import { NgIcon } from '@ng-icons/core';
 
+import { TaskCreate } from '@features/task';
 import { SHELL_SIDEBAR, type ShellSidebar } from '@shared/layout-slot';
 
 import { layoutLabels, statusLabels } from '../../../constants/view-labels/view-labels.constants';
@@ -202,6 +203,17 @@ export class ListPage {
    * @readonly
    */
   private readonly toasts: CwToastService = inject(CwToastService);
+
+  /**
+   * Property taskCreate
+   *
+   * @description
+   * The task create dialog, which « Créer une tâche » opens in this list.
+   *
+   * @type {TaskCreate}
+   * @readonly
+   */
+  private readonly taskCreate: TaskCreate = inject(TaskCreate);
 
   /**
    * Property router
@@ -572,6 +584,16 @@ export class ListPage {
     return list.sprint
       ? formatSprintRange(list.sprint.startDate, list.sprint.endDate, this.locale)
       : null;
+  }
+
+  /**
+   * Method createTask
+   *
+   * @description
+   * « Créer une tâche » of the view tools: opens the create dialog in this list.
+   */
+  protected createTask(): void {
+    this.taskCreate.open({ listId: this.listId() });
   }
 
   /**

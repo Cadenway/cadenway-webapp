@@ -1,8 +1,8 @@
-import { HttpErrorResponse } from '@angular/common/http';
+import { HttpErrorResponse, type HttpResponse } from '@angular/common/http';
 import { inject, Service } from '@angular/core';
 import { TasksService, type UpdateTaskClientResult } from '@cadenway/api-client';
-import type { StatusKey } from '@cadenway/contracts';
-import { catchError, map, type Observable, throwError } from 'rxjs';
+import type { PriorityKey, StatusKey } from '@cadenway/contracts';
+import { catchError, map, type MonoTypeOperatorFunction, type Observable, throwError } from 'rxjs';
 
 import { hasProblemCode } from '@core/api';
 
@@ -10,6 +10,41 @@ import type { TaskSummary } from '../../../models/task-summary/task-summary.inte
 import type { TaskCancellation } from '../../../models/task-status-change/task-status-change.interface';
 import { TaskVersionConflict } from '../../../models/task-write-error/task-write-error.model';
 import { toTaskSummary } from '../../adapters/task-summary/task-summary.adapter';
+
+/**
+ * Function ifMatch
+ *
+ * @description
+ * The `If-Match` precondition of a write made against a task version.
+ *
+ * @param {number} version - Task version the write was made against.
+ * @returns {Record<string, string>} The header.
+ */
+function ifMatch(version: number): Record<string, string> {
+  return { 'If-Match': `"${version.toString()}"` };
+}
+
+/**
+ * Function versionConflicts
+ *
+ * @description
+ * Turns a `412` other than an organization change into `TaskVersionConflict`, so the caller
+ * reads the task again; any other error passes unchanged.
+ *
+ * @param {string} taskKey - Key of the written task.
+ * @returns {MonoTypeOperatorFunction<T>} The operator.
+ */
+function versionConflicts<T>(taskKey: string): MonoTypeOperatorFunction<T> {
+  return catchError((error: unknown) =>
+    throwError(() =>
+      error instanceof HttpErrorResponse &&
+      error.status === 412 &&
+      !hasProblemCode(error, 'organization.context-changed')
+        ? new TaskVersionConflict(taskKey)
+        : error,
+    ),
+  );
+}
 
 /**
  * Service TaskApi
@@ -64,19 +99,77 @@ export class TaskApi {
               cancelNote: cancellation.note === '' ? null : cancellation.note,
             }
           : { status },
-        { headers: { 'If-Match': `"${version.toString()}"` } },
+        { headers: ifMatch(version) },
       )
       .pipe(
         map((task: UpdateTaskClientResult) => toTaskSummary(task)),
-        catchError((error: unknown) =>
-          throwError(() =>
-            error instanceof HttpErrorResponse &&
-            error.status === 412 &&
-            !hasProblemCode(error, 'organization.context-changed')
-              ? new TaskVersionConflict(taskKey)
-              : error,
-          ),
-        ),
+        versionConflicts(taskKey),
+      );
+  }
+
+  /**
+   * Method changePriority
+   *
+   * @description
+   * Sends one priority change with `If-Match`; a `412` other than an organization change rejects
+   * with `TaskVersionConflict`.
+   *
+   * @param {string} taskKey - Key of the task.
+   * @param {number} version - Version the change was made against.
+   * @param {PriorityKey} priority - New priority.
+   * @returns {Observable<TaskSummary>} The task as the gateway saved it, with its new version.
+   */
+  public changePriority(
+    taskKey: string,
+    version: number,
+    priority: PriorityKey,
+  ): Observable<TaskSummary> {
+    return this.client.updateTask(taskKey, { priority }, { headers: ifMatch(version) }).pipe(
+      map((task: UpdateTaskClientResult) => toTaskSummary(task)),
+      versionConflicts(taskKey),
+    );
+  }
+
+  /**
+   * Method assign
+   *
+   * @description
+   * Adds one assignee with `If-Match`; a person already assigned answers the same version.
+   *
+   * @param {string} taskKey - Key of the task.
+   * @param {number} version - Version the change was made against.
+   * @param {string} userId - User id of the person.
+   * @returns {Observable<TaskSummary>} The task as the gateway saved it, with its new version.
+   */
+  public assign(taskKey: string, version: number, userId: string): Observable<TaskSummary> {
+    return this.client.assignTask(taskKey, userId, {}, { headers: ifMatch(version) }).pipe(
+      map((task: UpdateTaskClientResult) => toTaskSummary(task)),
+      versionConflicts(taskKey),
+    );
+  }
+
+  /**
+   * Method unassign
+   *
+   * @description
+   * Removes one assignee with `If-Match`. The gateway answers no body: the version after the
+   * change comes from the `ETag` header, null when the header is missing or unreadable.
+   *
+   * @param {string} taskKey - Key of the task.
+   * @param {number} version - Version the change was made against.
+   * @param {string} userId - User id of the person.
+   * @returns {Observable<number | null>} The version after the change, or null when unknown.
+   */
+  public unassign(taskKey: string, version: number, userId: string): Observable<number | null> {
+    return this.client
+      .unassignTask(taskKey, userId, { headers: ifMatch(version), observe: 'response' })
+      .pipe(
+        map((response: HttpResponse<void>): number | null => {
+          const tag: string | null = response.headers.get('ETag');
+          const parsed: number = Number((tag ?? '').replace(/^W\//u, '').replaceAll('"', ''));
+          return tag !== null && Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+        }),
+        versionConflicts(taskKey),
       );
   }
 

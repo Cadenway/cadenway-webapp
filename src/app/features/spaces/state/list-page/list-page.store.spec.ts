@@ -336,12 +336,44 @@ describe('ListPageStore', () => {
     const calls: number = api['counts'].mock.calls.length;
     api['bulk'].mockResolvedValueOnce(3);
 
-    expect(await store.bulk([{ taskKey: 'CAD-482' }], { type: 'done' })).toBe(3);
+    expect(await store.bulk([{ taskKey: 'CAD-482' }], { type: 'done' })).toEqual({
+      affected: 3,
+      done: [{ taskKey: 'CAD-482' }],
+      failed: [],
+    });
     await expect.poll(() => api['counts'].mock.calls.length).toBe(calls + 1);
 
     api['bulk'].mockRejectedValueOnce(new Error('request.version-mismatch'));
-    expect(await store.bulk([{ taskKey: 'CAD-482' }], { type: 'trash' })).toBeNull();
-    expect(await store.bulk([], { type: 'trash' })).toBe(0);
+    expect(await store.bulk([{ taskKey: 'CAD-482' }], { type: 'trash' })).toEqual({
+      affected: 0,
+      done: [],
+      failed: [{ taskKey: 'CAD-482' }],
+    });
+    expect(await store.bulk([], { type: 'trash' })).toEqual({ affected: 0, done: [], failed: [] });
+  });
+
+  it('sends a selection over 50 in chunks and reports the refused chunk', async () => {
+    await loaded();
+    const selection: { taskKey: string }[] = Array.from(
+      { length: 120 },
+      (_: unknown, index: number) => ({ taskKey: `CAD-${String(400 + index)}` }),
+    );
+    api['bulk']
+      .mockResolvedValueOnce(50)
+      .mockRejectedValueOnce(new Error('request.version-mismatch'))
+      .mockResolvedValueOnce(20);
+
+    const outcome: Awaited<ReturnType<typeof store.bulk>> = await store.bulk(selection, {
+      type: 'done',
+    });
+
+    expect(api['bulk']).toHaveBeenCalledTimes(3);
+    expect(api['bulk'].mock.calls.map((call: unknown[]) => (call[0] as unknown[]).length)).toEqual([
+      50, 50, 20,
+    ]);
+    expect(outcome.affected).toBe(70);
+    expect(outcome.done).toHaveLength(70);
+    expect(outcome.failed).toEqual(selection.slice(50, 100));
   });
 
   it('reports the list writes', async () => {
