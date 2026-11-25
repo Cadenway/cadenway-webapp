@@ -3,6 +3,7 @@ import {
   inject,
   resource,
   type ResourceRef,
+  type ResourceStatus,
   type Signal,
   type Type,
 } from '@angular/core';
@@ -178,25 +179,38 @@ function createSpaceOverviewStore(): Type<SpaceOverviewStoreInstance> {
         }),
       };
     }),
-    withMethods((store) => ({
-      load: signalMethod<string>((spaceId: string): void => {
-        if (spaceId !== store.spaceId()) patchState(store, { spaceId });
-      }),
-      _followNavigation: signalMethod<SpaceOverview | undefined>(
-        (next: SpaceOverview | undefined): void => {
-          if (next === undefined) return;
-          if (
-            next.spaceId !== store.spaceId() ||
-            store.overview.isLoading() ||
-            !store.overview.hasValue() ||
-            store.overview.value() === next
-          ) {
-            return;
-          }
+    withMethods((store) => {
+      // The sidebar's overview received while the page's own read runs, applied once it ends.
+      let pending: SpaceOverview | undefined;
+      const apply: (next: SpaceOverview) => void = (next: SpaceOverview): void => {
+        if (
+          next.spaceId === store.spaceId() &&
+          store.overview.hasValue() &&
+          store.overview.value() !== next
+        ) {
           store.overview.set(next);
-        },
-      ),
-    })),
+        }
+      };
+      return {
+        load: signalMethod<string>((spaceId: string): void => {
+          if (spaceId !== store.spaceId()) patchState(store, { spaceId });
+        }),
+        _followNavigation: signalMethod<SpaceOverview | undefined>(
+          (next: SpaceOverview | undefined): void => {
+            if (next === undefined) return;
+            if (next.spaceId !== store.spaceId()) return;
+            if (store.overview.isLoading()) pending = next;
+            else apply(next);
+          },
+        ),
+        _flushNavigation: signalMethod<ResourceStatus>((status: ResourceStatus): void => {
+          if (status === 'loading' || status === 'reloading' || pending === undefined) return;
+          const next: SpaceOverview = pending;
+          pending = undefined;
+          apply(next);
+        }),
+      };
+    }),
     withHooks({
       onInit(store): void {
         store._followNavigation(
@@ -208,6 +222,7 @@ function createSpaceOverviewStore(): Type<SpaceOverviewStoreInstance> {
               : undefined;
           }),
         );
+        store._flushNavigation(store.overview.status);
       },
     }),
   );

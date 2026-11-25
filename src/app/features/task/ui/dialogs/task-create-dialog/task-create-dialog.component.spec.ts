@@ -448,6 +448,32 @@ describe('TaskCreateDialog', () => {
     expect(document.querySelector('cw-dialog-footer [role="alert"]')).toBeNull();
   });
 
+  it('drops a server issue for good once its field changes', async () => {
+    create.mockReturnValueOnce(
+      throwError(
+        () =>
+          new HttpErrorResponse({
+            status: 422,
+            error: { details: { issues: [{ path: 'name' }] } },
+          }),
+      ),
+    );
+    TestBed.inject(TaskCreate).open({ listId: 'sprint-14' });
+    await fixture.whenStable();
+    typeName('Préparer la démo');
+    await fixture.whenStable();
+    buttonNamed('Créer la tâche')?.click();
+    await fixture.whenStable();
+    expect(buttonNamed('Créer la tâche')?.disabled).toBe(true);
+
+    typeName('Préparer la démo du jeudi');
+    await fixture.whenStable();
+    typeName('Préparer la démo');
+    await fixture.whenStable();
+
+    expect(buttonNamed('Créer la tâche')?.disabled).toBe(false);
+  });
+
   it('starts each opening without the issues a refused creation left', async () => {
     create.mockReturnValueOnce(
       throwError(

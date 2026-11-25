@@ -509,8 +509,9 @@ export class TaskCreateDialog {
    *
    * @description
    * The fields a refused creation (422) named, each with the value it had then. A field's error
-   * stays until its value changes; each opening starts without any, which submission errors of
-   * Signal Forms could not offer (they survive a reset).
+   * goes for good once its value changes, even if it comes back to the refused value; each opening
+   * starts without any, which submission errors of Signal Forms could not offer (they survive a
+   * reset).
    *
    * @type {WritableSignal<Readonly<Partial<Record<ServerIssueField, unknown>>>>}
    * @readonly
@@ -672,6 +673,19 @@ export class TaskCreateDialog {
       },
       this.destroyRef,
     );
+    effect(() => {
+      const issues: Readonly<Partial<Record<ServerIssueField, unknown>>> = this.serverIssues();
+      const model: TaskCreateModel = this.model();
+      const kept: [string, unknown][] = Object.entries(issues).filter(
+        ([field, value]: [string, unknown]): boolean =>
+          (field === 'form' ? model : model[field as Exclude<ServerIssueField, 'form'>]) === value,
+      );
+      if (kept.length !== Object.keys(issues).length) {
+        untracked((): void => {
+          this.serverIssues.set(Object.fromEntries(kept));
+        });
+      }
+    });
     effect(() => {
       const open: boolean = this.taskCreate.isOpen();
       const organizationId: string = this.workspace.organization().id;
