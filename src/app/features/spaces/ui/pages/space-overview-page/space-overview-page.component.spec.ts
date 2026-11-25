@@ -231,6 +231,31 @@ describe('SpaceOverviewPage', () => {
     expect(navigation.overviews.value()?.['sp-design']).toEqual(overview);
   });
 
+  it('never brings its offered read back after a newer sidebar read and a failed one', async () => {
+    const navigation: InstanceType<typeof SpacesNavigationStore> =
+      TestBed.inject(SpacesNavigationStore);
+    api['overview'].mockRejectedValueOnce(new Error('unavailable'));
+    await expect.poll(() => navigation.overviews.hasValue()).toBe(true);
+    const harness: RouterTestingHarness = await RouterTestingHarness.create(
+      '/atelier-nord/spaces/sp-design',
+    );
+    await expect.poll(() => navigation.overviews.value()?.['sp-design']).toEqual(overview);
+
+    api['overview'].mockResolvedValueOnce({
+      ...overview,
+      taskCount: 33,
+      lists: [{ ...overview.lists[0], counts: { ...overview.lists[0].counts, total: 33 } }],
+    });
+    navigation.overviews.reload();
+    await expect.poll(() => text(harness, 'list-card')).toContain('33 tâches');
+    api['overview'].mockRejectedValueOnce(new Error('unavailable'));
+    navigation.overviews.reload();
+    await expect.poll(() => navigation.overviews.status()).toBe('resolved');
+
+    expect(navigation.overviews.value()).toEqual({});
+    expect(text(harness, 'list-card')).toContain('33 tâches');
+  });
+
   it('recovers a failed own read with a newer sidebar value received during it', async () => {
     const navigation: InstanceType<typeof SpacesNavigationStore> =
       TestBed.inject(SpacesNavigationStore);

@@ -295,8 +295,10 @@ function createSpacesNavigationStore(): Type<SpacesNavigationStoreInstance> {
           api.spaces(abortSignal),
       });
       const readOrders: WeakMap<SpaceOverview, number> = new WeakMap<SpaceOverview, number>();
-      // The newest read of each space offered by a reader of a space overview, which a sidebar
-      // read begun before it never replaces.
+      // The place of the newest read of each space that landed, whoever read it.
+      const landed: Map<string, number> = new Map<string, number>();
+      // A read of a space offered by a reader of a space overview, kept while no newer read of
+      // that space has landed, which a sidebar read begun before it never replaces.
       const offered: Map<string, { overview: SpaceOverview; order: number }> = new Map<
         string,
         { overview: SpaceOverview; order: number }
@@ -307,12 +309,18 @@ function createSpacesNavigationStore(): Type<SpacesNavigationStoreInstance> {
         of: (overview: SpaceOverview): number | undefined => readOrders.get(overview),
         record: (overview: SpaceOverview, order: number): void => {
           readOrders.set(overview, order);
+          if (order > (landed.get(overview.spaceId) ?? 0)) landed.set(overview.spaceId, order);
+          const kept: { overview: SpaceOverview; order: number } | undefined = offered.get(
+            overview.spaceId,
+          );
+          if (kept !== undefined && kept.order < order) offered.delete(overview.spaceId);
         },
       };
       return {
         _api: api,
         _workspace: inject(WORKSPACE_CONTEXT),
         _taskCreate: inject(TaskCreate),
+        _landed: landed,
         _offered: offered,
         overviewOrder,
         spaces,
@@ -461,17 +469,16 @@ function createSpacesNavigationStore(): Type<SpacesNavigationStoreInstance> {
         follow: signalMethod<string>((organizationId: string): void => {
           if (organizationId === store._organizationId()) return;
           store._offered.clear();
+          store._landed.clear();
           patchState(store, {
             _organizationId: organizationId,
             expanded: {},
           });
         }),
         offerOverview(overview: SpaceOverview, order: number): void {
+          // A newer read of the space already landed, offered or not.
+          if ((store._landed.get(overview.spaceId) ?? 0) > order) return;
           store.overviewOrder.record(overview, order);
-          const known: { overview: SpaceOverview; order: number } | undefined = store._offered.get(
-            overview.spaceId,
-          );
-          if (known !== undefined && known.order >= order) return;
           store._offered.set(overview.spaceId, { overview, order });
           // A read in flight takes the offered value when it ends.
           if (store.overviews.isLoading() || !store.overviews.hasValue()) return;
