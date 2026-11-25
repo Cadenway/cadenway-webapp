@@ -765,6 +765,38 @@ describe('InboxStore', () => {
     expect(store.unreadCount()).toBe(0);
   });
 
+  it('recovers passive reads after verification while still connected', async () => {
+    const pin: OrganizationPin = TestBed.inject(OrganizationPin);
+    pin.set('atelier-nord');
+    const store: InstanceType<typeof InboxStore> = await opened();
+    pin.markStale();
+    api.unreadCount.mockReturnValue(throwError(() => new Error('stale')));
+    api.notifications.mockRejectedValue(new Error('stale'));
+    api.pendingReminders.mockRejectedValue(new Error('stale'));
+    connectionStatus.set('reconnecting');
+    TestBed.tick();
+    connectionStatus.set('connected');
+    TestBed.tick();
+    await vi.advanceTimersByTimeAsync(0);
+    TestBed.tick();
+    expect(store.notifications.status()).toBe('error');
+    expect(store.reminders.status()).toBe('error');
+
+    api.unreadCount.mockReturnValue(of(3));
+    api.notifications.mockResolvedValue({ items: [mention], unreadCount: 3 });
+    api.pendingReminders.mockResolvedValue(reminders);
+    pin.set('atelier-nord');
+    await vi.advanceTimersByTimeAsync(0);
+    TestBed.tick();
+    await vi.waitFor(() => {
+      TestBed.tick();
+      expect(store.notifications.hasValue()).toBe(true);
+      expect(store.reminders.hasValue()).toBe(true);
+      expect(store.unreadCount()).toBe(3);
+    });
+    expect(connectionStatus()).toBe('connected');
+  });
+
   it('clears everything and polls the new organization on a switch, ignoring the old answers', async () => {
     const store: InstanceType<typeof InboxStore> = await openedWithTwo();
     const all: Deferred<number> = deferred<number>();
@@ -832,6 +864,9 @@ describe('InboxStore passive requests', () => {
     expect(changed).toHaveBeenCalledOnce();
     expect(store.reminders.error()).toBeDefined();
     pin.set('organization-a');
+    TestBed.tick();
+    const refreshedBadge: TestRequest = http.expectOne('/v1/inbox/unread-count');
+    refreshedBadge.flush({ unreadCount: 0 });
     store.reminders.reload();
     TestBed.tick();
     const retry: TestRequest = http.expectOne((request) => request.url === '/v1/reminders');

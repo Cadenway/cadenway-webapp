@@ -78,7 +78,7 @@
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/account/ui/components/user-menu/user-menu.component.ts</context>
-          <context context-type="linenumber">336</context>
+          <context context-type="linenumber">338</context>
         </context-group>
       </trans-unit>
       <trans-unit id="account.user-menu.theme-dark" datatype="html">
@@ -89,7 +89,7 @@
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/account/ui/components/user-menu/user-menu.component.ts</context>
-          <context context-type="linenumber">335</context>
+          <context context-type="linenumber">337</context>
         </context-group>
       </trans-unit>
       <trans-unit id="account.user-menu.status-online" datatype="html">
@@ -181,8 +181,8 @@
           <context context-type="linenumber">154</context>
         </context-group>
       </trans-unit>
-      <trans-unit id="account.user-menu.avatar-disabled" datatype="html">
-        <source>deactivated</source>
+      <trans-unit id="account.user-menu.avatar-dnd" datatype="html">
+        <source>do not disturb</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/account/ui/components/user-menu/user-menu.component.ts</context>
           <context context-type="linenumber">155</context>
@@ -190,62 +190,84 @@
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/account/ui/components/user-menu/user-menu.component.ts</context>
           <context context-type="linenumber">155</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="account.user-menu.avatar-invisible" datatype="html">
+        <source>invisible</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/account/ui/components/user-menu/user-menu.component.ts</context>
+          <context context-type="linenumber">156</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/account/ui/components/user-menu/user-menu.component.ts</context>
+          <context context-type="linenumber">156</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="account.user-menu.avatar-disabled" datatype="html">
+        <source>deactivated</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/account/ui/components/user-menu/user-menu.component.ts</context>
+          <context context-type="linenumber">157</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/account/ui/components/user-menu/user-menu.component.ts</context>
+          <context context-type="linenumber">157</context>
         </context-group>
       </trans-unit>
       <trans-unit id="account.user-menu.label" datatype="html">
         <source>Account of <x id="name" equiv-text="name"/>, status: <x id="status" equiv-text="current.label"/></source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/account/ui/components/user-menu/user-menu.component.ts</context>
-          <context context-type="linenumber">320</context>
+          <context context-type="linenumber">322</context>
         </context-group>
       </trans-unit>
       <trans-unit id="account.user-menu.label-no-status" datatype="html">
         <source>Account of <x id="name" equiv-text="name"/></source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/account/ui/components/user-menu/user-menu.component.ts</context>
-          <context context-type="linenumber">321</context>
+          <context context-type="linenumber">323</context>
         </context-group>
       </trans-unit>
       <trans-unit id="account.user-menu.status-failed" datatype="html">
         <source>The status could not be changed</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/account/ui/components/user-menu/user-menu.component.ts</context>
-          <context context-type="linenumber">356</context>
+          <context context-type="linenumber">358</context>
         </context-group>
       </trans-unit>
       <trans-unit id="account.user-menu.status-failed-text" datatype="html">
         <source>The server refused it. Try again in a moment.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/account/ui/components/user-menu/user-menu.component.ts</context>
-          <context context-type="linenumber">358</context>
+          <context context-type="linenumber">360</context>
         </context-group>
       </trans-unit>
       <trans-unit id="account.user-menu.status-toast" datatype="html">
         <source>Status: <x id="status" equiv-text="option.label"/></source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/account/ui/components/user-menu/user-menu.component.ts</context>
-          <context context-type="linenumber">384</context>
+          <context context-type="linenumber">386</context>
         </context-group>
       </trans-unit>
       <trans-unit id="account.user-menu.status-toast-text" datatype="html">
         <source><x id="hint" equiv-text="option.hint"/>.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/account/ui/components/user-menu/user-menu.component.ts</context>
-          <context context-type="linenumber">385</context>
+          <context context-type="linenumber">387</context>
         </context-group>
       </trans-unit>
       <trans-unit id="account.user-menu.sign-out-failed" datatype="html">
         <source>Sign-out failed</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/account/ui/components/user-menu/user-menu.component.ts</context>
-          <context context-type="linenumber">429</context>
+          <context context-type="linenumber">431</context>
         </context-group>
       </trans-unit>
       <trans-unit id="account.user-menu.sign-out-failed-text" datatype="html">
         <source>The server did not answer. Try again in a moment.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/account/ui/components/user-menu/user-menu.component.ts</context>
-          <context context-type="linenumber">430</context>
+          <context context-type="linenumber">432</context>
         </context-group>
       </trans-unit>
       <trans-unit id="auth.code.aria-label" datatype="html">
@@ -2495,166 +2517,162 @@
           <context context-type="linenumber">12,14</context>
         </context-group>
       </trans-unit>
-      <trans-unit id="inbox.title" datatype="html">
-        <source>Inbox</source>
-        <context-group purpose="location">
-          <context context-type="sourcefile">src/app/features/inbox/ui/components/inbox-rail-item/inbox-rail-item.component.html</context>
-          <context context-type="linenumber">22</context>
-        </context-group>
-        <context-group purpose="location">
-          <context context-type="sourcefile">src/app/features/inbox/ui/components/inbox-rail-item/inbox-rail-item.component.html</context>
-          <context context-type="linenumber">34,36</context>
-        </context-group>
-      </trans-unit>
       <trans-unit id="inbox.mark-all" datatype="html">
         <source>Mark all as read</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/inbox/ui/components/inbox-rail-item/inbox-rail-item.component.html</context>
-          <context context-type="linenumber">53,54</context>
+          <context context-type="linenumber">52,53</context>
         </context-group>
       </trans-unit>
       <trans-unit id="inbox.tabs" datatype="html">
         <source>Inbox content</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/inbox/ui/components/inbox-rail-item/inbox-rail-item.component.html</context>
-          <context context-type="linenumber">60,61</context>
+          <context context-type="linenumber">59,60</context>
         </context-group>
       </trans-unit>
       <trans-unit id="inbox.tab-notifications" datatype="html">
         <source>Notifications</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/inbox/ui/components/inbox-rail-item/inbox-rail-item.component.html</context>
-          <context context-type="linenumber">64,66</context>
+          <context context-type="linenumber">63,65</context>
         </context-group>
       </trans-unit>
       <trans-unit id="inbox.tab-reminders" datatype="html">
         <source>Reminders</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/inbox/ui/components/inbox-rail-item/inbox-rail-item.component.html</context>
-          <context context-type="linenumber">72,74</context>
+          <context context-type="linenumber">71,73</context>
         </context-group>
       </trans-unit>
       <trans-unit id="inbox.do-not-disturb" datatype="html">
         <source>Do not disturb: notifications paused</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/inbox/ui/components/inbox-rail-item/inbox-rail-item.component.html</context>
-          <context context-type="linenumber">87,89</context>
+          <context context-type="linenumber">86,88</context>
         </context-group>
       </trans-unit>
       <trans-unit id="inbox.notifications-failed" datatype="html">
         <source>The notifications could not be loaded</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/inbox/ui/components/inbox-rail-item/inbox-rail-item.component.html</context>
-          <context context-type="linenumber">106,108</context>
+          <context context-type="linenumber">105,107</context>
         </context-group>
       </trans-unit>
       <trans-unit id="inbox.retry" datatype="html">
         <source> Retry </source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/inbox/ui/components/inbox-rail-item/inbox-rail-item.component.html</context>
-          <context context-type="linenumber">118,119</context>
+          <context context-type="linenumber">117,118</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/inbox/ui/components/inbox-rail-item/inbox-rail-item.component.html</context>
-          <context context-type="linenumber">177,178</context>
+          <context context-type="linenumber">176,177</context>
         </context-group>
       </trans-unit>
       <trans-unit id="inbox.notifications-empty" datatype="html">
         <source>No notifications</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/inbox/ui/components/inbox-rail-item/inbox-rail-item.component.html</context>
-          <context context-type="linenumber">129,130</context>
+          <context context-type="linenumber">128,129</context>
         </context-group>
       </trans-unit>
       <trans-unit id="inbox.notifications-empty-text" datatype="html">
         <source>Mentions, assignments and comments on your tasks will show here.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/inbox/ui/components/inbox-rail-item/inbox-rail-item.component.html</context>
-          <context context-type="linenumber">131,133</context>
+          <context context-type="linenumber">130,132</context>
         </context-group>
       </trans-unit>
       <trans-unit id="inbox.reminders-failed" datatype="html">
         <source>The reminders could not be loaded</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/inbox/ui/components/inbox-rail-item/inbox-rail-item.component.html</context>
-          <context context-type="linenumber">165,167</context>
+          <context context-type="linenumber">164,166</context>
         </context-group>
       </trans-unit>
       <trans-unit id="inbox.reminders-empty" datatype="html">
         <source>No pending reminders</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/inbox/ui/components/inbox-rail-item/inbox-rail-item.component.html</context>
-          <context context-type="linenumber">188,189</context>
+          <context context-type="linenumber">187,188</context>
         </context-group>
       </trans-unit>
       <trans-unit id="inbox.reminders-empty-text" datatype="html">
         <source>Schedule one from a task: the alarm at the top of the detail, or right-click the task.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/inbox/ui/components/inbox-rail-item/inbox-rail-item.component.html</context>
-          <context context-type="linenumber">190,192</context>
+          <context context-type="linenumber">189,191</context>
         </context-group>
       </trans-unit>
       <trans-unit id="inbox.see-all" datatype="html">
         <source>Show everything on the home screen</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/inbox/ui/components/inbox-rail-item/inbox-rail-item.component.html</context>
-          <context context-type="linenumber">220,221</context>
+          <context context-type="linenumber">219,220</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="inbox.title" datatype="html">
+        <source>Inbox</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/inbox/ui/components/inbox-rail-item/inbox-rail-item.component.ts</context>
+          <context context-type="linenumber">98</context>
         </context-group>
       </trans-unit>
       <trans-unit id="inbox.rail.badge" datatype="html">
         <source><x id="count" equiv-text="this.unread()"/> unread</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/inbox/ui/components/inbox-rail-item/inbox-rail-item.component.ts</context>
-          <context context-type="linenumber">260</context>
+          <context context-type="linenumber">271</context>
         </context-group>
       </trans-unit>
       <trans-unit id="inbox.mark-all-failed" datatype="html">
         <source>The notifications could not be marked as read</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/inbox/ui/components/inbox-rail-item/inbox-rail-item.component.ts</context>
-          <context context-type="linenumber">296</context>
+          <context context-type="linenumber">307</context>
         </context-group>
       </trans-unit>
       <trans-unit id="inbox.mark-read-failed" datatype="html">
         <source>The notification could not be marked as read</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/inbox/ui/components/inbox-rail-item/inbox-rail-item.component.ts</context>
-          <context context-type="linenumber">313</context>
+          <context context-type="linenumber">324</context>
         </context-group>
       </trans-unit>
       <trans-unit id="inbox.reminder.snoozed" datatype="html">
         <source>Reminder postponed</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/inbox/ui/components/inbox-rail-item/inbox-rail-item.component.ts</context>
-          <context context-type="linenumber">355</context>
+          <context context-type="linenumber">366</context>
         </context-group>
       </trans-unit>
       <trans-unit id="inbox.reminder.snooze-failed" datatype="html">
         <source>The reminder could not be postponed</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/inbox/ui/components/inbox-rail-item/inbox-rail-item.component.ts</context>
-          <context context-type="linenumber">360</context>
+          <context context-type="linenumber">371</context>
         </context-group>
       </trans-unit>
       <trans-unit id="inbox.reminder.completed" datatype="html">
         <source>Reminder done</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/inbox/ui/components/inbox-rail-item/inbox-rail-item.component.ts</context>
-          <context context-type="linenumber">381</context>
+          <context context-type="linenumber">392</context>
         </context-group>
       </trans-unit>
       <trans-unit id="inbox.reminder.complete-failed" datatype="html">
         <source>The reminder could not be marked as done</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/inbox/ui/components/inbox-rail-item/inbox-rail-item.component.ts</context>
-          <context context-type="linenumber">387</context>
+          <context context-type="linenumber">398</context>
         </context-group>
       </trans-unit>
       <trans-unit id="inbox.write-failed-text" datatype="html">
         <source>The server did not answer. Try again in a moment.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/inbox/ui/components/inbox-rail-item/inbox-rail-item.component.ts</context>
-          <context context-type="linenumber">431</context>
+          <context context-type="linenumber">442</context>
         </context-group>
       </trans-unit>
       <trans-unit id="inbox.notification.unread" datatype="html">

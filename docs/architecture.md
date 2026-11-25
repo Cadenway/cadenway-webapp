@@ -147,18 +147,6 @@ Layouts never import features. Features fill them in three ways:
 - Bricks with their own text receive English source labels from `core/locale` through their labels
   providers. Route titles use `$localize` and go through the application `TitleStrategy`.
 
-## Design-system follow-ups
-
-Generic gaps met while building the shell (step 3). Each is a request to cadenway-design-system,
-then an exact `@cadenway/ui` or `@cadenway/icons` bump here; until then the feature works around it.
-
-- `cw-popover` needs a 384 px size without padding: the inbox popover of `App.dc.html` is `w-96`
-  with edge-to-edge rows, and it uses the padded 320 px `lg` size meanwhile.
-- `cw-avatar` needs the do-not-disturb (garnet dot with a bar) and invisible presence states: the
-  account menu draws its own presence dot over the avatar meanwhile.
-- `@cadenway/icons` lacks the Fill variant of the tray icon (`phosphorTrayFill`): the active inbox
-  rail item keeps `phosphorTrayBold`.
-
 ## Cross-repository changes
 
 Each checkout owns its implementation and release. Use published `@cadenway/*` packages instead of sibling source imports or local dependency links. For contract changes, make the contract and generated package available first, then update the producing service, gateways and listeners, and finally the webapp. Each step should remain deployable independently.

@@ -202,6 +202,14 @@
           <context context-type="linenumber">154</context>
         </context-group>
       </trans-unit>
+      <trans-unit id="account.user-menu.avatar-dnd" datatype="html">
+        <source>do not disturb</source>
+        <target>ne pas déranger</target>
+      </trans-unit>
+      <trans-unit id="account.user-menu.avatar-invisible" datatype="html">
+        <source>invisible</source>
+        <target>invisible</target>
+      </trans-unit>
       <trans-unit id="account.user-menu.avatar-disabled" datatype="html">
         <source>deactivated</source>
         <target>désactivé</target>

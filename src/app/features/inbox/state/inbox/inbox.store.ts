@@ -42,6 +42,7 @@ import {
   timer,
 } from 'rxjs';
 
+import { OrganizationPin } from '@core/api';
 import { RealtimeConnection, type PersonalNotice } from '@core/realtime';
 
 import {
@@ -396,6 +397,7 @@ function createInboxStore(): Type<InboxStoreInstance> {
       return {
         _api: api,
         _workspace: workspace,
+        _pin: inject(OrganizationPin),
         _window: inject(DOCUMENT).defaultView,
         _realtime: inject(RealtimeConnection, { optional: true }),
         _destroyRef: inject(DestroyRef),
@@ -634,6 +636,10 @@ function createInboxStore(): Type<InboxStoreInstance> {
               if (organizationAtStart === organizationVersion) refreshReminders();
             });
         },
+        _verified(): void {
+          refreshNotifications();
+          if (store._isOpen()) refreshReminders();
+        },
         _connected(): void {
           refreshReminders();
           if (!store._isOpen()) return;
@@ -791,6 +797,9 @@ function createInboxStore(): Type<InboxStoreInstance> {
           .subscribe(() => {
             store._connected();
           });
+        store._pin.organizationVerified.pipe(takeUntilDestroyed()).subscribe(() => {
+          if (store._pin.current() === organizationId()) store._verified();
+        });
         const personalNotices: Observable<PersonalNotice> =
           store._realtime?.personalNotices ?? EMPTY;
         toObservable(organizationId)

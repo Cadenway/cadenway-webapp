@@ -87,6 +87,17 @@ import { ReminderRow } from '../reminder-row/reminder-row.component';
 export class InboxRailItem {
   // #region Properties
   /**
+   * Property title
+   *
+   * @description
+   * « Boîte de réception », the popover's accessible name and visible heading.
+   *
+   * @type {string}
+   * @readonly
+   */
+  protected readonly title: string = $localize`:@@inbox.title:Inbox`;
+
+  /**
    * Property workspace
    *
    * @description

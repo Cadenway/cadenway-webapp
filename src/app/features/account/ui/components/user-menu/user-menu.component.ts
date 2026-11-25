@@ -152,6 +152,8 @@ const PRESENCE_OPTIONS: readonly PresenceOption[] = [
       unknown: $localize`:@@account.user-menu.avatar-unknown:Unknown user`,
       online: $localize`:@@account.user-menu.avatar-online:online`,
       away: $localize`:@@account.user-menu.avatar-away:away`,
+      dnd: $localize`:@@account.user-menu.avatar-dnd:do not disturb`,
+      invisible: $localize`:@@account.user-menu.avatar-invisible:invisible`,
       disabled: $localize`:@@account.user-menu.avatar-disabled:deactivated`,
     })),
   ],
