@@ -306,15 +306,14 @@ describe('SpacesNavigationStore', () => {
     expect(api.spaces).toHaveBeenCalledTimes(1);
   });
 
-  it('keeps the previous counts when reading the space of the created task fails', async () => {
+  it('reads every overview again when reading the space of the created task fails', async () => {
     await expect.poll(() => store.overviews.hasValue()).toBe(true);
     const reads: number = api.overview.mock.calls.length;
     api.overview.mockRejectedValueOnce(new Error('unavailable'));
 
     creations.next({ key: 'CAD-483', listId: 'l-backlog', status: 'todo', subtasks: 0 });
 
-    await expect.poll(() => api.overview.mock.calls.length).toBe(reads + 1);
-    await Promise.resolve();
+    await expect.poll(() => api.overview.mock.calls.length).toBe(reads * 2 + 1);
     expect(store.overviews.value()?.['sp-produit']?.taskCount).toBe(30);
   });
 

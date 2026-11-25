@@ -30,6 +30,17 @@ import type { ListSummary, SpaceOverview } from '../../models/task-list/task-lis
 import { isWithin, todayIso } from '../../utils/calendar-date/calendar-date.util';
 
 /**
+ * Constant OVERVIEW_TIMEOUT_MS
+ *
+ * @description
+ * Longest wait for the overview a creation reads, in milliseconds: the creations are read one after
+ * the other, so a stalled read must not hold the next ones back.
+ *
+ * @type {number}
+ */
+const OVERVIEW_TIMEOUT_MS: number = 10_000;
+
+/**
  * Interface SpacesNavigationState
  *
  * @description
@@ -320,7 +331,9 @@ function createSpacesNavigationStore(): Type<SpacesNavigationStoreInstance> {
                 reloadOverviews();
                 return EMPTY;
               }
-              return from(store._api.overview(spaceId, todayIso())).pipe(
+              return from(
+                store._api.overview(spaceId, todayIso(), AbortSignal.timeout(OVERVIEW_TIMEOUT_MS)),
+              ).pipe(
                 tapResponse({
                   next: (overview: SpaceOverview): void => {
                     if (store._organizationId() !== organizationId) return;
@@ -334,7 +347,9 @@ function createSpacesNavigationStore(): Type<SpacesNavigationStoreInstance> {
                       store.overviews.set({ ...before, [spaceId]: overview });
                     }
                   },
-                  error: (): void => undefined,
+                  error: (): void => {
+                    if (store._organizationId() === organizationId) reloadOverviews();
+                  },
                 }),
               );
             }),
@@ -454,10 +469,11 @@ function createSpacesNavigationStore(): Type<SpacesNavigationStoreInstance> {
  * sidebar, the sprint progress and the list screens share one read. Keyed on the organization
  * id committed by the workspace. A switch closes every space and reads again. At most four
  * overviews run at once; a failed read offers an inline retry. A task created from this tab reads
- * the overview of its list's space again, and only that one, one creation after the other: a
- * failed read keeps the previous counts. When that space is unknown, the overviews are loading, or
- * they changed while the space was read, every overview is read again instead (after the read in
- * flight), so an answer never overwrites a newer one and no creation is missed.
+ * the overview of its list's space again, and only that one, one creation after the other, each
+ * read given 10 s. When that space is unknown, the overviews are loading, they changed while the
+ * space was read, or the read failed, every overview is read again instead (after the read in
+ * flight): an answer never overwrites a newer one, no creation is missed, and a space that still
+ * fails shows its Retry.
  * Favorites change optimistically; a refusal restores the previous list.
  *
  * @type {ReturnType<typeof createSpacesNavigationStore>}
