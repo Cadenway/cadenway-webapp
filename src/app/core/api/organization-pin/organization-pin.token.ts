@@ -16,7 +16,7 @@ export const SKIP_ORGANIZATION_PIN: HttpContextToken<boolean> = new HttpContextT
  * Constant PASSIVE_REQUEST
  *
  * @description
- * Marks background requests that must not switch the session organization on a mismatch.
+ * Fences background requests locally while the pinned context is stale.
  *
  * @type {HttpContextToken<boolean>}
  */

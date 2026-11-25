@@ -54,13 +54,12 @@ export function organizationPinInterceptor(
       if (
         organizationId &&
         supported &&
+        revision === pin.revision() &&
         error instanceof HttpErrorResponse &&
         error.status === 412 &&
         hasProblemCode(error, 'organization.context-changed')
       ) {
-        if (request.context.get(PASSIVE_REQUEST)) {
-          if (revision === pin.revision()) pin.markStale();
-        } else pin.notifyContextChanged();
+        pin.notifyContextChanged();
       }
       return throwError(() => error);
     }),

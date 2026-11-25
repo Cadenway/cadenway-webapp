@@ -37,10 +37,11 @@ The root transport provides Angular HTTP to the generated `@cadenway/api-client`
   and CSV exports fetched via a direct download link, bypass HttpClient and remain unpinned. The
   current account avatar uses initials; the list CSV export uses the generated client and is pinned
   before its content is saved through an object URL.
-- A context mismatch marks the pin stale, fencing passive pinned requests until verification. Active
-  requests trigger recovery immediately or after an in-progress navigation; passive mismatches wait
-  until the tab is visible and focused. Failed recovery is retried with bounded backoff.
-  A rejected realtime ticket waits for a verified commit before reconnecting.
+- A context mismatch from the current pin revision marks the pin stale, fencing passive pinned
+  requests until verification. Mismatches from an older verified revision are ignored. Recovery runs
+  only while the document is visible and focused, immediately or after a running navigation ends;
+  otherwise it waits for focus or visibility. Failed recovery retries with bounded backoff. A rejected
+  realtime ticket waits for a verified commit before reconnecting.
 - Pinned cross-origin GETs are not CORS-simple: each distinct URL requires a preflight, including
   search-as-you-type and cursor pages. The gateway caches preflight results for 600 seconds. Deploy a
   gateway release including `cadenway-api-gateway#57` before shipping this image.

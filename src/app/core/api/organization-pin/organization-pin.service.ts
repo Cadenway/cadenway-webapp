@@ -46,7 +46,7 @@ export class OrganizationPin {
    * Property revision
    *
    * @description
-   * Current verified context generation for rejecting obsolete passive failures.
+   * Current verified context generation for rejecting obsolete failures.
    *
    * @type {Signal<number>}
    * @readonly
@@ -232,7 +232,7 @@ export class OrganizationPin {
    * Method notifyContextChanged
    *
    * @description
-   * Marks the context stale and reports an active rejection to workspace recovery listeners.
+   * Marks the context stale and reports the rejection to listeners.
    */
   public notifyContextChanged(): void {
     this.markStale();

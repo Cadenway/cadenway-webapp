@@ -1,5 +1,11 @@
 import { HttpContext, HttpErrorResponse, HttpResponse, HttpRequest } from '@angular/common/http';
-import { Component } from '@angular/core';
+import {
+  DOCUMENT,
+  Component,
+  createEnvironmentInjector,
+  EnvironmentInjector,
+  runInInjectionContext,
+} from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import {
   NavigationCancel,
@@ -34,6 +40,7 @@ import type {
   WorkspaceUser,
 } from './models/workspace-context/workspace-context.interface';
 import { WORKSPACE_ROUTES } from './workspace.routes';
+import { provideWorkspaceRuntime } from './providers/workspace-runtime/workspace-runtime.provider';
 
 vi.mock('socket.io-client', () => ({ io: vi.fn() }));
 
@@ -202,6 +209,8 @@ describe('WORKSPACE_ROUTES', () => {
   let session: SessionFake;
 
   beforeEach(() => {
+    vi.spyOn(document, 'hasFocus').mockReturnValue(true);
+    vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible');
     session = {
       currentUser: vi.fn(() => ok(camille)),
       currentOrganization: vi.fn(() => ok(atelierNord)),
@@ -368,8 +377,6 @@ describe('WORKSPACE_ROUTES', () => {
       ),
     );
     const harness: RouterTestingHarness = await open('/atelier-nord');
-    vi.spyOn(document, 'hasFocus').mockReturnValue(false);
-    vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('hidden');
     const pin: OrganizationPin = TestBed.inject(OrganizationPin);
     const navigation: Promise<boolean> = router.navigateByUrl('/atelier-nord/slow');
     await vi.waitFor(() => {
@@ -424,6 +431,137 @@ describe('WORKSPACE_ROUTES', () => {
       ),
     );
     await expect(resumed).resolves.toBeInstanceOf(HttpResponse);
+  });
+
+  it.each([
+    ['hidden', true],
+    ['visible', false],
+  ] as const)(
+    'waits for foreground after an active mismatch when %s and focus is %s',
+    async (visibility: 'hidden' | 'visible', focused: boolean) => {
+      TestBed.overrideProvider(RuntimeConfigStore, {
+        useValue: { config: () => ({ apiUrl: 'https://api.example.test' }) },
+      });
+      const harness: RouterTestingHarness = await open('/atelier-nord');
+      const router: Router = TestBed.inject(Router);
+      const pin: OrganizationPin = TestBed.inject(OrganizationPin);
+      const focus: Mock<() => boolean> = vi.spyOn(document, 'hasFocus').mockReturnValue(focused);
+      const state: Mock<() => DocumentVisibilityState> = vi
+        .spyOn(document, 'visibilityState', 'get')
+        .mockReturnValue(visibility);
+      const navigation: Mock = vi.spyOn(router, 'navigateByUrl');
+      const mismatch: Promise<unknown> = TestBed.runInInjectionContext(() =>
+        firstValueFrom(
+          organizationPinInterceptor(new HttpRequest('GET', '/v1/tasks/CAD-1'), () =>
+            throwError(
+              () =>
+                new HttpErrorResponse({
+                  status: 412,
+                  error: { code: 'organization.context-changed' },
+                }),
+            ),
+          ),
+        ),
+      );
+      await expect(mismatch).rejects.toBeInstanceOf(HttpErrorResponse);
+      await Promise.resolve();
+      expect(pin.stale()).toBe(true);
+      expect(navigation).not.toHaveBeenCalled();
+      expect(session.switchOrganization).not.toHaveBeenCalled();
+      const verified: Promise<void> = firstValueFrom(pin.organizationVerified);
+      state.mockReturnValue('visible');
+      focus.mockReturnValue(true);
+      window.dispatchEvent(new Event('focus'));
+      await verified;
+      await harness.fixture.whenStable();
+      expect(pin.stale()).toBe(false);
+      expect(navigation).toHaveBeenCalledOnce();
+    },
+  );
+
+  it('keeps a hidden tab from switching the shared session back after the focused tab recovers', async () => {
+    TestBed.overrideProvider(RuntimeConfigStore, {
+      useValue: { config: () => ({ apiUrl: 'https://api.example.test' }) },
+    });
+    const harness: RouterTestingHarness = await open('/atelier-nord');
+    const router: Router = TestBed.inject(Router);
+    const pinA: OrganizationPin = TestBed.inject(OrganizationPin);
+    let sharedOrganization: WorkspaceOrganization = lumen;
+    session.currentOrganization.mockImplementation(() => ok(sharedOrganization));
+    session.switchOrganization.mockImplementation((id: string) => {
+      sharedOrganization = id === atelierNord.id ? atelierNord : lumen;
+      return ok(undefined);
+    });
+    const tabDocument: Document = document.implementation.createHTMLDocument('Background tab');
+    vi.spyOn(tabDocument, 'visibilityState', 'get').mockReturnValue('hidden');
+    vi.spyOn(tabDocument, 'hasFocus').mockReturnValue(false);
+    const events: Subject<NavigationEnd> = new Subject<NavigationEnd>();
+    const navigateB: Mock = vi.fn(() => {
+      sharedOrganization = lumen;
+      return Promise.resolve(true);
+    });
+    const tabB: EnvironmentInjector = createEnvironmentInjector(
+      [
+        OrganizationPin,
+        { provide: DOCUMENT, useValue: tabDocument },
+        {
+          provide: Router,
+          useValue: {
+            url: '/lumen',
+            currentNavigation: () => null,
+            navigateByUrl: navigateB,
+            events,
+          },
+        },
+        ...provideWorkspaceRuntime(),
+      ],
+      TestBed.inject(EnvironmentInjector),
+    );
+    const pinB: OrganizationPin = tabB.get(OrganizationPin);
+    pinB.set(lumen.id);
+    const verified: Promise<void> = firstValueFrom(pinA.organizationVerified);
+    const mismatchA: Promise<unknown> = TestBed.runInInjectionContext(() =>
+      firstValueFrom(
+        organizationPinInterceptor(new HttpRequest('GET', '/v1/spaces/space-a'), () =>
+          throwError(
+            () =>
+              new HttpErrorResponse({
+                status: 412,
+                error: { code: 'organization.context-changed' },
+              }),
+          ),
+        ),
+      ),
+    );
+    await expect(mismatchA).rejects.toBeInstanceOf(HttpErrorResponse);
+    await verified;
+    await harness.fixture.whenStable();
+    expect(sharedOrganization.id).toBe(atelierNord.id);
+    expect(session.switchOrganization).toHaveBeenCalledTimes(1);
+    for (let i: number = 0; i < 3; i++) {
+      const mismatchB: Promise<unknown> = runInInjectionContext(tabB, () =>
+        firstValueFrom(
+          organizationPinInterceptor(new HttpRequest('GET', '/v1/spaces/space-b'), () =>
+            throwError(
+              () =>
+                new HttpErrorResponse({
+                  status: 412,
+                  error: { code: 'organization.context-changed' },
+                }),
+            ),
+          ),
+        ),
+      );
+      await expect(mismatchB).rejects.toBeInstanceOf(HttpErrorResponse);
+      tabDocument.dispatchEvent(new Event('visibilitychange'));
+    }
+    await Promise.resolve();
+    expect(pinB.stale()).toBe(true);
+    expect(navigateB).not.toHaveBeenCalled();
+    expect(sharedOrganization.id).toBe(atelierNord.id);
+    expect(router.url).toBe('/atelier-nord');
+    tabB.destroy();
+    events.complete();
   });
 
   it('revalidates a passive mismatch that arrives while already focused', async () => {
@@ -600,7 +738,7 @@ describe('WORKSPACE_ROUTES', () => {
           filter((event): event is NavigationEnd => event instanceof NavigationEnd),
         ),
       );
-      if (!active) focus.mockReturnValue(true);
+      focus.mockReturnValue(true);
       window.dispatchEvent(new Event('focus'));
       await verification;
       await harness.fixture.whenStable();

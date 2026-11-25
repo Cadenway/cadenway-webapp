@@ -791,7 +791,7 @@ describe('InboxStore passive requests', () => {
     vi.useRealTimers();
   });
 
-  it('marks an initial reminders mismatch stale without requesting revalidation', async () => {
+  it('marks an initial reminders mismatch stale', async () => {
     vi.useFakeTimers();
     TestBed.configureTestingModule({
       providers: [
@@ -810,8 +810,8 @@ describe('InboxStore passive requests', () => {
     });
     const pin: OrganizationPin = TestBed.inject(OrganizationPin);
     pin.set('organization-a');
-    const revalidate: Mock<() => void> = vi.fn();
-    pin.contextChanged.subscribe(revalidate);
+    const changed: Mock<() => void> = vi.fn();
+    pin.contextChanged.subscribe(changed);
     const store: InstanceType<typeof InboxStore> = TestBed.inject(InboxStore);
     TestBed.tick();
     await vi.advanceTimersByTimeAsync(0);
@@ -829,7 +829,7 @@ describe('InboxStore passive requests', () => {
     await vi.advanceTimersByTimeAsync(0);
     TestBed.tick();
     expect(pin.stale()).toBe(true);
-    expect(revalidate).not.toHaveBeenCalled();
+    expect(changed).toHaveBeenCalledOnce();
     expect(store.reminders.error()).toBeDefined();
     pin.set('organization-a');
     store.reminders.reload();

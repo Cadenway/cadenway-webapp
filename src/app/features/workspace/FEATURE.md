@@ -92,14 +92,16 @@ injects it as optional.
   connection. The gateway notice envelope does not name the delivering room: changes are broadcast
   to every active watch, whose consumer filters or refetches. A later contract should add the room.
 - The resolver sets `OrganizationPin` after committing the verified context, before child resolvers;
-  route destruction clears it. An active or passive `412 organization.context-changed` marks the
-  context stale and fences passive requests until the next verified commit. An active mismatch requests
-  a same-URL guard and resolver rerun, including after an in-progress navigation; a passive mismatch
-  waits until the tab is visible and focused. Failed recovery retries with bounded backoff. Query-only navigation
-  does not trigger revalidation. The guard's uncached current organization read skips the pin so it can discover and switch the session under the lock. Before
-  a session switch the guard fences pinned requests locally until the resolver commits the new pin.
-- A session holds one current organization across tabs. Passive work in a stale tab cannot switch it
-  back; user activity or returning to that tab can revalidate its workspace. Each committed workspace
+  route destruction clears it. A `412 organization.context-changed` from the current pin revision
+  marks the context stale and fences passive requests until the next verified commit; a response from
+  an older revision is ignored. While the document is visible and focused, recovery reruns guards and
+  the resolver immediately or after an in-progress navigation. Otherwise it waits for focus or
+  visibility. Failed recovery retries with bounded backoff. Query-only navigation does not trigger
+  revalidation. The guard's uncached current organization read skips the pin so it can discover and
+  switch the session under the lock. Before a session switch the guard fences pinned requests locally
+  until the resolver commits the new pin.
+- A session holds one current organization across tabs. A hidden or unfocused tab does not switch it
+  back after a mismatch; returning to that tab can revalidate its workspace. Each committed workspace
   switch reconnects its realtime client.
 - Guards and the resolver never reach the error boundary: they redirect with a `UrlTree` or a
   `RedirectCommand`.

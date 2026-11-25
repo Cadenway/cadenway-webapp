@@ -151,7 +151,7 @@ describe('organizationPinInterceptor', () => {
       );
     await expect(response).rejects.toBeInstanceOf(HttpErrorResponse);
     expect(pin.stale()).toBe(true);
-    expect(changed).not.toHaveBeenCalled();
+    expect(changed).toHaveBeenCalledOnce();
     await expect(firstValueFrom(http.get('/v1/tasks/CAD-1', { context }))).rejects.toBeInstanceOf(
       OrganizationSwitchPendingError,
     );
@@ -164,22 +164,29 @@ describe('organizationPinInterceptor', () => {
     await resumed;
   });
 
-  it('ignores a passive mismatch from before a verified commit', async () => {
-    const pin: OrganizationPin = TestBed.inject(OrganizationPin);
-    pin.set('organization-id');
-    const context: HttpContext = new HttpContext().set(PASSIVE_REQUEST, true);
-    const response: Promise<unknown> = firstValueFrom(
-      TestBed.inject(HttpClient).get('/v1/tasks/CAD-1', { context }),
-    );
-    const request: TestRequest = TestBed.inject(HttpTestingController).expectOne('/v1/tasks/CAD-1');
-    pin.set('organization-id');
-    request.flush(
-      { code: 'organization.context-changed' },
-      { status: 412, statusText: 'Precondition Failed' },
-    );
-    await expect(response).rejects.toBeInstanceOf(HttpErrorResponse);
-    expect(pin.stale()).toBe(false);
-  });
+  it.each([false, true])(
+    'ignores a mismatch from before a verified commit (passive: %s)',
+    async (passive: boolean) => {
+      const pin: OrganizationPin = TestBed.inject(OrganizationPin);
+      pin.set('organization-id');
+      const changed: Mock<() => void> = vi.fn();
+      pin.contextChanged.subscribe(changed);
+      const context: HttpContext = new HttpContext().set(PASSIVE_REQUEST, passive);
+      const response: Promise<unknown> = firstValueFrom(
+        TestBed.inject(HttpClient).get('/v1/tasks/CAD-1', { context }),
+      );
+      const request: TestRequest =
+        TestBed.inject(HttpTestingController).expectOne('/v1/tasks/CAD-1');
+      pin.set('new-organization');
+      request.flush(
+        { code: 'organization.context-changed' },
+        { status: 412, statusText: 'Precondition Failed' },
+      );
+      await expect(response).rejects.toBeInstanceOf(HttpErrorResponse);
+      expect(pin.stale()).toBe(false);
+      expect(changed).not.toHaveBeenCalled();
+    },
+  );
 
   it('reports only a context-changed 412 and preserves the error', async () => {
     const pin: OrganizationPin = TestBed.inject(OrganizationPin);
