@@ -66,8 +66,8 @@ const DEFAULT_ICON: string = 'default';
  * Component SaveViewDialog
  *
  * @description
- * « Enregistrer la vue » and « Renommer la vue » (`App.dc.html` lines 3172-3190): the summary of
- * the view, its name (required, 80 characters at most; an empty name keeps « Enregistrer »
+ * `Save the view` and `Rename the view` (`App.dc.html` lines 3172-3190): the summary of
+ * the view, its name (required, 80 characters at most; an empty name keeps `Save`
  * disabled, and the placeholder suggests one) and its icon among the layout's own and the look
  * icons. Opening resets the fields to `initialName` and `initialIcon`. Submitting a valid form
  * emits `submitted` with the trimmed name; the page closes the dialog once the gateway answers,
@@ -119,7 +119,7 @@ export class SaveViewDialog {
    * Property summary
    *
    * @description
-   * Description of the view (« Liste · 2 filtres · tri : échéance. »).
+   * Description of the view (`List · 2 filters · sort: due date.`).
    *
    * @type {InputSignal<string>}
    * @readonly
@@ -130,7 +130,7 @@ export class SaveViewDialog {
    * Property placeholder
    *
    * @description
-   * Suggested name (« Liste · filtrée »).
+   * Suggested name (`List · filtered`).
    *
    * @type {InputSignal<string>}
    * @readonly
@@ -163,7 +163,7 @@ export class SaveViewDialog {
    * Property defaultIconLabel
    *
    * @description
-   * Name of the first choice, the layout's icon: « Icône de la vue (Liste) ».
+   * Name of the first choice, the layout's icon: `View icon (List)`.
    *
    * @type {Signal<string>}
    * @readonly

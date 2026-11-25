@@ -2,16 +2,16 @@
 
 ## Purpose
 
-The home screen at the root of a workspace (`/:org`) and its « Accueil » rail item. It owns the page
+The home screen at the root of a workspace (`/:org`) and its `Home` rail item (`home.rail.label`). It owns the page
 content and that item only; the shell, the workspace context and the slug guards belong to Workspace.
 
 This step is a skeleton: the date line and the greeting (`App.dc.html` lines 1683-1690). The
-statistics, the task groups, « Créer une tâche » and the rest of the home screen come in step 6.
+statistics, the task groups, `Create a task` and the rest of the home screen come in step 6.
 
 ## Routes
 
-`HOME_ROUTES` mounts `HomePage` at `''` (`pathMatch: 'full'`) below `/:org`, with the « Accueil »
-route title.
+`HOME_ROUTES` mounts `HomePage` at `''` (`pathMatch: 'full'`) below `/:org`, with the `Home`
+route title (`home.route.title`).
 
 ## Public entry points
 

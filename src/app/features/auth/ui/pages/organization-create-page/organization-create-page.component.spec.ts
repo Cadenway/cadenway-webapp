@@ -76,14 +76,14 @@ describe('OrganizationCreatePage', () => {
   it('previews the address and opens the new workspace', async () => {
     const { host, fixture, navigate, create }: Awaited<ReturnType<typeof render>> = await render(
       { ok: true, destination: '/studio-nord', logoFailed: false },
-      'Studio Nörd',
+      'Studio N\u00f6rd',
     );
 
     expect(host.querySelector<HTMLInputElement>('#org-slug')?.value).toBe('studio-nord');
     await submit(host, fixture);
 
     expect(create).toHaveBeenCalledWith({
-      name: 'Studio Nörd',
+      name: 'Studio N\u00f6rd',
       teamSize: '6-20',
       primaryUse: 'product-engineering',
       inviteEmails: [],
@@ -102,13 +102,13 @@ describe('OrganizationCreatePage', () => {
 
     expect(host.textContent).toContain('SN');
     expect(host.querySelector('label[for="org-invite"]')?.textContent).toContain(
-      'Inviter des collègues (facultatif)',
+      'Invite colleagues (optional)',
     );
     const input: HTMLInputElement | null = host.querySelector('#org-logo');
     if (input === null) throw new Error('Expected the logo input.');
     for (const [size, caption] of [
-      [2048, 'logo.png · 2 Ko'],
-      [1_572_864, 'logo.png · 1,5 Mo'],
+      [2048, 'logo.png · 2 KB'],
+      [1_572_864, 'logo.png · 1.5 MB'],
     ] as const) {
       const file: File = new File([new Uint8Array(size)], 'logo.png', { type: 'image/png' });
       Object.defineProperty(input, 'files', { configurable: true, value: [file] });
@@ -128,11 +128,11 @@ describe('OrganizationCreatePage', () => {
 
   it('shows a reserved or taken address on the name', async () => {
     for (const [code, message] of [
-      ['organization.slug-reserved', 'Cette adresse est réservée : choisissez un autre nom.'],
-      ['organization.slug-taken', 'Cette adresse est déjà utilisée : choisissez un autre nom.'],
+      ['organization.slug-reserved', 'This address is reserved: choose another name.'],
+      ['organization.slug-taken', 'This address is already used: choose another name.'],
       [
         'organization.slug-invalid',
-        'Ce nom ne donne pas d’adresse valide : utilisez au moins 2 lettres ou chiffres.',
+        'This name gives no valid address: use at least 2 letters or digits.',
       ],
     ] as const) {
       TestBed.resetTestingModule();

@@ -34,7 +34,7 @@ export interface ViewOption<T extends string = string> {
  * Interface FilterChip
  *
  * @description
- * An active filter of the chips row: « Statut est l’un de À faire, En cours ».
+ * An active filter of the chips row: `Status is one of To do, In progress`.
  */
 export interface FilterChip {
   // #region Properties
@@ -64,7 +64,7 @@ export interface FilterChip {
    * Property name
    *
    * @description
-   * Name of the field (« Statut »).
+   * Name of the field (`Status`).
    *
    * @type {string}
    * @readonly
@@ -75,7 +75,7 @@ export interface FilterChip {
    * Property operator
    *
    * @description
-   * « est » for one value, « est l’un de » for several.
+   * `is` for one value, `is one of` for several.
    *
    * @type {string}
    * @readonly

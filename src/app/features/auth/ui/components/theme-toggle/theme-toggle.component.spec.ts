@@ -24,7 +24,7 @@ describe('ThemeToggle', () => {
       'button',
     );
 
-    expect(button?.getAttribute('aria-label')).toBe('Passer au thème sombre');
+    expect(button?.getAttribute('aria-label')).toBe('Switch to the dark theme');
     button?.click();
     const origin: { x: number; y: number } | undefined = toggle.mock.calls[0]?.[0] as
       { x: number; y: number } | undefined;
@@ -33,6 +33,6 @@ describe('ThemeToggle', () => {
 
     resolved.set('dark');
     await fixture.whenStable();
-    expect(button?.getAttribute('aria-label')).toBe('Passer au thème clair');
+    expect(button?.getAttribute('aria-label')).toBe('Switch to the light theme');
   });
 });

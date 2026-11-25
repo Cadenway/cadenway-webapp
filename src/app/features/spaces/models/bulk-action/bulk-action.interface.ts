@@ -36,8 +36,8 @@ export interface BulkSelection {
  * Type BulkAction
  *
  * @description
- * The actions of the selection bar: « Marquer terminé », « Assigner », « Déplacer vers… » and
- * « Supprimer » (to the trash).
+ * The actions of the selection bar: `Mark done`, `Assign`, `Move to…` and `Delete` (to the
+ * trash).
  *
  * @type {{ readonly type: 'done' } | { readonly type: 'assign'; readonly userId: string } | { readonly type: 'move'; readonly listId: string } | { readonly type: 'trash' }}
  */

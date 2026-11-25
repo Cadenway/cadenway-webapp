@@ -12,7 +12,7 @@ import type { ListGroupQuery } from '../../models/list-view-config/list-view-con
  * Constant ALL_GROUP
  *
  * @description
- * Value of the one group of a view that does not group (« Toutes les tâches »).
+ * Value of the one group of a view that does not group (`All tasks`).
  *
  * @type {string}
  */
@@ -22,7 +22,7 @@ export const ALL_GROUP: string = 'all';
  * Constant NO_ASSIGNEE_GROUP
  *
  * @description
- * Value of the group of the tasks nobody is assigned (« Non assignées »).
+ * Value of the group of the tasks nobody is assigned (`Unassigned`).
  *
  * @type {string}
  */

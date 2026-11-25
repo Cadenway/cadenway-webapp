@@ -63,8 +63,8 @@ function entry(id: string, name: string): ListDirectoryEntry {
   return {
     id,
     name,
-    spaceId: 'produit',
-    spaceName: 'Produit',
+    spaceId: 'product',
+    spaceName: 'Product',
     icon: 'phosphorListBulletsBold',
     tone: 'text-violet',
   };
@@ -80,7 +80,7 @@ function entry(id: string, name: string): ListDirectoryEntry {
  */
 const directory: readonly ListDirectoryEntry[] = [
   entry('l1', 'Sprint 14'),
-  entry('l2', 'Backlog produit'),
+  entry('l2', 'Product backlog'),
   entry('l3', 'Roadmap'),
   entry('l4', 'Bugs'),
   entry('l5', 'Sprint 15'),
@@ -111,7 +111,7 @@ describe('CommandPaletteDialog', () => {
 
   beforeEach(async () => {
     search = vi.fn(() =>
-      of([{ kind: 'task', key: 'CAD-482', name: 'Relecture du parcours SSO', status: 'review' }]),
+      of([{ kind: 'task', key: 'CAD-482', name: 'Review of the SSO flow', status: 'review' }]),
     );
     navigate = vi.fn(() => Promise.resolve(true));
     run = vi.fn(() => Promise.resolve(true));
@@ -139,15 +139,15 @@ describe('CommandPaletteDialog', () => {
     localStorage.clear();
   });
 
-  it('opens with Ctrl K and goes home from « Aller à »', async () => {
+  it('opens with Ctrl K and goes home from `Go to`', async () => {
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', ctrlKey: true }));
     await fixture.whenStable();
 
     expect(TestBed.inject(CommandPalette).isOpen()).toBe(true);
     expect(document.querySelector('[role="dialog"]')?.getAttribute('aria-label')).toBe(
-      'Palette de commandes',
+      'Command palette',
     );
-    optionNamed('Accueil')?.click();
+    optionNamed('Home')?.click();
     await fixture.whenStable();
 
     expect(navigate).toHaveBeenCalledWith(['/', 'atelier-nord']);
@@ -170,13 +170,13 @@ describe('CommandPaletteDialog', () => {
     expect(TestBed.inject(CommandPalette).isOpen()).toBe(true);
   });
 
-  it('suggests « Créer une tâche » first, which opens the task creation', async () => {
+  it('suggests `Create a task` first, which opens the task creation', async () => {
     TestBed.inject(CommandPalette).setOpen(true);
     await fixture.whenStable();
 
     const first: HTMLElement | undefined =
       document.querySelector<HTMLElement>('[role="option"]') ?? undefined;
-    expect(first?.textContent).toContain('Créer une tâche');
+    expect(first?.textContent).toContain('Create a task');
     expect(first?.textContent).toContain('N');
     first?.click();
     await fixture.whenStable();
@@ -195,10 +195,10 @@ describe('CommandPaletteDialog', () => {
 
     await vi.waitFor(() => {
       fixture.detectChanges();
-      expect(optionNamed('Relecture du parcours SSO')).toBeDefined();
+      expect(optionNamed('Review of the SSO flow')).toBeDefined();
     });
     expect(search).toHaveBeenCalledWith('sso');
-    optionNamed('Relecture du parcours SSO')?.click();
+    optionNamed('Review of the SSO flow')?.click();
 
     expect(navigate).toHaveBeenCalledWith(['/', 'atelier-nord', 't', 'CAD-482']);
     expect(localStorage.getItem('cadenway-recent-tasks:u1:o1')).toContain('CAD-482');
@@ -209,7 +209,7 @@ describe('CommandPaletteDialog', () => {
     await fixture.whenStable();
 
     const list: HTMLElement | undefined = optionNamed('Sprint 14');
-    expect(list?.textContent).toContain('Produit');
+    expect(list?.textContent).toContain('Product');
     expect(list?.querySelector('ng-icon')?.classList).toContain('text-violet');
     expect(optionNamed('Bugs')).toBeDefined();
     expect(optionNamed('Sprint 15')).toBeUndefined();
@@ -221,7 +221,7 @@ describe('CommandPaletteDialog', () => {
   it('filters the lists of the workspace by name beside the server list matches', async () => {
     search.mockReturnValue(
       of([
-        { kind: 'list', listId: 'l5', name: 'Sprint 15', spaceName: 'Produit' },
+        { kind: 'list', listId: 'l5', name: 'Sprint 15', spaceName: 'Product' },
         { kind: 'list', listId: 'l9', name: 'Sprint archive', spaceName: 'Ops' },
       ]),
     );
@@ -259,21 +259,21 @@ describe('CommandPaletteDialog', () => {
 
     await vi.waitFor(() => {
       fixture.detectChanges();
-      expect(document.body.textContent).toContain('Aucun résultat pour « zzzz ».');
+      expect(document.body.textContent).toContain('No results for “zzzz”.');
     });
   });
 
-  it('offers « Facturation et quotas » and one theme action that toggles', async () => {
+  it('offers `Billing and quotas` and one theme action that toggles', async () => {
     TestBed.inject(CommandPalette).setOpen(true);
     await fixture.whenStable();
 
-    optionNamed('Facturation et quotas')?.click();
+    optionNamed('Billing and quotas')?.click();
     expect(navigate).toHaveBeenCalledWith(['/', 'atelier-nord', 'organization', 'billing']);
 
     TestBed.inject(CommandPalette).setOpen(true);
     await fixture.whenStable();
-    expect(optionNamed('Passer au thème clair')).toBeUndefined();
-    optionNamed('Passer au thème sombre')?.click();
+    expect(optionNamed('Switch to the light theme')).toBeUndefined();
+    optionNamed('Switch to the dark theme')?.click();
     expect(toggle).toHaveBeenCalledOnce();
   });
 
@@ -287,11 +287,11 @@ describe('CommandPaletteDialog', () => {
     TestBed.inject(ShellOverlay).close('workspace.shortcuts-dialog');
   });
 
-  it('signs out from « Actions »', async () => {
+  it('signs out from `Actions`', async () => {
     TestBed.inject(CommandPalette).setOpen(true);
     await fixture.whenStable();
 
-    optionNamed('Se déconnecter')?.click();
+    optionNamed('Sign out')?.click();
 
     expect(run).toHaveBeenCalledOnce();
   });

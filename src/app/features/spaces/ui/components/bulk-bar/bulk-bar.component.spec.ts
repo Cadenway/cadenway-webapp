@@ -24,7 +24,7 @@ async function render(): Promise<ComponentFixture<BulkBar>> {
     {
       listId: 'l-bugs',
       name: 'Bugs',
-      spaceName: 'Produit',
+      spaceName: 'Product',
       icon: 'phosphorListBulletsBold',
       tone: 'text-muted-foreground',
     },
@@ -58,10 +58,10 @@ describe('BulkBar', () => {
       '[data-testid="bulk-bar"]',
     );
 
-    expect(bar?.getAttribute('aria-label')).toBe('Actions sur la sélection');
-    expect(bar?.textContent).toContain('2 sélectionnées');
+    expect(bar?.getAttribute('aria-label')).toBe('Actions on the selection');
+    expect(bar?.textContent).toContain('2 selected');
     bar?.querySelector<HTMLButtonElement>('button')?.click();
-    bar?.querySelector<HTMLButtonElement>('[aria-label="Annuler la sélection"]')?.click();
+    bar?.querySelector<HTMLButtonElement>('[aria-label="Cancel the selection"]')?.click();
     expect(done).toHaveBeenCalledTimes(1);
     expect(cleared).toHaveBeenCalledTimes(1);
   });
@@ -75,7 +75,7 @@ describe('BulkBar', () => {
     const host: HTMLElement = fixture.nativeElement as HTMLElement;
     const trigger: HTMLButtonElement | undefined = [
       ...host.querySelectorAll<HTMLButtonElement>('[data-testid="bulk-bar"] button'),
-    ].find((button: HTMLButtonElement) => button.textContent.includes('Assigner'));
+    ].find((button: HTMLButtonElement) => button.textContent.includes('Assign'));
     trigger?.click();
     fixture.detectChanges();
     await fixture.whenStable();

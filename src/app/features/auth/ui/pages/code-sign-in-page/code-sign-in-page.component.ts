@@ -42,8 +42,8 @@ const RESEND_SECONDS: number = 30;
  * @description
  * Sign-in with an e-mail code, the sign-in usage of `Otp.dc.html` (`/login/code`). It sends a code
  * to the address shared by `/login` on arrival, or asks for the address first when none is known.
- * The code opens the session, or the two-step challenge of an account that has one. « Renvoyer le
- * code » waits 30 seconds between requests.
+ * The code opens the session, or the two-step challenge of an account that has one. `Resend the
+ * code` waits 30 seconds between requests.
  */
 @Component({
   selector: 'cw-code-sign-in-page',

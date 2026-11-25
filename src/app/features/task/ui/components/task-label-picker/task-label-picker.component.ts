@@ -21,8 +21,8 @@ import { TASK_COMBOBOX_LABELS } from '../../../constants/task-brick-labels/task-
  *
  * @description
  * The labels property (`App.dc.html` near line 2950): a multi-check `cw-combobox` of the
- * organization's labels that also creates one from the typed text (« Créer « … » »). The trigger
- * reads « Étiquettes » when none is chosen. The chosen names are a two-way `value`; a created name
+ * organization's labels that also creates one from the typed text (`Create “…”`). The trigger
+ * reads `Labels` when none is chosen. The chosen names are a two-way `value`; a created name
  * is added to it and offered with the others.
  */
 @Component({
@@ -68,7 +68,7 @@ export class TaskLabelPicker {
    * Property retryLabel
    *
    * @description
-   * Label of the « Réessayer » button of a failed read.
+   * Label of the `Retry` button of a failed read.
    *
    * @type {string}
    * @readonly

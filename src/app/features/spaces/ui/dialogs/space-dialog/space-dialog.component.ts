@@ -64,7 +64,7 @@ interface SpaceFormModel {
    * Property name
    *
    * @description
-   * « Nom de l’espace ».
+   * `Space name`.
    *
    * @type {string}
    */
@@ -74,7 +74,7 @@ interface SpaceFormModel {
    * Property prefix
    *
    * @description
-   * « Préfixe », shown in capitals.
+   * `Prefix`, shown in capitals.
    *
    * @type {string}
    */
@@ -84,7 +84,7 @@ interface SpaceFormModel {
    * Property description
    *
    * @description
-   * « Description ».
+   * `Description`.
    *
    * @type {string}
    */
@@ -97,7 +97,7 @@ interface SpaceFormModel {
  *
  * @description
  * The prefix the dialog proposes for a name: its first three unaccented letters in capitals,
- * completed with `X` (« Ressources humaines » gives `RES`), as the mockup and the contract do.
+ * completed with `X` (`Human resources` gives `HUM`), as the mockup and the contract do.
  *
  * @param {string} name - The name typed.
  * @returns {string} The prefix, empty for an empty name.
@@ -116,10 +116,10 @@ export function prefixFromName(name: string): string {
  * Component SpaceDialog
  *
  * @description
- * « Créer un espace » and « Modifier l’espace » (`App.dc.html`, `dlgSpace`): the name with a
+ * `Create a space` and `Edit the space` (`App.dc.html`, `dlgSpace`): the name with a
  * preview of the space's mark, the prefix of its task keys (proposed from the name until edited,
  * kept as is when editing), the description, the icon, the color and the confidentiality
- * (« Tout {organization} » or « Privé »). The confidentiality is offered only to the people who
+ * (`All of {organization}` or `Private`). The confidentiality is offered only to the people who
  * manage the space. The submit button stays disabled while the name or the prefix is invalid,
  * and a prefix used by another known space, or refused by the gateway (`prefixTaken`), shows
  * its error. Presentational: it emits the trimmed draft; the host records it and closes.
@@ -173,7 +173,7 @@ export class SpaceDialog {
    * Property organizationName
    *
    * @description
-   * Name of the organization, in « Tout Atelier Nord ».
+   * Name of the organization, in `All of Atelier Nord`.
    *
    * @type {InputSignal<string>}
    * @readonly
@@ -217,7 +217,7 @@ export class SpaceDialog {
    * Property submitted
    *
    * @description
-   * Emits the trimmed draft on « Créer l’espace » or « Enregistrer ».
+   * Emits the trimmed draft on `Create the space` or `Save`.
    *
    * @type {OutputEmitterRef<SpaceDraft>}
    * @readonly
@@ -265,7 +265,7 @@ export class SpaceDialog {
    * Property visibility
    *
    * @description
-   * « organization » or « private ».
+   * `organization` or `private`.
    *
    * @type {WritableSignal<string>}
    * @readonly
@@ -400,7 +400,7 @@ export class SpaceDialog {
    * Property title
    *
    * @description
-   * « Créer un espace » or « Modifier l’espace ».
+   * `Create a space` or `Edit the space`.
    *
    * @type {Signal<string>}
    * @readonly
@@ -415,7 +415,7 @@ export class SpaceDialog {
    * Property organizationLabel
    *
    * @description
-   * « Tout Atelier Nord ».
+   * `All of Atelier Nord`.
    *
    * @type {Signal<string>}
    * @readonly

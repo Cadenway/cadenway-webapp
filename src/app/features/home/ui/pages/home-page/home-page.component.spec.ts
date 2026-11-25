@@ -34,16 +34,16 @@ describe('HomePage', () => {
   it('greets the person without a notice', async () => {
     const host: HTMLElement = (await render(undefined)).nativeElement as HTMLElement;
 
-    expect(host.querySelector('h1')?.textContent.trim()).toBe('Bonjour Camille');
+    expect(host.querySelector('h1')?.textContent.trim()).toBe('Hello Camille');
     expect(host.querySelector('cw-alert')).toBeNull();
   });
 
-  it('says the new organization’s logo could not be uploaded until dismissed', async () => {
+  it('says the logo of the new organization could not be uploaded until dismissed', async () => {
     const fixture: ComponentFixture<HomePage> = await render('logo-upload-failed');
     const host: HTMLElement = fixture.nativeElement as HTMLElement;
 
     expect(host.querySelector('cw-alert')?.textContent).toContain(
-      'L’organisation a été créée, mais son logo n’a pas pu être importé.',
+      'The organization was created, but its logo could not be uploaded.',
     );
     host.querySelector<HTMLButtonElement>('cw-alert button')?.click();
     await fixture.whenStable();

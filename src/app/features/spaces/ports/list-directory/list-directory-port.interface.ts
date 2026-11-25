@@ -5,7 +5,7 @@ import type { Signal } from '@angular/core';
  *
  * @description
  * A list of the workspace as the sidebar shows it, for another feature to offer it (the command
- * palette's « Listes »).
+ * palette's `Lists`).
  */
 export interface ListDirectoryEntry {
   // #region Properties
@@ -24,7 +24,7 @@ export interface ListDirectoryEntry {
    * Property name
    *
    * @description
-   * List name (« Sprint 14 »).
+   * List name (`Sprint 14`).
    *
    * @type {string}
    * @readonly
@@ -46,7 +46,7 @@ export interface ListDirectoryEntry {
    * Property spaceName
    *
    * @description
-   * Name of its space (« Produit »).
+   * Name of its space (`Product`).
    *
    * @type {string}
    * @readonly

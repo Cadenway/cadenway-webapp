@@ -8,7 +8,7 @@ import { CommandPalette } from '../../../services/command-palette/command-palett
  * Component SearchButton
  *
  * @description
- * The « Rechercher… Ctrl K » field-like button of the sidebar header (mockup `App.dc.html` lines
+ * The `Search… Ctrl K` field-like button of the sidebar header (mockup `App.dc.html` lines
  * 191-196), opening the command palette. It is a `sidebarHeader` slot contribution.
  */
 @Component({

@@ -210,7 +210,7 @@ export class OrganizationCreatePage {
    * Property initials
    *
    * @description
-   * The mark of the draft name, shown in the empty logo box (« Aa » while the name is blank).
+   * The mark of the draft name, shown in the empty logo box (`Aa` while the name is blank).
    *
    * @type {(name: string) => string}
    * @readonly

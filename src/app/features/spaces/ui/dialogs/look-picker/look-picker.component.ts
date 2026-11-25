@@ -18,7 +18,7 @@ import { LOOK_ICON_KEYS, lookIconName } from '../../../utils/look/look.util';
  * Constant DEFAULT_ICON
  *
  * @description
- * Value of the « Initiale » or « Par défaut » choice in the icon group.
+ * Value of the `Initial` or `Default` choice in the icon group.
  *
  * @type {string}
  */
@@ -28,7 +28,7 @@ const DEFAULT_ICON: string = 'default';
  * Interface LookColorChoice
  *
  * @description
- * A color of the « Couleur » group with its name and swatch.
+ * A color of the `Color` group with its name and swatch.
  */
 interface LookColorChoice {
   // #region Properties
@@ -47,7 +47,7 @@ interface LookColorChoice {
    * Property label
    *
    * @description
-   * Its name (« Améthyste »).
+   * Its name (`Amethyst`).
    *
    * @type {string}
    * @readonly
@@ -105,7 +105,7 @@ function lookColorChoices(): readonly LookColorChoice[] {
  * Component LookPicker
  *
  * @description
- * The « Icône » and « Couleur » groups of the space and list dialogs (`lookPicker` in
+ * The `Icon` and `Color` groups of the space and list dialogs (`lookPicker` in
  * `App.dc.html`): a single choice among the default (the space's initial, or the list's default
  * icon) and the seventeen icons, then among the thirteen colors, each named for assistive
  * technologies. Presentational: `icon` and `color` are two-way models.
@@ -225,7 +225,7 @@ export class LookPicker {
    * Property defaultLabel
    *
    * @description
-   * Name of the default choice (« Initiale », « Par défaut »).
+   * Name of the default choice (`Initial`, `Default`).
    *
    * @type {InputSignal<string>}
    * @readonly

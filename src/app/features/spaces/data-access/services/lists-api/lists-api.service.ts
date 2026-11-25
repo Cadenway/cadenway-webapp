@@ -258,7 +258,7 @@ export class ListsApi {
    * Method milestoneCount
    *
    * @description
-   * Counts the milestones of a list, subtasks included, for « Jalons n ».
+   * Counts the milestones of a list, subtasks included, for `Milestones n`.
    *
    * @param {string} listId - The list.
    * @param {AbortSignal | undefined} signal - Cancels a superseded read.
@@ -336,7 +336,7 @@ export class ListsApi {
    * Method labels
    *
    * @description
-   * Reads the labels of the tasks the caller sees, for the « Étiquette » filter.
+   * Reads the labels of the tasks the caller sees, for the `Label` filter.
    *
    * @param {AbortSignal | undefined} signal - Cancels a superseded read.
    * @returns {Promise<readonly string[]>} The labels, alphabetically.
@@ -405,7 +405,7 @@ export class ListsApi {
    * Method duplicate
    *
    * @description
-   * Copies a list with every live task (« Dupliquer avec les tâches »).
+   * Copies a list with every live task (`Duplicate with the tasks`).
    *
    * @param {TaskList} list - The list as shown.
    * @returns {Promise<{ list: TaskList; taskCount: number }>} The copy and its task count.

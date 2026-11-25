@@ -69,7 +69,7 @@ function parseAccounts(raw: string | null): RememberedAccount[] {
  * Service RememberedAccountsService
  *
  * @description
- * The accounts this device signed in with ("Comptes mémorisés sur cet appareil"), most recent
+ * The accounts this device signed in with (`auth.logged-out.remembered`), most recent
  * first, kept in `localStorage` with their name and address only. A sign-in remembers its account;
  * the signed-out screen offers them again and forgets one on request, with an undo. Storage that
  * cannot be read or written leaves an in-memory list.

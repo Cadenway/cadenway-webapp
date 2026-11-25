@@ -114,7 +114,7 @@ const ENTER_MS: number = 520;
  * @description
  * Time between the first realtime notice or completed status write of a window and the read of the
  * rows it gathers, in milliseconds: one read per window, so a steady flow of changes cannot hold
- * the rows back, and wide enough that the reads leave room for « load more » while it lasts.
+ * the rows back, and wide enough that the reads leave room for loading more while it lasts.
  *
  * @type {number}
  */
@@ -233,7 +233,7 @@ function changesOf(
  * Constant CHILD_READS
  *
  * @description
- * Subtask reads in flight at most when « Dépliées sous leur parent » opens every task.
+ * Subtask reads in flight at most when `Unfolded under their parent` opens every task.
  *
  * @type {number}
  */
@@ -380,7 +380,7 @@ interface ListRowsState {
    * Property moreFailed
    *
    * @description
-   * Whether reading the next page failed; the page offers « Réessayer ».
+   * Whether reading the next page failed; the page offers `Retry`.
    *
    * @type {boolean}
    * @readonly
@@ -525,7 +525,7 @@ interface ListRowsState {
  * Constant initialState
  *
  * @description
- * Nothing read, « Repliées sous leur parent ».
+ * Nothing read, `Folded under their parent`.
  *
  * @type {ListRowsState}
  */
@@ -563,7 +563,7 @@ function groupingOf(query: ListRowsQuery | null | undefined): ListGroupQuery['gr
  * Function collapsedOf
  *
  * @description
- * The folded groups of a grouping: what the user folded, else « Annulé » when grouping by
+ * The folded groups of a grouping: what the user folded, else `Cancelled` when grouping by
  * status (collapsed by default, as in `App.dc.html`).
  *
  * @param {Readonly<Partial<Record<string, readonly string[]>>>} collapsed - Folded groups by grouping.
@@ -724,7 +724,7 @@ export interface ListRowsStoreInstance {
    * Property collapsed
    *
    * @description
-   * Folded group values; « Annulé » by default when grouping by status.
+   * Folded group values; `Cancelled` by default when grouping by status.
    *
    * @type {Signal<readonly string[]>}
    * @readonly
@@ -875,7 +875,7 @@ export interface ListRowsStoreInstance {
    * Method retryMore
    *
    * @description
-   * « Réessayer » after a failed next page.
+   * `Retry` after a failed next page.
    */
   retryMore(): void;
 
@@ -893,7 +893,7 @@ export interface ListRowsStoreInstance {
    * Method retrySubtasks
    *
    * @description
-   * « Réessayer » after a failed read of the subtasks of a task.
+   * `Retry` after a failed read of the subtasks of a task.
    *
    * @param {string} taskKey - The parent task.
    */
@@ -941,7 +941,7 @@ export interface ListRowsStoreInstance {
    * Method restore
    *
    * @description
-   * Takes deleted tasks out of the trash (the « Annuler » of a deletion), then reads the rows
+   * Takes deleted tasks out of the trash (the `Undo` of a deletion), then reads the rows
    * again; resolves with whether every entry came back.
    *
    * @param {readonly string[]} entryIds - The trash entries.
@@ -955,7 +955,7 @@ export interface ListRowsStoreInstance {
  * Function createListRowsStore
  *
  * @description
- * Creates the store of the rows of the « Liste » view.
+ * Creates the store of the rows of the `List` view.
  *
  * @returns {Type<ListRowsStoreInstance>} Injectable store constructor.
  */
@@ -1650,7 +1650,7 @@ function createListRowsStore(): Type<ListRowsStoreInstance> {
  * Constant ListRowsStore
  *
  * @description
- * The rows of the « Liste » view, provided by the `list` route with `TaskStatusChangesStore`. Grouping is a filter: the primary read takes the group counts
+ * The rows of the `List` view, provided by the `list` route with `TaskStatusChangesStore`. Grouping is a filter: the primary read takes the group counts
  * (`countTaskGroups`), then cursor pages of each group in order (`queryListTasks` with the
  * group's value); `loadMore` reads the next page as the table scrolls, and a folded group reads
  * its first page only, so its header shows. A row is filed under its settled status, so it joins

@@ -28,7 +28,8 @@ export const STATUS_ORDER: readonly StatusKey[] = [
  * Constant PRIORITY_ORDER
  *
  * @description
- * The four priorities, from the highest, as the « Filtrer » dialog lists them.
+ * The four priorities, from the highest, as the `Filter` dialog lists them. The keys are the
+ * contract's wire values (`@cadenway/contracts` priority enum).
  *
  * @type {readonly PriorityKey[]}
  */

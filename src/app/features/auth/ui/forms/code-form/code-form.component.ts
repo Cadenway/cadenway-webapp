@@ -26,8 +26,8 @@ import { focusFirstError } from '../../../utils/form-focus/form-focus.util';
  *
  * @description
  * The 6-digit e-mail code form of `Otp.dc.html`, shared by `/login/code` and `/signup/verify`:
- * « Code de vérification » in two groups of three, the submit button (disabled until six digits),
- * « Renvoyer le code » with its countdown, « Modifier l'adresse » and the « Nouveau code envoyé »
+ * `Verification code` in two groups of three, the submit button (disabled until six digits),
+ * `Resend the code` with its countdown, `Change the address` and the `New code sent`
  * status. It emits the code; the page sends it and passes back `error` (shown under the code and
  * clearing it) and `busy`.
  */
@@ -51,7 +51,7 @@ export class CodeForm {
    * Property submitLabel
    *
    * @description
-   * Label of the submit button (« Se connecter », « Confirmer mon adresse »).
+   * Label of the submit button (`Sign in`, `Confirm my address`).
    *
    * @type {InputSignal<string>}
    * @readonly
@@ -62,7 +62,7 @@ export class CodeForm {
    * Property backLink
    *
    * @description
-   * Path of « Modifier l'adresse ».
+   * Path of `Change the address`.
    *
    * @type {InputSignal<string>}
    * @readonly

@@ -158,7 +158,7 @@ export const CANCEL_REASON_ICONS: Readonly<Record<CancelReason, string>> = {
  * Constant RECURRENCE_TITLES
  *
  * @description
- * Tooltip of the repeat icon of a recurring task (« Se répète : chaque semaine »); `none` has
+ * Tooltip of the repeat icon of a recurring task (`Repeats: every week`); `none` has
  * no icon.
  *
  * @type {Readonly<Record<Recurrence, string>>}

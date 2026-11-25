@@ -78,7 +78,7 @@ export interface TaskCancellation {
    * Property note
    *
    * @description
-   * The trimmed « Précision », or an empty string.
+   * The trimmed `Details`, or an empty string.
    *
    * @type {string}
    * @readonly

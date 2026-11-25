@@ -73,7 +73,7 @@ interface OrganizationChoiceState {
    * Property joined
    *
    * @description
-   * Organizations joined during this visit, shown first with "Nouveau".
+   * Organizations joined during this visit, shown first with `New`.
    *
    * @type {readonly OrganizationChoice[]}
    * @readonly
@@ -171,7 +171,7 @@ interface OrganizationChoiceStoreInstance {
    * Property invitationsProblem
    *
    * @description
-   * Problem of the failed invitation list, or null; the page shows it inline with Réessayer
+   * Problem of the failed invitation list, or null; the page shows it inline with `Retry`
    * instead of an empty list.
    *
    * @type {Signal<AuthProblem | null>}
@@ -229,7 +229,7 @@ interface OrganizationChoiceStoreInstance {
    * Method reload
    *
    * @description
-   * Reads the organizations and the invitations again (Réessayer).
+   * Reads the organizations and the invitations again (`Retry`).
    */
   reload(): void;
 
@@ -237,7 +237,7 @@ interface OrganizationChoiceStoreInstance {
    * Method reloadInvitations
    *
    * @description
-   * Reads the invitations again (Réessayer of their inline error).
+   * Reads the invitations again (`Retry` of their inline error).
    */
   reloadInvitations(): void;
 
@@ -256,7 +256,7 @@ interface OrganizationChoiceStoreInstance {
    * Method accept
    *
    * @description
-   * Joins the organization of an invitation; it then shows first with "Nouveau".
+   * Joins the organization of an invitation; it then shows first with `New`.
    *
    * @param {ReceivedInvitation} invitation - The invitation.
    * @returns {Promise<void>} Resolves once handled.
@@ -278,7 +278,7 @@ interface OrganizationChoiceStoreInstance {
    * Method undoRefuse
    *
    * @description
-   * Cancels the waiting refusal and shows the invitation again (Annuler).
+   * Cancels the waiting refusal and shows the invitation again (`Undo`).
    */
   undoRefuse(): void;
   // #endregion
@@ -305,8 +305,8 @@ const initialState: OrganizationChoiceState = {
  *
  * @description
  * Creates the chooser store, provided by the organizations page. Its two reads are independent
- * resources: a failed one shows its own error with Réessayer and never empties the other. A
- * refusal waits 6 seconds for Annuler and is sent at once when the page closes.
+ * resources: a failed one shows its own error with `Retry` and never empties the other. A
+ * refusal waits 6 seconds for `Undo` and is sent at once when the page closes.
  *
  * @returns {Type<OrganizationChoiceStoreInstance>} The store provider.
  */

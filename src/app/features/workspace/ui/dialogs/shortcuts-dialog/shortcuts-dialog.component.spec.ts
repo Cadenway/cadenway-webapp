@@ -24,7 +24,7 @@ describe('ShortcutsDialog', () => {
     return fixture;
   }
 
-  it('opens with « ? » and lists the mockup’s sections', async () => {
+  it('opens with `?` and lists the sections of the mockup', async () => {
     const fixture: ComponentFixture<ShortcutsDialog> = await render();
     expect(document.querySelector('[role="dialog"]')).toBeNull();
 
@@ -32,14 +32,14 @@ describe('ShortcutsDialog', () => {
     await fixture.whenStable();
 
     const dialog: HTMLElement | null = document.querySelector('[role="dialog"]');
-    expect(dialog?.textContent).toContain('Raccourcis clavier');
+    expect(dialog?.textContent).toContain('Keyboard shortcuts');
     expect(
       Array.from(dialog?.querySelectorAll('h3') ?? []).map((title: Element) => title.textContent),
-    ).toEqual(['Partout', 'Listes et tâches', 'Édition']);
-    expect(dialog?.textContent).toContain('Palette de commandes et recherche');
+    ).toEqual(['Everywhere', 'Lists and tasks', 'Editing']);
+    expect(dialog?.textContent).toContain('Command palette and search');
   });
 
-  it('opens from the sidebar footer’s button', async () => {
+  it('opens from the button of the sidebar footer', async () => {
     const fixture: ComponentFixture<ShortcutsDialog> = await render();
     const button: ComponentFixture<ShortcutsButton> = TestBed.createComponent(ShortcutsButton);
     await button.whenStable();
@@ -47,6 +47,6 @@ describe('ShortcutsDialog', () => {
     (button.nativeElement as HTMLElement).querySelector('button')?.click();
     await fixture.whenStable();
 
-    expect(document.querySelector('[role="dialog"]')?.textContent).toContain('Partout');
+    expect(document.querySelector('[role="dialog"]')?.textContent).toContain('Everywhere');
   });
 });

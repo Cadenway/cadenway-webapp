@@ -2,7 +2,7 @@
  * Interface InboxReminder
  *
  * @description
- * A pending reminder of the signed-in person, as the « Rappels » tab shows it.
+ * A pending reminder of the signed-in person, as the `Reminders` tab shows it.
  */
 export interface InboxReminder {
   // #region Properties

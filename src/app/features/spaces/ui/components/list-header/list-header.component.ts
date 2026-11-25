@@ -36,10 +36,10 @@ import { listIconName, lookIconName, lookTone } from '../../../utils/look/look.u
  * The header of a list page (`App.dc.html` lines 277-334): the breadcrumb row (the sidebar's
  * expand toggle while the sidebar is collapsed, the space's badge in its color, the list), the
  * list's icon in its color, a button that opens the list dialog, its title, the favorite toggle,
- * the description line (« Sprint du 3 – 17 nov. · 98 tâches · 25 % terminé »), the sprint goal,
- * the members' avatars from 768 px and the « … » menu: edit the list or sprint, edit the space,
- * duplicate with tasks, export CSV, copy link, archive and delete. « Partager », « Rapport de
- * sprint », « Statuts de l’espace » and « Automatisations » come in step 4b.
+ * the description line (`Sprint of Nov 3 – 17 · 98 tasks · 25 % done`), the sprint goal,
+ * the members' avatars from 768 px and the `…` menu: edit the list or sprint, edit the space,
+ * duplicate with tasks, export CSV, copy link, archive and delete. `Share`, `Sprint report`,
+ * `Space statuses` and `Automations` come in step 4b.
  * Presentational: every action is an output; the page confirms the deletion.
  */
 @Component({
@@ -189,7 +189,7 @@ export class ListHeader {
    * Property spaceEditable
    *
    * @description
-   * Whether « Modifier l’espace » is offered: the space is read and the caller has `edit` on it.
+   * Whether `Edit the space` is offered: the space is read and the caller has `edit` on it.
    *
    * @type {InputSignal<boolean>}
    * @readonly
@@ -211,7 +211,7 @@ export class ListHeader {
    * Property editRequested
    *
    * @description
-   * Emits on the list's icon and on « Modifier la liste » or « Modifier le sprint ».
+   * Emits on the list's icon and on `Edit the list` or `Edit the sprint`.
    *
    * @type {OutputEmitterRef<void>}
    * @readonly
@@ -222,7 +222,7 @@ export class ListHeader {
    * Property spaceEditRequested
    *
    * @description
-   * Emits on « Modifier l’espace ».
+   * Emits on `Edit the space`.
    *
    * @type {OutputEmitterRef<void>}
    * @readonly
@@ -244,7 +244,7 @@ export class ListHeader {
    * Property duplicated
    *
    * @description
-   * Emits on « Dupliquer avec les tâches ».
+   * Emits on `Duplicate with the tasks`.
    *
    * @type {OutputEmitterRef<void>}
    * @readonly
@@ -255,7 +255,7 @@ export class ListHeader {
    * Property exported
    *
    * @description
-   * Emits on « Exporter en CSV ».
+   * Emits on `Export as CSV`.
    *
    * @type {OutputEmitterRef<void>}
    * @readonly
@@ -266,7 +266,7 @@ export class ListHeader {
    * Property linkCopied
    *
    * @description
-   * Emits on « Copier le lien ».
+   * Emits on `Copy the link`.
    *
    * @type {OutputEmitterRef<void>}
    * @readonly
@@ -277,7 +277,7 @@ export class ListHeader {
    * Property archived
    *
    * @description
-   * Emits on « Archiver la liste ».
+   * Emits on `Archive the list`.
    *
    * @type {OutputEmitterRef<void>}
    * @readonly
@@ -288,7 +288,7 @@ export class ListHeader {
    * Property deleteRequested
    *
    * @description
-   * Emits on « Supprimer la liste »; the page asks for the typed name.
+   * Emits on `Delete the list`; the page asks for the typed name.
    *
    * @type {OutputEmitterRef<void>}
    * @readonly
@@ -339,7 +339,7 @@ export class ListHeader {
    * Property renameLabel
    *
    * @description
-   * « Modifier le sprint » or « Modifier la liste ».
+   * `Edit the sprint` or `Edit the list`.
    *
    * @type {Signal<string>}
    * @readonly
@@ -369,7 +369,7 @@ export class ListHeader {
    * Property membersLabel
    *
    * @description
-   * Name of the avatar group (« 4 membres sur cette liste »).
+   * Name of the avatar group (`4 members on this list`).
    *
    * @type {Signal<string>}
    * @readonly

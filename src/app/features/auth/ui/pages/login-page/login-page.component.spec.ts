@@ -148,10 +148,10 @@ describe('LoginPage', () => {
     await page.fixture.whenStable();
 
     expect(page.host.querySelector('#login-email-help')?.textContent).toContain(
-      "Saisissez l'adresse e-mail de votre compte, par exemple camille.martin@ateliernord.fr.",
+      'Enter the email address of your account, for example camille.martin@ateliernord.fr.',
     );
     expect(page.host.querySelector('#login-password-help')?.textContent).toContain(
-      'Saisissez votre mot de passe.',
+      'Enter your password.',
     );
     expect(document.activeElement?.id).toBe('login-email');
     expect(page.flow['signInWithPassword']).not.toHaveBeenCalled();
@@ -181,12 +181,12 @@ describe('LoginPage', () => {
     await signIn(page);
 
     const alert: string = page.host.querySelector('cw-alert')?.textContent ?? '';
-    expect(alert).toContain('E-mail ou mot de passe incorrect.');
+    expect(alert).toContain('Wrong email or password.');
     expect(alert).toContain(
-      'Vérifiez votre saisie. Il vous reste 3 tentatives avant le verrouillage temporaire.',
+      'Check what you typed. You have 3 attempts left before the temporary lockout.',
     );
     expect(page.host.querySelector('#login-password-help')?.textContent).toContain(
-      'Mot de passe incorrect : vérifiez les majuscules.',
+      'Wrong password: check the capital letters.',
     );
     expect(page.navigate).not.toHaveBeenCalled();
   });
@@ -199,14 +199,14 @@ describe('LoginPage', () => {
 
     await signIn(page);
 
-    expect(page.host.textContent).toContain('Compte verrouillé pendant 15 minutes.');
+    expect(page.host.textContent).toContain('Account locked for 15 minutes.');
     expect(page.host.querySelector('cw-alert a')?.getAttribute('href')).toBe('/forgot');
   });
 
   it('separates the sign-up question from its link', async () => {
     const page: Rendered = await render({ kind: 'challenge' });
 
-    expect(page.host.textContent).toContain('Pas encore de compte ? Créer un compte');
+    expect(page.host.textContent).toContain('No account yet? Create an account');
   });
 
   it('says the address of a remembered account is prefilled', async () => {
@@ -216,7 +216,7 @@ describe('LoginPage', () => {
       'camille.martin@ateliernord.fr',
     );
     expect(page.host.textContent).toContain(
-      'Compte mémorisé sur cet appareil : saisissez son mot de passe.',
+      'Account remembered on this device: enter its password.',
     );
   });
 
@@ -229,6 +229,6 @@ describe('LoginPage', () => {
     await page.fixture.whenStable();
 
     expect(page.flow['startFederatedSignIn']).toHaveBeenCalledWith('github');
-    expect(page.host.textContent).toContain('Connexion indisponible. Réessayez dans un instant.');
+    expect(page.host.textContent).toContain('Sign-in is unavailable. Try again in a moment.');
   });
 });

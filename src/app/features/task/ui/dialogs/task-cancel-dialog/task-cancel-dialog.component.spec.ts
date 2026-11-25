@@ -36,21 +36,21 @@ describe('TaskCancelDialog', () => {
     await fixture.whenStable();
 
     expect(document.querySelector('[role="dialog"] h2')?.textContent.trim()).toBe(
-      'Annuler CAD-482 ?',
+      'Cancel CAD-482?',
     );
-    expect(document.body.textContent).toContain('Doublon');
-    expect(document.body.textContent).toContain('Hors périmètre');
+    expect(document.body.textContent).toContain('Duplicate');
+    expect(document.body.textContent).toContain('Out of scope');
     Array.from(document.querySelectorAll<HTMLElement>('cw-radio-group-item'))
-      .find((item: HTMLElement) => item.textContent.includes('Obsolète'))
+      .find((item: HTMLElement) => item.textContent.includes('Obsolete'))
       ?.querySelector<HTMLButtonElement>('[role="radio"]')
       ?.click();
     const note: HTMLTextAreaElement | null = document.querySelector('#task-cancel-note');
     if (!note) throw new Error('No note field');
-    note.value = '  Remplacée par CAD-490 ';
+    note.value = '  Replaced by CAD-490 ';
     note.dispatchEvent(new Event('input'));
-    buttonNamed('Annuler la tâche')?.click();
+    buttonNamed('Cancel the task')?.click();
 
-    expect(confirmed).toEqual([{ reason: 'obsolete', note: 'Remplacée par CAD-490' }]);
+    expect(confirmed).toEqual([{ reason: 'obsolete', note: 'Replaced by CAD-490' }]);
   });
 
   it('keeps the task and names several tasks in its title', async () => {
@@ -61,9 +61,9 @@ describe('TaskCancelDialog', () => {
     await fixture.whenStable();
 
     expect(document.querySelector('[role="dialog"] h2')?.textContent.trim()).toBe(
-      'Annuler 3 tâches ?',
+      'Cancel 3 tasks?',
     );
-    buttonNamed('Garder la tâche')?.click();
+    buttonNamed('Keep the task')?.click();
 
     expect(kept).toBe(1);
   });

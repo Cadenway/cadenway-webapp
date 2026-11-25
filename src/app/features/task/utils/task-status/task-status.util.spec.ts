@@ -19,7 +19,7 @@ describe('task status rules', () => {
     expect(nextStatus('cancelled', false)).toBeNull();
   });
 
-  it('moves an upcoming or at-risk milestone to « Atteint » only', () => {
+  it('moves an upcoming or at-risk milestone to `Reached` only', () => {
     expect(nextStatus('todo', true)).toBe('done');
     expect(nextStatus('blocked', true)).toBe('done');
     expect(nextStatus('done', true)).toBeNull();
@@ -46,12 +46,12 @@ describe('task status rules', () => {
 
   it('gives a milestone its four statuses with their words', () => {
     expect(pickableStatuses([], 'todo', true).map((o: StatusOption) => o.label)).toEqual([
-      'À venir',
-      'À risque',
-      'Atteint',
-      'Annulé',
+      'Upcoming',
+      'At risk',
+      'Reached',
+      'Cancelled',
     ]);
-    expect(statusLabel('blocked', [], true)).toBe('À risque');
+    expect(statusLabel('blocked', [], true)).toBe('At risk');
   });
 
   it('excludes hidden milestone statuses', () => {
@@ -67,10 +67,10 @@ describe('task status rules', () => {
 
   it('names a status after the space, else with its default word', () => {
     const options: readonly StatusOption[] = defaultStatusOptions().map((option: StatusOption) =>
-      option.key === 'review' ? { ...option, label: 'Relecture' } : option,
+      option.key === 'review' ? { ...option, label: 'Peer review' } : option,
     );
 
-    expect(statusLabel('review', options, false)).toBe('Relecture');
-    expect(statusLabel('done', [], false)).toBe('Terminé');
+    expect(statusLabel('review', options, false)).toBe('Peer review');
+    expect(statusLabel('done', [], false)).toBe('Done');
   });
 });

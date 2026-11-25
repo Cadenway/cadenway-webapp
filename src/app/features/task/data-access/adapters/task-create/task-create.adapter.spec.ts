@@ -17,7 +17,7 @@ import {
  * @type {TaskDraft}
  */
 const draft: TaskDraft = {
-  name: 'Bug : export CSV vide',
+  name: 'Bug: empty CSV export',
   description: '',
   status: 'todo',
   cancelReason: null,
@@ -33,7 +33,7 @@ const draft: TaskDraft = {
 describe('task create adapters', () => {
   it('sends the draft and leaves out the empty description', () => {
     expect(toTaskCreation(draft)).toEqual({
-      name: 'Bug : export CSV vide',
+      name: 'Bug: empty CSV export',
       status: 'todo',
       priority: 'haute',
       assigneeIds: ['u1'],
@@ -60,7 +60,7 @@ describe('task create adapters', () => {
     });
 
     expect(body).toEqual({
-      name: 'Bug : export CSV vide',
+      name: 'Bug: empty CSV export',
       description: 'Contexte',
       status: 'todo',
       priority: 'haute',
@@ -74,8 +74,8 @@ describe('task create adapters', () => {
     expect(
       toListDestination(
         {
-          id: 'produit',
-          name: 'Produit',
+          id: 'product',
+          name: 'Product',
           prefix: 'CAD',
           description: null,
           icon: null,
@@ -89,7 +89,7 @@ describe('task create adapters', () => {
         },
         {
           id: 'sprint-14',
-          spaceId: 'produit',
+          spaceId: 'product',
           name: 'Sprint 14',
           icon: null,
           color: 'violet',
@@ -101,8 +101,8 @@ describe('task create adapters', () => {
     ).toEqual({
       listId: 'sprint-14',
       listName: 'Sprint 14',
-      spaceId: 'produit',
-      spaceName: 'Produit',
+      spaceId: 'product',
+      spaceName: 'Product',
       sprintEnd: '2026-11-17',
     });
   });
@@ -111,7 +111,7 @@ describe('task create adapters', () => {
     expect(
       toTaskTemplateOption({
         id: 'tpl-bug',
-        spaceId: 'produit',
+        spaceId: 'product',
         name: 'Bug',
         title: 'Bug : ',
         description: null,

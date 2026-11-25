@@ -202,7 +202,7 @@ export function toExportParams(query: ListTaskQuery): ExportListTasksParams {
  * Function toBulkTaskAction
  *
  * @description
- * The body of `executeBulkTaskAction`; « Marquer terminé » is the `done` status.
+ * The body of `executeBulkTaskAction`; `Mark done` is the `done` status.
  *
  * @param {readonly BulkSelection[]} selection - Selected tasks.
  * @param {BulkAction} action - Action.

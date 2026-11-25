@@ -11,8 +11,8 @@ export interface SettingsShellRouteData {
    * Property settingsNavigationLabel
    *
    * @description
-   * Localized accessible name of the settings navigation: « Paramètres » for the account settings,
-   * « Réglages de l'organisation » for the organization settings, from a `$localize` string the
+   * Localized accessible name of the settings navigation: `Settings` for the account settings,
+   * `Organization settings` for the organization settings, from a `$localize` string the
    * route owns.
    *
    * @type {string}

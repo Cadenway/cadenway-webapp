@@ -5,7 +5,7 @@ import { initials } from './initials.util';
 describe('initials', () => {
   it('takes the first letter of the first two words, upper-cased', () => {
     expect(initials('Atelier Nord')).toBe('AN');
-    expect(initials('  coopérative   lumen  durable ')).toBe('CL');
+    expect(initials('  lumen   cooperative  works ')).toBe('LC');
     expect(initials('Studio')).toBe('S');
   });
 

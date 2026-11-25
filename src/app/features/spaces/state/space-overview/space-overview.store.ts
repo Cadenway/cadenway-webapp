@@ -90,7 +90,7 @@ export interface SpaceOverviewStoreInstance {
    * Property milestones
    *
    * @description
-   * Secondary read of the « Jalons » section.
+   * Secondary read of the `Milestones` section.
    *
    * @type {ResourceRef<MilestonePage | undefined>}
    * @readonly
@@ -267,8 +267,8 @@ function createSpaceOverviewStore(): Type<SpaceOverviewStoreInstance> {
  * Constant SpaceOverviewStore
  *
  * @description
- * The overview of a space (« Vue d’ensemble »), provided by its page. The space and its lists are
- * the primary reads; the milestones keep an inline error with « Réessayer ». The lists follow the
+ * The overview of a space (`Overview`), provided by its page. The space and its lists are
+ * the primary reads; the milestones keep an inline error with `Retry`. The lists follow the
  * sidebar's overview of the same space once it changes (a task created from this tab reads it
  * again), so both show the same counts.
  *

@@ -16,7 +16,7 @@ const MINUTE_MS: number = 60_000;
  * Constant MORNING_HOUR
  *
  * @description
- * Local hour of « demain matin », as the mockup's « Lun. 9 nov., 9 h ».
+ * Local hour of `tomorrow morning`, as the mockup's `Mon, Nov 9, 9:00`.
  *
  * @type {number}
  */
@@ -53,7 +53,7 @@ function daysBetween(from: Date, to: Date): number {
  * Function capitalize
  *
  * @description
- * Uppercases the first character, since French abbreviated weekdays are lowercase.
+ * Uppercases the first character, since some locales write abbreviated weekdays in lowercase.
  *
  * @param {string} text - Formatted date.
  * @returns {string} The text with an uppercase first character.
@@ -66,9 +66,9 @@ function capitalize(text: string): string {
  * Function relativeTime
  *
  * @description
- * When a notification arrived, as the mockup writes it: « 12 min » and « 1 h » the same day (at
- * least one minute), « hier » the day before, the abbreviated weekday (« lun. ») within a week,
- * then the day and month (« 2 nov. »).
+ * When a notification arrived, as the mockup writes it: `12 min` and `1 h` the same day (at
+ * least one minute), `yesterday` the day before, the abbreviated weekday (`Mon`) within a week,
+ * then the day and month (`2 Nov`).
  *
  * @param {string} instant - ISO 8601 instant.
  * @param {Date} now - The current moment.
@@ -92,8 +92,8 @@ export function relativeTime(instant: string, now: Date, locale: string): string
  * Function reminderTime
  *
  * @description
- * When a reminder is due, as the mockup writes it: « Aujourd’hui, 9 h », « Demain, 15 h », else
- * « Lun. 16 nov., 9 h ».
+ * When a reminder is due, as the mockup writes it: `Today, 9:00`, `Tomorrow, 15:00`, else
+ * `Mon 16 Nov, 9:00`.
  *
  * @param {string} instant - ISO 8601 instant.
  * @param {Date} now - The current moment.
@@ -118,7 +118,7 @@ export function reminderTime(instant: string, now: Date, locale: string): string
  * Function tomorrowMorning
  *
  * @description
- * The instant « demain matin » stands for: 9 h tomorrow, local time.
+ * The instant `tomorrow morning` stands for: 9:00 tomorrow, local time.
  *
  * @param {Date} now - The current moment.
  * @returns {string} The instant, as ISO 8601.
@@ -131,7 +131,7 @@ export function tomorrowMorning(now: Date): string {
  * Function overdueCount
  *
  * @description
- * How many of the listed pending reminders are due at `now`, as the rows mark them « en retard ».
+ * How many of the listed pending reminders are due at `now`, as the rows mark them `late`.
  *
  * @param {readonly InboxReminder[]} reminders - Pending reminders.
  * @param {Date} now - The current moment.

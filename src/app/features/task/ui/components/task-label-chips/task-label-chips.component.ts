@@ -5,7 +5,7 @@ import { CwBadge } from '@cadenway/ui/components/badge';
  * Constant VISIBLE_LABELS
  *
  * @description
- * Labels a row shows before « +n » (`App.dc.html`, list row).
+ * Labels a row shows before `+n` (`App.dc.html`, list row).
  *
  * @type {number}
  */
@@ -15,7 +15,7 @@ const VISIBLE_LABELS: number = 2;
  * Component TaskLabelChips
  *
  * @description
- * The labels of a row or a card: the first two as bordered pills, then « +n » for the rest, whose
+ * The labels of a row or a card: the first two as bordered pills, then `+n` for the rest, whose
  * names are its tooltip and accessible name.
  */
 @Component({
@@ -66,7 +66,7 @@ export class TaskLabelChips {
    * Property rest
    *
    * @description
-   * The labels counted in « +n ».
+   * The labels counted in `+n`.
    *
    * @type {Signal<readonly string[]>}
    * @readonly
@@ -79,7 +79,7 @@ export class TaskLabelChips {
    * Property restNames
    *
    * @description
-   * Names of the labels counted in « +n », comma-separated.
+   * Names of the labels counted in `+n`, comma-separated.
    *
    * @type {Signal<string>}
    * @readonly

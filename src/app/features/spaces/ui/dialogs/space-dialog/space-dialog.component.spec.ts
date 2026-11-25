@@ -63,20 +63,20 @@ class SpaceDialogHost {
 }
 
 /**
- * Constant produit
+ * Constant product
  *
  * @description
- * The « Produit » space of Atelier Nord.
+ * The `Product` space of Atelier Nord.
  *
  * @type {SpaceDetails}
  */
-const produit: SpaceDetails = {
-  id: 'sp-produit',
-  name: 'Produit',
+const product: SpaceDetails = {
+  id: 'sp-product',
+  name: 'Product',
   prefix: 'CAD',
   canEdit: true,
   canManage: false,
-  description: 'Le produit',
+  description: 'The product team',
   icon: 'rocket',
   color: 'violet',
   private: false,
@@ -124,8 +124,8 @@ describe('SpaceDialog', () => {
   }
 
   it('proposes the prefix from the name, as the mockup does', () => {
-    expect(prefixFromName('Ressources humaines')).toBe('RES');
-    expect(prefixFromName('Été')).toBe('ETE');
+    expect(prefixFromName('Human resources')).toBe('HUM');
+    expect(prefixFromName('Na\u00efve')).toBe('NAI');
     expect(prefixFromName('Q')).toBe('QXX');
     expect(prefixFromName('  ')).toBe('');
   });
@@ -133,24 +133,24 @@ describe('SpaceDialog', () => {
   it('creates a space with the proposed prefix until it is typed', () => {
     fixture.componentInstance.open.set(true);
     fixture.detectChanges();
-    expect(document.body.textContent).toContain('Créer un espace');
+    expect(document.body.textContent).toContain('Create a space');
     expect(field('space-dialog-submit').disabled).toBe(true);
 
-    type('space-dialog-name', 'Ressources humaines');
-    expect(field('space-dialog-prefix').value).toBe('RES');
+    type('space-dialog-name', 'Human resources');
+    expect(field('space-dialog-prefix').value).toBe('HUM');
     expect(field('space-dialog-prefix-hint').textContent).toContain(
-      'Les tâches seront numérotées RES-1, RES-2…',
+      'Tasks will be numbered HUM-1, HUM-2…',
     );
-    type('space-dialog-prefix', 'rh');
-    type('space-dialog-name', 'Ressources');
-    expect(field('space-dialog-prefix').value).toBe('RH');
-    expect(document.body.textContent).toContain('Tout Atelier Nord');
+    type('space-dialog-prefix', 'hr');
+    type('space-dialog-name', 'People');
+    expect(field('space-dialog-prefix').value).toBe('HR');
+    expect(document.body.textContent).toContain('All of Atelier Nord');
     field('space-dialog-submit').click();
 
     expect(fixture.componentInstance.drafts).toEqual([
       {
-        name: 'Ressources',
-        prefix: 'RH',
+        name: 'People',
+        prefix: 'HR',
         description: null,
         icon: null,
         color: 'gris',
@@ -166,30 +166,30 @@ describe('SpaceDialog', () => {
     type('space-dialog-prefix', 'DES');
 
     expect(field('space-dialog-prefix-hint').textContent).toContain(
-      'Ce préfixe est déjà utilisé par un autre espace.',
+      'This prefix is already used by another space.',
     );
     expect(field('space-dialog-submit').disabled).toBe(true);
     type('space-dialog-prefix', 'D');
     expect(field('space-dialog-prefix-hint').textContent).toContain(
-      'De 2 à 5 lettres, sans accent.',
+      'From 2 to 5 letters, without accents.',
     );
   });
 
   it('edits a space from its settings and keeps its prefix', () => {
-    fixture.componentInstance.space.set(produit);
+    fixture.componentInstance.space.set(product);
     fixture.componentInstance.open.set(true);
     fixture.detectChanges();
 
-    expect(document.body.textContent).toContain('Modifier l’espace');
-    expect(document.body.textContent).not.toContain('Confidentialité');
-    type('space-dialog-name', 'Produit et design');
+    expect(document.body.textContent).toContain('Edit the space');
+    expect(document.body.textContent).not.toContain('Confidentiality');
+    type('space-dialog-name', 'Product and design');
     expect(field('space-dialog-prefix').value).toBe('CAD');
     field('space-dialog-submit').click();
 
     expect(fixture.componentInstance.drafts[0]).toEqual({
-      name: 'Produit et design',
+      name: 'Product and design',
       prefix: 'CAD',
-      description: 'Le produit',
+      description: 'The product team',
       icon: 'rocket',
       color: 'violet',
       private: false,

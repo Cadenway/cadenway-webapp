@@ -88,7 +88,7 @@ describe('WorkspaceSession', () => {
     http.expectOne('/v1/me').flush(
       {
         type: 'about:blank',
-        title: 'Session expirée',
+        title: 'Session expired',
         status: 401,
         code: 'auth.session-expired',
       },
@@ -116,7 +116,7 @@ describe('WorkspaceSession', () => {
     });
   });
 
-  it('reads every page of the caller’s organizations', async () => {
+  it('reads every page of the organizations of the caller', async () => {
     const result: Promise<WorkspaceResult<readonly WorkspaceOrganization[]>> = firstValueFrom(
       session.myOrganizations(),
     );
@@ -125,7 +125,7 @@ describe('WorkspaceSession', () => {
       .flush({ items: [myOrganization('atelier-nord', 'Atelier Nord')], nextCursor: 'page-2' });
     http
       .expectOne((request) => request.params.get('cursor') === 'page-2')
-      .flush({ items: [myOrganization('lumen', 'Coopérative Lumen')], nextCursor: null });
+      .flush({ items: [myOrganization('lumen', 'Lumen Cooperative')], nextCursor: null });
 
     const organizations: WorkspaceResult<readonly WorkspaceOrganization[]> = await result;
     expect(organizations.ok && organizations.value.map((item) => item.slug)).toEqual([
@@ -143,7 +143,7 @@ describe('WorkspaceSession', () => {
       .flush({ items: [myOrganization('atelier-nord', 'Atelier Nord')], nextCursor: 'page-2' });
     http
       .expectOne((request) => request.params.get('cursor') === 'page-2')
-      .flush({ items: [myOrganization('lumen', 'Coopérative Lumen')], nextCursor: null });
+      .flush({ items: [myOrganization('lumen', 'Lumen Cooperative')], nextCursor: null });
 
     const entries: WorkspaceResult<readonly OrganizationMenuEntry[]> = await result;
     expect(entries.ok && entries.value.map((item) => [item.slug, item.memberCount])).toEqual([

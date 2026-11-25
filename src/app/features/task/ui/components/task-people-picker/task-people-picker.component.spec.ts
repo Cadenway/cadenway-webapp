@@ -18,7 +18,7 @@ const people: readonly Person[] = [
 ];
 
 describe('TaskPeoplePicker', () => {
-  it('marks the current user « (moi) » and adds a chosen person', async () => {
+  it('marks the current user `(me)` and adds a chosen person', async () => {
     const fixture: ComponentFixture<TaskPeoplePicker> = TestBed.createComponent(TaskPeoplePicker);
     fixture.componentRef.setInput('people', people);
     fixture.componentRef.setInput('currentUserId', 'u1');
@@ -28,7 +28,7 @@ describe('TaskPeoplePicker', () => {
       'button[role="combobox"]',
     );
 
-    expect(trigger?.getAttribute('aria-label')).toBe('Assignés');
+    expect(trigger?.getAttribute('aria-label')).toBe('Assignees');
     trigger?.click();
     await fixture.whenStable();
     const options: HTMLElement[] = Array.from(
@@ -36,18 +36,18 @@ describe('TaskPeoplePicker', () => {
     );
     expect(
       options.map((option: HTMLElement) => option.textContent.replace(/\s+/gu, ' ').trim()),
-    ).toEqual(['CMCamille Martin (moi)', 'IRInès Robert']);
+    ).toEqual(['CMCamille Martin (me)', 'IRInès Robert']);
     options[1].click();
     await fixture.whenStable();
 
     expect(fixture.componentInstance.value()).toEqual(['u1', 'u2']);
   });
 
-  it('reads « Assigner » when nobody is chosen', async () => {
+  it('reads `Assign` when nobody is chosen', async () => {
     const fixture: ComponentFixture<TaskPeoplePicker> = TestBed.createComponent(TaskPeoplePicker);
     fixture.componentRef.setInput('people', people);
     await fixture.whenStable();
 
-    expect((fixture.nativeElement as HTMLElement).textContent).toContain('Assigner');
+    expect((fixture.nativeElement as HTMLElement).textContent).toContain('Assign');
   });
 });

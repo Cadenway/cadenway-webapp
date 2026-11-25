@@ -16,7 +16,7 @@ const SHORTCUTS: string = 'workspace.shortcuts-dialog';
  *
  * @description
  * Whether the keyboard shortcuts dialog is open, shared by the dialog (an `overlays`
- * contribution) and the « Raccourcis clavier » button of the sidebar footer, which the shell
+ * contribution) and the `Keyboard shortcuts` button of the sidebar footer, which the shell
  * renders as separate components. It goes through `ShellOverlay`, so the dialog never opens over
  * another shell overlay such as the command palette. It holds no user or organization data.
  */
@@ -52,7 +52,7 @@ export class ShortcutsHelp {
    *
    * @description
    * Opens the dialog unless another shell overlay is open, or closes it; the dialog also reports
-   * its own closing (Escape, backdrop, « Fermer ») here.
+   * its own closing (Escape, backdrop, `Close`) here.
    *
    * @param {boolean} open - Whether the dialog should be open.
    */

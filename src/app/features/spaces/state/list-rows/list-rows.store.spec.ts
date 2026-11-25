@@ -32,7 +32,7 @@ import { LIST_PAGE_SIZE, ListRowsStore } from './list-rows.store';
  * Function task
  *
  * @description
- * A task of Sprint 14 in the « Produit » space of Atelier Nord.
+ * A task of Sprint 14 in the `Product` space of Atelier Nord.
  *
  * @param {string} key - Task key.
  * @param {StatusKey} status - Saved status.
@@ -43,7 +43,7 @@ function task(key: string, status: StatusKey, changes: Partial<TaskSummary> = {}
   return {
     id: key,
     key,
-    name: `Tâche ${key}`,
+    name: `Task ${key}`,
     status,
     cancelReason: null,
     priority: 'moyenne',
@@ -58,7 +58,7 @@ function task(key: string, status: StatusKey, changes: Partial<TaskSummary> = {}
     milestone: false,
     recurrence: 'none',
     listId: 'sprint-14',
-    spaceId: 'produit',
+    spaceId: 'product',
     version: 3,
     ...changes,
   };
@@ -68,12 +68,12 @@ function task(key: string, status: StatusKey, changes: Partial<TaskSummary> = {}
  * Constant cad482
  *
  * @description
- * CAD-482, « Refondre l’écran de connexion SSO », to do.
+ * CAD-482, `Redesign the SSO sign-in screen`, to do.
  *
  * @type {TaskSummary}
  */
 const cad482: TaskSummary = task('CAD-482', 'todo', {
-  name: 'Refondre l’écran de connexion SSO',
+  name: 'Redesign the SSO sign-in screen',
   priority: 'haute',
 });
 
@@ -81,7 +81,7 @@ const cad482: TaskSummary = task('CAD-482', 'todo', {
  * Constant query
  *
  * @description
- * The default query of the « Liste » view.
+ * The default query of the `List` view.
  *
  * @type {ListTaskQuery}
  */
@@ -309,7 +309,7 @@ describe('ListRowsStore', () => {
     expect(store.nearEndThreshold()).toBe(13);
   });
 
-  it('reads each group with its value as a filter and folds « Annulé » by default', async () => {
+  it('reads each group with its value as a filter and folds `Cancelled` by default', async () => {
     groups.mockResolvedValue([
       { value: 'todo', count: 1 },
       { value: 'progress', count: 1 },
@@ -600,10 +600,7 @@ describe('ListRowsStore', () => {
 
     expect(rowOf(store, 'CAD-482')).toMatchObject({ status: 'todo', group: 'todo' });
     const toasts: { error: Mock } = TestBed.inject(CwToastService) as unknown as { error: Mock };
-    expect(toasts.error).toHaveBeenCalledWith(
-      'Impossible de modifier le statut',
-      expect.anything(),
-    );
+    expect(toasts.error).toHaveBeenCalledWith('Could not change the status', expect.anything());
   });
 
   it('reads again on a realtime notice without overwriting an unconfirmed status change', async () => {

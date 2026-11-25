@@ -8,7 +8,7 @@ error from its page's primary read; guards and resolvers redirect instead.
 
 ## Routes
 
-`ERRORS_ROUTES` mounts `**` with the not-found state and the « Page introuvable » title. The
+`ERRORS_ROUTES` mounts `**` with the not-found state and the `Page not found` title (`errors.not-found.route-title`). The
 application mounts it after its known routes, and Workspace mounts it again below `/:org`, where it
 renders inside the shell. The page keeps the unknown address in the browser.
 
@@ -23,8 +23,8 @@ renders inside the shell. The page keeps the unknown address in the browser.
 `app.config.ts`, a component under `ui/components/route-error-boundary`. A route that needs its
 own `errorComponent` uses the same component; the 404 route loads it too. It also publishes the
 `RouteErrorData` type: a route's `data` (`satisfies RouteErrorData`) may set `unavailableTitle`, the
-localized title of its unavailable state (Spaces' `list` view: « Impossible de charger les
-tâches »); every other route keeps « Impossible de charger cette page ».
+localized title of its unavailable state (Spaces' `list` view: `Could not load the
+tasks`); every other route keeps `Could not load this page` (`errors.unavailable.title`).
 
 ## Dependencies
 
@@ -37,19 +37,19 @@ tâches »); every other route keeps « Impossible de charger cette page ».
 
 - The boundary passes what the page threw; a resource read in its error state throws an error
   whose `cause` is the loader's rejection, so the page follows the `cause` chain to the typed error.
-- States: not found (« Retour à l’accueil » to `/home`), access denied (optional message to the
-  owner, « Demander l’accès », then « Demande envoyée »), deleted task (« Restaurer la tâche », then
-  the route runs again; « Déjà restaurée » for a `trash-entry.not-found`; « Ouvrir la corbeille » to
-  `/<slug>/trash`), and unavailable for any other failure (« Impossible de charger cette page »,
-  `Erreur <status> · réf. <requestId>` when known, « Réessayer »).
+- States: not found (`Back to home` to `/home`), access denied (optional message to the
+  owner, `Request access`, then `Request sent`), deleted task (`Restore the task`, then
+  the route runs again; `Already restored` for a `trash-entry.not-found`; `Open the trash` to
+  `/<slug>/trash`), and unavailable for any other failure (`Could not load this page`,
+  `Error <status> · ref. <requestId>` when known, `Retry`).
 - Retry runs the route again with a same-URL navigation and `onSameUrlNavigation: 'reload'`: the
   router re-creates a page whose outlet shows its error component, and re-runs the guards and
   resolvers its `runGuardsAndResolvers` allows. `errors.routes.spec.ts` covers it.
-- « État du service » (`App.dc.html` line 497) links to the runtime `statusUrl` in a new tab and
+- `Service status` (`errors.unavailable.service-status`, `App.dc.html` line 497) links to the runtime `statusUrl` in a new tab and
   shows only in the unavailable state when it is configured; no environment sets one yet.
 - `ErrorRecoveryStore` is page-scoped (component providers), so each failure starts over. A failed
   access request or restore returns to its idle state; its failure message waits for the shell's
   toaster.
 - The failure is reported to Angular's `ErrorHandler` by the boundary's `onError`.
-- The recovery actions load in a deferred chunk: « Chargement… » shows while it loads, and when it
-  cannot load (offline) a fallback keeps « Impossible de charger cette page » with « Réessayer ».
+- The recovery actions load in a deferred chunk: `Loading…` shows while it loads, and when it
+  cannot load (offline) a fallback keeps `Could not load this page` with `Retry`.

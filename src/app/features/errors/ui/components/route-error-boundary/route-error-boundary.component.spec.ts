@@ -54,7 +54,7 @@ describe('RouteErrorBoundary', () => {
 
     expect(
       (fixture.nativeElement as HTMLElement).querySelector('[role="status"]')?.textContent,
-    ).toContain('Chargement…');
+    ).toContain('Loading…');
   });
 
   it('keeps an inline Retry when its view cannot load', async () => {
@@ -64,7 +64,7 @@ describe('RouteErrorBoundary', () => {
     const alert: HTMLElement | null = (fixture.nativeElement as HTMLElement).querySelector(
       '[role="alert"]',
     );
-    expect(alert?.textContent).toContain('Impossible de charger cette page');
+    expect(alert?.textContent).toContain('Could not load this page');
     alert?.querySelector('button')?.click();
 
     expect(navigate).toHaveBeenCalledWith('/', { onSameUrlNavigation: 'reload' });

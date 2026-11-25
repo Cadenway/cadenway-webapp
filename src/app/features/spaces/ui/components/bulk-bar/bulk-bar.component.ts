@@ -79,7 +79,7 @@ export interface MoveTarget {
  * Interface BulkPerson
  *
  * @description
- * A person of « Assigner », ticked when every selected task has them.
+ * A person of `Assign`, ticked when every selected task has them.
  */
 export interface BulkPerson {
   // #region Properties
@@ -133,11 +133,11 @@ export interface BulkPerson {
  * Component BulkBar
  *
  * @description
- * The selection bar of a list view (`App.dc.html` lines 1451-1480): « n sélectionnée(s) »,
- * « Marquer terminé », « Assigner » (people with their initials, ticked when every selected task
- * has them; picking a ticked person removes them), « Déplacer vers… » (the other lists with their
- * icon and space), « Supprimer » and the cross that clears the selection, in a toolbar named
- * « Actions sur la sélection » that scrolls sideways without a scrollbar on a narrow screen.
+ * The selection bar of a list view (`App.dc.html` lines 1451-1480): `n selected`,
+ * `Mark done`, `Assign` (people with their initials, ticked when every selected task
+ * has them; picking a ticked person removes them), `Move to…` (the other lists with their
+ * icon and space), `Delete` and the cross that clears the selection, in a toolbar named
+ * `Actions on the selection` that scrolls sideways without a scrollbar on a narrow screen.
  * Presentational: the page owns the selection and runs the actions; nothing renders without a
  * selection.
  */
@@ -318,7 +318,7 @@ export class BulkBar {
    * Property doneMarked
    *
    * @description
-   * Emits on « Marquer terminé ».
+   * Emits on `Mark done`.
    *
    * @type {OutputEmitterRef<void>}
    * @readonly
@@ -329,7 +329,7 @@ export class BulkBar {
    * Property assigned
    *
    * @description
-   * Emits the account picked in « Assigner »: the page assigns it, or removes it when every
+   * Emits the account picked in `Assign`: the page assigns it, or removes it when every
    * selected task has it.
    *
    * @type {OutputEmitterRef<string>}
@@ -352,7 +352,7 @@ export class BulkBar {
    * Property deleted
    *
    * @description
-   * Emits on « Supprimer ».
+   * Emits on `Delete`.
    *
    * @type {OutputEmitterRef<void>}
    * @readonly
@@ -363,7 +363,7 @@ export class BulkBar {
    * Property cleared
    *
    * @description
-   * Emits on « Annuler la sélection ».
+   * Emits on `Cancel the selection`.
    *
    * @type {OutputEmitterRef<void>}
    * @readonly

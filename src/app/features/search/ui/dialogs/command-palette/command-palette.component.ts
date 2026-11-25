@@ -65,7 +65,7 @@ const SEARCH_TOKEN: string = '{search}';
  * Constant IDLE_LIST_COUNT
  *
  * @description
- * Lists of the workspace « Listes » shows before anything is typed (`App.dc.html` line 6935).
+ * Lists of the workspace `Lists` shows before anything is typed (`App.dc.html` line 6935).
  *
  * @type {number}
  */
@@ -75,7 +75,7 @@ const IDLE_LIST_COUNT: number = 4;
  * Constant MATCHED_LIST_COUNT
  *
  * @description
- * Lists of the workspace whose name matches the typed text that « Listes » shows at most
+ * Lists of the workspace whose name matches the typed text that `Lists` shows at most
  * (`App.dc.html` line 6935).
  *
  * @type {number}
@@ -111,16 +111,16 @@ const paletteFilter: CwCommandFilter = (
  * The Ctrl K command palette of mockup `App.dc.html` (lines 2778-2820, logic near line 6916), on
  * `cw-command-dialog`. Ctrl K (⌘ K) opens it through `ShortcutsService`, except while typing in a
  * field (line 4377); the rail item and the sidebar button open it through `CommandPalette`. Its
- * groups: « Suggestions » (« Créer une tâche », which opens Task's creation dialog, with its
- * shortcut N), « Tâches récentes »
- * (`RecentTasks`, empty until tasks are opened from here), « Aller à » (« Accueil »; later steps add
- * their pages), « Listes » (the workspace's lists from Spaces' `LIST_DIRECTORY`: the first four
+ * groups: `Suggestions` (`Create a task`, which opens Task's creation dialog, with its
+ * shortcut N), `Recent tasks`
+ * (`RecentTasks`, empty until tasks are opened from here), `Go to` (`Home`; later steps add
+ * their pages), `Lists` (the workspace's lists from Spaces' `LIST_DIRECTORY`: the first four
  * before anything is typed, then those whose name contains the text, followed by the server's other
- * list matches), « Tâches » from `GET /v1/search` (debounced, the latest text winning, with the
- * loading row and an inline error with « Réessayer »), « Réglages » (« Profil et
- * sécurité », « Paramètres de l’organisation », « Changer d’organisation ») and « Actions » (the
- * light and dark themes, « Se déconnecter »). Local items are filtered by their label; nothing
- * matching shows « Aucun résultat pour « … ». ». The arrows and Enter follow the brick. It provides
+ * list matches), `Tasks` from `GET /v1/search` (debounced, the latest text winning, with the
+ * loading row and an inline error with `Retry`), `Settings` (`Profile and
+ * security`, `Organization settings`, `Switch organization`) and `Actions` (the
+ * light and dark themes, `Sign out`). Local items are filtered by their label; nothing
+ * matching shows `No results for “…”.`. The arrows and Enter follow the brick. It provides
  * its own `CommandPaletteStore` and is an `overlays` slot contribution.
  */
 @Component({
@@ -275,7 +275,7 @@ export class CommandPaletteDialog {
    * Property taskCreate
    *
    * @description
-   * Task's creation dialog, opened by « Créer une tâche ».
+   * Task's creation dialog, opened by `Create a task`.
    *
    * @type {TaskCreate}
    * @readonly
@@ -339,7 +339,7 @@ export class CommandPaletteDialog {
    * Property localLists
    *
    * @description
-   * The workspace's lists « Listes » shows, as in the mockup: the first four before anything is
+   * The workspace's lists `Lists` shows, as in the mockup: the first four before anything is
    * typed, then up to twenty whose name contains the text, ignoring case.
    *
    * @type {Signal<readonly ListDirectoryEntry[]>}
@@ -362,7 +362,7 @@ export class CommandPaletteDialog {
    * Property serverLists
    *
    * @description
-   * The server's list matches that « Listes » does not already show from the workspace's lists.
+   * The server's list matches that `Lists` does not already show from the workspace's lists.
    *
    * @type {Signal<readonly ListSearchResult[]>}
    * @readonly

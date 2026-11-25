@@ -13,14 +13,14 @@ import { CodeSignInPage } from './code-sign-in-page.component';
  * Function resendButton
  *
  * @description
- * Finds « Renvoyer le code ».
+ * Finds `Resend the code`.
  *
  * @param {HTMLElement} host - The page.
  * @returns {HTMLButtonElement | undefined} The button.
  */
 function resendButton(host: HTMLElement): HTMLButtonElement | undefined {
   return Array.from(host.querySelectorAll('button')).find((button: HTMLButtonElement) =>
-    button.textContent.includes('Renvoyer'),
+    button.textContent.includes('Resend'),
   );
 }
 
@@ -73,7 +73,7 @@ describe('CodeSignInPage', () => {
 
     expect(requestSignInCode).toHaveBeenCalledWith('camille.martin@ateliernord.fr');
     expect(host.textContent).toContain('camille.martin@ateliernord.fr');
-    expect(resendButton(host)?.textContent.trim()).toBe('Renvoyer le code dans 0:30');
+    expect(resendButton(host)?.textContent.trim()).toBe('Resend the code in 0:30');
     expect(resendButton(host)?.disabled).toBe(true);
     await vi.advanceTimersByTimeAsync(30_000);
     await fixture.whenStable();
@@ -82,7 +82,7 @@ describe('CodeSignInPage', () => {
     await vi.advanceTimersByTimeAsync(0);
     await fixture.whenStable();
     expect(requestSignInCode).toHaveBeenCalledTimes(2);
-    expect(host.textContent).toContain('Nouveau code envoyé ; le précédent ne fonctionne plus.');
+    expect(host.textContent).toContain('New code sent; the previous one no longer works.');
     expect(host.querySelector('cw-code-help a')?.getAttribute('href')).toBe(
       'https://cadenway.example/help',
     );
@@ -98,9 +98,7 @@ describe('CodeSignInPage', () => {
       await fixture.whenStable();
     };
     await submitCode();
-    expect(host.textContent).toContain(
-      'Code incorrect ou expiré : vérifiez le dernier e-mail reçu.',
-    );
+    expect(host.textContent).toContain('Wrong or expired code: check the last email you received.');
     await submitCode();
     expect(navigate).toHaveBeenCalledWith('/login/two-step', { replaceUrl: true });
   });
@@ -133,7 +131,7 @@ describe('CodeSignInPage', () => {
     await fixture.whenStable();
 
     expect(host.querySelector('#code-email-help')?.textContent).toContain(
-      "Saisissez l'adresse e-mail de votre compte, par exemple camille.martin@ateliernord.fr.",
+      'Enter the email address of your account, for example camille.martin@ateliernord.fr.',
     );
     expect(document.activeElement?.id).toBe('code-email');
     expect(requestSignInCode).not.toHaveBeenCalled();

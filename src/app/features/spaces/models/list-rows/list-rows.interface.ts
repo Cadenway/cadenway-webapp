@@ -181,7 +181,7 @@ export interface GroupProgress {
  * Interface ListRowsQuery
  *
  * @description
- * What the rows of the « Liste » view read: the list, the view's query and grouping, and the
+ * What the rows of the `List` view read: the list, the view's query and grouping, and the
  * subtask display.
  */
 export interface ListRowsQuery {
@@ -225,7 +225,7 @@ export interface ListRowsQuery {
  * Interface ListRow
  *
  * @description
- * One row of the « Liste » view: a task in one group, at a subtask depth, with what its cells
+ * One row of the `List` view: a task in one group, at a subtask depth, with what its cells
  * show at once.
  */
 export interface ListRow {
@@ -324,7 +324,7 @@ export interface ListRow {
    * Property childrenFailed
    *
    * @description
-   * Whether reading its subtasks failed; the row offers « Réessayer ».
+   * Whether reading its subtasks failed; the row offers `Retry`.
    *
    * @type {boolean}
    * @readonly
@@ -348,7 +348,7 @@ export interface ListRow {
  * Interface ListRowsSummary
  *
  * @description
- * What the rows of the open view tell the list page's « Filtrer » and « Sous-tâches » controls.
+ * What the rows of the open view tell the list page's `Filter` and `Subtasks` controls.
  */
 export interface ListRowsSummary {
   // #region Properties
@@ -356,7 +356,7 @@ export interface ListRowsSummary {
    * Property visibleCount
    *
    * @description
-   * Tasks the view shows with its filters (« n sur m tâches »), or null while unknown or when
+   * Tasks the view shows with its filters (`n of m tasks`), or null while unknown or when
    * a task may be counted in several groups (grouped by assignee).
    *
    * @type {number | null}

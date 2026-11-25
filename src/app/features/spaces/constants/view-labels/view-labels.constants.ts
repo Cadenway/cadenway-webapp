@@ -54,7 +54,7 @@ export function priorityLabels(): Readonly<Record<PriorityKey, string>> {
  * Function sortLabels
  *
  * @description
- * The criteria of « Trier par » (`SORTS`).
+ * The criteria of `Sort by` (`SORTS`).
  *
  * @returns {Readonly<Record<ListSortField, string>>} The labels.
  */
@@ -72,7 +72,7 @@ export function sortLabels(): Readonly<Record<ListSortField, string>> {
  * Function groupLabels
  *
  * @description
- * The choices of « Grouper par » (`GROUPS`), « Aucun » keyed `none`.
+ * The choices of `Group by` (`GROUPS`), `None` keyed `none`.
  *
  * @returns {Readonly<Record<Exclude<ListGroupBy, null> | 'none', string>>} The labels.
  */
@@ -89,7 +89,7 @@ export function groupLabels(): Readonly<Record<Exclude<ListGroupBy, null> | 'non
  * Function filterFieldLabels
  *
  * @description
- * The fields of the « Filtrer » dialog and of the chips (`FIELD_DEFS`).
+ * The fields of the `Filter` dialog and of the chips (`FIELD_DEFS`).
  *
  * @returns {Readonly<Record<FilterField, string>>} The labels.
  */

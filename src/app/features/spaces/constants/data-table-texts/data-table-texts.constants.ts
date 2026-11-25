@@ -15,9 +15,9 @@ export const SPACES_RETRY: string = $localize`:@@spaces.retry:Retry`;
  * Constant LIST_TABLE_TEXTS
  *
  * @description
- * The English source texts of the data table of the « Liste » view, replacing the brick's French
- * defaults; their `fr` translations are those defaults, except the mockup's « Sélectionner toutes
- * les tâches » (header checkbox) and « Chargement des tâches » (loading state).
+ * The English source texts of the data table of the `List` view, replacing the brick's default
+ * texts; their `fr` translations are those defaults, except the mockup's wording of
+ * `spaces.table.select-all` (header checkbox) and `spaces.table.loading` (loading state).
  *
  * @type {Provider}
  */

@@ -11,8 +11,8 @@ export interface RouteErrorData {
    * Property unavailableTitle
    *
    * @description
-   * Title of the unavailable state in place of « Impossible de charger cette page » (the list view
-   * says « Impossible de charger les tâches »), localized by the route file.
+   * Title of the unavailable state in place of `Could not load this page` (the list view
+   * says `Could not load the tasks`), localized by the route file.
    *
    * @type {string | undefined}
    * @readonly

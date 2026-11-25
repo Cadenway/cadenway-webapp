@@ -77,8 +77,8 @@ describe('ResetPage', () => {
 
     expect(inspectPasswordReset).toHaveBeenCalledWith('reset-token');
     expect(replaceState).toHaveBeenCalledWith('/reset', { replaceUrl: true });
-    expect(host.textContent).toContain('Pour le compte camille.martin@ateliernord.fr.');
-    expect(host.textContent).toContain('3 appareils connectés seront déconnectés.');
+    expect(host.textContent).toContain('For the account camille.martin@ateliernord.fr.');
+    expect(host.textContent).toContain('3 signed-in devices will be signed out.');
 
     type(host, '#rp-new', 'atelier-nord-2026');
     type(host, '#rp-confirm', 'atelier-nord-2026');
@@ -86,25 +86,25 @@ describe('ResetPage', () => {
     expect(host.querySelector<HTMLButtonElement>('button[type="submit"]')?.disabled).toBe(false);
     host.querySelector('form')?.dispatchEvent(new Event('submit', { cancelable: true }));
     await fixture.whenStable();
-    expect(host.textContent).toContain('Choisissez un mot de passe qui respecte les 4 règles.');
+    expect(host.textContent).toContain('Choose a password that meets the 4 rules.');
     expect(document.activeElement?.id).toBe('rp-new');
     expect(confirmPasswordReset).not.toHaveBeenCalled();
 
     type(host, '#rp-new', 'Atelier-Nord-2026');
     type(host, '#rp-confirm', 'Atelier-Nord-2025');
     await fixture.whenStable();
-    expect(host.textContent).toContain('Les deux mots de passe diffèrent : saisissez le même.');
+    expect(host.textContent).toContain('The two passwords differ: type the same one.');
 
     type(host, '#rp-confirm', 'Atelier-Nord-2026');
     await fixture.whenStable();
-    expect(host.textContent).toContain('Les mots de passe correspondent.');
+    expect(host.textContent).toContain('The passwords match.');
     host.querySelector('form')?.dispatchEvent(new Event('submit', { cancelable: true }));
     await fixture.whenStable();
 
     expect(confirmPasswordReset).toHaveBeenCalledWith('reset-token', 'Atelier-Nord-2026', true);
-    expect(host.textContent).toContain('Mot de passe modifié');
+    expect(host.textContent).toContain('Password changed');
     expect(host.querySelector('h1 + p')?.textContent.trim()).toBe(
-      'Vos 3 autres sessions ont été fermées. Un e-mail de confirmation vient de partir vers camille.martin@ateliernord.fr.',
+      'Your 3 other sessions were closed. A confirmation email has just been sent to camille.martin@ateliernord.fr.',
     );
   });
 
@@ -117,10 +117,8 @@ describe('ResetPage', () => {
         }),
     });
 
-    expect(host.querySelector('h1')?.textContent.trim()).toBe('Ce lien a expiré');
-    expect(host.querySelector('a[href="/forgot"]')?.textContent.trim()).toBe(
-      'Demander un nouveau lien',
-    );
+    expect(host.querySelector('h1')?.textContent.trim()).toBe('This link has expired');
+    expect(host.querySelector('a[href="/forgot"]')?.textContent.trim()).toBe('Ask for a new link');
   });
 
   it('treats a link without a token as expired', async () => {
@@ -130,6 +128,6 @@ describe('ResetPage', () => {
     });
 
     expect(inspectPasswordReset).not.toHaveBeenCalled();
-    expect(host.querySelector('h1')?.textContent.trim()).toBe('Ce lien a expiré');
+    expect(host.querySelector('h1')?.textContent.trim()).toBe('This link has expired');
   });
 });

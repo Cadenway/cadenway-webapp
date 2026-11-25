@@ -231,7 +231,7 @@ export class SpacesApi {
    * Method createSpace
    *
    * @description
-   * Creates a space owned by the caller with its « Première liste », in one transaction. A retry
+   * Creates a space owned by the caller with its first list, in one transaction. A retry
    * of the same draft reuses its idempotency key, so a lost answer creates nothing twice.
    *
    * @param {SpaceDraft} draft - The dialog's values.

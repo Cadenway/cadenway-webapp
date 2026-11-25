@@ -16,7 +16,7 @@ import { advanceGroup, groupValuesOf, nextGroup, startGroups } from './list-rows
 const cad482: TaskSummary = {
   id: 'CAD-482',
   key: 'CAD-482',
-  name: 'Refondre l’écran de connexion SSO',
+  name: 'Redesign the SSO sign-in screen',
   status: 'progress',
   cancelReason: null,
   priority: 'haute',
@@ -31,7 +31,7 @@ const cad482: TaskSummary = {
   milestone: false,
   recurrence: 'none',
   listId: 'sprint-14',
-  spaceId: 'produit',
+  spaceId: 'product',
   version: 3,
 };
 

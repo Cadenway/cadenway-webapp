@@ -5,7 +5,7 @@ import { Component, computed, input, type InputSignal, type Signal } from '@angu
  *
  * @description
  * The line below the card of the code screens (`Otp.dc.html`): what to check when the code does
- * not arrive. « demandez à l'administrateur » links to the Help page of the public site at `siteUrl`;
+ * not arrive. `ask your administrator` links to the Help page of the public site at `siteUrl`;
  * without a site, the same sentence renders as plain text.
  */
 @Component({

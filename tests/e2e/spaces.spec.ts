@@ -5,7 +5,7 @@ const user = {
   id: '019a5f3c-8d2e-7c4a-9b1f-3e5d7a9c1b30',
   name: 'Camille Martin',
   email: 'camille.martin@ateliernord.fr',
-  language: 'fr',
+  language: 'en',
   displayName: null,
   jobTitle: null,
   timeZone: 'Europe/Paris',
@@ -25,11 +25,11 @@ const status = (name: string | null = null, hidden = false) => ({
   name,
   hidden,
 });
-const produit = {
+const product = {
   id: '019a6000-0000-7000-8000-000000000001',
-  name: 'Produit',
+  name: 'Product',
   prefix: 'CAD',
-  description: 'Le produit Cadenway.',
+  description: 'The Cadenway product.',
   icon: 'rocket',
   color: 'violet',
   visibility: 'organization',
@@ -52,14 +52,14 @@ const produit = {
 };
 const sprint14 = {
   id: '019a6000-0000-7000-8000-000000000101',
-  spaceId: produit.id,
+  spaceId: product.id,
   name: 'Sprint 14',
   icon: 'lightning',
   color: 'violet',
   sprint: {
     startDate: '2026-11-03',
     endDate: '2026-11-17',
-    goal: 'Livrer la connexion SSO et la page des quotas d’organisation.',
+    goal: 'Ship the SSO sign-in and the organization quotas page.',
   },
   createdAt: '2026-11-01T10:00:00Z',
   version: 4,
@@ -108,7 +108,7 @@ async function stubGateway(page: Page, failListOnce = false): Promise<Gateway> {
             ...atelierNord,
             description: null,
             website: null,
-            defaultLanguage: 'fr',
+            defaultLanguage: 'en',
             createdAt: '2026-11-01T10:00:00Z',
             version: 1,
           },
@@ -127,13 +127,13 @@ async function stubGateway(page: Page, failListOnce = false): Promise<Gateway> {
           },
         });
       case 'GET /v1/spaces':
-        return route.fulfill({ json: { items: [produit], nextCursor: null } });
-      case `GET /v1/spaces/${produit.id}`:
-        return route.fulfill({ json: produit });
-      case `GET /v1/spaces/${produit.id}/overview`:
+        return route.fulfill({ json: { items: [product], nextCursor: null } });
+      case `GET /v1/spaces/${product.id}`:
+        return route.fulfill({ json: product });
+      case `GET /v1/spaces/${product.id}/overview`:
         return route.fulfill({
           json: {
-            spaceId: produit.id,
+            spaceId: product.id,
             listCount: 2,
             taskCount: 15,
             items: [
@@ -143,7 +143,7 @@ async function stubGateway(page: Page, failListOnce = false): Promise<Gateway> {
             nextCursor: null,
           },
         });
-      case `GET /v1/spaces/${produit.id}/milestones`:
+      case `GET /v1/spaces/${product.id}/milestones`:
         return route.fulfill({ json: { items: [], nextCursor: null, total: 0 } });
       case 'GET /v1/me/favorites':
         return route.fulfill({ json: { items: [], nextCursor: null } });
@@ -201,21 +201,21 @@ test('the sidebar lists the spaces with their lists', async ({ page }) => {
   await page.goto('/atelier-nord');
 
   const spaces = page.getByTestId('sidebar-spaces');
-  await expect(spaces.getByRole('button', { name: /Produit/ })).toBeVisible();
-  await spaces.getByRole('button', { name: /Produit/ }).click();
+  await expect(spaces.getByRole('button', { name: /Product/ })).toBeVisible();
+  await spaces.getByRole('button', { name: /Product/ }).click();
   await expect(spaces.getByRole('link', { name: /Sprint 14/ })).toBeVisible();
   await expect(spaces.getByRole('link', { name: /Bugs/ })).toBeVisible();
 });
 
 test('the space overview opens with its list cards', async ({ page }) => {
   await stubGateway(page);
-  await page.goto(`/atelier-nord/spaces/${produit.id}`);
+  await page.goto(`/atelier-nord/spaces/${product.id}`);
 
-  await expect(page.getByRole('heading', { level: 1, name: 'Produit' })).toBeVisible();
-  await expect(page.getByTestId('space-meta')).toContainText('2 listes');
+  await expect(page.getByRole('heading', { level: 1, name: 'Product' })).toBeVisible();
+  await expect(page.getByTestId('space-meta')).toContainText('2 lists');
   const card = page.getByRole('link', { name: /Sprint 14/ }).last();
-  await expect(card).toContainText('12 tâches');
-  await expect(card).toContainText('3 / 12 terminées');
+  await expect(card).toContainText('12 tasks');
+  await expect(card).toContainText('3 / 12 done');
   await card.click();
   await expect(page).toHaveURL(new RegExp(`/atelier-nord/l/${sprint14.id}/list$`));
 });
@@ -225,26 +225,26 @@ test('a list page shows its header, its filters and its group menu', async ({ pa
   await page.goto(`/atelier-nord/l/${sprint14.id}`);
 
   await expect(page).toHaveURL(new RegExp(`/l/${sprint14.id}/list$`));
-  await expect(page.getByTestId('list-description')).toContainText('Sprint du 3 – 17 nov.');
-  await expect(page.getByTestId('list-description')).toContainText('12 tâches');
-  await expect(page.getByTestId('list-description')).toContainText('25 % terminé');
-  await expect(page.getByTestId('list-goal')).toContainText('Livrer la connexion SSO');
+  await expect(page.getByTestId('list-description')).toContainText(/Sprint of .*3 – .*17/u);
+  await expect(page.getByTestId('list-description')).toContainText('12 tasks');
+  await expect(page.getByTestId('list-description')).toContainText('25 % done');
+  await expect(page.getByTestId('list-goal')).toContainText('Ship the SSO sign-in');
 
-  await page.getByRole('button', { name: 'Filtrer' }).click();
-  const filters = page.getByRole('dialog', { name: 'Filtres' });
-  await expect(filters.getByText('À faire')).toBeVisible();
-  await expect(filters.getByText('Moi')).toBeVisible();
-  await expect(filters.getByText('Non assigné')).toBeVisible();
-  await filters.getByText('Urgente').click();
+  await page.getByRole('button', { name: 'Filter' }).click();
+  const filters = page.getByRole('dialog', { name: 'Filters' });
+  await expect(filters.getByText('To do')).toBeVisible();
+  await expect(filters.getByText('Me')).toBeVisible();
+  await expect(filters.getByText('Unassigned')).toBeVisible();
+  await filters.getByText('Urgent').click();
   await page.keyboard.press('Escape');
-  await expect(page.getByTestId('view-chip')).toContainText('Priorité');
+  await expect(page.getByTestId('view-chip')).toContainText('Priority');
 
-  await page.getByRole('button', { name: /Grouper :/ }).click();
-  const group = page.getByRole('menu', { name: 'Grouper' });
-  await expect(group.getByRole('menuitemradio', { name: 'Statut' })).toBeVisible();
-  await group.getByRole('menuitemradio', { name: 'Priorité' }).click();
+  await page.getByRole('button', { name: /Group:/ }).click();
+  const group = page.getByRole('menu', { name: 'Group' });
+  await expect(group.getByRole('menuitemradio', { name: 'Status' })).toBeVisible();
+  await group.getByRole('menuitemradio', { name: 'Priority' }).click();
   await page.keyboard.press('Escape');
-  await expect(page.getByRole('button', { name: /Grouper :/ })).toContainText('Grouper : priorité');
+  await expect(page.getByRole('button', { name: /Group:/ })).toContainText('Group: priority');
 });
 
 test('a saved view saves and reopens', async ({ page }) => {
@@ -254,19 +254,19 @@ test('a saved view saves and reopens', async ({ page }) => {
   await page.goto(`/atelier-nord/l/${sprint14.id}`);
   await expect(page.getByTestId('list-description')).toBeVisible();
 
-  await page.getByRole('button', { name: /Grouper :/ }).click();
+  await page.getByRole('button', { name: /Group:/ }).click();
   await page
-    .getByRole('menu', { name: 'Grouper' })
-    .getByRole('menuitemradio', { name: 'Assigné' })
+    .getByRole('menu', { name: 'Group' })
+    .getByRole('menuitemradio', { name: 'Assignee' })
     .click();
   await page.keyboard.press('Escape');
-  await page.getByRole('button', { name: 'Enregistrer la vue' }).click();
-  const dialog = page.getByRole('dialog', { name: 'Enregistrer la vue' });
+  await page.getByRole('button', { name: 'Save the view' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Save the view' });
   await expect(dialog).toBeVisible();
-  await dialog.getByRole('textbox', { name: 'Nom' }).fill('Par personne');
-  await dialog.getByRole('button', { name: 'Enregistrer la vue' }).click();
+  await dialog.getByRole('textbox', { name: 'Name' }).fill('By person');
+  await dialog.getByRole('button', { name: 'Save the view' }).click();
 
-  await expect(page.getByRole('tab', { name: 'Par personne' })).toHaveAttribute(
+  await expect(page.getByRole('tab', { name: 'By person' })).toHaveAttribute(
     'aria-selected',
     'true',
   );
@@ -274,15 +274,15 @@ test('a saved view saves and reopens', async ({ page }) => {
   await expect(dialog).toHaveCount(0);
   expect(gateway.calls).toContain(`POST /v1/lists/${sprint14.id}/saved-views`);
 
-  await page.getByRole('tab', { name: 'Liste' }).click();
+  await page.getByRole('tab', { name: 'List' }).click();
   await expect(page).not.toHaveURL(/savedView=/);
-  await expect(page.getByRole('button', { name: /Grouper :/ })).toContainText('Grouper : statut');
+  await expect(page.getByRole('button', { name: /Group:/ })).toContainText('Group: status');
 
-  await page.getByRole('tab', { name: 'Par personne' }).click();
+  await page.getByRole('tab', { name: 'By person' }).click();
   await expect(page).toHaveURL(/savedView=/);
   await page.reload();
-  await expect(page.getByRole('button', { name: /Grouper :/ })).toContainText('Grouper : assigné');
-  await expect(page.getByRole('tab', { name: 'Par personne' })).toHaveAttribute(
+  await expect(page.getByRole('button', { name: /Group:/ })).toContainText('Group: assignee');
+  await expect(page.getByRole('tab', { name: 'By person' })).toHaveAttribute(
     'aria-selected',
     'true',
   );
@@ -292,10 +292,8 @@ test('a saved view saves and reopens', async ({ page }) => {
 test('a failed list read can be retried', async ({ page }) => {
   const gateway = await stubGateway(page, true);
   await page.goto(`/atelier-nord/l/${sprint14.id}`);
-  await expect(
-    page.getByRole('heading', { name: 'Impossible de charger cette page' }),
-  ).toBeVisible();
-  await page.getByRole('button', { name: 'Réessayer' }).click();
+  await expect(page.getByRole('heading', { name: 'Could not load this page' })).toBeVisible();
+  await page.getByRole('button', { name: 'Retry' }).click();
   await expect(page.getByRole('heading', { name: 'Sprint 14' })).toBeVisible();
   expect(gateway.calls.filter((call) => call === `GET /v1/lists/${sprint14.id}`)).toHaveLength(2);
 });
@@ -305,11 +303,11 @@ test('deleting a list needs its typed name', async ({ page }) => {
   await page.goto(`/atelier-nord/l/${sprint14.id}`);
   await expect(page.getByTestId('list-description')).toBeVisible();
 
-  await page.getByRole('button', { name: "Plus d'actions sur la liste" }).click();
-  await page.getByRole('menuitem', { name: 'Supprimer la liste' }).click();
-  const dialog = page.getByRole('alertdialog', { name: 'Supprimer la liste « Sprint 14 » ?' });
+  await page.getByRole('button', { name: 'More actions on the list' }).click();
+  await page.getByRole('menuitem', { name: 'Delete the list' }).click();
+  const dialog = page.getByRole('alertdialog', { name: 'Delete the list “Sprint 14”?' });
   await expect(dialog).toBeVisible();
-  const confirm = dialog.getByRole('button', { name: 'Supprimer la liste' });
+  const confirm = dialog.getByRole('button', { name: 'Delete the list' });
   await expect(confirm).toHaveAttribute('aria-disabled', 'true');
 
   await dialog.getByRole('textbox').fill('Sprint');

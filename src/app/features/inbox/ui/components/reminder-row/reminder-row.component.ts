@@ -19,9 +19,9 @@ import { reminderTime } from '../../../utils/inbox-time/inbox-time.util';
  * Component ReminderRow
  *
  * @description
- * One pending reminder of the « Rappels » tab (mockup `App.dc.html` lines 160-164): the alarm, the
- * due time (« Aujourd’hui, 9 h », followed by « · en retard » in red once due), the task key and
- * name, the note, then « Reporter à demain matin » (`snoozed`) and « Marquer comme fait »
+ * One pending reminder of the `Reminders` tab (mockup `App.dc.html` lines 160-164): the alarm, the
+ * due time (`Today, 9:00`, followed by `· late` in red once due), the task key and
+ * name, the note, then `Postpone to tomorrow morning` (`snoozed`) and `Mark as done`
  * (`completed`). The text part is a button that emits `opened`.
  */
 @Component({
@@ -68,7 +68,7 @@ export class ReminderRow {
    * Property snoozed
    *
    * @description
-   * Fires when « Reporter à demain matin » is clicked.
+   * Fires when `Postpone to tomorrow morning` is clicked.
    *
    * @type {OutputEmitterRef<void>}
    * @readonly
@@ -79,7 +79,7 @@ export class ReminderRow {
    * Property completed
    *
    * @description
-   * Fires when « Marquer comme fait » is clicked.
+   * Fires when `Mark as done` is clicked.
    *
    * @type {OutputEmitterRef<void>}
    * @readonly
@@ -114,7 +114,7 @@ export class ReminderRow {
    * Property when
    *
    * @description
-   * The due time, with « · en retard » once due.
+   * The due time, with `· late` once due.
    *
    * @type {Signal<string>}
    * @readonly

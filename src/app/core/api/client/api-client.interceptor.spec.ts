@@ -40,8 +40,8 @@ describe('apiClientInterceptor', () => {
     );
     expect(pending.request.withCredentials).toBe(true);
     expect(pending.request.headers.has('Authorization')).toBe(false);
-    pending.flush({ name: 'Compte de test' });
-    await expect(response).resolves.toEqual({ name: 'Compte de test' });
+    pending.flush({ name: 'Test account' });
+    await expect(response).resolves.toEqual({ name: 'Test account' });
   });
 
   it('preserves the URL and credential policy for an asset', async () => {

@@ -163,7 +163,7 @@ const STATUS_FROM_MS: number = 600;
  * Constant REMINDER_HOUR
  *
  * @description
- * Hour of « Me rappeler demain matin », in the caller's time zone (`REM_PRESETS` of `App.dc.html`).
+ * Hour of `Remind me tomorrow morning`, in the caller's time zone (`REM_PRESETS` of `App.dc.html`).
  *
  * @type {number}
  */
@@ -173,7 +173,7 @@ const REMINDER_HOUR: number = 9;
  * Interface StatusMenuGroup
  *
  * @description
- * The statuses of one category of the row menu's « Statut », under its heading, each with its
+ * The statuses of one category of the row menu's `Status`, under its heading, each with its
  * hint; a milestone's menu has one group without a heading.
  */
 interface StatusMenuGroup {
@@ -193,7 +193,7 @@ interface StatusMenuGroup {
    * Property heading
    *
    * @description
-   * « Non commencé », « Actif » or « Fermé »; empty for a milestone.
+   * `Not started`, `Active` or `Closed`; empty for a milestone.
    *
    * @type {string}
    * @readonly
@@ -217,7 +217,7 @@ interface StatusMenuGroup {
  * Interface ActionToast
  *
  * @description
- * The toast of an applied action and what its « Annuler » sends back.
+ * The toast of an applied action and what its `Undo` sends back.
  */
 interface ActionToast {
   // #region Properties
@@ -307,21 +307,21 @@ function groupBy<T>(items: readonly T[], keyOf: (item: T) => string): readonly T
  * Component ListViewPage
  *
  * @description
- * The « Liste » view of a list (`/:org/l/:listId/list`): the grouped task rows of `ListRowsStore`
+ * The `List` view of a list (`/:org/l/:listId/list`): the grouped task rows of `ListRowsStore`
  * in a virtualized `cw-data-table`, read page by page as the table scrolls. A row shows the
  * status and the name (`cw-task-title-cell`, the icon animating from the previous status), the
- * assignees, the due date, the priority (« Urgente » in red) and the labels. A click on the name,
- * Enter or the « … » button opens the task (`?task=<KEY>`, the detail comes in step 5); a right
+ * assignees, the due date, the priority (`Urgent` in red) and the labels. A click on the name,
+ * Enter or the `…` button opens the task (`?task=<KEY>`, the detail comes in step 5); a right
  * click, the Menu key or Shift F10 on a row opens its menu, which acts on the selection when the
- * row is selected: « Ouvrir », « Statut » (by category, with hints), « Priorité », « Assigner »,
- * « Déplacer vers », the reminder, « Dupliquer », the two copies and « Supprimer ». A right click
- * elsewhere in the view opens the list menu (« Nouvelle tâche », « Grouper par », « Trier par »,
- * « Tout sélectionner », « Exporter en CSV »). « Nom » sorts by name. Each group's add row presets
+ * row is selected: `Open`, `Status` (by category, with hints), `Priority`, `Assign`,
+ * `Move to`, the reminder, `Duplicate`, the two copies and `Delete`. A right click
+ * elsewhere in the view opens the list menu (`New task`, `Group by`, `Sort by`,
+ * `Select all`, `Export as CSV`). `name` sorts by name. Each group's add row presets
  * its status, priority or assignee; `N` creates in this list. The selection fills the selection
  * bar. Every write goes through `ListRowsStore.act`: the rows change at once, a refusal puts them
- * back, and the toast's « Annuler » sends the reverse write (a deletion restores the trash
+ * back, and the toast's `Undo` sends the reverse write (a deletion restores the trash
  * entries). Under 768 px the rows keep the name and the due date. A failed first read reaches the
- * route's error boundary; a failed next page or subtask read offers « Réessayer » in place.
+ * route's error boundary; a failed next page or subtask read offers `Retry` in place.
  */
 @Component({
   selector: 'cw-list-view-page',
@@ -390,7 +390,7 @@ export class ListViewPage {
    * Property groupOptions
    *
    * @description
-   * « Grouper par » of the list menu: Statut, Priorité, Assigné, Aucun.
+   * `Group by` of the list menu: `Status`, `Priority`, `Assignee`, `None`.
    *
    * @type {readonly { value: ListGroupBy; label: string }[]}
    * @readonly
@@ -412,7 +412,7 @@ export class ListViewPage {
    * Property sortOptions
    *
    * @description
-   * « Trier par » of the list menu, in the mockup's order.
+   * `Sort by` of the list menu, in the mockup's order.
    *
    * @type {readonly { value: ListSortField; label: string }[]}
    * @readonly
@@ -739,7 +739,7 @@ export class ListViewPage {
    * Property menuTitle
    *
    * @description
-   * Heading of the row menu: « CAD-482 · name » or « n tâches sélectionnées ».
+   * Heading of the row menu: `CAD-482 · name` or `n tasks selected`.
    *
    * @type {Signal<string>}
    * @readonly
@@ -823,7 +823,7 @@ export class ListViewPage {
    * Property menuStatusGroups
    *
    * @description
-   * « Statut » of the row menu: the statuses under « Non commencé », « Actif » and « Fermé », each
+   * `Status` of the row menu: the statuses under `Not started`, `Active` and `Closed`, each
    * with its hint (`App.dc.html` near line 3406); a milestone's four in one group.
    *
    * @type {Signal<readonly StatusMenuGroup[]>}
@@ -875,7 +875,7 @@ export class ListViewPage {
    * Property userId
    *
    * @description
-   * The signed-in member, shown « (moi) » in the row menu.
+   * The signed-in member, shown `(me)` in the row menu.
    *
    * @type {Signal<string>}
    * @readonly
@@ -886,7 +886,7 @@ export class ListViewPage {
    * Property bulkPeople
    *
    * @description
-   * People of the selection bar's « Assigner », ticked when every selected task has them.
+   * People of the selection bar's `Assign`, ticked when every selected task has them.
    *
    * @type {Signal<readonly BulkPerson[]>}
    * @readonly
@@ -942,7 +942,7 @@ export class ListViewPage {
    * Property menuTargets
    *
    * @description
-   * « Déplacer vers » of the row menu: the lists not every task of the menu already sits in.
+   * `Move to` of the row menu: the lists not every task of the menu already sits in.
    *
    * @type {Signal<readonly MoveTarget[]>}
    * @readonly
@@ -974,7 +974,7 @@ export class ListViewPage {
    * Property tableLabel
    *
    * @description
-   * Accessible name of the table (« Tâches de la liste Sprint 14 »).
+   * Accessible name of the table (`Tasks of the list Sprint 14`).
    *
    * @type {Signal<string>}
    * @readonly
@@ -988,7 +988,7 @@ export class ListViewPage {
    * Property separate
    *
    * @description
-   * Whether subtasks show « À part, comme des tâches », with their parent's key.
+   * Whether subtasks show `Apart, as tasks`, with their parent's key.
    *
    * @type {Signal<boolean>}
    * @readonly
@@ -1001,7 +1001,7 @@ export class ListViewPage {
    * Property filtered
    *
    * @description
-   * Whether a filter, the search or « Jalons » narrows the rows.
+   * Whether a filter, the search or `Milestones` narrows the rows.
    *
    * @type {Signal<boolean>}
    * @readonly
@@ -1015,7 +1015,7 @@ export class ListViewPage {
    * Property tableSort
    *
    * @description
-   * The sort the « Nom » header shows: by name when the view sorts by name, else none.
+   * The sort the `name` header shows: by name when the view sorts by name, else none.
    *
    * @type {Signal<readonly CwSort[]>}
    * @readonly
@@ -1029,7 +1029,7 @@ export class ListViewPage {
    * Property loadedCount
    *
    * @description
-   * Tasks the view has read, each once (« Tout sélectionner » of the list menu).
+   * Tasks the view has read, each once (`Select all` of the list menu).
    *
    * @type {Signal<number>}
    * @readonly
@@ -1066,7 +1066,7 @@ export class ListViewPage {
    * Property rowLabel
    *
    * @description
-   * Short name of a row for its checkbox (« Sélectionner CAD-482 »).
+   * Short name of a row for its checkbox (`Select CAD-482`).
    *
    * @type {(row: ListRow) => string}
    * @readonly
@@ -1078,7 +1078,7 @@ export class ListViewPage {
    *
    * @description
    * Name of a group: the space's status name, the priority word, the member's name,
-   * « Non assignées » or « Toutes les tâches ».
+   * `Unassigned` or `All tasks`.
    *
    * @type {(key: string) => string}
    * @readonly
@@ -1293,7 +1293,7 @@ export class ListViewPage {
    * Method groupInitials
    *
    * @description
-   * Initials of an assignee group (« — » for « Non assignées »).
+   * Initials of an assignee group (`—` for `Unassigned`).
    *
    * @param {string} key - The group value.
    * @returns {string} The initials.
@@ -1308,7 +1308,7 @@ export class ListViewPage {
    * Method subtasksLabel
    *
    * @description
-   * Name of the caret of a row's subtasks (« Afficher les 3 sous-tâches de CAD-482 »).
+   * Name of the caret of a row's subtasks (`Show the 3 subtasks of CAD-482`).
    *
    * @param {ListRow} row - The row.
    * @returns {string} The label.
@@ -1325,7 +1325,7 @@ export class ListViewPage {
    * Method actionsLabel
    *
    * @description
-   * Name of a row's « … » button (« Actions sur CAD-482 »).
+   * Name of a row's `…` button (`Actions on CAD-482`).
    *
    * @param {ListRow} row - The row.
    * @returns {string} The label.
@@ -1339,7 +1339,7 @@ export class ListViewPage {
    * Method personLabel
    *
    * @description
-   * A person of the row menu's « Assigner »: the signed-in member reads « Nom (moi) ».
+   * A person of the row menu's `Assign`: the signed-in member reads `Name (me)`.
    *
    * @param {Person} person - The person.
    * @returns {string} The label.
@@ -1372,7 +1372,7 @@ export class ListViewPage {
    * Method remindLabel
    *
    * @description
-   * « Me rappeler demain matin », or « Me rappeler ces tâches demain matin » for several.
+   * `Remind me tomorrow morning`, or `Remind me of these tasks tomorrow morning` for several.
    *
    * @returns {string} The label.
    */
@@ -1386,7 +1386,7 @@ export class ListViewPage {
    * Method deleteMenuLabel
    *
    * @description
-   * « Supprimer la tâche », or « Supprimer les N tâches » for several.
+   * `Delete the task`, or `Delete the N tasks` for several.
    *
    * @returns {string} The label.
    */
@@ -1401,7 +1401,7 @@ export class ListViewPage {
    * Method selectAllHint
    *
    * @description
-   * Hint of « Tout sélectionner »: the tasks read (« 12 tâches »).
+   * Hint of `Select all`: the tasks read (`12 tasks`).
    *
    * @returns {string} The hint.
    */
@@ -1433,7 +1433,7 @@ export class ListViewPage {
    * Method sortChanged
    *
    * @description
-   * The « Nom » header: ascending, then descending, then ascending again (`sortByName` of
+   * The `name` header: ascending, then descending, then ascending again (`sortByName` of
    * `App.dc.html`).
    *
    * @param {readonly CwSort[]} sort - The sort the table asks for.
@@ -1449,7 +1449,7 @@ export class ListViewPage {
    * Method setGroupBy
    *
    * @description
-   * « Grouper par » of the list menu.
+   * `Group by` of the list menu.
    *
    * @param {ListGroupBy} groupBy - The grouping.
    */
@@ -1461,7 +1461,7 @@ export class ListViewPage {
    * Method setSortField
    *
    * @description
-   * « Trier par » of the list menu, keeping the direction.
+   * `Sort by` of the list menu, keeping the direction.
    *
    * @param {ListSortField} field - The criterion.
    */
@@ -1473,7 +1473,7 @@ export class ListViewPage {
    * Method selectAll
    *
    * @description
-   * « Tout sélectionner » of the list menu: ticks every row read.
+   * `Select all` of the list menu: ticks every row read.
    */
   protected selectAll(): void {
     this.tableSelection.set(this.rows.rows().map((row: ListRow): string => row.id));
@@ -1483,7 +1483,7 @@ export class ListViewPage {
    * Method editList
    *
    * @description
-   * « Modifier la liste » or « Modifier le sprint » of the list menu (`App.dc.html` line 7310):
+   * `Edit the list` or `Edit the sprint` of the list menu (`App.dc.html` line 7310):
    * opens the list dialog, which the sidebar hosts, as the header does.
    *
    * @param {TaskList} list - The open list.
@@ -1501,7 +1501,7 @@ export class ListViewPage {
    * Method exportCsv
    *
    * @description
-   * « Exporter en CSV » of the list menu: downloads the tasks the view shows, as the header does.
+   * `Export as CSV` of the list menu: downloads the tasks the view shows, as the header does.
    */
   protected async exportCsv(): Promise<void> {
     const file: ListExport | null = await this.store.exportCsv(this.view.taskQuery());
@@ -1520,8 +1520,8 @@ export class ListViewPage {
    * Method clearSearch
    *
    * @description
-   * « Effacer la recherche » of the empty result: empties the search, or the filters and
-   * « Jalons » when there is no search, so the button always shows tasks again.
+   * `Clear the search` of the empty result: empties the search, or the filters and
+   * `Milestones` when there is no search, so the button always shows tasks again.
    */
   protected clearSearch(): void {
     if (this.view.search().trim() !== '') {
@@ -1536,7 +1536,7 @@ export class ListViewPage {
    * Method setStatus
    *
    * @description
-   * « Statut » of the row menu: sets the status of its tasks at once. « Annulé » asks the reason
+   * `Status` of the row menu: sets the status of its tasks at once. `Cancelled` asks the reason
    * first, for the tasks not cancelled already, and only when there is one.
    *
    * @param {readonly TaskSummary[]} tasks - The tasks of the menu.
@@ -1573,7 +1573,7 @@ export class ListViewPage {
    *
    * @description
    * Cancels the tasks of the dialog with their shared reason; the toast names the reason and
-   * offers « Annuler ».
+   * offers `Undo`.
    *
    * @param {TaskCancellation} cancellation - The reason and optional note.
    */
@@ -1611,7 +1611,7 @@ export class ListViewPage {
    * Method setPriority
    *
    * @description
-   * « Priorité » of the row menu.
+   * `Priority` of the row menu.
    *
    * @param {readonly TaskSummary[]} tasks - The tasks of the menu.
    * @param {PriorityKey} priority - The priority.
@@ -1645,7 +1645,7 @@ export class ListViewPage {
    * Method toggleAssignee
    *
    * @description
-   * « Assigner » of the row menu or of the selection bar: assigns the person to every task, or
+   * `Assign` of the row menu or of the selection bar: assigns the person to every task, or
    * removes the person when every task has them already.
    *
    * @param {readonly TaskSummary[]} tasks - The tasks.
@@ -1686,7 +1686,7 @@ export class ListViewPage {
    * Method moveTo
    *
    * @description
-   * « Déplacer vers » of the row menu or of the selection bar; the rows leave the view at once.
+   * `Move to` of the row menu or of the selection bar; the rows leave the view at once.
    *
    * @param {readonly TaskSummary[]} tasks - The tasks.
    * @param {string} listId - The destination.
@@ -1719,7 +1719,7 @@ export class ListViewPage {
    * Method remind
    *
    * @description
-   * « Me rappeler demain matin »: a reminder tomorrow at 9 for each task of the menu.
+   * `Remind me tomorrow morning`: a reminder tomorrow at 9 for each task of the menu.
    *
    * @param {readonly TaskSummary[]} tasks - The tasks.
    */
@@ -1757,7 +1757,7 @@ export class ListViewPage {
    * Method duplicate
    *
    * @description
-   * « Dupliquer »: copies each task of the menu; the toast names the copies and « Ouvrir » opens
+   * `Duplicate`: copies each task of the menu; the toast names the copies and `Open` opens
    * a single copy.
    *
    * @param {readonly TaskSummary[]} tasks - The tasks.
@@ -1784,7 +1784,7 @@ export class ListViewPage {
    * Method copyLinks
    *
    * @description
-   * « Copier le lien »: the shareable addresses of the tasks (`/<slug>/t/<KEY>`), one per line.
+   * `Copy the link`: the shareable addresses of the tasks (`/<slug>/t/<KEY>`), one per line.
    *
    * @param {readonly TaskSummary[]} tasks - The tasks.
    */
@@ -1804,7 +1804,7 @@ export class ListViewPage {
    * Method copyKeys
    *
    * @description
-   * « Copier l’identifiant »: the keys of the tasks, comma-separated.
+   * `Copy the identifier`: the keys of the tasks, comma-separated.
    *
    * @param {readonly TaskSummary[]} tasks - The tasks.
    */
@@ -1836,7 +1836,7 @@ export class ListViewPage {
    * Method trash
    *
    * @description
-   * Moves the confirmed tasks to the trash; the toast counts their subtasks and « Annuler »
+   * Moves the confirmed tasks to the trash; the toast counts their subtasks and `Undo`
    * restores the trash entries.
    */
   protected async trash(): Promise<void> {
@@ -1887,8 +1887,8 @@ export class ListViewPage {
    * Method deleteTitle
    *
    * @description
-   * Question of the deletion: « Supprimer « nom » ? » from the row menu, else « Supprimer cette
-   * tâche ? »; « Supprimer N tâches ? » for several.
+   * Question of the deletion: `Delete “name”?` from the row menu, else `Delete this task?`;
+   * `Delete N tasks?` for several.
    *
    * @returns {string} The title.
    */
@@ -1939,7 +1939,7 @@ export class ListViewPage {
    * Method deleteItems
    *
    * @description
-   * The tasks the confirmation lists (« CAD-482 · nom »).
+   * The tasks the confirmation lists (`CAD-482 · name`).
    *
    * @returns {readonly string[]} The items.
    */
@@ -2005,7 +2005,7 @@ export class ListViewPage {
    *
    * @description
    * The trailing row of a group creates in this list with the group's value: its status, its
-   * priority or its assignee (nobody for « Non assignées »).
+   * priority or its assignee (nobody for `Unassigned`).
    *
    * @param {string | null} group - The group value.
    */
@@ -2037,7 +2037,7 @@ export class ListViewPage {
    * Method create
    *
    * @description
-   * « Ajouter une tâche » of the empty state and « Nouvelle tâche » of the list menu: creates in
+   * `Add a task` of the empty state and `New task` of the list menu: creates in
    * this list.
    */
   protected create(): void {
@@ -2058,7 +2058,7 @@ export class ListViewPage {
    * Method markDone
    *
    * @description
-   * « Marquer terminé » of the selection bar: the icons change at once, the rows join « Terminé »
+   * `Mark done` of the selection bar: the icons change at once, the rows join `Done`
    * 460 ms later and the selection empties at once.
    */
   protected markDone(): void {
@@ -2084,7 +2084,7 @@ export class ListViewPage {
    * Method assignSelection
    *
    * @description
-   * « Assigner » of the selection bar.
+   * `Assign` of the selection bar.
    *
    * @param {string} userId - The person.
    */
@@ -2096,7 +2096,7 @@ export class ListViewPage {
    * Method moveSelection
    *
    * @description
-   * « Déplacer vers… » of the selection bar.
+   * `Move to…` of the selection bar.
    *
    * @param {string} listId - The destination.
    */
@@ -2124,7 +2124,7 @@ export class ListViewPage {
    * Method tasksLabel
    *
    * @description
-   * How a toast names the tasks: « CAD-482 » or « 3 tâches ».
+   * How a toast names the tasks: `CAD-482` or `3 tasks`.
    *
    * @param {readonly TaskSummary[]} tasks - The tasks.
    * @returns {string} The label.
@@ -2142,8 +2142,8 @@ export class ListViewPage {
    * @description
    * Applies an action through `ListRowsStore.act`, then reports it. Tasks of a refused chunk stay
    * selected and a second toast counts them; a refusal of everything shows the failure toast; an
-   * uncertain answer warns and the rows are read again. The success toast offers « Annuler » when
-   * the action can be undone, or « Ouvrir » for a single copy. The list's counts are read again.
+   * uncertain answer warns and the rows are read again. The success toast offers `Undo` when
+   * the action can be undone, or `Open` for a single copy. The list's counts are read again.
    *
    * @param {readonly TaskSummary[]} tasks - The tasks, as shown.
    * @param {TaskBulkAction} action - The action.
@@ -2276,7 +2276,7 @@ export class ListViewPage {
    * Method restore
    *
    * @description
-   * « Annuler » of a deletion: takes the trash entries back.
+   * `Undo` of a deletion: takes the trash entries back.
    *
    * @param {readonly string[]} entryIds - The trash entries.
    * @returns {Promise<void>} Resolves once restored.

@@ -45,7 +45,7 @@ export interface RuntimeConfig {
    *
    * @description
    * Address of the public status page, when the environment has one. The unavailable error state
-   * offers « État du service » only when it is set.
+   * offers `Service status` only when it is set.
    *
    * @type {string | undefined}
    * @readonly

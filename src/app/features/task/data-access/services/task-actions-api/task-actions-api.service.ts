@@ -239,7 +239,7 @@ export class TaskActionsApi {
    * Method remind
    *
    * @description
-   * Sets the caller's reminder of a task (« Me rappeler demain matin »), replacing a previous one.
+   * Sets the caller's reminder of a task (`Remind me tomorrow morning`), replacing a previous one.
    *
    * @param {string} taskKey - Key of the task.
    * @param {Date} at - When to remind.
@@ -253,7 +253,7 @@ export class TaskActionsApi {
    * Method restore
    *
    * @description
-   * Takes a deleted task, with its subtasks, out of the trash (the « Annuler » of a deletion).
+   * Takes a deleted task, with its subtasks, out of the trash (the `Undo` of a deletion).
    *
    * @param {string} entryId - The trash entry.
    * @returns {Promise<void>} Resolves once the task is back.

@@ -68,7 +68,7 @@ export interface Space {
    * Property name
    *
    * @description
-   * Space name (« Produit »).
+   * Space name (`Product`).
    *
    * @type {string}
    * @readonly
@@ -112,7 +112,7 @@ export interface Space {
    * Property private
    *
    * @description
-   * Whether only its owner and the people it is shared with see it (« Espace privé »).
+   * Whether only its owner and the people it is shared with see it (`Private space`).
    *
    * @type {boolean}
    * @readonly
@@ -145,7 +145,7 @@ export interface SpaceDetails extends Space {
    * Property prefix
    *
    * @description
-   * Prefix of its task keys (« CAD »), 2 to 5 unaccented capital letters.
+   * Prefix of its task keys (`CAD`), 2 to 5 unaccented capital letters.
    *
    * @type {string}
    * @readonly
@@ -180,7 +180,7 @@ export interface SpaceDetails extends Space {
  * Interface SpaceDraft
  *
  * @description
- * What the space dialog submits, trimmed: « Créer l’espace » or « Enregistrer ».
+ * What the space dialog submits, trimmed: `Create the space` or `Save`.
  */
 export interface SpaceDraft {
   // #region Properties
@@ -188,7 +188,7 @@ export interface SpaceDraft {
    * Property name
    *
    * @description
-   * « Nom de l’espace », 1 to 80 characters.
+   * `Space name`, 1 to 80 characters.
    *
    * @type {string}
    * @readonly
@@ -199,7 +199,7 @@ export interface SpaceDraft {
    * Property prefix
    *
    * @description
-   * « Préfixe », 2 to 5 unaccented capital letters.
+   * `Prefix`, 2 to 5 unaccented capital letters.
    *
    * @type {string}
    * @readonly
@@ -210,7 +210,7 @@ export interface SpaceDraft {
    * Property description
    *
    * @description
-   * « Description », or null when empty.
+   * `Description`, or null when empty.
    *
    * @type {string | null}
    * @readonly
@@ -221,7 +221,7 @@ export interface SpaceDraft {
    * Property icon
    *
    * @description
-   * « Icône », or null for the initial.
+   * `Icon`, or null for the initial.
    *
    * @type {LookIcon}
    * @readonly
@@ -232,7 +232,7 @@ export interface SpaceDraft {
    * Property color
    *
    * @description
-   * « Couleur ».
+   * `Color`.
    *
    * @type {LookColor}
    * @readonly
@@ -243,7 +243,7 @@ export interface SpaceDraft {
    * Property private
    *
    * @description
-   * « Privé » rather than the whole organization.
+   * `Private` rather than the whole organization.
    *
    * @type {boolean}
    * @readonly

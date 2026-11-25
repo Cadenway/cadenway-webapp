@@ -11,8 +11,8 @@ import type { SidebarTip } from '../../../constants/sidebar-tips/sidebar-tips.co
  * @description
  * The suggestion carousel of the sidebar (`App.dc.html` lines 238-258): a `section` described as
  * a carousel, the tip's icon, title (announced politely as it changes), text, its call to action
- * as a link to `link`, « position / count » and, with several tips, previous and next buttons.
- * The cross emits `dismissed` (« Masquer les suggestions »). Presentational: the container owns
+ * as a link to `link`, `position / count` and, with several tips, previous and next buttons.
+ * The cross emits `dismissed` (`Hide the suggestions`). Presentational: the container owns
  * the position and the dismissal.
  */
 @Component({

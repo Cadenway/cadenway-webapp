@@ -62,7 +62,7 @@ export function provideSpacesNavigation(): Provider[] {
  * Function withSpacesRailItem
  *
  * @description
- * Contributes « Espaces » to the shell's `railNavigation` slot, after « Boîte de réception »: it
+ * Contributes `Spaces` to the shell's `railNavigation` slot, after `Inbox`: it
  * shows the spaces screen, and the favorite spaces follow it on desktop.
  *
  * @returns {SlotFeature<SlotContribution>} The slot contribution factory.
@@ -119,8 +119,8 @@ export function withSprintProgress(): SlotFeature<SlotContribution> {
  * Function withSidebarFooterLinks
  *
  * @description
- * Contributes « Corbeille » and « Archives » with their counts to the shell's `sidebarFooter`
- * slot, between the plan line (order 10) and « Raccourcis clavier » (order 90). Bind it on the
+ * Contributes `Trash` and `Archives` with their counts to the shell's `sidebarFooter`
+ * slot, between the plan line (order 10) and `Keyboard shortcuts` (order 90). Bind it on the
  * `/:org` route together with `provideSpacesNavigation()`.
  *
  * @returns {SlotFeature<SlotContribution>} The slot contribution factory.

@@ -29,7 +29,7 @@ export function withPlanSummary(): SlotFeature<SlotContribution> {
  * Function withStorageBanner
  *
  * @description
- * Contributes the « Stockage presque plein » banner to the shell's `banners` slot. Bind it on the
+ * Contributes the `Storage nearly full` banner to the shell's `banners` slot. Bind it on the
  * `/:org` route, whose injector provides `WORKSPACE_CONTEXT`.
  *
  * @returns {SlotFeature<SlotContribution>} The slot contribution factory.

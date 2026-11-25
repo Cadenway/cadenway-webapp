@@ -9,8 +9,8 @@ import { injectOrganizationSlug } from '../../../utils/workspace-route/workspace
  * Component SidebarFooterLinks
  *
  * @description
- * The « Corbeille » and « Archives » rows of the sidebar footer (`App.dc.html` lines 263-264),
- * between the plan line and « Raccourcis clavier »: each links to its screen of the organization
+ * The `Trash` and `Archives` rows of the sidebar footer (`App.dc.html` lines 263-264),
+ * between the plan line and `Keyboard shortcuts`: each links to its screen of the organization
  * and shows its count once read (`SpacesNavigationStore.trashCount` and `archiveCount`); a count
  * not read yet or whose read failed is left out, the row still links. A `sidebarFooter` slot
  * contribution; its host is `display: contents`.

@@ -40,24 +40,24 @@ None.
   reminder with `getReminder`; a failed read is retried once before refreshing the reminders list.
   The badge and reminders are read after reconnect because notices are not replayed. Personal notices require `REALTIME_PERSONAL_NOTICES_ENABLED` on the gateway.
   Reminders are read on load, and both lists are refreshed on opening; failed list reads show an
-  inline « Réessayer ». Verification retries passive reads refused by an organization mismatch or local fence, once per
+  inline `Retry`. Verification retries passive reads refused by an organization mismatch or local fence, once per
   verified revision, even while realtime reconnects. A later connection skips those retries, and
   pending writes settle before their reads resume.
 - Every write bumps a version: a poll answer or a notifications load that began before it is
   dropped (a load is sent again, up to three times), so a stale badge never comes back after
-  « Tout marquer comme lu ».
-- « Tout marquer comme lu », opening a notification, « demain matin » (9 h tomorrow, local time) and
-  « Marquer comme fait » are optimistic. A refusal restores, on the current state, only the
+  `Mark all as read`.
+- `Mark all as read`, opening a notification, `Postpone to tomorrow morning` (9:00 tomorrow, local
+  time) and `Mark as done` are optimistic. A refusal restores, on the current state, only the
   notifications and the count that write changed and no other pending or confirmed write covers,
   or only that reminder, and shows the inbox's error toast. Successful reminder actions confirm
   with the mockup's toasts.
 - Focus: when a completed reminder's row disappears it moves to the row taking its place, or to the
-  « Rappels » tab; when « Tout marquer comme lu » becomes disabled it moves to the popover heading.
+  `Reminders` tab; when `Mark all as read` becomes disabled it moves to the popover heading.
 - The badge counts the unread notifications plus the listed pending reminders already due, checked
   every minute (only the first page of 30 reminders, the soonest first, is read). The rail item is
   highlighted while the popover is open, through its `aria-expanded` state.
-- The badge is hidden at zero and while the person's presence is « Ne pas déranger », and the popover
-  then shows « Ne pas déranger : notifications en pause » (only for `do-not-disturb`; an unknown
+- The badge is hidden at zero and while the person's presence is `Do not disturb`, and the popover
+  then shows `Do not disturb: notifications paused` (only for `do-not-disturb`; an unknown
   presence shows nothing).
 - Opening a notification or a reminder opens `/<slug>/t/<key>`, which renders the 404 until step 5.
 - The inbox automatic loads, badge polling and realtime refreshes are passive and wait for workspace verification
@@ -67,19 +67,19 @@ None.
 
 | Unit                                                                                                                                           | Reason                                                                                                                            |
 | ---------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
-| `inbox.rail.badge-overdue`                                                                                                                     | The mockup gives its badge no spoken text; built from « non lues » and « en retard ».                                             |
+| `inbox.rail.badge-overdue`                                                                                                                     | The mockup gives its badge no spoken text; built from `unread` and `late`.                                                        |
 | `inbox.verb.status-changed`, `inbox.verb.other`                                                                                                | Contract cases the mockup does not draw: a status change without a status, and the `due-date`, `access` and `billing` categories. |
 | `inbox.notifications-empty`, `inbox.notifications-empty-text`                                                                                  | The mockup draws no empty notification list.                                                                                      |
 | `inbox.notifications-failed`, `inbox.reminders-failed`                                                                                         | The mockup draws no failed read.                                                                                                  |
 | `inbox.mark-all-failed`, `inbox.mark-read-failed`, `inbox.reminder.snooze-failed`, `inbox.reminder.complete-failed`, `inbox.write-failed-text` | The mockup draws no refused write.                                                                                                |
-| `inbox.time.tomorrow`, `inbox.time.at-time`                                                                                                    | Built on the mockup's « Aujourd’hui, 9 h » for tomorrow and for minutes.                                                          |
+| `inbox.time.tomorrow`, `inbox.time.at-time`                                                                                                    | Built on the mockup's `Today, 9:00` for tomorrow and for minutes.                                                                 |
 
 ## Copy not taken word for word from the mockup
 
-| Unit                                                                          | Reason                                                              |
-| ----------------------------------------------------------------------------- | ------------------------------------------------------------------- |
-| `inbox.notifications-empty`, `inbox.notifications-empty-text`                 | The mockup draws no empty notification list.                        |
-| `inbox.notifications-failed`, `inbox.reminders-failed`, `inbox.retry`         | The mockup draws no failed read.                                    |
-| `inbox.verb.other`, `inbox.verb.status-changed`                               | Contract categories the mockup does not draw.                       |
-| `inbox.mark-all-failed`, `inbox.reminder.*-failed`, `inbox.write-failed-text` | The mockup draws no refused write.                                  |
-| `inbox.time.*`                                                                | Built from the mockup's samples (« 12 min », « Lun. 9 nov., 9 h »). |
+| Unit                                                                          | Reason                                                         |
+| ----------------------------------------------------------------------------- | -------------------------------------------------------------- |
+| `inbox.notifications-empty`, `inbox.notifications-empty-text`                 | The mockup draws no empty notification list.                   |
+| `inbox.notifications-failed`, `inbox.reminders-failed`, `inbox.retry`         | The mockup draws no failed read.                               |
+| `inbox.verb.other`, `inbox.verb.status-changed`                               | Contract categories the mockup does not draw.                  |
+| `inbox.mark-all-failed`, `inbox.reminder.*-failed`, `inbox.write-failed-text` | The mockup draws no refused write.                             |
+| `inbox.time.*`                                                                | Built from the mockup's samples (`12 min`, `Mon 9 Nov, 9:00`). |

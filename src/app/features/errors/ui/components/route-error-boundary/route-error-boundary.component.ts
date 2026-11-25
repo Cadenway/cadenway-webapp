@@ -75,23 +75,23 @@ function findProblem(error: unknown): ApiProblem | null {
  * The router's `errorComponent` (mockup `App.dc.html` lines 487-500 and 1499-1522, `ERR_PAGES`).
  * The boundary renders it in place of a page that failed, in the same outlet, so the shell and
  * the page header stay; it receives the failure through its `error` input and renders:
- * - not found: « Page introuvable » with a link back to `/home`;
- * - access denied: an optional message to the owner and « Demander l’accès », which becomes
- *   « Demande envoyée »;
- * - deleted task: « Restaurer la tâche », which runs the route again once restored, and « Ouvrir la
- *   corbeille » inside a workspace;
- * - unavailable, and any failure that is not a typed route error: « Impossible de charger cette
- *   page », the status and request reference, and « Réessayer », which runs the route again with a
+ * - not found: `Page not found` with a link back to `/home`;
+ * - access denied: an optional message to the owner and `Request access`, which becomes
+ *   `Request sent`;
+ * - deleted task: `Restore the task`, which runs the route again once restored, and `Open the
+ *   trash` inside a workspace;
+ * - unavailable, and any failure that is not a typed route error: `Could not load this page`, the
+ *   status and request reference, and `Retry`, which runs the route again with a
  *   same-URL reload navigation (the router re-creates an outlet whose error component is active);
- *   the failing route's `unavailableTitle` (`RouteErrorData`) replaces the title, and « État du
- *   service » links to the configured `statusUrl`, only when there is one.
+ *   the failing route's `unavailableTitle` (`RouteErrorData`) replaces the title, and `Service
+ *   status` links to the configured `statusUrl`, only when there is one.
  *
  * The page derives the state and sends the writes through its own `ErrorRecoveryStore`, so each
  * failure starts over. `RouteErrorState` renders it in an `@defer (on immediate)` block: this
  * component is the router's default error component, part of the initial bundle, so the bricks,
  * the Signal Forms runtime and the icons load in their own chunk. While that chunk loads, a status
  * line says the page is loading; when it cannot load (offline), a plain fallback says the page
- * could not be loaded and offers « Réessayer », which runs the route again.
+ * could not be loaded and offers `Retry`, which runs the route again.
  */
 @Component({
   selector: 'cw-route-error-boundary',

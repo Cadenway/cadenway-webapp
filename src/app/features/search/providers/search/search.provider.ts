@@ -8,7 +8,7 @@ import { CommandPaletteDialog } from '../../ui/dialogs/command-palette/command-p
  * Function withSearchRailItem
  *
  * @description
- * Contributes the « Rechercher » item, first in the shell's `railFooter` slot.
+ * Contributes the `Search` item, first in the shell's `railFooter` slot.
  *
  * @returns {SlotFeature<SlotContribution>} The slot contribution factory.
  */
@@ -26,7 +26,7 @@ export function withSearchRailItem(): SlotFeature<SlotContribution> {
  * Function withSearchButton
  *
  * @description
- * Contributes the « Rechercher… » button to the shell's `sidebarHeader` slot.
+ * Contributes the `Search…` button to the shell's `sidebarHeader` slot.
  *
  * @returns {SlotFeature<SlotContribution>} The slot contribution factory.
  */

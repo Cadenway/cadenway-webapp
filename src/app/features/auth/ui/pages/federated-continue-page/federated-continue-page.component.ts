@@ -22,7 +22,7 @@ import { AuthFlowStore, type SessionResult } from '../../../state/auth-flow/auth
  * The return from a provider (`/auth/federated/continue`, the path the gateway imposes). It
  * redeems the HttpOnly continuation cookie once (`finishFederatedSignIn`, an empty body), then
  * opens the destination, or `/login/two-step` for an account with two-step verification. A refused
- * continuation shows an error and « Autres méthodes de connexion ».
+ * continuation shows an error and `Other sign-in methods`.
  */
 @Component({
   selector: 'cw-federated-continue-page',

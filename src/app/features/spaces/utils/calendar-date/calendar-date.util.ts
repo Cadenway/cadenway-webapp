@@ -32,7 +32,7 @@ export function toLocalDate(iso: string): Date {
  * Function formatDayMonth
  *
  * @description
- * A day and short month in the application locale (« 17 nov. »).
+ * A day and short month in the application locale (`Nov 17` in English).
  *
  * @param {string} iso - Plain date.
  * @param {string} locale - Application locale.
@@ -48,8 +48,8 @@ export function formatDayMonth(iso: string, locale: string): string {
  * Function formatSprintRange
  *
  * @description
- * The range of a sprint as the mockup writes it (`sprintRange`): « 3 – 17 nov. » within one
- * month, « 27 oct. – 9 nov. » across two.
+ * The range of a sprint as the mockup writes it (`sprintRange`): the month written once within
+ * one month (`Nov 3 – 17` in English), both months across two (`Oct 27 – Nov 9`).
  *
  * @param {string} start - First day.
  * @param {string} end - Last day.

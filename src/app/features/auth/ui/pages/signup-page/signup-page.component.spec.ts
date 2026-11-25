@@ -93,7 +93,7 @@ describe('SignupPage', () => {
     host.querySelector('form')?.dispatchEvent(new Event('submit', { cancelable: true }));
     await fixture.whenStable();
     expect(host.querySelector('#su-terms-help')?.textContent).toContain(
-      'Acceptez les conditions pour créer votre compte.',
+      'Accept the terms to create your account.',
     );
     expect(signUp).not.toHaveBeenCalled();
 
@@ -119,7 +119,7 @@ describe('SignupPage', () => {
     await acceptAndSubmit(host, fixture);
 
     expect(host.querySelector('#su-email-help')?.textContent).toContain(
-      'Saisissez votre adresse e-mail professionnelle, par exemple camille.martin@ateliernord.fr.',
+      'Enter your work email address, for example camille.martin@ateliernord.fr.',
     );
     expect(document.activeElement).toBe(input);
     expect(signUp).not.toHaveBeenCalled();
@@ -159,7 +159,7 @@ describe('SignupPage', () => {
     await acceptAndSubmit(host, fixture);
 
     expect(host.querySelector('#su-email-help')?.textContent).toContain(
-      'Un compte existe déjà avec cette adresse : connectez-vous.',
+      'An account already uses this address: sign in.',
     );
     expect(host.querySelector('#su-email-help a')?.getAttribute('href')).toBe('/login');
     expect(navigate).not.toHaveBeenCalled();
@@ -174,7 +174,7 @@ describe('SignupPage', () => {
     await fixture.whenStable();
 
     expect(host.querySelector('cw-alert')?.textContent).toContain(
-      'Une inscription plus récente a remplacé celle-ci',
+      'A newer sign-up replaced this one',
     );
   });
 });

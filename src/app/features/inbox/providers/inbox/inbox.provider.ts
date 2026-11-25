@@ -6,8 +6,8 @@ import { InboxRailItem } from '../../ui/components/inbox-rail-item/inbox-rail-it
  * Function withInbox
  *
  * @description
- * Contributes the « Boîte de réception » item and its popover to the shell's `railNavigation`
- * slot, after « Accueil ». Bind it on the `/:org` route, whose injector provides
+ * Contributes the `Inbox` item and its popover to the shell's `railNavigation`
+ * slot, after `Home`. Bind it on the `/:org` route, whose injector provides
  * `WORKSPACE_CONTEXT` and `PRESENCE`.
  *
  * @returns {SlotFeature<SlotContribution>} The slot contribution factory.

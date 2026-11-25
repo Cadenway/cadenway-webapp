@@ -109,9 +109,9 @@ interface StatusMenuGroup {
  * @description
  * The status split button of the task detail and the create dialog (`App.dc.html` near line
  * 2905): the left part shows the status icon and word and moves the task to its next status
- * (`NEXT_STATUS`, « Atteint » for a milestone); without a next status it opens the menu. The
- * caret opens the menu of the space's visible statuses, grouped under « Non commencé », « Actif »
- * and « Fermé », each with its hint; the current status is marked even when the space hides it. A
+ * (`NEXT_STATUS`, `Reached` for a milestone); without a next status it opens the menu. The
+ * caret opens the menu of the space's visible statuses, grouped under `Not started`, `Active`
+ * and `Closed`, each with its hint; the current status is marked even when the space hides it. A
  * milestone offers its four statuses only. It emits `statusChanged` with the chosen key and never
  * changes the shown status itself: the owner passes the displayed status back.
  */
@@ -246,7 +246,7 @@ export class TaskStatusPicker {
    * Property ariaLabel
    *
    * @description
-   * Accessible name of the main part (« Statut : À faire. Passer à « En cours » »).
+   * Accessible name of the main part (`Status: To do. Move to “In progress”`).
    *
    * @type {Signal<string>}
    * @readonly
@@ -267,7 +267,7 @@ export class TaskStatusPicker {
    * Property tooltip
    *
    * @description
-   * Tooltip of the main part (« Passer à « En cours » » or « Choisir un statut »).
+   * Tooltip of the main part (`Move to “In progress”` or `Choose a status`).
    *
    * @type {Signal<string>}
    * @readonly

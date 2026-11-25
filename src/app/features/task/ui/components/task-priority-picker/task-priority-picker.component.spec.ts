@@ -18,17 +18,17 @@ describe('TaskPriorityPicker', () => {
       'button',
     );
 
-    expect(trigger?.getAttribute('aria-label')).toBe('Priorité : Moyenne');
+    expect(trigger?.getAttribute('aria-label')).toBe('Priority: Medium');
     trigger?.click();
     await fixture.whenStable();
     const items: HTMLElement[] = Array.from(
       document.querySelectorAll<HTMLElement>('[role="menuitem"]'),
     );
     expect(items.map((item: HTMLElement) => item.textContent.trim())).toEqual([
-      'Urgente',
-      'Haute',
-      'Moyenne',
-      'Basse',
+      'Urgent',
+      'High',
+      'Medium',
+      'Low',
     ]);
     items[1].click();
 

@@ -190,7 +190,7 @@ export class ListPage {
    * Property workspace
    *
    * @description
-   * The workspace context, whose member is « Moi » in the assignee filter.
+   * The workspace context, whose member is `Me` in the assignee filter.
    *
    * @type {WorkspaceContextPort}
    * @readonly
@@ -235,7 +235,7 @@ export class ListPage {
    * Property taskCreate
    *
    * @description
-   * The task create dialog, which « Créer une tâche » opens in this list.
+   * The task create dialog, which `Create a task` opens in this list.
    *
    * @type {TaskCreate}
    * @readonly
@@ -312,7 +312,7 @@ export class ListPage {
    * Property spaceDetails
    *
    * @description
-   * The list's space as the sidebar read it, which « Modifier l’espace » opens, or undefined.
+   * The list's space as the sidebar read it, which `Edit the space` opens, or undefined.
    *
    * @type {Signal<SpaceDetails | undefined>}
    * @readonly
@@ -441,7 +441,7 @@ export class ListPage {
    * Property statuses
    *
    * @description
-   * Statuses the « Filtrer » dialog offers: those the space shows, with its labels.
+   * Statuses the `Filter` dialog offers: those the space shows, with its labels.
    *
    * @type {Signal<readonly ViewOption<StatusKey>[]>}
    * @readonly
@@ -499,7 +499,7 @@ export class ListPage {
    * Property dialogPlaceholder
    *
    * @description
-   * Suggested name of a new saved view (« Liste · filtrée »).
+   * Suggested name of a new saved view (`List · filtered`).
    *
    * @type {Signal<string>}
    * @readonly
@@ -613,7 +613,7 @@ export class ListPage {
    * Method createTask
    *
    * @description
-   * « Créer une tâche » of the view tools: opens the create dialog in this list.
+   * `Create a task` of the view tools: opens the create dialog in this list.
    */
   protected createTask(): void {
     this.taskCreate.open({ listId: this.listId() });
@@ -668,7 +668,7 @@ export class ListPage {
    * Method editList
    *
    * @description
-   * « Modifier la liste » or « Modifier le sprint »: opens the list dialog, which the sidebar
+   * `Edit the list` or `Edit the sprint`: opens the list dialog, which the sidebar
    * hosts; the recorded list comes back through `listEdited`.
    *
    * @param {TaskList} list - The list.
@@ -686,7 +686,7 @@ export class ListPage {
    * Method editSpace
    *
    * @description
-   * « Modifier l’espace »: opens the space dialog of the list's space.
+   * `Edit the space`: opens the space dialog of the list's space.
    */
   protected editSpace(): void {
     const space: SpaceDetails | undefined = this.spaceDetails();
@@ -720,7 +720,7 @@ export class ListPage {
    * Method duplicate
    *
    * @description
-   * Copies the list with its tasks and adds the copy to the sidebar; « Annuler » deletes the copy.
+   * Copies the list with its tasks and adds the copy to the sidebar; `Undo` deletes the copy.
    */
   protected async duplicate(): Promise<void> {
     const copy: { list: TaskList; taskCount: number } | null = await this.store.duplicate();
@@ -789,7 +789,7 @@ export class ListPage {
    * Method archive
    *
    * @description
-   * Archives the list, then shows its space; the sidebar no longer lists it. « Annuler » brings
+   * Archives the list, then shows its space; the sidebar no longer lists it. `Undo` brings
    * it back and shows it again.
    *
    * @param {TaskList} list - The list.
@@ -852,7 +852,7 @@ export class ListPage {
    * Method deleteTitle
    *
    * @description
-   * Question of the deletion (« Supprimer la liste « Bugs » ? »).
+   * Question of the deletion (`Delete the list “Bugs”?`).
    *
    * @param {TaskList} list - The list.
    * @returns {string} The title.
@@ -880,7 +880,7 @@ export class ListPage {
    * Method removeCopy
    *
    * @description
-   * The « Annuler » of « Liste dupliquée »: deletes the copy.
+   * The `Undo` of `List duplicated`: deletes the copy.
    *
    * @param {TaskList} copy - The copy.
    * @returns {Promise<void>} Resolves once handled.
@@ -895,7 +895,7 @@ export class ListPage {
    * Method unarchive
    *
    * @description
-   * The « Annuler » of « Liste archivée »: brings the list back and shows it again.
+   * The `Undo` of `List archived`: brings the list back and shows it again.
    *
    * @param {TaskList} list - The archived list.
    * @returns {Promise<void>} Resolves once handled.
@@ -914,7 +914,7 @@ export class ListPage {
    * Method openSaveDialog
    *
    * @description
-   * Opens « Enregistrer la vue » for the current view.
+   * Opens `Save the view` for the current view.
    */
   protected openSaveDialog(): void {
     this.dialogView.set(null);
@@ -925,7 +925,7 @@ export class ListPage {
    * Method openRenameDialog
    *
    * @description
-   * Opens « Renommer la vue ».
+   * Opens `Rename the view`.
    *
    * @param {SavedView} saved - The view.
    */
@@ -984,7 +984,7 @@ export class ListPage {
    * Method saveSettings
    *
    * @description
-   * Saves the current configuration into the applied saved view (« Enregistrer »).
+   * Saves the current configuration into the applied saved view (`Save`).
    */
   protected async saveSettings(): Promise<void> {
     const saved: SavedView | null = this.view.savedView();
@@ -1024,7 +1024,7 @@ export class ListPage {
    * Method deleteView
    *
    * @description
-   * Deletes a saved view; the applied one goes back to the standard tab. « Annuler » creates it
+   * Deletes a saved view; the applied one goes back to the standard tab. `Undo` creates it
    * again at its place, with its name, icon and configuration, and applies it again when it was
    * applied.
    *
@@ -1058,7 +1058,7 @@ export class ListPage {
    * Method restoreView
    *
    * @description
-   * The « Annuler » of « Vue supprimée ».
+   * The `Undo` of `View deleted`.
    *
    * @param {SavedView} saved - The deleted view.
    * @param {number} index - Its former place among the views.

@@ -33,13 +33,13 @@ import { AccessRequestForm } from '../../forms/access-request-form/access-reques
  * @description
  * Renders one state of the route error page (mockup `App.dc.html` lines 487-500 and 1499-1522,
  * `ERR_PAGES`), from the values the page derived and the progress of its writes:
- * - `not-found`: « Erreur 404 », « Page introuvable » and « Retour à l’accueil » to `/home`;
+ * - `not-found`: `Error 404`, `Page not found` and `Back to home` to `/home`;
  * - `access-denied`: the private space and its owner when known, the access request form, then
- *   « Demande envoyée »;
- * - `deleted-task`: the task, « Restaurer la tâche » (« Déjà restaurée » once the entry is gone) and
- *   « Ouvrir la corbeille » when a trash link is given;
- * - `unavailable`: « Impossible de charger cette page », « Réessayer » and the `Erreur <status> ·
- *   réf. <requestId>` line when known.
+ *   `Request sent`;
+ * - `deleted-task`: the task, `Restore the task` (`Already restored` once the entry is gone) and
+ *   `Open the trash` when a trash link is given;
+ * - `unavailable`: `Could not load this page`, `Retry` and the `Error <status> ·
+ *   ref. <requestId>` line when known.
  *
  * Each state's heading is the route focus target. The component only emits; the page sends.
  */
@@ -125,8 +125,8 @@ export class RouteErrorState {
    * Property unavailableTitle
    *
    * @description
-   * Title of the unavailable state the failing route gives, or null for « Impossible de charger
-   * cette page ».
+   * Title of the unavailable state the failing route gives, or null for `Could not load
+   * this page`.
    *
    * @type {InputSignal<string | null>}
    * @readonly
@@ -137,7 +137,7 @@ export class RouteErrorState {
    * Property statusUrl
    *
    * @description
-   * Status page « État du service » opens in a new tab, or null to leave the link out.
+   * Status page `Service status` opens in a new tab, or null to leave the link out.
    *
    * @type {InputSignal<string | null>}
    * @readonly

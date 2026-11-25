@@ -21,7 +21,7 @@
   repeats, `groupBy` + `mergeMap` to keep one stream per task. Read other store state inside the
   pipe through its signals (`store.query()`), not with `withLatestFrom`.
 - A failed read is a state flag (`searchFailed`), never an emptied collection, with a retry method
-  the page calls from Retry (`Réessayer` in French).
+  the page calls from Retry.
 - Reacting to a signal without RxJS: `signalMethod` rather than an `effect()` that writes state.
 - Call an `rxMethod` or `signalMethod` with a signal or an observable inside an injection context,
   or pass `{ injector }`: calling outside one without an injector is deprecated and will throw.
@@ -34,7 +34,7 @@ Load `cw-status-interactions` with this skill; the store is where those rules li
 
 - Optimistic change: keep the snapshot of what the change touches in a private slice, patch at once,
   call the data-access service, and on failure restore the snapshot and raise the error toast.
-  The toast's Annuler restores the same snapshot and has its own rollback; drop the snapshot when
+  The toast's Undo restores the same snapshot and has its own rollback; drop the snapshot when
   the toast closes.
 - Fast status clicks: one pending change per task in private state keyed by task id, shown at once;
   a new click replaces it; returning to the saved status drops it; the change settles 460 ms after

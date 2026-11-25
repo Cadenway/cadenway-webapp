@@ -120,7 +120,7 @@ describe('OrganizationApi', () => {
             id: 'invitation-lumen',
             organization: {
               id: 'org-lumen',
-              name: 'Coopérative Lumen',
+              name: 'Lumen Cooperative',
               slug: 'lumen',
               description: null,
               memberCount: 41,

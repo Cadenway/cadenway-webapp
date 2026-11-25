@@ -31,7 +31,7 @@ export const TASK_CREATE_DIALOG: string = 'task.create-dialog';
  *
  * @description
  * Opens the task create dialog, an `overlays` contribution of the shell bound with
- * `withTaskCreate()`, from any screen of the workspace: « Créer une tâche », the « + » of a group
+ * `withTaskCreate()`, from any screen of the workspace: `Create a task`, the `+` of a group
  * or a day, a subtask's parent. It goes through `ShellOverlay`, so the dialog never opens over the
  * command palette or the shortcuts dialog, and it announces each created task on `created` so lists
  * can refresh. It holds no user or organization data.

@@ -22,7 +22,7 @@ import { TaskApi } from './task-api.service';
  */
 const task: Record<string, unknown> = {
   key: 'CAD-482',
-  name: 'Refondre l’écran de connexion SSO',
+  name: 'Redesign the SSO sign-in screen',
   description: null,
   status: 'review',
   cancelReason: null,
@@ -35,7 +35,7 @@ const task: Record<string, unknown> = {
   labels: [],
   parentKey: null,
   listId: 'sprint-14',
-  spaceId: 'produit',
+  spaceId: 'product',
   subtaskCounts: { total: 0, closed: 0 },
   checklist: [],
   checklistCounts: { total: 0, done: 0 },

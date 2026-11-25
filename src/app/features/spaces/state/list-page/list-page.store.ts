@@ -126,7 +126,7 @@ export interface ListPageStoreInstance {
    * Property milestoneCount
    *
    * @description
-   * The milestones of the list, for « Jalons n ».
+   * The milestones of the list, for `Milestones n`.
    *
    * @type {ResourceRef<number | undefined>}
    * @readonly
@@ -159,7 +159,7 @@ export interface ListPageStoreInstance {
    * Property labels
    *
    * @description
-   * The labels the « Étiquette » filter offers.
+   * The labels the `Label` filter offers.
    *
    * @type {ResourceRef<readonly string[] | undefined>}
    * @readonly
@@ -292,7 +292,7 @@ export interface ListPageStoreInstance {
    * Method saveViewSettings
    *
    * @description
-   * Replaces a saved view's settings with the current configuration (« Enregistrer »).
+   * Replaces a saved view's settings with the current configuration (`Save`).
    *
    * @param {SavedView} view - The view.
    * @param {ListViewConfig} config - Current configuration.
@@ -327,7 +327,7 @@ export interface ListPageStoreInstance {
    *
    * @description
    * Creates a deleted view again with its name, icon and configuration, at its former place (the
-   * undo of « Vue supprimée »); the gateway gives it a new id.
+   * undo of `View deleted`); the gateway gives it a new id.
    *
    * @param {SavedView} view - The deleted view.
    * @param {number} index - Its former place among the views.
@@ -720,7 +720,7 @@ const COUNTED_TASK_NOTICES: ReadonlySet<string> = new Set([
  *
  * @description
  * The open list, provided by the `l/:listId` route. `list` is the page's primary read: its loader
- * rejects with the typed route error (« Accès refusé » for a list the gateway does not show, not
+ * rejects with the typed route error (`Access denied` for a list the gateway does not show, not
  * found for a malformed id, unavailable otherwise), which the page lets reach the boundary. The
  * space, counts, milestones, members, labels and saved views are secondary reads with their own
  * state. While the page lives it watches the list's realtime room and refreshes the counts 300 ms

@@ -85,8 +85,8 @@ interface RailSpaceView {
  * Component SpacesRailItem
  *
  * @description
- * The « Espaces » item of the rail (`railDefs` of `App.dc.html`) and the favorite spaces after it
- * (`railSpaces`, lines 43-52). « Espaces » shows the spaces screen: the last list or space
+ * The `Spaces` item of the rail (`railDefs` of `App.dc.html`) and the favorite spaces after it
+ * (`railSpaces`, lines 43-52). `Spaces` shows the spaces screen: the last list or space
  * overview shown in this tab, or the first space; it shows the filled squares and is current
  * while a space overview or a list is shown. After a separator, each favorite space has a
  * desktop-only button with its icon in its color (or its initial), named and labelled by the
@@ -391,7 +391,7 @@ export class SpacesRailItem {
    * Method removeFavorite
    *
    * @description
-   * « Retirer des espaces favoris »: the space leaves the rail.
+   * `Remove from favorite spaces`: the space leaves the rail.
    *
    * @param {SpaceDetails} space - The space.
    * @returns {Promise<void>} Resolves once handled.

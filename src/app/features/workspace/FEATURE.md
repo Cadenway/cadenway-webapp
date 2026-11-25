@@ -23,16 +23,16 @@ belong to Auth.
   runtime, the workspace context, Account's `providePresence()` and every shell contribution, and
   loads `AppShell` with `provideCadenwayIcons()`:
 
-  | Slot                   | Contributions, in order                                                                                           |
-  | ---------------------- | ----------------------------------------------------------------------------------------------------------------- |
-  | `banners`              | Organization's storage banner                                                                                     |
-  | `organizationSwitcher` | Workspace's organizations menu                                                                                    |
-  | `railNavigation`       | Home's « Accueil », Inbox's « Boîte de réception », Spaces' « Espaces »                                           |
-  | `railFooter`           | Search's « Rechercher », Workspace's theme button, Account's menu                                                 |
-  | `sidebarHeader`        | Workspace's organization row, Search's « Rechercher… » button                                                     |
-  | `sidebar`              | Spaces' favorites, spaces accordion and tips                                                                      |
-  | `sidebarFooter`        | Spaces' sprint progress, Organization's plan line, Spaces' « Corbeille » and « Archives », « Raccourcis clavier » |
-  | `overlays`             | Search's command palette, Workspace's shortcuts dialog, Task's create dialog                                      |
+  | Slot                   | Contributions, in order                                                                                 |
+  | ---------------------- | ------------------------------------------------------------------------------------------------------- |
+  | `banners`              | Organization's storage banner                                                                           |
+  | `organizationSwitcher` | Workspace's organizations menu                                                                          |
+  | `railNavigation`       | Home's `Home`, Inbox's `Inbox`, Spaces' `Spaces`                                                        |
+  | `railFooter`           | Search's `Search`, Workspace's theme button, Account's menu                                             |
+  | `sidebarHeader`        | Workspace's organization row, Search's `Search…` button                                                 |
+  | `sidebar`              | Spaces' favorites, spaces accordion and tips                                                            |
+  | `sidebarFooter`        | Spaces' sprint progress, Organization's plan line, Spaces' `Trash` and `Archives`, `Keyboard shortcuts` |
+  | `overlays`             | Search's command palette, Workspace's shortcuts dialog, Task's create dialog                            |
   - `''` mounts `HOME_ROUTES`, then `SPACES_ROUTES` (`spaces/:spaceId`, `l/:listId`), then
     `TASK_ROUTES` (`t/:taskKey`).
   - `**` mounts `ERRORS_ROUTES`, so an unknown address renders the 404 inside the shell.
@@ -79,11 +79,11 @@ injects it as optional.
   when the guard answers.
 - `WorkspaceContextStore` is destroyed with its route (`withAutoCleanupInjectors`).
 - The organizations menu provides `OrganizationMenuStore`, which reads every page of
-  `listMyOrganizations` the first time the menu opens, with skeletons and an inline « Réessayer ».
+  `listMyOrganizations` the first time the menu opens, with skeletons and an inline `Retry`.
   Choosing another organization navigates to `/<slug>`, whose guard switches the session; once the
-  navigation succeeds with that organization committed, the toast « Organisation : <name> » confirms
+  navigation succeeds with that organization committed, the toast `Organization: <name>` confirms
   it (a cancelled or redirected switch confirms nothing). The settings entries open `/<slug>/organization/general|members|billing` (the 404 until the
-  organization settings step) and « Créer ou rejoindre une organisation » opens `/organizations`.
+  organization settings step) and `Create or join an organization` opens `/organizations`.
 - `ShortcutsHelp` (root) only holds whether the shortcuts dialog is open; `?` opens it outside fields
   through `ShortcutsService`, for as long as the shell lives.
 - The same menu opens from the rail square (desktop only) and from the sidebar header's

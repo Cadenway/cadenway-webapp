@@ -86,10 +86,8 @@ describe('TwoStepPage', () => {
       answerChallenge,
     });
 
-    expect(host.textContent).toContain('Vérification en deux étapes');
-    expect(host.textContent).toContain(
-      "Saisissez le code à 6 chiffres affiché par votre application d'authentification.",
-    );
+    expect(host.textContent).toContain('Two-step verification');
+    expect(host.textContent).toContain('Enter the 6-digit code shown by your authenticator app.');
     const input: HTMLInputElement | null = host.querySelector('#mfa-app-code');
     if (input === null) throw new Error('Expected the app code.');
     const verify: () => HTMLButtonElement | null = () =>
@@ -97,7 +95,7 @@ describe('TwoStepPage', () => {
     input.value = '123';
     input.dispatchEvent(new Event('input'));
     await fixture.whenStable();
-    expect(verify()?.textContent.trim()).toBe('Vérifier (3 / 6)');
+    expect(verify()?.textContent.trim()).toBe('Verify (3 / 6)');
     expect(verify()?.disabled).toBe(true);
 
     const send: () => Promise<void> = async (): Promise<void> => {
@@ -115,7 +113,7 @@ describe('TwoStepPage', () => {
       false,
     );
     expect(host.querySelector('cw-alert')?.textContent).toContain(
-      'Code incorrect. Vérifiez le code de votre application.',
+      'Wrong code. Check the code of your app.',
     );
     await send();
     expect(navigate).toHaveBeenCalledWith('/atelier-nord', { replaceUrl: true });
@@ -145,12 +143,12 @@ describe('TwoStepPage', () => {
       ?.dispatchEvent(new Event('submit', { cancelable: true }));
     await fixture.whenStable();
 
-    expect(host.querySelector('h1')?.textContent.trim()).toBe('Vérification en deux étapes');
+    expect(host.querySelector('h1')?.textContent.trim()).toBe('Two-step verification');
     expect(host.querySelector('cw-alert')?.textContent).toContain(
-      'La vérification a expiré. Connectez-vous à nouveau.',
+      'The verification expired. Sign in again.',
     );
     const again: HTMLAnchorElement | null = host.querySelector('a[href="/login"]');
-    expect(again?.textContent.trim()).toBe('Se reconnecter');
+    expect(again?.textContent.trim()).toBe('Sign in again');
     expect(host.querySelector('#mfa-app-code')).toBeNull();
     expect(host.querySelector('[cwSkeleton]')).toBeNull();
   });
@@ -162,14 +160,14 @@ describe('TwoStepPage', () => {
     });
 
     Array.from(host.querySelectorAll<HTMLButtonElement>('[role="tab"]'))
-      .find((tab: HTMLButtonElement) => tab.textContent.includes('Clé de sécurité'))
+      .find((tab: HTMLButtonElement) => tab.textContent.includes('Security key'))
       ?.click();
     await fixture.whenStable();
     expect(host.textContent).toContain(
-      '2 clés enregistrées : YubiKey 5C NFC, Touch ID (MacBook Air).',
+      '2 registered keys: YubiKey 5C NFC, Touch ID (MacBook Air).',
     );
     expect(host.textContent).toContain(
-      'Il vous reste 7 codes inutilisés. Pensez à en générer de nouveaux depuis votre profil.',
+      'You have 7 unused codes left. Remember to generate new ones from your profile.',
     );
     const backup: HTMLInputElement | null = host.querySelector('#mfa-backup');
     expect(backup?.getAttribute('maxlength')).toBe('9');
@@ -185,19 +183,19 @@ describe('TwoStepPage', () => {
       answerChallenge,
     });
     Array.from(host.querySelectorAll<HTMLButtonElement>('[role="tab"]'))
-      .find((tab: HTMLButtonElement) => tab.textContent.includes('Clé de sécurité'))
+      .find((tab: HTMLButtonElement) => tab.textContent.includes('Security key'))
       ?.click();
     await fixture.whenStable();
     Array.from(host.querySelectorAll('button'))
-      .find((button: HTMLButtonElement) => button.textContent.includes('Utiliser ma clé'))
+      .find((button: HTMLButtonElement) => button.textContent.includes('Use my security key'))
       ?.click();
     await fixture.whenStable();
 
     expect(answerChallenge).toHaveBeenCalledWith({ method: 'security-key' }, false);
-    expect(host.textContent).toContain('Clé reconnue : YubiKey 5C NFC');
+    expect(host.textContent).toContain('Key recognized: YubiKey 5C NFC');
     expect(navigate).not.toHaveBeenCalled();
     Array.from(host.querySelectorAll('button'))
-      .find((button: HTMLButtonElement) => button.textContent.trim() === 'Continuer')
+      .find((button: HTMLButtonElement) => button.textContent.trim() === 'Continue')
       ?.click();
     await fixture.whenStable();
     expect(navigate).toHaveBeenCalledWith('/atelier-nord', { replaceUrl: true });
@@ -211,8 +209,8 @@ describe('TwoStepPage', () => {
 
     const contact: HTMLAnchorElement | undefined = Array.from(
       host.querySelectorAll<HTMLAnchorElement>('a'),
-    ).find((link: HTMLAnchorElement) => link.textContent.includes("Contacter l'administrateur"));
+    ).find((link: HTMLAnchorElement) => link.textContent.includes('Contact the administrator'));
     expect(contact?.getAttribute('href')).toBe('https://cadenway.example/help');
-    expect(host.textContent).toContain('Utiliser un autre compte');
+    expect(host.textContent).toContain('Use another account');
   });
 });

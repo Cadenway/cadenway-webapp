@@ -61,7 +61,7 @@ interface ListFormModel {
    * Property name
    *
    * @description
-   * « Nom ».
+   * `name`.
    *
    * @type {string}
    */
@@ -71,7 +71,7 @@ interface ListFormModel {
    * Property goal
    *
    * @description
-   * « Objectif du sprint ».
+   * `Sprint goal`.
    *
    * @type {string}
    */
@@ -99,8 +99,8 @@ export function addDays(iso: string, days: number): string {
  * Component ListDialog
  *
  * @description
- * « Créer une liste », « Créer un sprint », « Modifier la liste » and « Modifier le sprint »
- * (`App.dc.html`, `dlgList`): the name, the « Sprint » switch with its start and end dates (the
+ * `Create a list`, `Create a sprint`, `Edit the list` and `Edit the sprint`
+ * (`App.dc.html`, `dlgList`): the name, the `Sprint` switch with its start and end dates (the
  * end on or after the start, with the length in days and weeks) and its goal, then the icon and
  * the color. Turning the switch on proposes today and 14 days, and the lightning when no icon was
  * chosen. The submit button stays disabled while the name is empty or the dates are invalid.
@@ -242,7 +242,7 @@ export class ListDialog {
    * Property start
    *
    * @description
-   * « Début », `YYYY-MM-DD`, or null.
+   * `Start`, `YYYY-MM-DD`, or null.
    *
    * @type {WritableSignal<string | null>}
    * @readonly
@@ -253,7 +253,7 @@ export class ListDialog {
    * Property end
    *
    * @description
-   * « Fin », `YYYY-MM-DD`, or null.
+   * `End`, `YYYY-MM-DD`, or null.
    *
    * @type {WritableSignal<string | null>}
    * @readonly
@@ -286,7 +286,7 @@ export class ListDialog {
    * Property startDate
    *
    * @description
-   * « Début » for the date picker.
+   * `Start` for the date picker.
    *
    * @type {Signal<Date | null>}
    * @readonly
@@ -300,7 +300,7 @@ export class ListDialog {
    * Property endDate
    *
    * @description
-   * « Fin » for the date picker.
+   * `End` for the date picker.
    *
    * @type {Signal<Date | null>}
    * @readonly
@@ -330,7 +330,7 @@ export class ListDialog {
    * Property datesHint
    *
    * @description
-   * « La fin doit suivre le début. », or the length of the sprint (« 14 jours · 2 semaines »).
+   * `The end must follow the start.`, or the length of the sprint (`14 days · 2 weeks`).
    *
    * @type {Signal<string>}
    * @readonly
@@ -374,7 +374,7 @@ export class ListDialog {
    * Property submitLabel
    *
    * @description
-   * « Enregistrer », « Créer le sprint » or « Créer la liste ».
+   * `Save`, `Create the sprint` or `Create the list`.
    *
    * @type {Signal<string>}
    * @readonly

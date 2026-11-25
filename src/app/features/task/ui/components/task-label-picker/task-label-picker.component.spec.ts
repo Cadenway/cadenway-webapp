@@ -52,10 +52,10 @@ describe('TaskLabelPicker', () => {
       .querySelector<HTMLButtonElement>('button[role="combobox"]')
       ?.click();
     await fixture.whenStable();
-    expect(document.querySelector('[role="alert"]')?.textContent).toContain('Impossible');
+    expect(document.querySelector('[role="alert"]')?.textContent).toContain('Could not load');
     expect(document.querySelectorAll('[role="option"]')).toHaveLength(0);
     Array.from(document.querySelectorAll<HTMLButtonElement>('button'))
-      .find((button: HTMLButtonElement) => button.textContent.trim() === 'Réessayer')
+      .find((button: HTMLButtonElement) => button.textContent.trim() === 'Retry')
       ?.click();
     expect(retries).toBe(1);
   });
@@ -73,12 +73,12 @@ describe('TaskLabelPicker', () => {
 
   it('creates a label from the typed text and reuses one that differs by case', async () => {
     const fixture: ComponentFixture<TaskLabelPicker> = await open();
-    await search(fixture, 'Sécurité');
+    await search(fixture, 'Security');
     Array.from(document.querySelectorAll<HTMLElement>('[role="option"]'))
-      .find((option: HTMLElement) => option.textContent.includes('Créer'))
+      .find((option: HTMLElement) => option.textContent.includes('Create'))
       ?.click();
     await fixture.whenStable();
 
-    expect(fixture.componentInstance.value()).toEqual(['Sécurité']);
+    expect(fixture.componentInstance.value()).toEqual(['Security']);
   });
 });

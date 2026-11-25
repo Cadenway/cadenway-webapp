@@ -15,7 +15,7 @@ import { abortableRead } from '../../utils/abortable-read/abortable-read.util';
  * Interface SeatSummary
  *
  * @description
- * The plan of the organization and its free seats, for the « Inviter votre équipe » suggestion.
+ * The plan of the organization and its free seats, for the `Invite your team` suggestion.
  */
 export interface SeatSummary {
   // #region Properties
@@ -113,7 +113,7 @@ export class SidebarApi {
    * Method trashCount
    *
    * @description
-   * Counts the trash entries the caller may restore (« Corbeille »).
+   * Counts the trash entries the caller may restore (`Trash`).
    *
    * @param {AbortSignal | undefined} signal - Cancels a superseded read.
    * @returns {Promise<number>} The count.
@@ -127,7 +127,7 @@ export class SidebarApi {
    * Method archiveCount
    *
    * @description
-   * Counts the archived lists and archived task roots the caller sees (« Archives »).
+   * Counts the archived lists and archived task roots the caller sees (`Archives`).
    *
    * @param {AbortSignal | undefined} signal - Cancels a superseded read.
    * @returns {Promise<number>} The count.

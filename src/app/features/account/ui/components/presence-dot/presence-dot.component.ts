@@ -6,9 +6,9 @@ import type { PresenceStatus } from '@core/realtime';
  * Component PresenceDot
  *
  * @description
- * The colored dot of a presence (mockup `App.dc.html`, `USER_STATUSES`): jade for « Actif »,
- * garnet with a white bar for « Ne pas déranger », beacon yellow for « Absent », muted for
- * « Invisible ». It is decorative (`aria-hidden`): the presence word always sits next to it or in
+ * The colored dot of a presence (mockup `App.dc.html`, `USER_STATUSES`): jade for `Active`,
+ * garnet with a white bar for `Do not disturb`, beacon yellow for `Away`, muted for
+ * `Invisible`. It is decorative (`aria-hidden`): the presence word always sits next to it or in
  * the accessible name of its owner. The host sets the size and the ring.
  */
 @Component({

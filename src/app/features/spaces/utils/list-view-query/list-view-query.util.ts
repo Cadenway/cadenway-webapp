@@ -37,7 +37,7 @@ export const DEFAULT_VIEW_CONFIG: ListViewConfig = {
  * Constant SORT_FIELDS
  *
  * @description
- * The criteria of « Trier par », in the mockup's order (`SORTS`).
+ * The criteria of `Sort by`, in the mockup's order (`SORTS`).
  *
  * @type {readonly ListSortField[]}
  */
@@ -83,7 +83,7 @@ export function fromSortKey(key: string): ListSort {
  * Function filterCount
  *
  * @description
- * Fields that filter something, the number on « Filtrer ».
+ * Fields that filter something, the number on `Filter`.
  *
  * @param {ListViewFilters} filters - Filters.
  * @returns {number} Active fields.
@@ -103,7 +103,7 @@ export function filterCount(filters: ListViewFilters): number {
  *
  * @param {ListViewConfig} config - View configuration.
  * @param {string} search - Typed search.
- * @param {boolean} milestonesOnly - Whether « Jalons » is pressed.
+ * @param {boolean} milestonesOnly - Whether `Milestones` is pressed.
  * @returns {ListTaskQuery} The query.
  */
 export function toTaskQuery(
@@ -144,7 +144,7 @@ export function toGroupQuery(config: ListViewConfig, query: ListTaskQuery): List
  *
  * @description
  * Whether two configurations store the same view: filters (in any order), sort and grouping.
- * The subtask display is local and never makes a saved view « modifiée ».
+ * The subtask display is local and never makes a saved view `Modified`.
  *
  * @param {ListViewConfig} first - A configuration.
  * @param {ListViewConfig} second - Another configuration.

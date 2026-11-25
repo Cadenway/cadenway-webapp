@@ -11,13 +11,13 @@ describe('CodeHelp', () => {
     await fixture.whenStable();
     const host: HTMLElement = fixture.nativeElement as HTMLElement;
 
-    expect(host.textContent).toContain("Le code n'arrive pas ?");
+    expect(host.textContent).toContain('Code not arriving?');
     expect(host.querySelector('a')?.getAttribute('href')).toBe('https://cadenway.example/help');
-    expect(host.querySelector('a')?.textContent).toContain("demandez à l'administrateur");
+    expect(host.querySelector('a')?.textContent).toContain('ask your administrator');
 
     fixture.componentRef.setInput('siteUrl', null);
     await fixture.whenStable();
     expect(host.querySelector('a')).toBeNull();
-    expect(host.textContent).toContain("demandez à l'administrateur");
+    expect(host.textContent).toContain('ask your administrator');
   });
 });

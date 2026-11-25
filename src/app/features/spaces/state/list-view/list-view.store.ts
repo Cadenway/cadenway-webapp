@@ -52,7 +52,7 @@ interface ListViewState {
    * Property search
    *
    * @description
-   * Text typed in « Rechercher ».
+   * Text typed in `Search`.
    *
    * @type {string}
    * @readonly
@@ -63,7 +63,7 @@ interface ListViewState {
    * Property milestonesOnly
    *
    * @description
-   * Whether « Jalons » keeps only the milestones.
+   * Whether `Milestones` keeps only the milestones.
    *
    * @type {boolean}
    * @readonly
@@ -85,7 +85,7 @@ interface ListViewState {
    * Property rows
    *
    * @description
-   * What the rows of the view shown tell « Filtrer » and « Sous-tâches », published by that view.
+   * What the rows of the view shown tell `Filter` and `Subtasks`, published by that view.
    *
    * @type {ListRowsSummary}
    * @readonly
@@ -129,7 +129,7 @@ export interface ListViewStoreInstance {
    * Property search
    *
    * @description
-   * Text typed in « Rechercher ».
+   * Text typed in `Search`.
    *
    * @type {Signal<string>}
    * @readonly
@@ -140,7 +140,7 @@ export interface ListViewStoreInstance {
    * Property milestonesOnly
    *
    * @description
-   * Whether « Jalons » keeps only the milestones.
+   * Whether `Milestones` keeps only the milestones.
    *
    * @type {Signal<boolean>}
    * @readonly
@@ -184,7 +184,7 @@ export interface ListViewStoreInstance {
    * Property modified
    *
    * @description
-   * Whether the applied saved view differs from what it saved (« Modifiée »).
+   * Whether the applied saved view differs from what it saved (`Modified`).
    *
    * @type {Signal<boolean>}
    * @readonly
@@ -195,7 +195,7 @@ export interface ListViewStoreInstance {
    * Property canSave
    *
    * @description
-   * Whether a standard tab differs from the default, so « Enregistrer la vue » shows.
+   * Whether a standard tab differs from the default, so `Save the view` shows.
    *
    * @type {Signal<boolean>}
    * @readonly
@@ -228,7 +228,7 @@ export interface ListViewStoreInstance {
    * Property rows
    *
    * @description
-   * What the rows of the view shown tell « Filtrer » and « Sous-tâches »: unknown until a view
+   * What the rows of the view shown tell `Filter` and `Subtasks`: unknown until a view
    * publishes it with `followRows`.
    *
    * @type {Signal<ListRowsSummary>}
@@ -273,7 +273,7 @@ export interface ListViewStoreInstance {
    * Method clearFilters
    *
    * @description
-   * Removes every filter (« Tout effacer »).
+   * Removes every filter (`Clear all`).
    */
   clearFilters(): void;
 
@@ -291,7 +291,7 @@ export interface ListViewStoreInstance {
    * Method toggleSortDirection
    *
    * @description
-   * Switches between « Croissant » and « Décroissant ».
+   * Switches between `ascending` and `descending`.
    */
   toggleSortDirection(): void;
 
@@ -329,7 +329,7 @@ export interface ListViewStoreInstance {
    * Method toggleMilestones
    *
    * @description
-   * Presses or releases « Jalons ».
+   * Presses or releases `Milestones`.
    */
   toggleMilestones(): void;
 
@@ -356,7 +356,7 @@ export interface ListViewStoreInstance {
    * Method revert
    *
    * @description
-   * Puts back what the applied saved view saved (« Rétablir »).
+   * Puts back what the applied saved view saved (`Revert`).
    */
   revert(): void;
 
@@ -365,7 +365,7 @@ export interface ListViewStoreInstance {
    *
    * @description
    * Records that a view now saves the current configuration: after creating it (the view becomes
-   * the applied one) or after « Enregistrer ».
+   * the applied one) or after `Save`.
    *
    * @param {SavedView} view - The saved view as the gateway answered.
    */
@@ -516,8 +516,8 @@ function createListViewStore(): Type<ListViewStoreInstance> {
  * list shares it: switching view never changes the data shown. It maps the configuration to the
  * `queryListTasks` body (`taskQuery`) and the `countTaskGroups` parameters (`groupQuery`) for the
  * rows. A saved view is applied over the standard tab, which gets its configuration back when the
- * view is left; the subtask display, the search and « Jalons » stay local and never make a saved
- * view « Modifiée ».
+ * view is left; the subtask display, the search and `Milestones` stay local and never make a saved
+ * view `Modified`.
  *
  * @type {ReturnType<typeof createListViewStore>}
  */

@@ -11,8 +11,8 @@ import { filterCount } from '../list-view-query/list-view-query.util';
  * Function viewSummary
  *
  * @description
- * Describes a view as the mockup does (`cfgSummary`): « Liste · 2 filtres · tri : échéance ·
- * groupée par priorité ». The manual order and the grouping by status, the defaults, are left out.
+ * Describes a view as the mockup does (`cfgSummary`): `List · 2 filters · sort: due date ·
+ * grouped by priority`. The manual order and the grouping by status, the defaults, are left out.
  *
  * @param {ViewLayout} layout - Layout of the view.
  * @param {ListViewConfig} config - Its configuration.

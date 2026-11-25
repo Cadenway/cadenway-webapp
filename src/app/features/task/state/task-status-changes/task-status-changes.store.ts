@@ -48,7 +48,7 @@ export const STATUS_SETTLE_MS: number = 460;
  * Constant TOAST_MS
  *
  * @description
- * How long the change toast offers « Annuler », in milliseconds.
+ * How long the change toast offers `Undo`, in milliseconds.
  *
  * @type {number}
  */
@@ -156,7 +156,7 @@ interface SettledStatus {
  * Interface UndoSnapshot
  *
  * @description
- * What the toast's « Annuler » puts back: the status before the last confirmed change.
+ * What the toast's `Undo` puts back: the status before the last confirmed change.
  */
 interface UndoSnapshot {
   // #region Properties
@@ -199,7 +199,7 @@ interface UndoSnapshot {
  * Interface TaskCancelRequest
  *
  * @description
- * A request for « Annulé » that waits for the cancel reason dialog.
+ * A request for `Cancelled` that waits for the cancel reason dialog.
  */
 export interface TaskCancelRequest {
   // #region Properties
@@ -250,7 +250,7 @@ interface StatusRequest {
    * Property undo
    *
    * @description
-   * Whether the request is the toast's « Annuler »: sent at once, without a new toast.
+   * Whether the request is the toast's `Undo`: sent at once, without a new toast.
    *
    * @type {boolean}
    * @readonly
@@ -303,7 +303,7 @@ interface TaskStatusChangesState {
    * Property cancelRequest
    *
    * @description
-   * The « Annulé » click waiting for the cancel reason dialog, or null.
+   * The `Cancelled` click waiting for the cancel reason dialog, or null.
    *
    * @type {TaskCancelRequest | null}
    * @readonly
@@ -347,7 +347,7 @@ interface TaskStatusChangesState {
    * Property _undo
    *
    * @description
-   * What « Annuler » puts back, per task.
+   * What `Undo` puts back, per task.
    *
    * @type {Readonly<Partial<Record<string, UndoSnapshot>>>}
    * @readonly
@@ -447,7 +447,7 @@ interface TaskStatusChangesInstance {
    * Property cancelRequest
    *
    * @description
-   * The « Annulé » click waiting for the cancel reason dialog; the page renders
+   * The `Cancelled` click waiting for the cancel reason dialog; the page renders
    * `cw-task-cancel-dialog` open while it is set.
    *
    * @type {Signal<TaskCancelRequest | null>}
@@ -533,7 +533,7 @@ interface TaskStatusChangesInstance {
    * @description
    * Shows a clicked status at once and settles it 460 ms after the last click with one versioned
    * write. A new click replaces the pending one, a click on the saved status cancels it, and
-   * « Annulé » opens the cancel reason dialog first.
+   * `Cancelled` opens the cancel reason dialog first.
    *
    * @param {TaskSummary} task - Task as the caller holds it.
    * @param {StatusKey} status - Clicked status.
@@ -556,7 +556,7 @@ interface TaskStatusChangesInstance {
    * Method confirmCancel
    *
    * @description
-   * « Annuler la tâche »: requests `cancelled` with the dialog's reason and note.
+   * `Cancel the task`: requests `cancelled` with the dialog's reason and note.
    *
    * @param {TaskCancellation} cancellation - Reason and note.
    */
@@ -566,7 +566,7 @@ interface TaskStatusChangesInstance {
    * Method keepTask
    *
    * @description
-   * « Garder la tâche »: closes the dialog without any change.
+   * `Keep the task`: closes the dialog without any change.
    */
   keepTask(): void;
 
@@ -574,7 +574,7 @@ interface TaskStatusChangesInstance {
    * Method undo
    *
    * @description
-   * The toast's « Annuler »: sends the status before the last confirmed change at once, while the
+   * The toast's `Undo`: sends the status before the last confirmed change at once, while the
    * task still has the status that change gave it.
    *
    * @param {string} taskId - Id of the task.
@@ -1004,7 +1004,7 @@ function createTaskStatusChanges(): Type<TaskStatusChangesInstance> {
  * one pending change per task settles 460 ms after the last click with one `updateTask` write
  * against its version (`If-Match`), and the writes of one task never overlap. A `412` reads the
  * task again and warns; any other failure puts the confirmed status back with a failure toast. A
- * confirmed change shows a 6 s toast whose « Annuler » restores the previous status.
+ * confirmed change shows a 6 s toast whose `Undo` restores the previous status.
  *
  * @type {Type<TaskStatusChangesInstance>}
  */

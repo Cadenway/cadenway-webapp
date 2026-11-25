@@ -37,7 +37,7 @@ const entries: readonly OrganizationMenuEntry[] = [
   {
     id: 'o2',
     slug: 'lumen',
-    name: 'Coopérative Lumen',
+    name: 'Lumen Cooperative',
     initials: 'CL',
     role: 'member',
     plan: 'enterprise',
@@ -169,29 +169,29 @@ describe('OrganizationSwitcher', () => {
 
     expect(menuOrganizations).toHaveBeenCalledOnce();
     expect(item('Atelier Nord')?.getAttribute('aria-checked')).toBe('true');
-    expect(item('Atelier Nord')?.textContent).toContain('Propriétaire · plan Équipe');
-    expect(item('Coopérative Lumen')?.textContent).toContain('Membre · plan Entreprise');
-    expect(item('Membres et invitations')?.textContent).toContain('18');
+    expect(item('Atelier Nord')?.textContent).toContain('Owner · Team plan');
+    expect(item('Lumen Cooperative')?.textContent).toContain('Member · Enterprise plan');
+    expect(item('Members and invitations')?.textContent).toContain('18');
   });
 
-  it('opens another organization’s workspace', async () => {
+  it('opens the workspace of another organization', async () => {
     await openMenu();
 
-    item('Coopérative Lumen')?.click();
+    item('Lumen Cooperative')?.click();
 
     expect(navigateByUrl).toHaveBeenCalledWith('/lumen');
   });
 
   it('confirms a completed switch, and nothing when the navigation fails', async () => {
     navigateByUrl.mockImplementationOnce(() => {
-      organization.set({ ...ATELIER_NORD, id: 'o2', slug: 'lumen', name: 'Coopérative Lumen' });
+      organization.set({ ...ATELIER_NORD, id: 'o2', slug: 'lumen', name: 'Lumen Cooperative' });
       return Promise.resolve(true);
     });
     await openMenu();
-    item('Coopérative Lumen')?.click();
+    item('Lumen Cooperative')?.click();
     await vi.waitFor(() => {
-      expect(show).toHaveBeenCalledWith('Organisation : Coopérative Lumen', {
-        description: 'Vos espaces et réglages suivent l’organisation choisie.',
+      expect(show).toHaveBeenCalledWith('Organization: Lumen Cooperative', {
+        description: 'Your spaces and settings follow the chosen organization.',
       });
     });
 
@@ -219,20 +219,20 @@ describe('OrganizationSwitcher', () => {
       fixture.detectChanges();
       expect(item('Studio Pivot')).toBeDefined();
     });
-    expect(item('Créer ou rejoindre une organisation')).toBeDefined();
+    expect(item('Create or join an organization')).toBeDefined();
   });
 
   it('opens the organization settings and the organization choice', async () => {
     await openMenu();
-    item('Facturation et quotas')?.click();
+    item('Billing and quotas')?.click();
     expect(navigate).toHaveBeenCalledWith(['/', 'atelier-nord', 'organization', 'billing']);
 
     await openMenu();
-    item('Créer ou rejoindre une organisation')?.click();
+    item('Create or join an organization')?.click();
     expect(navigateByUrl).toHaveBeenCalledWith('/organizations');
   });
 
-  it('offers Réessayer when the list cannot be read', async () => {
+  it('offers Retry when the list cannot be read', async () => {
     menuOrganizations.mockReturnValueOnce(
       of({ ok: false as const, problem: { status: 503, code: 'upstream.unavailable' } }),
     );
@@ -243,7 +243,7 @@ describe('OrganizationSwitcher', () => {
     await vi.waitFor(() => {
       fixture.detectChanges();
       retry = Array.from(document.querySelectorAll<HTMLButtonElement>('button')).find(
-        (button: HTMLButtonElement) => button.textContent.trim() === 'Réessayer',
+        (button: HTMLButtonElement) => button.textContent.trim() === 'Retry',
       );
       expect(retry).toBeDefined();
     });

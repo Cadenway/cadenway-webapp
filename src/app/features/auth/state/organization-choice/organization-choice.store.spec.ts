@@ -30,13 +30,13 @@ const atelierNord: OrganizationChoice = {
  * Constant lumen
  *
  * @description
- * Coopérative Lumen once joined.
+ * Lumen Cooperative once joined.
  *
  * @type {OrganizationChoice}
  */
 const lumen: OrganizationChoice = {
   id: 'org-lumen',
-  name: 'Coopérative Lumen',
+  name: 'Lumen Cooperative',
   slug: 'lumen',
   role: 'member',
   memberCount: 41,
@@ -47,13 +47,13 @@ const lumen: OrganizationChoice = {
  * Constant invitation
  *
  * @description
- * Inès Robert's invitation to Coopérative Lumen.
+ * Inès Robert's invitation to Lumen Cooperative.
  *
  * @type {ReceivedInvitation}
  */
 const invitation: ReceivedInvitation = {
   id: 'invitation-lumen',
-  organizationName: 'Coopérative Lumen',
+  organizationName: 'Lumen Cooperative',
   role: 'member',
   inviterName: 'Inès Robert',
   expiresAt: '2026-11-15T10:00:00Z',

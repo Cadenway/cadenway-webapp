@@ -16,13 +16,13 @@ import { CommandPaletteStore, DEBOUNCE_MS } from './command-palette.store';
  * Constant results
  *
  * @description
- * Matches of « sso » in the mockup: a task, then a list.
+ * Matches of `sso` in the mockup: a task, then a list.
  *
  * @type {readonly SearchResult[]}
  */
 const results: readonly SearchResult[] = [
-  { kind: 'task', key: 'CAD-482', name: 'Relecture du parcours SSO', status: 'review' },
-  { kind: 'list', listId: 'l1', name: 'Sprint 14', spaceName: 'Produit' },
+  { kind: 'task', key: 'CAD-482', name: 'Review of the SSO flow', status: 'review' },
+  { kind: 'list', listId: 'l1', name: 'Sprint 14', spaceName: 'Product' },
 ];
 
 /**
@@ -77,7 +77,7 @@ describe('CommandPaletteStore', () => {
     expect(store.lists().map((list) => list.name)).toEqual(['Sprint 14']);
   });
 
-  it('drops an old answer that arrives inside the next text’s pause', async () => {
+  it('drops an old answer that arrives inside the pause of the next text', async () => {
     search.mockImplementation((query: string) =>
       of(query === 'sso' ? results : []).pipe(delay(200)),
     );

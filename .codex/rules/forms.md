@@ -12,4 +12,4 @@ paths:
   French; a field shows its error after touch or submit.
 - Submit stays enabled while the form is invalid, as in the mockup: an invalid submit shows the
   errors and focuses the first invalid field. Disable it only while its request is pending.
-- Settings forms show the "Modifications non enregistrées" bar with Annuler and Enregistrer.
+- Settings forms show the unsaved-changes bar with Cancel and Save.

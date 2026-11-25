@@ -22,13 +22,13 @@ import { ListsApi } from './lists-api.service';
  * Constant bugs
  *
  * @description
- * The « Bugs » list as the gateway answers it.
+ * The `Bugs` list as the gateway answers it.
  *
  * @type {TaskList}
  */
 const bugs: TaskList = {
   id: 'l-bugs',
-  spaceId: 'sp-produit',
+  spaceId: 'sp-product',
   name: 'Bugs',
   icon: 'bug',
   color: 'rouge',
@@ -55,7 +55,7 @@ describe('ListsApi', () => {
       exportListTasks: vi.fn(() =>
         of(
           new HttpResponse({
-            body: '"Identifiant";"Nom"\n"CAD-499";"Notifications"',
+            body: '"Key";"Name"\n"CAD-499";"Notifications"',
             headers: new HttpHeaders({ 'Content-Disposition': 'attachment; filename="bugs.csv"' }),
           }),
         ),
@@ -210,7 +210,7 @@ describe('ListsApi', () => {
     expect((await api.duplicate(list)).taskCount).toBe(3);
     expect(await api.exportCsv(list, { level: 'roots', sort: 'manual' })).toEqual({
       fileName: 'bugs.csv',
-      content: '"Identifiant";"Nom"\n"CAD-499";"Notifications"',
+      content: '"Key";"Name"\n"CAD-499";"Notifications"',
     });
     await api.archive('l-bugs');
     await api.remove(list);
@@ -220,7 +220,7 @@ describe('ListsApi', () => {
 
   it('creates a sprint with its dates in a space', async () => {
     const sprint: ListSprint = { startDate: '2026-11-18', endDate: '2026-12-01', goal: null };
-    const created: Awaited<ReturnType<ListsApi['create']>> = await api.create('sp-produit', {
+    const created: Awaited<ReturnType<ListsApi['create']>> = await api.create('sp-product', {
       name: 'Sprint 15',
       icon: 'lightning',
       color: 'violet',
@@ -228,7 +228,7 @@ describe('ListsApi', () => {
     });
 
     expect(created.name).toBe('Sprint 15');
-    expect(lists['createList']).toHaveBeenCalledWith('sp-produit', {
+    expect(lists['createList']).toHaveBeenCalledWith('sp-product', {
       name: 'Sprint 15',
       icon: 'lightning',
       color: 'violet',
@@ -240,7 +240,7 @@ describe('ListsApi', () => {
     const view: Awaited<ReturnType<ListsApi['createSavedView']>> = await api.createSavedView(
       'l-bugs',
       {
-        name: 'Par personne',
+        name: 'By person',
         icon: null,
         layout: 'list',
         config: { ...DEFAULT_VIEW_CONFIG, groupBy: 'assignee' },

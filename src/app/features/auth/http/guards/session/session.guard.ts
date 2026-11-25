@@ -17,7 +17,7 @@ import { AuthFlowStore } from '../../../state/auth-flow/auth-flow.store';
  * Lets a screen that needs a session open only once the gateway confirms the cookie, and records
  * its account in the flow store so the screen does not read it twice. Without a session (`401`) it
  * redirects to `/login?next=<url>`, so the person comes back after signing in. Any other failure
- * lets the screen open: its own reads show the error with Réessayer.
+ * lets the screen open: its own reads show the error with `Retry`.
  *
  * @param {ActivatedRouteSnapshot} _route - The guarded route.
  * @param {RouterStateSnapshot} state - The target router state, whose URL becomes `next`.

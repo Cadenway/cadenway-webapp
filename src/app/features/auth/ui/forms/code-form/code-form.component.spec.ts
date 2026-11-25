@@ -19,7 +19,7 @@ async function render(): Promise<ComponentFixture<CodeForm>> {
     providers: [provideRouter([]), provideCadenwayIcons()],
   });
   const fixture: ComponentFixture<CodeForm> = TestBed.createComponent(CodeForm);
-  fixture.componentRef.setInput('submitLabel', 'Se connecter');
+  fixture.componentRef.setInput('submitLabel', 'Sign in');
   fixture.componentRef.setInput('backLink', '/login');
   await fixture.whenStable();
   return fixture;
@@ -47,7 +47,7 @@ describe('CodeForm', () => {
 
     fixture.componentRef.setInput(
       'error',
-      'Code incorrect ou expiré : vérifiez le dernier e-mail reçu.',
+      'Wrong or expired code: check the last email you received.',
     );
     await fixture.whenStable();
     expect(input.value).toBe('');
@@ -64,21 +64,21 @@ describe('CodeForm', () => {
     fixture.componentRef.setInput('resendIn', '0:29');
     await fixture.whenStable();
     const button: HTMLButtonElement | undefined = Array.from(host.querySelectorAll('button')).find(
-      (item: HTMLButtonElement) => item.textContent.includes('Renvoyer'),
+      (item: HTMLButtonElement) => item.textContent.includes('Resend'),
     );
-    expect(button?.textContent.trim()).toBe('Renvoyer le code dans 0:29');
+    expect(button?.textContent.trim()).toBe('Resend the code in 0:29');
     expect(button?.disabled).toBe(true);
 
     fixture.componentRef.setInput('resendIn', null);
     fixture.componentRef.setInput('resent', true);
     fixture.componentRef.setInput(
       'error',
-      'Code incorrect ou expiré : vérifiez le dernier e-mail reçu.',
+      'Wrong or expired code: check the last email you received.',
     );
     await fixture.whenStable();
     button?.click();
     expect(resend).toHaveBeenCalledOnce();
-    expect(host.querySelector('[role="alert"]')?.textContent).toContain('Code incorrect ou expiré');
-    expect(host.querySelector('[role="status"]')?.textContent).toContain('Nouveau code envoyé');
+    expect(host.querySelector('[role="alert"]')?.textContent).toContain('Wrong or expired code');
+    expect(host.querySelector('[role="status"]')?.textContent).toContain('New code sent');
   });
 });

@@ -5,7 +5,7 @@ const user = {
   id: '019a5f3c-8d2e-7c4a-9b1f-3e5d7a9c1b30',
   name: 'Camille Martin',
   email: 'camille.martin@ateliernord.fr',
-  language: 'fr',
+  language: 'en',
   displayName: null,
   jobTitle: null,
   timeZone: 'Europe/Paris',
@@ -32,9 +32,9 @@ const statusKeys = [
   ['done', 'closed'],
   ['cancelled', 'closed'],
 ] as const;
-const produit = {
-  id: 'produit',
-  name: 'Produit',
+const product = {
+  id: 'product',
+  name: 'Product',
   prefix: 'CAD',
   description: null,
   icon: null,
@@ -50,7 +50,7 @@ const produit = {
 };
 const sprint14 = {
   id: 'sprint-14',
-  spaceId: 'produit',
+  spaceId: 'product',
   name: 'Sprint 14',
   icon: null,
   color: 'violet',
@@ -95,7 +95,7 @@ async function stubGateway(page: Page): Promise<Gateway> {
             ...atelierNord,
             description: null,
             website: null,
-            defaultLanguage: 'fr',
+            defaultLanguage: 'en',
             createdAt: '2026-11-01T10:00:00Z',
             version: 1,
           },
@@ -121,15 +121,15 @@ async function stubGateway(page: Page): Promise<Gateway> {
         });
         return;
       case 'GET /v1/spaces':
-        await route.fulfill({ json: { items: [produit], nextCursor: null } });
+        await route.fulfill({ json: { items: [product], nextCursor: null } });
         return;
-      case 'GET /v1/spaces/produit':
-        await route.fulfill({ json: produit });
+      case 'GET /v1/spaces/product':
+        await route.fulfill({ json: product });
         return;
-      case 'GET /v1/spaces/produit/lists':
+      case 'GET /v1/spaces/product/lists':
         await route.fulfill({ json: { items: [sprint14], nextCursor: null } });
         return;
-      case 'GET /v1/spaces/produit/task-templates':
+      case 'GET /v1/spaces/product/task-templates':
         await route.fulfill({ json: { items: [], nextCursor: null } });
         return;
       case 'GET /v1/members':
@@ -175,7 +175,7 @@ async function stubGateway(page: Page): Promise<Gateway> {
             labels: [],
             parentKey: null,
             listId: 'sprint-14',
-            spaceId: 'produit',
+            spaceId: 'product',
             subtaskCounts: { total: 0, closed: 0 },
             checklist: [],
             checklistCounts: { total: 0, done: 0 },
@@ -202,54 +202,52 @@ test.beforeEach(async ({ page }) => {
   });
 });
 
-test('N opens the create dialog, a task is created and the toast offers « Ouvrir »', async ({
-  page,
-}) => {
+test('N opens the create dialog, a task is created and the toast offers Open', async ({ page }) => {
   const gateway = await stubGateway(page);
   await page.goto('/atelier-nord');
-  await expect(page.getByRole('heading', { name: 'Bonjour Camille' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Hello Camille' })).toBeVisible();
 
   await page.keyboard.press('n');
 
-  const dialog = page.getByRole('dialog', { name: 'Créer une tâche' });
+  const dialog = page.getByRole('dialog', { name: 'Create a task' });
   await expect(dialog).toBeVisible();
   await expect(dialog.getByTestId('task-create-destination')).toContainText('Sprint 14');
   await expect(dialog.getByTestId('task-create-next-key')).toHaveText('CAD-495');
-  await expect(dialog.getByRole('button', { name: /Créer la tâche/ })).toBeDisabled();
+  await expect(dialog.getByRole('button', { name: /Create the task/ })).toBeDisabled();
 
-  await dialog.getByPlaceholder('Nom de la tâche').fill('Préparer la démo du sprint');
-  await dialog.getByRole('button', { name: /Créer la tâche/ }).click();
+  await dialog.getByPlaceholder('Task name').fill('Prepare the sprint demo');
+  await dialog.getByRole('button', { name: /Create the task/ }).click();
 
   await expect(dialog).toBeHidden();
-  await expect(page.getByText('Tâche CAD-495 créée')).toBeVisible();
-  await expect(page.getByText('Sprint 14 · À faire.')).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Ouvrir' })).toBeVisible();
+  await expect(page.getByText('Task CAD-495 created')).toBeVisible();
+  await expect(page.getByText('Sprint 14 · To do.')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Open' })).toBeVisible();
   expect(gateway.calls).toContain('POST /v1/lists/sprint-14/tasks');
   expect(gateway.creations[0].body).toMatchObject({
-    name: 'Préparer la démo du sprint',
+    name: 'Prepare the sprint demo',
     status: 'todo',
     priority: 'moyenne',
     assigneeIds: [user.id],
   });
   expect(gateway.creations[0].key).toMatch(/^[0-9a-f-]{36}$/);
 
-  await page.getByRole('button', { name: 'Ouvrir' }).click();
+  await page.getByRole('button', { name: 'Open' }).click();
   await expect(page).toHaveURL(/\/atelier-nord\/t\/CAD-495$/);
 });
 
 test('Escape closes an open menu first, then the dialog', async ({ page }) => {
   await stubGateway(page);
   await page.goto('/atelier-nord');
-  await expect(page.getByRole('heading', { name: 'Bonjour Camille' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Hello Camille' })).toBeVisible();
   await page.keyboard.press('n');
-  const dialog = page.getByRole('dialog', { name: 'Créer une tâche' });
+  const dialog = page.getByRole('dialog', { name: 'Create a task' });
   await expect(dialog).toBeVisible();
 
-  await dialog.getByRole('button', { name: /Priorité : Moyenne/ }).click();
-  await expect(page.getByRole('menu', { name: 'Priorité' })).toBeVisible();
+  await dialog.getByRole('button', { name: /Priority: Medium/ }).click();
+  await expect(page.getByRole('menu', { name: 'Priority' })).toBeVisible();
   await page.keyboard.press('Escape');
 
-  await expect(page.getByRole('menu', { name: 'Priorité' })).toBeHidden();
+  await expect(page.getByRole('menu', { name: 'Priority' })).toBeHidden();
   await expect(dialog).toBeVisible();
   await page.keyboard.press('Escape');
   await expect(dialog).toBeHidden();

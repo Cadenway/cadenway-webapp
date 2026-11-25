@@ -6,7 +6,7 @@ import { initialsOf, toWorkspaceOrganization, toWorkspaceUser } from './workspac
 describe('workspace context adapter', () => {
   it.each([
     ['Atelier Nord', 'AN'],
-    ['Coopérative Lumen', 'CL'],
+    ['Lumen Cooperative', 'LC'],
     ['  camille   martin  ', 'CM'],
     ['Élodie de la Tour', 'ÉT'],
     ['Cadenway', 'CA'],

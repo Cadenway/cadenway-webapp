@@ -29,8 +29,8 @@ import { ListViewStore } from './state/list-view/list-view.store';
  * status store and rows data access, so they can use the workspace context and pending changes
  * die with the view. The default error
  * boundary renders a failed primary read in the failing route's outlet, so a failed view keeps
- * the list header; the `list` view's `RouteErrorData` titles it « Impossible de charger les
- * tâches ». The bricks' texts are the English source copy.
+ * the list header; the `list` view's `RouteErrorData` titles it `Could not load the tasks`
+ * (`spaces.list-view.load-failed`). The bricks' texts are the English source copy.
  *
  * @type {Routes}
  */

@@ -27,7 +27,7 @@ import { SpacesNavigationStore } from '../../../state/spaces-navigation/spaces-n
  * Constant design
  *
  * @description
- * The mockup's private « Design » space.
+ * The mockup's private `Design` space.
  *
  * @type {SpaceDetails}
  */
@@ -37,7 +37,7 @@ const design: SpaceDetails = {
   prefix: 'DES',
   canEdit: true,
   canManage: true,
-  description: 'Système de design et recherche utilisateur.',
+  description: 'Design system and user research.',
   icon: 'paint',
   color: 'rose',
   private: true,
@@ -60,7 +60,7 @@ const overview: SpaceOverview = {
       list: {
         id: 'l-ds',
         spaceId: 'sp-design',
-        name: 'Système de design',
+        name: 'Design system',
         icon: null,
         color: 'gris',
         sprint: null,
@@ -145,7 +145,7 @@ describe('SpaceOverviewPage', () => {
     await expect.poll(() => api['overview'].mock.calls.length).toBe(1);
     await expect.poll(() => TestBed.inject(SpacesNavigationStore).overviews.hasValue()).toBe(true);
     await harness.navigateByUrl('/atelier-nord/spaces/sp-design');
-    await expect.poll(() => text(harness, 'space-lists')).toContain('Système de design');
+    await expect.poll(() => text(harness, 'space-lists')).toContain('Design system');
     expect(api['overview']).toHaveBeenCalledTimes(1);
   });
 
@@ -153,7 +153,7 @@ describe('SpaceOverviewPage', () => {
     const harness: RouterTestingHarness = await RouterTestingHarness.create(
       '/atelier-nord/spaces/sp-design',
     );
-    await expect.poll(() => text(harness, 'list-card')).toContain('32 tâches');
+    await expect.poll(() => text(harness, 'list-card')).toContain('32 tasks');
     const navigation: InstanceType<typeof SpacesNavigationStore> =
       TestBed.inject(SpacesNavigationStore);
     await expect.poll(() => navigation.overviews.hasValue()).toBe(true);
@@ -165,7 +165,7 @@ describe('SpaceOverviewPage', () => {
     });
     navigation.overviews.reload();
 
-    await expect.poll(() => text(harness, 'list-card')).toContain('33 tâches');
+    await expect.poll(() => text(harness, 'list-card')).toContain('33 tasks');
   });
 
   it('keeps a sidebar overview read after its own began, even while its own runs', async () => {
@@ -202,7 +202,7 @@ describe('SpaceOverviewPage', () => {
     answer(overview);
     const harness: RouterTestingHarness = await created;
 
-    await expect.poll(() => text(harness, 'list-card')).toContain('34 tâches');
+    await expect.poll(() => text(harness, 'list-card')).toContain('34 tasks');
   });
 
   it('keeps its own read over a sidebar read begun before it, and gives it to the sidebar', async () => {
@@ -232,7 +232,7 @@ describe('SpaceOverviewPage', () => {
 
     expect(navigation.overviews.value()?.['sp-design'].taskCount).toBe(32);
 
-    expect(text(harness, 'list-card')).toContain('32 tâches');
+    expect(text(harness, 'list-card')).toContain('32 tasks');
   });
 
   it('gives its own read to a sidebar that failed to read the space', async () => {
@@ -246,7 +246,7 @@ describe('SpaceOverviewPage', () => {
       '/atelier-nord/spaces/sp-design',
     );
 
-    await expect.poll(() => text(harness, 'list-card')).toContain('32 tâches');
+    await expect.poll(() => text(harness, 'list-card')).toContain('32 tasks');
     expect(navigation.overviews.value()?.['sp-design']).toEqual(overview);
   });
 
@@ -266,13 +266,13 @@ describe('SpaceOverviewPage', () => {
       lists: [{ ...overview.lists[0], counts: { ...overview.lists[0].counts, total: 33 } }],
     });
     navigation.overviews.reload();
-    await expect.poll(() => text(harness, 'list-card')).toContain('33 tâches');
+    await expect.poll(() => text(harness, 'list-card')).toContain('33 tasks');
     api['overview'].mockRejectedValueOnce(new Error('unavailable'));
     navigation.overviews.reload();
     await expect.poll(() => navigation.overviews.status()).toBe('resolved');
 
     expect(navigation.overviews.value()).toEqual({});
-    expect(text(harness, 'list-card')).toContain('33 tâches');
+    expect(text(harness, 'list-card')).toContain('33 tasks');
   });
 
   it('recovers a failed own read with a newer sidebar value received during it', async () => {
@@ -310,7 +310,7 @@ describe('SpaceOverviewPage', () => {
     fail(new Error('unavailable'));
     const harness: RouterTestingHarness = await created;
 
-    await expect.poll(() => text(harness, 'list-card')).toContain('34 tâches');
+    await expect.poll(() => text(harness, 'list-card')).toContain('34 tasks');
   });
 
   it('reads on its own instead of waiting for a slow sidebar read of another space', async () => {
@@ -334,7 +334,7 @@ describe('SpaceOverviewPage', () => {
     release({ ...overview, spaceId: other.id, taskCount: 0, lists: [] });
     const harness: RouterTestingHarness = await created;
 
-    await expect.poll(() => text(harness, 'list-card')).toContain('32 tâches');
+    await expect.poll(() => text(harness, 'list-card')).toContain('32 tasks');
   });
 
   it('shows the sidebar value at once while the sidebar reads again, then its newer one', async () => {
@@ -362,7 +362,7 @@ describe('SpaceOverviewPage', () => {
     });
     const harness: RouterTestingHarness = await created;
 
-    await expect.poll(() => text(harness, 'list-card')).toContain('33 tâches');
+    await expect.poll(() => text(harness, 'list-card')).toContain('33 tasks');
     expect(api['overview']).toHaveBeenCalledTimes(2);
   });
 
@@ -376,9 +376,9 @@ describe('SpaceOverviewPage', () => {
         harness.detectChanges();
         return harness.routeNativeElement?.textContent;
       })
-      .toContain('Réessayer');
+      .toContain('Retry');
     [...document.querySelectorAll('button')]
-      .find((button) => button.textContent.includes('Réessayer'))
+      .find((button) => button.textContent.includes('Retry'))
       ?.click();
     await expect
       .poll(() => {
@@ -386,23 +386,25 @@ describe('SpaceOverviewPage', () => {
         return api['space'].mock.calls.length;
       })
       .toBe(2);
-    await expect.poll(() => text(harness, 'space-lists')).toContain('Système de design');
+    await expect.poll(() => text(harness, 'space-lists')).toContain('Design system');
   });
 
   it('shows the list cards with their counts', async () => {
     const harness: RouterTestingHarness = await RouterTestingHarness.create(
       '/atelier-nord/spaces/sp-design',
     );
-    await expect.poll(() => text(harness, 'space-lists')).toContain('Système de design');
+    await expect.poll(() => text(harness, 'space-lists')).toContain('Design system');
 
     const card: string = text(harness, 'list-card');
-    expect(card).toContain('32 tâches');
-    expect(card).toContain('12 / 32 terminées');
+    expect(card).toContain('32 tasks');
+    expect(card).toContain('12 / 32 done');
     expect(card).toContain('38%');
-    expect(card).toContain('14 ouvertes');
-    expect(card).toContain('3 en retard');
-    expect(text(harness, 'space-meta')).toContain('1 liste');
-    expect(harness.routeNativeElement?.querySelector('[aria-label="Espace privé"]')).not.toBeNull();
+    expect(card).toContain('14 open');
+    expect(card).toContain('3 late');
+    expect(text(harness, 'space-meta')).toContain('1 list');
+    expect(
+      harness.routeNativeElement?.querySelector('[aria-label="Private space"]'),
+    ).not.toBeNull();
     expect(
       harness.routeNativeElement?.querySelector('[data-testid="list-card"]')?.getAttribute('href'),
     ).toBe('/atelier-nord/l/l-ds');
@@ -415,10 +417,10 @@ describe('SpaceOverviewPage', () => {
       '/atelier-nord/spaces/sp-design',
     );
 
-    await expect.poll(() => text(harness, 'space-empty')).toContain('Aucune liste dans cet espace');
+    await expect.poll(() => text(harness, 'space-empty')).toContain('No list in this space');
     await expect
       .poll(() => text(harness, 'space-milestones-failed'))
-      .toContain('Impossible de charger les jalons');
+      .toContain('The milestones could not be loaded');
     harness.routeNativeElement
       ?.querySelector<HTMLButtonElement>('[data-testid="space-milestones-failed"] button')
       ?.click();
@@ -433,20 +435,20 @@ describe('SpaceOverviewPage', () => {
     const harness: RouterTestingHarness = await RouterTestingHarness.create(
       '/atelier-nord/spaces/sp-design',
     );
-    await expect.poll(() => text(harness, 'space-lists')).toContain('Système de design');
+    await expect.poll(() => text(harness, 'space-lists')).toContain('Design system');
     await expect.poll(() => api['favorites'].mock.calls.length).toBe(1);
 
     const star: HTMLButtonElement | null | undefined = harness.routeNativeElement?.querySelector(
       '[data-testid="space-favorite"]',
     );
-    expect(star?.getAttribute('aria-label')).toBe('Ajouter aux espaces favoris');
+    expect(star?.getAttribute('aria-label')).toBe('Add to favorite spaces');
     star?.click();
     await expect.poll(() => api['addFavorite'].mock.calls.length).toBe(1);
     expect(api['addFavorite']).toHaveBeenCalledWith('space', 'sp-design');
     harness.detectChanges();
     expect(star?.getAttribute('aria-pressed')).toBe('true');
     await expect.poll(() => show.mock.calls.length).toBe(1);
-    expect(show).toHaveBeenCalledWith('Ajouté aux espaces favoris', { description: 'Design' });
+    expect(show).toHaveBeenCalledWith('Added to favorite spaces', { description: 'Design' });
   });
 
   it('opens the space dialog and the list dialog from the header buttons', async () => {
@@ -455,14 +457,14 @@ describe('SpaceOverviewPage', () => {
     );
     const navigation: InstanceType<typeof SpacesNavigationStore> =
       TestBed.inject(SpacesNavigationStore);
-    await expect.poll(() => text(harness, 'space-lists')).toContain('Système de design');
+    await expect.poll(() => text(harness, 'space-lists')).toContain('Design system');
     await expect.poll(() => navigation.spaceById('sp-design')).toBeTruthy();
     const button: (id: string) => HTMLButtonElement | null | undefined = (id: string) => {
       harness.detectChanges();
       return harness.routeNativeElement?.querySelector<HTMLButtonElement>(`[data-testid="${id}"]`);
     };
 
-    expect(button('space-edit')?.textContent).toContain('Modifier');
+    expect(button('space-edit')?.textContent).toContain('Edit');
     button('space-edit')?.click();
     expect(navigation.dialog()).toEqual({ kind: 'space', space: design });
     button('space-new-sprint')?.click();
@@ -472,7 +474,7 @@ describe('SpaceOverviewPage', () => {
       list: null,
       sprint: true,
     });
-    expect(button('space-new-list')?.textContent).toContain('Nouvelle liste');
+    expect(button('space-new-list')?.textContent).toContain('New list');
     button('space-new-list')?.click();
     expect(navigation.dialog()).toMatchObject({ kind: 'list', sprint: false });
   });

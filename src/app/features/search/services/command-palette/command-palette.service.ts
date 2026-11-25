@@ -16,7 +16,7 @@ const PALETTE: string = 'search.command-palette';
  *
  * @description
  * Whether the command palette is open, shared by the palette (an `overlays` contribution), the
- * rail's « Rechercher » item and the sidebar's « Rechercher… » button, which the shell renders as
+ * rail's `Search` item and the sidebar's `Search…` button, which the shell renders as
  * separate components. It goes through `ShellOverlay`, so the palette never opens over another
  * shell overlay such as the keyboard shortcuts dialog. It holds no user or organization data.
  */

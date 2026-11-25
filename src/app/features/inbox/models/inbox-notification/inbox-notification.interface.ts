@@ -46,7 +46,7 @@ export interface InboxNotification {
    * Property actorInitials
    *
    * @description
-   * Initials of that person (« IR »), or an empty string.
+   * Initials of that person (`IR`), or an empty string.
    *
    * @type {string}
    * @readonly

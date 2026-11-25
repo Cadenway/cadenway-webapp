@@ -11,14 +11,14 @@ import { ForgotPage } from './forgot-page.component';
  * Function resendButton
  *
  * @description
- * Finds « Renvoyer l'e-mail ».
+ * Finds `Resend the email`.
  *
  * @param {HTMLElement} host - The page.
  * @returns {HTMLButtonElement | undefined} The button.
  */
 function resendButton(host: HTMLElement): HTMLButtonElement | undefined {
   return Array.from(host.querySelectorAll('button')).find((button: HTMLButtonElement) =>
-    button.textContent.includes('Renvoyer'),
+    button.textContent.includes('Resend'),
   );
 }
 
@@ -51,7 +51,7 @@ describe('ForgotPage', () => {
     host.querySelector('form')?.dispatchEvent(new Event('submit', { cancelable: true }));
     await fixture.whenStable();
     expect(host.querySelector('#fp-email-help')?.textContent).toContain(
-      "Saisissez l'adresse e-mail de votre compte, par exemple camille.martin@ateliernord.fr.",
+      'Enter the email address of your account, for example camille.martin@ateliernord.fr.',
     );
     expect(document.activeElement).toBe(input);
     expect(requestPasswordReset).not.toHaveBeenCalled();
@@ -64,8 +64,8 @@ describe('ForgotPage', () => {
     await fixture.whenStable();
 
     expect(requestPasswordReset).toHaveBeenCalledWith('camille.martin@ateliernord.fr');
-    expect(host.querySelector('h1')?.textContent.trim()).toBe('Vérifiez vos e-mails');
-    expect(resendButton(host)?.textContent.trim()).toBe("Renvoyer l'e-mail dans 0:45");
+    expect(host.querySelector('h1')?.textContent.trim()).toBe('Check your email');
+    expect(resendButton(host)?.textContent.trim()).toBe('Resend the email in 0:45');
     await vi.advanceTimersByTimeAsync(44_000);
     await fixture.whenStable();
     expect(resendButton(host)?.disabled).toBe(true);
@@ -76,17 +76,17 @@ describe('ForgotPage', () => {
     await fixture.whenStable();
     expect(requestPasswordReset).toHaveBeenCalledTimes(2);
     expect(host.textContent).toContain(
-      'Un nouveau lien vient de partir ; le précédent ne fonctionne plus.',
+      'A new link has just been sent; the previous one no longer works.',
     );
 
     Array.from(host.querySelectorAll('button'))
-      .find((button: HTMLButtonElement) => button.textContent.includes("Modifier l'adresse"))
+      .find((button: HTMLButtonElement) => button.textContent.includes('Change the address'))
       ?.click();
     await fixture.whenStable();
     await new Promise<void>((resolve: () => void) => {
       setTimeout(resolve);
     });
-    expect(host.querySelector('h1')?.textContent.trim()).toBe('Mot de passe oublié');
+    expect(host.querySelector('h1')?.textContent.trim()).toBe('Forgot password');
     const edited: HTMLInputElement | null = host.querySelector('#fp-email');
     expect(document.activeElement).toBe(edited);
     expect(edited?.selectionStart).toBe(0);

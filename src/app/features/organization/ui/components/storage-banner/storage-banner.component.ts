@@ -35,10 +35,10 @@ const GIGABYTE: number = 1_000_000_000;
  * Component StorageBanner
  *
  * @description
- * The « Stockage presque plein » banner across the top of the shell (mockup `App.dc.html` lines
+ * The `Storage nearly full` banner across the top of the shell (mockup `App.dc.html` lines
  * 20-29): shown when attachments use at least 90 % of the organization's storage quota, with the
- * used and included gigabytes, « Plus tard » and the close button (both hide it for this browser
- * tab's session and this organization) and « Gérer les quotas », which opens
+ * used and included gigabytes, `Later` and the close button (both hide it for this browser
+ * tab's session and this organization) and `Manage quotas`, which opens
  * `/<slug>/organization/quotas`. Billing answers an owner only, so nobody else sees it. It
  * reads the `SubscriptionStore` of the `/:org` route and is a `banners` slot contribution.
  */
@@ -141,8 +141,8 @@ export class StorageBanner {
    * Method description
    *
    * @description
-   * The used and included gigabytes and the consequence (« · 92,4 Go utilisés sur 100 Go. Au-delà,
-   * les nouvelles pièces jointes seront refusées. »).
+   * The used and included gigabytes and the consequence (`· 92.4 GB used out of 100 GB. Beyond that,
+   * new attachments will be refused.`).
    *
    * @param {OrganizationSubscription} subscription - Plan and usage.
    * @returns {string} The banner's description.

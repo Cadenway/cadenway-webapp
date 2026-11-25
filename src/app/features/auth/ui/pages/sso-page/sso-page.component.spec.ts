@@ -26,7 +26,7 @@ describe('SsoPage', () => {
 
     expect(input.getAttribute('aria-describedby')).toBe('sso-email-help');
     expect(host.querySelector('#sso-email-help')?.textContent).toContain(
-      'Saisissez votre adresse professionnelle, par exemple prenom.nom@ateliernord.fr.',
+      'Enter your work address, for example first.last@ateliernord.fr.',
     );
     expect(host.querySelector<HTMLButtonElement>('button[type="submit"]')?.disabled).toBe(false);
     host.querySelector('form')?.dispatchEvent(new Event('submit', { cancelable: true }));
@@ -43,7 +43,7 @@ describe('SsoPage', () => {
 
     expect(startSso).toHaveBeenCalledWith('camille@gmail.com');
     expect(host.querySelector('#sso-email-help')?.textContent).toContain(
-      'Aucun SSO n’est configuré pour « gmail.com » : utilisez une autre méthode de connexion.',
+      'No SSO is set up for “gmail.com”: use another sign-in method.',
     );
   });
 });

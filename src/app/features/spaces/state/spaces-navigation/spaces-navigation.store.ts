@@ -274,7 +274,7 @@ interface SpacesNavigationStoreInstance {
    *
    * @description
    * The last space overview or list shown in this tab for the organization followed, or null;
-   * « Espaces » of the rail opens it again.
+   * `Spaces` of the rail opens it again.
    *
    * @type {Signal<string | null>}
    * @readonly
@@ -285,7 +285,7 @@ interface SpacesNavigationStoreInstance {
    * Property seats
    *
    * @description
-   * The plan and its free seats, for the « Inviter votre équipe » suggestion; idle until an
+   * The plan and its free seats, for the `Invite your team` suggestion; idle until an
    * organization is followed.
    *
    * @type {ResourceRef<SeatSummary | undefined>}
@@ -297,7 +297,7 @@ interface SpacesNavigationStoreInstance {
    * Property trashCount
    *
    * @description
-   * Entries of the trash the caller may restore (« Corbeille »).
+   * Entries of the trash the caller may restore (`Trash`).
    *
    * @type {ResourceRef<number | undefined>}
    * @readonly
@@ -308,7 +308,7 @@ interface SpacesNavigationStoreInstance {
    * Property archiveCount
    *
    * @description
-   * Archived lists and task roots the caller sees (« Archives »).
+   * Archived lists and task roots the caller sees (`Archives`).
    *
    * @type {ResourceRef<number | undefined>}
    * @readonly
@@ -378,7 +378,7 @@ interface SpacesNavigationStoreInstance {
    * Method setAllExpanded
    *
    * @description
-   * Opens every space (« Déplier tous les espaces ») or closes them all.
+   * Opens every space (`Expand all spaces`) or closes them all.
    *
    * @param {boolean} open - Whether their lists show.
    */
@@ -417,7 +417,7 @@ interface SpacesNavigationStoreInstance {
    * Method rememberSpacesUrl
    *
    * @description
-   * Remembers the space overview or list shown, for « Espaces » of the rail.
+   * Remembers the space overview or list shown, for `Spaces` of the rail.
    *
    * @param {string} url - Its address.
    */
@@ -503,7 +503,7 @@ interface SpacesNavigationStoreInstance {
    * Method unarchiveList
    *
    * @description
-   * Brings an archived list back (the undo of « Liste archivée »), then reads the sidebar again.
+   * Brings an archived list back (the undo of `List archived`), then reads the sidebar again.
    *
    * @param {string} listId - The list.
    * @returns {Promise<TaskList | null>} The list as recorded, or null when refused.
@@ -514,7 +514,7 @@ interface SpacesNavigationStoreInstance {
    * Method removeList
    *
    * @description
-   * Deletes a list from the version shown (the undo of « Liste dupliquée »), then reads the
+   * Deletes a list from the version shown (the undo of `List duplicated`), then reads the
    * sidebar again.
    *
    * @param {TaskList} list - The list.

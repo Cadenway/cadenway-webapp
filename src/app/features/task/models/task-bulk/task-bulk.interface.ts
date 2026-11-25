@@ -102,7 +102,7 @@ export interface TaskBulkEntry {
    * Property trashEntryId
    *
    * @description
-   * Trash entry holding the task, for `trash`; « Annuler » restores it.
+   * Trash entry holding the task, for `trash`; `Undo` restores it.
    *
    * @type {string | null}
    * @readonly

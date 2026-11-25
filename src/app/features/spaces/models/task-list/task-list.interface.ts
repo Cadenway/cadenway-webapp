@@ -34,7 +34,7 @@ export interface ListSprint {
    * Property goal
    *
    * @description
-   * Sprint goal (« Livrer la connexion SSO… »), or null.
+   * Sprint goal (`Ship the SSO sign-in…`), or null.
    *
    * @type {string | null}
    * @readonly
@@ -77,7 +77,7 @@ export interface TaskList {
    * Property name
    *
    * @description
-   * List name (« Sprint 14 »).
+   * List name (`Sprint 14`).
    *
    * @type {string}
    * @readonly
@@ -176,7 +176,7 @@ export interface ListCounts {
    * Property open
    *
    * @description
-   * Tasks neither done nor cancelled (« 14 ouvertes »).
+   * Tasks neither done nor cancelled (`14 open`).
    *
    * @type {number}
    * @readonly
@@ -209,7 +209,7 @@ export interface ListCounts {
    * Property late
    *
    * @description
-   * Open tasks whose due date is before the caller's today (« 3 en retard »).
+   * Open tasks whose due date is before the caller's today (`3 late`).
    *
    * @type {number}
    * @readonly
@@ -305,7 +305,7 @@ export interface ListDraft {
    * Property name
    *
    * @description
-   * « Nom », 1 to 100 characters.
+   * `Name`, 1 to 100 characters.
    *
    * @type {string}
    * @readonly
@@ -316,7 +316,7 @@ export interface ListDraft {
    * Property icon
    *
    * @description
-   * « Icône », or null for the default icon.
+   * `Icon`, or null for the default icon.
    *
    * @type {LookIcon}
    * @readonly
@@ -327,7 +327,7 @@ export interface ListDraft {
    * Property color
    *
    * @description
-   * « Couleur ».
+   * `Color`.
    *
    * @type {LookColor}
    * @readonly

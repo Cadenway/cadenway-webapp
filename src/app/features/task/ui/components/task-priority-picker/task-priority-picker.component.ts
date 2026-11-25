@@ -23,7 +23,7 @@ import { PRIORITY_LABELS } from '../../../constants/task-copy/task-copy.constant
  * @description
  * The priority property of the task detail and the create dialog (`App.dc.html` near line
  * 2940): a button with the priority icon and word that opens the menu of the four priorities,
- * from « Urgente » to « Basse », the current one marked. It emits `priorityChanged` with the
+ * from `Urgent` to `Low`, the current one marked. It emits `priorityChanged` with the
  * chosen key; the owner passes the new priority back.
  */
 @Component({
@@ -149,7 +149,7 @@ export class TaskPriorityPicker {
    * Property ariaLabel
    *
    * @description
-   * Accessible name of the button (« Priorité : Haute »).
+   * Accessible name of the button (`Priority: High`).
    *
    * @type {Signal<string>}
    * @readonly

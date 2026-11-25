@@ -28,8 +28,8 @@ describe('ErrorRecoveryStore', () => {
     const response: Subject<void> = new Subject<void>();
     recovery.requestAccess.mockReturnValue(response);
 
-    const first: Promise<void> = store.requestAccess({ kind: 'space', id: 's1' }, 'Bonjour');
-    await store.requestAccess({ kind: 'space', id: 's1' }, 'Bonjour');
+    const first: Promise<void> = store.requestAccess({ kind: 'space', id: 's1' }, 'Hello');
+    await store.requestAccess({ kind: 'space', id: 's1' }, 'Hello');
     expect(store.accessRequest()).toBe('sending');
     await vi.waitFor(() => {
       expect(recovery.requestAccess).toHaveBeenCalled();
@@ -40,7 +40,7 @@ describe('ErrorRecoveryStore', () => {
 
     expect(recovery.requestAccess).toHaveBeenCalledTimes(1);
     expect(store.accessRequest()).toBe('sent');
-    await store.requestAccess({ kind: 'space', id: 's1' }, 'Bonjour');
+    await store.requestAccess({ kind: 'space', id: 's1' }, 'Hello');
     expect(recovery.requestAccess).toHaveBeenCalledTimes(1);
   });
 

@@ -25,12 +25,12 @@ describe('SearchRailItem', () => {
     item = button;
   });
 
-  it('is named « Rechercher (Ctrl K) » and described by « Rechercher · Ctrl K »', () => {
-    expect(item.getAttribute('aria-label')).toBe('Rechercher (Ctrl K)');
+  it('is named `Search (Ctrl K)` and described by `Search · Ctrl K`', () => {
+    expect(item.getAttribute('aria-label')).toBe('Search (Ctrl K)');
     expect(item.getAttribute('aria-keyshortcuts')).toBe('Control+K Meta+K');
     const description: string | null = item.getAttribute('aria-describedby');
     expect(description && document.getElementById(description)?.textContent.trim()).toBe(
-      'Rechercher · Ctrl K',
+      'Search · Ctrl K',
     );
   });
 

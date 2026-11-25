@@ -58,7 +58,7 @@ export type OrganizationSwitcherPlacement = 'rail' | 'sidebar';
  * Constant ROLE_NAMES
  *
  * @description
- * Display names of the roles (« Propriétaire », « Administrateur », « Membre », « Invité »).
+ * Display names of the roles (`Owner`, `Administrator`, `Member`, `Guest`).
  *
  * @type {Readonly<Record<WorkspaceRole, string>>}
  */
@@ -75,17 +75,17 @@ const ROLE_NAMES: Readonly<Record<WorkspaceRole, string>> = {
  * @description
  * The organizations menu (mockup `App.dc.html` lines 74-90) and its trigger, chosen by
  * `placement`. In the rail (lines 33-35), the trigger is the filled square with the current
- * organization's initials, its name as the tooltip and « Changer d’organisation : <name> » as the
+ * organization's initials, its name as the tooltip and `Switch organization: <name>` as the
  * accessible name; it is hidden from the phone tab bar. In the sidebar header (lines 183-187), it
  * is the organization row: the Cadenway mark, the organization's name, `<host>/<slug>` from the
- * page address and an up-down caret; the shell's collapse button ends that row. The menu lists the caller's organizations as radio items (initials, name, « role · plan »), read
- * the first time it opens, with skeletons while loading and an inline error with « Réessayer »;
+ * page address and an up-down caret; the shell's collapse button ends that row. The menu lists the caller's organizations as radio items (initials, name, `role · plan`), read
+ * the first time it opens, with skeletons while loading and an inline error with `Retry`;
  * choosing another one navigates to `/<slug>`, whose guard switches the session, and once that
- * organization is the workspace's, confirms with « Organisation : <name> » (lines 8256-8262). Then
+ * organization is the workspace's, confirms with `Organization: <name>` (lines 8256-8262). Then
  * come
- * « Paramètres de l'organisation », « Membres et invitations » (with the member count) and
- * « Facturation et quotas », which open `/<slug>/organization/<section>`, and « Créer ou
- * rejoindre une organisation », which opens `/organizations`. It provides its own
+ * `Organization settings`, `Members and invitations` (with the member count) and
+ * `Billing and quotas`, which open `/<slug>/organization/<section>`, and `Create or
+ * join an organization`, which opens `/organizations`. It provides its own
  * `OrganizationMenuStore` and follows an organization switch in place through the `workspace`
  * port. Its host is `display: contents`, so the item joins the rail group's layout.
  */
@@ -209,8 +209,8 @@ export class OrganizationSwitcher {
    * Method meta
    *
    * @description
-   * The second line of an organization: the caller's role and its plan (« Propriétaire · plan
-   * Équipe »).
+   * The second line of an organization: the caller's role and its plan (`Owner · Team
+   * plan`).
    *
    * @param {OrganizationMenuEntry} entry - A listed organization.
    * @returns {string} The role and the plan.

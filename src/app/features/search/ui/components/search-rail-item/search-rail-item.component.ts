@@ -7,8 +7,8 @@ import { CommandPalette } from '../../../services/command-palette/command-palett
  * Component SearchRailItem
  *
  * @description
- * The « Rechercher » item of the rail footer (mockup `App.dc.html` lines 55-58): a magnifying
- * glass named « Rechercher (Ctrl K) » whose tooltip reads « Rechercher · Ctrl K », opening the
+ * The `Search` item of the rail footer (mockup `App.dc.html` lines 55-58): a magnifying
+ * glass named `Search (Ctrl K)` whose tooltip reads `Search · Ctrl K`, opening the
  * command palette. It stays in the phone tab bar. Its
  * host is `display: contents`, so the item joins the rail footer's layout.
  */

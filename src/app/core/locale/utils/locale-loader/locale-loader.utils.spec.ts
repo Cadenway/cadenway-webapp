@@ -15,11 +15,35 @@ import { readCatalog, loadLocale } from './locale-loader.utils';
  * @description
  * The maintained French catalog, as the server delivers it.
  *
- * @type {unknown}
+ * @type {{ readonly translations: Readonly<Record<string, string>> }}
  */
-const FRENCH_CATALOG: unknown = JSON.parse(
+const FRENCH_CATALOG: { readonly translations: Readonly<Record<string, string>> } = JSON.parse(
   readFileSync(resolve(process.cwd(), 'src/locale/messages.fr.json'), 'utf8'),
-);
+) as { readonly translations: Readonly<Record<string, string>> };
+
+/**
+ * Constant FRENCH_PROFILE
+ *
+ * @description
+ * The French text of `account.user-menu.profile`, read from the catalog so the spec holds no French.
+ *
+ * @type {string}
+ */
+const FRENCH_PROFILE: string = FRENCH_CATALOG.translations['account.user-menu.profile'] ?? '';
+
+/**
+ * Constant FRENCH_DAY
+ *
+ * @description
+ * Monday, 9 November 2026 as the `fr` locale writes `EEEE d MMMM`, computed by `Intl`.
+ *
+ * @type {string}
+ */
+const FRENCH_DAY: string = new Intl.DateTimeFormat('fr', {
+  weekday: 'long',
+  day: 'numeric',
+  month: 'long',
+}).format(new Date(2026, 10, 9));
 
 /**
  * Component LocalizedSample
@@ -105,13 +129,14 @@ describe('loadLocale', () => {
     expect(window.localStorage.getItem('cadenway-locale')).toBe('fr');
     expect($localize.locale).toBe('fr');
     expect(document.documentElement.lang).toBe('fr');
-    expect(profileLabel()).toBe('Mon profil');
+    expect(FRENCH_PROFILE).not.toBe('My profile');
+    expect(profileLabel()).toBe(FRENCH_PROFILE);
 
     const fixture: ComponentFixture<LocalizedSample> = TestBed.createComponent(LocalizedSample);
     fixture.detectChanges();
     const host: HTMLElement = fixture.nativeElement as HTMLElement;
-    expect(host.querySelector('p')?.textContent).toBe('Mon profil');
-    expect(host.querySelector('time')?.textContent).toBe('lundi 9 novembre');
+    expect(host.querySelector('p')?.textContent).toBe(FRENCH_PROFILE);
+    expect(host.querySelector('time')?.textContent).toBe(FRENCH_DAY);
   });
 
   it('keeps the remembered French choice when the address has no parameter', async () => {
@@ -119,7 +144,7 @@ describe('loadLocale', () => {
 
     await expect(loadLocale(window)).resolves.toBe('fr');
 
-    expect(profileLabel()).toBe('Mon profil');
+    expect(profileLabel()).toBe(FRENCH_PROFILE);
   });
 
   it('returns to English with ?lang=en and remembers it', async () => {

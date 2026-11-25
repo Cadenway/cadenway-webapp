@@ -63,7 +63,7 @@ describe('FederatedContinuePage', () => {
     });
 
     expect(navigate).not.toHaveBeenCalled();
-    expect(host.textContent).toContain('Cette méthode de connexion ne peut pas être utilisée.');
+    expect(host.textContent).toContain('This sign-in method cannot be used.');
     expect(host.querySelector('a')?.getAttribute('href')).toBe('/login');
   });
 });

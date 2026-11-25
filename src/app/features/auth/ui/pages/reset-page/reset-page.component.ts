@@ -63,7 +63,7 @@ interface ResetModel {
    * Property closeOtherSessions
    *
    * @description
-   * "Fermer mes autres sessions", ticked by default.
+   * `Close my other sessions`, ticked by default.
    *
    * @type {boolean}
    */
@@ -99,8 +99,8 @@ const PASSWORD_RULES: readonly CwPasswordRule[] = cwPasswordRules(CW_PASSWORD_ST
  * @description
  * New password of `Reinitialisation.dc.html` (`/reset#token=…`). The token is read from the URL
  * fragment, which no server receives, then removed from the address bar and sent in bodies only.
- * The link is inspected first (« Pour le compte … »); an expired, used or replaced link shows
- * « Ce lien a expiré ». The success says how many sessions closed and offers « Se connecter ».
+ * The link is inspected first (`For the account …`); an expired, used or replaced link shows
+ * `This link has expired`. The success says how many sessions closed and offers `Sign in`.
  */
 @Component({
   selector: 'cw-reset-page',

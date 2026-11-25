@@ -151,7 +151,7 @@ interface TaskCreateStoreInstance {
    * Property destinationsFailed
    *
    * @description
-   * Whether reading the lists failed; the dialog shows « Réessayer ».
+   * Whether reading the lists failed; the dialog shows `Retry`.
    *
    * @type {Signal<boolean>}
    * @readonly
@@ -337,7 +337,7 @@ interface TaskCreateStoreInstance {
    * Method retry
    *
    * @description
-   * « Réessayer » after the lists could not be read.
+   * `Retry` after the lists could not be read.
    */
   retry(): void;
 

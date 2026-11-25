@@ -32,13 +32,13 @@ import { DEFAULT_VIEW_CONFIG } from '../../../utils/list-view-query/list-view-qu
  * Constant bugs
  *
  * @description
- * The mockup's « Bugs » list of « Produit ».
+ * The mockup's `Bugs` list of `Product`.
  *
  * @type {TaskList}
  */
 const bugs: TaskList = {
   id: 'l-bugs',
-  spaceId: 'sp-produit',
+  spaceId: 'sp-product',
   name: 'Bugs',
   icon: 'bug',
   color: 'rouge',
@@ -49,16 +49,16 @@ const bugs: TaskList = {
 };
 
 /**
- * Constant produit
+ * Constant product
  *
  * @description
- * The « Produit » space.
+ * The `Product` space.
  *
  * @type {SpaceDetails}
  */
-const produit: SpaceDetails = {
-  id: 'sp-produit',
-  name: 'Produit',
+const product: SpaceDetails = {
+  id: 'sp-product',
+  name: 'Product',
   prefix: 'CAD',
   canEdit: true,
   canManage: true,
@@ -74,17 +74,17 @@ const produit: SpaceDetails = {
 };
 
 /**
- * Constant bugsCritiques
+ * Constant criticalBugs
  *
  * @description
- * The mockup's saved view of « Bugs ».
+ * The mockup's saved view of `Bugs`.
  *
  * @type {SavedView}
  */
-const bugsCritiques: SavedView = {
+const criticalBugs: SavedView = {
   id: 'sv-bugs',
   listId: 'l-bugs',
-  name: 'Bugs critiques',
+  name: 'Critical bugs',
   icon: 'bug',
   layout: 'list',
   config: {
@@ -114,16 +114,16 @@ describe('ListPage', () => {
       ),
       organizationMembers: vi.fn(() => Promise.resolve([{ userId: 'u1', name: 'Inès Robert' }])),
       labels: vi.fn(() => Promise.resolve(['Bug', 'Front'])),
-      savedViews: vi.fn(() => Promise.resolve([bugsCritiques])),
+      savedViews: vi.fn(() => Promise.resolve([criticalBugs])),
       remove: vi.fn(() => Promise.resolve(undefined)),
       duplicate: vi.fn(() =>
-        Promise.resolve({ list: { ...bugs, name: 'Bugs (copie)' }, taskCount: 3 }),
+        Promise.resolve({ list: { ...bugs, name: 'Bugs (copy)' }, taskCount: 3 }),
       ),
       archive: vi.fn(() => Promise.reject(new Error('access.role-insufficient'))),
       createSavedView: vi.fn(),
       deleteSavedView: vi.fn(() => Promise.resolve(undefined)),
     };
-    spaceRead = vi.fn(() => Promise.resolve(produit));
+    spaceRead = vi.fn(() => Promise.resolve(product));
     TestBed.configureTestingModule({
       providers: [
         provideCadenwayIcons(),
@@ -173,9 +173,9 @@ describe('ListPage', () => {
           provide: SpacesApi,
           useValue: {
             space: spaceRead,
-            spaces: vi.fn(() => Promise.resolve([produit])),
+            spaces: vi.fn(() => Promise.resolve([product])),
             overview: vi.fn(() =>
-              Promise.resolve({ spaceId: 'sp-produit', taskCount: 3, lists: [] }),
+              Promise.resolve({ spaceId: 'sp-product', taskCount: 3, lists: [] }),
             ),
             favorites: vi.fn(() => Promise.resolve([])),
           },
@@ -220,13 +220,13 @@ describe('ListPage', () => {
   it('redirects to the list view and shows the header, the tabs and the tools', async () => {
     await open('/atelier-nord/l/l-bugs');
 
-    await expect.poll(() => find('list-breadcrumb-space')?.textContent ?? '').toContain('Produit');
-    expect(find('list-description')?.textContent).toContain('3 tâches');
-    expect(find('list-description')?.textContent).toContain('0 % terminé');
+    await expect.poll(() => find('list-breadcrumb-space')?.textContent ?? '').toContain('Product');
+    expect(find('list-description')?.textContent).toContain('3 tasks');
+    expect(find('list-description')?.textContent).toContain('0 % done');
     expect(find('list-rows')).not.toBeNull();
-    expect(find('view-tabs')?.textContent).toContain('Liste');
-    expect(find('view-group')?.textContent).toContain('Grouper : statut');
-    expect(find('view-chips')?.textContent).toContain('Aucun filtre');
+    expect(find('view-tabs')?.textContent).toContain('List');
+    expect(find('view-group')?.textContent).toContain('Group: status');
+    expect(find('view-chips')?.textContent).toContain('No filter');
   });
 
   it('opens the filters with the space statuses and the labels, then shows a chip', async () => {
@@ -236,21 +236,21 @@ describe('ListPage', () => {
     await expect.poll(() => find('view-filter-dialog')).not.toBeNull();
 
     const dialog: HTMLElement | null = find('view-filter-dialog');
-    expect(dialog?.textContent).toContain('À faire');
-    expect(dialog?.textContent).not.toContain('À trier');
-    expect(dialog?.textContent).toContain('Moi');
-    expect(dialog?.textContent).toContain('Non assigné');
+    expect(dialog?.textContent).toContain('To do');
+    expect(dialog?.textContent).not.toContain('To triage');
+    expect(dialog?.textContent).toContain('Me');
+    expect(dialog?.textContent).toContain('Unassigned');
     expect(dialog?.textContent).not.toContain('Inès Robert');
     expect(dialog?.textContent).toContain('Front');
-    expect(dialog?.textContent).toContain('0 sur 3 tâches');
+    expect(dialog?.textContent).toContain('0 of 3 tasks');
 
     dialog?.querySelector<HTMLButtonElement>('[role="checkbox"]')?.click();
     harness.detectChanges();
-    await expect.poll(() => find('view-chip')?.textContent ?? '').toContain('Statut');
+    await expect.poll(() => find('view-chip')?.textContent ?? '').toContain('Status');
     expect(find('view-filter')?.textContent).toContain('1');
   });
 
-  it('hides « Sous-tâches » once the rows read have no subtask', async () => {
+  it('hides the subtasks menu once the rows read have no subtask', async () => {
     const harness: RouterTestingHarness = await open('/atelier-nord/l/l-bugs');
     await expect
       .poll(() => {
@@ -263,9 +263,9 @@ describe('ListPage', () => {
 
   it('applies the saved view of the address and marks it modified', async () => {
     const harness: RouterTestingHarness = await open('/atelier-nord/l/l-bugs?savedView=sv-bugs');
-    await expect.poll(() => find('view-chip')?.textContent ?? '').toContain('Urgente, Haute');
+    await expect.poll(() => find('view-chip')?.textContent ?? '').toContain('Urgent, High');
     expect(find('saved-view-tab')?.getAttribute('aria-selected')).toBe('true');
-    expect(find('view-sort')?.textContent).toContain('Tri : échéance');
+    expect(find('view-sort')?.textContent).toContain('Sort: due date');
 
     find('view-chip')?.querySelector<HTMLButtonElement>('button')?.click();
     harness.detectChanges();
@@ -290,7 +290,7 @@ describe('ListPage', () => {
       .toBe('/atelier-nord/l/l-bugs/list?keep=yes#section');
     expect(find('view-filter')).not.toBeNull();
     expect(find('list-rows')).not.toBeNull();
-    expect(info).toHaveBeenCalledExactlyOnceWith("Cette vue n'existe plus");
+    expect(info).toHaveBeenCalledExactlyOnceWith('This view no longer exists');
     expect(navigate).toHaveBeenCalledWith(
       [],
       expect.objectContaining({ replaceUrl: true, queryParams: { savedView: null } }),
@@ -337,7 +337,7 @@ describe('ListPage', () => {
     harness.detectChanges();
     const priority: HTMLButtonElement | undefined = [
       ...document.querySelectorAll<HTMLButtonElement>('[role="menuitemradio"]'),
-    ].find((item) => item.textContent.includes('Priorité'));
+    ].find((item) => item.textContent.includes('Priority'));
     priority?.click();
     harness.detectChanges();
     await expect.poll(() => find('view-save')).not.toBeNull();
@@ -348,10 +348,10 @@ describe('ListPage', () => {
         harness.detectChanges();
         return harness.routeNativeElement?.textContent;
       })
-      .toContain('Impossible de charger les vues enregistrées');
+      .toContain('Saved views could not be loaded');
     expect(find('view-save')?.hasAttribute('disabled')).toBe(true);
     [...document.querySelectorAll<HTMLButtonElement>('button')]
-      .find((button) => button.textContent.includes('Réessayer'))
+      .find((button) => button.textContent.includes('Retry'))
       ?.click();
     await expect
       .poll(() => {
@@ -365,10 +365,10 @@ describe('ListPage', () => {
   it('resolves a saved assignee id to the member name', async () => {
     api['savedViews'].mockResolvedValueOnce([
       {
-        ...bugsCritiques,
+        ...criticalBugs,
         config: {
-          ...bugsCritiques.config,
-          filters: { ...bugsCritiques.config.filters, assignee: ['u1'] },
+          ...criticalBugs.config,
+          filters: { ...criticalBugs.config.filters, assignee: ['u1'] },
         },
       },
     ]);
@@ -385,9 +385,9 @@ describe('ListPage', () => {
         harness.detectChanges();
         return harness.routeNativeElement?.textContent;
       })
-      .toContain('Réessayer');
+      .toContain('Retry');
     [...document.querySelectorAll('button')]
-      .find((button) => button.textContent.includes('Réessayer'))
+      .find((button) => button.textContent.includes('Retry'))
       ?.click();
     await expect
       .poll(() => {
@@ -415,10 +415,10 @@ describe('ListPage', () => {
         harness.detectChanges();
         return document.querySelector('cw-route-error-boundary h1')?.textContent.trim();
       })
-      .toBe('Impossible de charger les tâches');
+      .toBe('Could not load the tasks');
     expect(find('list-description')).not.toBeNull();
-    expect(harness.routeNativeElement?.textContent).toContain('Réessayer');
-    expect(harness.routeNativeElement?.textContent).not.toContain('État du service');
+    expect(harness.routeNativeElement?.textContent).toContain('Retry');
+    expect(harness.routeNativeElement?.textContent).not.toContain('Service status');
   });
 
   it('keeps saved filters and actions unavailable until a failed read is retried', async () => {
@@ -429,7 +429,7 @@ describe('ListPage', () => {
         harness.detectChanges();
         return harness.routeNativeElement?.textContent;
       })
-      .toContain('Impossible de charger les vues enregistrées');
+      .toContain('Saved views could not be loaded');
     expect(find('view-filter')).toBeNull();
     expect(find('list-rows')).toBeNull();
     find('list-more')?.click();
@@ -437,14 +437,14 @@ describe('ListPage', () => {
     await expect.poll(() => find('list-export')).not.toBeNull();
     expect(find('list-export')?.getAttribute('aria-disabled')).toBe('true');
     [...document.querySelectorAll('button')]
-      .find((button) => button.textContent.includes('Réessayer'))
+      .find((button) => button.textContent.includes('Retry'))
       ?.click();
     await expect
       .poll(() => {
         harness.detectChanges();
         return find('view-chip')?.textContent;
       })
-      .toContain('Urgente, Haute');
+      .toContain('Urgent, High');
     expect(api['savedViews']).toHaveBeenCalledTimes(2);
   });
 
@@ -456,10 +456,10 @@ describe('ListPage', () => {
         harness.detectChanges();
         return harness.routeNativeElement?.textContent;
       })
-      .toContain('Impossible de charger l’espace');
+      .toContain('The space could not be loaded');
     const alert: Element | undefined = [
       ...(harness.routeNativeElement?.querySelectorAll('[role="alert"]') ?? []),
-    ].find((item: Element) => item.textContent.includes('Impossible de charger l’espace'));
+    ].find((item: Element) => item.textContent.includes('The space could not be loaded'));
     alert?.querySelector<HTMLButtonElement>('button')?.click();
     await expect.poll(() => spaceRead.mock.calls.length).toBe(2);
     await expect
@@ -467,7 +467,7 @@ describe('ListPage', () => {
         harness.detectChanges();
         return find('list-breadcrumb-space')?.textContent;
       })
-      .toContain('Produit');
+      .toContain('Product');
   });
 
   it('retries failed secondary reads instead of treating them as empty', async () => {
@@ -478,10 +478,10 @@ describe('ListPage', () => {
     const harness: RouterTestingHarness =
       await RouterTestingHarness.create('/atelier-nord/l/l-bugs');
     for (const message of [
-      'Impossible de charger les étiquettes',
-      'Impossible de charger les membres.',
-      'Impossible de charger les comptes',
-      'Impossible de charger les membres de la liste',
+      'The labels could not be loaded',
+      'The members could not be loaded.',
+      'The counts could not be loaded',
+      'The list members could not be loaded',
     ]) {
       await expect
         .poll(() => {
@@ -536,21 +536,21 @@ describe('ListPage', () => {
 
     find('list-more')?.click();
     harness.detectChanges();
-    await expect.poll(() => menuItem('Dupliquer avec les tâches')).toBeTruthy();
-    menuItem('Dupliquer avec les tâches')?.click();
+    await expect.poll(() => menuItem('Duplicate with the tasks')).toBeTruthy();
+    menuItem('Duplicate with the tasks')?.click();
     await expect.poll(() => show.mock.calls.length).toBe(1);
-    expect(show.mock.calls[0]?.[0]).toBe('Liste dupliquée');
-    expect(show.mock.calls[0]?.[1]?.description).toBe('Bugs (copie) · 3 tâches');
+    expect(show.mock.calls[0]?.[0]).toBe('List duplicated');
+    expect(show.mock.calls[0]?.[1]?.description).toBe('Bugs (copy) · 3 tasks');
     show.mock.calls[0]?.[1]?.undo?.();
     await expect.poll(() => api['remove'].mock.calls.length).toBe(1);
-    expect(api['remove']).toHaveBeenCalledWith({ ...bugs, name: 'Bugs (copie)' });
+    expect(api['remove']).toHaveBeenCalledWith({ ...bugs, name: 'Bugs (copy)' });
 
     find('list-more')?.click();
     harness.detectChanges();
-    await expect.poll(() => menuItem('Archiver la liste')).toBeTruthy();
-    menuItem('Archiver la liste')?.click();
+    await expect.poll(() => menuItem('Archive the list')).toBeTruthy();
+    menuItem('Archive the list')?.click();
     await expect.poll(() => error.mock.calls.length).toBe(1);
-    expect(error).toHaveBeenCalledWith('Impossible d’archiver la liste');
+    expect(error).toHaveBeenCalledWith('The list could not be archived');
   });
 
   it('opens the list dialog from the list icon and the space dialog from the menu', async () => {
@@ -561,20 +561,20 @@ describe('ListPage', () => {
       '[data-testid="list-edit"]',
     ) as HTMLButtonElement | null;
 
-    expect(edit?.getAttribute('aria-label')).toBe('Modifier la liste');
+    expect(edit?.getAttribute('aria-label')).toBe('Edit the list');
     edit?.click();
     expect(navigation.dialog()).toEqual({
       kind: 'list',
-      spaceId: 'sp-produit',
+      spaceId: 'sp-product',
       list: bugs,
       sprint: false,
     });
 
-    await expect.poll(() => navigation.spaceById('sp-produit')).toBeTruthy();
+    await expect.poll(() => navigation.spaceById('sp-product')).toBeTruthy();
     find('list-more')?.click();
     harness.detectChanges();
     await expect.poll(() => find('list-edit-space')).not.toBeNull();
     find('list-edit-space')?.click();
-    expect(navigation.dialog()).toEqual({ kind: 'space', space: produit });
+    expect(navigation.dialog()).toEqual({ kind: 'space', space: product });
   });
 });

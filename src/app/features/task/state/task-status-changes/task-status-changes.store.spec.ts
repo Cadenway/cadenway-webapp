@@ -27,7 +27,7 @@ import { STATUS_SETTLE_MS, TaskStatusChangesStore } from './task-status-changes.
 const task: TaskSummary = {
   id: 'CAD-482',
   key: 'CAD-482',
-  name: 'Refondre l’écran de connexion SSO',
+  name: 'Redesign the SSO sign-in screen',
   status: 'todo',
   cancelReason: null,
   priority: 'haute',
@@ -42,7 +42,7 @@ const task: TaskSummary = {
   milestone: false,
   recurrence: 'none',
   listId: 'sprint-14',
-  spaceId: 'produit',
+  spaceId: 'product',
   version: 3,
 };
 
@@ -185,7 +185,7 @@ describe('TaskStatusChangesStore', () => {
     store.request(task, 'cancelled');
     expect(store.cancelRequest()).toEqual({ taskKeys: ['CAD-482'] });
     expect(store.displayedStatus(task)).toBe('todo');
-    const cancellation: TaskCancellation = { reason: 'duplicate', note: 'remplacée par CAD-490' };
+    const cancellation: TaskCancellation = { reason: 'duplicate', note: 'replaced by CAD-490' };
     store.confirmCancel(cancellation);
     expect(store.cancelRequest()).toBeNull();
     expect(store.displayedStatus(task)).toBe('cancelled');
@@ -197,7 +197,7 @@ describe('TaskStatusChangesStore', () => {
     expect(options?.description).toContain(CANCEL_REASON_LABELS.duplicate);
   });
 
-  it('keeps the task when « Garder la tâche » closes the dialog', async () => {
+  it('keeps the task when `Keep the task` closes the dialog', async () => {
     const store: InstanceType<typeof TaskStatusChangesStore> = setup();
 
     store.request(task, 'cancelled');
@@ -426,7 +426,7 @@ describe('TaskStatusChangesStore', () => {
     expect(error).not.toHaveBeenCalled();
   });
 
-  it('lets the caller’s task win once it caught up with the confirmed version', async () => {
+  it('lets the task of the caller win once it caught up with the confirmed version', async () => {
     const store: InstanceType<typeof TaskStatusChangesStore> = setup();
     store.request(task, 'progress');
     await vi.runAllTimersAsync();

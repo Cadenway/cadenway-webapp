@@ -23,7 +23,7 @@ import { ListTasksApi } from './list-tasks-api.service';
  * Constant query
  *
  * @description
- * The default query of the « Liste » view.
+ * The default query of the `List` view.
  *
  * @type {ListTaskQuery}
  */
@@ -53,7 +53,7 @@ function task(key: string, assignees: readonly string[]): TaskSummaryDto {
     labels: ['Auth'],
     parentKey: null,
     listId: 'sprint-14',
-    spaceId: 'produit',
+    spaceId: 'product',
     subtaskCounts: { total: 0, closed: 0 },
     checklistCounts: { total: 0, done: 0 },
     completedAt: null,

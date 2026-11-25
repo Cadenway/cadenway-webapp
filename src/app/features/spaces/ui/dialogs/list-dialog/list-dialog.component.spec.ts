@@ -110,18 +110,18 @@ describe('ListDialog', () => {
   it('creates a list from its name and look', () => {
     fixture.componentInstance.open.set(true);
     fixture.detectChanges();
-    expect(document.body.textContent).toContain('Créer une liste');
+    expect(document.body.textContent).toContain('Create a list');
     const submit: HTMLButtonElement = element('list-dialog-submit') as HTMLButtonElement;
     expect(submit.disabled).toBe(true);
 
     const name: HTMLInputElement = element('list-dialog-name') as HTMLInputElement;
-    name.value = '  Feuille de route ';
+    name.value = '  Roadmap ';
     name.dispatchEvent(new Event('input'));
     fixture.detectChanges();
     submit.click();
 
     expect(fixture.componentInstance.drafts).toEqual([
-      { name: 'Feuille de route', icon: null, color: 'gris', sprint: null },
+      { name: 'Roadmap', icon: null, color: 'gris', sprint: null },
     ]);
   });
 
@@ -137,8 +137,8 @@ describe('ListDialog', () => {
 
     element('list-dialog-sprint').querySelector<HTMLButtonElement>('button')?.click();
     fixture.detectChanges();
-    expect(document.body.textContent).toContain('Créer un sprint');
-    expect(element('list-dialog-dates').textContent).toContain('14 jours · 2 semaines');
+    expect(document.body.textContent).toContain('Create a sprint');
+    expect(element('list-dialog-dates').textContent).toContain('14 days · 2 weeks');
     element('list-dialog-submit').click();
 
     const today: string = todayIso();
@@ -158,13 +158,13 @@ describe('ListDialog', () => {
       name: 'Sprint 14',
       icon: 'lightning',
       color: 'violet',
-      sprint: { startDate: '2026-11-17', endDate: '2026-11-03', goal: 'Livrer la connexion SSO' },
+      sprint: { startDate: '2026-11-17', endDate: '2026-11-03', goal: 'Ship the SSO sign-in' },
     });
     fixture.componentInstance.open.set(true);
     fixture.detectChanges();
 
-    expect(document.body.textContent).toContain('Modifier le sprint');
-    expect(element('list-dialog-dates').textContent).toContain('La fin doit suivre le début.');
+    expect(document.body.textContent).toContain('Edit the sprint');
+    expect(element('list-dialog-dates').textContent).toContain('The end must follow the start.');
     expect((element('list-dialog-submit') as HTMLButtonElement).disabled).toBe(true);
   });
 });

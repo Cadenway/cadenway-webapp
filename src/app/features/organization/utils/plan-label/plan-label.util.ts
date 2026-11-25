@@ -2,7 +2,7 @@
  * Constant PLAN_NAMES
  *
  * @description
- * Display names of the plan keys Billing reports today (« Gratuit », « Équipe », « Entreprise »).
+ * Display names of the plan keys Billing reports today (`Free`, `Team`, `Enterprise`).
  *
  * @type {Readonly<Record<string, string>>}
  */

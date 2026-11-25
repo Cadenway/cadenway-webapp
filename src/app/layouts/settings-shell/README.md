@@ -9,7 +9,7 @@ The settings frame of mockups `Compte.dc.html` and `Organisation.dc.html`. The s
 
 ## Navigation name
 
-The route that loads `SettingsShell` names the settings navigation through its `data`, typed with `satisfies`. The routes supply the English source strings with `$localize`. The French translations are « Paramètres » for the account and « Réglages de l'organisation » for the organization.
+The route that loads `SettingsShell` names the settings navigation through its `data`, typed with `satisfies`. The routes supply the English source strings with `$localize`. They read `Settings` for the account and `Organization settings` for the organization; their French translations live in `src/locale/messages.fr.json`.
 
 ```ts
 data: { settingsNavigationLabel: $localize`:@@<feature>.<area>.<key>:…` } satisfies SettingsShellRouteData,

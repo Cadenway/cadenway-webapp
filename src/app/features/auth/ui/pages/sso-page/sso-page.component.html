@@ -24,7 +24,7 @@
           id="sso-email"
           type="email"
           autocomplete="email"
-          placeholder="prenom.nom@entreprise.fr"
+          placeholder="first.last@company.com"
           i18n-placeholder="@@auth.sso.placeholder"
           aria-describedby="sso-email-help"
           [formField]="ssoForm.email"
@@ -40,7 +40,7 @@
           </p>
         } @else {
           <p id="sso-email-help" class="text-xs text-muted-foreground" i18n="@@auth.sso.email-hint">
-            Enter your work address, for example prenom.nom@ateliernord.fr.
+            Enter your work address, for example first.last@ateliernord.fr.
           </p>
         }
       </div>

@@ -109,7 +109,7 @@ const atelierNord: WorkspaceOrganization = {
 const lumen: WorkspaceOrganization = {
   id: '019a5f3c-8d2e-7c4a-9b1f-3e5d7a9c1c40',
   slug: 'lumen',
-  name: 'Coopérative Lumen',
+  name: 'Lumen Cooperative',
   initials: 'CL',
   role: 'member',
   plan: 'enterprise',
@@ -306,20 +306,20 @@ describe('WORKSPACE_ROUTES', () => {
     const harness: RouterTestingHarness = await open('/atelier-nord');
 
     const element: HTMLElement = harness.fixture.nativeElement as HTMLElement;
-    expect(element.querySelector('h1')?.textContent.trim()).toBe('Bonjour Camille');
+    expect(element.querySelector('h1')?.textContent.trim()).toBe('Hello Camille');
     const switcher: HTMLButtonElement | null = element.querySelector(
       '[data-testid="organization-switcher"]',
     );
     expect(switcher?.getAttribute('aria-haspopup')).toBe('menu');
     expect(switcher?.textContent).toContain('AN');
-    expect(switcher?.textContent).toContain('Changer d’organisation : Atelier Nord');
+    expect(switcher?.textContent).toContain('Switch organization: Atelier Nord');
     expect(session.switchOrganization).not.toHaveBeenCalled();
   });
 
   it('renders the list grid inside the workspace route', async () => {
     const list: Record<string, unknown> = {
       id: 'sprint-14',
-      spaceId: 'produit',
+      spaceId: 'product',
       name: 'Sprint 14',
       icon: null,
       color: null,
@@ -345,7 +345,7 @@ describe('WORKSPACE_ROUTES', () => {
         {
           provide: SpacesService,
           useValue: {
-            getSpace: () => of({ id: 'produit', name: 'Produit', statuses: {} }),
+            getSpace: () => of({ id: 'product', name: 'Product', statuses: {} }),
             listSpaces: () => of(empty),
             listFavorites: () => of(empty),
           },
@@ -1264,7 +1264,7 @@ describe('WORKSPACE_ROUTES', () => {
 
     const element: HTMLElement = harness.fixture.nativeElement as HTMLElement;
     expect(element.querySelector('[data-testid="organization-switcher"]')?.textContent).toContain(
-      'Coopérative Lumen',
+      'Lumen Cooperative',
     );
   });
 
@@ -1440,7 +1440,7 @@ describe('WORKSPACE_ROUTES', () => {
     const harness: RouterTestingHarness = await open('/atelier-nord/missing/page');
 
     const element: HTMLElement = harness.fixture.nativeElement as HTMLElement;
-    expect(element.querySelector('h1')?.textContent.trim()).toBe('Page introuvable');
+    expect(element.querySelector('h1')?.textContent.trim()).toBe('Page not found');
     expect(element.querySelector('[data-testid="organization-switcher"]')).not.toBeNull();
     expect(TestBed.inject(Router).url).toBe('/atelier-nord/missing/page');
   });
@@ -1457,7 +1457,7 @@ describe('WORKSPACE_ROUTES', () => {
 
     const element: HTMLElement = harness.fixture.nativeElement as HTMLElement;
     expect(getTask).toHaveBeenCalledWith('CAD-482', { cache: 'no-store' });
-    expect(element.querySelector('h1')?.textContent.trim()).toBe('Page introuvable');
+    expect(element.querySelector('h1')?.textContent.trim()).toBe('Page not found');
     expect(element.querySelector('[data-testid="organization-switcher"]')).not.toBeNull();
   });
 

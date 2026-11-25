@@ -3,8 +3,8 @@
 ## Purpose
 
 The account settings and their 5 sections, and the account menu of the application shell: the
-rail's account button with the person's presence, the « Statut » and « Thème » submenus, the links
-to the account sections and « Se déconnecter ». It owns the person's own presence port (`PRESENCE`).
+rail's account button with the person's presence, the `Status` and `Theme` submenus, the links
+to the account sections and `Sign out`. It owns the person's own presence port (`PRESENCE`).
 Sign-out itself belongs to Auth; the realtime connection belongs to `core`.
 
 ## Routes
@@ -35,18 +35,18 @@ Until then the menu's links open the 404 inside the shell.
 
 - `providePresence()` binds `PRESENCE` to the workspace's `RealtimeConnection` (provided by
   Workspace's runtime on `/:org`). `ownStatus` is null until the presence snapshot returns the
-  saved preference or the person chooses a presence in this tab. Until then the rail button names the person only, the presence dots are hidden and « Statut » checks nothing.
-- Choosing a presence closes the menu and confirms with the toast « Statut : <presence> ». When the
+  saved preference or the person chooses a presence in this tab. Until then the rail button names the person only, the presence dots are hidden and `Status` checks nothing.
+- Choosing a presence closes the menu and confirms with the toast `Status: <presence>` (`account.user-menu.status-toast`). When the
   gateway refuses it and `ownStatus` returns to the confirmed value, an error toast says so.
-- When realtime is disabled (`status()` is `disabled`, no `realtimeUrl`), « Statut » is disabled with
-  « Indisponible » and nothing is set or confirmed.
+- When realtime is disabled (`status()` is `disabled`, no `realtimeUrl`), `Status` is disabled with
+  `Unavailable` (`account.user-menu.status-unavailable`) and nothing is set or confirmed.
 - The menu is a slot contribution acting as a container: it injects `WORKSPACE_CONTEXT`, `PRESENCE`,
   the router and the toasts; `PresenceDot` stays presentational.
 - The rail's account button has no tooltip (mockup lines 63-66); its accessible name names the
   person and their presence.
 - The theme submenu drives `ThemeService`; the transition spreads from the account button.
 - A refused sign-out keeps the page and shows an error toast.
-- Known gap: « Définir un message de statut » and the status message under the header are left out,
+- Known gap: the mockup's `Set a status message` item and the status message under the header are left out,
   since the backend has no status message yet.
 
 ## Copy not taken word for word from the mockup
@@ -57,4 +57,4 @@ Until then the menu's links open the 404 inside the shell.
 | `account.user-menu.status-unavailable`                                                                                                                                                                            | The mockup has no state without realtime.                                                      |
 | `account.user-menu.status-failed`, `account.user-menu.status-failed-text`                                                                                                                                         | The mockup draws no refused presence.                                                          |
 | `account.user-menu.sign-out-failed`, `account.user-menu.sign-out-failed-text`                                                                                                                                     | The mockup draws no refused sign-out.                                                          |
-| `account.user-menu.avatar-unknown`, `account.user-menu.avatar-online`, `account.user-menu.avatar-away`, `account.user-menu.avatar-dnd`, `account.user-menu.avatar-invisible`, `account.user-menu.avatar-disabled` | Texts of the avatar brick, taken from its French defaults.                                     |
+| `account.user-menu.avatar-unknown`, `account.user-menu.avatar-online`, `account.user-menu.avatar-away`, `account.user-menu.avatar-dnd`, `account.user-menu.avatar-invisible`, `account.user-menu.avatar-disabled` | Texts of the avatar brick, taken from its defaults.                                            |

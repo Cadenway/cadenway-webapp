@@ -42,10 +42,10 @@ import { initials } from '../../../utils/initials/initials.util';
  *
  * @description
  * The chooser of `Organisations.dc.html` (`/organizations`): the account of the session, the
- * invitations addressed to it (Accepter, Refuser with « Annuler »), its organizations, « Créer une
- * organisation » and « Se déconnecter ». Choosing an organization moves the session to it and
+ * invitations addressed to it (`Accept`, `Refuse` with `Undo`), its organizations, `Create an
+ * organization` and `Sign out`. Choosing an organization moves the session to it and
  * opens `/<slug>`. An invitation named by `?invitation=` stands out. A failed list shows
- * « Impossible de charger cette page » with « Réessayer »; a lost session returns to `/login`.
+ * `This page could not be loaded` with `Retry`; a lost session returns to `/login`.
  */
 @Component({
   selector: 'cw-organizations-page',
@@ -271,7 +271,7 @@ export class OrganizationsPage {
    * Whether an organization was joined during this visit.
    *
    * @param {OrganizationChoice} organization - The organization.
-   * @returns {boolean} Whether it shows « Nouveau ».
+   * @returns {boolean} Whether it shows `New`.
    */
   protected isNew(organization: OrganizationChoice): boolean {
     return this.store.joined().some((item: OrganizationChoice) => item.id === organization.id);

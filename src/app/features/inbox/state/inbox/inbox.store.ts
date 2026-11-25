@@ -189,7 +189,7 @@ interface ReadClaim {
    * Property all
    *
    * @description
-   * Whether the write is « Tout marquer comme lu », which also covers notifications off the list.
+   * Whether the write is `Mark all as read`, which also covers notifications off the list.
    *
    * @type {boolean}
    * @readonly
@@ -949,7 +949,7 @@ function createInboxStore(): Type<InboxStoreInstance> {
  * notifications and reminders are refreshed on opening. Every write bumps a
  * version, so a poll answer or a notifications load that began before it is dropped. Writes are
  * optimistic; a refusal restores only what that write changed and no other write covers, on the
- * current state. A failed read keeps its resource error for the popover's inline « Réessayer ».
+ * current state. A failed read keeps its resource error for the popover's inline `Retry`.
  *
  * @type {ReturnType<typeof createInboxStore>}
  */

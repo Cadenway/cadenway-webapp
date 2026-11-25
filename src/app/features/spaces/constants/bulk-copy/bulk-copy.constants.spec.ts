@@ -9,19 +9,19 @@ import {
 } from './bulk-copy.constants';
 
 describe('bulk toast copy', () => {
-  it('uses the French singular forms for one task', () => {
-    expect(bulkDoneText(1)).toBe('1 tâche terminée');
-    expect(bulkMovedText(1)).toBe('1 tâche déplacée');
-    expect(bulkDeletedText(1)).toBe('1 tâche supprimée');
-    expect(bulkUpdatedText(1)).toBe('1 tâche mise à jour.');
-    expect(bulkPartialText(1, 3)).toBe('1 tâche sur 3 n’a pas pu être modifiée');
+  it('uses the singular forms for one task', () => {
+    expect(bulkDoneText(1)).toBe('1 task done');
+    expect(bulkMovedText(1)).toBe('1 task moved');
+    expect(bulkDeletedText(1)).toBe('1 task deleted');
+    expect(bulkUpdatedText(1)).toBe('1 task updated.');
+    expect(bulkPartialText(1, 3)).toBe('1 of 3 tasks could not be changed');
   });
 
-  it('uses the French plural forms for two tasks', () => {
-    expect(bulkDoneText(2)).toBe('2 tâches terminées');
-    expect(bulkMovedText(2)).toBe('2 tâches déplacées');
-    expect(bulkDeletedText(2)).toBe('2 tâches supprimées');
-    expect(bulkUpdatedText(2)).toBe('2 tâches mises à jour.');
-    expect(bulkPartialText(2, 3)).toBe('2 tâches sur 3 n’ont pas pu être modifiées');
+  it('uses the plural forms for two tasks', () => {
+    expect(bulkDoneText(2)).toBe('2 tasks done');
+    expect(bulkMovedText(2)).toBe('2 tasks moved');
+    expect(bulkDeletedText(2)).toBe('2 tasks deleted');
+    expect(bulkUpdatedText(2)).toBe('2 tasks updated.');
+    expect(bulkPartialText(2, 3)).toBe('2 of 3 tasks could not be changed');
   });
 });

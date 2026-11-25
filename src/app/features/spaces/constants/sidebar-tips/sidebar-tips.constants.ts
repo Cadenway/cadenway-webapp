@@ -91,7 +91,7 @@ export interface SidebarTip {
  * Function planLabel
  *
  * @description
- * The name of a plan in the invitation tip (« Équipe »), or its key for a later plan.
+ * The name of a plan in the invitation tip (`Team`), or its key for a later plan.
  *
  * @param {string} plan - Plan key.
  * @returns {string} The name.
@@ -113,7 +113,7 @@ function planLabel(plan: string): string {
  * Function inviteTip
  *
  * @description
- * « Inviter votre équipe », with the free seats of the plan, opening the organization's members.
+ * `Invite your team`, with the free seats of the plan, opening the organization's members.
  *
  * @param {number} free - Free seats, at least one.
  * @param {string} plan - Name of the plan.

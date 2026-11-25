@@ -9,7 +9,7 @@ import { toStatusOptions } from './status-option.adapter';
  * Function statuses
  *
  * @description
- * The statuses of the Produit space: « En revue » renamed « Relecture », « En attente » hidden,
+ * The statuses of the Product space: `In review` renamed `Peer review`, `Waiting` hidden,
  * the other names blank or absent.
  *
  * @returns {GetSpaceClientResult['statuses']} The statuses.
@@ -20,7 +20,7 @@ function statuses(): GetSpaceClientResult['statuses'] {
       key,
       {
         category: STATUS_CATEGORY_BY_KEY[key],
-        name: key === 'review' ? 'Relecture' : key === 'todo' ? '  ' : null,
+        name: key === 'review' ? 'Peer review' : key === 'todo' ? '  ' : null,
         hidden: key === 'waiting',
       },
     ]),
@@ -28,17 +28,17 @@ function statuses(): GetSpaceClientResult['statuses'] {
 }
 
 describe('toStatusOptions', () => {
-  it('lists the ten statuses in workflow order with the space’s names', () => {
+  it('lists the ten statuses in workflow order with the names of the space', () => {
     const options: readonly StatusOption[] = toStatusOptions(statuses());
 
     expect(options.map((option: StatusOption) => option.key)).toEqual([...STATUS_KEYS]);
     expect(options.find((option: StatusOption) => option.key === 'review')?.label).toBe(
-      'Relecture',
+      'Peer review',
     );
-    expect(options.find((option: StatusOption) => option.key === 'todo')?.label).toBe('À faire');
+    expect(options.find((option: StatusOption) => option.key === 'todo')?.label).toBe('To do');
     expect(options.find((option: StatusOption) => option.key === 'progress')).toEqual({
       key: 'progress',
-      label: 'En cours',
+      label: 'In progress',
       category: 'active',
       hidden: false,
       milestone: false,

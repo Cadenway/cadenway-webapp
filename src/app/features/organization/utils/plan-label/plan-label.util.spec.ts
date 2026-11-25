@@ -4,11 +4,7 @@ import { planName } from './plan-label.util';
 
 describe('planName', () => {
   it('names the known plans with the mockup words', () => {
-    expect(['free', 'team', 'enterprise'].map(planName)).toEqual([
-      'Gratuit',
-      'Équipe',
-      'Entreprise',
-    ]);
+    expect(['free', 'team', 'enterprise'].map(planName)).toEqual(['Free', 'Team', 'Enterprise']);
   });
 
   it('shows a later plan key as it is', () => {

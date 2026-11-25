@@ -54,7 +54,7 @@ export interface SavedView {
    * Property name
    *
    * @description
-   * View name (« Bugs critiques »).
+   * View name (`Critical bugs`).
    *
    * @type {string}
    * @readonly
@@ -111,7 +111,7 @@ export interface SavedView {
  * Interface SavedViewDraft
  *
  * @description
- * What the « Enregistrer la vue » dialog submits.
+ * What the `Save the view` dialog submits.
  */
 export interface SavedViewDraft {
   // #region Properties

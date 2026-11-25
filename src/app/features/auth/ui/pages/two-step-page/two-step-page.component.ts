@@ -78,7 +78,7 @@ interface TwoStepModel {
    * Property trustDevice
    *
    * @description
-   * "Faire confiance à cet appareil pendant 30 jours".
+   * `Trust this device for 30 days`.
    *
    * @type {boolean}
    */
@@ -91,11 +91,11 @@ interface TwoStepModel {
  *
  * @description
  * Two-step verification of `Mfa.dc.html` (`/login/two-step`), with one tab per method the account
- * has: the application code (`cw-input-otp`, « Vérifier (n / 6) »), the security key (WebAuthn
+ * has: the application code (`cw-input-otp`, `Verify (n / 6)`), the security key (WebAuthn
  * through `@simplewebauthn/browser`) and a backup code (`XXXX-XXXX`). A recognized key shows
- * « Clé reconnue » with « Continuer », which opens the session's destination; the codes open it
- * right away. The footer offers « Contacter l'administrateur » (the site's Help page, when a site
- * is configured) and « Utiliser un autre compte ». After a reload the challenge is read again from
+ * `Key recognized` with `Continue`, which opens the session's destination; the codes open it
+ * right away. The footer offers `Contact the administrator` (the site's Help page, when a site
+ * is configured) and `Use another account`. After a reload the challenge is read again from
  * the tab's token; without one, it returns to `/login`.
  */
 @Component({
@@ -236,7 +236,7 @@ export class TwoStepPage implements OnInit {
    * Property filled
    *
    * @description
-   * Digits typed in the application tab, for « Vérifier (n / 6) ».
+   * Digits typed in the application tab, for `Verify (n / 6)`.
    *
    * @type {Signal<number>}
    * @readonly
@@ -269,7 +269,7 @@ export class TwoStepPage implements OnInit {
    * Property expired
    *
    * @description
-   * Whether the challenge expired: the answers give way to « Se reconnecter » (`/login`).
+   * Whether the challenge expired: the answers give way to `Sign in again` (`/login`).
    *
    * @type {Signal<boolean>}
    * @readonly
@@ -371,7 +371,7 @@ export class TwoStepPage implements OnInit {
    *
    * @description
    * Destination of the session a security key opened, once the key was recognized and until the
-   * person chooses « Continuer »; null before.
+   * person chooses `Continue`; null before.
    *
    * @type {WritableSignal<string | null>}
    * @readonly
@@ -382,7 +382,7 @@ export class TwoStepPage implements OnInit {
    * Property siteUrl
    *
    * @description
-   * The public site whose Help page « Contacter l'administrateur » opens, or null without one.
+   * The public site whose Help page `Contact the administrator` opens, or null without one.
    *
    * @type {string | null}
    * @readonly

@@ -18,7 +18,7 @@ describe('SpacesApi', () => {
       listSpaces: vi
         .fn()
         .mockReturnValueOnce(
-          of({ items: [{ id: 'sp-1', name: 'Produit', statuses: {} }], nextCursor: 'c2' }),
+          of({ items: [{ id: 'sp-1', name: 'Product', statuses: {} }], nextCursor: 'c2' }),
         )
         .mockReturnValueOnce(
           of({ items: [{ id: 'sp-2', name: 'Design', statuses: {} }], nextCursor: null }),
@@ -40,17 +40,17 @@ describe('SpacesApi', () => {
         }),
       ),
       createFavorite: vi.fn(() =>
-        of({ id: 'f3', kind: 'space', targetId: 'sp-1', target: { name: 'Produit', href: '/' } }),
+        of({ id: 'f3', kind: 'space', targetId: 'sp-1', target: { name: 'Product', href: '/' } }),
       ),
       deleteFavorite: vi.fn(() => of(undefined)),
       createSpace: vi.fn(() =>
         of({
-          space: { id: 'sp-rh', name: 'RH', prefix: 'RH', statuses: {}, visibility: 'private' },
-          firstList: { id: 'l-1', spaceId: 'sp-rh', name: 'Premiere liste', version: 1 },
+          space: { id: 'sp-hr', name: 'HR', prefix: 'HR', statuses: {}, visibility: 'private' },
+          firstList: { id: 'l-1', spaceId: 'sp-hr', name: 'First list', version: 1 },
         }),
       ),
       updateSpace: vi.fn(() =>
-        of({ id: 'sp-1', name: 'Produit 2', prefix: 'CAD', statuses: {}, visibility: 'private' }),
+        of({ id: 'sp-1', name: 'Product 2', prefix: 'CAD', statuses: {}, visibility: 'private' }),
       ),
       deleteSpace: vi.fn(() => of(undefined)),
     };
@@ -59,7 +59,7 @@ describe('SpacesApi', () => {
   });
 
   it('follows every page of the spaces', async () => {
-    expect((await api.spaces()).map((space) => space.name)).toEqual(['Produit', 'Design']);
+    expect((await api.spaces()).map((space) => space.name)).toEqual(['Product', 'Design']);
     expect(spaces['listSpaces']).toHaveBeenLastCalledWith({ limit: 100, cursor: 'c2' });
   });
 
@@ -100,8 +100,8 @@ describe('SpacesApi', () => {
 
   it('creates a space with its first list and sends a visibility change only', async () => {
     const draft: SpaceDraft = {
-      name: 'RH',
-      prefix: 'RH',
+      name: 'HR',
+      prefix: 'HR',
       description: null,
       icon: null,
       color: 'gris',
@@ -116,8 +116,8 @@ describe('SpacesApi', () => {
     expect(created.space.private).toBe(true);
     expect(spaces['createSpace']).toHaveBeenCalledWith(
       {
-        name: 'RH',
-        prefix: 'RH',
+        name: 'HR',
+        prefix: 'HR',
         description: null,
         icon: null,
         color: 'gris',
@@ -125,15 +125,15 @@ describe('SpacesApi', () => {
       },
       { headers: { 'Idempotency-Key': 'key-1' } },
     );
-    await api.updateSpace(created.space, { ...draft, name: 'RH 2' });
-    expect(spaces['updateSpace']).toHaveBeenCalledWith('sp-rh', {
-      name: 'RH 2',
-      prefix: 'RH',
+    await api.updateSpace(created.space, { ...draft, name: 'HR 2' });
+    expect(spaces['updateSpace']).toHaveBeenCalledWith('sp-hr', {
+      name: 'HR 2',
+      prefix: 'HR',
       description: null,
       icon: null,
       color: 'gris',
     });
-    await api.deleteSpace('sp-rh');
-    expect(spaces['deleteSpace']).toHaveBeenCalledWith('sp-rh');
+    await api.deleteSpace('sp-hr');
+    expect(spaces['deleteSpace']).toHaveBeenCalledWith('sp-hr');
   });
 });

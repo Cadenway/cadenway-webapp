@@ -167,7 +167,7 @@ interface SidebarSpaceView {
  * Interface SidebarFavoriteView
  *
  * @description
- * A favorite list or saved view of « Favoris », with the list it opens when it is known.
+ * A favorite list or saved view of `Favorites`, with the list it opens when it is known.
  */
 interface SidebarFavoriteView {
   // #region Properties
@@ -263,16 +263,16 @@ function draftOfList(list: TaskList): ListDraft {
  * Component SpacesSidebar
  *
  * @description
- * The body of the shell's sidebar (`App.dc.html` lines 197-259): « Favoris » (the caller's
+ * The body of the shell's sidebar (`App.dc.html` lines 197-259): `Favorites` (the caller's
  * favorite lists and saved views, hidden when there are none; favorite spaces sit in the rail),
- * « Espaces » (« Créer un espace », an accordion of the spaces with their lists and task counts,
- * and « Modifier l’espace » and the space overview on hover) and the suggestion carousel. Spaces,
+ * `Spaces` (`Create a space`, an accordion of the spaces with their lists and task counts,
+ * and `Edit the space` and the space overview on hover) and the suggestion carousel. Spaces,
  * lists, favorites and the background open their context menus (right click, ContextMenu key,
  * Shift + F10, long press) with the mockup's items. A container: it follows the route's
  * organization in the workspace's `SpacesNavigationStore`, opens the space of the list shown,
  * keeps the dismissed suggestions in browser storage, and hosts the navigation's dialogs (space,
  * list or sprint, space deletion) for every screen that opens them through the store, with their
- * toasts and their « Annuler ». The spaces show skeletons while read and an inline « Réessayer »
+ * toasts and their `Undo`. The spaces show skeletons while read and an inline `Retry`
  * when the read fails.
  */
 @Component({
@@ -382,7 +382,7 @@ export class SpacesSidebar {
    * Property taskCreate
    *
    * @description
-   * Task's create dialog, for « Nouvelle tâche ».
+   * Task's create dialog, for `New task`.
    *
    * @type {TaskCreate}
    * @readonly
@@ -549,7 +549,7 @@ export class SpacesSidebar {
    * Property allTips
    *
    * @description
-   * Every suggestion the workspace can offer now: « Inviter votre équipe » needs free seats.
+   * Every suggestion the workspace can offer now: `Invite your team` needs free seats.
    *
    * @type {Signal<readonly SidebarTip[]>}
    * @readonly
@@ -650,8 +650,8 @@ export class SpacesSidebar {
    *
    * @description
    * The values the list dialog opens with: the list edited, or the proposal of a new list or of
-   * the next sprint (« Sprint 15 », the day after the end of the last sprint or today, 14 days,
-   * the lightning and « Améthyste »).
+   * the next sprint (`Sprint 15`, the day after the end of the last sprint or today, 14 days,
+   * the lightning and `Amethyst`).
    *
    * @type {Signal<ListDraft>}
    * @readonly
@@ -742,7 +742,7 @@ export class SpacesSidebar {
    * Property deleteTitle
    *
    * @description
-   * « Supprimer l’espace « Produit » ? ».
+   * `Delete the space “Product”?`.
    *
    * @type {Signal<string>}
    * @readonly
@@ -821,7 +821,7 @@ export class SpacesSidebar {
    * Method overviewLabel
    *
    * @description
-   * Name of a space's overview link (« Vue d’ensemble de Produit »).
+   * Name of a space's overview link (`Overview of Product`).
    *
    * @param {SpaceDetails} space - The space.
    * @returns {string} The label.
@@ -834,7 +834,7 @@ export class SpacesSidebar {
    * Method editLabel
    *
    * @description
-   * Name of a space's edit button (« Modifier l’espace Produit »).
+   * Name of a space's edit button (`Edit the space Product`).
    *
    * @param {SpaceDetails} space - The space.
    * @returns {string} The label.
@@ -962,7 +962,7 @@ export class SpacesSidebar {
    * Method openList
    *
    * @description
-   * « Ouvrir »: shows a list.
+   * `Open`: shows a list.
    *
    * @param {TaskList} list - The list.
    */
@@ -974,7 +974,7 @@ export class SpacesSidebar {
    * Method openFavorite
    *
    * @description
-   * « Ouvrir » on a favorite saved view: shows its list with the view applied.
+   * `Open` on a favorite saved view: shows its list with the view applied.
    *
    * @param {Favorite} favorite - The favorite.
    */
@@ -988,7 +988,7 @@ export class SpacesSidebar {
    * Method newTask
    *
    * @description
-   * « Nouvelle tâche »: opens Task's create dialog in the list.
+   * `New task`: opens Task's create dialog in the list.
    *
    * @param {TaskList} list - The list.
    */
@@ -1000,7 +1000,7 @@ export class SpacesSidebar {
    * Method editList
    *
    * @description
-   * « Modifier la liste » or « Modifier le sprint ».
+   * `Edit the list` or `Edit the sprint`.
    *
    * @param {TaskList} list - The list.
    */
@@ -1017,7 +1017,7 @@ export class SpacesSidebar {
    * Method toggleListFavorite
    *
    * @description
-   * « Ajouter aux favoris » or « Retirer des favoris » on a list.
+   * `Add to favorites` or `Remove from favorites` on a list.
    *
    * @param {TaskList} list - The list.
    */
@@ -1039,7 +1039,7 @@ export class SpacesSidebar {
    * Method copyListLink
    *
    * @description
-   * « Copier le lien » of a list.
+   * `Copy the link` of a list.
    *
    * @param {TaskList} list - The list.
    */
@@ -1062,8 +1062,8 @@ export class SpacesSidebar {
    * Method archiveList
    *
    * @description
-   * « Archiver »: takes the list out of the sidebar, opens its space when it was shown, and offers
-   * « Annuler », which brings it back and shows it again.
+   * `Archive`: takes the list out of the sidebar, opens its space when it was shown, and offers
+   * `Undo`, which brings it back and shows it again.
    *
    * @param {TaskList} list - The list.
    */
@@ -1092,7 +1092,7 @@ export class SpacesSidebar {
    * Method openOverview
    *
    * @description
-   * « Vue d’ensemble »: shows a space's overview with its lists open.
+   * `Overview`: shows a space's overview with its lists open.
    *
    * @param {SpaceDetails} space - The space.
    */
@@ -1105,7 +1105,7 @@ export class SpacesSidebar {
    * Method editSpace
    *
    * @description
-   * « Modifier l’espace ».
+   * `Edit the space`.
    *
    * @param {SpaceDetails} space - The space.
    */
@@ -1117,7 +1117,7 @@ export class SpacesSidebar {
    * Method createSpace
    *
    * @description
-   * « Créer un espace » and « Nouvel espace ».
+   * `Create a space` and `New space`.
    */
   protected createSpace(): void {
     this.navigation.openDialog({ kind: 'space', space: null });
@@ -1127,7 +1127,7 @@ export class SpacesSidebar {
    * Method newList
    *
    * @description
-   * « Nouvelle liste » or « Nouveau sprint » in a space.
+   * `New list` or `New sprint` in a space.
    *
    * @param {SpaceDetails} space - The space.
    * @param {boolean} sprint - Whether a sprint is proposed.
@@ -1140,7 +1140,7 @@ export class SpacesSidebar {
    * Method toggleSpaceFavorite
    *
    * @description
-   * « Ajouter aux espaces favoris » or « Retirer des espaces favoris ».
+   * `Add to favorite spaces` or `Remove from favorite spaces`.
    *
    * @param {SpaceDetails} space - The space.
    */
@@ -1162,7 +1162,7 @@ export class SpacesSidebar {
    * Method askDeleteSpace
    *
    * @description
-   * « Supprimer l’espace »: asks for the typed name first.
+   * `Delete the space`: asks for the typed name first.
    *
    * @param {SpaceDetails} space - The space.
    */
@@ -1174,7 +1174,7 @@ export class SpacesSidebar {
    * Method dialogOpenChanged
    *
    * @description
-   * Closes the navigation's dialog when a dialog closes itself (Annuler, Escape, outside click).
+   * Closes the navigation's dialog when a dialog closes itself (Cancel, Escape, outside click).
    *
    * @param {boolean} open - Whether the dialog stays open.
    */
@@ -1189,8 +1189,8 @@ export class SpacesSidebar {
    * Method saveSpace
    *
    * @description
-   * Records the space dialog: « Espace créé » opens its first list, « Espace modifié » offers
-   * « Annuler », which puts the previous settings back. A used prefix stays in the dialog with its
+   * Records the space dialog: `Space created` opens its first list, `Space updated` offers
+   * `Undo`, which puts the previous settings back. A used prefix stays in the dialog with its
    * error.
    *
    * @param {SpaceDraft} draft - The dialog's values.
@@ -1243,7 +1243,7 @@ export class SpacesSidebar {
    * Method saveList
    *
    * @description
-   * Records the list dialog: a created list or sprint opens; a change offers « Annuler », which
+   * Records the list dialog: a created list or sprint opens; a change offers `Undo`, which
    * puts the previous values back.
    *
    * @param {ListDraft} draft - The dialog's values.
@@ -1362,7 +1362,7 @@ export class SpacesSidebar {
    * Method restoreList
    *
    * @description
-   * The « Annuler » of an archiving: brings the list back and shows it again when it was shown.
+   * The `Undo` of an archiving: brings the list back and shows it again when it was shown.
    *
    * @param {TaskList} list - The archived list.
    * @param {boolean} shown - Whether it was shown when archived.

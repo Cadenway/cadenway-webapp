@@ -43,11 +43,11 @@ import { ListCard } from '../../components/list-card/list-card.component';
  *
  * @description
  * The overview of a space at `/:org/spaces/:spaceId` (`App.dc.html` lines 1639-1682): its mark,
- * name, « n listes · m tâches », description and favorite toggle; a card per list; « Aucune liste
- * dans cet espace » when it has none; and the « Jalons » section. The space and its lists are the
+ * name, `n lists · m tasks`, description and favorite toggle; a card per list; `No list in this
+ * space` when it has none; and the `Milestones` section. The space and its lists are the
  * primary reads: their failure reaches the route's error boundary through the template's read
- * (« Accès refusé » for a space the gateway does not show). The milestones keep an inline error
- * with « Réessayer ». « Modifier », « Nouveau sprint » and « Nouvelle liste » open the dialogs of
+ * (`Access denied` for a space the gateway does not show). The milestones keep an inline error
+ * with `Retry`. `Edit`, `New sprint` and `New list` open the dialogs of
  * step 4b and are not built yet.
  */
 @Component({
@@ -201,7 +201,7 @@ export class SpaceOverviewPage {
    *
    * @description
    * The space as the sidebar read it, with what its dialogs need, or undefined before that read;
-   * « Modifier », « Nouveau sprint » and « Nouvelle liste » wait for it and need `edit`.
+   * `Edit`, `New sprint` and `New list` wait for it and need `edit`.
    *
    * @type {Signal<SpaceDetails | undefined>}
    * @readonly
@@ -309,7 +309,7 @@ export class SpaceOverviewPage {
    * Method milestoneDate
    *
    * @description
-   * Date of a milestone (« 20 nov. »), or a dash.
+   * Date of a milestone (`Nov 20` in English), or a dash.
    *
    * @param {Milestone} milestone - The milestone.
    * @returns {string} The date.
@@ -345,7 +345,7 @@ export class SpaceOverviewPage {
    * Method editSpace
    *
    * @description
-   * « Modifier »: opens the space dialog, which the sidebar hosts.
+   * `Edit`: opens the space dialog, which the sidebar hosts.
    *
    * @param {SpaceDetails} space - The space.
    */
@@ -357,7 +357,7 @@ export class SpaceOverviewPage {
    * Method newList
    *
    * @description
-   * « Nouvelle liste » or « Nouveau sprint » in the space.
+   * `New list` or `New sprint` in the space.
    *
    * @param {SpaceDetails} space - The space.
    * @param {boolean} sprint - Whether the next sprint is proposed.

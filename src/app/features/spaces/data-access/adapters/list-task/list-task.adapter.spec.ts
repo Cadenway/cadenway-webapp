@@ -16,7 +16,7 @@ import { toGroupCountParams, toListTask, toListTasksQuery, withGroup } from './l
  */
 const dto: TaskSummaryDto = {
   key: 'CAD-482',
-  name: 'Refondre l’écran de connexion SSO',
+  name: 'Redesign the SSO sign-in screen',
   status: 'progress',
   cancelReason: null,
   priority: 'haute',
@@ -27,7 +27,7 @@ const dto: TaskSummaryDto = {
   labels: ['Auth', 'Front'],
   parentKey: null,
   listId: 'sprint-14',
-  spaceId: 'produit',
+  spaceId: 'product',
   subtaskCounts: { total: 3, closed: 1 },
   checklistCounts: { total: 4, done: 2 },
   completedAt: null,
@@ -39,7 +39,7 @@ const dto: TaskSummaryDto = {
  * Constant query
  *
  * @description
- * A filtered query of the « Liste » view.
+ * A filtered query of the `List` view.
  *
  * @type {ListTaskQuery}
  */
@@ -60,7 +60,7 @@ describe('list task adapter', () => {
     expect(toListTask(dto)).toEqual({
       id: 'CAD-482',
       key: 'CAD-482',
-      name: 'Refondre l’écran de connexion SSO',
+      name: 'Redesign the SSO sign-in screen',
       status: 'progress',
       cancelReason: null,
       priority: 'haute',
@@ -75,7 +75,7 @@ describe('list task adapter', () => {
       milestone: false,
       recurrence: 'none',
       listId: 'sprint-14',
-      spaceId: 'produit',
+      spaceId: 'product',
       version: 7,
     });
   });

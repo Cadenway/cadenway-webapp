@@ -15,7 +15,7 @@ import { TaskCreateStore } from './task-create.store';
  * Constant destinations
  *
  * @description
- * Backlog of Produit and Campagnes of Marketing.
+ * Backlog of Product and Campaigns of Marketing.
  *
  * @type {readonly ListDestination[]}
  */
@@ -23,13 +23,13 @@ const destinations: readonly ListDestination[] = [
   {
     listId: 'backlog',
     listName: 'Backlog',
-    spaceId: 'produit',
-    spaceName: 'Produit',
+    spaceId: 'product',
+    spaceName: 'Product',
     sprintEnd: null,
   },
   {
     listId: 'campagnes',
-    listName: 'Campagnes',
+    listName: 'Campaigns',
     spaceId: 'marketing',
     spaceName: 'Marketing',
     sprintEnd: null,
@@ -45,7 +45,7 @@ const destinations: readonly ListDestination[] = [
  * @type {TaskDraft}
  */
 const draft: TaskDraft = {
-  name: 'Préparer la démo',
+  name: 'Prepare the demo',
   description: '',
   status: 'todo',
   cancelReason: null,
@@ -72,7 +72,7 @@ function setup(overrides: Partial<Record<keyof TaskCreateApi, Mock>> = {}): {
   space: Mock<(id: string) => Observable<SpaceSetup>>;
 } {
   const space: Mock<(id: string) => Observable<SpaceSetup>> = vi.fn((spaceId: string) =>
-    of({ spaceId, nextKey: spaceId === 'produit' ? 'CAD-495' : 'MKT-12', statuses: [] }),
+    of({ spaceId, nextKey: spaceId === 'product' ? 'CAD-495' : 'MKT-12', statuses: [] }),
   );
   TestBed.configureTestingModule({
     providers: [
@@ -114,7 +114,7 @@ describe('TaskCreateStore', () => {
     const space: Mock = vi
       .fn()
       .mockReturnValueOnce(throwError(() => new Error('offline')))
-      .mockReturnValue(of({ spaceId: 'produit', nextKey: null, statuses: [] }));
+      .mockReturnValue(of({ spaceId: 'product', nextKey: null, statuses: [] }));
     const { store }: ReturnType<typeof setup> = setup({ people, labels, templates, space });
     store.activate(null);
     await vi.waitFor(() => {
@@ -198,8 +198,8 @@ describe('TaskCreateStore', () => {
     });
 
     create.mockClear();
-    await store.create({ ...draft, name: 'Autre' }, null);
-    await store.create({ ...draft, name: 'Encore' }, null);
+    await store.create({ ...draft, name: 'Other' }, null);
+    await store.create({ ...draft, name: 'Another' }, null);
     expect(create.mock.calls[0][2]).not.toBe(create.mock.calls[1][2]);
   });
 

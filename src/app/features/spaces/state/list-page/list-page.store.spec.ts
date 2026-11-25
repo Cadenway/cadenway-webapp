@@ -25,13 +25,13 @@ import { ListPageStore } from './list-page.store';
  * Constant sprint14
  *
  * @description
- * The mockup's « Sprint 14 ».
+ * The mockup's `Sprint 14`.
  *
  * @type {TaskList}
  */
 const sprint14: TaskList = {
   id: 'l-sprint14',
-  spaceId: 'sp-produit',
+  spaceId: 'sp-product',
   name: 'Sprint 14',
   icon: 'lightning',
   color: 'violet',
@@ -42,17 +42,17 @@ const sprint14: TaskList = {
 };
 
 /**
- * Constant bugsCritiques
+ * Constant criticalBugs
  *
  * @description
  * A saved view of the list.
  *
  * @type {SavedView}
  */
-const bugsCritiques: SavedView = {
+const criticalBugs: SavedView = {
   id: 'sv-bugs',
   listId: 'l-sprint14',
-  name: 'Bugs critiques',
+  name: 'Critical bugs',
   icon: 'bug',
   layout: 'list',
   config: DEFAULT_VIEW_CONFIG,
@@ -94,7 +94,7 @@ describe('ListPageStore', () => {
       listMembers: vi.fn(() => Promise.resolve({ items: [], total: 0 })),
       organizationMembers: vi.fn(() => Promise.resolve([{ userId: 'u1', name: 'Inès Robert' }])),
       labels: vi.fn(() => Promise.resolve(['Auth', 'Front'])),
-      savedViews: vi.fn(() => Promise.resolve([bugsCritiques])),
+      savedViews: vi.fn(() => Promise.resolve([criticalBugs])),
       duplicate: vi.fn(),
       exportCsv: vi.fn(),
       archive: vi.fn(),
@@ -112,7 +112,7 @@ describe('ListPageStore', () => {
         { provide: ListsApi, useValue: api },
         {
           provide: SpacesApi,
-          useValue: { space: vi.fn(() => Promise.resolve({ id: 'sp-produit' })) },
+          useValue: { space: vi.fn(() => Promise.resolve({ id: 'sp-product' })) },
         },
         { provide: RealtimeConnection, useValue: { watch } },
         { provide: TaskCreate, useValue: { created: creations.asObservable() } },
@@ -231,7 +231,7 @@ describe('ListPageStore', () => {
     });
     expect(api['counts']).toHaveBeenCalledTimes(1);
     notices.next({ ...notice, data: { listId: 'l-sprint14' } });
-    notices.next({ ...notice, data: { spaceId: 'sp-produit' } });
+    notices.next({ ...notice, data: { spaceId: 'sp-product' } });
     await expect.poll(() => api['counts'].mock.calls.length).toBe(2);
     expect(api['milestoneCount']).toHaveBeenCalledTimes(2);
   });
@@ -279,7 +279,7 @@ describe('ListPageStore', () => {
     const edits: Subject<TaskList> = new Subject<TaskList>();
     store.followListEdits(edits);
 
-    edits.next({ ...sprint14, id: 'l-other', name: 'Autre' });
+    edits.next({ ...sprint14, id: 'l-other', name: 'Other' });
     expect(store.list.value()?.name).toBe('Sprint 14');
     edits.next({ ...sprint14, name: 'Sprint 15', version: 9 });
     expect(store.list.value()).toMatchObject({ name: 'Sprint 15', version: 9 });
@@ -287,17 +287,17 @@ describe('ListPageStore', () => {
 
   it('creates a deleted view again at its former place', async () => {
     await loaded();
-    const again: SavedView = { ...bugsCritiques, id: 'sv-again' };
+    const again: SavedView = { ...criticalBugs, id: 'sv-again' };
     api['createSavedView'].mockResolvedValueOnce(again);
-    await store.deleteView(bugsCritiques);
+    await store.deleteView(criticalBugs);
 
-    expect(await store.restoreView(bugsCritiques, 0)).toEqual(again);
+    expect(await store.restoreView(criticalBugs, 0)).toEqual(again);
     expect(store.savedViews.value()).toEqual([again]);
     expect(api['createSavedView']).toHaveBeenCalledWith('l-sprint14', {
-      name: bugsCritiques.name,
-      icon: bugsCritiques.icon,
-      layout: bugsCritiques.layout,
-      config: bugsCritiques.config,
+      name: criticalBugs.name,
+      icon: criticalBugs.icon,
+      layout: criticalBugs.layout,
+      config: criticalBugs.config,
     });
   });
 
@@ -305,11 +305,11 @@ describe('ListPageStore', () => {
     await loaded();
     api['deleteSavedView'].mockRejectedValueOnce(new Error('saved-view.list-archived'));
 
-    const pending: Promise<boolean> = store.deleteView(bugsCritiques);
+    const pending: Promise<boolean> = store.deleteView(criticalBugs);
     expect(store.savedViews.value()).toEqual([]);
 
     expect(await pending).toBe(false);
-    expect(store.savedViews.value()).toEqual([bugsCritiques]);
+    expect(store.savedViews.value()).toEqual([criticalBugs]);
   });
 
   it('keeps the saved views read pending or failed when a creation completes', async () => {
@@ -321,15 +321,15 @@ describe('ListPageStore', () => {
     );
     store.load('l-sprint14');
     await expect.poll(() => store.savedViews.isLoading()).toBe(true);
-    const created: SavedView = { ...bugsCritiques, id: 'sv-new' };
+    const created: SavedView = { ...criticalBugs, id: 'sv-new' };
     api['createSavedView'].mockResolvedValue(created);
     expect(
       await store.createView({ name: 'New', icon: null }, 'list', DEFAULT_VIEW_CONFIG),
     ).toEqual(created);
     expect(store.savedViews.isLoading()).toBe(true);
-    resolveViews([bugsCritiques, created]);
+    resolveViews([criticalBugs, created]);
     await expect.poll(() => store.savedViews.hasValue()).toBe(true);
-    expect(store.savedViews.value()).toEqual([bugsCritiques, created]);
+    expect(store.savedViews.value()).toEqual([criticalBugs, created]);
 
     api['savedViews'].mockRejectedValueOnce(new Error('unavailable'));
     store.savedViews.reload();
@@ -357,15 +357,15 @@ describe('ListPageStore', () => {
     api['savedViews'].mockRejectedValueOnce(new Error('unavailable'));
     store.savedViews.reload();
     await expect.poll(() => store.savedViews.status()).toBe('error');
-    finish({ ...bugsCritiques, id: 'sv-new' });
+    finish({ ...criticalBugs, id: 'sv-new' });
     await pending;
     expect(store.savedViews.status()).toBe('error');
   });
 
   it('restores only the deleted view when other writes succeed before its refusal', async () => {
-    const second: SavedView = { ...bugsCritiques, id: 'sv-second', name: 'Second' };
-    const third: SavedView = { ...bugsCritiques, id: 'sv-third', name: 'Third' };
-    api['savedViews'].mockResolvedValueOnce([bugsCritiques, second, third]);
+    const second: SavedView = { ...criticalBugs, id: 'sv-second', name: 'Second' };
+    const third: SavedView = { ...criticalBugs, id: 'sv-third', name: 'Third' };
+    api['savedViews'].mockResolvedValueOnce([criticalBugs, second, third]);
     await loaded();
     let refuse: (reason: unknown) => void = () => undefined;
     api['deleteSavedView'].mockReturnValueOnce(
@@ -382,20 +382,20 @@ describe('ListPageStore', () => {
     await store.createView({ name: 'New', icon: null }, 'list', DEFAULT_VIEW_CONFIG);
     refuse(new Error('unavailable'));
     expect(await deleting).toBe(false);
-    expect(store.savedViews.value()).toEqual([bugsCritiques, second, renamed, created]);
+    expect(store.savedViews.value()).toEqual([criticalBugs, second, renamed, created]);
   });
 
   it('appends a created view and its duplicate after its source', async () => {
     await loaded();
-    const created: SavedView = { ...bugsCritiques, id: 'sv-2', name: 'Mes tâches' };
-    const copy: SavedView = { ...bugsCritiques, id: 'sv-3', name: 'Bugs critiques (copie)' };
+    const created: SavedView = { ...criticalBugs, id: 'sv-2', name: 'My tasks' };
+    const copy: SavedView = { ...criticalBugs, id: 'sv-3', name: 'Critical bugs (copy)' };
     api['createSavedView'].mockResolvedValueOnce(created);
     api['duplicateSavedView'].mockResolvedValueOnce(copy);
 
     expect(
-      await store.createView({ name: 'Mes tâches', icon: null }, 'list', DEFAULT_VIEW_CONFIG),
+      await store.createView({ name: 'My tasks', icon: null }, 'list', DEFAULT_VIEW_CONFIG),
     ).toBe(created);
-    expect(await store.duplicateView(bugsCritiques)).toBe(copy);
+    expect(await store.duplicateView(criticalBugs)).toBe(copy);
     expect(store.savedViews.value()?.map((view: SavedView) => view.id)).toEqual([
       'sv-bugs',
       'sv-3',
@@ -417,8 +417,8 @@ describe('ListPageStore', () => {
         finishUpdate = resolve;
       }),
     );
-    const duplicate: Promise<SavedView | null> = store.duplicateView(bugsCritiques);
-    const update: Promise<SavedView | null> = store.renameView(bugsCritiques, {
+    const duplicate: Promise<SavedView | null> = store.duplicateView(criticalBugs);
+    const update: Promise<SavedView | null> = store.renameView(criticalBugs, {
       name: 'Changed',
       icon: null,
     });
@@ -427,8 +427,8 @@ describe('ListPageStore', () => {
     await expect
       .poll(() => store.savedViews.hasValue() && store.savedViews.value().length === 0)
       .toBe(true);
-    finishDuplicate({ ...bugsCritiques, id: 'copy' });
-    finishUpdate({ ...bugsCritiques, name: 'Changed' });
+    finishDuplicate({ ...criticalBugs, id: 'copy' });
+    finishUpdate({ ...criticalBugs, name: 'Changed' });
     await Promise.all([duplicate, update]);
     expect(store.savedViews.value()).toEqual([]);
   });

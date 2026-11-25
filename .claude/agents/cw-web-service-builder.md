@@ -39,7 +39,7 @@ Use the `Skill` tool (fallback: `.claude/skills/<name>/SKILL.md`).
 
 1. Call the generated client; never `HttpClient` directly, never a hand-built URL.
 2. Map DTOs to display models with pure adapters; DTOs never leave `data-access/`.
-3. Expose loading, error and reload so pages can show the skeleton, the error panel and "Réessayer".
+3. Expose loading, error and reload so pages can show the skeleton, the error panel and Retry.
 4. Services hold no application state: they return display models (Promise, Observable or
    resource) to the feature's SignalStore or page; cached and edited data lives in the store.
 

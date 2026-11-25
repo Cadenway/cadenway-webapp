@@ -20,8 +20,8 @@ import type { Person } from '../../../models/person/person.interface';
  *
  * @description
  * The assignees property (`App.dc.html` near line 2915): a multi-check `cw-combobox` of the
- * organization's people, searchable by name, the current user marked « (moi) ». The trigger reads
- * « Assigner » when nobody is chosen, the person's name for one and « n personnes » for more. The
+ * organization's people, searchable by name, the current user marked `(me)`. The trigger reads
+ * `Assign` when nobody is chosen, the person's name for one and `n people` for more. The
  * chosen user ids are a two-way `value`.
  */
 @Component({
@@ -77,7 +77,7 @@ export class TaskPeoplePicker {
    * Property retryLabel
    *
    * @description
-   * Label of the « Réessayer » button of a failed read.
+   * Label of the `Retry` button of a failed read.
    *
    * @type {string}
    * @readonly
@@ -121,7 +121,7 @@ export class TaskPeoplePicker {
    * Property currentUserId
    *
    * @description
-   * User id of the person using the app, marked « (moi) ».
+   * User id of the person using the app, marked `(me)`.
    *
    * @type {InputSignal<string | null>}
    * @readonly
@@ -169,7 +169,7 @@ export class TaskPeoplePicker {
    * Property summary
    *
    * @description
-   * Trigger text for several people (« 3 personnes »).
+   * Trigger text for several people (`3 people`).
    *
    * @type {(count: number) => string}
    * @readonly

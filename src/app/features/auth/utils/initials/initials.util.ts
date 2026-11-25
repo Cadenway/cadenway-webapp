@@ -3,7 +3,7 @@
  *
  * @description
  * The mark of a name as `Organisations.dc.html` draws it: the first letter of its first two words,
- * upper-cased (« Atelier Nord » gives « AN », « Coopérative Lumen » gives « CL »). Letters outside
+ * upper-cased (`Atelier Nord` gives `AN`, `Lumen Cooperative` gives `LC`). Letters outside
  * the Basic Multilingual Plane count as one character. A blank name gives an empty string.
  *
  * @param {string} name - The organization or draft name.
