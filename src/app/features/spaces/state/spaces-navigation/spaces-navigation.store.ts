@@ -16,7 +16,11 @@ import {
   withProps,
   withState,
 } from '@ngrx/signals';
+import { rxMethod } from '@ngrx/signals/rxjs-interop';
+import { tapResponse } from '@ngrx/operators';
+import { concatMap, EMPTY, from, type Observable, pipe } from 'rxjs';
 
+import { type CreatedTask, TaskCreate } from '@features/task';
 import { WORKSPACE_CONTEXT } from '@features/workspace/ports/workspace-context';
 
 import { SpacesApi } from '../../data-access/services/spaces-api/spaces-api.service';
@@ -24,6 +28,19 @@ import type { Favorite, FavoriteKind } from '../../models/favorite/favorite.inte
 import type { Space } from '../../models/space/space.interface';
 import type { ListSummary, SpaceOverview } from '../../models/task-list/task-list.interface';
 import { isWithin, todayIso } from '../../utils/calendar-date/calendar-date.util';
+
+/**
+ * Constant OVERVIEW_PAGE_TIMEOUT_MS
+ *
+ * @description
+ * Longest wait for each page of a space overview, in milliseconds: a stalled page must neither hold
+ * back the batch of four spaces it is read with, nor the creations read one after the other, while
+ * a large space read page after page keeps all the time it needs. A space whose page times out is
+ * left out of the overviews, which offers its Retry.
+ *
+ * @type {number}
+ */
+const OVERVIEW_PAGE_TIMEOUT_MS: number = 10_000;
 
 /**
  * Interface SpacesNavigationState
@@ -213,6 +230,7 @@ function createSpacesNavigationStore(): Type<SpacesNavigationStoreInstance> {
       return {
         _api: api,
         _workspace: inject(WORKSPACE_CONTEXT),
+        _taskCreate: inject(TaskCreate),
         spaces,
         overviews: resource({
           params: () =>
@@ -234,7 +252,7 @@ function createSpacesNavigationStore(): Type<SpacesNavigationStoreInstance> {
                 params.ids
                   .slice(offset, offset + 4)
                   .map((id: string): Promise<SpaceOverview> =>
-                    api.overview(id, today, abortSignal),
+                    api.overview(id, today, abortSignal, OVERVIEW_PAGE_TIMEOUT_MS),
                   ),
               );
               for (const result of settled) {
@@ -284,6 +302,10 @@ function createSpacesNavigationStore(): Type<SpacesNavigationStoreInstance> {
         string,
         { desired: boolean; confirmed: Favorite | undefined; promise: Promise<boolean> }
       >();
+      // Reads every overview again, or once more after the read in flight.
+      const reloadOverviews: () => void = (): void => {
+        if (!store.overviews.reload() && store.overviews.isLoading()) overviewRefreshQueued = true;
+      };
       return {
         _flushRefresh: signalMethod<string>((status: string): void => {
           if (status !== 'loading' && status !== 'reloading' && refreshQueued) {
@@ -291,6 +313,50 @@ function createSpacesNavigationStore(): Type<SpacesNavigationStoreInstance> {
             store.spaces.reload();
           }
         }),
+        _countCreations: rxMethod<CreatedTask>(
+          pipe(
+            concatMap((task: CreatedTask): Observable<SpaceOverview> => {
+              const organizationId: string | null = store._organizationId();
+              const before: Readonly<Record<string, SpaceOverview>> | undefined =
+                !store.overviews.isLoading() && store.overviews.hasValue()
+                  ? store.overviews.value()
+                  : undefined;
+              const spaceId: string | undefined =
+                before === undefined
+                  ? undefined
+                  : Object.values(before).find((overview: SpaceOverview): boolean =>
+                      overview.lists.some(
+                        (summary: ListSummary): boolean => summary.list.id === task.listId,
+                      ),
+                    )?.spaceId;
+              if (before === undefined || spaceId === undefined) {
+                reloadOverviews();
+                return EMPTY;
+              }
+              return from(
+                store._api.overview(spaceId, todayIso(), undefined, OVERVIEW_PAGE_TIMEOUT_MS),
+              ).pipe(
+                tapResponse({
+                  next: (overview: SpaceOverview): void => {
+                    if (store._organizationId() !== organizationId) return;
+                    if (
+                      store.overviews.isLoading() ||
+                      !store.overviews.hasValue() ||
+                      store.overviews.value() !== before
+                    ) {
+                      reloadOverviews();
+                    } else {
+                      store.overviews.set({ ...before, [spaceId]: overview });
+                    }
+                  },
+                  error: (): void => {
+                    if (store._organizationId() === organizationId) reloadOverviews();
+                  },
+                }),
+              );
+            }),
+          ),
+        ),
         _flushOverviews: signalMethod<string>((status: string): void => {
           if (status !== 'loading' && status !== 'reloading' && overviewRefreshQueued) {
             overviewRefreshQueued = false;
@@ -309,8 +375,7 @@ function createSpacesNavigationStore(): Type<SpacesNavigationStoreInstance> {
         },
         refresh(): void {
           if (!store.spaces.reload() && store.spaces.isLoading()) refreshQueued = true;
-          if (!store.overviews.reload() && store.overviews.isLoading())
-            overviewRefreshQueued = true;
+          reloadOverviews();
         },
         favoriteOf(kind: FavoriteKind, targetId: string): Favorite | undefined {
           return currentFavorites().find(
@@ -392,6 +457,7 @@ function createSpacesNavigationStore(): Type<SpacesNavigationStoreInstance> {
         store.follow(organizationId);
         store._flushRefresh(store.spaces.status);
         store._flushOverviews(store.overviews.status);
+        store._countCreations(store._taskCreate.created);
       },
     }),
   );
@@ -404,8 +470,13 @@ function createSpacesNavigationStore(): Type<SpacesNavigationStoreInstance> {
  * The spaces navigation of a workspace, provided on `/:org` by `provideSpacesNavigation()` so the
  * sidebar, the sprint progress and the list screens share one read. Keyed on the organization
  * id committed by the workspace. A switch closes every space and reads again. At most four
- * overviews run at once; a failed read offers an inline retry. Favorites change optimistically;
- * a refusal restores the previous list.
+ * overviews run at once; a failed read offers an inline retry. A task created from this tab reads
+ * the overview of its list's space again, and only that one, one creation after the other, each
+ * page given 10 s. When that space is unknown, the overviews are loading, they changed while the
+ * space was read, or the read failed, every overview is read again instead (after the read in
+ * flight): an answer never overwrites a newer one, no creation is missed, and a space that still
+ * fails shows its Retry.
+ * Favorites change optimistically; a refusal restores the previous list.
  *
  * @type {ReturnType<typeof createSpacesNavigationStore>}
  */

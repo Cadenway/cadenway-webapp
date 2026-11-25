@@ -130,7 +130,7 @@
           [formField]="createForm.name"
         />
         @if (createForm.name().touched() && createForm.name().invalid()) {
-          @for (error of createForm.name().errors(); track error.kind) {
+          @for (error of createForm.name().errors(); track $index) {
             <p class="text-xs text-destructive" role="alert">{{ error.message }}</p>
           }
         }
@@ -254,9 +254,9 @@
   </div>
 
   <cw-dialog-footer>
-    @if (createForm().errorSummary().length > 0) {
+    @if (footerErrors().length > 0) {
       <div role="alert" class="text-xs text-destructive">
-        @for (error of createForm().errorSummary(); track $index) {
+        @for (error of footerErrors(); track $index) {
           <p>{{ error.message }}</p>
         }
       </div>

@@ -331,6 +331,7 @@ describe('TaskCreateDialog', () => {
     expect(create).toHaveBeenCalledWith('backlog', expect.anything(), expect.any(String));
     expect(TestBed.inject(TaskCreate).isOpen()).toBe(true);
     expect(document.querySelector<HTMLInputElement>('#task-create-name')?.value).toBe('');
+    expect(document.querySelector('[role="dialog"] [role="alert"]')).toBeNull();
   });
 
   it('creates a subtask under its parent', async () => {
@@ -407,6 +408,25 @@ describe('TaskCreateDialog', () => {
     },
   );
 
+  it('opens without announcing the empty name, which only disables « Créer la tâche »', async () => {
+    TestBed.inject(TaskCreate).open({ listId: 'sprint-14' });
+    await fixture.whenStable();
+
+    expect(buttonNamed('Créer la tâche')?.disabled).toBe(true);
+    expect(document.querySelector('[role="dialog"] [role="alert"]')).toBeNull();
+    const field: HTMLInputElement | null = document.querySelector('#task-create-name');
+    field?.dispatchEvent(new Event('blur'));
+    await fixture.whenStable();
+
+    const alerts: HTMLElement[] = Array.from(
+      document.querySelectorAll<HTMLElement>('[role="dialog"] [role="alert"]'),
+    );
+    expect(alerts.map((alert: HTMLElement) => alert.textContent.trim())).toEqual([
+      'Saisissez le nom de la tâche.',
+    ]);
+    expect(document.querySelector('cw-dialog-footer [role="alert"]')).toBeNull();
+  });
+
   it('keeps a name validation issue in the form', async () => {
     create.mockReturnValueOnce(
       throwError(
@@ -424,7 +444,8 @@ describe('TaskCreateDialog', () => {
     buttonNamed('Créer la tâche')?.click();
     await fixture.whenStable();
     expect(error).not.toHaveBeenCalled();
-    expect(document.querySelector('[role="alert"]')?.textContent).toBeTruthy();
+    expect(document.querySelector('#task-create-name ~ [role="alert"]')?.textContent).toBeTruthy();
+    expect(document.querySelector('cw-dialog-footer [role="alert"]')).toBeNull();
   });
 
   it('keeps field and unmapped validation issues in the form', async () => {
@@ -447,7 +468,8 @@ describe('TaskCreateDialog', () => {
     buttonNamed('Créer la tâche')?.click();
     await fixture.whenStable();
     expect(error).not.toHaveBeenCalled();
-    expect(document.querySelectorAll('cw-dialog-footer [role="alert"] p')).toHaveLength(7);
+    expect(document.querySelectorAll('cw-dialog-footer [role="alert"] p')).toHaveLength(6);
+    expect(document.querySelector('#task-create-name ~ [role="alert"]')).not.toBeNull();
   });
 
   it('asks the reason before taking « Annulé »', async () => {

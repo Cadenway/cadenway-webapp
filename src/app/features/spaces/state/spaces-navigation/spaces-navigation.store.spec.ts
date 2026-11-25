@@ -2,7 +2,10 @@ import { signal, type WritableSignal } from '@angular/core';
 import { WORKSPACE_CONTEXT } from '@features/workspace/ports/workspace-context';
 
 import { TestBed } from '@angular/core/testing';
+import { Subject } from 'rxjs';
 import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
+
+import { type CreatedTask, TaskCreate } from '@features/task';
 
 import { SpacesApi } from '../../data-access/services/spaces-api/spaces-api.service';
 import type { Favorite } from '../../models/favorite/favorite.interface';
@@ -123,6 +126,7 @@ describe('SpacesNavigationStore', () => {
   let organization: WritableSignal<{ id: string; slug: string }>;
   let api: SpacesApiFake;
   let store: InstanceType<typeof SpacesNavigationStore>;
+  let creations: Subject<CreatedTask>;
   const today: string = todayIso();
   const roadmap: Favorite = {
     id: 'f1',
@@ -134,6 +138,7 @@ describe('SpacesNavigationStore', () => {
 
   beforeEach(() => {
     organization = signal({ id: 'org-1', slug: 'atelier-nord' });
+    creations = new Subject<CreatedTask>();
     api = {
       spaces: vi.fn(() =>
         Promise.resolve([space('sp-produit', 'Produit'), space('sp-design', 'Design')]),
@@ -164,6 +169,7 @@ describe('SpacesNavigationStore', () => {
         SpacesNavigationStore,
         { provide: SpacesApi, useValue: api },
         { provide: WORKSPACE_CONTEXT, useValue: { organization } },
+        { provide: TaskCreate, useValue: { created: creations.asObservable() } },
       ],
     });
     store = TestBed.inject(SpacesNavigationStore);
@@ -276,6 +282,70 @@ describe('SpacesNavigationStore', () => {
       finish();
     });
     await expect.poll(() => store.overviews.hasValue()).toBe(true);
+  });
+
+  it('reads the counts of the space of the created task again, and only that space', async () => {
+    await expect.poll(() => store.overviews.hasValue()).toBe(true);
+    const reads: number = api.overview.mock.calls.length;
+    api.overview.mockResolvedValueOnce({
+      spaceId: 'sp-produit',
+      taskCount: 31,
+      lists: [
+        {
+          list: list('l-backlog', 'sp-produit'),
+          counts: { total: 11, open: 9, done: 2, cancelled: 0, late: 0 },
+        },
+      ],
+    });
+
+    creations.next({ key: 'CAD-483', listId: 'l-backlog', status: 'todo', subtasks: 0 });
+
+    await expect.poll(() => store.overviews.value()?.['sp-produit']?.taskCount).toBe(31);
+    expect(api.overview).toHaveBeenCalledTimes(reads + 1);
+    expect(api.overview.mock.calls.at(-1)?.[0]).toBe('sp-produit');
+    expect(api.spaces).toHaveBeenCalledTimes(1);
+  });
+
+  it('reads every overview again when reading the space of the created task fails', async () => {
+    await expect.poll(() => store.overviews.hasValue()).toBe(true);
+    const reads: number = api.overview.mock.calls.length;
+    api.overview.mockRejectedValueOnce(new Error('unavailable'));
+
+    creations.next({ key: 'CAD-483', listId: 'l-backlog', status: 'todo', subtasks: 0 });
+
+    await expect.poll(() => api.overview.mock.calls.length).toBe(reads * 2 + 1);
+    expect(store.overviews.value()?.['sp-produit']?.taskCount).toBe(30);
+  });
+
+  it('reads every overview again when the space of the created task is unknown', async () => {
+    await expect.poll(() => store.overviews.hasValue()).toBe(true);
+    const reads: number = api.overview.mock.calls.length;
+
+    creations.next({ key: 'CAD-483', listId: 'l-elsewhere', status: 'todo', subtasks: 0 });
+
+    await expect.poll(() => api.overview.mock.calls.length).toBe(reads * 2);
+  });
+
+  it('reads every overview once more after a read in flight during a creation', async () => {
+    const pending: ((value: SpaceOverview) => void)[] = [];
+    const answer: ((spaceId: string) => Promise<SpaceOverview>) | undefined =
+      api.overview.getMockImplementation();
+    if (!answer) throw new Error('No overview fake');
+    api.overview.mockImplementation(
+      (): Promise<SpaceOverview> =>
+        new Promise((resolve: (value: SpaceOverview) => void) => {
+          pending.push(resolve);
+        }),
+    );
+    TestBed.tick();
+    await expect.poll(() => pending.length).toBe(2);
+    const reads: number = api.overview.mock.calls.length;
+
+    creations.next({ key: 'CAD-483', listId: 'l-backlog', status: 'todo', subtasks: 0 });
+    api.overview.mockImplementation(answer);
+    for (const resolve of pending) resolve(await answer('sp-produit'));
+
+    await expect.poll(() => api.overview.mock.calls.length).toBe(reads + 2);
   });
 
   it('reads the spaces again on refresh', async () => {

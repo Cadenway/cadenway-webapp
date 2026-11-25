@@ -140,7 +140,8 @@ function createSpaceOverviewStore(): Type<SpaceOverviewStoreInstance> {
             params: { spaceId: string };
             abortSignal: AbortSignal;
           }): Promise<SpaceOverview> =>
-            navigation.overviews.status() === 'resolved' &&
+            (navigation.overviews.status() === 'resolved' ||
+              navigation.overviews.status() === 'local') &&
             navigation.overviews.hasValue() &&
             params.spaceId in navigation.overviews.value()
               ? Promise.resolve(navigation.overviews.value()[params.spaceId])
