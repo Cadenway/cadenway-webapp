@@ -172,7 +172,26 @@ describe('ListPageStore', () => {
     await expect.poll(() => api['counts'].mock.calls.length).toBe(2);
   });
 
-  it('ignores unrelated notices and debounces matching notices', async () => {
+  it('reads the counts again while task notices keep arriving faster than 300 ms', async () => {
+    await loaded();
+    const notice: RealtimeChange = {
+      id: 'n1',
+      type: 'task.updated.v1',
+      at: '2026-11-08T09:00:00Z',
+      data: { taskId: 'CAD-482', changed: ['dueDate'] },
+    };
+
+    for (let sent: number = 0; sent < 8; sent++) {
+      notices.next(notice);
+      await new Promise<void>((resolve) => {
+        setTimeout(resolve, 100);
+      });
+    }
+
+    expect(api['counts'].mock.calls.length).toBeGreaterThan(1);
+  });
+
+  it('ignores unrelated notices and gathers matching notices into one refresh', async () => {
     await loaded();
     const notice: RealtimeChange = {
       id: 'n1',

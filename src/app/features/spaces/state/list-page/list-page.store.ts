@@ -16,16 +16,7 @@ import {
   withState,
 } from '@ngrx/signals';
 import { rxMethod } from '@ngrx/signals/rxjs-interop';
-import {
-  catchError,
-  debounceTime,
-  EMPTY,
-  filter,
-  type Observable,
-  pipe,
-  switchMap,
-  tap,
-} from 'rxjs';
+import { auditTime, catchError, EMPTY, filter, type Observable, pipe, switchMap, tap } from 'rxjs';
 
 import { type RealtimeChange, RealtimeConnection } from '@core/realtime';
 import { type CreatedTask, TaskCreate } from '@features/task';
@@ -489,7 +480,7 @@ function createListPageStore(): Type<ListPageStoreInstance> {
               }
               return true;
             }),
-            debounceTime(300),
+            auditTime(300),
             tap((): void => {
               reloadCounts();
             }),
@@ -678,10 +669,11 @@ function createListPageStore(): Type<ListPageStoreInstance> {
  * rejects with the typed route error (« Accès refusé » for a list the gateway does not show, not
  * found for a malformed id, unavailable otherwise), which the page lets reach the boundary. The
  * space, counts, milestones, members, labels and saved views are secondary reads with their own
- * state. While the page lives it watches the list's realtime room and refreshes the counts after
- * 300 ms of quiet. The socket hands every notice to every watch: a notice naming another list or
- * space is ignored, and a task notice, which names only its task (`{ taskId, changed }`), counts,
- * as for the rows. A task created in the list from this tab refreshes them at once.
+ * state. While the page lives it watches the list's realtime room and refreshes the counts 300 ms
+ * after a notice, once for every notice of that window, so a steady flow of changes cannot hold the
+ * refresh back. The socket hands every notice to every watch: a notice naming another list or space
+ * is ignored, and a task notice, which names only its task (`{ taskId, changed }`), counts, as for
+ * the rows. A task created in the list from this tab refreshes them at once.
  * Writes report whether the gateway recorded them; renaming and deleting a saved view are
  * optimistic and restore on a refusal.
  *
