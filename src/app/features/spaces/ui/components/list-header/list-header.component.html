@@ -30,7 +30,7 @@
           }
         </span>
         {{ current.name }}
-      } @else {
+      } @else if (!spaceFailed()) {
         <span cwSkeleton class="inline-block h-3 w-16"></span>
       }
     </a>
@@ -90,7 +90,7 @@
         ·
         <ng-container i18n="@@spaces.header.done">{{ percent() }} % done</ng-container>
       </p>
-    } @else {
+    } @else if (!countsFailed()) {
       <div cwSkeleton class="h-5 w-56"></div>
     }
     @if (list().sprint?.goal; as goal) {
@@ -139,7 +139,12 @@
     <ng-icon name="phosphorCopyBold" aria-hidden="true" />
     <ng-container i18n="@@spaces.header.duplicate">Duplicate with the tasks</ng-container>
   </button>
-  <button cwMenuItem data-testid="list-export" (triggered)="exported.emit()">
+  <button
+    cwMenuItem
+    [disabled]="exportDisabled()"
+    data-testid="list-export"
+    (triggered)="exported.emit()"
+  >
     <ng-icon name="phosphorDownloadSimpleBold" aria-hidden="true" />
     <ng-container i18n="@@spaces.header.export">Export as CSV</ng-container>
   </button>
@@ -148,7 +153,12 @@
     <ng-container i18n="@@spaces.header.copy-link">Copy the link</ng-container>
   </button>
   <cw-menu-separator />
-  <button cwMenuItem [disabled]="!list().canEdit || list().archived" (triggered)="archived.emit()">
+  <button
+    cwMenuItem
+    variant="destructive"
+    [disabled]="!list().canEdit || list().archived"
+    (triggered)="archived.emit()"
+  >
     <ng-icon name="phosphorArchiveBold" aria-hidden="true" />
     <ng-container i18n="@@spaces.header.archive">Archive the list</ng-container>
   </button>

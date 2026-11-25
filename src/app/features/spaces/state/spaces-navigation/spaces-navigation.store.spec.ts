@@ -1,3 +1,6 @@
+import { signal, type WritableSignal } from '@angular/core';
+import { WORKSPACE_CONTEXT } from '@features/workspace/ports/workspace-context';
+
 import { TestBed } from '@angular/core/testing';
 import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 
@@ -117,6 +120,7 @@ interface SpacesApiFake {
 }
 
 describe('SpacesNavigationStore', () => {
+  let organization: WritableSignal<{ id: string; slug: string }>;
   let api: SpacesApiFake;
   let store: InstanceType<typeof SpacesNavigationStore>;
   const today: string = todayIso();
@@ -129,6 +133,7 @@ describe('SpacesNavigationStore', () => {
   };
 
   beforeEach(() => {
+    organization = signal({ id: 'org-1', slug: 'atelier-nord' });
     api = {
       spaces: vi.fn(() =>
         Promise.resolve([space('sp-produit', 'Produit'), space('sp-design', 'Design')]),
@@ -155,16 +160,17 @@ describe('SpacesNavigationStore', () => {
       removeFavorite: vi.fn(),
     };
     TestBed.configureTestingModule({
-      providers: [SpacesNavigationStore, { provide: SpacesApi, useValue: api }],
+      providers: [
+        SpacesNavigationStore,
+        { provide: SpacesApi, useValue: api },
+        { provide: WORKSPACE_CONTEXT, useValue: { organization } },
+      ],
     });
     store = TestBed.inject(SpacesNavigationStore);
   });
 
   it('reads nothing before following an organization, then the spaces, counts and favorites', async () => {
     TestBed.tick();
-    expect(api.spaces).not.toHaveBeenCalled();
-
-    store.follow('atelier-nord');
     await expect.poll(() => store.overviews.hasValue()).toBe(true);
 
     expect(store.spaces.value()?.map((item: Space) => item.name)).toEqual(['Produit', 'Design']);
@@ -175,18 +181,17 @@ describe('SpacesNavigationStore', () => {
   });
 
   it('closes the spaces and reads again for another organization', async () => {
-    store.follow('atelier-nord');
     await expect.poll(() => store.spaces.hasValue()).toBe(true);
     store.setExpanded('sp-produit', true);
     expect(store.expanded()).toEqual({ 'sp-produit': true });
 
-    store.follow('lumen');
+    organization.set({ id: 'org-2', slug: 'lumen' });
+    TestBed.tick();
     expect(store.expanded()).toEqual({});
     await expect.poll(() => api.spaces.mock.calls.length).toBe(2);
   });
 
   it('adds a favorite at once and restores the list when the gateway refuses', async () => {
-    store.follow('atelier-nord');
     await expect.poll(() => store.favorites.hasValue()).toBe(true);
     api.addFavorite.mockRejectedValueOnce(new Error('favorite.limit-reached'));
 
@@ -199,7 +204,6 @@ describe('SpacesNavigationStore', () => {
   });
 
   it('removes a favorite and puts it back when the gateway refuses', async () => {
-    store.follow('atelier-nord');
     await expect.poll(() => store.favorites.hasValue()).toBe(true);
     api.removeFavorite.mockRejectedValueOnce(new Error('unavailable'));
 
@@ -213,7 +217,6 @@ describe('SpacesNavigationStore', () => {
   });
 
   it('replaces the pending favorite with the created one', async () => {
-    store.follow('atelier-nord');
     await expect.poll(() => store.favorites.hasValue()).toBe(true);
     api.addFavorite.mockResolvedValueOnce({
       ...roadmap,
@@ -228,8 +231,54 @@ describe('SpacesNavigationStore', () => {
     expect(api.addFavorite).toHaveBeenCalledTimes(1);
   });
 
+  it('serializes rapid favorite changes using the created identifier', async () => {
+    await expect.poll(() => store.favorites.hasValue()).toBe(true);
+    let resolveCreate!: (favorite: Favorite) => void;
+    api.addFavorite.mockReturnValueOnce(
+      new Promise<Favorite>((resolve) => {
+        resolveCreate = resolve;
+      }),
+    );
+    api.removeFavorite.mockResolvedValueOnce(undefined);
+
+    const added: Promise<boolean> = store.setFavorite('list', 'l-bugs', 'Bugs', true);
+    const removed: Promise<boolean> = store.setFavorite('list', 'l-bugs', 'Bugs', false);
+    expect(store.favoriteOf('list', 'l-bugs')).toBeUndefined();
+    expect(api.removeFavorite).not.toHaveBeenCalled();
+    resolveCreate({ ...roadmap, id: 'f2', targetId: 'l-bugs', name: 'Bugs' });
+    expect(await added).toBe(true);
+    expect(await removed).toBe(true);
+    expect(api.removeFavorite).toHaveBeenCalledExactlyOnceWith('f2');
+    expect(store.favoriteOf('list', 'l-bugs')).toBeUndefined();
+  });
+
+  it('limits concurrent space overview requests to four', async () => {
+    const finishes: (() => void)[] = [];
+    api.spaces.mockResolvedValueOnce(
+      Array.from({ length: 6 }, (_unused: unknown, index: number) =>
+        space(String(index), String(index)),
+      ),
+    );
+    api.overview.mockImplementation(
+      (spaceId: string): Promise<SpaceOverview> =>
+        new Promise((resolve) => {
+          finishes.push(() => {
+            resolve({ spaceId, taskCount: 0, lists: [] });
+          });
+        }),
+    );
+    await expect.poll(() => api.overview.mock.calls.length).toBe(4);
+    finishes.splice(0).forEach((finish: () => void) => {
+      finish();
+    });
+    await expect.poll(() => api.overview.mock.calls.length).toBe(6);
+    finishes.splice(0).forEach((finish: () => void) => {
+      finish();
+    });
+    await expect.poll(() => store.overviews.hasValue()).toBe(true);
+  });
+
   it('reads the spaces again on refresh', async () => {
-    store.follow('atelier-nord');
     await expect.poll(() => store.spaces.hasValue()).toBe(true);
     store.refresh();
     await expect.poll(() => api.spaces.mock.calls.length).toBe(2);

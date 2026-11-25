@@ -191,6 +191,17 @@ export class ViewTools {
   public readonly labels: InputSignal<readonly string[]> = input<readonly string[]>([]);
 
   /**
+   * Property people
+   *
+   * @description
+   * Organization members available for assignee filters.
+   *
+   * @type {InputSignal<readonly ViewOption[]>}
+   * @readonly
+   */
+  public readonly people: InputSignal<readonly ViewOption[]> = input<readonly ViewOption[]>([]);
+
+  /**
    * Property search
    *
    * @description
@@ -522,6 +533,7 @@ export class ViewTools {
           options: [
             { value: 'me', label: $localize`:@@spaces.filter.me:Me` },
             { value: 'none', label: $localize`:@@spaces.filter.unassigned:Unassigned` },
+            ...this.people(),
           ],
         },
         {

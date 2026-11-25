@@ -9,7 +9,7 @@ import {
   TasksService,
   type TaskList,
 } from '@cadenway/api-client';
-import { of, throwError } from 'rxjs';
+import { Observable, of, throwError } from 'rxjs';
 import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 
 import { AccessDeniedRouteError } from '@shared/route-errors';
@@ -145,6 +145,42 @@ describe('ListsApi', () => {
       ],
     });
     expect(await api.labels()).toEqual(['Bug']);
+  });
+
+  it('reads every member page for assignee choices', async () => {
+    members['listMembers'].mockReturnValueOnce(
+      of({ items: [{ userId: 'u1', name: 'Inès' }], nextCursor: 'next' }),
+    );
+    members['listMembers'].mockReturnValueOnce(
+      of({ items: [{ userId: 'u2', name: 'Camille' }], nextCursor: null }),
+    );
+    expect(await api.organizationMembers()).toEqual([
+      { userId: 'u1', name: 'Inès' },
+      { userId: 'u2', name: 'Camille' },
+    ]);
+    expect(members['listMembers']).toHaveBeenLastCalledWith({ limit: 100, cursor: 'next' });
+  });
+
+  it('cancels an in-flight paginated read when superseded', async () => {
+    let cancelled: boolean = false;
+    tasks['listLabels'].mockReturnValueOnce(
+      new Observable(() => () => {
+        cancelled = true;
+      }),
+    );
+    const controller: AbortController = new AbortController();
+    const pending: Promise<readonly string[]> = api.labels(controller.signal);
+    controller.abort();
+    await expect(pending).rejects.toThrow();
+    expect(cancelled).toBe(true);
+    expect(tasks['listLabels']).toHaveBeenCalledTimes(1);
+  });
+
+  it('reads every labels page', async () => {
+    tasks['listLabels'].mockReturnValueOnce(of({ items: [{ name: 'Auth' }], nextCursor: 'next' }));
+    tasks['listLabels'].mockReturnValueOnce(of({ items: [{ name: 'Front' }], nextCursor: null }));
+    expect(await api.labels()).toEqual(['Auth', 'Front']);
+    expect(tasks['listLabels']).toHaveBeenLastCalledWith({ limit: 100, cursor: 'next' });
   });
 
   it('keeps the members without names when the directory is refused', async () => {

@@ -1,21 +1,19 @@
-import { inject, type Signal } from '@angular/core';
-import { toSignal } from '@angular/core/rxjs-interop';
-import { ActivatedRoute, type ParamMap } from '@angular/router';
-import { map } from 'rxjs';
+import { computed, inject, type Signal } from '@angular/core';
+
+import {
+  WORKSPACE_CONTEXT,
+  type WorkspaceContextPort,
+} from '@features/workspace/ports/workspace-context';
 
 /**
  * Function injectOrganizationSlug
  *
  * @description
- * The `:org` slug of the workspace route, followed through an in-place organization switch. Call
- * it in the injection context of a component rendered inside `/:org` (a shell contribution or a
- * routed page), whose `ActivatedRoute` sees the parameter.
+ * Follows the committed workspace organization for links.
  *
- * @returns {Signal<string>} The slug, empty outside a workspace.
+ * @returns {Signal<string>} The committed organization slug.
  */
 export function injectOrganizationSlug(): Signal<string> {
-  const route: ActivatedRoute = inject(ActivatedRoute);
-  return toSignal(route.paramMap.pipe(map((params: ParamMap): string => params.get('org') ?? '')), {
-    initialValue: route.snapshot.paramMap.get('org') ?? '',
-  });
+  const workspace: WorkspaceContextPort = inject(WORKSPACE_CONTEXT);
+  return computed((): string => workspace.organization().slug);
 }

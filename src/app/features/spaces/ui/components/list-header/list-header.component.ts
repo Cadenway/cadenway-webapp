@@ -90,6 +90,28 @@ export class ListHeader {
   public readonly space: InputSignal<Space | null> = input<Space | null>(null);
 
   /**
+   * Property spaceFailed
+   *
+   * @description
+   * Whether the breadcrumb read failed.
+   *
+   * @type {InputSignal<boolean>}
+   * @readonly
+   */
+  public readonly spaceFailed: InputSignal<boolean> = input(false);
+
+  /**
+   * Property countsFailed
+   *
+   * @description
+   * Whether the counts read failed.
+   *
+   * @type {InputSignal<boolean>}
+   * @readonly
+   */
+  public readonly countsFailed: InputSignal<boolean> = input(false);
+
+  /**
    * Property spaceLink
    *
    * @description
@@ -132,6 +154,17 @@ export class ListHeader {
    * @readonly
    */
   public readonly favorite: InputSignal<boolean> = input(false);
+
+  /**
+   * Property exportDisabled
+   *
+   * @description
+   * Prevents exporting until the requested saved filters have been applied.
+   *
+   * @type {InputSignal<boolean>}
+   * @readonly
+   */
+  public readonly exportDisabled: InputSignal<boolean> = input(false);
 
   /**
    * Property members

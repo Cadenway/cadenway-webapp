@@ -9,14 +9,23 @@ import {
   withState,
 } from '@ngrx/signals';
 import { rxMethod } from '@ngrx/signals/rxjs-interop';
-import { catchError, EMPTY, type Observable, pipe, switchMap, tap } from 'rxjs';
+import {
+  catchError,
+  debounceTime,
+  EMPTY,
+  filter,
+  type Observable,
+  pipe,
+  switchMap,
+  tap,
+} from 'rxjs';
 
 import { type RealtimeChange, RealtimeConnection } from '@core/realtime';
 
 import { type ListExport, ListsApi } from '../../data-access/services/lists-api/lists-api.service';
 import { SpacesApi } from '../../data-access/services/spaces-api/spaces-api.service';
 import type { BulkAction, BulkSelection } from '../../models/bulk-action/bulk-action.interface';
-import type { ListMembers } from '../../models/list-member/list-member.interface';
+import type { ListMember, ListMembers } from '../../models/list-member/list-member.interface';
 import type {
   ListTaskQuery,
   ListViewConfig,
@@ -48,17 +57,6 @@ interface ListPageState {
    * @readonly
    */
   readonly listId: string | null;
-
-  /**
-   * Property _countsRevision
-   *
-   * @description
-   * Bumped to read the counts again.
-   *
-   * @type {number}
-   * @readonly
-   */
-  readonly _countsRevision: number;
   // #endregion
 }
 
@@ -136,6 +134,17 @@ export interface ListPageStoreInstance {
    * @readonly
    */
   readonly members: ResourceRef<ListMembers | undefined>;
+
+  /**
+   * Property organizationMembers
+   *
+   * @description
+   * The member directory for assignee filters and actions.
+   *
+   * @type {ResourceRef<readonly ListMember[] | undefined>}
+   * @readonly
+   */
+  readonly organizationMembers: ResourceRef<readonly ListMember[] | undefined>;
 
   /**
    * Property labels
@@ -316,7 +325,7 @@ export interface ListPageStoreInstance {
  *
  * @type {ListPageState}
  */
-const initialState: ListPageState = { listId: null, _countsRevision: 0 };
+const initialState: ListPageState = { listId: null };
 
 /**
  * Function createListPageStore
@@ -338,54 +347,94 @@ function createListPageStore(): Type<ListPageStoreInstance> {
       };
       const list: ResourceRef<TaskList | undefined> = resource({
         params: byList,
-        loader: ({ params }: { params: { listId: string } }): Promise<TaskList> =>
-          api.list(params.listId),
+        loader: ({
+          params,
+          abortSignal,
+        }: {
+          params: { listId: string };
+          abortSignal: AbortSignal;
+        }): Promise<TaskList> => api.list(params.listId, abortSignal),
       });
-      const counted: () => { listId: string; revision: number } | undefined = () => {
-        const listId: string | null = store.listId();
-        return listId === null ? undefined : { listId, revision: store._countsRevision() };
-      };
       return {
         _api: api,
         _realtime: inject(RealtimeConnection, { optional: true }),
         list,
         space: resource({
           params: () => (list.hasValue() ? { spaceId: list.value().spaceId } : undefined),
-          loader: ({ params }: { params: { spaceId: string } }): Promise<Space> =>
-            spaces.space(params.spaceId),
+          loader: ({
+            params,
+            abortSignal,
+          }: {
+            params: { spaceId: string };
+            abortSignal: AbortSignal;
+          }): Promise<Space> => spaces.space(params.spaceId, abortSignal),
         }),
         counts: resource({
-          params: counted,
-          loader: ({ params }: { params: { listId: string } }): Promise<ListSummary> =>
-            api.counts(params.listId, todayIso()),
+          params: byList,
+          loader: ({
+            params,
+            abortSignal,
+          }: {
+            params: { listId: string };
+            abortSignal: AbortSignal;
+          }): Promise<ListSummary> => api.counts(params.listId, todayIso(), abortSignal),
         }),
         milestoneCount: resource({
-          params: counted,
-          loader: ({ params }: { params: { listId: string } }): Promise<number> =>
-            api.milestoneCount(params.listId),
+          params: byList,
+          loader: ({
+            params,
+            abortSignal,
+          }: {
+            params: { listId: string };
+            abortSignal: AbortSignal;
+          }): Promise<number> => api.milestoneCount(params.listId, abortSignal),
         }),
         members: resource({
           params: byList,
-          loader: ({ params }: { params: { listId: string } }): Promise<ListMembers> =>
-            api.listMembers(params.listId),
+          loader: ({
+            params,
+            abortSignal,
+          }: {
+            params: { listId: string };
+            abortSignal: AbortSignal;
+          }): Promise<ListMembers> => api.listMembers(params.listId, abortSignal),
+        }),
+        organizationMembers: resource({
+          params: byList,
+          loader: ({ abortSignal }: { abortSignal: AbortSignal }): Promise<readonly ListMember[]> =>
+            api.organizationMembers(abortSignal),
         }),
         labels: resource({
           params: byList,
-          loader: (): Promise<readonly string[]> => api.labels(),
+          loader: ({ abortSignal }: { abortSignal: AbortSignal }): Promise<readonly string[]> =>
+            api.labels(abortSignal),
         }),
         savedViews: resource({
           params: byList,
-          loader: ({ params }: { params: { listId: string } }): Promise<readonly SavedView[]> =>
-            api.savedViews(params.listId),
+          loader: ({
+            params,
+            abortSignal,
+          }: {
+            params: { listId: string };
+            abortSignal: AbortSignal;
+          }): Promise<readonly SavedView[]> => api.savedViews(params.listId, abortSignal),
         }),
       };
     }),
     withMethods((store) => {
+      let countsQueued: boolean = false;
+      let milestonesQueued: boolean = false;
+      const reloadCounts: () => void = (): void => {
+        if (!store.counts.reload() && store.counts.isLoading()) countsQueued = true;
+        if (!store.milestoneCount.reload() && store.milestoneCount.isLoading())
+          milestonesQueued = true;
+      };
       const currentList: () => TaskList | undefined = () =>
         store.list.hasValue() ? store.list.value() : undefined;
       const views: () => readonly SavedView[] = () =>
         store.savedViews.hasValue() ? store.savedViews.value() : [];
       const replaceView: (view: SavedView) => void = (view: SavedView): void => {
+        if (store.listId() !== view.listId || !store.savedViews.hasValue()) return;
         store.savedViews.set(
           views().map((item: SavedView): SavedView => (item.id === view.id ? view : item)),
         );
@@ -407,16 +456,40 @@ function createListPageStore(): Type<ListPageStoreInstance> {
                 ? EMPTY
                 : store._realtime.watch({ kind: 'list', listId }).pipe(catchError(() => EMPTY)),
             ),
+            filter((notice: RealtimeChange): boolean => {
+              const data: unknown = notice.data;
+              return (
+                typeof data === 'object' &&
+                data !== null &&
+                (('listId' in data && data.listId === store.listId()) ||
+                  ('spaceId' in data &&
+                    store.list.hasValue() &&
+                    data.spaceId === store.list.value().spaceId))
+              );
+            }),
+            debounceTime(300),
             tap((): void => {
-              patchState(store, { _countsRevision: store._countsRevision() + 1 });
+              reloadCounts();
             }),
           ),
         ),
+        _flushCounts: signalMethod<string>((status: string): void => {
+          if (status !== 'loading' && status !== 'reloading' && countsQueued) {
+            countsQueued = false;
+            store.counts.reload();
+          }
+        }),
+        _flushMilestones: signalMethod<string>((status: string): void => {
+          if (status !== 'loading' && status !== 'reloading' && milestonesQueued) {
+            milestonesQueued = false;
+            store.milestoneCount.reload();
+          }
+        }),
         load: signalMethod<string>((listId: string): void => {
           if (listId !== store.listId()) patchState(store, { listId });
         }),
         refreshCounts(): void {
-          patchState(store, { _countsRevision: store._countsRevision() + 1 });
+          reloadCounts();
         },
         async rename(name: string): Promise<boolean> {
           const before: TaskList | undefined = currentList();
@@ -478,10 +551,12 @@ function createListPageStore(): Type<ListPageStoreInstance> {
         },
         async duplicateView(view: SavedView): Promise<SavedView | null> {
           const copy: SavedView | null = await attempt(() => store._api.duplicateSavedView(view));
-          if (copy) {
+          if (copy && store.listId() === view.listId && store.savedViews.hasValue()) {
             const list: readonly SavedView[] = views();
             const index: number = list.findIndex((item: SavedView): boolean => item.id === view.id);
-            store.savedViews.set([...list.slice(0, index + 1), copy, ...list.slice(index + 1)]);
+            if (index >= 0) {
+              store.savedViews.set([...list.slice(0, index + 1), copy, ...list.slice(index + 1)]);
+            }
           }
           return copy;
         },
@@ -504,8 +579,7 @@ function createListPageStore(): Type<ListPageStoreInstance> {
         ): Promise<number | null> {
           if (selection.length === 0) return 0;
           const affected: number | null = await attempt(() => store._api.bulk(selection, action));
-          if (affected !== null)
-            patchState(store, { _countsRevision: store._countsRevision() + 1 });
+          if (affected !== null) reloadCounts();
           return affected;
         },
       };
@@ -513,6 +587,8 @@ function createListPageStore(): Type<ListPageStoreInstance> {
     withHooks({
       onInit(store): void {
         store._watch(store.listId);
+        store._flushCounts(store.counts.status);
+        store._flushMilestones(store.milestoneCount.status);
       },
     }),
   );
@@ -527,7 +603,7 @@ function createListPageStore(): Type<ListPageStoreInstance> {
  * found for a malformed id, unavailable otherwise), which the page lets reach the boundary. The
  * space, counts, milestones, members, labels and saved views are secondary reads with their own
  * state. While the page lives it watches the list's realtime room; the gateway broadcasts every
- * change to every watch, so any notice reads the counts again. Writes report whether the gateway
+ * change to every watch, so matching list or space notices are debounced before refreshing counts. Writes report whether the gateway
  * recorded them; renaming and deleting a saved view are optimistic and restore on a refusal.
  *
  * @type {ReturnType<typeof createListPageStore>}

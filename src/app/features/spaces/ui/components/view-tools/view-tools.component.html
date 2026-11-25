@@ -124,14 +124,18 @@
           chip.name
         }}
       </span>
-      <span class="px-1 text-muted-foreground">{{ chip.operator }}</span>
-      <span class="max-w-48 truncate px-1 font-medium">{{ chip.values }}</span>
+      <span class="flex items-center border-l border-input px-2 text-muted-foreground">{{
+        chip.operator
+      }}</span>
+      <span class="flex max-w-48 items-center truncate border-l border-input px-2 font-medium">{{
+        chip.values
+      }}</span>
       <button
         cwButton
         type="button"
         variant="ghost"
         size="icon-xs"
-        class="rounded-none"
+        class="rounded-none border-l border-input"
         [attr.aria-label]="removeLabel(chip)"
         (click)="filterCleared.emit(chip.field)"
       >

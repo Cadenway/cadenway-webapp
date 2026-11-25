@@ -1,9 +1,18 @@
+import { WORKSPACE_CONTEXT } from '@features/workspace/ports/workspace-context';
+
 import { TestBed } from '@angular/core/testing';
-import { provideRouter, withComponentInputBinding, withRouterConfig } from '@angular/router';
+import {
+  provideRouter,
+  withComponentInputBinding,
+  withErrorBoundaries,
+  withRouterConfig,
+} from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { provideCadenwayIcons } from '@cadenway/icons';
 import { CwToastService } from '@cadenway/ui/components/toast';
 import { beforeEach, describe, expect, it, type Mock, type MockInstance, vi } from 'vitest';
+
+import { RouteErrorBoundary } from '@features/errors/ui/components/route-error-boundary/route-error-boundary.component';
 
 import { ListsApi } from '../../../data-access/services/lists-api/lists-api.service';
 import { SpacesApi } from '../../../data-access/services/spaces-api/spaces-api.service';
@@ -80,6 +89,7 @@ const bugsCritiques: SavedView = {
 
 describe('ListPage', () => {
   let api: Record<string, Mock>;
+  let spaceRead: Mock;
 
   beforeEach(() => {
     api = {
@@ -94,6 +104,7 @@ describe('ListPage', () => {
       listMembers: vi.fn(() =>
         Promise.resolve({ items: [{ userId: 'u1', name: 'Inès Robert' }], total: 1 }),
       ),
+      organizationMembers: vi.fn(() => Promise.resolve([{ userId: 'u1', name: 'Inès Robert' }])),
       labels: vi.fn(() => Promise.resolve(['Bug', 'Front'])),
       savedViews: vi.fn(() => Promise.resolve([bugsCritiques])),
       remove: vi.fn(() => Promise.resolve(undefined)),
@@ -103,20 +114,26 @@ describe('ListPage', () => {
       archive: vi.fn(() => Promise.reject(new Error('access.role-insufficient'))),
       createSavedView: vi.fn(),
     };
+    spaceRead = vi.fn(() => Promise.resolve(produit));
     TestBed.configureTestingModule({
       providers: [
         provideCadenwayIcons(),
         provideRouter(
           [{ path: ':org', children: SPACES_ROUTES }],
           withComponentInputBinding(),
+          withErrorBoundaries({ defaultErrorComponent: RouteErrorBoundary }),
           withRouterConfig({ paramsInheritanceStrategy: 'always' }),
         ),
         SpacesNavigationStore,
+        {
+          provide: WORKSPACE_CONTEXT,
+          useValue: { organization: () => ({ id: 'org-1', slug: 'atelier-nord' }) },
+        },
         { provide: ListsApi, useValue: api },
         {
           provide: SpacesApi,
           useValue: {
-            space: vi.fn(() => Promise.resolve(produit)),
+            space: spaceRead,
             spaces: vi.fn(() => Promise.resolve([produit])),
             overview: vi.fn(() =>
               Promise.resolve({ spaceId: 'sp-produit', taskCount: 3, lists: [] }),
@@ -184,6 +201,7 @@ describe('ListPage', () => {
     expect(dialog?.textContent).not.toContain('À trier');
     expect(dialog?.textContent).toContain('Moi');
     expect(dialog?.textContent).toContain('Non assigné');
+    expect(dialog?.textContent).toContain('Inès Robert');
     expect(dialog?.textContent).toContain('Front');
 
     dialog?.querySelector<HTMLButtonElement>('[role="checkbox"]')?.click();
@@ -200,6 +218,126 @@ describe('ListPage', () => {
     find('view-chip')?.querySelector<HTMLButtonElement>('button')?.click();
     harness.detectChanges();
     await expect.poll(() => find('view-modified')).not.toBeNull();
+  });
+
+  it('resolves a saved assignee id to the member name', async () => {
+    api['savedViews'].mockResolvedValueOnce([
+      {
+        ...bugsCritiques,
+        config: {
+          ...bugsCritiques.config,
+          filters: { ...bugsCritiques.config.filters, assignee: ['u1'] },
+        },
+      },
+    ]);
+    await open('/atelier-nord/l/l-bugs?savedView=sv-bugs');
+    await expect.poll(() => find('view-chips')?.textContent).toContain('Inès Robert');
+  });
+
+  it('retries a failed primary list read through the route boundary', async () => {
+    api['list'].mockRejectedValueOnce(new Error('unavailable'));
+    const harness: RouterTestingHarness =
+      await RouterTestingHarness.create('/atelier-nord/l/l-bugs');
+    await expect
+      .poll(() => {
+        harness.detectChanges();
+        return harness.routeNativeElement?.textContent;
+      })
+      .toContain('Réessayer');
+    [...document.querySelectorAll('button')]
+      .find((button) => button.textContent.includes('Réessayer'))
+      ?.click();
+    await expect
+      .poll(() => {
+        harness.detectChanges();
+        return api['list'].mock.calls.length;
+      })
+      .toBe(2);
+    await expect
+      .poll(() => {
+        harness.detectChanges();
+        return find('list-description');
+      })
+      .not.toBeNull();
+  });
+
+  it('keeps saved filters and actions unavailable until a failed read is retried', async () => {
+    api['savedViews'].mockRejectedValueOnce(new Error('unavailable'));
+    const harness: RouterTestingHarness = await open('/atelier-nord/l/l-bugs?savedView=sv-bugs');
+    await expect
+      .poll(() => {
+        harness.detectChanges();
+        return harness.routeNativeElement?.textContent;
+      })
+      .toContain('Impossible de charger les vues enregistrées');
+    expect(find('view-filter')).toBeNull();
+    expect(find('list-rows-placeholder')).toBeNull();
+    find('list-more')?.click();
+    harness.detectChanges();
+    await expect.poll(() => find('list-export')).not.toBeNull();
+    expect(find('list-export')?.getAttribute('aria-disabled')).toBe('true');
+    [...document.querySelectorAll('button')]
+      .find((button) => button.textContent.includes('Réessayer'))
+      ?.click();
+    await expect
+      .poll(() => {
+        harness.detectChanges();
+        return find('view-chip')?.textContent;
+      })
+      .toContain('Urgente, Haute');
+    expect(api['savedViews']).toHaveBeenCalledTimes(2);
+  });
+
+  it('retries a failed breadcrumb space read', async () => {
+    spaceRead.mockRejectedValueOnce(new Error('unavailable'));
+    const harness: RouterTestingHarness = await open('/atelier-nord/l/l-bugs');
+    await expect
+      .poll(() => {
+        harness.detectChanges();
+        return harness.routeNativeElement?.textContent;
+      })
+      .toContain('Impossible de charger l’espace');
+    const alert: Element | undefined = [
+      ...(harness.routeNativeElement?.querySelectorAll('[role="alert"]') ?? []),
+    ].find((item: Element) => item.textContent.includes('Impossible de charger l’espace'));
+    alert?.querySelector<HTMLButtonElement>('button')?.click();
+    await expect.poll(() => spaceRead.mock.calls.length).toBe(2);
+    await expect
+      .poll(() => {
+        harness.detectChanges();
+        return find('list-breadcrumb-space')?.textContent;
+      })
+      .toContain('Produit');
+  });
+
+  it('retries failed secondary reads instead of treating them as empty', async () => {
+    api['labels'].mockRejectedValueOnce(new Error('unavailable'));
+    api['organizationMembers'].mockRejectedValueOnce(new Error('unavailable'));
+    api['counts'].mockRejectedValueOnce(new Error('unavailable'));
+    api['listMembers'].mockRejectedValueOnce(new Error('unavailable'));
+    const harness: RouterTestingHarness =
+      await RouterTestingHarness.create('/atelier-nord/l/l-bugs');
+    for (const message of [
+      'Impossible de charger les étiquettes',
+      'Impossible de charger les membres.',
+      'Impossible de charger les comptes',
+      'Impossible de charger les membres de la liste',
+    ]) {
+      await expect
+        .poll(() => {
+          harness.detectChanges();
+          return harness.routeNativeElement?.textContent;
+        })
+        .toContain(message);
+      const alert: Element | undefined = [
+        ...(harness.routeNativeElement?.querySelectorAll('[role="alert"]') ?? []),
+      ].find((element: Element) => element.textContent.includes(message));
+      alert?.querySelector<HTMLButtonElement>('button')?.click();
+    }
+    await expect.poll(() => api['labels'].mock.calls.length).toBe(2);
+    await expect.poll(() => api['organizationMembers'].mock.calls.length).toBe(2);
+    await expect.poll(() => api['counts'].mock.calls.length).toBe(2);
+    await expect.poll(() => api['listMembers'].mock.calls.length).toBe(2);
   });
 
   it('deletes the list only once its name is typed', async () => {

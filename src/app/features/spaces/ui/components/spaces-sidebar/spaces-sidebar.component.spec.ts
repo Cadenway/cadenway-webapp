@@ -1,3 +1,5 @@
+import { WORKSPACE_CONTEXT } from '@features/workspace/ports/workspace-context';
+
 import { Component, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
@@ -81,12 +83,26 @@ const produit: Space = {
 
 describe('SpacesSidebar', () => {
   let spaces: Mock;
+  let favorites: Mock;
+  let overviewRead: Mock;
   let toggle: Mock;
 
   beforeEach(() => {
     localStorage.removeItem('cadenway-tips');
     spaces = vi.fn(() => Promise.resolve([produit]));
     toggle = vi.fn();
+    favorites = vi.fn(() =>
+      Promise.resolve([
+        {
+          id: 'f1',
+          kind: 'saved-view',
+          targetId: 'sv-bugs',
+          name: 'Bugs critiques',
+          listId: 'l-bugs',
+        },
+        { id: 'f2', kind: 'space', targetId: 'sp-produit', name: 'Produit favori', listId: null },
+      ]),
+    );
     const overview: SpaceOverview = {
       spaceId: 'sp-produit',
       taskCount: 40,
@@ -101,6 +117,7 @@ describe('SpacesSidebar', () => {
         },
       ],
     };
+    overviewRead = vi.fn(() => Promise.resolve(overview));
     TestBed.configureTestingModule({
       providers: [
         provideCadenwayIcons(),
@@ -109,6 +126,10 @@ describe('SpacesSidebar', () => {
           { path: ':org/l/:listId', component: ShellStub },
         ]),
         SpacesNavigationStore,
+        {
+          provide: WORKSPACE_CONTEXT,
+          useValue: { organization: () => ({ id: 'org-1', slug: 'atelier-nord' }) },
+        },
         {
           provide: SHELL_SIDEBAR,
           useValue: {
@@ -122,18 +143,8 @@ describe('SpacesSidebar', () => {
           provide: SpacesApi,
           useValue: {
             spaces,
-            overview: vi.fn(() => Promise.resolve(overview)),
-            favorites: vi.fn(() =>
-              Promise.resolve([
-                {
-                  id: 'f1',
-                  kind: 'saved-view',
-                  targetId: 'sv-bugs',
-                  name: 'Bugs critiques',
-                  listId: 'l-bugs',
-                },
-              ]),
-            ),
+            overview: overviewRead,
+            favorites,
           },
         },
       ],
@@ -169,6 +180,12 @@ describe('SpacesSidebar', () => {
     const favorite: HTMLAnchorElement | null | undefined =
       harness.routeNativeElement?.querySelector('[data-testid="sidebar-favorites"] a');
     expect(favorite?.getAttribute('href')).toBe('/atelier-nord/l/l-bugs?savedView=sv-bugs');
+    const spaceFavorite: HTMLAnchorElement | undefined = [
+      ...(harness.routeNativeElement?.querySelectorAll<HTMLAnchorElement>(
+        '[data-testid="sidebar-favorites"] a',
+      ) ?? []),
+    ].find((link) => link.textContent.includes('Produit favori'));
+    expect(spaceFavorite?.getAttribute('href')).toBe('/atelier-nord/spaces/sp-produit');
   });
 
   it('hides the tips for good once dismissed', async () => {
@@ -199,6 +216,32 @@ describe('SpacesSidebar', () => {
       ?.click();
     await expect.poll(() => text(harness, 'sidebar-spaces')).toContain('Produit');
     expect(spaces).toHaveBeenCalledTimes(2);
+  });
+
+  it('offers retry for failed favorites and space overview reads', async () => {
+    favorites.mockRejectedValueOnce(new Error('unavailable'));
+    overviewRead.mockRejectedValueOnce(new Error('unavailable'));
+    const harness: RouterTestingHarness = await RouterTestingHarness.create('/atelier-nord');
+    await expect
+      .poll(() => {
+        harness.detectChanges();
+        return harness.routeNativeElement?.textContent;
+      })
+      .toContain('Impossible de charger les favoris');
+    await expect
+      .poll(() => {
+        harness.detectChanges();
+        return harness.routeNativeElement?.textContent;
+      })
+      .toContain('Impossible de charger les listes');
+    const alerts: NodeListOf<Element> | undefined =
+      harness.routeNativeElement?.querySelectorAll('[role="alert"]');
+    alerts?.forEach((alert: Element) => {
+      alert.querySelector<HTMLButtonElement>('button')?.click();
+    });
+    await expect.poll(() => favorites.mock.calls.length).toBe(2);
+    await expect.poll(() => overviewRead.mock.calls.length).toBe(2);
+    await expect.poll(() => text(harness, 'sidebar-favorites')).toContain('Bugs critiques');
   });
 
   it('toggles the shell sidebar from the rail and marks it current on a list', async () => {

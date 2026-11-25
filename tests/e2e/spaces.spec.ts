@@ -85,7 +85,7 @@ function problem(status: number, code: string) {
 }
 
 /** Stubs `config.json` and the gateway for a signed-in owner of Atelier Nord with one space. */
-async function stubGateway(page: Page): Promise<Gateway> {
+async function stubGateway(page: Page, failListOnce = false): Promise<Gateway> {
   const calls: string[] = [];
   const savedViews: Record<string, unknown>[] = [];
 
@@ -148,6 +148,10 @@ async function stubGateway(page: Page): Promise<Gateway> {
       case 'GET /v1/me/favorites':
         return route.fulfill({ json: { items: [], nextCursor: null } });
       case `GET /v1/lists/${sprint14.id}`:
+        if (failListOnce) {
+          failListOnce = false;
+          return route.fulfill(problem(503, 'service.unavailable'));
+        }
         return route.fulfill({ json: sprint14 });
       case `DELETE /v1/lists/${sprint14.id}`:
         return route.fulfill({ status: 204 });
@@ -157,6 +161,8 @@ async function stubGateway(page: Page): Promise<Gateway> {
         return route.fulfill({ json: { items: [], nextCursor: null, total: 0 } });
       case `QUERY /v1/lists/${sprint14.id}/tasks`:
         return route.fulfill({ json: { items: [], nextCursor: null, total: 1 } });
+      case 'GET /v1/members':
+        return route.fulfill({ json: { items: [], nextCursor: null, total: 0 } });
       case 'GET /v1/labels':
         return route.fulfill({
           json: { items: [{ name: 'Auth' }, { name: 'Front' }], nextCursor: null },
@@ -207,7 +213,7 @@ test('the space overview opens with its list cards', async ({ page }) => {
 
   await expect(page.getByRole('heading', { level: 1, name: 'Produit' })).toBeVisible();
   await expect(page.getByTestId('space-meta')).toContainText('2 listes');
-  const card = page.getByTestId('list-card').filter({ hasText: 'Sprint 14' });
+  const card = page.getByRole('link', { name: /Sprint 14/ }).last();
   await expect(card).toContainText('12 tâches');
   await expect(card).toContainText('3 / 12 terminées');
   await card.click();
@@ -224,7 +230,7 @@ test('a list page shows its header, its filters and its group menu', async ({ pa
   await expect(page.getByTestId('list-description')).toContainText('25 % terminé');
   await expect(page.getByTestId('list-goal')).toContainText('Livrer la connexion SSO');
 
-  await page.getByTestId('view-filter').click();
+  await page.getByRole('button', { name: 'Filtrer' }).click();
   const filters = page.getByRole('dialog', { name: 'Filtres' });
   await expect(filters.getByText('À faire')).toBeVisible();
   await expect(filters.getByText('Moi')).toBeVisible();
@@ -233,12 +239,12 @@ test('a list page shows its header, its filters and its group menu', async ({ pa
   await page.keyboard.press('Escape');
   await expect(page.getByTestId('view-chip')).toContainText('Priorité');
 
-  await page.getByTestId('view-group').click();
+  await page.getByRole('button', { name: /Grouper :/ }).click();
   const group = page.getByRole('menu', { name: 'Grouper' });
   await expect(group.getByRole('menuitemradio', { name: 'Statut' })).toBeVisible();
   await group.getByRole('menuitemradio', { name: 'Priorité' }).click();
   await page.keyboard.press('Escape');
-  await expect(page.getByTestId('view-group')).toContainText('Grouper : priorité');
+  await expect(page.getByRole('button', { name: /Grouper :/ })).toContainText('Grouper : priorité');
 });
 
 test('a saved view saves and reopens', async ({ page }) => {
@@ -248,33 +254,47 @@ test('a saved view saves and reopens', async ({ page }) => {
   await page.goto(`/atelier-nord/l/${sprint14.id}`);
   await expect(page.getByTestId('list-description')).toBeVisible();
 
-  await page.getByTestId('view-group').click();
+  await page.getByRole('button', { name: /Grouper :/ }).click();
   await page
     .getByRole('menu', { name: 'Grouper' })
     .getByRole('menuitemradio', { name: 'Assigné' })
     .click();
   await page.keyboard.press('Escape');
-  await page.getByTestId('view-save').click();
+  await page.getByRole('button', { name: 'Enregistrer la vue' }).click();
   const dialog = page.getByRole('dialog', { name: 'Enregistrer la vue' });
   await expect(dialog).toBeVisible();
-  await page.getByTestId('save-view-name').fill('Par personne');
-  await page.getByTestId('save-view-submit').click();
+  await dialog.getByRole('textbox', { name: 'Nom' }).fill('Par personne');
+  await dialog.getByRole('button', { name: 'Enregistrer la vue' }).click();
 
-  await expect(page.getByTestId('saved-view-tab')).toContainText('Par personne');
+  await expect(page.getByRole('tab', { name: 'Par personne' })).toContainText('Par personne');
   await expect(page).toHaveURL(/savedView=/);
   await expect(dialog).toHaveCount(0);
   expect(gateway.calls).toContain(`POST /v1/lists/${sprint14.id}/saved-views`);
 
   await page.getByRole('tab', { name: 'Liste' }).click();
   await expect(page).not.toHaveURL(/savedView=/);
-  await expect(page.getByTestId('view-group')).toContainText('Grouper : statut');
+  await expect(page.getByRole('button', { name: /Grouper :/ })).toContainText('Grouper : statut');
 
-  await page.getByTestId('saved-view-tab').click();
+  await page.getByRole('tab', { name: 'Par personne' }).click();
   await expect(page).toHaveURL(/savedView=/);
   await page.reload();
-  await expect(page.getByTestId('view-group')).toContainText('Grouper : assigné');
-  await expect(page.getByTestId('saved-view-tab')).toHaveAttribute('aria-selected', 'true');
+  await expect(page.getByRole('button', { name: /Grouper :/ })).toContainText('Grouper : assigné');
+  await expect(page.getByRole('tab', { name: 'Par personne' })).toHaveAttribute(
+    'aria-selected',
+    'true',
+  );
   expect(errors).toEqual([]);
+});
+
+test('a failed list read can be retried', async ({ page }) => {
+  const gateway = await stubGateway(page, true);
+  await page.goto(`/atelier-nord/l/${sprint14.id}`);
+  await expect(
+    page.getByRole('heading', { name: 'Impossible de charger cette page' }),
+  ).toBeVisible();
+  await page.getByRole('button', { name: 'Réessayer' }).click();
+  await expect(page.getByRole('heading', { name: 'Sprint 14' })).toBeVisible();
+  expect(gateway.calls.filter((call) => call === `GET /v1/lists/${sprint14.id}`)).toHaveLength(2);
 });
 
 test('deleting a list needs its typed name', async ({ page }) => {
@@ -282,11 +302,11 @@ test('deleting a list needs its typed name', async ({ page }) => {
   await page.goto(`/atelier-nord/l/${sprint14.id}`);
   await expect(page.getByTestId('list-description')).toBeVisible();
 
-  await page.getByTestId('list-more').click();
-  await page.getByTestId('list-delete').click();
+  await page.getByRole('button', { name: "Plus d'actions sur la liste" }).click();
+  await page.getByRole('menuitem', { name: 'Supprimer la liste' }).click();
   const dialog = page.getByRole('alertdialog', { name: 'Supprimer la liste « Sprint 14 » ?' });
   await expect(dialog).toBeVisible();
-  const confirm = dialog.getByTestId('list-delete-confirm');
+  const confirm = dialog.getByRole('button', { name: 'Supprimer la liste' });
   await expect(confirm).toHaveAttribute('aria-disabled', 'true');
 
   await dialog.getByRole('textbox').fill('Sprint');

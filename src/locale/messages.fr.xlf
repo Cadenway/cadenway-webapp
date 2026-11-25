@@ -5104,6 +5104,38 @@
           <context context-type="linenumber">27,29</context>
         </context-group>
       </trans-unit>
+      <trans-unit id="spaces.saved.read-failed" datatype="html">
+        <source>Saved views could not be loaded.</source>
+        <target>Impossible de charger les vues enregistrées.</target>
+      </trans-unit>
+      <trans-unit id="spaces.secondary.space-failed" datatype="html">
+        <source>The space could not be loaded.</source>
+        <target>Impossible de charger l’espace.</target>
+      </trans-unit>
+      <trans-unit id="spaces.secondary.counts-failed" datatype="html">
+        <source>The counts could not be loaded.</source>
+        <target>Impossible de charger les comptes.</target>
+      </trans-unit>
+      <trans-unit id="spaces.secondary.grants-failed" datatype="html">
+        <source>The list members could not be loaded.</source>
+        <target>Impossible de charger les membres de la liste.</target>
+      </trans-unit>
+      <trans-unit id="spaces.secondary.members-failed" datatype="html">
+        <source>The members could not be loaded.</source>
+        <target>Impossible de charger les membres.</target>
+      </trans-unit>
+      <trans-unit id="spaces.secondary.labels-failed" datatype="html">
+        <source>The labels could not be loaded.</source>
+        <target>Impossible de charger les étiquettes.</target>
+      </trans-unit>
+      <trans-unit id="spaces.secondary.favorites-failed" datatype="html">
+        <source>The favorites could not be loaded.</source>
+        <target>Impossible de charger les favoris.</target>
+      </trans-unit>
+      <trans-unit id="spaces.secondary.overview-failed" datatype="html">
+        <source>The lists could not be loaded.</source>
+        <target>Impossible de charger les listes.</target>
+      </trans-unit>
       <trans-unit id="spaces.retry" datatype="html">
         <source> Retry </source>
         <target> Réessayer</target>

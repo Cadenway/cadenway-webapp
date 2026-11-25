@@ -41,10 +41,10 @@ belong to Auth.
 
 ## Public entry points
 
-| Entry point               | Consumers                                          |
-| ------------------------- | -------------------------------------------------- |
-| `workspace.routes`        | app                                                |
-| `ports/workspace-context` | home, errors, account, search, inbox, organization |
+| Entry point               | Consumers                                                  |
+| ------------------------- | ---------------------------------------------------------- |
+| `workspace.routes`        | app                                                        |
+| `ports/workspace-context` | home, errors, account, search, inbox, organization, spaces |
 
 `ports/workspace-context` publishes `WORKSPACE_CONTEXT` (`WorkspaceContextPort`: `user`,
 `organization`, `role` and `can(role)`) and the `WorkspaceUser`, `WorkspaceOrganization` and

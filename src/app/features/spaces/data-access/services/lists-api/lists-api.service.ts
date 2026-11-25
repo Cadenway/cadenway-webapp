@@ -29,6 +29,7 @@ import type {
 import type { LookIcon } from '../../../models/look/look.type';
 import type { SavedView, ViewLayout } from '../../../models/saved-view/saved-view.interface';
 import type { ListSummary, TaskList } from '../../../models/task-list/task-list.interface';
+import { abortableRead } from '../../utils/abortable-read/abortable-read.util';
 import { toRouteError } from '../../adapters/route-error/route-error.adapter';
 import {
   toBulkTaskAction,
@@ -205,12 +206,13 @@ export class ListsApi {
    * Reads a list, the primary read of its page.
    *
    * @param {string} listId - The list.
+   * @param {AbortSignal | undefined} signal - Cancels a superseded read.
    * @returns {Promise<TaskList>} The list.
    * @throws {Error} The typed route error of the failure.
    */
-  public async list(listId: string): Promise<TaskList> {
+  public async list(listId: string, signal?: AbortSignal): Promise<TaskList> {
     try {
-      return toTaskList(await firstValueFrom(this.lists.getList(listId)));
+      return toTaskList(await abortableRead(this.lists.getList(listId), signal));
     } catch (error: unknown) {
       throw toRouteError(error, 'list', listId);
     }
@@ -224,11 +226,13 @@ export class ListsApi {
    *
    * @param {string} listId - The list.
    * @param {string} today - The caller's date, `YYYY-MM-DD`.
+   * @param {AbortSignal | undefined} signal - Cancels a superseded read.
    * @returns {Promise<ListSummary>} The list with its counts.
    */
-  public async counts(listId: string, today: string): Promise<ListSummary> {
-    const summary: ListSummaryDto = await firstValueFrom(
+  public async counts(listId: string, today: string, signal?: AbortSignal): Promise<ListSummary> {
+    const summary: ListSummaryDto = await abortableRead(
       this.lists.getListCounts(listId, { today }, { cache: 'no-store' }),
+      signal,
     );
     return toListSummary(summary);
   }
@@ -240,11 +244,13 @@ export class ListsApi {
    * Counts the milestones of a list, subtasks included, for « Jalons n ».
    *
    * @param {string} listId - The list.
+   * @param {AbortSignal | undefined} signal - Cancels a superseded read.
    * @returns {Promise<number>} The count.
    */
-  public async milestoneCount(listId: string): Promise<number> {
-    const page: TaskSummaryPage = await firstValueFrom(
+  public async milestoneCount(listId: string, signal?: AbortSignal): Promise<number> {
+    const page: TaskSummaryPage = await abortableRead(
       this.queries.queryListTasks(listId, { milestone: true, level: 'all', limit: 1 }),
+      signal,
     );
     return page.total;
   }
@@ -257,16 +263,19 @@ export class ListsApi {
    * a directory the caller may not read leaves the names unknown.
    *
    * @param {string} listId - The list.
+   * @param {AbortSignal | undefined} signal - Cancels a superseded read.
    * @returns {Promise<ListMembers>} The members and their total.
    */
-  public async listMembers(listId: string): Promise<ListMembers> {
-    const grants: GrantPage = await firstValueFrom(
+  public async listMembers(listId: string, signal?: AbortSignal): Promise<ListMembers> {
+    const grants: GrantPage = await abortableRead(
       this.access.listListGrants(listId, { limit: MEMBER_PREVIEW }),
+      signal,
     );
     const names: Map<string, string> = new Map<string, string>();
     try {
-      const directory: MemberPage = await firstValueFrom(
+      const directory: MemberPage = await abortableRead(
         this.members.listMembers({ limit: PAGE_LIMIT }),
+        signal,
       );
       for (const member of directory.items) names.set(member.userId, member.name);
     } catch {
@@ -282,16 +291,51 @@ export class ListsApi {
   }
 
   /**
+   * Method organizationMembers
+   *
+   * @description
+   * Reads every member for assignee choices and labels.
+   *
+   * @param {AbortSignal | undefined} signal - Cancels a superseded read.
+   * @returns {Promise<readonly ListMember[]>} The member directory.
+   */
+  public async organizationMembers(signal?: AbortSignal): Promise<readonly ListMember[]> {
+    const items: ListMember[] = [];
+    let cursor: string | undefined;
+    do {
+      const page: MemberPage = await abortableRead(
+        this.members.listMembers({ limit: PAGE_LIMIT, ...(cursor ? { cursor } : {}) }),
+        signal,
+      );
+      items.push(
+        ...page.items.map((member): ListMember => ({ userId: member.userId, name: member.name })),
+      );
+      cursor = page.nextCursor ?? undefined;
+    } while (cursor);
+    return items;
+  }
+
+  /**
    * Method labels
    *
    * @description
    * Reads the labels of the tasks the caller sees, for the « Étiquette » filter.
    *
+   * @param {AbortSignal | undefined} signal - Cancels a superseded read.
    * @returns {Promise<readonly string[]>} The labels, alphabetically.
    */
-  public async labels(): Promise<readonly string[]> {
-    const page: LabelPage = await firstValueFrom(this.tasks.listLabels({ limit: PAGE_LIMIT }));
-    return page.items.map((label: LabelPage['items'][number]): string => label.name);
+  public async labels(signal?: AbortSignal): Promise<readonly string[]> {
+    const items: string[] = [];
+    let cursor: string | undefined;
+    do {
+      const page: LabelPage = await abortableRead(
+        this.tasks.listLabels({ limit: PAGE_LIMIT, ...(cursor ? { cursor } : {}) }),
+        signal,
+      );
+      items.push(...page.items.map((label: LabelPage['items'][number]): string => label.name));
+      cursor = page.nextCursor ?? undefined;
+    } while (cursor);
+    return items;
   }
 
   /**
@@ -383,14 +427,16 @@ export class ListsApi {
    * Reads every saved view of a list, in creation order.
    *
    * @param {string} listId - The list.
+   * @param {AbortSignal | undefined} signal - Cancels a superseded read.
    * @returns {Promise<readonly SavedView[]>} The views.
    */
-  public async savedViews(listId: string): Promise<readonly SavedView[]> {
+  public async savedViews(listId: string, signal?: AbortSignal): Promise<readonly SavedView[]> {
     const items: SavedViewDto[] = [];
     let cursor: string | undefined;
     do {
-      const page: SavedViewPage = await firstValueFrom(
+      const page: SavedViewPage = await abortableRead(
         this.lists.listSavedViews(listId, { limit: PAGE_LIMIT, ...(cursor ? { cursor } : {}) }),
+        signal,
       );
       items.push(...page.items);
       cursor = page.nextCursor ?? undefined;

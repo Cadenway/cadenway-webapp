@@ -12,6 +12,7 @@ import { SpacesApi } from '../../data-access/services/spaces-api/spaces-api.serv
 import type { MilestonePage } from '../../models/milestone/milestone.interface';
 import type { Space } from '../../models/space/space.interface';
 import type { SpaceOverview } from '../../models/task-list/task-list.interface';
+import { SpacesNavigationStore } from '../spaces-navigation/spaces-navigation.store';
 import { todayIso } from '../../utils/calendar-date/calendar-date.util';
 
 /**
@@ -114,6 +115,7 @@ function createSpaceOverviewStore(): Type<SpaceOverviewStoreInstance> {
     withState<SpaceOverviewState>({ spaceId: null }),
     withProps((store) => {
       const api: SpacesApi = inject(SpacesApi);
+      const navigation: InstanceType<typeof SpacesNavigationStore> = inject(SpacesNavigationStore);
       const bySpace: () => { spaceId: string } | undefined = () => {
         const spaceId: string | null = store.spaceId();
         return spaceId === null ? undefined : { spaceId };
@@ -121,18 +123,38 @@ function createSpaceOverviewStore(): Type<SpaceOverviewStoreInstance> {
       return {
         space: resource({
           params: bySpace,
-          loader: ({ params }: { params: { spaceId: string } }): Promise<Space> =>
-            api.space(params.spaceId),
+          loader: ({
+            params,
+            abortSignal,
+          }: {
+            params: { spaceId: string };
+            abortSignal: AbortSignal;
+          }): Promise<Space> => api.space(params.spaceId, abortSignal),
         }),
         overview: resource({
           params: bySpace,
-          loader: ({ params }: { params: { spaceId: string } }): Promise<SpaceOverview> =>
-            api.overview(params.spaceId, todayIso()),
+          loader: ({
+            params,
+            abortSignal,
+          }: {
+            params: { spaceId: string };
+            abortSignal: AbortSignal;
+          }): Promise<SpaceOverview> =>
+            navigation.overviews.status() === 'resolved' &&
+            navigation.overviews.hasValue() &&
+            params.spaceId in navigation.overviews.value()
+              ? Promise.resolve(navigation.overviews.value()[params.spaceId])
+              : api.overview(params.spaceId, todayIso(), abortSignal),
         }),
         milestones: resource({
           params: bySpace,
-          loader: ({ params }: { params: { spaceId: string } }): Promise<MilestonePage> =>
-            api.milestones(params.spaceId),
+          loader: ({
+            params,
+            abortSignal,
+          }: {
+            params: { spaceId: string };
+            abortSignal: AbortSignal;
+          }): Promise<MilestonePage> => api.milestones(params.spaceId, abortSignal),
         }),
       };
     }),

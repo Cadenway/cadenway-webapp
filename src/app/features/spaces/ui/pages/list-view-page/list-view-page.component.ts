@@ -130,10 +130,10 @@ export class ListViewPage {
    * @readonly
    */
   protected readonly people: Signal<readonly ViewOption[]> = computed((): readonly ViewOption[] =>
-    this.store.members.hasValue()
-      ? this.store.members
+    this.store.organizationMembers.hasValue()
+      ? this.store.organizationMembers
           .value()
-          .items.filter((member: ListMember): boolean => member.name !== null)
+          .filter((member: ListMember): boolean => member.name !== null)
           .map((member: ListMember): ViewOption => ({
             value: member.userId,
             label: member.name ?? '',

@@ -251,17 +251,13 @@ export class SpacesSidebar {
    * Property favorites
    *
    * @description
-   * Favorite lists and saved views, in insertion order.
+   * Favorite spaces, lists and saved views, in insertion order.
    *
    * @type {Signal<readonly Favorite[]>}
    * @readonly
    */
   protected readonly favorites: Signal<readonly Favorite[]> = computed((): readonly Favorite[] =>
-    this.navigation.favorites.hasValue()
-      ? this.navigation.favorites
-          .value()
-          .filter((favorite: Favorite): boolean => favorite.kind !== 'space')
-      : [],
+    this.navigation.favorites.hasValue() ? this.navigation.favorites.value() : [],
   );
 
   /**
@@ -360,7 +356,6 @@ export class SpacesSidebar {
    * @constructor
    */
   public constructor() {
-    this.navigation.follow(this.slug);
     effect((): void => {
       const listId: string | null = this.currentListId();
       if (listId === null) return;
@@ -416,7 +411,7 @@ export class SpacesSidebar {
     return [
       '/',
       this.slug(),
-      'l',
+      favorite.kind === 'space' ? 'spaces' : 'l',
       favorite.kind === 'saved-view' ? (favorite.listId ?? '') : favorite.targetId,
     ];
   }

@@ -195,7 +195,6 @@ export class SpaceOverviewPage {
    */
   public constructor() {
     this.store.load(this.spaceId);
-    this.navigation.follow(this.slug);
   }
   // #endregion
 

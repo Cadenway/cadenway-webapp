@@ -1,8 +1,17 @@
+import { WORKSPACE_CONTEXT } from '@features/workspace/ports/workspace-context';
+
 import { TestBed } from '@angular/core/testing';
-import { provideRouter, withComponentInputBinding, withRouterConfig } from '@angular/router';
+import {
+  provideRouter,
+  withComponentInputBinding,
+  withErrorBoundaries,
+  withRouterConfig,
+} from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { provideCadenwayIcons } from '@cadenway/icons';
 import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
+
+import { RouteErrorBoundary } from '@features/errors/ui/components/route-error-boundary/route-error-boundary.component';
 
 import { SpacesApi } from '../../../data-access/services/spaces-api/spaces-api.service';
 import type { Space } from '../../../models/space/space.interface';
@@ -83,9 +92,14 @@ describe('SpaceOverviewPage', () => {
         provideRouter(
           [{ path: ':org', children: SPACES_ROUTES }],
           withComponentInputBinding(),
+          withErrorBoundaries({ defaultErrorComponent: RouteErrorBoundary }),
           withRouterConfig({ paramsInheritanceStrategy: 'always' }),
         ),
         SpacesNavigationStore,
+        {
+          provide: WORKSPACE_CONTEXT,
+          useValue: { organization: () => ({ id: 'org-1', slug: 'atelier-nord' }) },
+        },
         { provide: SpacesApi, useValue: api },
       ],
     });
@@ -105,6 +119,39 @@ describe('SpaceOverviewPage', () => {
     harness.detectChanges();
     return harness.routeNativeElement?.querySelector(`[data-testid="${id}"]`)?.textContent ?? '';
   }
+
+  it('reuses a fresh sidebar overview', async () => {
+    const harness: RouterTestingHarness = await RouterTestingHarness.create();
+    TestBed.inject(SpacesNavigationStore);
+    await expect.poll(() => api['overview'].mock.calls.length).toBe(1);
+    await expect.poll(() => TestBed.inject(SpacesNavigationStore).overviews.hasValue()).toBe(true);
+    await harness.navigateByUrl('/atelier-nord/spaces/sp-design');
+    await expect.poll(() => text(harness, 'space-lists')).toContain('Système de design');
+    expect(api['overview']).toHaveBeenCalledTimes(1);
+  });
+
+  it('retries a failed primary space read through the route boundary', async () => {
+    api['space'].mockRejectedValueOnce(new Error('unavailable'));
+    const harness: RouterTestingHarness = await RouterTestingHarness.create(
+      '/atelier-nord/spaces/sp-design',
+    );
+    await expect
+      .poll(() => {
+        harness.detectChanges();
+        return harness.routeNativeElement?.textContent;
+      })
+      .toContain('Réessayer');
+    [...document.querySelectorAll('button')]
+      .find((button) => button.textContent.includes('Réessayer'))
+      ?.click();
+    await expect
+      .poll(() => {
+        harness.detectChanges();
+        return api['space'].mock.calls.length;
+      })
+      .toBe(2);
+    await expect.poll(() => text(harness, 'space-lists')).toContain('Système de design');
+  });
 
   it('shows the list cards with their counts', async () => {
     const harness: RouterTestingHarness = await RouterTestingHarness.create(

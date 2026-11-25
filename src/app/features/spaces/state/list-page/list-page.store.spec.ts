@@ -8,7 +8,7 @@ import { AccessDeniedRouteError } from '@shared/route-errors';
 import { ListsApi } from '../../data-access/services/lists-api/lists-api.service';
 import { SpacesApi } from '../../data-access/services/spaces-api/spaces-api.service';
 import type { SavedView } from '../../models/saved-view/saved-view.interface';
-import type { TaskList } from '../../models/task-list/task-list.interface';
+import type { ListSummary, TaskList } from '../../models/task-list/task-list.interface';
 import { DEFAULT_VIEW_CONFIG } from '../../utils/list-view-query/list-view-query.util';
 import { ListPageStore } from './list-page.store';
 
@@ -79,6 +79,7 @@ describe('ListPageStore', () => {
       ),
       milestoneCount: vi.fn(() => Promise.resolve(2)),
       listMembers: vi.fn(() => Promise.resolve({ items: [], total: 0 })),
+      organizationMembers: vi.fn(() => Promise.resolve([{ userId: 'u1', name: 'Inès Robert' }])),
       labels: vi.fn(() => Promise.resolve(['Auth', 'Front'])),
       savedViews: vi.fn(() => Promise.resolve([bugsCritiques])),
       rename: vi.fn(),
@@ -134,9 +135,51 @@ describe('ListPageStore', () => {
     expect(watch).toHaveBeenCalledWith({ kind: 'list', listId: 'l-sprint14' });
     const calls: number = api['counts'].mock.calls.length;
 
-    notices.next({ id: 'n1', type: 'task.updated', at: '2026-11-08T09:00:00Z', data: {} });
+    notices.next({
+      id: 'n1',
+      type: 'task.updated',
+      at: '2026-11-08T09:00:00Z',
+      data: { listId: 'l-sprint14' },
+    });
     await expect.poll(() => api['counts'].mock.calls.length).toBe(calls + 1);
     expect(api['milestoneCount']).toHaveBeenCalledTimes(2);
+  });
+
+  it('ignores unrelated notices and debounces matching notices', async () => {
+    await loaded();
+    const notice: RealtimeChange = {
+      id: 'n1',
+      type: 'task.updated',
+      at: '2026-11-08T09:00:00Z',
+      data: { listId: 'other' },
+    };
+    notices.next(notice);
+    await new Promise<void>((resolve) => {
+      setTimeout(resolve, 350);
+    });
+    expect(api['counts']).toHaveBeenCalledTimes(1);
+    notices.next({ ...notice, data: { listId: 'l-sprint14' } });
+    notices.next({ ...notice, data: { spaceId: 'sp-produit' } });
+    await expect.poll(() => api['counts'].mock.calls.length).toBe(2);
+    expect(api['milestoneCount']).toHaveBeenCalledTimes(2);
+  });
+
+  it('retains counts and queues one refresh while a read is running', async () => {
+    await loaded();
+    const original: ListSummary | undefined = store.counts.value();
+    let finish: (value: unknown) => void = () => undefined;
+    api['counts'].mockReturnValueOnce(
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+    );
+    store.refreshCounts();
+    await expect.poll(() => api['counts'].mock.calls.length).toBe(2);
+    store.refreshCounts();
+    store.refreshCounts();
+    expect(store.counts.value()).toEqual(original);
+    finish(original);
+    await expect.poll(() => api['counts'].mock.calls.length).toBe(3);
   });
 
   it('shows a new name at once and restores it when the rename is refused', async () => {
@@ -183,6 +226,36 @@ describe('ListPageStore', () => {
       'sv-3',
       'sv-2',
     ]);
+  });
+
+  it('does not apply a saved view write after switching lists', async () => {
+    await loaded();
+    let finishDuplicate: (view: SavedView) => void = () => undefined;
+    let finishUpdate: (view: SavedView) => void = () => undefined;
+    api['duplicateSavedView'].mockReturnValueOnce(
+      new Promise<SavedView>((resolve) => {
+        finishDuplicate = resolve;
+      }),
+    );
+    api['updateSavedView'].mockReturnValueOnce(
+      new Promise<SavedView>((resolve) => {
+        finishUpdate = resolve;
+      }),
+    );
+    const duplicate: Promise<SavedView | null> = store.duplicateView(bugsCritiques);
+    const update: Promise<SavedView | null> = store.renameView(bugsCritiques, {
+      name: 'Changed',
+      icon: null,
+    });
+    api['savedViews'].mockResolvedValueOnce([]);
+    store.load('l-other');
+    await expect
+      .poll(() => store.savedViews.hasValue() && store.savedViews.value().length === 0)
+      .toBe(true);
+    finishDuplicate({ ...bugsCritiques, id: 'copy' });
+    finishUpdate({ ...bugsCritiques, name: 'Changed' });
+    await Promise.all([duplicate, update]);
+    expect(store.savedViews.value()).toEqual([]);
   });
 
   it('reads the counts again after a bulk action and reports a refusal', async () => {

@@ -1,13 +1,23 @@
-import { inject, resource, type ResourceRef, type Signal, type Type } from '@angular/core';
+import {
+  computed,
+  inject,
+  resource,
+  type ResourceRef,
+  type Signal,
+  type Type,
+} from '@angular/core';
 import {
   patchState,
   signalMethod,
   signalStore,
   withComputed,
+  withHooks,
   withMethods,
   withProps,
   withState,
 } from '@ngrx/signals';
+
+import { WORKSPACE_CONTEXT } from '@features/workspace/ports/workspace-context';
 
 import { SpacesApi } from '../../data-access/services/spaces-api/spaces-api.service';
 import type { Favorite, FavoriteKind } from '../../models/favorite/favorite.interface';
@@ -35,26 +45,15 @@ interface SpacesNavigationState {
   readonly expanded: Readonly<Record<string, boolean>>;
 
   /**
-   * Property _slug
+   * Property _organizationId
    *
    * @description
-   * Organization slug the reads belong to, or null before the first one.
+   * Organization id the reads belong to, or null before the first one.
    *
    * @type {string | null}
    * @readonly
    */
-  readonly _slug: string | null;
-
-  /**
-   * Property _revision
-   *
-   * @description
-   * Bumped to read the spaces and their counts again.
-   *
-   * @type {number}
-   * @readonly
-   */
-  readonly _revision: number;
+  readonly _organizationId: string | null;
   // #endregion
 }
 
@@ -127,11 +126,11 @@ interface SpacesNavigationStoreInstance {
    * Method follow
    *
    * @description
-   * Follows the organization of the route; a new slug clears the open spaces and reads again.
+   * Follows the committed organization; a switch clears the open spaces and reads again.
    *
-   * @param {Signal<string> | string} slug - Organization slug.
+   * @param {Signal<string> | string} organizationId - Organization id.
    */
-  follow(slug: Signal<string> | string): void;
+  follow(organizationId: Signal<string> | string): void;
 
   /**
    * Method setExpanded
@@ -188,7 +187,7 @@ interface SpacesNavigationStoreInstance {
  *
  * @type {SpacesNavigationState}
  */
-const initialState: SpacesNavigationState = { expanded: {}, _slug: null, _revision: 0 };
+const initialState: SpacesNavigationState = { expanded: {}, _organizationId: null };
 
 /**
  * Function createSpacesNavigationStore
@@ -205,13 +204,15 @@ function createSpacesNavigationStore(): Type<SpacesNavigationStoreInstance> {
       const api: SpacesApi = inject(SpacesApi);
       const spaces: ResourceRef<readonly Space[] | undefined> = resource({
         params: () => {
-          const slug: string | null = store._slug();
-          return slug === null ? undefined : { slug, revision: store._revision() };
+          const organizationId: string | null = store._organizationId();
+          return organizationId === null ? undefined : { organizationId };
         },
-        loader: (): Promise<readonly Space[]> => api.spaces(),
+        loader: ({ abortSignal }: { abortSignal: AbortSignal }): Promise<readonly Space[]> =>
+          api.spaces(abortSignal),
       });
       return {
         _api: api,
+        _workspace: inject(WORKSPACE_CONTEXT),
         spaces,
         overviews: resource({
           params: () =>
@@ -220,26 +221,36 @@ function createSpacesNavigationStore(): Type<SpacesNavigationStoreInstance> {
               : undefined,
           loader: async ({
             params,
+            abortSignal,
           }: {
             params: { ids: readonly string[] };
+            abortSignal: AbortSignal;
           }): Promise<Readonly<Record<string, SpaceOverview>>> => {
             const today: string = todayIso();
-            const settled: PromiseSettledResult<SpaceOverview>[] = await Promise.allSettled(
-              params.ids.map((id: string): Promise<SpaceOverview> => api.overview(id, today)),
-            );
             const byId: Record<string, SpaceOverview> = {};
-            for (const result of settled) {
-              if (result.status === 'fulfilled') byId[result.value.spaceId] = result.value;
+            for (let offset: number = 0; offset < params.ids.length; offset += 4) {
+              abortSignal.throwIfAborted();
+              const settled: PromiseSettledResult<SpaceOverview>[] = await Promise.allSettled(
+                params.ids
+                  .slice(offset, offset + 4)
+                  .map((id: string): Promise<SpaceOverview> =>
+                    api.overview(id, today, abortSignal),
+                  ),
+              );
+              for (const result of settled) {
+                if (result.status === 'fulfilled') byId[result.value.spaceId] = result.value;
+              }
             }
             return byId;
           },
         }),
         favorites: resource({
           params: () => {
-            const slug: string | null = store._slug();
-            return slug === null ? undefined : { slug };
+            const organizationId: string | null = store._organizationId();
+            return organizationId === null ? undefined : { organizationId };
           },
-          loader: (): Promise<readonly Favorite[]> => api.favorites(),
+          loader: ({ abortSignal }: { abortSignal: AbortSignal }): Promise<readonly Favorite[]> =>
+            api.favorites(abortSignal),
         }),
       };
     }),
@@ -264,16 +275,42 @@ function createSpacesNavigationStore(): Type<SpacesNavigationStoreInstance> {
     withMethods((store) => {
       const currentFavorites: () => readonly Favorite[] = () =>
         store.favorites.hasValue() ? store.favorites.value() : [];
+      let refreshQueued: boolean = false;
+      let overviewRefreshQueued: boolean = false;
+      const pending: Map<
+        string,
+        { desired: boolean; confirmed: Favorite | undefined; promise: Promise<boolean> }
+      > = new Map<
+        string,
+        { desired: boolean; confirmed: Favorite | undefined; promise: Promise<boolean> }
+      >();
       return {
-        follow: signalMethod<string>((slug: string): void => {
-          if (slug === store._slug()) return;
-          patchState(store, { _slug: slug, expanded: {}, _revision: store._revision() + 1 });
+        _flushRefresh: signalMethod<string>((status: string): void => {
+          if (status !== 'loading' && status !== 'reloading' && refreshQueued) {
+            refreshQueued = false;
+            store.spaces.reload();
+          }
+        }),
+        _flushOverviews: signalMethod<string>((status: string): void => {
+          if (status !== 'loading' && status !== 'reloading' && overviewRefreshQueued) {
+            overviewRefreshQueued = false;
+            store.overviews.reload();
+          }
+        }),
+        follow: signalMethod<string>((organizationId: string): void => {
+          if (organizationId === store._organizationId()) return;
+          patchState(store, {
+            _organizationId: organizationId,
+            expanded: {},
+          });
         }),
         setExpanded(spaceId: string, open: boolean): void {
           patchState(store, { expanded: { ...store.expanded(), [spaceId]: open } });
         },
         refresh(): void {
-          patchState(store, { _revision: store._revision() + 1 });
+          if (!store.spaces.reload() && store.spaces.isLoading()) refreshQueued = true;
+          if (!store.overviews.reload() && store.overviews.isLoading())
+            overviewRefreshQueued = true;
         },
         favoriteOf(kind: FavoriteKind, targetId: string): Favorite | undefined {
           return currentFavorites().find(
@@ -287,45 +324,75 @@ function createSpacesNavigationStore(): Type<SpacesNavigationStoreInstance> {
           name: string,
           on: boolean,
         ): Promise<boolean> {
-          const slug: string | null = store._slug();
+          const organizationId: string | null = store._organizationId();
+          const key: string = `${organizationId ?? ''}:${kind}:${targetId}`;
           const existing: Favorite | undefined = currentFavorites().find(
             (favorite: Favorite): boolean =>
               favorite.kind === kind && favorite.targetId === targetId,
           );
-          if (on === (existing !== undefined)) return true;
+          const active:
+            | { desired: boolean; confirmed: Favorite | undefined; promise: Promise<boolean> }
+            | undefined = pending.get(key);
+          if (!active && on === (existing !== undefined)) return true;
           const pendingId: string = `pending:${kind}:${targetId}`;
-          const without: (favorites: readonly Favorite[], id: string) => readonly Favorite[] = (
-            favorites,
-            id,
-          ) => favorites.filter((favorite: Favorite): boolean => favorite.id !== id);
-          if (on) {
-            store.favorites.set([
-              ...currentFavorites(),
-              { id: pendingId, kind, targetId, name, listId: null },
-            ]);
-          } else if (existing) {
-            store.favorites.set(without(currentFavorites(), existing.id));
+          const show: (favorite: Favorite | undefined) => void = (
+            favorite: Favorite | undefined,
+          ): void => {
+            if (organizationId !== store._organizationId()) return;
+            const rest: readonly Favorite[] = currentFavorites().filter(
+              (item: Favorite): boolean => item.kind !== kind || item.targetId !== targetId,
+            );
+            store.favorites.set(favorite ? [...rest, favorite] : rest);
+          };
+          if (active) {
+            active.desired = on;
+            show(
+              on
+                ? (active.confirmed ?? { id: pendingId, kind, targetId, name, listId: null })
+                : undefined,
+            );
+            return active.promise;
           }
-          try {
-            if (on) {
-              const created: Favorite | null = await store._api.addFavorite(kind, targetId);
-              if (slug === store._slug()) {
-                const rest: readonly Favorite[] = without(currentFavorites(), pendingId);
-                store.favorites.set(created ? [...rest, created] : rest);
+          const operation: {
+            desired: boolean;
+            confirmed: Favorite | undefined;
+            promise: Promise<boolean>;
+          } = { desired: on, confirmed: existing, promise: Promise.resolve(true) };
+          pending.set(key, operation);
+          show(on ? { id: pendingId, kind, targetId, name, listId: null } : undefined);
+          operation.promise = (async (): Promise<boolean> => {
+            try {
+              while (operation.desired !== (operation.confirmed !== undefined)) {
+                if (operation.desired) {
+                  operation.confirmed = (await store._api.addFavorite(kind, targetId)) ?? undefined;
+                  if (!operation.confirmed) throw new Error('Favorite was not created');
+                } else if (operation.confirmed) {
+                  await store._api.removeFavorite(operation.confirmed.id);
+                  operation.confirmed = undefined;
+                }
+                show(operation.desired ? operation.confirmed : undefined);
               }
-            } else if (existing) {
-              await store._api.removeFavorite(existing.id);
+              return true;
+            } catch {
+              show(operation.confirmed);
+              return false;
+            } finally {
+              pending.delete(key);
             }
-            return true;
-          } catch {
-            if (slug === store._slug()) {
-              if (on) store.favorites.set(without(currentFavorites(), pendingId));
-              else if (existing) store.favorites.set([...currentFavorites(), existing]);
-            }
-            return false;
-          }
+          })();
+          return operation.promise;
         },
       };
+    }),
+    withHooks({
+      onInit(store): void {
+        const organizationId: Signal<string> = computed(
+          (): string => store._workspace.organization().id,
+        );
+        store.follow(organizationId);
+        store._flushRefresh(store.spaces.status);
+        store._flushOverviews(store.overviews.status);
+      },
     }),
   );
 }
@@ -336,9 +403,9 @@ function createSpacesNavigationStore(): Type<SpacesNavigationStoreInstance> {
  * @description
  * The spaces navigation of a workspace, provided on `/:org` by `provideSpacesNavigation()` so the
  * sidebar, the sprint progress and the list screens share one read. Keyed on the organization
- * slug the sidebar follows: a new slug closes every space and reads again. The counts of every
- * space are read in parallel, one overview per space, and a space whose read fails shows no
- * count. Favorites change optimistically; a refusal restores the previous list.
+ * id committed by the workspace. A switch closes every space and reads again. At most four
+ * overviews run at once; a failed read offers an inline retry. Favorites change optimistically;
+ * a refusal restores the previous list.
  *
  * @type {ReturnType<typeof createSpacesNavigationStore>}
  */

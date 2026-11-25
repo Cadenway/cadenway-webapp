@@ -39,6 +39,7 @@ import type {
 } from '../../../models/saved-view/saved-view.interface';
 import type { Space, SpaceStatusOption } from '../../../models/space/space.interface';
 import type { TaskList } from '../../../models/task-list/task-list.interface';
+import type { ListMember } from '../../../models/list-member/list-member.interface';
 import type { ViewOption } from '../../../models/view-option/view-option.interface';
 import { ListPageStore } from '../../../state/list-page/list-page.store';
 import { ListViewStore } from '../../../state/list-view/list-view.store';
@@ -357,6 +358,27 @@ export class ListPage {
   protected readonly layoutNames: Readonly<Record<ViewLayout, string>> = layoutLabels();
 
   /**
+   * Property people
+   *
+   * @description
+   * Member choices and labels for assignee filters.
+   *
+   * @type {Signal<readonly ViewOption[]>}
+   * @readonly
+   */
+  protected readonly people: Signal<readonly ViewOption[]> = computed((): readonly ViewOption[] =>
+    this.store.organizationMembers.hasValue()
+      ? this.store.organizationMembers
+          .value()
+          .filter((member: ListMember): boolean => member.name !== null)
+          .map((member: ListMember): ViewOption => ({
+            value: member.userId,
+            label: member.name ?? '',
+          }))
+      : [],
+  );
+
+  /**
    * Property favorite
    *
    * @description
@@ -481,8 +503,8 @@ export class ListPage {
    * @constructor
    */
   public constructor() {
+    if (this.store.list.error()) this.store.list.reload();
     this.store.load(this.listId);
-    this.navigation.follow(this.slug);
     this.sidebar?.claimToggle(inject(DestroyRef));
 
     let previousList: string | null = null;

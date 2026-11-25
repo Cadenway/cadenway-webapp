@@ -57,14 +57,14 @@ breadcrumb, dialog, inline edit, toolbar).
 
 - Stores and scopes:
   - `SpacesNavigationStore`, route-scoped on `/:org` (`provideSpacesNavigation()`): the spaces,
-    one overview per space read in parallel (a failed one shows no count), the favorites and the
-    open spaces. Keyed on the `:org` slug the sidebar follows: a new slug closes every space and
+    one overview per space read at most four at a time (a failed one offers Retry), the favorites and the
+    open spaces. Keyed on the committed organization id: a switch closes every space and
     reads again. Favorites change optimistically and a refusal restores the previous list. The
     current sprint is the first sprint, in sidebar order, whose dates hold the caller's today.
   - `ListPageStore`, route-scoped on `l/:listId`: the list (primary read) and its space, counts,
     milestone count, members, labels and saved views (secondary reads), the header's and the
     selection bar's writes. It watches the list's realtime room while the page lives; since the
-    gateway broadcasts every notice to every watch, any notice reads the counts again.
+    gateway broadcasts notices to every watch, it filters by list or space and debounces count refreshes.
   - `ListViewStore`, route-scoped on `l/:listId`: filters, sort, grouping, subtask display, search,
     « Jalons » and the applied saved view. It exposes `taskQuery` (the `queryListTasks` body
     without cursor and limit) and `groupQuery` (the `countTaskGroups` parameters, null when not
@@ -78,8 +78,7 @@ breadcrumb, dialog, inline edit, toolbar).
   a `400` (malformed id) is not found; anything else is unavailable with its status and reference.
 - The sidebar's counts come from `getSpaceOverview`, one call per space, which the contract
   designates for the sidebar; `getListCounts` serves the list header.
-- Every shell contribution reads the slug from the `:org` route (`ActivatedRoute`), not from
-  `WORKSPACE_CONTEXT`.
+- Shell contributions and pages take link slugs from the committed `WORKSPACE_CONTEXT`.
 - The list page claims the shell's sidebar toggle (`claimToggle`) and renders it in its breadcrumb
   row while the sidebar is collapsed.
 - The dismissed suggestions are kept in browser storage under `cadenway-tips`, as in the mockup.
@@ -88,6 +87,13 @@ breadcrumb, dialog, inline edit, toolbar).
   view's filters, sort and level.
 - « Créer une tâche » emits `taskCreated` from `ViewTools`; the next pass opens the task feature's
   creation dialog. `ListViewPage` holds the selection the rows pass fills.
+
+## Gateway follow-up
+
+`listSpaces`, `getSpaceOverview`, favorites, `getListCounts`, saved views, `listLabels`,
+`listMembers` and `listListGrants` are not yet pinned by the gateway. They await B20
+(`cadenway-api-contracts#118`, then the gateway); afterward the webapp adds them to
+`ORGANIZATION_PIN_OPERATIONS`.
 
 ## Known gaps
 
@@ -99,17 +105,22 @@ breadcrumb, dialog, inline edit, toolbar).
 - `cw-tabs` of `@cadenway/ui` 0.7.0 reads the required value of a tab that is not bound yet when
   no earlier tab is active (NG0950): `ViewTabs` activates a saved view's tab only from the render
   after its creation. To fix in the design system.
+- « Modifier la liste » uses inline editing until the list edit dialog in step 4b.
+- Bulk selections over 50 must be chunked in the rows pass.
+- Realtime notices without a list or space id cannot be attributed to the open list and do not
+  refresh its counts; the notice contract needs to include that context.
 - The filter dialog does not count the visible tasks (« n sur m tâches »): the rows pass reads them.
 
 ## Copy not taken word for word from the mockup
 
-| Unit                                                                                                                        | Reason                                                                     |
-| --------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
-| `spaces.retry`, `spaces.sidebar.failed`, `spaces.overview.milestones-failed`                                                | The mockup draws no failed read.                                           |
-| `spaces.favorite.failed`, `spaces.list.*-failed`, `spaces.saved.failed`, `spaces.saved.delete-failed`, `spaces.bulk.failed` | The mockup draws no refused write.                                         |
-| `spaces.list.export-failed`                                                                                                 | Taken from the mockup's « Export impossible ici » title only.              |
-| `spaces.labels.*`                                                                                                           | The bricks' own French defaults, which the mockup does not show as copy.   |
-| `spaces.sidebar.overview`                                                                                                   | The mockup's « Vue d’ensemble de … », with the space name.                 |
-| `spaces.list-view.region`, `spaces.sprint-progress.label`, `spaces.saved.modified-group`                                    | Accessible names of regions the mockup names differently or does not name. |
-| `spaces.route.overview`, `spaces.route.list`                                                                                | Route titles.                                                              |
-| `spaces.tips.*`                                                                                                             | Two of the five suggestions: the others need integrations or seat counts.  |
+| Unit                                                                                                                           | Reason                                                                     |
+| ------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------- |
+| `spaces.retry`, `spaces.sidebar.failed`, `spaces.overview.milestones-failed`, `spaces.secondary.*`, `spaces.saved.read-failed` | The mockup draws no failed read.                                           |
+| `spaces.favorite.failed`, `spaces.list.*-failed`, `spaces.saved.failed`, `spaces.saved.delete-failed`, `spaces.bulk.failed`    | The mockup draws no refused write.                                         |
+| `spaces.save-view.name-required`                                                                                               | The mockup disables the save button rather than showing an error.          |
+| `spaces.list.export-failed`                                                                                                    | Taken from the mockup's « Export impossible ici » title only.              |
+| `spaces.labels.*`                                                                                                              | The bricks' own French defaults, which the mockup does not show as copy.   |
+| `spaces.sidebar.overview`                                                                                                      | The mockup's « Vue d’ensemble de … », with the space name.                 |
+| `spaces.list-view.region`, `spaces.sprint-progress.label`, `spaces.saved.modified-group`                                       | Accessible names of regions the mockup names differently or does not name. |
+| `spaces.route.overview`, `spaces.route.list`                                                                                   | Route titles.                                                              |
+| `spaces.tips.*`                                                                                                                | Two of the five suggestions: the others need integrations or seat counts.  |

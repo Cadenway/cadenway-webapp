@@ -4,10 +4,13 @@
     <cw-list-header
       [list]="list"
       [space]="space()"
+      [spaceFailed]="!!store.space.error()"
+      [countsFailed]="!!store.counts.error()"
       [spaceLink]="spaceLink(list)"
       [counts]="store.counts.hasValue() ? store.counts.value().counts : null"
       [sprintRange]="sprintRange(list)"
       [favorite]="favorite()"
+      [exportDisabled]="!!savedView() && view.savedView()?.id !== savedView()"
       [members]="store.members.hasValue() ? store.members.value() : null"
       [showSidebarToggle]="sidebar !== null && !sidebar.expanded()"
       [saving]="renaming()"
@@ -22,52 +25,137 @@
       (deleteRequested)="deleteOpen.set(true)"
     />
 
-    <cw-view-tabs
-      [layouts]="layouts"
-      [layout]="view.layout()"
-      [savedViews]="store.savedViews.hasValue() ? store.savedViews.value() : []"
-      [activeViewId]="view.savedView()?.id ?? null"
-      [modified]="view.modified()"
-      [canEdit]="canEdit()"
-      (layoutPicked)="pickLayout($event)"
-      (savedPicked)="pickSaved($event)"
-      (saveRequested)="openSaveDialog()"
-      (settingsSaved)="saveSettings()"
-      (reverted)="revert($event)"
-      (renameRequested)="openRenameDialog($event)"
-      (duplicated)="duplicateView($event)"
-      (deleted)="deleteView($event)"
-    />
+    @if (store.space.error()) {
+      <div role="alert">
+        <span i18n="@@spaces.secondary.space-failed">The space could not be loaded.</span>
+        <button
+          cwButton
+          variant="outline"
+          size="xs"
+          (click)="store.space.reload()"
+          i18n="@@spaces.retry"
+        >
+          Retry
+        </button>
+      </div>
+    }
+    @if (store.counts.error()) {
+      <div role="alert">
+        <span i18n="@@spaces.secondary.counts-failed">The counts could not be loaded.</span>
+        <button
+          cwButton
+          variant="outline"
+          size="xs"
+          (click)="store.counts.reload()"
+          i18n="@@spaces.retry"
+        >
+          Retry
+        </button>
+      </div>
+    }
+    @if (store.members.error()) {
+      <div role="alert">
+        <span i18n="@@spaces.secondary.grants-failed">The list members could not be loaded.</span>
+        <button
+          cwButton
+          variant="outline"
+          size="xs"
+          (click)="store.members.reload()"
+          i18n="@@spaces.retry"
+        >
+          Retry
+        </button>
+      </div>
+    }
+    @if (store.organizationMembers.error()) {
+      <div role="alert">
+        <span i18n="@@spaces.secondary.members-failed">The members could not be loaded.</span>
+        <button
+          cwButton
+          variant="outline"
+          size="xs"
+          (click)="store.organizationMembers.reload()"
+          i18n="@@spaces.retry"
+        >
+          Retry
+        </button>
+      </div>
+    }
+    @if (store.labels.error()) {
+      <div role="alert">
+        <span i18n="@@spaces.secondary.labels-failed">The labels could not be loaded.</span>
+        <button
+          cwButton
+          variant="outline"
+          size="xs"
+          (click)="store.labels.reload()"
+          i18n="@@spaces.retry"
+        >
+          Retry
+        </button>
+      </div>
+    }
 
-    <cw-view-tools
-      [config]="view.config()"
-      [statuses]="statuses()"
-      [labels]="store.labels.hasValue() ? store.labels.value() : []"
-      [search]="view.search()"
-      [milestonesOnly]="view.milestonesOnly()"
-      [milestoneCount]="store.milestoneCount.hasValue() ? store.milestoneCount.value() : null"
-      [taskTotal]="store.counts.hasValue() ? store.counts.value().counts.total : null"
-      [savedView]="view.savedView()"
-      [modified]="view.modified()"
-      [canSave]="view.canSave() && canEdit()"
-      (milestonesToggled)="view.toggleMilestones()"
-      (filterToggled)="view.toggleFilter($event.field, $event.value)"
-      (filterCleared)="view.clearFilter($event)"
-      (filtersCleared)="view.clearFilters()"
-      (sortChanged)="view.setSort($event)"
-      (sortDirectionToggled)="view.toggleSortDirection()"
-      (groupChanged)="view.setGroupBy($event)"
-      (subtasksChanged)="view.setSubtasks($event)"
-      (searchChanged)="view.setSearch($event)"
-      (saveRequested)="openSaveDialog()"
-      (savedReverted)="view.revert()"
-      (savedUpdated)="saveSettings()"
-    />
+    @if (store.savedViews.error()) {
+      <p role="alert" i18n="@@spaces.saved.read-failed">Saved views could not be loaded.</p>
+      <button cwButton variant="outline" (click)="store.savedViews.reload()" i18n="@@spaces.retry">
+        Retry
+      </button>
+    } @else if (store.savedViews.isLoading()) {
+      <div cwSkeleton class="h-9 w-full" aria-busy="true"></div>
+    } @else {
+      <cw-view-tabs
+        [layouts]="layouts"
+        [layout]="view.layout()"
+        [savedViews]="store.savedViews.hasValue() ? store.savedViews.value() : []"
+        [activeViewId]="view.savedView()?.id ?? null"
+        [modified]="view.modified()"
+        [canEdit]="canEdit() && (!savedView() || view.savedView()?.id === savedView())"
+        (layoutPicked)="pickLayout($event)"
+        (savedPicked)="pickSaved($event)"
+        (saveRequested)="openSaveDialog()"
+        (settingsSaved)="saveSettings()"
+        (reverted)="revert($event)"
+        (renameRequested)="openRenameDialog($event)"
+        (duplicated)="duplicateView($event)"
+        (deleted)="deleteView($event)"
+      />
+    }
+
+    @if (!savedView() || view.savedView()?.id === savedView()) {
+      <cw-view-tools
+        [config]="view.config()"
+        [statuses]="statuses()"
+        [labels]="store.labels.hasValue() ? store.labels.value() : []"
+        [people]="people()"
+        [search]="view.search()"
+        [milestonesOnly]="view.milestonesOnly()"
+        [milestoneCount]="store.milestoneCount.hasValue() ? store.milestoneCount.value() : null"
+        [taskTotal]="store.counts.hasValue() ? store.counts.value().counts.total : null"
+        [savedView]="view.savedView()"
+        [modified]="view.modified()"
+        [canSave]="view.canSave() && canEdit()"
+        (milestonesToggled)="view.toggleMilestones()"
+        (filterToggled)="view.toggleFilter($event.field, $event.value)"
+        (filterCleared)="view.clearFilter($event)"
+        (filtersCleared)="view.clearFilters()"
+        (sortChanged)="view.setSort($event)"
+        (sortDirectionToggled)="view.toggleSortDirection()"
+        (groupChanged)="view.setGroupBy($event)"
+        (subtasksChanged)="view.setSubtasks($event)"
+        (searchChanged)="view.setSearch($event)"
+        (saveRequested)="openSaveDialog()"
+        (savedReverted)="view.revert()"
+        (savedUpdated)="saveSettings()"
+      />
+    }
   </div>
 
-  <div class="relative flex min-h-0 flex-1 flex-col">
-    <router-outlet />
-  </div>
+  @if (!savedView() || view.savedView()?.id === savedView()) {
+    <div class="relative flex min-h-0 flex-1 flex-col">
+      <router-outlet />
+    </div>
+  }
 
   <cw-save-view-dialog
     [(open)]="dialogOpen"

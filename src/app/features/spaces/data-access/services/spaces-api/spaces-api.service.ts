@@ -15,6 +15,7 @@ import type { Favorite, FavoriteKind } from '../../../models/favorite/favorite.i
 import type { MilestonePage } from '../../../models/milestone/milestone.interface';
 import type { Space } from '../../../models/space/space.interface';
 import type { SpaceOverview } from '../../../models/task-list/task-list.interface';
+import { abortableRead } from '../../utils/abortable-read/abortable-read.util';
 import { toRouteError } from '../../adapters/route-error/route-error.adapter';
 import {
   toFavorite,
@@ -73,14 +74,16 @@ export class SpacesApi {
    * @description
    * Reads every space the caller sees, in sidebar order.
    *
+   * @param {AbortSignal | undefined} signal - Cancels a superseded read.
    * @returns {Promise<readonly Space[]>} The spaces.
    */
-  public async spaces(): Promise<readonly Space[]> {
+  public async spaces(signal?: AbortSignal): Promise<readonly Space[]> {
     const items: SpaceDto[] = [];
     let cursor: string | undefined;
     do {
-      const page: SpacePage = await firstValueFrom(
+      const page: SpacePage = await abortableRead(
         this.spacesService.listSpaces({ limit: PAGE_LIMIT, ...(cursor ? { cursor } : {}) }),
+        signal,
       );
       items.push(...page.items);
       cursor = page.nextCursor ?? undefined;
@@ -95,12 +98,13 @@ export class SpacesApi {
    * Reads one space, the primary read of its overview.
    *
    * @param {string} spaceId - The space.
+   * @param {AbortSignal | undefined} signal - Cancels a superseded read.
    * @returns {Promise<Space>} The space.
    * @throws {Error} The typed route error of the failure.
    */
-  public async space(spaceId: string): Promise<Space> {
+  public async space(spaceId: string, signal?: AbortSignal): Promise<Space> {
     try {
-      return toSpace(await firstValueFrom(this.spacesService.getSpace(spaceId)));
+      return toSpace(await abortableRead(this.spacesService.getSpace(spaceId), signal));
     } catch (error: unknown) {
       throw toRouteError(error, 'space', spaceId);
     }
@@ -114,21 +118,27 @@ export class SpacesApi {
    *
    * @param {string} spaceId - The space.
    * @param {string} today - The caller's date, `YYYY-MM-DD`, for the late tasks.
+   * @param {AbortSignal | undefined} signal - Cancels a superseded read.
    * @returns {Promise<SpaceOverview>} The overview.
    * @throws {Error} The typed route error of the failure.
    */
-  public async overview(spaceId: string, today: string): Promise<SpaceOverview> {
+  public async overview(
+    spaceId: string,
+    today: string,
+    signal?: AbortSignal,
+  ): Promise<SpaceOverview> {
     const items: ListSummaryDto[] = [];
     let cursor: string | undefined;
     let taskCount: number;
     try {
       do {
-        const page: SpaceOverviewDto = await firstValueFrom(
+        const page: SpaceOverviewDto = await abortableRead(
           this.spacesService.getSpaceOverview(spaceId, {
             today,
             limit: PAGE_LIMIT,
             ...(cursor ? { cursor } : {}),
           }),
+          signal,
         );
         items.push(...page.items);
         taskCount = page.taskCount;
@@ -147,11 +157,13 @@ export class SpacesApi {
    * Reads the first milestones of a space, by due date.
    *
    * @param {string} spaceId - The space.
+   * @param {AbortSignal | undefined} signal - Cancels a superseded read.
    * @returns {Promise<MilestonePage>} The milestones and their total.
    */
-  public async milestones(spaceId: string): Promise<MilestonePage> {
-    const page: MilestonePageDto = await firstValueFrom(
+  public async milestones(spaceId: string, signal?: AbortSignal): Promise<MilestonePage> {
+    const page: MilestonePageDto = await abortableRead(
       this.spacesService.listSpaceMilestones(spaceId, { limit: MILESTONE_LIMIT }),
+      signal,
     );
     return toMilestonePage(page);
   }
@@ -162,14 +174,16 @@ export class SpacesApi {
    * @description
    * Reads every favorite of the caller, in insertion order; unknown kinds are left out.
    *
+   * @param {AbortSignal | undefined} signal - Cancels a superseded read.
    * @returns {Promise<readonly Favorite[]>} The favorites.
    */
-  public async favorites(): Promise<readonly Favorite[]> {
+  public async favorites(signal?: AbortSignal): Promise<readonly Favorite[]> {
     const items: FavoriteDto[] = [];
     let cursor: string | undefined;
     do {
-      const page: FavoritePage = await firstValueFrom(
+      const page: FavoritePage = await abortableRead(
         this.spacesService.listFavorites({ limit: PAGE_LIMIT, ...(cursor ? { cursor } : {}) }),
+        signal,
       );
       items.push(...page.items);
       cursor = page.nextCursor ?? undefined;
