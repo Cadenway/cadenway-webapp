@@ -1,6 +1,15 @@
 <cw-dialog [open]="open()" (openChange)="openChange($event)">
   <cw-dialog-header>
-    <h2 cwDialogTitle>{{ title() }}</h2>
+    <h2 cwDialogTitle>
+      @if ((taskKeys()?.length ?? 0) > 1) {
+        <ng-container i18n="@@task.cancel-dialog.title-count">{taskKeys()!.length, plural,
+          =1 {Cancel one task?}
+          other {Cancel {{ taskKeys()!.length }} tasks?}
+        }</ng-container>
+      } @else {
+        {{ title() }}
+      }
+    </h2>
     <p cwDialogDescription i18n="@@task.cancel-dialog.description">
       Say why: the reason stays visible on the task and in the reports.
     </p>

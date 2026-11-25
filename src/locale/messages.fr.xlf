@@ -2901,7 +2901,7 @@
         </context-group>
       </trans-unit>
       <trans-unit id="inbox.retry" datatype="html">
-        <source> Retry </source>
+        <source>Retry</source>
         <target>Réessayer</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/inbox/ui/components/inbox-rail-item/inbox-rail-item.component.html</context>
@@ -3145,7 +3145,7 @@
         </context-group>
       </trans-unit>
       <trans-unit id="organization.retry" datatype="html">
-        <source> Retry </source>
+        <source>Retry</source>
         <target>Réessayer</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/organization/ui/components/plan-summary/plan-summary.component.ts</context>
@@ -3421,7 +3421,7 @@
         </context-group>
       </trans-unit>
       <trans-unit id="search.retry" datatype="html">
-        <source> Retry </source>
+        <source>Retry</source>
         <target>Réessayer</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/search/ui/dialogs/command-palette/command-palette.component.html</context>
@@ -4112,6 +4112,22 @@
           <context context-type="linenumber">13</context>
         </context-group>
       </trans-unit>
+      <trans-unit id="task.status-picker.milestone-reach" datatype="html">
+        <source>Mark the milestone as reached</source>
+        <target>Marquer le jalon comme atteint</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/task/ui/components/task-status-picker/task-status-picker.component.ts</context>
+          <context context-type="linenumber">257</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="task.status-picker.milestone-change" datatype="html">
+        <source>Change the milestone status</source>
+        <target>Changer le statut du jalon</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/task/ui/components/task-status-picker/task-status-picker.component.ts</context>
+          <context context-type="linenumber">258</context>
+        </context-group>
+      </trans-unit>
       <trans-unit id="task.status-picker.advance-label" datatype="html">
         <source>Status: <x id="status" equiv-text="this.label()"/>. Move to “<x id="next" equiv-text="statusLabel(next, this.options(), this.milestone())"/>”</source>
         <target>Statut : <x id="status" equiv-text="this.label()"/>. Passer à « <x id="next" equiv-text="statusLabel(next, this.options(), this.milestone())"/> »</target>
@@ -4120,12 +4136,12 @@
           <context context-type="linenumber">235</context>
         </context-group>
       </trans-unit>
-      <trans-unit id="task.status-picker.choose-label" datatype="html">
-        <source>Status: <x id="status" equiv-text="this.label()"/>. Choose a status</source>
-        <target>Statut : <x id="status" equiv-text="this.label()"/>. Choisir un statut</target>
+      <trans-unit id="task.status-picker.status-label" datatype="html">
+        <source>Status: <x id="status" equiv-text="this.label()"/></source>
+        <target>Statut : <x id="status" equiv-text="this.label()"/></target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/task/ui/components/task-status-picker/task-status-picker.component.ts</context>
-          <context context-type="linenumber">236</context>
+          <context context-type="linenumber">262</context>
         </context-group>
       </trans-unit>
       <trans-unit id="task.status-picker.advance-title" datatype="html">
@@ -4134,6 +4150,14 @@
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/task/ui/components/task-status-picker/task-status-picker.component.ts</context>
           <context context-type="linenumber">251</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="task.cancel-dialog.title-count" datatype="html">
+        <source>{VAR_PLURAL, plural, =1 {Cancel one task?} other {Cancel <x id="INTERPOLATION"/> tasks?}}</source>
+        <target>{VAR_PLURAL, plural, =1 {Annuler une tâche ?} other {Annuler <x id="INTERPOLATION"/> tâches ?}}</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/task/ui/dialogs/task-cancel-dialog/task-cancel-dialog.component.html</context>
+          <context context-type="linenumber">5,6</context>
         </context-group>
       </trans-unit>
       <trans-unit id="task.cancel-dialog.description" datatype="html">
@@ -4244,8 +4268,28 @@
           <context context-type="linenumber">18,21</context>
         </context-group>
       </trans-unit>
+      <trans-unit id="task.create.read-failed" datatype="html">
+        <source>Could not load this information.</source>
+        <target>Impossible de charger ces informations.</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/task/ui/components/task-label-picker/task-label-picker.component.ts</context>
+          <context context-type="linenumber">50</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/task/ui/components/task-people-picker/task-people-picker.component.ts</context>
+          <context context-type="linenumber">48</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/task/ui/components/task-status-picker/task-status-picker.component.html</context>
+          <context context-type="linenumber">15,16</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/task/ui/dialogs/task-create-dialog/task-create-dialog.component.html</context>
+          <context context-type="linenumber">100,102</context>
+        </context-group>
+      </trans-unit>
       <trans-unit id="task.retry" datatype="html">
-        <source> Retry </source>
+        <source>Retry</source>
         <target>Réessayer</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/task/ui/dialogs/task-create-dialog/task-create-dialog.component.html</context>
@@ -4556,12 +4600,44 @@
           <context context-type="linenumber">671</context>
         </context-group>
       </trans-unit>
+      <trans-unit id="task.create.refused" datatype="html">
+        <source>The task could not be created. Check its details and try again.</source>
+        <target>Impossible de créer la tâche. Vérifiez les informations et réessayez.</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/task/ui/dialogs/task-create-dialog/task-create-dialog.component.ts</context>
+          <context context-type="linenumber">786</context>
+        </context-group>
+      </trans-unit>
       <trans-unit id="task.create.failed" datatype="html">
         <source>Could not create the task</source>
         <target>Impossible de créer la tâche</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/task/ui/dialogs/task-create-dialog/task-create-dialog.component.ts</context>
           <context context-type="linenumber">721</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="task.create.field-invalid" datatype="html">
+        <source>Check this information.</source>
+        <target>Vérifiez cette information.</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/task/ui/dialogs/task-create-dialog/task-create-dialog.component.ts</context>
+          <context context-type="linenumber">775</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="task.create.role-insufficient" datatype="html">
+        <source>You cannot create tasks in this list.</source>
+        <target>Vous ne pouvez pas créer de tâche dans cette liste.</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/task/ui/dialogs/task-create-dialog/task-create-dialog.component.ts</context>
+          <context context-type="linenumber">781</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="task.create.status-hidden" datatype="html">
+        <source>This status is no longer available. Choose another.</source>
+        <target>Ce statut n’est plus disponible. Choisissez-en un autre.</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/task/ui/dialogs/task-create-dialog/task-create-dialog.component.ts</context>
+          <context context-type="linenumber">783</context>
         </context-group>
       </trans-unit>
       <trans-unit id="task.create.failed-text" datatype="html">
@@ -4813,7 +4889,7 @@
         </context-group>
       </trans-unit>
       <trans-unit id="workspace.retry" datatype="html">
-        <source> Retry </source>
+        <source>Retry</source>
         <target>Réessayer</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/workspace/ui/components/organization-switcher/organization-switcher.component.html</context>

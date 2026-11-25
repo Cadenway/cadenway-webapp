@@ -9,7 +9,14 @@ import {
   untracked,
   type WritableSignal,
 } from '@angular/core';
-import { type FieldTree, form, FormField, required, submit } from '@angular/forms/signals';
+import {
+  type FieldTree,
+  form,
+  FormField,
+  required,
+  submit,
+  type ValidationError,
+} from '@angular/forms/signals';
 import { Router } from '@angular/router';
 import type { CancelReason, PriorityKey, StatusKey } from '@cadenway/contracts';
 import { CwButton } from '@cadenway/ui/components/button';
@@ -36,6 +43,7 @@ import { CwToastService } from '@cadenway/ui/components/toast';
 import { NgIcon } from '@ng-icons/core';
 
 import { ShortcutsService } from '@core/shortcuts';
+import { hasProblemCode, readProblem, type ApiProblem } from '@core/api';
 import {
   WORKSPACE_CONTEXT,
   type WorkspaceContextPort,
@@ -292,6 +300,17 @@ function addDays(date: Date, days: number): Date {
 export class TaskCreateDialog {
   // #region Properties
   /**
+   * Property retryLabel
+   *
+   * @description
+   * Label of the « Réessayer » button of a failed read.
+   *
+   * @type {string}
+   * @readonly
+   */
+  protected readonly retryLabel: string = $localize`:@@task.retry:Retry`;
+
+  /**
    * Property taskCreate
    *
    * @description
@@ -323,6 +342,26 @@ export class TaskCreateDialog {
    * @readonly
    */
   protected readonly workspace: WorkspaceContextPort = inject(WORKSPACE_CONTEXT);
+
+  /**
+   * Property organizationId
+   *
+   * @description
+   * Committed organization for the current dialog session.
+   *
+   * @type {string}
+   */
+  private organizationId: string = this.workspace.organization().id;
+
+  /**
+   * Property openingId
+   *
+   * @description
+   * Identifies an opening across asynchronous creation responses.
+   *
+   * @type {number}
+   */
+  private openingId: number = 0;
 
   /**
    * Property toasts
@@ -503,6 +542,7 @@ export class TaskCreateDialog {
    * @constructor
    */
   public constructor() {
+    this.store.reset(this.organizationId);
     this.shortcuts.register(
       {
         keys: 'n',
@@ -514,7 +554,16 @@ export class TaskCreateDialog {
     );
     effect(() => {
       const open: boolean = this.taskCreate.isOpen();
+      const organizationId: string = this.workspace.organization().id;
       untracked(() => {
+        if (organizationId !== this.organizationId) {
+          this.organizationId = organizationId;
+          this.openingId++;
+          this.taskCreate.close();
+          this.store.reset(organizationId);
+          this.model.set(this.blank({}));
+          return;
+        }
         if (open) this.start(this.taskCreate.options());
         else this.stop();
       });
@@ -680,7 +729,7 @@ export class TaskCreateDialog {
    * @param {boolean} open - Whether the dialog stays open.
    */
   protected openChange(open: boolean): void {
-    if (!open) this.taskCreate.close();
+    if (!open && !this.store.creating()) this.taskCreate.close();
   }
 
   /**
@@ -697,11 +746,13 @@ export class TaskCreateDialog {
   protected async create(): Promise<void> {
     if (this.store.creating() || this.cancelAsk() !== null) return;
     await submit(this.createForm, {
-      action: async (): Promise<undefined> => {
+      action: async (): Promise<ValidationError.WithOptionalFieldTree[] | undefined> => {
         const model: TaskCreateModel = this.model();
         const destination: ListDestination | null = this.store.destination();
+        const openingId: number = this.openingId;
         try {
           const created: CreatedTask = await this.store.create(this.draft(model), this.parentKey());
+          if (openingId !== this.openingId || !this.taskCreate.isOpen()) return undefined;
           this.taskCreate.announce(created);
           this.confirm(created, destination);
           if (this.more()) {
@@ -710,16 +761,54 @@ export class TaskCreateDialog {
               description: '',
               subtasks: [],
               subtaskDraft: '',
-              checklist: [],
             });
             this.createForm.name().reset();
             this.createForm.name().focusBoundControl();
           } else {
             this.taskCreate.close();
           }
-        } catch {
+        } catch (error: unknown) {
+          if (openingId !== this.openingId || !this.taskCreate.isOpen()) return undefined;
+          const problem: ApiProblem | null = readProblem(error);
+          const issues: unknown = problem?.details?.['issues'];
+          if (
+            problem?.status === 422 &&
+            !hasProblemCode(error, 'task.status-hidden') &&
+            Array.isArray(issues) &&
+            issues.length
+          ) {
+            const errors: ValidationError.WithOptionalFieldTree[] = [];
+            const fields: Readonly<Record<string, FieldTree<unknown>>> = {
+              name: this.createForm.name,
+              title: this.createForm.name,
+              description: this.createForm.description,
+              dueDate: this.createForm.due,
+              assigneeIds: this.createForm.assigneeIds,
+              labels: this.createForm.labels,
+              status: this.createForm.status,
+            };
+            for (const issue of issues as unknown[]) {
+              const path: unknown =
+                typeof issue === 'object' && issue !== null && 'path' in issue ? issue.path : null;
+              const root: string = typeof path === 'string' ? path.split('.')[0].split('[')[0] : '';
+              errors.push({
+                kind: 'server',
+                fieldTree: fields[root] ?? this.createForm,
+                message: $localize`:@@task.create.field-invalid:Check this information.`,
+              });
+            }
+            return errors;
+          }
+          const description: string =
+            problem?.status === 403 && hasProblemCode(error, 'access.role-insufficient')
+              ? $localize`:@@task.create.role-insufficient:You cannot create tasks in this list.`
+              : problem?.status === 422 && hasProblemCode(error, 'task.status-hidden')
+                ? $localize`:@@task.create.status-hidden:This status is no longer available. Choose another.`
+                : !problem || problem.status === 0 || problem.status >= 500
+                  ? $localize`:@@task.create.failed-text:The server did not answer. Try again in a moment.`
+                  : $localize`:@@task.create.refused:The task could not be created. Check its details and try again.`;
           this.toasts.error($localize`:@@task.create.failed:Could not create the task`, {
-            description: $localize`:@@task.create.failed-text:The server did not answer. Try again in a moment.`,
+            description,
           });
         }
         return undefined;
@@ -821,6 +910,7 @@ export class TaskCreateDialog {
    * @param {TaskCreateOptions} options - Presets of the opening.
    */
   private start(options: TaskCreateOptions): void {
+    this.openingId++;
     this.store.activate(options.listId ?? null);
     this.model.set(this.blank(options));
     this.createForm().reset();
@@ -845,6 +935,7 @@ export class TaskCreateDialog {
    * Ends an opening: Ctrl Entrée is unbound.
    */
   private stop(): void {
+    this.openingId++;
     this.unregisterSubmit?.();
     this.unregisterSubmit = null;
     this.cancelAsk.set(null);

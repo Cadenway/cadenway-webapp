@@ -54,6 +54,17 @@ describe('task status rules', () => {
     expect(statusLabel('blocked', [], true)).toBe('À risque');
   });
 
+  it('excludes hidden milestone statuses', () => {
+    const options: readonly StatusOption[] = defaultStatusOptions().map((option: StatusOption) =>
+      option.key === 'blocked' ? { ...option, hidden: true } : option,
+    );
+    expect(
+      pickableStatuses(options, 'todo', true).some(
+        (option: StatusOption) => option.key === 'blocked',
+      ),
+    ).toBe(false);
+  });
+
   it('names a status after the space, else with its default word', () => {
     const options: readonly StatusOption[] = defaultStatusOptions().map((option: StatusOption) =>
       option.key === 'review' ? { ...option, label: 'Relecture' } : option,

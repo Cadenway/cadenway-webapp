@@ -27,6 +27,13 @@ describe('TaskCreate', () => {
     expect(taskCreate.options()).toEqual({});
   });
 
+  it('keeps the presets when opening an already open dialog', () => {
+    const taskCreate: TaskCreate = TestBed.inject(TaskCreate);
+    taskCreate.open({ listId: 'sprint-14', parentKey: 'CAD-482' });
+    expect(taskCreate.open()).toBe(false);
+    expect(taskCreate.options()).toEqual({ listId: 'sprint-14', parentKey: 'CAD-482' });
+  });
+
   it('announces the created tasks', () => {
     const taskCreate: TaskCreate = TestBed.inject(TaskCreate);
     const created: CreatedTask[] = [];

@@ -11,7 +11,7 @@ export { TaskCreate } from './services/task-create/task-create.service';
 export {
   STATUS_SETTLE_MS,
   type TaskCancelRequest,
-  TaskStatusChanges,
+  TaskStatusChangesStore,
 } from './state/task-status-changes/task-status-changes.store';
 export { TaskDueDate } from './ui/components/task-due-date/task-due-date.component';
 export { TaskLabelChips } from './ui/components/task-label-chips/task-label-chips.component';

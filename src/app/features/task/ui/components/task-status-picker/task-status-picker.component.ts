@@ -123,6 +123,28 @@ interface StatusMenuGroup {
 export class TaskStatusPicker {
   // #region Properties
   /**
+   * Property failed
+   *
+   * @description
+   * Whether the status options could not be loaded.
+   *
+   * @type {InputSignal<boolean>}
+   * @readonly
+   */
+  public readonly failed: InputSignal<boolean> = input(false);
+
+  /**
+   * Property retry
+   *
+   * @description
+   * Requests another status options read.
+   *
+   * @type {OutputEmitterRef<void>}
+   * @readonly
+   */
+  public readonly retry: OutputEmitterRef<void> = output();
+
+  /**
    * Property status
    *
    * @description
@@ -231,9 +253,14 @@ export class TaskStatusPicker {
    */
   protected readonly ariaLabel: Signal<string> = computed((): string => {
     const next: StatusKey | null = this.next();
+    if (this.milestone()) {
+      return next
+        ? $localize`:@@task.status-picker.milestone-reach:Mark the milestone as reached`
+        : $localize`:@@task.status-picker.milestone-change:Change the milestone status`;
+    }
     return next
       ? $localize`:@@task.status-picker.advance-label:Status: ${this.label()}:status:. Move to “${statusLabel(next, this.options(), this.milestone())}:next:”`
-      : $localize`:@@task.status-picker.choose-label:Status: ${this.label()}:status:. Choose a status`;
+      : $localize`:@@task.status-picker.status-label:Status: ${this.label()}:status:`;
   });
 
   /**
@@ -294,6 +321,7 @@ export class TaskStatusPicker {
    * otherwise.
    */
   protected advance(): void {
+    if (this.failed()) return;
     const next: StatusKey | null = this.next();
     if (next) this.statusChanged.emit(next);
   }

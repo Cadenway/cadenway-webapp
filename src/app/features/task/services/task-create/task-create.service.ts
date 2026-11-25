@@ -110,8 +110,11 @@ export class TaskCreate {
    * @param {TaskCreateOptions} [options] - Destination list, status, due date or parent key.
    * @returns {boolean} Whether the dialog opened.
    */
-  public open(options: TaskCreateOptions = {}): boolean {
-    if (this.overlay.anyOpen() && !this.isOpen()) return false;
+  public open(
+    options: TaskCreateOptions &
+      ({ parentKey: string; listId: string } | { parentKey?: never }) = {},
+  ): boolean {
+    if (this.overlay.anyOpen()) return false;
     this.presets.set(options);
     return this.overlay.open(TASK_CREATE_DIALOG);
   }
@@ -124,6 +127,7 @@ export class TaskCreate {
    */
   public close(): void {
     this.overlay.close(TASK_CREATE_DIALOG);
+    this.presets.set({});
   }
 
   /**

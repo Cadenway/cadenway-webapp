@@ -138,7 +138,7 @@ export function pickableStatuses(
   const all: readonly StatusOption[] = options.length > 0 ? options : defaultStatusOptions();
   if (milestone) {
     return all
-      .filter((option: StatusOption) => isMilestoneStatus(option.key))
+      .filter((option: StatusOption) => isMilestoneStatus(option.key) && !option.hidden)
       .map((option: StatusOption): StatusOption => ({
         ...option,
         label: MILESTONE_STATUS_LABELS[option.key as MilestoneStatusKey],

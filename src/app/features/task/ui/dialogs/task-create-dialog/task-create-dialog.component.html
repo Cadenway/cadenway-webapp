@@ -17,15 +17,8 @@
           <span class="text-xs text-destructive" role="alert" i18n="@@task.create.lists-failed"
             >The lists could not be read.</span
           >
-          <button
-            cwButton
-            type="button"
-            variant="outline"
-            size="xs"
-            (click)="store.retry()"
-            i18n="@@task.retry"
-          >
-            Retry
+          <button cwButton type="button" variant="outline" size="xs" (click)="store.retry()">
+            {{ retryLabel }}
           </button>
         } @else {
           <button
@@ -84,7 +77,7 @@
           nextKey
         }}</span>
       }
-      @if (store.templates().length > 0) {
+      @if (!parentKey() && (store.templates().length > 0 || store.templatesFailed())) {
         <button cwButton type="button" variant="ghost" size="xs" [cwMenuTriggerFor]="templates">
           <ng-icon name="phosphorFileTextBold" aria-hidden="true" />
           @if (template(); as chosen) {
@@ -95,6 +88,14 @@
         </button>
         <cw-menu #templates ariaLabel="Task templates" i18n-ariaLabel="@@task.create.templates">
           <cw-menu-label i18n="@@task.create.template-heading">Start from a template</cw-menu-label>
+          @if (store.templatesFailed()) {
+            <span role="alert" i18n="@@task.create.read-failed"
+              >Could not load this information.</span
+            >
+            <button cwMenuItem type="button" (triggered)="store.retrySecondary('templates')">
+              {{ retryLabel }}
+            </button>
+          }
           @for (option of store.templates(); track option.id) {
             <button
               cwMenuItem
@@ -212,6 +213,8 @@
         <cw-task-status-picker
           [status]="model().status"
           [options]="store.statuses()"
+          [failed]="store.spaceFailed()"
+          (retry)="store.retrySecondary('space')"
           (statusChanged)="pickStatus($event)"
         />
         <cw-task-people-picker
@@ -219,6 +222,8 @@
           [people]="store.people()"
           [currentUserId]="workspace.user().id"
           [loading]="store.peopleLoading()"
+          [failed]="store.peopleFailed()"
+          (retry)="store.retrySecondary('people')"
           [value]="model().assigneeIds"
           (valueChange)="patch({ assigneeIds: $event })"
         />
@@ -240,6 +245,8 @@
           class="w-full"
           [labels]="store.labels()"
           [loading]="store.labelsLoading()"
+          [failed]="store.labelsFailed()"
+          (retry)="store.retrySecondary('labels')"
           [value]="model().labels"
           (valueChange)="patch({ labels: $event })"
         />
@@ -248,6 +255,13 @@
   </div>
 
   <cw-dialog-footer>
+    @if (createForm().errorSummary().length > 0) {
+      <div role="alert" class="text-xs text-destructive">
+        @for (error of createForm().errorSummary(); track $index) {
+          <p>{{ error.message }}</p>
+        }
+      </div>
+    }
     <div class="mr-auto flex items-center gap-2">
       <cw-switch
         id="task-create-more"
@@ -263,6 +277,7 @@
       cwButton
       type="button"
       variant="outline"
+      [disabled]="store.creating()"
       (click)="taskCreate.close()"
       i18n="@@task.create.cancel"
     >

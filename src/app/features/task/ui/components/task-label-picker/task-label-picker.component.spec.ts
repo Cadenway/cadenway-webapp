@@ -41,6 +41,24 @@ async function search(fixture: ComponentFixture<TaskLabelPicker>, text: string):
 }
 
 describe('TaskLabelPicker', () => {
+  it('offers retry inside the picker when labels fail to load', async () => {
+    const fixture: ComponentFixture<TaskLabelPicker> = TestBed.createComponent(TaskLabelPicker);
+    let retries: number = 0;
+    fixture.componentInstance.retry.subscribe(() => retries++);
+    fixture.componentRef.setInput('failed', true);
+    fixture.componentRef.setInput('labels', ['Front']);
+    await fixture.whenStable();
+    (fixture.nativeElement as HTMLElement)
+      .querySelector<HTMLButtonElement>('button[role="combobox"]')
+      ?.click();
+    await fixture.whenStable();
+    expect(document.querySelector('[role="alert"]')?.textContent).toContain('Impossible');
+    expect(document.querySelectorAll('[role="option"]')).toHaveLength(0);
+    Array.from(document.querySelectorAll<HTMLButtonElement>('button'))
+      .find((button: HTMLButtonElement) => button.textContent.trim() === 'Réessayer')
+      ?.click();
+    expect(retries).toBe(1);
+  });
   it('checks several labels', async () => {
     const fixture: ComponentFixture<TaskLabelPicker> = await open();
     const options: HTMLElement[] = Array.from(

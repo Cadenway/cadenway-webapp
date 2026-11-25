@@ -130,4 +130,20 @@ describe('TaskStatusPicker', () => {
     expect(document.body.textContent).toContain('À venir');
     expect(document.body.textContent).toContain('Atteint');
   });
+
+  it('names the milestone action for upcoming and reached milestones', async () => {
+    const upcoming: Rendered = await render('todo', true);
+    expect(
+      (upcoming.fixture.nativeElement as HTMLElement)
+        .querySelector('button')
+        ?.getAttribute('aria-label'),
+    ).toBe('Marquer le jalon comme atteint');
+    upcoming.fixture.componentRef.setInput('status', 'done');
+    await upcoming.fixture.whenStable();
+    expect(
+      (upcoming.fixture.nativeElement as HTMLElement)
+        .querySelector('button')
+        ?.getAttribute('aria-label'),
+    ).toBe('Changer le statut du jalon');
+  });
 });

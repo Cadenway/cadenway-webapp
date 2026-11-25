@@ -26,11 +26,11 @@ the 404 meanwhile).
 `.` publishes:
 
 - Models: `TaskSummary` (`id` is the key, `version` is the `If-Match` precondition), `TaskProgress`,
-  `StatusOption`, `Person`, `TaskStatusChange`, `TaskCancellation`, `TaskCreateOptions`,
+  `StatusOption`, `Person`, `TaskStatusChange`, `TaskCancellation`, `TaskCancelRequest`, `TaskCreateOptions`,
   `CreatedTask`; the words `STATUS_LABELS` and `PRIORITY_LABELS`; the rules `nextStatus`,
   `isClosedStatus`, `statusLabel`, `pickableStatuses` and `defaultStatusOptions`.
-- `TaskStatusChanges`, a SignalStore the consumer provides on its route: `request(task, status,
-options?)`, `pendingStatus(taskId)`, `displayedStatus(task)`, `settledStatus(task)`, `undo(taskId)`,
+- `TaskStatusChangesStore`, a SignalStore the consumer provides on its route: `request(task, status,
+options?)`, `requestCancel(tasks, options?)`, `pendingStatus(taskId)`, `displayedStatus(task)`, `settledStatus(task)`, `undo(taskId)`,
   `cancelRequest` with `confirmCancel(cancellation)` and `keepTask()`, and the `changed` stream;
   `STATUS_SETTLE_MS` (460).
 - `TaskCreate` (root): `open(options?)`, `close()`, `isOpen`, `options`, `created`.
@@ -41,7 +41,7 @@ options?)`, `pendingStatus(taskId)`, `displayedStatus(task)`, `settledStatus(tas
 ## Dependencies
 
 - `@cadenway/api-client` through `data-access/`: `TasksService.updateTask` (with `If-Match`),
-  `getTask`, `createTask` (with `Idempotency-Key`), `createSubtask`, `listLabels`;
+  `getTask`, `createTask` and `createSubtask` (with `Idempotency-Key`), `listLabels`;
   `SpacesService.listSpaces`, `getSpace` (`cache: 'no-store'`), `listTaskTemplates`;
   `ListsService.listLists`; `MembersService.listMembers` (owners, admins and members). Every
   collection is read to its last cursor page.
@@ -55,7 +55,7 @@ options?)`, `pendingStatus(taskId)`, `displayedStatus(task)`, `settledStatus(tas
 
 ## Invariants
 
-- `TaskStatusChanges` is never provided at the root: the route whose screens change statuses
+- `TaskStatusChangesStore` is never provided at the root: the route whose screens change statuses
   provides it, so its pending changes die with it. The icon and the word change at once; one
   pending change per task, a new click replaces it and a click on the saved status cancels it; it
   settles 460 ms after the last click (`animateStatus` of `App.dc.html`) with one `updateTask`
@@ -78,19 +78,19 @@ options?)`, `pendingStatus(taskId)`, `displayedStatus(task)`, `settledStatus(tas
   outside fields while the shell lives; Ctrl Entrée creates while it is open.
 - `TaskCreateStore` is provided by the create dialog. It reads the destinations, the people and the
   labels the first time the dialog opens; the statuses, the next key and the templates follow the
-  chosen list's space, and the next key is read again after each creation. A failed read of the
-  lists is a flag with « Réessayer », never an empty list. A creation sent again with the same body
+  chosen list's space, and the next key is read again after each creation. Failed reads expose
+  « Réessayer », never a successful empty result. A creation sent again with the same body
   reuses its `Idempotency-Key`; a changed body gets a new one. A subtask (`parentKey`) goes to
-  `createSubtask`, which declares no `Idempotency-Key` and takes no drafted subtasks.
+  `createSubtask`, which takes no drafted subtasks or checklist. The parent key requires its list id.
 - The create dialog starts each opening afresh: the presets, the current user assigned, « À faire »
   and « Moyenne ». « Créer d'autres tâches » keeps it open and empties the name, the description,
-  the subtasks and the template's checklist. Its toast « Ouvrir » leads to `/<slug>/t/<key>`.
+  and the subtasks while retaining the template's checklist. Its toast « Ouvrir » leads to `/<slug>/t/<key>`.
 - Known gaps: the comment count of a row is null (task summaries carry none); the Git chip is left
   out (B4, no API yet); the dialog's file drop is not built (attachments need the task first); the
   mockup's built-in templates (Bug, Fonctionnalité, Mise en production) appear only when the space
   returns them from `listTaskTemplates`; avatars draw initials (members give an avatar id, no
   address).
-- The copy of the entries no screen mounts yet (`TaskStatusChanges` toasts, `cw-task-title-cell`,
+- The copy of the entries no screen mounts yet (`TaskStatusChangesStore` toasts, `cw-task-title-cell`,
   `cw-task-due-date`) is extracted once a consumer mounts them: their units are `task.status-change.*`,
   `task.title-cell.*` and `task.due.*`, with the French below.
 
@@ -98,6 +98,8 @@ options?)`, `pendingStatus(taskId)`, `displayedStatus(task)`, `settledStatus(tas
 | ----------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
 | `task.status-change.moved`, `task.status-change.from`                               | « {key} passée en {status} », « Depuis {status}. »                                               |
 | `task.status-change.cancelled`, `task.status-change.reason`                         | « {key} annulée », « Motif : {reason}. »                                                         |
+| `task.status-change.cancelled-one`, `task.status-change.cancelled-many`             | « {count} tâche annulée », « {count} tâches annulées »                                           |
+| `task.status-change.cancel-failed-one`, `task.status-change.cancel-failed-count`    | « Impossible d’annuler {count} tâche », « Impossible d’annuler {count} tâches »                  |
 | `task.status-change.failed`, `task.status-change.failed-text`                       | « Impossible de modifier le statut », « Le serveur n’a pas répondu. Réessayez dans un instant. » |
 | `task.status-change.conflict`, `task.status-change.conflict-text`                   | « {key} modifiée ailleurs », « Son dernier statut est affiché : {status}. »                      |
 | `task.title-cell.advance`, `task.title-cell.parent`                                 | « {status} · passer à « {next} » », « Sous-tâche de {key} »                                      |
@@ -106,15 +108,16 @@ options?)`, `pendingStatus(taskId)`, `displayedStatus(task)`, `settledStatus(tas
 
 ## Copy not taken word for word from the mockup
 
-| Unit                                                                                                                  | Reason                                                           |
-| --------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
-| `task.combobox.*`                                                                                                     | Texts of the combobox brick, taken from its French defaults.     |
-| `task.create.due-*` but `due-today`, `due-tomorrow`, `due-friday`, `due-sprint`, `due-none`                           | Texts of the date picker brick, taken from its French defaults.  |
-| `task.people-picker.search`, `task.label-picker.search`                                                               | The mockup's menus have no search field.                         |
-| `task.priority-picker.label`, `task.status-picker.menu`, `task.create.destination`                                    | Accessible names the mockup does not write out.                  |
-| `task.create.name-required`                                                                                           | The mockup disables « Créer la tâche » without showing an error. |
-| `task.create.lists-failed`, `task.retry`, `task.create.no-list`                                                       | The mockup draws no failed or empty read of the lists.           |
-| `task.create.failed`, `task.create.failed-text`                                                                       | The mockup draws no refused creation.                            |
-| `task.status-change.failed*`, `task.status-change.conflict*`                                                          | The mockup draws no refused or conflicting status change.        |
-| `task.due.late`, `task.due.none`, `task.title-cell.subtasks`, `task.title-cell.checklist`, `task.title-cell.comments` | Screen reader texts and tooltips the mockup does not write out.  |
-| `task.cancel-dialog.close`, `task.create.close`                                                                       | Close button of the dialog brick.                                |
+| Unit                                                                                        | Reason                                                           |
+| ------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| `task.combobox.*`                                                                           | Texts of the combobox brick, taken from its French defaults.     |
+| `task.create.due-*` but `due-today`, `due-tomorrow`, `due-friday`, `due-sprint`, `due-none` | Texts of the date picker brick, taken from its French defaults.  |
+| `task.people-picker.search`, `task.label-picker.search`                                     | The mockup's menus have no search field.                         |
+| `task.priority-picker.label`, `task.status-picker.menu`, `task.create.destination`          | Accessible names the mockup does not write out.                  |
+| `task.create.name-required`                                                                 | The mockup disables « Créer la tâche » without showing an error. |
+| `task.create.lists-failed`, `task.retry`, `task.create.no-list`                             | The mockup draws no failed or empty read of the lists.           |
+| `task.create.failed`, `task.create.failed-text`                                             | The mockup draws no refused creation.                            |
+| `task.status-change.failed*`, `task.status-change.conflict*`                                | The mockup draws no refused or conflicting status change.        |
+| `task.status-change.cancel-failed-*`                                                        | The mockup draws no refused cancellation.                        |
+| `task.title-cell.subtasks`, `task.title-cell.checklist`, `task.title-cell.comments`         | Screen reader texts and tooltips the mockup does not write out.  |
+| `task.cancel-dialog.close`, `task.create.close`                                             | Close button of the dialog brick.                                |

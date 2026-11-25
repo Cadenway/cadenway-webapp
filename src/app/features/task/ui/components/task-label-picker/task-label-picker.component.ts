@@ -7,9 +7,12 @@ import {
   type InputSignalWithTransform,
   model,
   type ModelSignal,
+  output,
+  type OutputEmitterRef,
   type Signal,
 } from '@angular/core';
-import { CwCombobox, CwComboboxOption } from '@cadenway/ui/components/combobox';
+import { CwCombobox, CwComboboxEmpty, CwComboboxOption } from '@cadenway/ui/components/combobox';
+import { CwButton } from '@cadenway/ui/components/button';
 
 import { TASK_COMBOBOX_LABELS } from '../../../constants/task-brick-labels/task-brick-labels.constants';
 
@@ -24,12 +27,12 @@ import { TASK_COMBOBOX_LABELS } from '../../../constants/task-brick-labels/task-
  */
 @Component({
   selector: 'cw-task-label-picker',
-  imports: [CwCombobox, CwComboboxOption],
+  imports: [CwButton, CwCombobox, CwComboboxEmpty, CwComboboxOption],
   providers: [TASK_COMBOBOX_LABELS],
   template: `
     <cw-combobox
       multiple
-      creatable
+      [creatable]="!failed()"
       size="sm"
       [value]="value()"
       (valueChange)="choose($event)"
@@ -43,7 +46,17 @@ import { TASK_COMBOBOX_LABELS } from '../../../constants/task-brick-labels/task-
       ariaLabel="Labels"
       i18n-ariaLabel="@@task.label-picker.placeholder"
     >
-      @for (label of choices(); track label) {
+      @if (failed()) {
+        <cw-combobox-empty
+          ><span role="alert" i18n="@@task.create.read-failed"
+            >Could not load this information.</span
+          >
+          <button cwButton type="button" size="xs" (click)="retry.emit()">
+            {{ retryLabel }}
+          </button></cw-combobox-empty
+        >
+      }
+      @for (label of failed() ? [] : choices(); track label) {
         <cw-combobox-option [value]="label">{{ label }}</cw-combobox-option>
       }
     </cw-combobox>
@@ -51,6 +64,39 @@ import { TASK_COMBOBOX_LABELS } from '../../../constants/task-brick-labels/task-
 })
 export class TaskLabelPicker {
   // #region Properties
+  /**
+   * Property retryLabel
+   *
+   * @description
+   * Label of the « Réessayer » button of a failed read.
+   *
+   * @type {string}
+   * @readonly
+   */
+  protected readonly retryLabel: string = $localize`:@@task.retry:Retry`;
+
+  /**
+   * Property failed
+   *
+   * @description
+   * Whether the labels could not be loaded.
+   *
+   * @type {InputSignal<boolean>}
+   * @readonly
+   */
+  public readonly failed: InputSignal<boolean> = input(false);
+
+  /**
+   * Property retry
+   *
+   * @description
+   * Requests another labels read.
+   *
+   * @type {OutputEmitterRef<void>}
+   * @readonly
+   */
+  public readonly retry: OutputEmitterRef<void> = output();
+
   /**
    * Property labels
    *

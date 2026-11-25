@@ -206,10 +206,11 @@ describe('TaskCreateApi', () => {
   });
 
   it('creates a subtask under its parent', async () => {
-    const answer: Promise<CreatedTask> = firstValueFrom(api.createSubtask('CAD-482', draft));
+    const answer: Promise<CreatedTask> = firstValueFrom(api.createSubtask('CAD-482', draft, 'k-1'));
     const request: TestRequest = http.expectOne('/v1/tasks/CAD-482/subtasks');
 
     expect(request.request.body).not.toHaveProperty('subtasks');
+    expect(request.request.headers.get('Idempotency-Key')).toBe('k-1');
     request.flush({ key: 'CAD-496', listId: 'sprint-14', status: 'todo' });
     await expect(answer).resolves.toMatchObject({ key: 'CAD-496', subtasks: 0 });
   });

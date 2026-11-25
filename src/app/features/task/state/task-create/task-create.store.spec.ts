@@ -98,6 +98,42 @@ function setup(overrides: Partial<Record<keyof TaskCreateApi, Mock>> = {}): {
 }
 
 describe('TaskCreateStore', () => {
+  it('exposes failed secondary reads and retries them independently', async () => {
+    const people: Mock = vi
+      .fn()
+      .mockReturnValueOnce(throwError(() => new Error('offline')))
+      .mockReturnValue(of([]));
+    const labels: Mock = vi
+      .fn()
+      .mockReturnValueOnce(throwError(() => new Error('offline')))
+      .mockReturnValue(of([]));
+    const templates: Mock = vi
+      .fn()
+      .mockReturnValueOnce(throwError(() => new Error('offline')))
+      .mockReturnValue(of([]));
+    const space: Mock = vi
+      .fn()
+      .mockReturnValueOnce(throwError(() => new Error('offline')))
+      .mockReturnValue(of({ spaceId: 'produit', nextKey: null, statuses: [] }));
+    const { store }: ReturnType<typeof setup> = setup({ people, labels, templates, space });
+    store.activate(null);
+    await vi.waitFor(() => {
+      expect(store.peopleFailed()).toBe(true);
+      expect(store.labelsFailed()).toBe(true);
+      expect(store.templatesFailed()).toBe(true);
+      expect(store.spaceFailed()).toBe(true);
+    });
+    store.retrySecondary('people');
+    store.retrySecondary('labels');
+    store.retrySecondary('templates');
+    store.retrySecondary('space');
+    await vi.waitFor(() => {
+      expect(store.peopleFailed()).toBe(false);
+      expect(store.labelsFailed()).toBe(false);
+      expect(store.templatesFailed()).toBe(false);
+      expect(store.spaceFailed()).toBe(false);
+    });
+  });
   it('reads nothing until the dialog opens, then the first list and its space', async () => {
     const { store, space }: ReturnType<typeof setup> = setup();
     TestBed.tick();

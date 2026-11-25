@@ -282,16 +282,22 @@ export class TaskCreateApi {
    * Method createSubtask
    *
    * @description
-   * Creates the draft as a subtask of a task, in the parent's list. The operation declares no
-   * `Idempotency-Key`.
+   * Creates the draft as a subtask of a task, in the parent's list, with retry protection.
    *
    * @param {string} parentKey - Key of the parent task.
    * @param {TaskDraft} draft - Submitted draft.
+   * @param {string} idempotencyKey - Key reused for retries of the same draft.
    * @returns {Observable<CreatedTask>} The created subtask.
    */
-  public createSubtask(parentKey: string, draft: TaskDraft): Observable<CreatedTask> {
+  public createSubtask(
+    parentKey: string,
+    draft: TaskDraft,
+    idempotencyKey: string,
+  ): Observable<CreatedTask> {
     return this.tasks
-      .createSubtask(parentKey, toSubtaskCreation(draft))
+      .createSubtask(parentKey, toSubtaskCreation(draft), {
+        headers: { 'Idempotency-Key': idempotencyKey },
+      })
       .pipe(map((task: CreateTaskClientResult) => toCreatedTask(task, 0)));
   }
   // #endregion

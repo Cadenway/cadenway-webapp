@@ -1,8 +1,9 @@
 import { signal } from '@angular/core';
+import { HttpErrorResponse } from '@angular/common/http';
 import { type ComponentFixture, TestBed } from '@angular/core/testing';
 import { Router } from '@angular/router';
 import { CwToastService, type CwToastOptions } from '@cadenway/ui/components/toast';
-import { type Observable, of, throwError } from 'rxjs';
+import { type Observable, of, Subject, throwError } from 'rxjs';
 import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 
 import {
@@ -165,6 +166,56 @@ describe('TaskCreateDialog', () => {
 
   afterEach(() => {
     TestBed.inject(TaskCreate).close();
+    (workspace.organization as ReturnType<typeof signal>).set({
+      id: 'o1',
+      slug: 'atelier-nord',
+      name: 'Atelier Nord',
+      initials: 'AN',
+      role: 'owner',
+      plan: 'team',
+    });
+  });
+
+  it('closes and clears presets when the committed organization changes', async () => {
+    const service: TaskCreate = TestBed.inject(TaskCreate);
+    service.open({ listId: 'sprint-14', parentKey: 'CAD-482' });
+    await fixture.whenStable();
+    (workspace.organization as ReturnType<typeof signal>).set({
+      id: 'o2',
+      slug: 'other',
+      name: 'Other',
+      initials: 'OT',
+      role: 'owner',
+      plan: 'team',
+    });
+    await fixture.whenStable();
+    expect(service.isOpen()).toBe(false);
+    expect(service.options()).toEqual({});
+  });
+
+  it('ignores a creation response from an earlier opening', async () => {
+    const response: Subject<CreatedTask> = new Subject<CreatedTask>();
+    create.mockReturnValueOnce(response);
+    const service: TaskCreate = TestBed.inject(TaskCreate);
+    service.open();
+    await fixture.whenStable();
+    typeName('First draft');
+    await fixture.whenStable();
+    buttonNamed('Créer la tâche')?.click();
+    await fixture.whenStable();
+    service.close();
+    await fixture.whenStable();
+    service.open();
+    await fixture.whenStable();
+    typeName('Second draft');
+    response.next({ key: 'CAD-495', listId: 'backlog', status: 'todo', subtasks: 0 });
+    response.complete();
+    await fixture.whenStable();
+    expect(service.isOpen()).toBe(true);
+    expect(document.querySelector<HTMLInputElement>('#task-create-name')?.value).toBe(
+      'Second draft',
+    );
+    expect(show).not.toHaveBeenCalled();
   });
 
   it('opens with N outside fields', async () => {
@@ -175,6 +226,39 @@ describe('TaskCreateDialog', () => {
     expect(document.querySelector('[role="dialog"] h2')?.textContent.trim()).toBe(
       'Créer une tâche',
     );
+  });
+
+  it('ignores N in an editable field and while the dialog is open', async () => {
+    const input: HTMLInputElement = document.createElement('input');
+    document.body.append(input);
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'n', code: 'KeyN', bubbles: true }));
+    await fixture.whenStable();
+    const service: TaskCreate = TestBed.inject(TaskCreate);
+    expect(service.isOpen()).toBe(false);
+    input.remove();
+    service.open({ listId: 'sprint-14', parentKey: 'CAD-482' });
+    await fixture.whenStable();
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'n', code: 'KeyN' }));
+    await fixture.whenStable();
+    expect(service.options()).toEqual({ listId: 'sprint-14', parentKey: 'CAD-482' });
+  });
+
+  it('closes an open people combobox before closing the dialog on Escape', async () => {
+    const service: TaskCreate = TestBed.inject(TaskCreate);
+    service.open();
+    await fixture.whenStable();
+    document
+      .querySelector<HTMLButtonElement>('cw-task-people-picker button[role="combobox"]')
+      ?.click();
+    await fixture.whenStable();
+    const field: HTMLInputElement | null = document.querySelector('input[role="combobox"]');
+    expect(field).not.toBeNull();
+    field?.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', bubbles: true }),
+    );
+    await fixture.whenStable();
+    expect(service.isOpen()).toBe(true);
+    expect(document.querySelector('input[role="combobox"]')).toBeNull();
   });
 
   it('creates the task in the preset list and offers « Ouvrir »', async () => {
@@ -233,7 +317,7 @@ describe('TaskCreateDialog', () => {
   });
 
   it('creates a subtask under its parent', async () => {
-    TestBed.inject(TaskCreate).open({ parentKey: 'CAD-482' });
+    TestBed.inject(TaskCreate).open({ parentKey: 'CAD-482', listId: 'sprint-14' });
     await fixture.whenStable();
     typeName('Relire le parcours');
     await fixture.whenStable();
@@ -243,6 +327,7 @@ describe('TaskCreateDialog', () => {
     expect(createSubtask).toHaveBeenCalledWith(
       'CAD-482',
       expect.objectContaining({ subtasks: [] }),
+      expect.any(String),
     );
     expect(create).not.toHaveBeenCalled();
   });
@@ -262,6 +347,69 @@ describe('TaskCreateDialog', () => {
     await fixture.whenStable();
     expect(create).toHaveBeenCalledTimes(2);
     expect(create.mock.calls[1][2]).toBe(create.mock.calls[0][2]);
+  });
+
+  it.each([
+    { status: 403, code: 'access.role-insufficient' },
+    { status: 422, code: 'task.status-hidden' },
+  ])(
+    'shows a specific refusal for $code',
+    async ({ status, code }: { status: number; code: string }) => {
+      create.mockReturnValueOnce(
+        throwError(() => new HttpErrorResponse({ status, error: { code } })),
+      );
+      TestBed.inject(TaskCreate).open();
+      await fixture.whenStable();
+      typeName('Préparer la démo');
+      await fixture.whenStable();
+      buttonNamed('Créer la tâche')?.click();
+      await fixture.whenStable();
+      expect(error).toHaveBeenCalledOnce();
+      expect(error.mock.calls[0][1]?.description).not.toContain('serveur');
+    },
+  );
+
+  it('keeps a name validation issue in the form', async () => {
+    create.mockReturnValueOnce(
+      throwError(
+        () =>
+          new HttpErrorResponse({
+            status: 422,
+            error: { details: { issues: [{ path: 'name' }] } },
+          }),
+      ),
+    );
+    TestBed.inject(TaskCreate).open();
+    await fixture.whenStable();
+    typeName('Préparer la démo');
+    await fixture.whenStable();
+    buttonNamed('Créer la tâche')?.click();
+    await fixture.whenStable();
+    expect(error).not.toHaveBeenCalled();
+    expect(document.querySelector('[role="alert"]')?.textContent).toBeTruthy();
+  });
+
+  it('keeps field and unmapped validation issues in the form', async () => {
+    const issues: { path: string }[] = [
+      'name',
+      'description',
+      'dueDate',
+      'assigneeIds.0',
+      'labels.0',
+      'status',
+      'unknown',
+    ].map((path: string) => ({ path }));
+    create.mockReturnValueOnce(
+      throwError(() => new HttpErrorResponse({ status: 422, error: { details: { issues } } })),
+    );
+    TestBed.inject(TaskCreate).open();
+    await fixture.whenStable();
+    typeName('Préparer la démo');
+    await fixture.whenStable();
+    buttonNamed('Créer la tâche')?.click();
+    await fixture.whenStable();
+    expect(error).not.toHaveBeenCalled();
+    expect(document.querySelectorAll('cw-dialog-footer [role="alert"] p')).toHaveLength(7);
   });
 
   it('asks the reason before taking « Annulé »', async () => {

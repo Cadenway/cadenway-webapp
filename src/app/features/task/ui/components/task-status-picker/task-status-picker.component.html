@@ -1,8 +1,8 @@
 <cw-split-button
   [label]="ariaLabel()"
   [tooltip]="tooltip()"
-  [opensMenu]="next() === null"
-  [arrow]="next() !== null"
+  [opensMenu]="failed() || next() === null"
+  [arrow]="!failed() && next() !== null"
   [disabled]="disabled()"
   menuLabel="Choose a status"
   i18n-menuLabel="@@task.status-picker.choose"
@@ -11,26 +11,31 @@
   <cw-status-icon [status]="status()" [from]="from()" [milestone]="milestone()" size="3.5" />
   <span class="truncate">{{ label() }}</span>
   <cw-menu ariaLabel="Status" i18n-ariaLabel="@@task.status-picker.menu">
-    @for (group of groups(); track group.category) {
-      <cw-menu-group>
-        @if (group.heading) {
-          <cw-menu-label>{{ group.heading }}</cw-menu-label>
-        }
-        @for (entry of group.entries; track entry.option.key) {
-          <button
-            cwMenuItem
-            type="button"
-            [selected]="entry.option.key === status()"
-            (triggered)="choose(entry.option.key)"
-          >
-            <cw-status-icon [status]="entry.option.key" [milestone]="milestone()" size="4" />
-            <span class="flex min-w-0 flex-col">
-              <span>{{ entry.option.label }}</span>
-              <span class="text-xs text-muted-foreground">{{ entry.hint }}</span>
-            </span>
-          </button>
-        }
-      </cw-menu-group>
+    @if (failed()) {
+      <span role="alert" i18n="@@task.create.read-failed">Could not load this information.</span>
+      <button cwMenuItem type="button" (triggered)="retry.emit()" i18n="@@task.retry">Retry</button>
+    } @else {
+      @for (group of groups(); track group.category) {
+        <cw-menu-group>
+          @if (group.heading) {
+            <cw-menu-label>{{ group.heading }}</cw-menu-label>
+          }
+          @for (entry of group.entries; track entry.option.key) {
+            <button
+              cwMenuItem
+              type="button"
+              [selected]="entry.option.key === status()"
+              (triggered)="choose(entry.option.key)"
+            >
+              <cw-status-icon [status]="entry.option.key" [milestone]="milestone()" size="4" />
+              <span class="flex min-w-0 flex-col">
+                <span>{{ entry.option.label }}</span>
+                <span class="text-xs text-muted-foreground">{{ entry.hint }}</span>
+              </span>
+            </button>
+          }
+        </cw-menu-group>
+      }
     }
   </cw-menu>
 </cw-split-button>

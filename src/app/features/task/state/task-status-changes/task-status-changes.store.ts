@@ -9,17 +9,20 @@ import {
   concatMap,
   debounce,
   EMPTY,
+  finalize,
   groupBy,
   map,
   mergeMap,
   type Observable,
   pipe,
   Subject,
+  shareReplay,
   throwError,
   timer,
 } from 'rxjs';
 
 import { CANCEL_REASON_LABELS } from '../../constants/task-copy/task-copy.constants';
+import { hasProblemCode, OrganizationSwitchPendingError } from '@core/api';
 import { TaskApi } from '../../data-access/services/task-api/task-api.service';
 import type { StatusOption } from '../../models/status-option/status-option.interface';
 import type {
@@ -300,12 +303,12 @@ interface TaskStatusChangesState {
    * Property _cancelTask
    *
    * @description
-   * Task the cancel request is about.
+   * Tasks the cancel request is about.
    *
-   * @type {TaskSummary | null}
+   * @type {readonly TaskSummary[]}
    * @readonly
    */
-  readonly _cancelTask: TaskSummary | null;
+  readonly _cancelTask: readonly TaskSummary[];
 
   /**
    * Property _pending
@@ -374,7 +377,7 @@ interface TaskStatusChangesState {
  */
 const initialState: TaskStatusChangesState = {
   cancelRequest: null,
-  _cancelTask: null,
+  _cancelTask: [],
   _pending: {},
   _settled: {},
   _undo: {},
@@ -505,6 +508,17 @@ interface TaskStatusChangesInstance {
   request(task: TaskSummary, status: StatusKey, options?: readonly StatusOption[]): void;
 
   /**
+   * Method requestCancel
+   *
+   * @description
+   * Requests a shared cancellation reason for the supplied tasks.
+   *
+   * @param {readonly TaskSummary[]} tasks - Tasks to cancel.
+   * @param {readonly StatusOption[]} [options] - Statuses for the toast words.
+   */
+  requestCancel(tasks: readonly TaskSummary[], options?: readonly StatusOption[]): void;
+
+  /**
    * Method confirmCancel
    *
    * @description
@@ -555,6 +569,52 @@ function createTaskStatusChanges(): Type<TaskStatusChangesInstance> {
     }),
     withMethods(
       (store, api: TaskApi = inject(TaskApi), toasts: CwToastService = inject(CwToastService)) => {
+        const destroyRef: DestroyRef = inject(DestroyRef);
+        const inFlight: Map<string, Observable<unknown>> = new Map<string, Observable<unknown>>();
+        const batches: Map<
+          string,
+          { remaining: Set<string>; snapshots: Map<string, UndoSnapshot>; failed: number }
+        > = new Map<
+          string,
+          { remaining: Set<string>; snapshots: Map<string, UndoSnapshot>; failed: number }
+        >();
+        const finishBatch: (id: string, snapshot?: UndoSnapshot) => boolean = (
+          id,
+          snapshot,
+        ): boolean => {
+          const batch:
+            | { remaining: Set<string>; snapshots: Map<string, UndoSnapshot>; failed: number }
+            | undefined = batches.get(id);
+          if (!batch) return false;
+          batches.delete(id);
+          batch.remaining.delete(id);
+          if (snapshot) batch.snapshots.set(id, snapshot);
+          else batch.failed++;
+          if (batch.remaining.size === 0 && !destroyRef.destroyed) {
+            if (batch.failed > 0) {
+              const failedCount: number = batch.failed;
+              toasts.error(
+                failedCount === 1
+                  ? $localize`:@@task.status-change.cancel-failed-one:Could not cancel ${failedCount}:count: task`
+                  : $localize`:@@task.status-change.cancel-failed-count:Could not cancel ${failedCount}:count: tasks`,
+              );
+            }
+            if (!batch.snapshots.size) return true;
+            const count: number = batch.snapshots.size;
+            toasts.show(
+              count === 1
+                ? $localize`:@@task.status-change.cancelled-one:${count}:count: task cancelled`
+                : $localize`:@@task.status-change.cancelled-many:${count}:count: tasks cancelled`,
+              {
+                duration: TOAST_MS,
+                undo: (): void => {
+                  for (const [taskId, entry] of batch.snapshots) undo(taskId, entry);
+                },
+              },
+            );
+          }
+          return true;
+        };
         const settledStatus: (task: TaskSummary) => StatusKey = (task: TaskSummary): StatusKey =>
           settledOf(store._settled(), task)?.status ?? task.status;
 
@@ -574,6 +634,7 @@ function createTaskStatusChanges(): Type<TaskStatusChangesInstance> {
           from: StatusKey,
           to: StatusKey,
         ): void => {
+          const snapshot: UndoSnapshot | undefined = store._undo()[task.id];
           const reason: CancelReason | null = store._settled()[task.id]?.cancelReason ?? null;
           const title: string =
             to === 'cancelled'
@@ -587,7 +648,7 @@ function createTaskStatusChanges(): Type<TaskStatusChangesInstance> {
             description,
             duration: TOAST_MS,
             undo: (): void => {
-              undo(task.id);
+              undo(task.id, snapshot);
             },
           });
         };
@@ -624,62 +685,88 @@ function createTaskStatusChanges(): Type<TaskStatusChangesInstance> {
             store._changes.next({ taskId: id, from: status, to: from, reason: fromReason });
           };
 
-          return api.changeStatus(task.key, version, status, pending.cancellation).pipe(
-            map((saved: TaskSummary): WriteOutcome => ({ conflict: false, task: saved })),
-            catchError((error: unknown) =>
-              error instanceof TaskVersionConflict
-                ? api
-                    .read(task.key)
-                    .pipe(
-                      map((fresh: TaskSummary): WriteOutcome => ({ conflict: true, task: fresh })),
+          const write: Observable<unknown> = api
+            .changeStatus(task.key, version, status, pending.cancellation)
+            .pipe(
+              map((saved: TaskSummary): WriteOutcome => ({ conflict: false, task: saved })),
+              catchError((error: unknown) =>
+                error instanceof TaskVersionConflict
+                  ? api.read(task.key).pipe(
+                      map((fresh: TaskSummary): WriteOutcome => ({
+                        conflict: true,
+                        task: fresh,
+                      })),
                     )
-                : throwError(() => error),
-            ),
-            tapResponse({
-              next: ({ conflict, task: saved }: WriteOutcome): void => {
-                patchState(store, (state: TaskStatusChangesState) => ({
-                  _settled: {
-                    ...state._settled,
-                    [id]: {
-                      status: saved.status,
-                      cancelReason: saved.cancelReason,
-                      version: saved.version,
-                      writing: false,
+                  : throwError(() => error),
+              ),
+              tapResponse({
+                next: ({ conflict, task: saved }: WriteOutcome): void => {
+                  patchState(store, (state: TaskStatusChangesState) => ({
+                    _settled: {
+                      ...state._settled,
+                      [id]: {
+                        status: saved.status,
+                        cancelReason: saved.cancelReason,
+                        version: saved.version,
+                        writing: false,
+                      },
                     },
-                  },
-                  _undo:
-                    conflict || isUndo
-                      ? omit(state._undo, id)
-                      : {
-                          ...state._undo,
-                          [id]: { status: from, cancelReason: fromReason, changedTo: saved.status },
+                    _undo:
+                      conflict || isUndo
+                        ? omit(state._undo, id)
+                        : {
+                            ...state._undo,
+                            [id]: {
+                              status: from,
+                              cancelReason: fromReason,
+                              changedTo: saved.status,
+                            },
+                          },
+                  }));
+                  if (destroyRef.destroyed) return;
+                  const batch: boolean =
+                    status === 'cancelled' &&
+                    !isUndo &&
+                    finishBatch(id, conflict ? undefined : store._undo()[id]);
+                  if (conflict) {
+                    if (saved.status !== status) {
+                      store._changes.next({
+                        taskId: id,
+                        from: status,
+                        to: saved.status,
+                        reason: saved.cancelReason,
+                      });
+                    }
+                    if (!batch)
+                      toasts.warning(
+                        $localize`:@@task.status-change.conflict:${task.key}:key: changed elsewhere`,
+                        {
+                          description: $localize`:@@task.status-change.conflict-text:Its latest status is shown: ${labelOf(task, saved.status)}:status:.`,
                         },
-                }));
-                if (conflict) {
-                  if (saved.status !== status) {
-                    store._changes.next({
-                      taskId: id,
-                      from: status,
-                      to: saved.status,
-                      reason: saved.cancelReason,
-                    });
+                      );
+                  } else if (!isUndo && !batch) {
+                    confirmedToast(task, from, saved.status);
                   }
-                  toasts.warning(
-                    $localize`:@@task.status-change.conflict:${task.key}:key: changed elsewhere`,
-                    {
-                      description: $localize`:@@task.status-change.conflict-text:Its latest status is shown: ${labelOf(task, saved.status)}:status:.`,
-                    },
-                  );
-                } else if (!isUndo) {
-                  confirmedToast(task, from, saved.status);
-                }
-              },
-              error: (): void => {
-                restore();
-                failed();
-              },
-            }),
-          );
+                },
+                error: (error: unknown): void => {
+                  restore();
+                  const batch: boolean = status === 'cancelled' && !isUndo && finishBatch(id);
+                  if (
+                    !batch &&
+                    !destroyRef.destroyed &&
+                    !(error instanceof OrganizationSwitchPendingError) &&
+                    !hasProblemCode(error, 'organization.context-changed')
+                  )
+                    failed();
+                },
+              }),
+              finalize((): void => {
+                inFlight.delete(id);
+              }),
+              shareReplay({ bufferSize: 1, refCount: false }),
+            );
+          inFlight.set(id, write);
+          return write;
         };
 
         const send: (request: StatusRequest) => void = rxMethod<StatusRequest>(
@@ -693,6 +780,26 @@ function createTaskStatusChanges(): Type<TaskStatusChangesInstance> {
             ),
           ),
         );
+
+        destroyRef.onDestroy((): void => {
+          for (const [id, pending] of Object.entries(store._pending())) {
+            if (pending) {
+              const active: Observable<unknown> | undefined = inFlight.get(id);
+              if (active) {
+                active
+                  .pipe(
+                    finalize((): void => {
+                      commit({ id, status: pending.status, undo: false }).subscribe();
+                    }),
+                  )
+                  .subscribe();
+              } else {
+                commit({ id, status: pending.status, undo: false }).subscribe();
+              }
+            }
+          }
+          toasts.dismiss();
+        });
 
         const place: (
           task: TaskSummary,
@@ -715,10 +822,19 @@ function createTaskStatusChanges(): Type<TaskStatusChangesInstance> {
           send({ id: task.id, status, undo: false });
         };
 
-        const undo: (taskId: string) => void = (taskId: string): void => {
+        const undo: (taskId: string, expected?: UndoSnapshot) => void = (
+          taskId,
+          expected,
+        ): void => {
           const snapshot: UndoSnapshot | undefined = store._undo()[taskId];
           const task: TaskSummary | undefined = store._tasks()[taskId];
-          if (!snapshot || !task || settledStatus(task) !== snapshot.changedTo) return;
+          if (
+            !snapshot ||
+            (expected && expected !== snapshot) ||
+            !task ||
+            settledStatus(task) !== snapshot.changedTo
+          )
+            return;
           if (store._pending()[taskId]) return;
           patchState(store, (state: TaskStatusChangesState) => ({
             _pending: {
@@ -730,9 +846,39 @@ function createTaskStatusChanges(): Type<TaskStatusChangesInstance> {
                   : null,
               },
             },
-            _undo: omit(state._undo, taskId),
           }));
           send({ id: taskId, status: snapshot.status, undo: true });
+        };
+
+        const requestCancel: (
+          tasks: readonly TaskSummary[],
+          options?: readonly StatusOption[],
+        ) => void = (tasks: readonly TaskSummary[], options?: readonly StatusOption[]): void => {
+          const selected: readonly TaskSummary[] = [
+            ...new Map(
+              [...store._cancelTask(), ...tasks].map((task: TaskSummary) => [task.id, task]),
+            ).values(),
+          ].filter((task: TaskSummary) => settledStatus(task) !== 'cancelled');
+          if (!selected.length) return;
+          patchState(store, (state: TaskStatusChangesState) => {
+            let pending: Partial<Record<string, PendingChange>> = { ...state._pending };
+            const known: Partial<Record<string, TaskSummary>> = { ...state._tasks };
+            const statusOptions: Partial<Record<string, readonly StatusOption[]>> = {
+              ...state._options,
+            };
+            for (const task of selected) {
+              pending = omit(pending, task.id);
+              known[task.id] = task;
+              if (options) statusOptions[task.spaceId] = options;
+            }
+            return {
+              _pending: pending,
+              _tasks: known,
+              _options: statusOptions,
+              _cancelTask: selected,
+              cancelRequest: { taskKeys: selected.map((task: TaskSummary) => task.key) },
+            };
+          });
         };
 
         return {
@@ -744,24 +890,38 @@ function createTaskStatusChanges(): Type<TaskStatusChangesInstance> {
           },
           settledStatus,
           request(task: TaskSummary, status: StatusKey, options?: readonly StatusOption[]): void {
+            if (batches.has(task.id)) finishBatch(task.id);
             patchState(store, (state: TaskStatusChangesState) => ({
               _tasks: { ...state._tasks, [task.id]: task },
               _options: options ? { ...state._options, [task.spaceId]: options } : state._options,
             }));
             if (status === 'cancelled' && settledStatus(task) !== 'cancelled') {
-              patchState(store, { cancelRequest: { taskKeys: [task.key] }, _cancelTask: task });
+              requestCancel([task], options);
               return;
             }
             place(task, status, null);
           },
           confirmCancel(cancellation: TaskCancellation): void {
-            const task: TaskSummary | null = store._cancelTask();
-            patchState(store, { cancelRequest: null, _cancelTask: null });
-            if (task) place(task, 'cancelled', cancellation);
+            const tasks: readonly TaskSummary[] = store._cancelTask();
+            patchState(store, { cancelRequest: null, _cancelTask: [] });
+            if (tasks.length > 1) {
+              const batch: {
+                remaining: Set<string>;
+                snapshots: Map<string, UndoSnapshot>;
+                failed: number;
+              } = {
+                remaining: new Set(tasks.map((task: TaskSummary) => task.id)),
+                snapshots: new Map<string, UndoSnapshot>(),
+                failed: 0,
+              };
+              for (const task of tasks) batches.set(task.id, batch);
+            }
+            for (const task of tasks) place(task, 'cancelled', cancellation);
           },
           keepTask(): void {
-            patchState(store, { cancelRequest: null, _cancelTask: null });
+            patchState(store, { cancelRequest: null, _cancelTask: [] });
           },
+          requestCancel,
           undo,
         };
       },
@@ -770,7 +930,7 @@ function createTaskStatusChanges(): Type<TaskStatusChangesInstance> {
 }
 
 /**
- * Constant TaskStatusChanges
+ * Constant TaskStatusChangesStore
  *
  * @description
  * The status change interaction (`cw-status-interactions`), provided by the route whose lists,
@@ -782,4 +942,4 @@ function createTaskStatusChanges(): Type<TaskStatusChangesInstance> {
  *
  * @type {Type<TaskStatusChangesInstance>}
  */
-export const TaskStatusChanges: Type<TaskStatusChangesInstance> = createTaskStatusChanges();
+export const TaskStatusChangesStore: Type<TaskStatusChangesInstance> = createTaskStatusChanges();

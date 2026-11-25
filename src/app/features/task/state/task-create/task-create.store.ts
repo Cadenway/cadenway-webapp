@@ -41,6 +41,17 @@ interface TaskCreateState {
   readonly _active: boolean;
 
   /**
+   * Property _organizationId
+   *
+   * @description
+   * Committed organization that owns the resources.
+   *
+   * @type {string}
+   * @readonly
+   */
+  readonly _organizationId: string;
+
+  /**
    * Property _listId
    *
    * @description
@@ -86,6 +97,7 @@ interface TaskCreateState {
  */
 const initialState: TaskCreateState = {
   _active: false,
+  _organizationId: '',
   _listId: null,
   creating: false,
   _attempt: null,
@@ -244,6 +256,50 @@ interface TaskCreateStoreInstance {
    * @readonly
    */
   readonly creating: Signal<boolean>;
+
+  /**
+   * Property peopleFailed
+   *
+   * @description
+   * Whether the people read failed.
+   *
+   * @type {Signal<boolean>}
+   * @readonly
+   */
+  readonly peopleFailed: Signal<boolean>;
+
+  /**
+   * Property labelsFailed
+   *
+   * @description
+   * Whether the labels read failed.
+   *
+   * @type {Signal<boolean>}
+   * @readonly
+   */
+  readonly labelsFailed: Signal<boolean>;
+
+  /**
+   * Property spaceFailed
+   *
+   * @description
+   * Whether the space setup read failed.
+   *
+   * @type {Signal<boolean>}
+   * @readonly
+   */
+  readonly spaceFailed: Signal<boolean>;
+
+  /**
+   * Property templatesFailed
+   *
+   * @description
+   * Whether the templates read failed.
+   *
+   * @type {Signal<boolean>}
+   * @readonly
+   */
+  readonly templatesFailed: Signal<boolean>;
   // #endregion
 
   // #region Methods
@@ -256,6 +312,16 @@ interface TaskCreateStoreInstance {
    * @param {string | null} listId - Preset list, or null for the first one.
    */
   activate(listId: string | null): void;
+
+  /**
+   * Method reset
+   *
+   * @description
+   * Resets data for a committed organization change.
+   *
+   * @param {string} organizationId - Committed organization id.
+   */
+  reset(organizationId: string): void;
 
   /**
    * Method chooseList
@@ -274,6 +340,16 @@ interface TaskCreateStoreInstance {
    * « Réessayer » after the lists could not be read.
    */
   retry(): void;
+
+  /**
+   * Method retrySecondary
+   *
+   * @description
+   * Retries one failed secondary read.
+   *
+   * @param {'people' | 'labels' | 'space' | 'templates'} read - Resource to reload.
+   */
+  retrySecondary(read: 'people' | 'labels' | 'space' | 'templates'): void;
 
   /**
    * Method create
@@ -303,16 +379,16 @@ function createTaskCreateStore(): Type<TaskCreateStoreInstance> {
   return signalStore(
     withState(initialState),
     withProps((store, api: TaskCreateApi = inject(TaskCreateApi)) => ({
-      _destinations: rxResource<readonly ListDestination[], true | undefined>({
-        params: () => (store._active() ? true : undefined),
+      _destinations: rxResource<readonly ListDestination[], string | undefined>({
+        params: () => (store._active() ? store._organizationId() : undefined),
         stream: () => api.destinations(),
       }),
-      _people: rxResource<readonly Person[], true | undefined>({
-        params: () => (store._active() ? true : undefined),
+      _people: rxResource<readonly Person[], string | undefined>({
+        params: () => (store._active() ? store._organizationId() : undefined),
         stream: () => api.people(),
       }),
-      _labels: rxResource<readonly string[], true | undefined>({
-        params: () => (store._active() ? true : undefined),
+      _labels: rxResource<readonly string[], string | undefined>({
+        params: () => (store._active() ? store._organizationId() : undefined),
         stream: () => api.labels(),
       }),
     })),
@@ -333,18 +409,31 @@ function createTaskCreateStore(): Type<TaskCreateStoreInstance> {
         },
         people: (): readonly Person[] => valueOf(store._people, []),
         peopleLoading: (): boolean => store._people.isLoading(),
+        peopleFailed: (): boolean => store._people.error() !== undefined,
         labels: (): readonly string[] => valueOf(store._labels, []),
         labelsLoading: (): boolean => store._labels.isLoading(),
+        labelsFailed: (): boolean => store._labels.error() !== undefined,
       };
     }),
     withProps((store, api: TaskCreateApi = inject(TaskCreateApi)) => ({
-      _space: rxResource<SpaceSetup, string | undefined>({
-        params: () => store.destination()?.spaceId,
-        stream: ({ params }: { params: string }) => api.space(params),
+      _space: rxResource<SpaceSetup, { organizationId: string; spaceId: string } | undefined>({
+        params: () => {
+          const spaceId: string | undefined = store.destination()?.spaceId;
+          return spaceId ? { organizationId: store._organizationId(), spaceId } : undefined;
+        },
+        stream: ({ params }: { params: { organizationId: string; spaceId: string } }) =>
+          api.space(params.spaceId),
       }),
-      _templates: rxResource<readonly TaskTemplateOption[], string | undefined>({
-        params: () => store.destination()?.spaceId,
-        stream: ({ params }: { params: string }) => api.templates(params),
+      _templates: rxResource<
+        readonly TaskTemplateOption[],
+        { organizationId: string; spaceId: string } | undefined
+      >({
+        params: () => {
+          const spaceId: string | undefined = store.destination()?.spaceId;
+          return spaceId ? { organizationId: store._organizationId(), spaceId } : undefined;
+        },
+        stream: ({ params }: { params: { organizationId: string; spaceId: string } }) =>
+          api.templates(params.spaceId),
       }),
     })),
     withComputed((store) => ({
@@ -352,10 +441,21 @@ function createTaskCreateStore(): Type<TaskCreateStoreInstance> {
       statuses: (): readonly StatusOption[] =>
         valueOf<SpaceSetup | null>(store._space, null)?.statuses ?? [],
       templates: (): readonly TaskTemplateOption[] => valueOf(store._templates, []),
+      spaceFailed: (): boolean => store._space.error() !== undefined,
+      templatesFailed: (): boolean => store._templates.error() !== undefined,
     })),
     withMethods((store, api: TaskCreateApi = inject(TaskCreateApi)) => ({
       activate(listId: string | null): void {
-        patchState(store, { _active: true, _listId: listId ?? store._listId() });
+        if (store._active()) store._destinations.reload();
+        patchState(store, {
+          _active: true,
+          _listId: listId ?? store._listId(),
+          creating: false,
+          _attempt: null,
+        });
+      },
+      reset(organizationId: string): void {
+        patchState(store, { ...initialState, _organizationId: organizationId });
       },
       chooseList(listId: string): void {
         patchState(store, { _listId: listId });
@@ -363,24 +463,34 @@ function createTaskCreateStore(): Type<TaskCreateStoreInstance> {
       retry(): void {
         store._destinations.reload();
       },
+      retrySecondary(read: 'people' | 'labels' | 'space' | 'templates'): void {
+        if (read === 'people') store._people.reload();
+        else if (read === 'labels') store._labels.reload();
+        else if (read === 'space') store._space.reload();
+        else store._templates.reload();
+      },
       async create(draft: TaskDraft, parentKey: string | null): Promise<CreatedTask> {
         const listId: string | undefined = store.destination()?.listId;
         if (!listId && parentKey === null) throw new Error('No destination list.');
         const body: string = JSON.stringify({ listId, parentKey, draft });
         const attempt: { readonly key: string; readonly body: string } | null = store._attempt();
         const key: string = attempt?.body === body ? attempt.key : crypto.randomUUID();
+        const organizationId: string = store._organizationId();
         patchState(store, { creating: true, _attempt: { key, body } });
         try {
           const created: CreatedTask = await firstValueFrom(
             parentKey === null
               ? api.create(listId ?? '', draft, key)
-              : api.createSubtask(parentKey, draft),
+              : api.createSubtask(parentKey, draft, key),
           );
-          patchState(store, { creating: false, _attempt: null });
-          store._space.reload();
+          if (organizationId === store._organizationId() && store._attempt()?.key === key) {
+            patchState(store, { creating: false, _attempt: null });
+            store._space.reload();
+          }
           return created;
         } catch (error: unknown) {
-          patchState(store, { creating: false });
+          if (organizationId === store._organizationId() && store._attempt()?.key === key)
+            patchState(store, { creating: false });
           throw error;
         }
       },
