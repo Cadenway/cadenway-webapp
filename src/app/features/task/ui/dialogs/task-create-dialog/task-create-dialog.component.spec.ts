@@ -228,7 +228,7 @@ describe('TaskCreateDialog', () => {
     );
   });
 
-  it('names the due date picker once, then with the picked date', async () => {
+  it('names the empty due date picker by its text, and a set one by label and date', async () => {
     const service: TaskCreate = TestBed.inject(TaskCreate);
     service.open({ listId: 'sprint-14' });
     await fixture.whenStable();

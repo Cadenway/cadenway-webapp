@@ -326,9 +326,10 @@ export class TaskCreateDialog {
    * Property dueName
    *
    * @description
-   * Name of the due date picker: « Échéance » before the picked date (« Échéance, 18 nov. »).
-   * Without a date the trigger shows the same word as its placeholder and takes its name from it,
-   * so it is not announced twice.
+   * Name of the due date picker, put before the picked date (« Échéance, 18 nov. »). Without a
+   * date the trigger shows the same word as its placeholder and takes its name from that text, so
+   * it is not announced twice. Valid for the button variant only: the `input` variant would need
+   * its name at all times.
    *
    * @type {Signal<string>}
    * @readonly

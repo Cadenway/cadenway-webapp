@@ -681,9 +681,10 @@ function createListPageStore(): Type<ListPageStoreInstance> {
  * found for a malformed id, unavailable otherwise), which the page lets reach the boundary. The
  * space, counts, milestones, members, labels and saved views are secondary reads with their own
  * state. While the page lives it watches the list's realtime room; the gateway broadcasts every
- * change to every watch, so matching list or space notices are debounced before refreshing counts. A task
- * created in the list from this tab refreshes them at once, without waiting for its notice. Writes report whether the gateway
- * recorded them; renaming and deleting a saved view are optimistic and restore on a refusal.
+ * change to every watch, so matching list or space notices are debounced before refreshing counts.
+ * A task created in the list from this tab refreshes them at once, without waiting for its notice.
+ * Writes report whether the gateway recorded them; renaming and deleting a saved view are
+ * optimistic and restore on a refusal.
  *
  * @type {ReturnType<typeof createListPageStore>}
  */
