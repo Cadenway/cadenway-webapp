@@ -448,6 +448,40 @@ describe('TaskCreateDialog', () => {
     expect(document.querySelector('cw-dialog-footer [role="alert"]')).toBeNull();
   });
 
+  it('starts each opening without the issues a refused creation left', async () => {
+    create.mockReturnValueOnce(
+      throwError(
+        () =>
+          new HttpErrorResponse({
+            status: 422,
+            error: { details: { issues: [{ path: 'status' }] } },
+          }),
+      ),
+    );
+    const service: TaskCreate = TestBed.inject(TaskCreate);
+    service.open({ listId: 'sprint-14' });
+    await fixture.whenStable();
+    typeName('Préparer la démo');
+    await fixture.whenStable();
+    buttonNamed('Créer la tâche')?.click();
+    await fixture.whenStable();
+    expect(document.querySelector('cw-dialog-footer [role="alert"]')?.textContent).toContain(
+      'Vérifiez cette information.',
+    );
+
+    service.close();
+    await fixture.whenStable();
+    service.open({ listId: 'sprint-14' });
+    await fixture.whenStable();
+    typeName('Préparer la démo');
+    await fixture.whenStable();
+    document.querySelector('#task-create-name')?.dispatchEvent(new Event('blur'));
+    await fixture.whenStable();
+
+    expect(buttonNamed('Créer la tâche')?.disabled).toBe(false);
+    expect(document.querySelector('cw-dialog-footer [role="alert"]')).toBeNull();
+  });
+
   it('keeps field and unmapped validation issues in the form', async () => {
     const issues: { path: string }[] = [
       'name',

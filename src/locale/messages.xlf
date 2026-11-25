@@ -6081,7 +6081,7 @@
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/task/ui/dialogs/task-create-dialog/task-create-dialog.component.ts</context>
-          <context context-type="linenumber">325</context>
+          <context context-type="linenumber">357</context>
         </context-group>
       </trans-unit>
       <trans-unit id="task.people-picker.placeholder" datatype="html">
@@ -6450,203 +6450,203 @@
         <source>Due date</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/task/ui/dialogs/task-create-dialog/task-create-dialog.component.ts</context>
-          <context context-type="linenumber">78</context>
+          <context context-type="linenumber">80</context>
         </context-group>
       </trans-unit>
       <trans-unit id="task.create.close" datatype="html">
         <source>Close</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/task/ui/dialogs/task-create-dialog/task-create-dialog.component.ts</context>
-          <context context-type="linenumber">301</context>
+          <context context-type="linenumber">333</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/task/ui/dialogs/task-create-dialog/task-create-dialog.component.ts</context>
-          <context context-type="linenumber">301</context>
+          <context context-type="linenumber">333</context>
         </context-group>
       </trans-unit>
       <trans-unit id="task.create.due-dialog" datatype="html">
         <source>Due date</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/task/ui/dialogs/task-create-dialog/task-create-dialog.component.ts</context>
-          <context context-type="linenumber">304</context>
+          <context context-type="linenumber">336</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/task/ui/dialogs/task-create-dialog/task-create-dialog.component.ts</context>
-          <context context-type="linenumber">304</context>
+          <context context-type="linenumber">336</context>
         </context-group>
       </trans-unit>
       <trans-unit id="task.create.due-clear" datatype="html">
         <source>Clear</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/task/ui/dialogs/task-create-dialog/task-create-dialog.component.ts</context>
-          <context context-type="linenumber">305</context>
+          <context context-type="linenumber">337</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/task/ui/dialogs/task-create-dialog/task-create-dialog.component.ts</context>
-          <context context-type="linenumber">305</context>
+          <context context-type="linenumber">337</context>
         </context-group>
       </trans-unit>
       <trans-unit id="task.create.due-add-time" datatype="html">
         <source>Add a time</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/task/ui/dialogs/task-create-dialog/task-create-dialog.component.ts</context>
-          <context context-type="linenumber">306</context>
+          <context context-type="linenumber">338</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/task/ui/dialogs/task-create-dialog/task-create-dialog.component.ts</context>
-          <context context-type="linenumber">306</context>
+          <context context-type="linenumber">338</context>
         </context-group>
       </trans-unit>
       <trans-unit id="task.create.due-time" datatype="html">
         <source>Time</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/task/ui/dialogs/task-create-dialog/task-create-dialog.component.ts</context>
-          <context context-type="linenumber">307</context>
+          <context context-type="linenumber">339</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/task/ui/dialogs/task-create-dialog/task-create-dialog.component.ts</context>
-          <context context-type="linenumber">307</context>
+          <context context-type="linenumber">339</context>
         </context-group>
       </trans-unit>
       <trans-unit id="task.create.due-calendar" datatype="html">
         <source>Open the calendar</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/task/ui/dialogs/task-create-dialog/task-create-dialog.component.ts</context>
-          <context context-type="linenumber">308</context>
+          <context context-type="linenumber">340</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/task/ui/dialogs/task-create-dialog/task-create-dialog.component.ts</context>
-          <context context-type="linenumber">308</context>
+          <context context-type="linenumber">340</context>
         </context-group>
       </trans-unit>
       <trans-unit id="task.create.due-input" datatype="html">
         <source>dd/mm/yyyy</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/task/ui/dialogs/task-create-dialog/task-create-dialog.component.ts</context>
-          <context context-type="linenumber">309</context>
+          <context context-type="linenumber">341</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/task/ui/dialogs/task-create-dialog/task-create-dialog.component.ts</context>
-          <context context-type="linenumber">309</context>
+          <context context-type="linenumber">341</context>
         </context-group>
       </trans-unit>
       <trans-unit id="task.create.name-required" datatype="html">
         <source>Enter a name for the task.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/task/ui/dialogs/task-create-dialog/task-create-dialog.component.ts</context>
-          <context context-type="linenumber">486</context>
+          <context context-type="linenumber">533</context>
         </context-group>
       </trans-unit>
       <trans-unit id="task.create.due-today" datatype="html">
         <source>Today</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/task/ui/dialogs/task-create-dialog/task-create-dialog.component.ts</context>
-          <context context-type="linenumber">559</context>
+          <context context-type="linenumber">627</context>
         </context-group>
       </trans-unit>
       <trans-unit id="task.create.due-tomorrow" datatype="html">
         <source>Tomorrow</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/task/ui/dialogs/task-create-dialog/task-create-dialog.component.ts</context>
-          <context context-type="linenumber">560</context>
+          <context context-type="linenumber">628</context>
         </context-group>
       </trans-unit>
       <trans-unit id="task.create.due-friday" datatype="html">
         <source>Friday</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/task/ui/dialogs/task-create-dialog/task-create-dialog.component.ts</context>
-          <context context-type="linenumber">561</context>
+          <context context-type="linenumber">629</context>
         </context-group>
       </trans-unit>
       <trans-unit id="task.create.due-sprint" datatype="html">
         <source>End of the sprint</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/task/ui/dialogs/task-create-dialog/task-create-dialog.component.ts</context>
-          <context context-type="linenumber">565</context>
+          <context context-type="linenumber">633</context>
         </context-group>
       </trans-unit>
       <trans-unit id="task.create.due-none" datatype="html">
         <source>No due date</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/task/ui/dialogs/task-create-dialog/task-create-dialog.component.ts</context>
-          <context context-type="linenumber">570</context>
+          <context context-type="linenumber">638</context>
         </context-group>
       </trans-unit>
       <trans-unit id="task.create.subtask-remove" datatype="html">
         <source>Remove the subtask <x id="name" equiv-text="subtask"/></source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/task/ui/dialogs/task-create-dialog/task-create-dialog.component.ts</context>
-          <context context-type="linenumber">772</context>
+          <context context-type="linenumber">840</context>
         </context-group>
       </trans-unit>
       <trans-unit id="task.create.field-invalid" datatype="html">
         <source>Check this information.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/task/ui/dialogs/task-create-dialog/task-create-dialog.component.ts</context>
-          <context context-type="linenumber">849</context>
+          <context context-type="linenumber">874</context>
         </context-group>
       </trans-unit>
       <trans-unit id="task.create.role-insufficient" datatype="html">
         <source>You cannot create tasks in this list.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/task/ui/dialogs/task-create-dialog/task-create-dialog.component.ts</context>
-          <context context-type="linenumber">856</context>
+          <context context-type="linenumber">938</context>
         </context-group>
       </trans-unit>
       <trans-unit id="task.create.status-hidden" datatype="html">
         <source>This status is no longer available. Choose another.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/task/ui/dialogs/task-create-dialog/task-create-dialog.component.ts</context>
-          <context context-type="linenumber">858</context>
+          <context context-type="linenumber">940</context>
         </context-group>
       </trans-unit>
       <trans-unit id="task.create.failed-text" datatype="html">
         <source>The server did not answer. Try again in a moment.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/task/ui/dialogs/task-create-dialog/task-create-dialog.component.ts</context>
-          <context context-type="linenumber">860</context>
+          <context context-type="linenumber">942</context>
         </context-group>
       </trans-unit>
       <trans-unit id="task.create.refused" datatype="html">
         <source>The task could not be created. Check its details and try again.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/task/ui/dialogs/task-create-dialog/task-create-dialog.component.ts</context>
-          <context context-type="linenumber">861</context>
+          <context context-type="linenumber">943</context>
         </context-group>
       </trans-unit>
       <trans-unit id="task.create.failed" datatype="html">
         <source>Could not create the task</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/task/ui/dialogs/task-create-dialog/task-create-dialog.component.ts</context>
-          <context context-type="linenumber">862</context>
+          <context context-type="linenumber">944</context>
         </context-group>
       </trans-unit>
       <trans-unit id="task.create.subtask-one" datatype="html">
         <source>1 subtask</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/task/ui/dialogs/task-create-dialog/task-create-dialog.component.ts</context>
-          <context context-type="linenumber">913</context>
+          <context context-type="linenumber">995</context>
         </context-group>
       </trans-unit>
       <trans-unit id="task.create.subtask-many" datatype="html">
         <source><x id="count" equiv-text="created.subtasks"/> subtasks</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/task/ui/dialogs/task-create-dialog/task-create-dialog.component.ts</context>
-          <context context-type="linenumber">915</context>
+          <context context-type="linenumber">997</context>
         </context-group>
       </trans-unit>
       <trans-unit id="task.create.created" datatype="html">
         <source>Task <x id="key" equiv-text="created.key"/> created</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/task/ui/dialogs/task-create-dialog/task-create-dialog.component.ts</context>
-          <context context-type="linenumber">918</context>
+          <context context-type="linenumber">1000</context>
         </context-group>
       </trans-unit>
       <trans-unit id="task.create.open" datatype="html">
         <source>Open</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/task/ui/dialogs/task-create-dialog/task-create-dialog.component.ts</context>
-          <context context-type="linenumber">922</context>
+          <context context-type="linenumber">1004</context>
         </context-group>
       </trans-unit>
       <trans-unit id="workspace.shortcuts.key-ctrl" datatype="html">

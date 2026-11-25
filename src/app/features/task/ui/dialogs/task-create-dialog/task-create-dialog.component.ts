@@ -10,11 +10,13 @@ import {
   type WritableSignal,
 } from '@angular/core';
 import {
+  type FieldContext,
   type FieldTree,
   form,
   FormField,
   required,
   submit,
+  validate,
   type ValidationError,
 } from '@angular/forms/signals';
 import { Router } from '@angular/router';
@@ -77,6 +79,36 @@ import { TaskCancelDialog } from '../task-cancel-dialog/task-cancel-dialog.compo
 function dueLabel(): string {
   return $localize`:@@task.create.due:Due date`;
 }
+
+/**
+ * Type ServerIssueField
+ *
+ * @description
+ * Where a refused creation's issue is shown: one of the dialog's fields, or the whole form for a
+ * path the dialog does not show.
+ *
+ * @type {'name' | 'description' | 'due' | 'assigneeIds' | 'labels' | 'status' | 'form'}
+ */
+type ServerIssueField =
+  'name' | 'description' | 'due' | 'assigneeIds' | 'labels' | 'status' | 'form';
+
+/**
+ * Constant SERVER_ISSUE_FIELDS
+ *
+ * @description
+ * The dialog field of each first segment of a 422 issue path.
+ *
+ * @type {Readonly<Record<string, ServerIssueField>>}
+ */
+const SERVER_ISSUE_FIELDS: Readonly<Record<string, ServerIssueField>> = {
+  name: 'name',
+  title: 'name',
+  description: 'description',
+  dueDate: 'due',
+  assigneeIds: 'assigneeIds',
+  labels: 'labels',
+  status: 'status',
+};
 
 /**
  * Interface TaskCreateModel
@@ -473,6 +505,21 @@ export class TaskCreateDialog {
   );
 
   /**
+   * Property serverIssues
+   *
+   * @description
+   * The fields a refused creation (422) named, each with the value it had then. A field's error
+   * stays until its value changes; each opening starts without any, which submission errors of
+   * Signal Forms could not offer (they survive a reset).
+   *
+   * @type {WritableSignal<Readonly<Partial<Record<ServerIssueField, unknown>>>>}
+   * @readonly
+   */
+  private readonly serverIssues: WritableSignal<
+    Readonly<Partial<Record<ServerIssueField, unknown>>>
+  > = signal({});
+
+  /**
    * Property createForm
    *
    * @description
@@ -485,6 +532,27 @@ export class TaskCreateDialog {
     required(path.name, {
       message: $localize`:@@task.create.name-required:Enter a name for the task.`,
     });
+    validate(path.name, (context: FieldContext<string>) =>
+      this.serverIssue('name', context.value()),
+    );
+    validate(path.description, (context: FieldContext<string>) =>
+      this.serverIssue('description', context.value()),
+    );
+    validate(path.due, (context: FieldContext<Date | null>) =>
+      this.serverIssue('due', context.value()),
+    );
+    validate(path.assigneeIds, (context: FieldContext<readonly string[]>) =>
+      this.serverIssue('assigneeIds', context.value()),
+    );
+    validate(path.labels, (context: FieldContext<readonly string[]>) =>
+      this.serverIssue('labels', context.value()),
+    );
+    validate(path.status, (context: FieldContext<StatusKey>) =>
+      this.serverIssue('status', context.value()),
+    );
+    validate(path, (context: FieldContext<TaskCreateModel>) =>
+      this.serverIssue('form', context.value()),
+    );
   });
 
   /**
@@ -785,6 +853,30 @@ export class TaskCreateDialog {
   }
 
   /**
+   * Method serverIssue
+   *
+   * @description
+   * The refused creation's error of a field while it keeps the value that was refused.
+   *
+   * @param {ServerIssueField} field - The field, or the whole form.
+   * @param {unknown} value - Its current value.
+   * @returns {ValidationError.WithoutFieldTree | undefined} « Vérifiez cette information. », or
+   * nothing.
+   */
+  private serverIssue(
+    field: ServerIssueField,
+    value: unknown,
+  ): ValidationError.WithoutFieldTree | undefined {
+    const issues: Readonly<Partial<Record<ServerIssueField, unknown>>> = this.serverIssues();
+    return field in issues && issues[field] === value
+      ? {
+          kind: 'server',
+          message: $localize`:@@task.create.field-invalid:Check this information.`,
+        }
+      : undefined;
+  }
+
+  /**
    * Method create
    *
    * @description
@@ -807,6 +899,7 @@ export class TaskCreateDialog {
           if (openingId !== this.openingId || !this.taskCreate.isOpen()) return undefined;
           this.taskCreate.announce(created);
           this.confirm(created, destination);
+          this.serverIssues.set({});
           if (this.more()) {
             this.patch({
               name: '',
@@ -829,27 +922,16 @@ export class TaskCreateDialog {
             Array.isArray(issues) &&
             issues.length
           ) {
-            const errors: ValidationError.WithOptionalFieldTree[] = [];
-            const fields: Readonly<Record<string, FieldTree<unknown>>> = {
-              name: this.createForm.name,
-              title: this.createForm.name,
-              description: this.createForm.description,
-              dueDate: this.createForm.due,
-              assigneeIds: this.createForm.assigneeIds,
-              labels: this.createForm.labels,
-              status: this.createForm.status,
-            };
+            const refused: Partial<Record<ServerIssueField, unknown>> = {};
             for (const issue of issues as unknown[]) {
               const path: unknown =
                 typeof issue === 'object' && issue !== null && 'path' in issue ? issue.path : null;
               const root: string = typeof path === 'string' ? path.split('.')[0].split('[')[0] : '';
-              errors.push({
-                kind: 'server',
-                fieldTree: fields[root] ?? this.createForm,
-                message: $localize`:@@task.create.field-invalid:Check this information.`,
-              });
+              const field: ServerIssueField = SERVER_ISSUE_FIELDS[root] ?? 'form';
+              refused[field] = field === 'form' ? model : model[field];
             }
-            return errors;
+            this.serverIssues.set(refused);
+            return undefined;
           }
           const description: string =
             problem?.status === 403 && hasProblemCode(error, 'access.role-insufficient')
@@ -965,6 +1047,7 @@ export class TaskCreateDialog {
     this.openingId++;
     this.store.activate(options.listId ?? null);
     this.model.set(this.blank(options));
+    this.serverIssues.set({});
     this.createForm().reset();
     this.cancelAsk.set(null);
     this.unregisterSubmit?.();
