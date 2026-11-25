@@ -9,7 +9,12 @@ import { TestBed } from '@angular/core/testing';
 import { type Observable, of, Subject, throwError } from 'rxjs';
 
 import { RealtimeConnection, type PersonalNotice } from '@core/realtime';
-import { OrganizationPin, organizationPinInterceptor, PASSIVE_REQUEST } from '@core/api';
+import {
+  OrganizationPin,
+  OrganizationSwitchPendingError,
+  organizationPinInterceptor,
+  PASSIVE_REQUEST,
+} from '@core/api';
 import { RuntimeConfigStore } from '@core/config';
 import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 
@@ -770,9 +775,9 @@ describe('InboxStore', () => {
     pin.set('atelier-nord');
     const store: InstanceType<typeof InboxStore> = await opened();
     pin.markStale();
-    api.unreadCount.mockReturnValue(throwError(() => new Error('stale')));
-    api.notifications.mockRejectedValue(new Error('stale'));
-    api.pendingReminders.mockRejectedValue(new Error('stale'));
+    api.unreadCount.mockReturnValue(throwError(() => new OrganizationSwitchPendingError()));
+    api.notifications.mockRejectedValue(new OrganizationSwitchPendingError());
+    api.pendingReminders.mockRejectedValue(new OrganizationSwitchPendingError());
     connectionStatus.set('reconnecting');
     TestBed.tick();
     connectionStatus.set('connected');
@@ -795,6 +800,66 @@ describe('InboxStore', () => {
       expect(store.unreadCount()).toBe(3);
     });
     expect(connectionStatus()).toBe('connected');
+  });
+
+  it('does not retry an unrelated read failure on verification', async () => {
+    const pin: OrganizationPin = TestBed.inject(OrganizationPin);
+    pin.set('atelier-nord');
+    await opened();
+    api.unreadCount.mockReturnValue(throwError(() => new Error('unavailable')));
+    window.dispatchEvent(new Event('focus'));
+    api.unreadCount.mockClear();
+    api.notifications.mockClear();
+    api.pendingReminders.mockClear();
+    pin.set('atelier-nord');
+    expect(api.unreadCount).not.toHaveBeenCalled();
+    expect(api.notifications).not.toHaveBeenCalled();
+    expect(api.pendingReminders).not.toHaveBeenCalled();
+  });
+
+  it('does not recover old reads under a newly committed organization pin', async () => {
+    const pin: OrganizationPin = TestBed.inject(OrganizationPin);
+    pin.set('atelier-nord');
+    await opened();
+    api.unreadCount.mockReturnValue(throwError(() => new OrganizationSwitchPendingError()));
+    window.dispatchEvent(new Event('focus'));
+    api.unreadCount.mockClear();
+    current.set(workspaceOrganization('lumen'));
+    pin.set('lumen');
+    expect(api.unreadCount).not.toHaveBeenCalled();
+    TestBed.tick();
+  });
+
+  it('defers recovery to reconnect and avoids repeated verification retries', async () => {
+    const pin: OrganizationPin = TestBed.inject(OrganizationPin);
+    pin.set('atelier-nord');
+    await opened();
+    api.unreadCount.mockReturnValue(throwError(() => new OrganizationSwitchPendingError()));
+    window.dispatchEvent(new Event('focus'));
+    connectionStatus.set('reconnecting');
+    TestBed.tick();
+    api.unreadCount.mockClear();
+    api.notifications.mockClear();
+    api.pendingReminders.mockClear();
+    pin.set('atelier-nord');
+    expect(api.unreadCount).not.toHaveBeenCalled();
+    expect(api.notifications).not.toHaveBeenCalled();
+    expect(api.pendingReminders).not.toHaveBeenCalled();
+    connectionStatus.set('connected');
+    TestBed.tick();
+    await vi.advanceTimersByTimeAsync(0);
+    TestBed.tick();
+    expect(api.unreadCount).toHaveBeenCalledTimes(1);
+    expect(api.notifications).toHaveBeenCalledTimes(1);
+    expect(api.pendingReminders).toHaveBeenCalledTimes(1);
+    api.unreadCount.mockClear();
+    api.unreadCount.mockReturnValueOnce(throwError(() => new Error('412 context changed')));
+    pin.set('atelier-nord');
+    expect(api.unreadCount).toHaveBeenCalledTimes(1);
+    window.dispatchEvent(new Event('focus'));
+    api.unreadCount.mockClear();
+    pin.set('atelier-nord');
+    expect(api.unreadCount).not.toHaveBeenCalled();
   });
 
   it('clears everything and polls the new organization on a switch, ignoring the old answers', async () => {
@@ -865,8 +930,6 @@ describe('InboxStore passive requests', () => {
     expect(store.reminders.error()).toBeDefined();
     pin.set('organization-a');
     TestBed.tick();
-    const refreshedBadge: TestRequest = http.expectOne('/v1/inbox/unread-count');
-    refreshedBadge.flush({ unreadCount: 0 });
     store.reminders.reload();
     TestBed.tick();
     const retry: TestRequest = http.expectOne((request) => request.url === '/v1/reminders');

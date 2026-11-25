@@ -147,6 +147,9 @@ Layouts never import features. Features fill them in three ways:
 - Bricks with their own text receive English source labels from `core/locale` through their labels
   providers. Route titles use `$localize` and go through the application `TitleStrategy`.
 
+The account menu uses `cw-avatar` presence indicators for the rail and menu header; their
+localized labels describe the presence, while the avatars are decorative beside the account name.
+
 ## Cross-repository changes
 
 Each checkout owns its implementation and release. Use published `@cadenway/*` packages instead of sibling source imports or local dependency links. For contract changes, make the contract and generated package available first, then update the producing service, gateways and listeners, and finally the webapp. Each step should remain deployable independently.
