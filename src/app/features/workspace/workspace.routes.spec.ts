@@ -1,7 +1,16 @@
-import { Component } from '@angular/core';
+import { HttpContext, HttpErrorResponse, HttpResponse, HttpRequest } from '@angular/common/http';
+import {
+  DOCUMENT,
+  Component,
+  createEnvironmentInjector,
+  EnvironmentInjector,
+  runInInjectionContext,
+} from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import {
+  NavigationCancel,
   NavigationEnd,
+  NavigationError,
   provideRouter,
   Router,
   withAutoCleanupInjectors,
@@ -10,11 +19,16 @@ import {
 } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { BillingService, InboxService, RealtimeService } from '@cadenway/api-client';
-import { filter, firstValueFrom, type Observable, of, Subject } from 'rxjs';
+import { filter, firstValueFrom, Observable, of, Subject, throwError } from 'rxjs';
 import { io, type Socket } from 'socket.io-client';
 import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 
-import { OrganizationPin } from '@core/api';
+import {
+  OrganizationPin,
+  organizationPinInterceptor,
+  OrganizationSwitchPendingError,
+  PASSIVE_REQUEST,
+} from '@core/api';
 import { RuntimeConfigStore } from '@core/config';
 import { REALTIME_TERMINAL_FAILURE, RealtimeConnection } from '@core/realtime';
 
@@ -26,6 +40,7 @@ import type {
   WorkspaceUser,
 } from './models/workspace-context/workspace-context.interface';
 import { WORKSPACE_ROUTES } from './workspace.routes';
+import { provideWorkspaceRuntime } from './providers/workspace-runtime/workspace-runtime.provider';
 
 vi.mock('socket.io-client', () => ({ io: vi.fn() }));
 
@@ -205,6 +220,8 @@ describe('WORKSPACE_ROUTES', () => {
   let session: SessionFake;
 
   beforeEach(() => {
+    vi.spyOn(document, 'hasFocus').mockReturnValue(true);
+    vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible');
     session = {
       currentUser: vi.fn(() => ok(camille)),
       currentOrganization: vi.fn(() => ok(atelierNord)),
@@ -326,6 +343,225 @@ describe('WORKSPACE_ROUTES', () => {
     expect(pin.current()).toBe(atelierNord.id);
   });
 
+  it.each(['focus', 'visibility'] as const)(
+    'defers a recovery switch when the tab loses %s during the organization read',
+    async (lost: 'focus' | 'visibility') => {
+      const harness: RouterTestingHarness = await open('/atelier-nord');
+      const router: Router = TestBed.inject(Router);
+      const pin: OrganizationPin = TestBed.inject(OrganizationPin);
+      const focus: Mock<() => boolean> = vi.spyOn(document, 'hasFocus').mockReturnValue(true);
+      const visibility: Mock<() => DocumentVisibilityState> = vi
+        .spyOn(document, 'visibilityState', 'get')
+        .mockReturnValue('visible');
+      const clock: Mock<() => number> = vi.spyOn(Date, 'now');
+      const read: Subject<WorkspaceResult<WorkspaceOrganization>> = new Subject<
+        WorkspaceResult<WorkspaceOrganization>
+      >();
+      session.currentOrganization.mockReturnValueOnce(read).mockReturnValue(ok(lumen));
+      const cancelled: Promise<NavigationCancel> = firstValueFrom(
+        router.events.pipe(
+          filter((event): event is NavigationCancel => event instanceof NavigationCancel),
+        ),
+      );
+      pin.notifyContextChanged();
+      await vi.waitFor(() => {
+        expect(session.currentOrganization).toHaveBeenCalledTimes(2);
+      });
+      if (lost === 'focus') focus.mockReturnValue(false);
+      else visibility.mockReturnValue('hidden');
+      read.next({ ok: true, value: lumen });
+      read.complete();
+      await cancelled;
+      await vi.waitFor(() => {
+        expect(router.currentNavigation()).toBeNull();
+      });
+      await Promise.resolve();
+      expect(session.switchOrganization).not.toHaveBeenCalled();
+      expect(pin.stale()).toBe(true);
+      expect(pin.isSwitching()).toBe(false);
+      expect(router.url).toBe('/atelier-nord');
+      clock.mockReturnValue(Date.now() + 2000);
+      const verified: Promise<void> = firstValueFrom(pin.organizationVerified);
+      focus.mockReturnValue(true);
+      visibility.mockReturnValue('visible');
+      window.dispatchEvent(new Event('focus'));
+      await verified;
+      await harness.fixture.whenStable();
+      expect(session.switchOrganization).toHaveBeenCalledExactlyOnceWith(atelierNord.id);
+      expect(pin.stale()).toBe(false);
+      clock.mockRestore();
+    },
+  );
+
+  it.each(['current organization', 'organization lookup'] as const)(
+    'does not switch after a recovery is superseded during the locked %s read',
+    async (stage: 'current organization' | 'organization lookup') => {
+      const harness: RouterTestingHarness = await open('/atelier-nord');
+      const router: Router = TestBed.inject(Router);
+      const pin: OrganizationPin = TestBed.inject(OrganizationPin);
+      const focus: Mock<() => boolean> = vi.spyOn(document, 'hasFocus').mockReturnValue(true);
+      const clock: Mock<() => number> = vi.spyOn(Date, 'now');
+      const current: Subject<WorkspaceResult<WorkspaceOrganization>> = new Subject<
+        WorkspaceResult<WorkspaceOrganization>
+      >();
+      const lookup: Subject<WorkspaceResult<readonly WorkspaceOrganization[]>> = new Subject<
+        WorkspaceResult<readonly WorkspaceOrganization[]>
+      >();
+      const settled: Subject<void> = new Subject<void>();
+      session.exclusive.mockImplementation(
+        (operation: () => Observable<unknown>) =>
+          new Observable((subscriber) => {
+            operation().subscribe({
+              next: (value: unknown) => {
+                subscriber.next(value);
+              },
+              error: (error: unknown) => {
+                subscriber.error(error);
+              },
+              complete: () => {
+                subscriber.complete();
+                settled.next();
+              },
+            });
+          }),
+      );
+      if (stage === 'current organization')
+        session.currentOrganization.mockReturnValueOnce(current);
+      else {
+        session.currentOrganization.mockReturnValueOnce(ok(lumen));
+        session.myOrganizations.mockReturnValueOnce(lookup);
+      }
+      session.currentOrganization.mockReturnValue(ok(lumen));
+      const cancelled: Promise<NavigationCancel> = firstValueFrom(
+        router.events.pipe(
+          filter((event): event is NavigationCancel => event instanceof NavigationCancel),
+        ),
+      );
+      pin.notifyContextChanged();
+      await vi.waitFor(() => {
+        if (stage === 'current organization')
+          expect(session.currentOrganization).toHaveBeenCalledTimes(2);
+        else expect(session.myOrganizations).toHaveBeenCalledOnce();
+      });
+      const superseding: Promise<boolean> = router.navigateByUrl('/atelier-nord?task=CAD-1');
+      await cancelled;
+      expect(await superseding).toBe(true);
+      const finished: Promise<void> = firstValueFrom(settled);
+      if (stage === 'current organization') {
+        current.next({ ok: true, value: lumen });
+        current.complete();
+      } else {
+        lookup.next({ ok: true, value: [atelierNord, lumen] });
+        lookup.complete();
+      }
+      await finished;
+      expect(session.switchOrganization).not.toHaveBeenCalled();
+      expect(pin.stale()).toBe(true);
+      expect(pin.isSwitching()).toBe(false);
+      focus.mockReturnValue(false);
+      clock.mockReturnValue(Date.now() + 2000);
+      const verified: Promise<void> = firstValueFrom(pin.organizationVerified);
+      focus.mockReturnValue(true);
+      window.dispatchEvent(new Event('focus'));
+      await verified;
+      await harness.fixture.whenStable();
+      expect(session.switchOrganization).toHaveBeenCalledExactlyOnceWith(atelierNord.id);
+      expect(pin.stale()).toBe(false);
+      clock.mockRestore();
+      settled.complete();
+    },
+  );
+
+  it('finishes a dispatched recovery switch even when navigation is superseded', async () => {
+    await open('/atelier-nord');
+    const router: Router = TestBed.inject(Router);
+    const pin: OrganizationPin = TestBed.inject(OrganizationPin);
+    const focus: Mock<() => boolean> = vi.spyOn(document, 'hasFocus').mockReturnValue(true);
+    const write: Subject<WorkspaceResult<void>> = new Subject<WorkspaceResult<void>>();
+    const settled: Subject<void> = new Subject<void>();
+    session.exclusive.mockImplementation(
+      (operation: () => Observable<unknown>) =>
+        new Observable((subscriber) => {
+          operation().subscribe({
+            next: (value: unknown) => {
+              subscriber.next(value);
+            },
+            error: (error: unknown) => {
+              subscriber.error(error);
+            },
+            complete: () => {
+              subscriber.complete();
+              settled.next();
+            },
+          });
+        }),
+    );
+    session.currentOrganization.mockReturnValue(ok(lumen));
+    session.switchOrganization.mockReturnValueOnce(write);
+    pin.notifyContextChanged();
+    await vi.waitFor(() => {
+      expect(session.switchOrganization).toHaveBeenCalledOnce();
+    });
+    const finished: Promise<void> = firstValueFrom(settled);
+    const superseding: Promise<boolean> = router.navigateByUrl('/atelier-nord?task=CAD-1');
+    expect(await superseding).toBe(true);
+    focus.mockReturnValue(false);
+    write.next({ ok: true, value: undefined });
+    write.complete();
+    await finished;
+    expect(session.switchOrganization).toHaveBeenCalledExactlyOnceWith(atelierNord.id);
+    expect(pin.stale()).toBe(true);
+    settled.complete();
+  });
+
+  it('lets an explicit organization switch finish after navigation is superseded during its read', async () => {
+    await open('/atelier-nord');
+    const router: Router = TestBed.inject(Router);
+    const read: Subject<WorkspaceResult<WorkspaceOrganization>> = new Subject<
+      WorkspaceResult<WorkspaceOrganization>
+    >();
+    const settled: Subject<void> = new Subject<void>();
+    session.exclusive.mockImplementation(
+      (operation: () => Observable<unknown>) =>
+        new Observable((subscriber) => {
+          operation().subscribe({
+            next: (value: unknown) => {
+              subscriber.next(value);
+            },
+            error: (error: unknown) => {
+              subscriber.error(error);
+            },
+            complete: () => {
+              subscriber.complete();
+              settled.next();
+            },
+          });
+        }),
+    );
+    session.currentOrganization.mockReturnValueOnce(read);
+    const cancelledNavigation: Promise<boolean> = router.navigateByUrl('/lumen');
+    await vi.waitFor(() => {
+      expect(session.currentOrganization).toHaveBeenCalledTimes(2);
+    });
+    const superseding: Promise<boolean> = router.navigateByUrl('/atelier-nord?task=CAD-1');
+    expect(await cancelledNavigation).toBe(false);
+    expect(await superseding).toBe(true);
+    const finished: Promise<void> = firstValueFrom(settled);
+    read.next({ ok: true, value: atelierNord });
+    read.complete();
+    await finished;
+    expect(session.switchOrganization).toHaveBeenCalledExactlyOnceWith(lumen.id);
+    settled.complete();
+  });
+
+  it('allows an explicit organization navigation while the document is unfocused', async () => {
+    const harness: RouterTestingHarness = await open('/atelier-nord');
+    vi.spyOn(document, 'hasFocus').mockReturnValue(false);
+    await harness.navigateByUrl('/lumen');
+    expect(session.switchOrganization).toHaveBeenCalledExactlyOnceWith(lumen.id);
+    expect(TestBed.inject(OrganizationPin).current()).toBe(lumen.id);
+  });
+
   it('does not interrupt an in-progress organization navigation on a context change', async () => {
     const harness: RouterTestingHarness = await open('/atelier-nord');
     const pending: Subject<WorkspaceResult<void>> = new Subject<WorkspaceResult<void>>();
@@ -346,6 +582,545 @@ describe('WORKSPACE_ROUTES', () => {
     expect(router.url).toBe('/lumen');
     expect(pin.current()).toBe(lumen.id);
     expect(pin.isSwitching()).toBe(false);
+  });
+
+  it('recovers an active mismatch after an unrelated navigation finishes', async () => {
+    TestBed.overrideProvider(RuntimeConfigStore, {
+      useValue: { config: () => ({ apiUrl: 'https://api.example.test' }) },
+    });
+    const router: Router = TestBed.inject(Router);
+    const pending: Subject<boolean> = new Subject<boolean>();
+    const guard: Mock<() => Observable<boolean>> = vi
+      .fn(() => of(true))
+      .mockReturnValueOnce(pending);
+    router.resetConfig(
+      router.config.map((route) =>
+        route.path === ':org'
+          ? {
+              ...route,
+              children: [
+                { path: 'slow', canActivate: [guard], component: AuthStub },
+                ...(route.children ?? []),
+              ],
+            }
+          : route,
+      ),
+    );
+    const harness: RouterTestingHarness = await open('/atelier-nord');
+    const pin: OrganizationPin = TestBed.inject(OrganizationPin);
+    const navigation: Promise<boolean> = router.navigateByUrl('/atelier-nord/slow');
+    await vi.waitFor(() => {
+      expect(guard).toHaveBeenCalledOnce();
+      expect(router.currentNavigation()).not.toBeNull();
+    });
+    const active: Promise<unknown> = TestBed.runInInjectionContext(() =>
+      firstValueFrom(
+        organizationPinInterceptor(new HttpRequest('GET', '/v1/tasks/CAD-1'), () =>
+          throwError(
+            () =>
+              new HttpErrorResponse({
+                status: 412,
+                error: { code: 'organization.context-changed' },
+              }),
+          ),
+        ),
+      ),
+    );
+    await expect(active).rejects.toBeInstanceOf(HttpErrorResponse);
+    expect(pin.stale()).toBe(true);
+    const next: Mock = vi.fn(() => of(new HttpResponse({ status: 200 })));
+    const passive: Promise<unknown> = TestBed.runInInjectionContext(() =>
+      firstValueFrom(
+        organizationPinInterceptor(
+          new HttpRequest('GET', '/v1/tasks/CAD-1', {
+            context: new HttpContext().set(PASSIVE_REQUEST, true),
+          }),
+          next,
+        ),
+      ),
+    );
+    await expect(passive).rejects.toBeInstanceOf(OrganizationSwitchPendingError);
+    expect(next).not.toHaveBeenCalled();
+    session.currentOrganization.mockReturnValue(ok(lumen));
+    const verified: Promise<void> = firstValueFrom(pin.organizationVerified);
+    pending.next(true);
+    pending.complete();
+    expect(await navigation).toBe(true);
+    await verified;
+    await harness.fixture.whenStable();
+    expect(session.switchOrganization).toHaveBeenCalledWith(atelierNord.id);
+    expect(pin.stale()).toBe(false);
+    const resumed: Promise<unknown> = TestBed.runInInjectionContext(() =>
+      firstValueFrom(
+        organizationPinInterceptor(
+          new HttpRequest('GET', '/v1/tasks/CAD-1', {
+            context: new HttpContext().set(PASSIVE_REQUEST, true),
+          }),
+          next,
+        ),
+      ),
+    );
+    await expect(resumed).resolves.toBeInstanceOf(HttpResponse);
+  });
+
+  it.each([
+    ['hidden', true],
+    ['visible', false],
+  ] as const)(
+    'waits for foreground after an active mismatch when %s and focus is %s',
+    async (visibility: 'hidden' | 'visible', focused: boolean) => {
+      TestBed.overrideProvider(RuntimeConfigStore, {
+        useValue: { config: () => ({ apiUrl: 'https://api.example.test' }) },
+      });
+      const harness: RouterTestingHarness = await open('/atelier-nord');
+      const router: Router = TestBed.inject(Router);
+      const pin: OrganizationPin = TestBed.inject(OrganizationPin);
+      const focus: Mock<() => boolean> = vi.spyOn(document, 'hasFocus').mockReturnValue(focused);
+      const state: Mock<() => DocumentVisibilityState> = vi
+        .spyOn(document, 'visibilityState', 'get')
+        .mockReturnValue(visibility);
+      const navigation: Mock = vi.spyOn(router, 'navigateByUrl');
+      const mismatch: Promise<unknown> = TestBed.runInInjectionContext(() =>
+        firstValueFrom(
+          organizationPinInterceptor(new HttpRequest('GET', '/v1/tasks/CAD-1'), () =>
+            throwError(
+              () =>
+                new HttpErrorResponse({
+                  status: 412,
+                  error: { code: 'organization.context-changed' },
+                }),
+            ),
+          ),
+        ),
+      );
+      await expect(mismatch).rejects.toBeInstanceOf(HttpErrorResponse);
+      await Promise.resolve();
+      expect(pin.stale()).toBe(true);
+      expect(navigation).not.toHaveBeenCalled();
+      expect(session.switchOrganization).not.toHaveBeenCalled();
+      const verified: Promise<void> = firstValueFrom(pin.organizationVerified);
+      state.mockReturnValue('visible');
+      focus.mockReturnValue(true);
+      window.dispatchEvent(new Event('focus'));
+      await verified;
+      await harness.fixture.whenStable();
+      expect(pin.stale()).toBe(false);
+      expect(navigation).toHaveBeenCalledOnce();
+    },
+  );
+
+  it('keeps a hidden tab from switching the shared session back after the focused tab recovers', async () => {
+    TestBed.overrideProvider(RuntimeConfigStore, {
+      useValue: { config: () => ({ apiUrl: 'https://api.example.test' }) },
+    });
+    const harness: RouterTestingHarness = await open('/atelier-nord');
+    const router: Router = TestBed.inject(Router);
+    const pinA: OrganizationPin = TestBed.inject(OrganizationPin);
+    let sharedOrganization: WorkspaceOrganization = lumen;
+    session.currentOrganization.mockImplementation(() => ok(sharedOrganization));
+    session.switchOrganization.mockImplementation((id: string) => {
+      sharedOrganization = id === atelierNord.id ? atelierNord : lumen;
+      return ok(undefined);
+    });
+    const tabDocument: Document = document.implementation.createHTMLDocument('Background tab');
+    vi.spyOn(tabDocument, 'visibilityState', 'get').mockReturnValue('hidden');
+    vi.spyOn(tabDocument, 'hasFocus').mockReturnValue(false);
+    const events: Subject<NavigationEnd> = new Subject<NavigationEnd>();
+    const navigateB: Mock = vi.fn(() => {
+      sharedOrganization = lumen;
+      return Promise.resolve(true);
+    });
+    const tabB: EnvironmentInjector = createEnvironmentInjector(
+      [
+        OrganizationPin,
+        { provide: DOCUMENT, useValue: tabDocument },
+        {
+          provide: Router,
+          useValue: {
+            url: '/lumen',
+            currentNavigation: () => null,
+            navigateByUrl: navigateB,
+            events,
+          },
+        },
+        ...provideWorkspaceRuntime(),
+      ],
+      TestBed.inject(EnvironmentInjector),
+    );
+    const pinB: OrganizationPin = tabB.get(OrganizationPin);
+    pinB.set(lumen.id);
+    const verified: Promise<void> = firstValueFrom(pinA.organizationVerified);
+    const mismatchA: Promise<unknown> = TestBed.runInInjectionContext(() =>
+      firstValueFrom(
+        organizationPinInterceptor(new HttpRequest('GET', '/v1/spaces/space-a'), () =>
+          throwError(
+            () =>
+              new HttpErrorResponse({
+                status: 412,
+                error: { code: 'organization.context-changed' },
+              }),
+          ),
+        ),
+      ),
+    );
+    await expect(mismatchA).rejects.toBeInstanceOf(HttpErrorResponse);
+    await verified;
+    await harness.fixture.whenStable();
+    expect(sharedOrganization.id).toBe(atelierNord.id);
+    expect(session.switchOrganization).toHaveBeenCalledTimes(1);
+    for (let i: number = 0; i < 3; i++) {
+      const mismatchB: Promise<unknown> = runInInjectionContext(tabB, () =>
+        firstValueFrom(
+          organizationPinInterceptor(new HttpRequest('GET', '/v1/spaces/space-b'), () =>
+            throwError(
+              () =>
+                new HttpErrorResponse({
+                  status: 412,
+                  error: { code: 'organization.context-changed' },
+                }),
+            ),
+          ),
+        ),
+      );
+      await expect(mismatchB).rejects.toBeInstanceOf(HttpErrorResponse);
+      tabDocument.dispatchEvent(new Event('visibilitychange'));
+    }
+    await Promise.resolve();
+    expect(pinB.stale()).toBe(true);
+    expect(navigateB).not.toHaveBeenCalled();
+    expect(sharedOrganization.id).toBe(atelierNord.id);
+    expect(router.url).toBe('/atelier-nord');
+    tabB.destroy();
+    events.complete();
+  });
+
+  it.each([
+    ['session', 503, null],
+    ['session', 408, null],
+    ['organization', 0, null],
+    ['organization', 429, 'gateway.unavailable'],
+    ['lookup', 503, null],
+    ['switch', 503, null],
+  ] as const)(
+    'keeps the workspace and retries a transient %s failure (status %s)',
+    async (
+      stage: 'session' | 'organization' | 'lookup' | 'switch',
+      status: number,
+      code: string | null,
+    ) => {
+      TestBed.overrideProvider(RuntimeConfigStore, {
+        useValue: { config: () => ({ apiUrl: 'https://api.example.test' }) },
+      });
+      const harness: RouterTestingHarness = await open('/atelier-nord');
+      const router: Router = TestBed.inject(Router);
+      const pin: OrganizationPin = TestBed.inject(OrganizationPin);
+      const clock: Mock<() => number> = vi.spyOn(Date, 'now');
+      if (stage === 'session') session.currentUser.mockReturnValueOnce(failed({ status, code }));
+      if (stage === 'organization')
+        session.currentOrganization.mockReturnValueOnce(failed({ status, code }));
+      if (stage === 'lookup' || stage === 'switch')
+        session.currentOrganization.mockReturnValue(ok(lumen));
+      if (stage === 'lookup') session.myOrganizations.mockReturnValueOnce(failed({ status, code }));
+      if (stage === 'switch')
+        session.switchOrganization.mockReturnValueOnce(failed({ status, code }));
+      const cancelled: Promise<NavigationCancel> = firstValueFrom(
+        router.events.pipe(
+          filter((event): event is NavigationCancel => event instanceof NavigationCancel),
+        ),
+      );
+      const mismatch: Promise<unknown> = TestBed.runInInjectionContext(() =>
+        firstValueFrom(
+          organizationPinInterceptor(
+            new HttpRequest('GET', '/v1/tasks/CAD-1', {
+              context: new HttpContext().set(PASSIVE_REQUEST, true),
+            }),
+            () =>
+              throwError(
+                () =>
+                  new HttpErrorResponse({
+                    status: 412,
+                    error: { code: 'organization.context-changed' },
+                  }),
+              ),
+          ),
+        ),
+      );
+      await expect(mismatch).rejects.toBeInstanceOf(HttpErrorResponse);
+      await cancelled;
+      await vi.waitFor(() => {
+        expect(router.currentNavigation()).toBeNull();
+      });
+      await Promise.resolve();
+      expect(router.url).toBe('/atelier-nord');
+      expect(pin.current()).toBe(atelierNord.id);
+      expect(pin.stale()).toBe(true);
+      const verified: Promise<void> = firstValueFrom(pin.organizationVerified);
+      clock.mockReturnValue(Date.now() + 2000);
+      window.dispatchEvent(new Event('focus'));
+      await verified;
+      await harness.fixture.whenStable();
+      expect(router.url).toBe('/atelier-nord');
+      expect(pin.stale()).toBe(false);
+      clock.mockRestore();
+    },
+  );
+
+  it.each([
+    ['session', 401, 'auth.session-expired', '/login?next=%2Fatelier-nord'],
+    ['organization', 403, 'organization.access-denied', '/organizations'],
+    ['switch', 403, 'organization.mfa-required', '/organizations'],
+    ['unknown', 404, 'organization.not-found', '/organizations'],
+  ] as const)(
+    'keeps the definitive %s failure redirect during recovery',
+    async (
+      stage: 'session' | 'organization' | 'switch' | 'unknown',
+      status: number,
+      code: string,
+      target: string,
+    ) => {
+      await open('/atelier-nord');
+      const router: Router = TestBed.inject(Router);
+      const pin: OrganizationPin = TestBed.inject(OrganizationPin);
+      if (stage === 'session') session.currentUser.mockReturnValueOnce(failed({ status, code }));
+      if (stage === 'organization')
+        session.currentOrganization.mockReturnValueOnce(failed({ status, code }));
+      if (stage === 'unknown') {
+        session.currentOrganization.mockReturnValueOnce(failed({ status, code }));
+        session.myOrganizations.mockReturnValueOnce(ok([]));
+      }
+      if (stage === 'switch') {
+        session.currentOrganization.mockReturnValue(ok(lumen));
+        session.switchOrganization.mockReturnValueOnce(failed({ status, code }));
+      }
+      const navigation: Promise<NavigationEnd> = firstValueFrom(
+        router.events.pipe(
+          filter((event): event is NavigationEnd => event instanceof NavigationEnd),
+        ),
+      );
+      pin.markStale();
+      await navigation;
+      expect(router.url).toBe(target);
+    },
+  );
+
+  it('revalidates a passive mismatch that arrives while already focused', async () => {
+    TestBed.overrideProvider(RuntimeConfigStore, {
+      useValue: { config: () => ({ apiUrl: 'https://api.example.test' }) },
+    });
+    vi.spyOn(document, 'hasFocus').mockReturnValue(true);
+    vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible');
+    const harness: RouterTestingHarness = await open('/atelier-nord');
+    const router: Router = TestBed.inject(Router);
+    session.currentOrganization.mockReturnValue(ok(lumen));
+    const navigation: Promise<NavigationEnd> = firstValueFrom(
+      router.events.pipe(filter((event): event is NavigationEnd => event instanceof NavigationEnd)),
+    );
+    const response: Promise<unknown> = TestBed.runInInjectionContext(() =>
+      firstValueFrom(
+        organizationPinInterceptor(
+          new HttpRequest('GET', '/v1/tasks/CAD-1', {
+            context: new HttpContext().set(PASSIVE_REQUEST, true),
+          }),
+          () =>
+            throwError(
+              () =>
+                new HttpErrorResponse({
+                  status: 412,
+                  error: { code: 'organization.context-changed' },
+                }),
+            ),
+        ),
+      ),
+    );
+    await expect(response).rejects.toBeDefined();
+    await navigation;
+    await harness.fixture.whenStable();
+    expect(session.currentOrganization).toHaveBeenCalledTimes(2);
+    expect(session.switchOrganization).toHaveBeenCalledWith(atelierNord.id);
+    expect(TestBed.inject(OrganizationPin).stale()).toBe(false);
+  });
+
+  it('revalidates a stale context once when the document returns to the foreground', async () => {
+    TestBed.overrideProvider(RuntimeConfigStore, {
+      useValue: { config: () => ({ apiUrl: 'https://api.example.test' }) },
+    });
+    const harness: RouterTestingHarness = await open('/atelier-nord');
+    const router: Router = TestBed.inject(Router);
+    const pin: OrganizationPin = TestBed.inject(OrganizationPin);
+    vi.spyOn(document, 'hasFocus').mockReturnValue(true);
+    vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('hidden');
+    const response: Promise<unknown> = TestBed.runInInjectionContext(() =>
+      firstValueFrom(
+        organizationPinInterceptor(
+          new HttpRequest('GET', '/v1/tasks/CAD-1', {
+            context: new HttpContext().set(PASSIVE_REQUEST, true),
+          }),
+          () =>
+            throwError(
+              () =>
+                new HttpErrorResponse({
+                  status: 412,
+                  error: { code: 'organization.context-changed' },
+                }),
+            ),
+        ),
+      ),
+    );
+    await expect(response).rejects.toBeDefined();
+    expect(pin.stale()).toBe(true);
+    window.dispatchEvent(new Event('focus'));
+    expect(session.currentOrganization).toHaveBeenCalledTimes(1);
+    vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible');
+    const navigation: Promise<NavigationEnd> = firstValueFrom(
+      router.events.pipe(filter((event): event is NavigationEnd => event instanceof NavigationEnd)),
+    );
+    document.dispatchEvent(new Event('visibilitychange'));
+    window.dispatchEvent(new Event('focus'));
+    await navigation;
+    await harness.fixture.whenStable();
+    expect(session.currentOrganization).toHaveBeenCalledTimes(2);
+    expect(pin.stale()).toBe(false);
+  });
+
+  it.each([
+    ['cancelled', false],
+    ['superseded', false],
+    ['failed', false],
+    ['cancelled', true],
+    ['failed', true],
+  ] as const)(
+    'retries a %s recovery (active: %s) and resumes passive requests',
+    async (outcome: 'cancelled' | 'superseded' | 'failed', active: boolean) => {
+      TestBed.overrideProvider(RuntimeConfigStore, {
+        useValue: { config: () => ({ apiUrl: 'https://api.example.test' }) },
+      });
+      const guard: Mock<() => boolean> = vi.fn(() => true);
+      const router: Router = TestBed.inject(Router);
+      router.resetConfig(
+        router.config.map((route) =>
+          route.path === ':org'
+            ? { ...route, canActivate: [...(route.canActivate ?? []), guard] }
+            : route,
+        ),
+      );
+      const harness: RouterTestingHarness = await open('/atelier-nord');
+      const pin: OrganizationPin = TestBed.inject(OrganizationPin);
+      const focus: Mock<() => boolean> = vi.spyOn(document, 'hasFocus').mockReturnValue(true);
+      vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible');
+      const clock: Mock<() => number> = vi.spyOn(Date, 'now');
+      const navigationSpy: Mock = vi.spyOn(router, 'navigateByUrl');
+      const pending: Subject<WorkspaceResult<WorkspaceUser>> = new Subject<
+        WorkspaceResult<WorkspaceUser>
+      >();
+      if (outcome === 'cancelled') guard.mockReturnValueOnce(false);
+      if (outcome === 'failed')
+        session.currentUser.mockReturnValueOnce(throwError(() => new Error('Navigation failed')));
+      if (outcome === 'superseded') session.currentUser.mockReturnValueOnce(pending);
+      const failedNavigation: Promise<NavigationCancel | NavigationError> = firstValueFrom(
+        router.events.pipe(
+          filter(
+            (event): event is NavigationCancel | NavigationError =>
+              event instanceof NavigationCancel || event instanceof NavigationError,
+          ),
+        ),
+      );
+      if (active) {
+        const mismatch: Promise<unknown> = TestBed.runInInjectionContext(() =>
+          firstValueFrom(
+            organizationPinInterceptor(new HttpRequest('GET', '/v1/tasks/CAD-1'), () =>
+              throwError(
+                () =>
+                  new HttpErrorResponse({
+                    status: 412,
+                    error: { code: 'organization.context-changed' },
+                  }),
+              ),
+            ),
+          ),
+        );
+        await expect(mismatch).rejects.toBeInstanceOf(HttpErrorResponse);
+      } else pin.markStale();
+      focus.mockReturnValue(false);
+      if (outcome === 'superseded') {
+        await vi.waitFor(() => {
+          expect(session.currentUser).toHaveBeenCalledTimes(2);
+        });
+        await router.navigateByUrl('/atelier-nord?tab=next');
+      }
+      const event: NavigationCancel | NavigationError = await failedNavigation;
+      expect(event).toBeInstanceOf(outcome === 'failed' ? NavigationError : NavigationCancel);
+      await vi.waitFor(() => {
+        expect(navigationSpy).toHaveBeenCalled();
+      });
+      await vi.waitFor(() => {
+        expect(router.currentNavigation()).toBeNull();
+      });
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(pin.stale()).toBe(true);
+      const fencedNext: Mock = vi.fn(() => of(new HttpResponse({ status: 200 })));
+      const fenced: Promise<unknown> = TestBed.runInInjectionContext(() =>
+        firstValueFrom(
+          organizationPinInterceptor(
+            new HttpRequest('GET', '/v1/tasks/CAD-1', {
+              context: new HttpContext().set(PASSIVE_REQUEST, true),
+            }),
+            fencedNext,
+          ),
+        ),
+      );
+      await expect(fenced).rejects.toBeInstanceOf(OrganizationSwitchPendingError);
+      expect(fencedNext).not.toHaveBeenCalled();
+      clock.mockReturnValue(Date.now() + 2000);
+      const verification: Promise<NavigationEnd> = firstValueFrom(
+        router.events.pipe(
+          filter((event): event is NavigationEnd => event instanceof NavigationEnd),
+        ),
+      );
+      focus.mockReturnValue(true);
+      window.dispatchEvent(new Event('focus'));
+      await verification;
+      await harness.fixture.whenStable();
+      expect(pin.stale()).toBe(false);
+      const next: Mock = vi.fn(() => of(new HttpResponse({ status: 200 })));
+      const response: Promise<unknown> = TestBed.runInInjectionContext(() =>
+        firstValueFrom(
+          organizationPinInterceptor(
+            new HttpRequest('GET', '/v1/tasks/CAD-1', {
+              context: new HttpContext().set(PASSIVE_REQUEST, true),
+            }),
+            next,
+          ),
+        ),
+      );
+      await expect(response).resolves.toBeInstanceOf(HttpResponse);
+      expect(next).toHaveBeenCalledOnce();
+      clock.mockRestore();
+    },
+  );
+
+  it('backs off repeated failed recoveries while the tab remains focused', async () => {
+    await open('/atelier-nord');
+    const router: Router = TestBed.inject(Router);
+    const pin: OrganizationPin = TestBed.inject(OrganizationPin);
+    vi.spyOn(document, 'hasFocus').mockReturnValue(true);
+    vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible');
+    vi.useFakeTimers();
+    const navigation: Mock = vi.spyOn(router, 'navigateByUrl').mockResolvedValue(false);
+    pin.markStale();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(navigation).toHaveBeenCalledTimes(1);
+    window.dispatchEvent(new Event('focus'));
+    await vi.advanceTimersByTimeAsync(999);
+    expect(navigation).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(navigation).toHaveBeenCalledTimes(2);
+    await vi.advanceTimersByTimeAsync(1999);
+    expect(navigation).toHaveBeenCalledTimes(2);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(navigation).toHaveBeenCalledTimes(3);
+    TestBed.resetTestingModule();
+    vi.useRealTimers();
   });
 
   it('coalesces multiple context changes into one revalidation', async () => {

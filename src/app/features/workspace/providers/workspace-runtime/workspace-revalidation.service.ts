@@ -1,6 +1,16 @@
 import { Service } from '@angular/core';
 
 /**
+ * Constant WORKSPACE_RECOVERY_NAVIGATION
+ *
+ * @description
+ * Identifies recovery navigation without persisting its origin in browser history.
+ *
+ * @type {symbol}
+ */
+export const WORKSPACE_RECOVERY_NAVIGATION: symbol = Symbol('WORKSPACE_RECOVERY_NAVIGATION');
+
+/**
  * Service WorkspaceRevalidation
  *
  * @description

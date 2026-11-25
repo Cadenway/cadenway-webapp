@@ -40,7 +40,7 @@ settings step. Until then the shell's links open the 404 inside the shell.
   close button hide it for the tab's session and the organization (`sessionStorage`,
   `cadenway-storage-banner-dismissed:<organizationId>`). « Gérer les quotas » opens
   `/<slug>/organization/quotas`.
-- The billing operation does not declare `If-Organization-Match` (see Workspace).
+- Billing requests carry the workspace organization pin (see Core).
 
 ## Copy not taken word for word from the mockup
 

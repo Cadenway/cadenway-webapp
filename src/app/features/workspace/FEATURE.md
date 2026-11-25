@@ -72,9 +72,10 @@ injects it as optional.
   never changes what the shell shows. Leaving `/:org` destroys the store.
 - The URL slug and the session's current organization agree before anything below `/:org` is
   created: the guard reads the current organization, looks the slug up and switches the session
-  inside one exclusive browser session lock (`WorkspaceSession.exclusive`). Once granted, the
-  sequence runs to its end even if the navigation is cancelled, so the session is never left half
-  switched; the store only takes the organization when the guard answers.
+  inside one exclusive browser session lock (`WorkspaceSession.exclusive`). A recovery switch is
+  deferred if its navigation is superseded or the tab leaves the foreground before dispatch. Once
+  dispatched, a switch completes even if navigation is cancelled; the store only takes the organization
+  when the guard answers.
 - `WorkspaceContextStore` is destroyed with its route (`withAutoCleanupInjectors`).
 - The organizations menu provides `OrganizationMenuStore`, which reads every page of
   `listMyOrganizations` the first time the menu opens, with skeletons and an inline « Réessayer ».
@@ -88,19 +89,23 @@ injects it as optional.
 - Every shell contribution is a container that injects `WORKSPACE_CONTEXT` itself (none takes it as
   an input). `ShortcutsHelp` and Search's `CommandPalette` go through `ShellOverlay`
   (`@shared/layout-slot`), so the shortcuts dialog and the palette never open over each other.
-- Backend gap, planned as contract work (B20): the inbox, reminder, search and billing operations do
-  not declare `If-Organization-Match`, so a switch made in another tab between the pin and the
-  request can redirect a write such as « Tout marquer comme lu » to the other organization.
 - The route runtime supplies the workspace organization and fresh tickets to the shared realtime
   connection. The gateway notice envelope does not name the delivering room: changes are broadcast
   to every active watch, whose consumer filters or refetches. A later contract should add the room.
 - The resolver sets `OrganizationPin` after committing the verified context, before child resolvers;
-  route destruction clears it. A `412 organization.context-changed` requests one same-URL guard and
-  resolver rerun. Query-only navigation does not trigger revalidation. The guard's uncached current
-  organization read skips the pin so it can discover and switch the session under the lock. Before
-  a session switch the guard fences pinned requests locally until the resolver commits the new pin.
-- A session holds one current organization across tabs. Tabs on different organizations can take
-  turns switching the session; each committed workspace switch reconnects its realtime client.
+  route destruction clears it. A `412 organization.context-changed` from the current pin revision
+  marks the context stale and fences passive requests until the next verified commit; a response from
+  an older revision is ignored. While the document is visible and focused, recovery reruns guards and
+  the resolver immediately or after an in-progress navigation. Otherwise it waits for focus or
+  visibility. The guard checks that the recovery navigation is current and that the tab is focused and
+  visible immediately before a recovery switch. Transient read or switch failures cancel recovery
+  without leaving the workspace; recovery retries with bounded backoff. Definitive access failures
+  keep their redirects. Query-only navigation does not trigger revalidation. The guard's uncached current organization read skips the pin so it can discover and
+  switch the session under the lock. Before a session switch the guard fences pinned requests locally
+  until the resolver commits the new pin.
+- A session holds one current organization across tabs. A hidden or unfocused tab does not switch it
+  back after a mismatch; returning to that tab can revalidate its workspace. Each committed workspace
+  switch reconnects its realtime client.
 - Guards and the resolver never reach the error boundary: they redirect with a `UrlTree` or a
   `RedirectCommand`.
 - The `settings-shell` binding comes with the account and organization settings steps.

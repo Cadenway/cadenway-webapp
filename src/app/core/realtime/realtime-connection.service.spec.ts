@@ -1,12 +1,12 @@
 import { signal, type WritableSignal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import type { Subscription } from 'rxjs';
+import { firstValueFrom, throwError, type Subscription } from 'rxjs';
 import { io, type Socket } from 'socket.io-client';
 import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 
 import { HttpErrorResponse } from '@angular/common/http';
 
-import { OrganizationPin } from '@core/api';
+import { OrganizationPin, OrganizationSwitchPendingError } from '@core/api';
 import { RuntimeConfigStore } from '@core/config';
 
 import {
@@ -899,6 +899,54 @@ describe('RealtimeConnection', () => {
     expect(sockets).toHaveLength(1);
   });
 
+  it.each([new OrganizationSwitchPendingError()])(
+    'backs off and retries a nonterminal ticket failure',
+    async (error: Error) => {
+      const {
+        connection,
+        ticket,
+        terminal,
+      }: { connection: RealtimeConnection; ticket: Mock; terminal: Mock } = setup();
+      ticket.mockRejectedValueOnce(error);
+      connection.presenceChanges.subscribe();
+      await flush();
+      expect(connection.status()).toBe('reconnecting');
+      expect(terminal).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(999);
+      expect(ticket).toHaveBeenCalledOnce();
+      await vi.advanceTimersByTimeAsync(1);
+      await flush();
+      expect(ticket).toHaveBeenCalledTimes(2);
+    },
+  );
+
+  it('waits for verification after a stale ticket and resumes for the same organization', async () => {
+    const {
+      connection,
+      ticket,
+      terminal,
+    }: { connection: RealtimeConnection; ticket: Mock; terminal: Mock } = setup();
+    const pin: OrganizationPin = TestBed.inject(OrganizationPin);
+    pin.set(organization);
+    ticket.mockImplementationOnce(() => {
+      pin.markStale();
+      return firstValueFrom(
+        throwError(
+          () =>
+            new HttpErrorResponse({ status: 412, error: { code: 'organization.context-changed' } }),
+        ),
+      );
+    });
+    connection.presenceChanges.subscribe();
+    await flush();
+    await vi.advanceTimersByTimeAsync(60000);
+    expect(ticket).toHaveBeenCalledOnce();
+    expect(terminal).not.toHaveBeenCalled();
+    pin.set(organization);
+    await flush();
+    expect(ticket).toHaveBeenCalledTimes(2);
+  });
+
   it('retries when hello does not arrive before the admission timeout', async () => {
     const {
       connection,
@@ -1093,25 +1141,36 @@ describe('RealtimeConnection', () => {
     expect(ticket).toHaveBeenCalledTimes(3);
   });
 
-  it.each([401, 403, 404])('stops on terminal ticket status %s', async (status: number) => {
-    const {
-      connection,
-      sockets,
-      ticket,
-      terminal,
-    }: { connection: RealtimeConnection; sockets: FakeSocket[]; ticket: Mock; terminal: Mock } =
-      setup();
-    ticket.mockRejectedValueOnce(
-      new HttpErrorResponse({ status, error: status === 404 ? { code: 'member.not-found' } : {} }),
-    );
-    connection.presenceChanges.subscribe();
-    await flush();
-    expect(connection.status()).toBe('disabled');
-    expect(terminal).toHaveBeenCalledWith(status === 401 ? 401 : 403);
-    await vi.advanceTimersByTimeAsync(60000);
-    expect(ticket).toHaveBeenCalledOnce();
-    expect(sockets).toHaveLength(0);
-  });
+  it.each([
+    [401, null],
+    [403, null],
+    [404, 'member.not-found'],
+    [404, 'organization.not-found'],
+  ] as const)(
+    'stops on terminal ticket status %s and code %s',
+    async (status: number, code: string | null) => {
+      const {
+        connection,
+        sockets,
+        ticket,
+        terminal,
+      }: { connection: RealtimeConnection; sockets: FakeSocket[]; ticket: Mock; terminal: Mock } =
+        setup();
+      ticket.mockRejectedValueOnce(
+        new HttpErrorResponse({
+          status,
+          error: code ? { code } : {},
+        }),
+      );
+      connection.presenceChanges.subscribe();
+      await flush();
+      expect(connection.status()).toBe('disabled');
+      expect(terminal).toHaveBeenCalledWith(status === 401 ? 401 : 403);
+      await vi.advanceTimersByTimeAsync(60000);
+      expect(ticket).toHaveBeenCalledOnce();
+      expect(sockets).toHaveLength(0);
+    },
+  );
 
   it('stops after a revoked socket receives a 401 ticket rejection', async () => {
     const {
