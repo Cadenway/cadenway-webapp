@@ -10,6 +10,7 @@ export {
 } from './realtime.token';
 export type {
   MemberPresenceChange,
+  PersonalNotice,
   PresenceStatus,
   RealtimeChange,
   RealtimeRoom,

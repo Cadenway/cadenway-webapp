@@ -1,4 +1,10 @@
-import type { MemberPresenceChange, RealtimeChange } from './realtime.types';
+import type {
+  MemberPresenceChange,
+  PersonalNotice,
+  PresencePage,
+  PresenceStatus,
+  RealtimeChange,
+} from './realtime.types';
 
 /**
  * Constant UUID
@@ -152,4 +158,79 @@ export function parsePresence(value: unknown): MemberPresenceChange | null {
   )
     return null;
   return { memberId: data['memberId'], status };
+}
+
+/**
+ * Function parsePresencePage
+ *
+ * @description
+ * Validates a snapshot page from the gateway before using its cursor or members.
+ *
+ * @param {unknown} value - Untrusted acknowledgement.
+ * @returns {PresencePage | null} Validated page or null.
+ */
+export function parsePresencePage(value: unknown): PresencePage | null {
+  if (
+    !record(value) ||
+    value['ok'] !== true ||
+    !exactKeys(value, ['ok', 'status', 'members', 'nextCursor'])
+  )
+    return null;
+  const status: unknown = value['status'];
+  const cursor: unknown = value['nextCursor'];
+  const members: unknown = value['members'];
+  if (
+    (status !== 'online' &&
+      status !== 'away' &&
+      status !== 'do-not-disturb' &&
+      status !== 'invisible') ||
+    !(
+      cursor === null ||
+      (typeof cursor === 'string' && cursor.length > 0 && cursor.length <= 128)
+    ) ||
+    !Array.isArray(members) ||
+    members.length > 100
+  )
+    return null;
+  const parsed: { memberId: string; status: Exclude<PresenceStatus, 'invisible'> }[] = [];
+  for (const member of members as unknown[]) {
+    if (
+      !record(member) ||
+      !exactKeys(member, ['memberId', 'status']) ||
+      typeof member['memberId'] !== 'string' ||
+      !UUID.test(member['memberId']) ||
+      (member['status'] !== 'online' &&
+        member['status'] !== 'away' &&
+        member['status'] !== 'do-not-disturb')
+    )
+      return null;
+    parsed.push({ memberId: member['memberId'], status: member['status'] });
+  }
+  return { status, members: parsed, nextCursor: cursor };
+}
+
+/**
+ * Function parsePersonalNotice
+ *
+ * @description
+ * Validates the closed personal notice payload before it triggers a server read.
+ *
+ * @param {unknown} value - Untrusted change packet.
+ * @returns {PersonalNotice | null} Validated notice or null.
+ */
+export function parsePersonalNotice(value: unknown): PersonalNotice | null {
+  if (!envelope(value) || !record(value['data'])) return null;
+  const data: Record<string, unknown> = value['data'];
+  if (value['type'] === 'notification.created.v1' && exactKeys(data, []))
+    return { type: 'notification.created.v1' };
+  if (
+    value['type'] !== 'reminder.due.v1' ||
+    !exactKeys(data, ['reminderId', 'taskId']) ||
+    typeof data['reminderId'] !== 'string' ||
+    !UUID.test(data['reminderId']) ||
+    typeof data['taskId'] !== 'string' ||
+    !UUID.test(data['taskId'])
+  )
+    return null;
+  return { type: 'reminder.due.v1', reminderId: data['reminderId'], taskId: data['taskId'] };
 }
