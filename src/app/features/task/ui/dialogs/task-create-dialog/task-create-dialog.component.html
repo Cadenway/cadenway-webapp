@@ -1,0 +1,290 @@
+<cw-dialog
+  size="lg"
+  [open]="taskCreate.isOpen()"
+  (openChange)="openChange($event)"
+  [pending]="store.creating()"
+>
+  <cw-dialog-header>
+    <div class="flex flex-wrap items-center gap-2 pr-8">
+      <h2 cwDialogTitle i18n="@@task.create.title">Create a task</h2>
+      @if (parentKey(); as parent) {
+        <span class="text-xs text-muted-foreground" i18n="@@task.create.subtask-of"
+          >Subtask of <span class="font-mono">{{ parent }}</span></span
+        >
+      } @else {
+        <span class="text-xs text-muted-foreground" i18n="@@task.create.in">in</span>
+        @if (store.destinationsFailed()) {
+          <span class="text-xs text-destructive" role="alert" i18n="@@task.create.lists-failed"
+            >The lists could not be read.</span
+          >
+          <button
+            cwButton
+            type="button"
+            variant="outline"
+            size="xs"
+            (click)="store.retry()"
+            i18n="@@task.retry"
+          >
+            Retry
+          </button>
+        } @else {
+          <button
+            cwButton
+            type="button"
+            variant="outline"
+            size="xs"
+            [cwMenuTriggerFor]="lists"
+            [disabled]="store.destinationsLoading()"
+            data-testid="task-create-destination"
+          >
+            <ng-icon
+              name="phosphorListBulletsBold"
+              class="text-muted-foreground"
+              aria-hidden="true"
+            />
+            @if (store.destination(); as destination) {
+              <span class="truncate">{{ destination.spaceName }}</span>
+              <ng-icon
+                name="phosphorCaretRightBold"
+                size="0.75rem"
+                class="text-muted-foreground"
+                aria-hidden="true"
+              />
+              <span class="truncate">{{ destination.listName }}</span>
+            } @else {
+              <span i18n="@@task.create.no-list">No list</span>
+            }
+            <ng-icon
+              name="phosphorCaretDownBold"
+              size="0.75rem"
+              class="text-muted-foreground"
+              aria-hidden="true"
+            />
+          </button>
+          <cw-menu #lists ariaLabel="Destination list" i18n-ariaLabel="@@task.create.destination">
+            @for (destination of store.destinations(); track destination.listId) {
+              <button
+                cwMenuItem
+                type="button"
+                [selected]="destination.listId === store.destination()?.listId"
+                (triggered)="store.chooseList(destination.listId)"
+              >
+                <ng-icon name="phosphorListBulletsBold" aria-hidden="true" />
+                <span class="truncate">{{ destination.listName }}</span>
+                <span class="ml-auto pl-3 text-xs text-muted-foreground">{{
+                  destination.spaceName
+                }}</span>
+              </button>
+            }
+          </cw-menu>
+        }
+      }
+      @if (store.nextKey(); as nextKey) {
+        <span class="font-mono text-xs text-muted-foreground" data-testid="task-create-next-key">{{
+          nextKey
+        }}</span>
+      }
+      @if (store.templates().length > 0) {
+        <button cwButton type="button" variant="ghost" size="xs" [cwMenuTriggerFor]="templates">
+          <ng-icon name="phosphorFileTextBold" aria-hidden="true" />
+          @if (template(); as chosen) {
+            <span>{{ chosen.name }}</span>
+          } @else {
+            <span i18n="@@task.create.template">Template</span>
+          }
+        </button>
+        <cw-menu #templates ariaLabel="Task templates" i18n-ariaLabel="@@task.create.templates">
+          <cw-menu-label i18n="@@task.create.template-heading">Start from a template</cw-menu-label>
+          @for (option of store.templates(); track option.id) {
+            <button
+              cwMenuItem
+              type="button"
+              [selected]="option.id === model().templateId"
+              (triggered)="pickTemplate(option)"
+            >
+              <span class="flex min-w-0 flex-col">
+                <span>{{ option.name }}</span>
+                @if (option.labels.length > 0) {
+                  <span class="text-xs text-muted-foreground">{{ option.labels.join(', ') }}</span>
+                }
+              </span>
+            </button>
+          }
+        </cw-menu>
+      }
+    </div>
+  </cw-dialog-header>
+
+  <div class="grid gap-6 md:grid-cols-[minmax(0,1fr)_14rem]">
+    <div class="flex min-w-0 flex-col gap-4">
+      <div class="flex flex-col gap-2">
+        <label for="task-create-name" class="sr-only" i18n="@@task.create.name">Task name</label>
+        <input
+          cwInput
+          id="task-create-name"
+          type="text"
+          autocomplete="off"
+          placeholder="Task name"
+          i18n-placeholder="@@task.create.name"
+          [formField]="createForm.name"
+        />
+        @if (createForm.name().touched() && createForm.name().invalid()) {
+          @for (error of createForm.name().errors(); track error.kind) {
+            <p class="text-xs text-destructive" role="alert">{{ error.message }}</p>
+          }
+        }
+        <label for="task-create-description" class="sr-only" i18n="@@task.create.description"
+          >Description</label
+        >
+        <textarea
+          cwTextarea
+          id="task-create-description"
+          rows="3"
+          placeholder="Add a description: context, acceptance criteria, links…"
+          i18n-placeholder="@@task.create.description-placeholder"
+          [formField]="createForm.description"
+        ></textarea>
+      </div>
+
+      @if (parentKey() === null) {
+        <section class="flex flex-col gap-2" aria-labelledby="task-create-subtasks">
+          <div class="flex items-center gap-2 text-sm font-medium">
+            <span id="task-create-subtasks" i18n="@@task.create.subtasks">Subtasks</span>
+            <span class="text-xs text-muted-foreground tabular-nums">{{
+              model().subtasks.length
+            }}</span>
+          </div>
+          @if (model().subtasks.length > 0) {
+            <ul class="flex flex-col">
+              @for (subtask of model().subtasks; track $index) {
+                <li class="flex h-8 items-center gap-2 rounded-md px-1 text-sm hover:bg-muted">
+                  <cw-status-icon status="todo" size="3.5" />
+                  <span class="min-w-0 flex-1 truncate">{{ subtask }}</span>
+                  <button
+                    cwButton
+                    type="button"
+                    variant="ghost"
+                    size="icon-xs"
+                    [attr.aria-label]="removeLabel(subtask)"
+                    (click)="removeSubtask($index)"
+                  >
+                    <ng-icon name="phosphorXBold" aria-hidden="true" />
+                  </button>
+                </li>
+              }
+            </ul>
+          }
+          <div class="flex items-center gap-2">
+            <ng-icon name="phosphorPlusBold" class="text-muted-foreground" aria-hidden="true" />
+            <label for="task-create-subtask" class="sr-only" i18n="@@task.create.subtask-add"
+              >Add a subtask</label
+            >
+            <input
+              cwInput
+              id="task-create-subtask"
+              type="text"
+              autocomplete="off"
+              placeholder="Add a subtask (Enter to confirm)"
+              i18n-placeholder="@@task.create.subtask-placeholder"
+              [value]="model().subtaskDraft"
+              (input)="typeSubtask($event)"
+              (keydown.enter)="addSubtask($event)"
+            />
+          </div>
+        </section>
+      }
+    </div>
+
+    <aside class="flex flex-col gap-2" aria-labelledby="task-create-properties">
+      <p
+        id="task-create-properties"
+        class="text-xs font-medium text-muted-foreground"
+        i18n="@@task.create.properties"
+      >
+        Properties
+      </p>
+      <div
+        class="flex flex-col items-start gap-2"
+        role="group"
+        aria-label="Task properties"
+        i18n-aria-label="@@task.create.properties-group"
+      >
+        <cw-task-status-picker
+          [status]="model().status"
+          [options]="store.statuses()"
+          (statusChanged)="pickStatus($event)"
+        />
+        <cw-task-people-picker
+          class="w-full"
+          [people]="store.people()"
+          [currentUserId]="workspace.user().id"
+          [loading]="store.peopleLoading()"
+          [value]="model().assigneeIds"
+          (valueChange)="patch({ assigneeIds: $event })"
+        />
+        <cw-date-picker
+          class="w-full"
+          size="sm"
+          [value]="model().due"
+          (valueChange)="pickDue($event)"
+          [presets]="presets()"
+          clearable
+          ariaLabel="Due date"
+          i18n-ariaLabel="@@task.create.due"
+        />
+        <cw-task-priority-picker
+          [priority]="model().priority"
+          (priorityChanged)="patch({ priority: $event })"
+        />
+        <cw-task-label-picker
+          class="w-full"
+          [labels]="store.labels()"
+          [loading]="store.labelsLoading()"
+          [value]="model().labels"
+          (valueChange)="patch({ labels: $event })"
+        />
+      </div>
+    </aside>
+  </div>
+
+  <cw-dialog-footer>
+    <div class="mr-auto flex items-center gap-2">
+      <cw-switch
+        id="task-create-more"
+        size="sm"
+        [checked]="more()"
+        (checkedChange)="more.set($event)"
+      />
+      <label for="task-create-more" class="text-sm" i18n="@@task.create.more"
+        >Create more tasks</label
+      >
+    </div>
+    <button
+      cwButton
+      type="button"
+      variant="outline"
+      (click)="taskCreate.close()"
+      i18n="@@task.create.cancel"
+    >
+      Cancel
+    </button>
+    <button
+      cwButton
+      type="button"
+      [disabled]="createForm().invalid() || store.creating()"
+      (click)="create()"
+    >
+      <span i18n="@@task.create.submit">Create the task</span>
+      <span class="inline-flex items-center gap-0.5" aria-hidden="true">
+        <kbd cwKbd i18n="@@task.create.key-ctrl">Ctrl</kbd>
+        <kbd cwKbd i18n="@@task.create.key-enter">Enter</kbd>
+      </span>
+    </button>
+  </cw-dialog-footer>
+</cw-dialog>
+
+<cw-task-cancel-dialog
+  [taskKeys]="cancelAsk()"
+  (confirmed)="confirmCancel($event)"
+  (kept)="cancelAsk.set(null)"
+/>

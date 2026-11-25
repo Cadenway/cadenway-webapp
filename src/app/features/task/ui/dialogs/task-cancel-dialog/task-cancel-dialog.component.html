@@ -1,0 +1,54 @@
+<cw-dialog [open]="open()" (openChange)="openChange($event)">
+  <cw-dialog-header>
+    <h2 cwDialogTitle>{{ title() }}</h2>
+    <p cwDialogDescription i18n="@@task.cancel-dialog.description">
+      Say why: the reason stays visible on the task and in the reports.
+    </p>
+  </cw-dialog-header>
+  <div class="flex flex-col gap-4">
+    <cw-radio-group
+      ariaLabel="Cancel reason"
+      i18n-ariaLabel="@@task.cancel-dialog.reasons"
+      [value]="reason()"
+      (valueChange)="pick($event)"
+    >
+      @for (key of reasons; track key) {
+        <cw-radio-group-item variant="card" [value]="key">
+          <ng-icon [name]="icons[key]" class="text-muted-foreground" aria-hidden="true" />
+          <span class="flex min-w-0 flex-col">
+            <span class="text-sm font-medium">{{ labels[key] }}</span>
+            <span class="text-xs text-muted-foreground">{{ hints[key] }}</span>
+          </span>
+        </cw-radio-group-item>
+      }
+    </cw-radio-group>
+    <div class="flex flex-col gap-1.5">
+      <label for="task-cancel-note" class="text-sm font-medium" i18n="@@task.cancel-dialog.note"
+        >Details <span class="font-normal text-muted-foreground">(optional)</span></label
+      >
+      <textarea
+        cwTextarea
+        id="task-cancel-note"
+        rows="2"
+        placeholder="For example: replaced by CAD-482"
+        i18n-placeholder="@@task.cancel-dialog.note-placeholder"
+        [value]="note()"
+        (input)="type($event)"
+      ></textarea>
+    </div>
+  </div>
+  <cw-dialog-footer>
+    <button
+      cwButton
+      type="button"
+      variant="outline"
+      (click)="kept.emit()"
+      i18n="@@task.cancel-dialog.keep"
+    >
+      Keep the task
+    </button>
+    <button cwButton type="button" (click)="confirm()" i18n="@@task.cancel-dialog.confirm">
+      Cancel the task
+    </button>
+  </cw-dialog-footer>
+</cw-dialog>

@@ -3568,6 +3568,1042 @@
           <context context-type="linenumber">378</context>
         </context-group>
       </trans-unit>
+      <trans-unit id="task.combobox.placeholder" datatype="html">
+        <source>Choose…</source>
+        <target>Choisir…</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/task/constants/task-brick-labels/task-brick-labels.constants.ts</context>
+          <context context-type="linenumber">14</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="task.combobox.search" datatype="html">
+        <source>Search…</source>
+        <target>Rechercher…</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/task/constants/task-brick-labels/task-brick-labels.constants.ts</context>
+          <context context-type="linenumber">15</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="task.combobox.empty" datatype="html">
+        <source>No results</source>
+        <target>Aucun résultat</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/task/constants/task-brick-labels/task-brick-labels.constants.ts</context>
+          <context context-type="linenumber">16</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="task.combobox.create" datatype="html">
+        <source>Create “<x id="query" equiv-text="query"/>”</source>
+        <target>Créer « <x id="query" equiv-text="query"/> »</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/task/constants/task-brick-labels/task-brick-labels.constants.ts</context>
+          <context context-type="linenumber">18</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="task.combobox.loading" datatype="html">
+        <source>Searching…</source>
+        <target>Recherche…</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/task/constants/task-brick-labels/task-brick-labels.constants.ts</context>
+          <context context-type="linenumber">19</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="task.combobox.summary" datatype="html">
+        <source><x id="count" equiv-text="count"/> selected</source>
+        <target><x id="count" equiv-text="count"/> sélectionnés</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/task/constants/task-brick-labels/task-brick-labels.constants.ts</context>
+          <context context-type="linenumber">20</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="task.combobox.results-one" datatype="html">
+        <source>1 result</source>
+        <target>1 résultat</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/task/constants/task-brick-labels/task-brick-labels.constants.ts</context>
+          <context context-type="linenumber">23</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="task.combobox.results-many" datatype="html">
+        <source><x id="count" equiv-text="count"/> results</source>
+        <target><x id="count" equiv-text="count"/> résultats</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/task/constants/task-brick-labels/task-brick-labels.constants.ts</context>
+          <context context-type="linenumber">24</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="task.combobox.disabled" datatype="html">
+        <source>Disabled</source>
+        <target>Désactivé</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/task/constants/task-brick-labels/task-brick-labels.constants.ts</context>
+          <context context-type="linenumber">25</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="task.status.triage" datatype="html">
+        <source>To sort</source>
+        <target>À trier</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/task/constants/task-copy/task-copy.constants.ts</context>
+          <context context-type="linenumber">20</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="task.status.backlog" datatype="html">
+        <source>To plan</source>
+        <target>À planifier</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/task/constants/task-copy/task-copy.constants.ts</context>
+          <context context-type="linenumber">21</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="task.status.todo" datatype="html">
+        <source>To do</source>
+        <target>À faire</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/task/constants/task-copy/task-copy.constants.ts</context>
+          <context context-type="linenumber">22</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="task.status.progress" datatype="html">
+        <source>In progress</source>
+        <target>En cours</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/task/constants/task-copy/task-copy.constants.ts</context>
+          <context context-type="linenumber">23</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="task.status.review" datatype="html">
+        <source>In review</source>
+        <target>En revue</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/task/constants/task-copy/task-copy.constants.ts</context>
+          <context context-type="linenumber">24</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="task.status.testing" datatype="html">
+        <source>In validation</source>
+        <target>En validation</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/task/constants/task-copy/task-copy.constants.ts</context>
+          <context context-type="linenumber">25</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="task.status.waiting" datatype="html">
+        <source>Waiting</source>
+        <target>En attente</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/task/constants/task-copy/task-copy.constants.ts</context>
+          <context context-type="linenumber">26</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="task.status.blocked" datatype="html">
+        <source>Blocked</source>
+        <target>Bloqué</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/task/constants/task-copy/task-copy.constants.ts</context>
+          <context context-type="linenumber">27</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="task.status.done" datatype="html">
+        <source>Done</source>
+        <target>Terminé</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/task/constants/task-copy/task-copy.constants.ts</context>
+          <context context-type="linenumber">28</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="task.status.cancelled" datatype="html">
+        <source>Cancelled</source>
+        <target>Annulé</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/task/constants/task-copy/task-copy.constants.ts</context>
+          <context context-type="linenumber">29</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="task.status.triage-hint" datatype="html">
+        <source>Request received, not qualified yet</source>
+        <target>Demande reçue, pas encore qualifiée</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/task/constants/task-copy/task-copy.constants.ts</context>
+          <context context-type="linenumber">41</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="task.status.backlog-hint" datatype="html">
+        <source>Kept, without a work date</source>
+        <target>Retenue, sans date de travail</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/task/constants/task-copy/task-copy.constants.ts</context>
+          <context context-type="linenumber">42</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="task.status.todo-hint" datatype="html">
+        <source>Ready to start</source>
+        <target>Prête à commencer</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/task/constants/task-copy/task-copy.constants.ts</context>
+          <context context-type="linenumber">43</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="task.status.progress-hint" datatype="html">
+        <source>Someone is working on it</source>
+        <target>Quelqu’un travaille dessus</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/task/constants/task-copy/task-copy.constants.ts</context>
+          <context context-type="linenumber">44</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="task.status.review-hint" datatype="html">
+        <source>Reviewed by a peer</source>
+        <target>Relecture par un pair</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/task/constants/task-copy/task-copy.constants.ts</context>
+          <context context-type="linenumber">45</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="task.status.testing-hint" datatype="html">
+        <source>Checked by the requester</source>
+        <target>Vérification par le demandeur</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/task/constants/task-copy/task-copy.constants.ts</context>
+          <context context-type="linenumber">46</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="task.status.waiting-hint" datatype="html">
+        <source>Waits for an outside answer</source>
+        <target>Attend une réponse extérieure</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/task/constants/task-copy/task-copy.constants.ts</context>
+          <context context-type="linenumber">47</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="task.status.blocked-hint" datatype="html">
+        <source>An obstacle prevents progress</source>
+        <target>Un obstacle empêche d’avancer</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/task/constants/task-copy/task-copy.constants.ts</context>
+          <context context-type="linenumber">48</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="task.status.done-hint" datatype="html">
+        <source>Delivered and validated</source>
+        <target>Livrée et validée</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/task/constants/task-copy/task-copy.constants.ts</context>
+          <context context-type="linenumber">49</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="task.status.cancelled-hint" datatype="html">
+        <source>Will not be done</source>
+        <target>Ne sera pas faite</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/task/constants/task-copy/task-copy.constants.ts</context>
+          <context context-type="linenumber">50</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="task.status.category-open" datatype="html">
+        <source>Not started</source>
+        <target>Non commencé</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/task/constants/task-copy/task-copy.constants.ts</context>
+          <context context-type="linenumber">62</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="task.status.category-active" datatype="html">
+        <source>Active</source>
+        <target>Actif</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/task/constants/task-copy/task-copy.constants.ts</context>
+          <context context-type="linenumber">63</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="task.status.category-closed" datatype="html">
+        <source>Closed</source>
+        <target>Fermé</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/task/constants/task-copy/task-copy.constants.ts</context>
+          <context context-type="linenumber">64</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="task.milestone.todo" datatype="html">
+        <source>Upcoming</source>
+        <target>À venir</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/task/constants/task-copy/task-copy.constants.ts</context>
+          <context context-type="linenumber">76</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="task.milestone.blocked" datatype="html">
+        <source>At risk</source>
+        <target>À risque</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/task/constants/task-copy/task-copy.constants.ts</context>
+          <context context-type="linenumber">77</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="task.milestone.done" datatype="html">
+        <source>Reached</source>
+        <target>Atteint</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/task/constants/task-copy/task-copy.constants.ts</context>
+          <context context-type="linenumber">78</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="task.milestone.cancelled" datatype="html">
+        <source>Cancelled</source>
+        <target>Annulé</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/task/constants/task-copy/task-copy.constants.ts</context>
+          <context context-type="linenumber">79</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="task.milestone.todo-hint" datatype="html">
+        <source>The date has not passed yet</source>
+        <target>La date n’est pas encore passée</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/task/constants/task-copy/task-copy.constants.ts</context>
+          <context context-type="linenumber">91</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="task.milestone.blocked-hint" datatype="html">
+        <source>A dependency threatens the date</source>
+        <target>Une dépendance menace la date</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/task/constants/task-copy/task-copy.constants.ts</context>
+          <context context-type="linenumber">92</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="task.milestone.done-hint" datatype="html">
+        <source>The due date is kept</source>
+        <target>L’échéance est tenue</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/task/constants/task-copy/task-copy.constants.ts</context>
+          <context context-type="linenumber">93</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="task.milestone.cancelled-hint" datatype="html">
+        <source>The milestone is dropped</source>
+        <target>Le jalon est abandonné</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/task/constants/task-copy/task-copy.constants.ts</context>
+          <context context-type="linenumber">94</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="task.priority.urgente" datatype="html">
+        <source>Urgent</source>
+        <target>Urgente</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/task/constants/task-copy/task-copy.constants.ts</context>
+          <context context-type="linenumber">106</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="task.priority.haute" datatype="html">
+        <source>High</source>
+        <target>Haute</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/task/constants/task-copy/task-copy.constants.ts</context>
+          <context context-type="linenumber">107</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="task.priority.moyenne" datatype="html">
+        <source>Medium</source>
+        <target>Moyenne</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/task/constants/task-copy/task-copy.constants.ts</context>
+          <context context-type="linenumber">108</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="task.priority.basse" datatype="html">
+        <source>Low</source>
+        <target>Basse</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/task/constants/task-copy/task-copy.constants.ts</context>
+          <context context-type="linenumber">109</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="task.cancel.duplicate" datatype="html">
+        <source>Duplicate</source>
+        <target>Doublon</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/task/constants/task-copy/task-copy.constants.ts</context>
+          <context context-type="linenumber">121</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="task.cancel.wontdo" datatype="html">
+        <source>Will not be done</source>
+        <target>Ne sera pas fait</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/task/constants/task-copy/task-copy.constants.ts</context>
+          <context context-type="linenumber">122</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="task.cancel.scope" datatype="html">
+        <source>Out of scope</source>
+        <target>Hors périmètre</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/task/constants/task-copy/task-copy.constants.ts</context>
+          <context context-type="linenumber">123</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="task.cancel.obsolete" datatype="html">
+        <source>Obsolete</source>
+        <target>Obsolète</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/task/constants/task-copy/task-copy.constants.ts</context>
+          <context context-type="linenumber">124</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="task.cancel.duplicate-hint" datatype="html">
+        <source>Another task already covers this need</source>
+        <target>Une autre tâche couvre déjà ce besoin</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/task/constants/task-copy/task-copy.constants.ts</context>
+          <context context-type="linenumber">136</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="task.cancel.wontdo-hint" datatype="html">
+        <source>Decision not to handle the request</source>
+        <target>Décision de ne pas traiter la demande</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/task/constants/task-copy/task-copy.constants.ts</context>
+          <context context-type="linenumber">137</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="task.cancel.scope-hint" datatype="html">
+        <source>Not for this team or this project</source>
+        <target>Ne relève pas de cette équipe ou de ce projet</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/task/constants/task-copy/task-copy.constants.ts</context>
+          <context context-type="linenumber">138</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="task.cancel.obsolete-hint" datatype="html">
+        <source>The need is gone or has changed</source>
+        <target>Le besoin a disparu ou a changé</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/task/constants/task-copy/task-copy.constants.ts</context>
+          <context context-type="linenumber">139</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="task.recurrence.daily" datatype="html">
+        <source>Repeats: every working day</source>
+        <target>Se répète : chaque jour ouvré</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/task/constants/task-copy/task-copy.constants.ts</context>
+          <context context-type="linenumber">168</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="task.recurrence.weekly" datatype="html">
+        <source>Repeats: every week</source>
+        <target>Se répète : chaque semaine</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/task/constants/task-copy/task-copy.constants.ts</context>
+          <context context-type="linenumber">169</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="task.recurrence.biweekly" datatype="html">
+        <source>Repeats: every 2 weeks</source>
+        <target>Se répète : toutes les 2 semaines</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/task/constants/task-copy/task-copy.constants.ts</context>
+          <context context-type="linenumber">170</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="task.recurrence.monthly" datatype="html">
+        <source>Repeats: every month</source>
+        <target>Se répète : chaque mois</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/task/constants/task-copy/task-copy.constants.ts</context>
+          <context context-type="linenumber">171</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="task.label-picker.placeholder" datatype="html">
+        <source>Labels</source>
+        <target>Étiquettes</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/task/ui/components/task-label-picker/task-label-picker.component.ts</context>
+          <context context-type="linenumber">40</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/task/ui/components/task-label-picker/task-label-picker.component.ts</context>
+          <context context-type="linenumber">44</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="task.label-picker.search" datatype="html">
+        <source>Search or create a label…</source>
+        <target>Rechercher ou créer une étiquette…</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/task/ui/components/task-label-picker/task-label-picker.component.ts</context>
+          <context context-type="linenumber">41,42</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="task.people-picker.placeholder" datatype="html">
+        <source>Assign</source>
+        <target>Assigner</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/task/ui/components/task-people-picker/task-people-picker.component.ts</context>
+          <context context-type="linenumber">38</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="task.people-picker.search" datatype="html">
+        <source>Search for a person…</source>
+        <target>Rechercher une personne…</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/task/ui/components/task-people-picker/task-people-picker.component.ts</context>
+          <context context-type="linenumber">39,40</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="task.people-picker.label" datatype="html">
+        <source>Assignees</source>
+        <target>Assignés</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/task/ui/components/task-people-picker/task-people-picker.component.ts</context>
+          <context context-type="linenumber">41,42</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="task.people-picker.me" datatype="html">
+        <source><x id="INTERPOLATION" equiv-text="{{ person.name }}"/> (me)</source>
+        <target><x id="INTERPOLATION" equiv-text="{{ person.name }}"/> (moi)</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/task/ui/components/task-people-picker/task-people-picker.component.ts</context>
+          <context context-type="linenumber">52,53</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="task.people-picker.summary" datatype="html">
+        <source><x id="count" equiv-text="count"/> people</source>
+        <target><x id="count" equiv-text="count"/> personnes</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/task/ui/components/task-people-picker/task-people-picker.component.ts</context>
+          <context context-type="linenumber">132</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="task.priority-picker.menu" datatype="html">
+        <source>Priority</source>
+        <target>Priorité</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/task/ui/components/task-priority-picker/task-priority-picker.component.ts</context>
+          <context context-type="linenumber">45</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="task.priority-picker.label" datatype="html">
+        <source>Priority: <x id="priority" equiv-text="this.label()"/></source>
+        <target>Priorité : <x id="priority" equiv-text="this.label()"/></target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/task/ui/components/task-priority-picker/task-priority-picker.component.ts</context>
+          <context context-type="linenumber">137</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="task.status-picker.choose" datatype="html">
+        <source>Choose a status</source>
+        <target>Choisir un statut</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/task/ui/components/task-status-picker/task-status-picker.component.html</context>
+          <context context-type="linenumber">7,8</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/task/ui/components/task-status-picker/task-status-picker.component.ts</context>
+          <context context-type="linenumber">252</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="task.status-picker.menu" datatype="html">
+        <source>Status</source>
+        <target>Statut</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/task/ui/components/task-status-picker/task-status-picker.component.html</context>
+          <context context-type="linenumber">13</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="task.status-picker.advance-label" datatype="html">
+        <source>Status: <x id="status" equiv-text="this.label()"/>. Move to “<x id="next" equiv-text="statusLabel(next, this.options(), this.milestone())"/>”</source>
+        <target>Statut : <x id="status" equiv-text="this.label()"/>. Passer à « <x id="next" equiv-text="statusLabel(next, this.options(), this.milestone())"/> »</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/task/ui/components/task-status-picker/task-status-picker.component.ts</context>
+          <context context-type="linenumber">235</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="task.status-picker.choose-label" datatype="html">
+        <source>Status: <x id="status" equiv-text="this.label()"/>. Choose a status</source>
+        <target>Statut : <x id="status" equiv-text="this.label()"/>. Choisir un statut</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/task/ui/components/task-status-picker/task-status-picker.component.ts</context>
+          <context context-type="linenumber">236</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="task.status-picker.advance-title" datatype="html">
+        <source>Move to “<x id="next" equiv-text="statusLabel(next, this.options(), this.milestone())"/>”</source>
+        <target>Passer à « <x id="next" equiv-text="statusLabel(next, this.options(), this.milestone())"/> »</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/task/ui/components/task-status-picker/task-status-picker.component.ts</context>
+          <context context-type="linenumber">251</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="task.cancel-dialog.description" datatype="html">
+        <source> Say why: the reason stays visible on the task and in the reports. </source>
+        <target>Indiquez pourquoi : le motif reste visible sur la tâche et dans les rapports.</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/task/ui/dialogs/task-cancel-dialog/task-cancel-dialog.component.html</context>
+          <context context-type="linenumber">5,8</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="task.cancel-dialog.reasons" datatype="html">
+        <source>Cancel reason</source>
+        <target>Motif d’annulation</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/task/ui/dialogs/task-cancel-dialog/task-cancel-dialog.component.html</context>
+          <context context-type="linenumber">10,11</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="task.cancel-dialog.note" datatype="html">
+        <source>Details <x id="START_TAG_SPAN" ctype="x-span" equiv-text="&lt;span class=&quot;font-normal text-muted-foreground&quot;&gt;"/>(optional)<x id="CLOSE_TAG_SPAN" ctype="x-span" equiv-text="&lt;/span&gt;"/></source>
+        <target>Précision <x id="START_TAG_SPAN" ctype="x-span" equiv-text="&lt;span class=&quot;font-normal text-muted-foreground&quot;&gt;"/>(facultatif)<x id="CLOSE_TAG_SPAN" ctype="x-span" equiv-text="&lt;/span&gt;"/></target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/task/ui/dialogs/task-cancel-dialog/task-cancel-dialog.component.html</context>
+          <context context-type="linenumber">27,29</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="task.cancel-dialog.note-placeholder" datatype="html">
+        <source>For example: replaced by CAD-482</source>
+        <target>Par exemple : remplacée par CAD-482</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/task/ui/dialogs/task-cancel-dialog/task-cancel-dialog.component.html</context>
+          <context context-type="linenumber">33,34</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="task.cancel-dialog.keep" datatype="html">
+        <source> Keep the task </source>
+        <target>Garder la tâche</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/task/ui/dialogs/task-cancel-dialog/task-cancel-dialog.component.html</context>
+          <context context-type="linenumber">48,50</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="task.cancel-dialog.confirm" datatype="html">
+        <source> Cancel the task </source>
+        <target>Annuler la tâche</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/task/ui/dialogs/task-cancel-dialog/task-cancel-dialog.component.html</context>
+          <context context-type="linenumber">51,53</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="task.cancel-dialog.close" datatype="html">
+        <source>Close</source>
+        <target>Fermer</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/task/ui/dialogs/task-cancel-dialog/task-cancel-dialog.component.ts</context>
+          <context context-type="linenumber">58</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/task/ui/dialogs/task-cancel-dialog/task-cancel-dialog.component.ts</context>
+          <context context-type="linenumber">58</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="task.cancel-dialog.title-many" datatype="html">
+        <source>Cancel <x id="count" equiv-text="keys.length"/> tasks?</source>
+        <target>Annuler <x id="count" equiv-text="keys.length"/> tâches ?</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/task/ui/dialogs/task-cancel-dialog/task-cancel-dialog.component.ts</context>
+          <context context-type="linenumber">166</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="task.cancel-dialog.title-one" datatype="html">
+        <source>Cancel <x id="key" equiv-text="keys[0] ?? &apos;&apos;"/>?</source>
+        <target>Annuler <x id="key" equiv-text="keys[0] ?? &apos;&apos;"/> ?</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/task/ui/dialogs/task-cancel-dialog/task-cancel-dialog.component.ts</context>
+          <context context-type="linenumber">167</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="task.create.title" datatype="html">
+        <source>Create a task</source>
+        <target>Créer une tâche</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/task/ui/dialogs/task-create-dialog/task-create-dialog.component.html</context>
+          <context context-type="linenumber">9,10</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="task.create.subtask-of" datatype="html">
+        <source>Subtask of <x id="START_TAG_SPAN" ctype="x-span" equiv-text="&lt;span class=&quot;font-mono&quot;&gt;"/><x id="INTERPOLATION" equiv-text="{{ parent }}"/><x id="CLOSE_TAG_SPAN" ctype="x-span" equiv-text="&lt;/span&gt;"/></source>
+        <target>Sous-tâche de <x id="START_TAG_SPAN" ctype="x-span" equiv-text="&lt;span class=&quot;font-mono&quot;&gt;"/><x id="INTERPOLATION" equiv-text="{{ parent }}"/><x id="CLOSE_TAG_SPAN" ctype="x-span" equiv-text="&lt;/span&gt;"/></target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/task/ui/dialogs/task-create-dialog/task-create-dialog.component.html</context>
+          <context context-type="linenumber">12,14</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="task.create.in" datatype="html">
+        <source>in</source>
+        <target>dans</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/task/ui/dialogs/task-create-dialog/task-create-dialog.component.html</context>
+          <context context-type="linenumber">15,16</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="task.create.lists-failed" datatype="html">
+        <source>The lists could not be read.</source>
+        <target>Les listes n’ont pas pu être lues.</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/task/ui/dialogs/task-create-dialog/task-create-dialog.component.html</context>
+          <context context-type="linenumber">18,21</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="task.retry" datatype="html">
+        <source> Retry </source>
+        <target>Réessayer</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/task/ui/dialogs/task-create-dialog/task-create-dialog.component.html</context>
+          <context context-type="linenumber">28,29</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="task.create.no-list" datatype="html">
+        <source>No list</source>
+        <target>Aucune liste</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/task/ui/dialogs/task-create-dialog/task-create-dialog.component.html</context>
+          <context context-type="linenumber">55,57</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="task.create.destination" datatype="html">
+        <source>Destination list</source>
+        <target>Liste de destination</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/task/ui/dialogs/task-create-dialog/task-create-dialog.component.html</context>
+          <context context-type="linenumber">64</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="task.create.template" datatype="html">
+        <source>Template</source>
+        <target>Modèle</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/task/ui/dialogs/task-create-dialog/task-create-dialog.component.html</context>
+          <context context-type="linenumber">93,95</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="task.create.templates" datatype="html">
+        <source>Task templates</source>
+        <target>Modèles de tâche</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/task/ui/dialogs/task-create-dialog/task-create-dialog.component.html</context>
+          <context context-type="linenumber">96</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="task.create.template-heading" datatype="html">
+        <source>Start from a template</source>
+        <target>Partir d’un modèle</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/task/ui/dialogs/task-create-dialog/task-create-dialog.component.html</context>
+          <context context-type="linenumber">97,98</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="task.create.name" datatype="html">
+        <source>Task name</source>
+        <target>Nom de la tâche</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/task/ui/dialogs/task-create-dialog/task-create-dialog.component.html</context>
+          <context context-type="linenumber">121,123</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/task/ui/dialogs/task-create-dialog/task-create-dialog.component.html</context>
+          <context context-type="linenumber">127,128</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="task.create.description" datatype="html">
+        <source>Description</source>
+        <target>Description</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/task/ui/dialogs/task-create-dialog/task-create-dialog.component.html</context>
+          <context context-type="linenumber">137,140</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="task.create.description-placeholder" datatype="html">
+        <source>Add a description: context, acceptance criteria, links…</source>
+        <target>Ajouter une description : contexte, critères d'acceptation, liens…</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/task/ui/dialogs/task-create-dialog/task-create-dialog.component.html</context>
+          <context context-type="linenumber">143,144</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="task.create.subtasks" datatype="html">
+        <source>Subtasks</source>
+        <target>Sous-tâches</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/task/ui/dialogs/task-create-dialog/task-create-dialog.component.html</context>
+          <context context-type="linenumber">152,153</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="task.create.subtask-add" datatype="html">
+        <source>Add a subtask</source>
+        <target>Ajouter une sous-tâche</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/task/ui/dialogs/task-create-dialog/task-create-dialog.component.html</context>
+          <context context-type="linenumber">180,182</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="task.create.subtask-placeholder" datatype="html">
+        <source>Add a subtask (Enter to confirm)</source>
+        <target>Ajouter une sous-tâche (Entrée pour valider)</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/task/ui/dialogs/task-create-dialog/task-create-dialog.component.html</context>
+          <context context-type="linenumber">187,188</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="task.create.properties" datatype="html">
+        <source> Properties </source>
+        <target>Propriétés</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/task/ui/dialogs/task-create-dialog/task-create-dialog.component.html</context>
+          <context context-type="linenumber">204,207</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="task.create.properties-group" datatype="html">
+        <source>Task properties</source>
+        <target>Propriétés de la tâche</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/task/ui/dialogs/task-create-dialog/task-create-dialog.component.html</context>
+          <context context-type="linenumber">209,210</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="task.create.due" datatype="html">
+        <source>Due date</source>
+        <target>Échéance</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/task/ui/dialogs/task-create-dialog/task-create-dialog.component.html</context>
+          <context context-type="linenumber">232,233</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/task/ui/dialogs/task-create-dialog/task-create-dialog.component.ts</context>
+          <context context-type="linenumber">281</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/task/ui/dialogs/task-create-dialog/task-create-dialog.component.ts</context>
+          <context context-type="linenumber">281</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="task.create.more" datatype="html">
+        <source>Create more tasks</source>
+        <target>Créer d'autres tâches</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/task/ui/dialogs/task-create-dialog/task-create-dialog.component.html</context>
+          <context context-type="linenumber">259,262</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="task.create.cancel" datatype="html">
+        <source> Cancel </source>
+        <target>Annuler</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/task/ui/dialogs/task-create-dialog/task-create-dialog.component.html</context>
+          <context context-type="linenumber">269,272</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="task.create.submit" datatype="html">
+        <source>Create the task</source>
+        <target>Créer la tâche</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/task/ui/dialogs/task-create-dialog/task-create-dialog.component.html</context>
+          <context context-type="linenumber">277,278</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="task.create.key-ctrl" datatype="html">
+        <source>Ctrl</source>
+        <target>Ctrl</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/task/ui/dialogs/task-create-dialog/task-create-dialog.component.html</context>
+          <context context-type="linenumber">279,280</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="task.create.key-enter" datatype="html">
+        <source>Enter</source>
+        <target>Entrée</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/task/ui/dialogs/task-create-dialog/task-create-dialog.component.html</context>
+          <context context-type="linenumber">280,283</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="task.create.close" datatype="html">
+        <source>Close</source>
+        <target>Fermer</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/task/ui/dialogs/task-create-dialog/task-create-dialog.component.ts</context>
+          <context context-type="linenumber">279</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/task/ui/dialogs/task-create-dialog/task-create-dialog.component.ts</context>
+          <context context-type="linenumber">279</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="task.create.due-dialog" datatype="html">
+        <source>Due date</source>
+        <target>Échéance</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/task/ui/dialogs/task-create-dialog/task-create-dialog.component.ts</context>
+          <context context-type="linenumber">282</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/task/ui/dialogs/task-create-dialog/task-create-dialog.component.ts</context>
+          <context context-type="linenumber">282</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="task.create.due-clear" datatype="html">
+        <source>Clear</source>
+        <target>Effacer</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/task/ui/dialogs/task-create-dialog/task-create-dialog.component.ts</context>
+          <context context-type="linenumber">283</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/task/ui/dialogs/task-create-dialog/task-create-dialog.component.ts</context>
+          <context context-type="linenumber">283</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="task.create.due-add-time" datatype="html">
+        <source>Add a time</source>
+        <target>Ajouter une heure</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/task/ui/dialogs/task-create-dialog/task-create-dialog.component.ts</context>
+          <context context-type="linenumber">284</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/task/ui/dialogs/task-create-dialog/task-create-dialog.component.ts</context>
+          <context context-type="linenumber">284</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="task.create.due-time" datatype="html">
+        <source>Time</source>
+        <target>Heure</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/task/ui/dialogs/task-create-dialog/task-create-dialog.component.ts</context>
+          <context context-type="linenumber">285</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/task/ui/dialogs/task-create-dialog/task-create-dialog.component.ts</context>
+          <context context-type="linenumber">285</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="task.create.due-calendar" datatype="html">
+        <source>Open the calendar</source>
+        <target>Ouvrir le calendrier</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/task/ui/dialogs/task-create-dialog/task-create-dialog.component.ts</context>
+          <context context-type="linenumber">286</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/task/ui/dialogs/task-create-dialog/task-create-dialog.component.ts</context>
+          <context context-type="linenumber">286</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="task.create.due-input" datatype="html">
+        <source>dd/mm/yyyy</source>
+        <target>jj/mm/aaaa</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/task/ui/dialogs/task-create-dialog/task-create-dialog.component.ts</context>
+          <context context-type="linenumber">287</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/task/ui/dialogs/task-create-dialog/task-create-dialog.component.ts</context>
+          <context context-type="linenumber">287</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="task.create.name-required" datatype="html">
+        <source>Enter a name for the task.</source>
+        <target>Saisissez le nom de la tâche.</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/task/ui/dialogs/task-create-dialog/task-create-dialog.component.ts</context>
+          <context context-type="linenumber">395</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="task.create.due-today" datatype="html">
+        <source>Today</source>
+        <target>Aujourd’hui</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/task/ui/dialogs/task-create-dialog/task-create-dialog.component.ts</context>
+          <context context-type="linenumber">468</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="task.create.due-tomorrow" datatype="html">
+        <source>Tomorrow</source>
+        <target>Demain</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/task/ui/dialogs/task-create-dialog/task-create-dialog.component.ts</context>
+          <context context-type="linenumber">469</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="task.create.due-friday" datatype="html">
+        <source>Friday</source>
+        <target>Vendredi</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/task/ui/dialogs/task-create-dialog/task-create-dialog.component.ts</context>
+          <context context-type="linenumber">470</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="task.create.due-sprint" datatype="html">
+        <source>End of the sprint</source>
+        <target>Fin du sprint</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/task/ui/dialogs/task-create-dialog/task-create-dialog.component.ts</context>
+          <context context-type="linenumber">474</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="task.create.due-none" datatype="html">
+        <source>No due date</source>
+        <target>Sans échéance</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/task/ui/dialogs/task-create-dialog/task-create-dialog.component.ts</context>
+          <context context-type="linenumber">479</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="task.create.subtask-remove" datatype="html">
+        <source>Remove the subtask <x id="name" equiv-text="subtask"/></source>
+        <target>Retirer la sous-tâche <x id="name" equiv-text="subtask"/></target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/task/ui/dialogs/task-create-dialog/task-create-dialog.component.ts</context>
+          <context context-type="linenumber">671</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="task.create.failed" datatype="html">
+        <source>Could not create the task</source>
+        <target>Impossible de créer la tâche</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/task/ui/dialogs/task-create-dialog/task-create-dialog.component.ts</context>
+          <context context-type="linenumber">721</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="task.create.failed-text" datatype="html">
+        <source>The server did not answer. Try again in a moment.</source>
+        <target>Le serveur n’a pas répondu. Réessayez dans un instant.</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/task/ui/dialogs/task-create-dialog/task-create-dialog.component.ts</context>
+          <context context-type="linenumber">722</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="task.create.subtask-one" datatype="html">
+        <source>1 subtask</source>
+        <target>1 sous-tâche</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/task/ui/dialogs/task-create-dialog/task-create-dialog.component.ts</context>
+          <context context-type="linenumber">772</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="task.create.subtask-many" datatype="html">
+        <source><x id="count" equiv-text="created.subtasks"/> subtasks</source>
+        <target><x id="count" equiv-text="created.subtasks"/> sous-tâches</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/task/ui/dialogs/task-create-dialog/task-create-dialog.component.ts</context>
+          <context context-type="linenumber">774</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="task.create.created" datatype="html">
+        <source>Task <x id="key" equiv-text="created.key"/> created</source>
+        <target>Tâche <x id="key" equiv-text="created.key"/> créée</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/task/ui/dialogs/task-create-dialog/task-create-dialog.component.ts</context>
+          <context context-type="linenumber">777</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="task.create.open" datatype="html">
+        <source>Open</source>
+        <target>Ouvrir</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/task/ui/dialogs/task-create-dialog/task-create-dialog.component.ts</context>
+          <context context-type="linenumber">781</context>
+        </context-group>
+      </trans-unit>
       <trans-unit id="workspace.shortcuts.key-ctrl" datatype="html">
         <source>Ctrl</source>
         <target>Ctrl</target>
