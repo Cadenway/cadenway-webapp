@@ -783,6 +783,115 @@ describe('WORKSPACE_ROUTES', () => {
     events.complete();
   });
 
+  it.each([
+    ['session', 503, null],
+    ['session', 408, null],
+    ['organization', 0, null],
+    ['organization', 429, 'gateway.unavailable'],
+    ['lookup', 503, null],
+    ['switch', 503, null],
+  ] as const)(
+    'keeps the workspace and retries a transient %s failure (status %s)',
+    async (
+      stage: 'session' | 'organization' | 'lookup' | 'switch',
+      status: number,
+      code: string | null,
+    ) => {
+      TestBed.overrideProvider(RuntimeConfigStore, {
+        useValue: { config: () => ({ apiUrl: 'https://api.example.test' }) },
+      });
+      const harness: RouterTestingHarness = await open('/atelier-nord');
+      const router: Router = TestBed.inject(Router);
+      const pin: OrganizationPin = TestBed.inject(OrganizationPin);
+      const clock: Mock<() => number> = vi.spyOn(Date, 'now');
+      if (stage === 'session') session.currentUser.mockReturnValueOnce(failed({ status, code }));
+      if (stage === 'organization')
+        session.currentOrganization.mockReturnValueOnce(failed({ status, code }));
+      if (stage === 'lookup' || stage === 'switch')
+        session.currentOrganization.mockReturnValue(ok(lumen));
+      if (stage === 'lookup') session.myOrganizations.mockReturnValueOnce(failed({ status, code }));
+      if (stage === 'switch')
+        session.switchOrganization.mockReturnValueOnce(failed({ status, code }));
+      const cancelled: Promise<NavigationCancel> = firstValueFrom(
+        router.events.pipe(
+          filter((event): event is NavigationCancel => event instanceof NavigationCancel),
+        ),
+      );
+      const mismatch: Promise<unknown> = TestBed.runInInjectionContext(() =>
+        firstValueFrom(
+          organizationPinInterceptor(
+            new HttpRequest('GET', '/v1/tasks/CAD-1', {
+              context: new HttpContext().set(PASSIVE_REQUEST, true),
+            }),
+            () =>
+              throwError(
+                () =>
+                  new HttpErrorResponse({
+                    status: 412,
+                    error: { code: 'organization.context-changed' },
+                  }),
+              ),
+          ),
+        ),
+      );
+      await expect(mismatch).rejects.toBeInstanceOf(HttpErrorResponse);
+      await cancelled;
+      await vi.waitFor(() => {
+        expect(router.currentNavigation()).toBeNull();
+      });
+      await Promise.resolve();
+      expect(router.url).toBe('/atelier-nord');
+      expect(pin.current()).toBe(atelierNord.id);
+      expect(pin.stale()).toBe(true);
+      const verified: Promise<void> = firstValueFrom(pin.organizationVerified);
+      clock.mockReturnValue(Date.now() + 2000);
+      window.dispatchEvent(new Event('focus'));
+      await verified;
+      await harness.fixture.whenStable();
+      expect(router.url).toBe('/atelier-nord');
+      expect(pin.stale()).toBe(false);
+      clock.mockRestore();
+    },
+  );
+
+  it.each([
+    ['session', 401, 'auth.session-expired', '/login?next=%2Fatelier-nord'],
+    ['organization', 403, 'organization.access-denied', '/organizations'],
+    ['switch', 403, 'organization.mfa-required', '/organizations'],
+    ['unknown', 404, 'organization.not-found', '/organizations'],
+  ] as const)(
+    'keeps the definitive %s failure redirect during recovery',
+    async (
+      stage: 'session' | 'organization' | 'switch' | 'unknown',
+      status: number,
+      code: string,
+      target: string,
+    ) => {
+      await open('/atelier-nord');
+      const router: Router = TestBed.inject(Router);
+      const pin: OrganizationPin = TestBed.inject(OrganizationPin);
+      if (stage === 'session') session.currentUser.mockReturnValueOnce(failed({ status, code }));
+      if (stage === 'organization')
+        session.currentOrganization.mockReturnValueOnce(failed({ status, code }));
+      if (stage === 'unknown') {
+        session.currentOrganization.mockReturnValueOnce(failed({ status, code }));
+        session.myOrganizations.mockReturnValueOnce(ok([]));
+      }
+      if (stage === 'switch') {
+        session.currentOrganization.mockReturnValue(ok(lumen));
+        session.switchOrganization.mockReturnValueOnce(failed({ status, code }));
+      }
+      const navigation: Promise<NavigationEnd> = firstValueFrom(
+        router.events.pipe(
+          filter((event): event is NavigationEnd => event instanceof NavigationEnd),
+        ),
+      );
+      pin.markStale();
+      await navigation;
+      expect(router.url).toBe(target);
+    },
+  );
+
   it('revalidates a passive mismatch that arrives while already focused', async () => {
     TestBed.overrideProvider(RuntimeConfigStore, {
       useValue: { config: () => ({ apiUrl: 'https://api.example.test' }) },

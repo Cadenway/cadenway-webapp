@@ -98,7 +98,9 @@ injects it as optional.
   an older revision is ignored. While the document is visible and focused, recovery reruns guards and
   the resolver immediately or after an in-progress navigation. Otherwise it waits for focus or
   visibility. The guard checks that the recovery navigation is current and that the tab is focused and
-  visible immediately before a recovery switch. Failed recovery retries with bounded backoff. Query-only navigation does not trigger revalidation. The guard's uncached current organization read skips the pin so it can discover and
+  visible immediately before a recovery switch. Transient read or switch failures cancel recovery
+  without leaving the workspace; recovery retries with bounded backoff. Definitive access failures
+  keep their redirects. Query-only navigation does not trigger revalidation. The guard's uncached current organization read skips the pin so it can discover and
   switch the session under the lock. Before a session switch the guard fences pinned requests locally
   until the resolver commits the new pin.
 - A session holds one current organization across tabs. A hidden or unfocused tab does not switch it

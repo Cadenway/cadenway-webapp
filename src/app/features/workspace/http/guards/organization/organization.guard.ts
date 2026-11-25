@@ -20,6 +20,7 @@ import type {
 } from '../../../models/workspace-context/workspace-context.interface';
 import {
   accessRedirect,
+  isTransientWorkspaceProblem,
   organizationChoiceRedirect,
 } from '../../../navigation/access-redirect/access-redirect.util';
 import { WorkspaceContextStore } from '../../../state/workspace-context/workspace-context.store';
@@ -97,7 +98,8 @@ function mayNameAnotherOrganization(problem: WorkspaceProblem): boolean {
  * The current-organization read, the lookup and the switch run under one exclusive session lock,
  * so another tab cannot switch in between. A recovery that is superseded or leaves the foreground
  * before dispatching a switch is cancelled; a dispatched switch completes even if navigation is cancelled.
- * The store only takes the organization when the guard answers.
+ * A transient recovery failure cancels navigation for retry. The store only takes the organization
+ * when the guard answers.
  *
  * Use it on the route that provides `WorkspaceContextStore` and reruns guards for organization
  * changes and requested context revalidation.
@@ -170,7 +172,10 @@ export const organizationGuard: CanActivateFn = (
   return session.exclusive(enter).pipe(
     map((result: WorkspaceResult<WorkspaceOrganization>): boolean | UrlTree => {
       if (result === RECOVERY_DEFERRED) return false;
-      if (!result.ok) return accessRedirect(router, result.problem, state.url);
+      if (!result.ok) {
+        if (recoveryId !== undefined && isTransientWorkspaceProblem(result.problem)) return false;
+        return accessRedirect(router, result.problem, state.url);
+      }
       store.verifyOrganization(result.value);
       return true;
     }),

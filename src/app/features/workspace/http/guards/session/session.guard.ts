@@ -13,7 +13,11 @@ import type {
   WorkspaceResult,
   WorkspaceUser,
 } from '../../../models/workspace-context/workspace-context.interface';
-import { accessRedirect } from '../../../navigation/access-redirect/access-redirect.util';
+import {
+  accessRedirect,
+  isTransientWorkspaceProblem,
+} from '../../../navigation/access-redirect/access-redirect.util';
+import { WORKSPACE_RECOVERY_NAVIGATION } from '../../../providers/workspace-runtime/workspace-revalidation.service';
 import { WorkspaceContextStore } from '../../../state/workspace-context/workspace-context.store';
 
 /**
@@ -22,7 +26,8 @@ import { WorkspaceContextStore } from '../../../state/workspace-context/workspac
  * @description
  * Requires a signed-in session before a workspace route activates, and keeps the person it read
  * for the workspace resolver. A `401` goes to `/login?next=<url>`; any other failure goes to
- * the organization choice. Use it on the route that provides `WorkspaceContextStore`.
+ * the organization choice. A transient failure during recovery cancels navigation for retry.
+ * Use it on the route that provides `WorkspaceContextStore`.
  *
  * @param {ActivatedRouteSnapshot} _route - Route being activated.
  * @param {RouterStateSnapshot} state - Target router state, whose URL becomes the return URL.
@@ -34,11 +39,16 @@ export const sessionGuard: CanActivateFn = (
 ): Observable<boolean | UrlTree> => {
   const router: Router = inject(Router);
   const store: InstanceType<typeof WorkspaceContextStore> = inject(WorkspaceContextStore);
+  const recovery: boolean =
+    router.currentNavigation()?.extras.info === WORKSPACE_RECOVERY_NAVIGATION;
   return inject(WorkspaceSession)
     .currentUser()
     .pipe(
       map((result: WorkspaceResult<WorkspaceUser>): boolean | UrlTree => {
-        if (!result.ok) return accessRedirect(router, result.problem, state.url);
+        if (!result.ok) {
+          if (recovery && isTransientWorkspaceProblem(result.problem)) return false;
+          return accessRedirect(router, result.problem, state.url);
+        }
         store.verifyUser(result.value);
         return true;
       }),
