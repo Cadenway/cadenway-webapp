@@ -666,7 +666,8 @@ function createListPageStore(): Type<ListPageStoreInstance> {
  *
  * @description
  * The task notices that can change the counts or the milestone count: an update, a status change,
- * and a task joining or leaving the list (created, archived, unarchived, trashed, restored). A
+ * and a task joining or leaving the list (created, archived, unarchived, trashed, restored, moved
+ * out). A
  * comment or Git link notice cannot, and the socket hands notices of every watched room to every
  * watch.
  *
@@ -680,6 +681,7 @@ const COUNTED_TASK_NOTICES: ReadonlySet<string> = new Set([
   'task.unarchived.v1',
   'task.trashed.v1',
   'task.restored.v1',
+  'task.moved.v1',
 ]);
 
 /**

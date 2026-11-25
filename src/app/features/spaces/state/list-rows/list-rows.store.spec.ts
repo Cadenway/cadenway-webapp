@@ -636,6 +636,7 @@ describe('ListRowsStore', () => {
     ['task.unarchived.v1', { taskKey: 'CAD-482' }],
     ['task.trashed.v1', { taskKey: 'CAD-482' }],
     ['task.restored.v1', { taskKey: 'CAD-482' }],
+    ['task.moved.v1', { taskKey: 'CAD-482' }],
   ])('reloads for a parsed %s notice without a list id', async (type, data) => {
     const store: InstanceType<typeof ListRowsStore> = setup(flat);
     await settle();

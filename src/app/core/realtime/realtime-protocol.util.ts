@@ -124,6 +124,7 @@ const TASK_MEMBERSHIP_NOTICES: ReadonlySet<string> = new Set([
   'task.unarchived.v1',
   'task.trashed.v1',
   'task.restored.v1',
+  'task.moved.v1',
 ]);
 
 /**

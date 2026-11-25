@@ -178,6 +178,7 @@ describe('ListPageStore', () => {
     'task.unarchived.v1',
     'task.trashed.v1',
     'task.restored.v1',
+    'task.moved.v1',
   ])('reads the counts again when a task joins or leaves the list (%s)', async (type) => {
     await loaded();
 
