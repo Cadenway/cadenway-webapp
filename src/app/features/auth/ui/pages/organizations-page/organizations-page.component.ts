@@ -13,7 +13,6 @@ import {
 } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
 import { CwAlert, CwAlertDescription } from '@cadenway/ui/components/alert';
-import { CwAvatar } from '@cadenway/ui/components/avatar';
 import { CwBadge } from '@cadenway/ui/components/badge';
 import { CwButton } from '@cadenway/ui/components/button';
 import { CwCard } from '@cadenway/ui/components/card';
@@ -36,6 +35,7 @@ import type {
 } from '../../../models/organization/organization.interface';
 import { AuthFlowStore, type StepResult } from '../../../state/auth-flow/auth-flow.store';
 import { OrganizationChoiceStore } from '../../../state/organization-choice/organization-choice.store';
+import { initials } from '../../../utils/initials/initials.util';
 
 /**
  * Component OrganizationsPage
@@ -52,7 +52,6 @@ import { OrganizationChoiceStore } from '../../../state/organization-choice/orga
   imports: [
     CwAlert,
     CwAlertDescription,
-    CwAvatar,
     CwBadge,
     CwButton,
     CwCard,
@@ -200,6 +199,17 @@ export class OrganizationsPage {
     team: $localize`:@@auth.plan.team:Team`,
     enterprise: $localize`:@@auth.plan.enterprise:Enterprise`,
   };
+
+  /**
+   * Property initials
+   *
+   * @description
+   * The square mark of an organization or an invitation.
+   *
+   * @type {(name: string) => string}
+   * @readonly
+   */
+  protected readonly initials: (name: string) => string = initials;
   // #endregion
 
   // #region Constructor

@@ -9,12 +9,16 @@ import {
 } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { provideCadenwayIcons } from '@cadenway/icons';
-import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
+import { beforeEach, describe, expect, it, type Mock, type MockInstance, vi } from 'vitest';
 
+import { RuntimeConfigStore } from '@core/config';
 import { RouteErrorBoundary } from '@features/errors/ui/components/route-error-boundary/route-error-boundary.component';
 
 import { SpacesApi } from '../../../data-access/services/spaces-api/spaces-api.service';
-import type { Space } from '../../../models/space/space.interface';
+import { CwToastService } from '@cadenway/ui/components/toast';
+
+import { SidebarApi } from '../../../data-access/services/sidebar-api/sidebar-api.service';
+import type { Space, SpaceDetails } from '../../../models/space/space.interface';
 import type { SpaceOverview } from '../../../models/task-list/task-list.interface';
 import { SPACES_ROUTES } from '../../../spaces.routes';
 import { SpacesNavigationStore } from '../../../state/spaces-navigation/spaces-navigation.store';
@@ -25,11 +29,14 @@ import { SpacesNavigationStore } from '../../../state/spaces-navigation/spaces-n
  * @description
  * The mockup's private « Design » space.
  *
- * @type {Space}
+ * @type {SpaceDetails}
  */
-const design: Space = {
+const design: SpaceDetails = {
   id: 'sp-design',
   name: 'Design',
+  prefix: 'DES',
+  canEdit: true,
+  canManage: true,
   description: 'Système de design et recherche utilisateur.',
   icon: 'paint',
   color: 'rose',
@@ -97,10 +104,22 @@ describe('SpaceOverviewPage', () => {
         ),
         SpacesNavigationStore,
         {
+          provide: RuntimeConfigStore,
+          useValue: { config: () => ({ apiUrl: 'http://api.test' }) },
+        },
+        {
           provide: WORKSPACE_CONTEXT,
           useValue: { organization: () => ({ id: 'org-1', slug: 'atelier-nord' }) },
         },
         { provide: SpacesApi, useValue: api },
+        {
+          provide: SidebarApi,
+          useValue: {
+            seats: vi.fn(() => Promise.resolve({ plan: 'team', free: 7 })),
+            trashCount: vi.fn(() => Promise.resolve(0)),
+            archiveCount: vi.fn(() => Promise.resolve(0)),
+          },
+        },
       ],
     });
   });
@@ -407,6 +426,10 @@ describe('SpaceOverviewPage', () => {
   });
 
   it('adds the space to the favorites', async () => {
+    const show: MockInstance<CwToastService['show']> = vi.spyOn(
+      TestBed.inject(CwToastService),
+      'show',
+    );
     const harness: RouterTestingHarness = await RouterTestingHarness.create(
       '/atelier-nord/spaces/sp-design',
     );
@@ -422,5 +445,35 @@ describe('SpaceOverviewPage', () => {
     expect(api['addFavorite']).toHaveBeenCalledWith('space', 'sp-design');
     harness.detectChanges();
     expect(star?.getAttribute('aria-pressed')).toBe('true');
+    await expect.poll(() => show.mock.calls.length).toBe(1);
+    expect(show).toHaveBeenCalledWith('Ajouté aux espaces favoris', { description: 'Design' });
+  });
+
+  it('opens the space dialog and the list dialog from the header buttons', async () => {
+    const harness: RouterTestingHarness = await RouterTestingHarness.create(
+      '/atelier-nord/spaces/sp-design',
+    );
+    const navigation: InstanceType<typeof SpacesNavigationStore> =
+      TestBed.inject(SpacesNavigationStore);
+    await expect.poll(() => text(harness, 'space-lists')).toContain('Système de design');
+    await expect.poll(() => navigation.spaceById('sp-design')).toBeTruthy();
+    const button: (id: string) => HTMLButtonElement | null | undefined = (id: string) => {
+      harness.detectChanges();
+      return harness.routeNativeElement?.querySelector<HTMLButtonElement>(`[data-testid="${id}"]`);
+    };
+
+    expect(button('space-edit')?.textContent).toContain('Modifier');
+    button('space-edit')?.click();
+    expect(navigation.dialog()).toEqual({ kind: 'space', space: design });
+    button('space-new-sprint')?.click();
+    expect(navigation.dialog()).toEqual({
+      kind: 'list',
+      spaceId: 'sp-design',
+      list: null,
+      sprint: true,
+    });
+    expect(button('space-new-list')?.textContent).toContain('Nouvelle liste');
+    button('space-new-list')?.click();
+    expect(navigation.dialog()).toMatchObject({ kind: 'list', sprint: false });
   });
 });

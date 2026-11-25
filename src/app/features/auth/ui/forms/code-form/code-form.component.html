@@ -42,12 +42,13 @@
   >
     {{ submitLabel() }}
   </button>
-  <div class="flex items-center justify-between gap-2">
+  <div class="flex flex-wrap items-center justify-between gap-2">
     <button
       cwButton
       type="button"
       variant="ghost"
       size="sm"
+      class="tabular-nums"
       [disabled]="resendIn() !== null"
       (click)="resendRequested.emit()"
     >
@@ -59,15 +60,18 @@
       }
     </button>
     <a
+      cwButton
+      variant="ghost"
+      size="sm"
+      class="text-muted-foreground hover:text-foreground"
       [routerLink]="backLink()"
-      class="rounded-sm text-sm font-medium text-primary underline-offset-4 hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
       i18n="@@auth.code.change-address"
       >Change the address</a
     >
   </div>
   @if (resent()) {
     <p role="status" class="flex items-center gap-1.5 text-xs text-muted-foreground">
-      <ng-icon name="phosphorCheckCircleBold" class="size-3.5" aria-hidden="true" />
+      <ng-icon name="phosphorCheckCircleFill" class="size-3.5 text-jade" aria-hidden="true" />
       <span i18n="@@auth.code.resent">New code sent; the previous one no longer works.</span>
     </p>
   }

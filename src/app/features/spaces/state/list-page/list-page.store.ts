@@ -198,15 +198,25 @@ export interface ListPageStoreInstance {
   refreshCounts(): void;
 
   /**
-   * Method rename
+   * Method followListEdits
    *
    * @description
-   * Shows the new name at once and records it; a refusal restores the previous name.
+   * Shows each recorded change of the open list made elsewhere (the list dialog, the undo of its
+   * archiving); a change of another list is ignored.
    *
-   * @param {string} name - New name, trimmed and non-empty.
-   * @returns {Promise<boolean>} Whether the gateway recorded it.
+   * @param {Observable<TaskList>} edits - The recorded lists.
    */
-  rename(name: string): Promise<boolean>;
+  followListEdits(edits: Observable<TaskList>): void;
+
+  /**
+   * Method followSpaceEdits
+   *
+   * @description
+   * Shows each recorded change of the open list's space made through the space dialog.
+   *
+   * @param {Observable<Space>} edits - The recorded spaces.
+   */
+  followSpaceEdits(edits: Observable<Space>): void;
 
   /**
    * Method duplicate
@@ -311,6 +321,19 @@ export interface ListPageStoreInstance {
    * @returns {Promise<boolean>} Whether the gateway recorded it.
    */
   deleteView(view: SavedView): Promise<boolean>;
+
+  /**
+   * Method restoreView
+   *
+   * @description
+   * Creates a deleted view again with its name, icon and configuration, at its former place (the
+   * undo of « Vue supprimée »); the gateway gives it a new id.
+   *
+   * @param {SavedView} view - The deleted view.
+   * @param {number} index - Its former place among the views.
+   * @returns {Promise<SavedView | null>} The view created again, or null when refused.
+   */
+  restoreView(view: SavedView, index: number): Promise<SavedView | null>;
 
   /**
    * Method bulk
@@ -512,19 +535,18 @@ function createListPageStore(): Type<ListPageStoreInstance> {
         refreshCounts(): void {
           reloadCounts();
         },
-        async rename(name: string): Promise<boolean> {
-          const before: TaskList | undefined = currentList();
-          if (!before || name === before.name) return true;
-          store.list.set({ ...before, name });
-          try {
-            const renamed: TaskList = await store._api.rename(before, name);
-            if (currentList()?.id === renamed.id) store.list.set(renamed);
-            return true;
-          } catch {
-            if (currentList()?.id === before.id) store.list.set(before);
-            return false;
-          }
-        },
+        followListEdits: rxMethod<TaskList>(
+          tap((list: TaskList): void => {
+            if (currentList()?.id === list.id) store.list.set(list);
+          }),
+        ),
+        followSpaceEdits: rxMethod<Space>(
+          tap((space: Space): void => {
+            if (store.space.hasValue() && store.space.value().id === space.id) {
+              store.space.set(space);
+            }
+          }),
+        ),
         duplicate(): Promise<{ list: TaskList; taskCount: number } | null> {
           const list: TaskList | undefined = currentList();
           return list ? attempt(() => store._api.duplicate(list)) : Promise.resolve(null);
@@ -601,6 +623,22 @@ function createListPageStore(): Type<ListPageStoreInstance> {
             }
             return false;
           }
+        },
+        async restoreView(view: SavedView, index: number): Promise<SavedView | null> {
+          const created: SavedView | null = await attempt(() =>
+            store._api.createSavedView(view.listId, {
+              name: view.name,
+              icon: view.icon,
+              layout: view.layout,
+              config: view.config,
+            }),
+          );
+          if (created && store.listId() === view.listId && store.savedViews.hasValue()) {
+            const list: readonly SavedView[] = views();
+            const at: number = Math.min(Math.max(index, 0), list.length);
+            store.savedViews.set([...list.slice(0, at), created, ...list.slice(at)]);
+          }
+          return created;
         },
         async bulk(selection: readonly BulkSelection[], action: BulkAction): Promise<BulkOutcome> {
           const organizationId: string = store._workspace.organization().id;

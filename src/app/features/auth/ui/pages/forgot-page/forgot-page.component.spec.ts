@@ -31,7 +31,7 @@ describe('ForgotPage', () => {
     vi.useRealTimers();
   });
 
-  it('says to check the emails, waits 45 seconds to resend and lets the address change', async () => {
+  it('shows the address error on submit, says to check the emails, waits 45 seconds to resend and lets the address change', async () => {
     const requestPasswordReset: Mock = vi.fn(() => Promise.resolve({ ok: true, value: undefined }));
     TestBed.configureTestingModule({
       imports: [ForgotPage],
@@ -46,6 +46,15 @@ describe('ForgotPage', () => {
     const host: HTMLElement = fixture.nativeElement as HTMLElement;
     const input: HTMLInputElement | null = host.querySelector('#fp-email');
     if (input === null) throw new Error('Expected the address.');
+
+    expect(host.querySelector<HTMLButtonElement>('button[type="submit"]')?.disabled).toBe(false);
+    host.querySelector('form')?.dispatchEvent(new Event('submit', { cancelable: true }));
+    await fixture.whenStable();
+    expect(host.querySelector('#fp-email-help')?.textContent).toContain(
+      "Saisissez l'adresse e-mail de votre compte, par exemple camille.martin@ateliernord.fr.",
+    );
+    expect(document.activeElement).toBe(input);
+    expect(requestPasswordReset).not.toHaveBeenCalled();
 
     input.value = 'camille.martin@ateliernord.fr';
     input.dispatchEvent(new Event('input'));
@@ -74,6 +83,13 @@ describe('ForgotPage', () => {
       .find((button: HTMLButtonElement) => button.textContent.includes("Modifier l'adresse"))
       ?.click();
     await fixture.whenStable();
+    await new Promise<void>((resolve: () => void) => {
+      setTimeout(resolve);
+    });
     expect(host.querySelector('h1')?.textContent.trim()).toBe('Mot de passe oublié');
+    const edited: HTMLInputElement | null = host.querySelector('#fp-email');
+    expect(document.activeElement).toBe(edited);
+    expect(edited?.selectionStart).toBe(0);
+    expect(edited?.selectionEnd).toBe('camille.martin@ateliernord.fr'.length);
   });
 });

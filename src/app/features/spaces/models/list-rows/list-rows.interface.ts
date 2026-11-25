@@ -343,3 +343,36 @@ export interface ListRow {
   readonly entering: boolean;
   // #endregion
 }
+
+/**
+ * Interface ListRowsSummary
+ *
+ * @description
+ * What the rows of the open view tell the list page's « Filtrer » and « Sous-tâches » controls.
+ */
+export interface ListRowsSummary {
+  // #region Properties
+  /**
+   * Property visibleCount
+   *
+   * @description
+   * Tasks the view shows with its filters (« n sur m tâches »), or null while unknown or when
+   * a task may be counted in several groups (grouped by assignee).
+   *
+   * @type {number | null}
+   * @readonly
+   */
+  readonly visibleCount: number | null;
+
+  /**
+   * Property hasSubtasks
+   *
+   * @description
+   * Whether a task read has subtasks or is one, or null before the first answer.
+   *
+   * @type {boolean | null}
+   * @readonly
+   */
+  readonly hasSubtasks: boolean | null;
+  // #endregion
+}

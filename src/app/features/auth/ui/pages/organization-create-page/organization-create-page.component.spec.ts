@@ -92,6 +92,33 @@ describe('OrganizationCreatePage', () => {
     expect(navigate).toHaveBeenCalledWith('/studio-nord', { replaceUrl: true });
   });
 
+  it('marks the empty logo with the draft initials and sizes a chosen logo', async () => {
+    const createObjectURL: Mock = vi.fn(() => 'blob:logo');
+    vi.stubGlobal('URL', Object.assign(URL, { createObjectURL, revokeObjectURL: vi.fn() }));
+    const { host, fixture }: Awaited<ReturnType<typeof render>> = await render(
+      { ok: true },
+      'Studio Nord',
+    );
+
+    expect(host.textContent).toContain('SN');
+    expect(host.querySelector('label[for="org-invite"]')?.textContent).toContain(
+      'Inviter des collègues (facultatif)',
+    );
+    const input: HTMLInputElement | null = host.querySelector('#org-logo');
+    if (input === null) throw new Error('Expected the logo input.');
+    for (const [size, caption] of [
+      [2048, 'logo.png · 2 Ko'],
+      [1_572_864, 'logo.png · 1,5 Mo'],
+    ] as const) {
+      const file: File = new File([new Uint8Array(size)], 'logo.png', { type: 'image/png' });
+      Object.defineProperty(input, 'files', { configurable: true, value: [file] });
+      input.dispatchEvent(new Event('change'));
+      await fixture.whenStable();
+      expect(host.querySelector('#org-logo-help')?.textContent.trim()).toBe(caption);
+    }
+    vi.unstubAllGlobals();
+  });
+
   it('refuses a name without an address before sending', async () => {
     const { host, create }: Awaited<ReturnType<typeof render>> = await render({ ok: true }, '***');
 

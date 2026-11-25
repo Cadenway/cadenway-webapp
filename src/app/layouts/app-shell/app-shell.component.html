@@ -49,14 +49,13 @@
                 <ng-container *ngComponentOutlet="row.component; inputs: row.inputs" />
               }
             </div>
-            <div class="flex h-11 shrink-0 items-center">
+            <div class="flex h-9 shrink-0 items-center">
               <button
                 cwButton
                 variant="ghost"
                 size="icon-sm"
                 aria-label="Collapse the sidebar"
                 i18n-aria-label="@@layouts.app-shell.sidebar-collapse"
-                aria-keyshortcuts="Control+B"
                 aria-expanded="true"
                 [attr.aria-controls]="sidebarRef.id"
                 data-testid="app-shell-sidebar-collapse"
@@ -89,7 +88,6 @@
               size="icon-sm"
               aria-label="Expand the sidebar"
               i18n-aria-label="@@layouts.app-shell.sidebar-expand"
-              aria-keyshortcuts="Control+B"
               aria-expanded="false"
               [attr.aria-controls]="sidebarRef.id"
               data-testid="app-shell-sidebar-expand"

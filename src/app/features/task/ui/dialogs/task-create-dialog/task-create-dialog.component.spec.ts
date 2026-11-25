@@ -319,6 +319,18 @@ describe('TaskCreateDialog', () => {
     expect(TestBed.inject(TaskCreate).isOpen()).toBe(false);
   });
 
+  it('creates with the priority and the assignees of the group it was opened from', async () => {
+    TestBed.inject(TaskCreate).open({ listId: 'sprint-14', priority: 'urgente', assigneeIds: [] });
+    await fixture.whenStable();
+    expect(document.querySelector('[data-testid="task-create-next-key"]')).not.toBeNull();
+    typeName('Corriger le crash');
+    await fixture.whenStable();
+    buttonNamed('Créer la tâche')?.click();
+    await fixture.whenStable();
+
+    expect(create.mock.calls[0][1]).toMatchObject({ priority: 'urgente', assigneeIds: [] });
+  });
+
   it('keeps the dialog open with an empty name for « Créer d’autres tâches »', async () => {
     TestBed.inject(TaskCreate).open();
     await fixture.whenStable();

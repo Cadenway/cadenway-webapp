@@ -295,6 +295,7 @@ describe('AppShell', () => {
       $localize`:@@layouts.app-shell.sidebar-collapse:Collapse the sidebar`,
     );
     expect(sidebar?.contains(collapse)).toBe(true);
+    expect(collapse?.hasAttribute('aria-keyshortcuts')).toBe(false);
     expect(byTestId(host, 'app-shell-sidebar-expand')).toBeNull();
   });
 
@@ -310,6 +311,7 @@ describe('AppShell', () => {
       $localize`:@@layouts.app-shell.sidebar-expand:Expand the sidebar`,
     );
     expect(document.activeElement).toBe(expand);
+    expect(expand?.hasAttribute('aria-keyshortcuts')).toBe(false);
 
     await click(expand);
 

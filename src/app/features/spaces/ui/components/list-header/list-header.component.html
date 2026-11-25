@@ -20,7 +20,8 @@
     <a cwBreadcrumbLink [routerLink]="spaceLink()" data-testid="list-breadcrumb-space">
       @if (space(); as current) {
         <span
-          class="flex size-4 shrink-0 items-center justify-center rounded-[3px] text-[9px] font-semibold"
+          class="flex size-4 shrink-0 items-center justify-center rounded-[3px] border border-border bg-background text-[9px] font-semibold"
+          [class]="spaceTone(current)"
           aria-hidden="true"
         >
           @if (spaceIcon(current); as name) {
@@ -41,28 +42,25 @@
 <header class="flex flex-wrap items-start gap-x-4 gap-y-2">
   <div class="flex min-w-0 flex-1 flex-col gap-1">
     <div class="flex items-center gap-2">
-      <span
-        class="inline-flex size-8 shrink-0 items-center justify-center rounded-lg border border-border bg-background"
+      <button
+        type="button"
+        class="relative isolate inline-flex size-8 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-border bg-background transition-all hover:bg-linear-to-b hover:from-hover hover:to-hover focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background focus-visible:outline-none disabled:pointer-events-none"
         [class]="tone()"
-        aria-hidden="true"
-        ><ng-icon [name]="icon()" class="size-[18px]"
-      /></span>
+        [disabled]="!list().canEdit"
+        [attr.aria-label]="renameLabel()"
+        [attr.title]="renameLabel()"
+        data-testid="list-edit"
+        (click)="editRequested.emit()"
+      >
+        <ng-icon [name]="icon()" class="size-[18px]" aria-hidden="true" />
+      </button>
       <h1
         class="min-w-0 truncate text-2xl font-semibold tracking-tight"
         tabindex="-1"
         data-route-focus
+        data-testid="list-title"
       >
-        <cw-inline-edit
-          [value]="list().name"
-          [(editing)]="editing"
-          required
-          [maxLength]="100"
-          [saving]="saving()"
-          [readonly]="!list().canEdit"
-          [ariaLabel]="renameLabel()"
-          data-testid="list-title"
-          (save)="save($event)"
-        />
+        {{ list().name }}
       </h1>
       <button
         cwButton
@@ -104,6 +102,7 @@
     @if (members(); as people) {
       @if (people.items.length > 0) {
         <cw-avatar-group
+          class="max-md:hidden"
           size="sm"
           [max]="4"
           [ariaLabel]="membersLabel()"
@@ -131,9 +130,18 @@
 </header>
 
 <cw-menu #listMenu align="end" ariaLabel="List actions" i18n-ariaLabel="@@spaces.header.menu">
-  <button cwMenuItem [disabled]="!list().canEdit" (triggered)="editing.set(true)">
+  <button cwMenuItem [disabled]="!list().canEdit" (triggered)="editRequested.emit()">
     <ng-icon name="phosphorPencilSimpleBold" aria-hidden="true" />
     {{ renameLabel() }}
+  </button>
+  <button
+    cwMenuItem
+    [disabled]="!spaceEditable()"
+    data-testid="list-edit-space"
+    (triggered)="spaceEditRequested.emit()"
+  >
+    <ng-icon name="phosphorSquaresFourBold" aria-hidden="true" />
+    <ng-container i18n="@@spaces.menu.edit-space">Edit the space</ng-container>
   </button>
   <button cwMenuItem [disabled]="!list().canEdit" (triggered)="duplicated.emit()">
     <ng-icon name="phosphorCopyBold" aria-hidden="true" />

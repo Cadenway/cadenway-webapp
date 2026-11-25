@@ -4,6 +4,8 @@ import { provideRouter, Router } from '@angular/router';
 import { provideCadenwayIcons } from '@cadenway/icons';
 import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 
+import { RuntimeConfigStore } from '@core/config';
+
 import { AuthFlowStore } from '../../../state/auth-flow/auth-flow.store';
 import { CodeSignInPage } from './code-sign-in-page.component';
 
@@ -46,6 +48,12 @@ describe('CodeSignInPage', () => {
         provideRouter([]),
         provideCadenwayIcons(),
         {
+          provide: RuntimeConfigStore,
+          useValue: {
+            config: signal({ apiUrl: 'http://api.localhost', siteUrl: 'https://cadenway.example' }),
+          },
+        },
+        {
           provide: AuthFlowStore,
           useValue: {
             email: signal('camille.martin@ateliernord.fr'),
@@ -75,6 +83,9 @@ describe('CodeSignInPage', () => {
     await fixture.whenStable();
     expect(requestSignInCode).toHaveBeenCalledTimes(2);
     expect(host.textContent).toContain('Nouveau code envoyé ; le précédent ne fonctionne plus.');
+    expect(host.querySelector('cw-code-help a')?.getAttribute('href')).toBe(
+      'https://cadenway.example/help',
+    );
 
     const input: HTMLInputElement | null = host.querySelector('#code-input');
     if (input === null) throw new Error('Expected the code input.');
@@ -94,13 +105,19 @@ describe('CodeSignInPage', () => {
     expect(navigate).toHaveBeenCalledWith('/login/two-step', { replaceUrl: true });
   });
 
-  it('asks for the address first when none is known', async () => {
+  it('asks for the address first when none is known and shows its error on submit', async () => {
     const requestSignInCode: Mock = vi.fn(() => Promise.resolve({ ok: true, value: undefined }));
     TestBed.configureTestingModule({
       imports: [CodeSignInPage],
       providers: [
         provideRouter([]),
         provideCadenwayIcons(),
+        {
+          provide: RuntimeConfigStore,
+          useValue: {
+            config: signal({ apiUrl: 'http://api.localhost', siteUrl: 'https://cadenway.example' }),
+          },
+        },
         { provide: AuthFlowStore, useValue: { email: signal(''), requestSignInCode } },
       ],
     });
@@ -110,5 +127,15 @@ describe('CodeSignInPage', () => {
 
     expect(requestSignInCode).not.toHaveBeenCalled();
     expect(host.querySelector('#code-email')).not.toBeNull();
+    expect(host.querySelector('cw-code-help')).toBeNull();
+    expect(host.querySelector<HTMLButtonElement>('button[type="submit"]')?.disabled).toBe(false);
+    host.querySelector('form')?.dispatchEvent(new Event('submit', { cancelable: true }));
+    await fixture.whenStable();
+
+    expect(host.querySelector('#code-email-help')?.textContent).toContain(
+      "Saisissez l'adresse e-mail de votre compte, par exemple camille.martin@ateliernord.fr.",
+    );
+    expect(document.activeElement?.id).toBe('code-email');
+    expect(requestSignInCode).not.toHaveBeenCalled();
   });
 });

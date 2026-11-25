@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 
 import { UnavailableRouteError } from '@shared/route-errors';
 
+import type { SpaceDraft } from '../../../models/space/space.interface';
 import { SpacesApi } from './spaces-api.service';
 
 describe('SpacesApi', () => {
@@ -42,6 +43,16 @@ describe('SpacesApi', () => {
         of({ id: 'f3', kind: 'space', targetId: 'sp-1', target: { name: 'Produit', href: '/' } }),
       ),
       deleteFavorite: vi.fn(() => of(undefined)),
+      createSpace: vi.fn(() =>
+        of({
+          space: { id: 'sp-rh', name: 'RH', prefix: 'RH', statuses: {}, visibility: 'private' },
+          firstList: { id: 'l-1', spaceId: 'sp-rh', name: 'Premiere liste', version: 1 },
+        }),
+      ),
+      updateSpace: vi.fn(() =>
+        of({ id: 'sp-1', name: 'Produit 2', prefix: 'CAD', statuses: {}, visibility: 'private' }),
+      ),
+      deleteSpace: vi.fn(() => of(undefined)),
     };
     TestBed.configureTestingModule({ providers: [{ provide: SpacesService, useValue: spaces }] });
     api = TestBed.inject(SpacesApi);
@@ -85,5 +96,44 @@ describe('SpacesApi', () => {
     expect((await api.addFavorite('space', 'sp-1'))?.id).toBe('f3');
     await api.removeFavorite('f3');
     expect(spaces['deleteFavorite']).toHaveBeenCalledWith('f3');
+  });
+
+  it('creates a space with its first list and sends a visibility change only', async () => {
+    const draft: SpaceDraft = {
+      name: 'RH',
+      prefix: 'RH',
+      description: null,
+      icon: null,
+      color: 'gris',
+      private: true,
+    };
+    const created: Awaited<ReturnType<SpacesApi['createSpace']>> = await api.createSpace(
+      draft,
+      'key-1',
+    );
+
+    expect(created.firstList.id).toBe('l-1');
+    expect(created.space.private).toBe(true);
+    expect(spaces['createSpace']).toHaveBeenCalledWith(
+      {
+        name: 'RH',
+        prefix: 'RH',
+        description: null,
+        icon: null,
+        color: 'gris',
+        visibility: 'private',
+      },
+      { headers: { 'Idempotency-Key': 'key-1' } },
+    );
+    await api.updateSpace(created.space, { ...draft, name: 'RH 2' });
+    expect(spaces['updateSpace']).toHaveBeenCalledWith('sp-rh', {
+      name: 'RH 2',
+      prefix: 'RH',
+      description: null,
+      icon: null,
+      color: 'gris',
+    });
+    await api.deleteSpace('sp-rh');
+    expect(spaces['deleteSpace']).toHaveBeenCalledWith('sp-rh');
   });
 });

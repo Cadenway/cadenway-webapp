@@ -42,6 +42,11 @@ import {
 import { type RealtimeChange, RealtimeConnection } from '@core/realtime';
 import {
   type CreatedTask,
+  STATUS_SETTLE_MS,
+  TaskActionsApi,
+  type TaskBulkAction,
+  type TaskBulkOutcome,
+  type TaskBulkSelection,
   TaskCreate,
   type TaskStatusChange,
   TaskStatusChangesStore,
@@ -57,6 +62,7 @@ import type {
   GroupProgress,
   ListRow,
   ListRowsQuery,
+  ListRowsSummary,
   ListTaskPage,
 } from '../../models/list-rows/list-rows.interface';
 import type {
@@ -113,6 +119,115 @@ const ENTER_MS: number = 520;
  * @type {number}
  */
 const NOTICE_REFRESH_MS: number = 1000;
+
+/**
+ * Type RowChanges
+ *
+ * @description
+ * The fields of a task an action of the view changes before the gateway confirms it.
+ *
+ * @type {Partial<Pick<TaskSummary, 'status' | 'cancelReason' | 'priority' | 'assigneeIds' | 'listId'>>}
+ */
+type RowChanges = Partial<
+  Pick<TaskSummary, 'status' | 'cancelReason' | 'priority' | 'assigneeIds' | 'listId'>
+>;
+
+/**
+ * Interface RowPatch
+ *
+ * @description
+ * An optimistic change of one task: shown at once, filed (grouped) 460 ms later, and applied only
+ * while the task is at the version it was made on, so the next read of the task wins over it.
+ */
+interface RowPatch {
+  // #region Properties
+  /**
+   * Property version
+   *
+   * @description
+   * Version of the task the change was made on.
+   *
+   * @type {number}
+   * @readonly
+   */
+  readonly version: number;
+
+  /**
+   * Property changes
+   *
+   * @description
+   * The changed fields.
+   *
+   * @type {RowChanges}
+   * @readonly
+   */
+  readonly changes: RowChanges;
+
+  /**
+   * Property filed
+   *
+   * @description
+   * Whether the row is already grouped by the changed fields.
+   *
+   * @type {boolean}
+   * @readonly
+   */
+  readonly filed: boolean;
+
+  /**
+   * Property hidden
+   *
+   * @description
+   * Whether the row leaves the view at once (moved to another list or deleted).
+   *
+   * @type {boolean}
+   * @readonly
+   */
+  readonly hidden: boolean;
+  // #endregion
+}
+
+/**
+ * Function changesOf
+ *
+ * @description
+ * What an action changes on a task, shown before the gateway confirms it; null for an action
+ * that changes nothing visible in the row (a copy).
+ *
+ * @param {TaskSummary} task - The task.
+ * @param {TaskBulkAction} action - The action.
+ * @returns {{ changes: RowChanges; hidden: boolean } | null} The changes.
+ */
+function changesOf(
+  task: TaskSummary,
+  action: TaskBulkAction,
+): { changes: RowChanges; hidden: boolean } | null {
+  switch (action.type) {
+    case 'status':
+      return {
+        changes: { status: action.status, cancelReason: action.cancelReason ?? null },
+        hidden: false,
+      };
+    case 'priority':
+      return { changes: { priority: action.priority }, hidden: false };
+    case 'assign':
+      return {
+        changes: { assigneeIds: [...new Set([...task.assigneeIds, action.userId])] },
+        hidden: false,
+      };
+    case 'unassign':
+      return {
+        changes: { assigneeIds: task.assigneeIds.filter((id: string) => id !== action.userId) },
+        hidden: false,
+      };
+    case 'move':
+      return { changes: { listId: action.listId }, hidden: true };
+    case 'trash':
+      return { changes: {}, hidden: true };
+    case 'duplicate':
+      return null;
+  }
+}
 
 /**
  * Constant CHILD_READS
@@ -392,6 +507,17 @@ interface ListRowsState {
    * @readonly
    */
   readonly _hidden: readonly string[];
+
+  /**
+   * Property _patches
+   *
+   * @description
+   * Optimistic changes of the view's actions, by task key.
+   *
+   * @type {Readonly<Partial<Record<string, RowPatch>>>}
+   * @readonly
+   */
+  readonly _patches: Readonly<Partial<Record<string, RowPatch>>>;
   // #endregion
 }
 
@@ -417,6 +543,7 @@ const initialState: ListRowsState = {
   _children: {},
   _entering: [],
   _hidden: [],
+  _patches: {},
 };
 
 /**
@@ -669,6 +796,18 @@ export interface ListRowsStoreInstance {
    * @readonly
    */
   readonly moreFailed: Signal<boolean>;
+
+  /**
+   * Property summary
+   *
+   * @description
+   * The count of tasks the view shows (the sum of its groups' counts, null while one is unknown
+   * or when grouped by assignee) and whether the tasks read have subtasks, for the list page.
+   *
+   * @type {Signal<ListRowsSummary>}
+   * @readonly
+   */
+  readonly summary: Signal<ListRowsSummary>;
   // #endregion
 
   // #region Methods
@@ -767,6 +906,48 @@ export interface ListRowsStoreInstance {
    * Reads the rows again in place, as deep as they are read; queued while a read runs.
    */
   reload(): void;
+
+  /**
+   * Method act
+   *
+   * @description
+   * Applies an action of the row menu or of the selection bar to tasks shown by the view, with
+   * each task's shown version, through `TaskActionsApi.bulk` (chunks of 50). The rows change at
+   * once: the icon, the word or the people at once, the group 460 ms later (at once with reduced
+   * motion); a moved or deleted row leaves at once. A refused, uncertain or unsent task gets its
+   * confirmed values back. The rows are read again when something may have changed. The promise
+   * never rejects.
+   *
+   * @param {readonly TaskSummary[]} tasks - The tasks, as shown.
+   * @param {TaskBulkAction} action - The action.
+   * @returns {Promise<TaskBulkOutcome>} What was applied, refused, uncertain or not sent.
+   */
+  act(tasks: readonly TaskSummary[], action: TaskBulkAction): Promise<TaskBulkOutcome>;
+
+  /**
+   * Method remind
+   *
+   * @description
+   * Sets the caller's reminder of each task at the same moment; resolves with the keys whose
+   * reminder was recorded.
+   *
+   * @param {readonly string[]} taskKeys - The tasks.
+   * @param {Date} at - When to remind.
+   * @returns {Promise<readonly string[]>} The recorded keys.
+   */
+  remind(taskKeys: readonly string[], at: Date): Promise<readonly string[]>;
+
+  /**
+   * Method restore
+   *
+   * @description
+   * Takes deleted tasks out of the trash (the « Annuler » of a deletion), then reads the rows
+   * again; resolves with whether every entry came back.
+   *
+   * @param {readonly string[]} entryIds - The trash entries.
+   * @returns {Promise<boolean>} Whether all were restored.
+   */
+  restore(entryIds: readonly string[]): Promise<boolean>;
   // #endregion
 }
 
@@ -830,6 +1011,8 @@ function createListRowsStore(): Type<ListRowsStoreInstance> {
       });
       return {
         _api: api,
+        _actions: inject(TaskActionsApi),
+        _destroyRef: inject(DestroyRef),
         _reloadRequests: new Subject<void>(),
         _params: params,
         _status: inject(TaskStatusChangesStore),
@@ -840,11 +1023,19 @@ function createListRowsStore(): Type<ListRowsStoreInstance> {
       };
     }),
     withComputed((store) => {
+      const patchOf: (task: TaskSummary) => RowPatch | null = (
+        task: TaskSummary,
+      ): RowPatch | null => {
+        const patch: RowPatch | undefined = store._patches()[task.key];
+        return patch?.version === task.version ? patch : null;
+      };
       const effective: (task: TaskSummary) => TaskSummary = (task: TaskSummary): TaskSummary => {
         const settled: TaskSummary = store._status.settledTask(task);
-        return store._reduceMotion
+        const shown: TaskSummary = store._reduceMotion
           ? { ...settled, status: store._status.displayedStatus(settled) }
           : settled;
+        const patch: RowPatch | null = patchOf(task);
+        return patch?.filed ? { ...shown, ...patch.changes } : shown;
       };
       const groupBy: () => ListGroupQuery['groupBy'] | null = () => groupingOf(store._params());
       return {
@@ -880,7 +1071,11 @@ function createListRowsStore(): Type<ListRowsStoreInstance> {
             group: string,
             depth: number,
           ): void => {
-            const shown: TaskSummary = effective(task);
+            const patch: RowPatch | null = patchOf(task);
+            if (patch?.hidden) return;
+            const shown: TaskSummary = patch
+              ? { ...effective(task), ...patch.changes }
+              : effective(task);
             const expandable: boolean =
               mode !== 'separate' && depth < SUBTASK_DEPTH && shown.subtasks.total > 0;
             const expanded: boolean = expandable && (open[shown.key] ?? mode === 'expanded');
@@ -902,7 +1097,7 @@ function createListRowsStore(): Type<ListRowsStoreInstance> {
               id: grouping === 'assignee' ? `${group}/${shown.key}` : shown.key,
               group,
               task: shown,
-              status: store._status.displayedStatus(shown),
+              status: patch?.changes.status ?? store._status.displayedStatus(shown),
               depth,
               canAddSubtask: actualDepth < SUBTASK_DEPTH && shown.subtasks.total < 25,
               expandable,
@@ -963,6 +1158,23 @@ function createListRowsStore(): Type<ListRowsStoreInstance> {
         !store.moreFailed(),
       empty: (): boolean =>
         store.hasCurrentSnapshot() && store.rows().length === 0 && !store._hasMoreVisible(),
+      summary: (): ListRowsSummary => {
+        if (!store.hasCurrentSnapshot()) return { visibleCount: null, hasSubtasks: null };
+        const counts: readonly (number | null)[] =
+          store.groupBy() === 'assignee'
+            ? [null]
+            : store._groups().map((group: GroupProgress): number | null => group.count);
+        return {
+          visibleCount: counts.includes(null)
+            ? null
+            : counts.reduce((sum: number, count: number | null): number => sum + (count ?? 0), 0),
+          hasSubtasks: store
+            .entities()
+            .some(
+              (task: TaskSummary): boolean => task.subtasks.total > 0 || task.parentKey !== null,
+            ),
+        };
+      },
     })),
     withMethods((store) => {
       let moreController: AbortController | null = null;
@@ -1100,6 +1312,57 @@ function createListRowsStore(): Type<ListRowsStoreInstance> {
       const reload: () => void = (): void => {
         if (!store.primary.reload() && store._params() !== undefined) reloadQueued = true;
       };
+      const timers: Set<ReturnType<typeof setTimeout>> = new Set<ReturnType<typeof setTimeout>>();
+      store._destroyRef.onDestroy((): void => {
+        for (const timer of timers) clearTimeout(timer);
+      });
+      const later: (ms: number, run: () => void) => void = (ms: number, run: () => void): void => {
+        const timer: ReturnType<typeof setTimeout> = setTimeout((): void => {
+          timers.delete(timer);
+          run();
+        }, ms);
+        timers.add(timer);
+      };
+      const unpatch: (keys: readonly string[]) => void = (keys: readonly string[]): void => {
+        if (!keys.some((key: string): boolean => key in store._patches())) return;
+        patchState(store, (state: ListRowsState): Partial<ListRowsState> => ({
+          _patches: Object.fromEntries(
+            Object.entries(state._patches).filter(
+              ([key]: [string, RowPatch | undefined]) => !keys.includes(key),
+            ),
+          ),
+        }));
+      };
+      const fileLater: (keys: readonly string[]) => void = (keys: readonly string[]): void => {
+        const made: Readonly<Partial<Record<string, RowPatch>>> = store._patches();
+        later(STATUS_SETTLE_MS, (): void => {
+          const filed: string[] = keys.filter(
+            (key: string): boolean =>
+              made[key] !== undefined && store._patches()[key] === made[key],
+          );
+          if (filed.length === 0) return;
+          patchState(store, (state: ListRowsState): Partial<ListRowsState> => ({
+            _patches: {
+              ...state._patches,
+              ...Object.fromEntries(
+                filed.flatMap((key: string): [string, RowPatch][] => {
+                  const patch: RowPatch | undefined = state._patches[key];
+                  return patch ? [[key, { ...patch, filed: true }]] : [];
+                }),
+              ),
+            },
+            _entering: [
+              ...state._entering.filter((key: string): boolean => !filed.includes(key)),
+              ...filed,
+            ],
+          }));
+          later(ENTER_MS, (): void => {
+            patchState(store, (state: ListRowsState): Partial<ListRowsState> => ({
+              _entering: state._entering.filter((key: string): boolean => !filed.includes(key)),
+            }));
+          });
+        });
+      };
 
       return {
         _follow: signalMethod<RowsParams | undefined>((params: RowsParams | undefined): void => {
@@ -1222,12 +1485,17 @@ function createListRowsStore(): Type<ListRowsStoreInstance> {
           const effectiveKeys: ReadonlySet<string> = new Set(
             store
               .entities()
-              .filter(
-                (task) =>
+              .filter((task) => {
+                const patch: RowPatch | undefined = store._patches()[task.key];
+                const own: RowPatch | null = patch?.version === task.version ? patch : null;
+                if (own?.hidden) return false;
+                const status: string =
+                  (own?.filed ? own.changes.status : undefined) ??
                   (store._reduceMotion
                     ? store._status.displayedStatus(task)
-                    : store._status.settledTask(task).status) === value,
-              )
+                    : store._status.settledTask(task).status);
+                return status === value;
+              })
               .map((task) => task.key),
           );
           return count + effectiveKeys.size - serverKeys.size;
@@ -1257,6 +1525,60 @@ function createListRowsStore(): Type<ListRowsStoreInstance> {
           readChildren(taskKey);
         },
         reload,
+        async act(tasks: readonly TaskSummary[], action: TaskBulkAction): Promise<TaskBulkOutcome> {
+          const organizationId: string | undefined = store._params()?.organizationId;
+          const current: () => boolean = (): boolean =>
+            !store._destroyRef.destroyed && store._params()?.organizationId === organizationId;
+          const patched: string[] = [];
+          const next: Partial<Record<string, RowPatch>> = { ...store._patches() };
+          for (const task of tasks) {
+            const change: { changes: RowChanges; hidden: boolean } | null = changesOf(task, action);
+            if (!change) continue;
+            next[task.key] = {
+              version: task.version,
+              changes: change.changes,
+              filed: store._reduceMotion || change.hidden,
+              hidden: change.hidden,
+            };
+            patched.push(task.key);
+          }
+          if (patched.length > 0) {
+            patchState(store, { _patches: next });
+            if (!store._reduceMotion) fileLater(patched);
+          }
+          const selection: TaskBulkSelection[] = tasks.map(
+            (task: TaskSummary): TaskBulkSelection => ({
+              taskKey: task.key,
+              version: task.version,
+            }),
+          );
+          const outcome: TaskBulkOutcome = await store._actions.bulk(selection, action, current);
+          if (store._destroyRef.destroyed) return outcome;
+          unpatch(
+            [...outcome.failed, ...outcome.unknown, ...outcome.notSent].map(
+              (item: TaskBulkSelection): string => item.taskKey,
+            ),
+          );
+          if (current() && (outcome.done.length > 0 || outcome.unknown.length > 0)) reload();
+          return outcome;
+        },
+        async remind(taskKeys: readonly string[], at: Date): Promise<readonly string[]> {
+          const results: PromiseSettledResult<void>[] = await Promise.allSettled(
+            taskKeys.map((key: string): Promise<void> => store._actions.remind(key, at)),
+          );
+          return taskKeys.filter(
+            (_: string, index: number) => results[index].status === 'fulfilled',
+          );
+        },
+        async restore(entryIds: readonly string[]): Promise<boolean> {
+          const results: PromiseSettledResult<void>[] = await Promise.allSettled(
+            entryIds.map((id: string): Promise<void> => store._actions.restore(id)),
+          );
+          if (!store._destroyRef.destroyed) reload();
+          return results.every(
+            (result: PromiseSettledResult<void>) => result.status === 'fulfilled',
+          );
+        },
       };
     }),
     withHooks({

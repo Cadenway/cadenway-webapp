@@ -13,7 +13,7 @@ import { STATUS_ORDER } from '../../../constants/statuses/statuses.constants';
 import type { StatusKey } from '../../../models/list-view-config/list-view-config.interface';
 import type { LookColor, LookIcon } from '../../../models/look/look.type';
 import type { Milestone, MilestonePage } from '../../../models/milestone/milestone.interface';
-import type { Space, SpaceStatusOption } from '../../../models/space/space.interface';
+import type { SpaceDetails, SpaceStatusOption } from '../../../models/space/space.interface';
 import type {
   ListCounts,
   ListSummary,
@@ -116,15 +116,20 @@ export function isStatusKey(value: string): value is StatusKey {
  * Function toSpace
  *
  * @description
- * Maps a space with its statuses in workflow order.
+ * Maps a space with its statuses in workflow order, its prefix and the caller's rights on it: an
+ * absent `callerRole` reads as `edit` and an absent `callerCanManage` as managing, so the actions
+ * stay offered and their `403` is handled.
  *
  * @param {SpaceDto} dto - Gateway space.
- * @returns {Space} The display model.
+ * @returns {SpaceDetails} The display model.
  */
-export function toSpace(dto: SpaceDto): Space {
+export function toSpace(dto: SpaceDto): SpaceDetails {
   return {
     id: dto.id,
     name: dto.name,
+    prefix: dto.prefix,
+    canEdit: dto.callerRole === undefined || dto.callerRole === 'edit',
+    canManage: dto.callerCanManage ?? true,
     description: dto.description,
     icon: toLookIcon(dto.icon),
     color: toLookColor(dto.color),

@@ -8,7 +8,12 @@ import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vite
 import { OrganizationPin } from '@core/api';
 import { type RealtimeChange, RealtimeConnection } from '@core/realtime';
 import { parseChange } from '@core/realtime/realtime-protocol.util';
-import { TaskStatusChangesStore, type TaskSummary } from '@features/task';
+import {
+  TaskActionsApi,
+  type TaskBulkOutcome,
+  TaskStatusChangesStore,
+  type TaskSummary,
+} from '@features/task';
 import { TaskApi } from '@features/task/data-access/services/task-api/task-api.service';
 import { WORKSPACE_CONTEXT } from '@features/workspace/ports/workspace-context';
 
@@ -135,6 +140,7 @@ describe('ListRowsStore', () => {
   let page: Mock<PageRead>;
   let subtasks: Mock<ListTasksApi['subtasks']>;
   let changeStatus: Mock<TaskApi['changeStatus']>;
+  let bulk: Mock<TaskActionsApi['bulk']>;
   let notices: Subject<RealtimeChange>;
   let organization: WritableSignal<{ id: string; slug: string }>;
 
@@ -154,6 +160,10 @@ describe('ListRowsStore', () => {
         ListRowsStore,
         { provide: ListTasksApi, useValue: { groups, page, subtasks } },
         { provide: TaskApi, useValue: { changeStatus, read: vi.fn() } },
+        {
+          provide: TaskActionsApi,
+          useValue: { bulk, remind: vi.fn(), restore: vi.fn(() => Promise.resolve()) },
+        },
         {
           provide: CwToastService,
           useValue: { show: vi.fn(), error: vi.fn(), warning: vi.fn(), dismiss: vi.fn() },
@@ -212,6 +222,15 @@ describe('ListRowsStore', () => {
     );
     page = vi.fn<PageRead>(() => Promise.resolve(pageOf([cad482])));
     subtasks = vi.fn<ListTasksApi['subtasks']>(() => Promise.resolve([]));
+    bulk = vi.fn<TaskActionsApi['bulk']>(() =>
+      Promise.resolve<TaskBulkOutcome>({
+        affected: 1,
+        done: [{ taskKey: 'CAD-482', version: 4, newTaskKey: null, trashEntryId: null }],
+        failed: [],
+        unknown: [],
+        notSent: [],
+      }),
+    );
     changeStatus = vi.fn<TaskApi['changeStatus']>(
       (key: string, version: number, status: StatusKey): Observable<TaskSummary> =>
         of({ ...cad482, status, version: version + 1 }),
@@ -929,6 +948,34 @@ describe('ListRowsStore', () => {
     expect(subtasks).toHaveBeenCalledTimes(2);
   });
 
+  it('sums the group counts and tells whether the tasks read have subtasks', async () => {
+    const store: InstanceType<typeof ListRowsStore> = setup(byStatus);
+    expect(store.summary()).toEqual({ visibleCount: null, hasSubtasks: null });
+    await settle();
+
+    expect(store.summary()).toEqual({ visibleCount: 1, hasSubtasks: false });
+
+    page.mockResolvedValue(pageOf([{ ...cad482, subtasks: { closed: 0, total: 1 } }]));
+    store.reload();
+    await settle();
+
+    expect(store.summary()).toEqual({ visibleCount: 1, hasSubtasks: true });
+  });
+
+  it('leaves the visible count unknown when grouped by assignee', async () => {
+    groups.mockResolvedValue([
+      { value: 'a', count: 1 },
+      { value: 'b', count: 1 },
+    ]);
+    const store: InstanceType<typeof ListRowsStore> = setup({
+      ...flat,
+      groupQuery: { groupBy: 'assignee', query },
+    });
+    await settle();
+
+    expect(store.summary().visibleCount).toBeNull();
+  });
+
   it('uses each assignee group page order for tasks with multiple assignees', async () => {
     const shared: TaskSummary = task('CAD-shared', 'todo', { assigneeIds: ['a', 'b'] });
     const other: TaskSummary = task('CAD-other', 'todo', { assigneeIds: ['b'] });
@@ -949,6 +996,65 @@ describe('ListRowsStore', () => {
       'b/CAD-other',
       'b/CAD-shared',
     ]);
+  });
+
+  it('shows a bulk status at once, files the row 460 ms later and reads the rows again', async () => {
+    const store: InstanceType<typeof ListRowsStore> = setup(byStatus);
+    await settle();
+    const reads: number = page.mock.calls.length;
+
+    const done: Promise<TaskBulkOutcome> = store.act([cad482], { type: 'status', status: 'done' });
+
+    expect(rowOf(store, 'CAD-482')).toMatchObject({ status: 'done', group: 'todo' });
+    expect(bulk).toHaveBeenCalledWith(
+      [{ taskKey: 'CAD-482', version: 3 }],
+      { type: 'status', status: 'done' },
+      expect.any(Function),
+    );
+    await vi.advanceTimersByTimeAsync(460);
+    expect(rowOf(store, 'CAD-482')).toMatchObject({ status: 'done', group: 'done' });
+    await done;
+    await settle();
+    expect(page.mock.calls.length).toBeGreaterThan(reads);
+  });
+
+  it('brings the confirmed values back when a bulk action is refused', async () => {
+    bulk.mockResolvedValueOnce({
+      affected: 0,
+      done: [],
+      failed: [{ taskKey: 'CAD-482', version: 3 }],
+      unknown: [],
+      notSent: [],
+    });
+    const store: InstanceType<typeof ListRowsStore> = setup(byStatus);
+    await settle();
+
+    const refused: Promise<TaskBulkOutcome> = store.act([cad482], {
+      type: 'priority',
+      priority: 'urgente',
+    });
+    expect(rowOf(store, 'CAD-482')?.task.priority).toBe('urgente');
+    await refused;
+
+    expect(rowOf(store, 'CAD-482')?.task.priority).toBe('haute');
+  });
+
+  it('hides a deleted row at once and shows it again when the deletion is refused', async () => {
+    let answer: (outcome: TaskBulkOutcome) => void = () => undefined;
+    bulk.mockReturnValueOnce(
+      new Promise<TaskBulkOutcome>((resolve) => {
+        answer = resolve;
+      }),
+    );
+    const store: InstanceType<typeof ListRowsStore> = setup(byStatus);
+    await settle();
+
+    const deleted: Promise<TaskBulkOutcome> = store.act([cad482], { type: 'trash' });
+    expect(rowOf(store, 'CAD-482')).toBeUndefined();
+    answer({ affected: 0, done: [], failed: [], unknown: [], notSent: [{ taskKey: 'CAD-482' }] });
+    await deleted;
+
+    expect(rowOf(store, 'CAD-482')).toBeDefined();
   });
 
   it('only offers subtask creation within the known depth in separate mode', async () => {

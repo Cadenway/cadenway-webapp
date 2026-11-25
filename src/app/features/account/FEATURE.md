@@ -42,6 +42,8 @@ Until then the menu's links open the 404 inside the shell.
   « Indisponible » and nothing is set or confirmed.
 - The menu is a slot contribution acting as a container: it injects `WORKSPACE_CONTEXT`, `PRESENCE`,
   the router and the toasts; `PresenceDot` stays presentational.
+- The rail's account button has no tooltip (mockup lines 63-66); its accessible name names the
+  person and their presence.
 - The theme submenu drives `ThemeService`; the transition spreads from the account button.
 - A refused sign-out keeps the page and shows an error toast.
 - Known gap: « Définir un message de statut » and the status message under the header are left out,

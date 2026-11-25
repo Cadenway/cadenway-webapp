@@ -6,6 +6,7 @@ import {
   type MilestonePage as MilestonePageDto,
   type Space as SpaceDto,
   type SpaceOverview as SpaceOverviewDto,
+  type SpaceCreated,
   type SpacePage,
   SpacesService,
 } from '@cadenway/api-client';
@@ -13,8 +14,8 @@ import { firstValueFrom } from 'rxjs';
 
 import type { Favorite, FavoriteKind } from '../../../models/favorite/favorite.interface';
 import type { MilestonePage } from '../../../models/milestone/milestone.interface';
-import type { Space } from '../../../models/space/space.interface';
-import type { SpaceOverview } from '../../../models/task-list/task-list.interface';
+import type { SpaceDetails, SpaceDraft } from '../../../models/space/space.interface';
+import type { SpaceOverview, TaskList } from '../../../models/task-list/task-list.interface';
 import { abortableRead } from '../../utils/abortable-read/abortable-read.util';
 import { toRouteError } from '../../adapters/route-error/route-error.adapter';
 import {
@@ -22,6 +23,7 @@ import {
   toMilestonePage,
   toSpace,
   toSpaceOverview,
+  toTaskList,
 } from '../../adapters/space/space.adapter';
 
 /**
@@ -75,9 +77,9 @@ export class SpacesApi {
    * Reads every space the caller sees, in sidebar order.
    *
    * @param {AbortSignal | undefined} signal - Cancels a superseded read.
-   * @returns {Promise<readonly Space[]>} The spaces.
+   * @returns {Promise<readonly SpaceDetails[]>} The spaces.
    */
-  public async spaces(signal?: AbortSignal): Promise<readonly Space[]> {
+  public async spaces(signal?: AbortSignal): Promise<readonly SpaceDetails[]> {
     const items: SpaceDto[] = [];
     let cursor: string | undefined;
     do {
@@ -99,10 +101,10 @@ export class SpacesApi {
    *
    * @param {string} spaceId - The space.
    * @param {AbortSignal | undefined} signal - Cancels a superseded read.
-   * @returns {Promise<Space>} The space.
+   * @returns {Promise<SpaceDetails>} The space.
    * @throws {Error} The typed route error of the failure.
    */
-  public async space(spaceId: string, signal?: AbortSignal): Promise<Space> {
+  public async space(spaceId: string, signal?: AbortSignal): Promise<SpaceDetails> {
     try {
       return toSpace(await abortableRead(this.spacesService.getSpace(spaceId), signal));
     } catch (error: unknown) {
@@ -223,6 +225,78 @@ export class SpacesApi {
    */
   public async removeFavorite(favoriteId: string): Promise<void> {
     await firstValueFrom(this.spacesService.deleteFavorite(favoriteId));
+  }
+
+  /**
+   * Method createSpace
+   *
+   * @description
+   * Creates a space owned by the caller with its « Première liste », in one transaction. A retry
+   * of the same draft reuses its idempotency key, so a lost answer creates nothing twice.
+   *
+   * @param {SpaceDraft} draft - The dialog's values.
+   * @param {string} idempotencyKey - Key of this creation.
+   * @returns {Promise<{ space: SpaceDetails; firstList: TaskList }>} The space and its first list.
+   */
+  public async createSpace(
+    draft: SpaceDraft,
+    idempotencyKey: string,
+  ): Promise<{ space: SpaceDetails; firstList: TaskList }> {
+    const created: SpaceCreated = await firstValueFrom(
+      this.spacesService.createSpace(
+        {
+          name: draft.name,
+          prefix: draft.prefix,
+          description: draft.description,
+          icon: draft.icon,
+          color: draft.color,
+          visibility: draft.private ? 'private' : 'organization',
+        },
+        { headers: { 'Idempotency-Key': idempotencyKey } },
+      ),
+    );
+    return { space: toSpace(created.space), firstList: toTaskList(created.firstList) };
+  }
+
+  /**
+   * Method updateSpace
+   *
+   * @description
+   * Changes a space's settings. The visibility is sent only when it changes, since only the
+   * people who manage the space may send it.
+   *
+   * @param {SpaceDetails} space - The space as shown.
+   * @param {SpaceDraft} draft - The dialog's values.
+   * @returns {Promise<SpaceDetails>} The space as recorded.
+   */
+  public async updateSpace(space: SpaceDetails, draft: SpaceDraft): Promise<SpaceDetails> {
+    return toSpace(
+      await firstValueFrom(
+        this.spacesService.updateSpace(space.id, {
+          name: draft.name,
+          prefix: draft.prefix,
+          description: draft.description,
+          icon: draft.icon,
+          color: draft.color,
+          ...(draft.private === space.private
+            ? {}
+            : { visibility: draft.private ? 'private' : 'organization' }),
+        }),
+      ),
+    );
+  }
+
+  /**
+   * Method deleteSpace
+   *
+   * @description
+   * Deletes a space with its lists; its tasks reach the trash within minutes.
+   *
+   * @param {string} spaceId - The space.
+   * @returns {Promise<void>} Resolves once deleted.
+   */
+  public async deleteSpace(spaceId: string): Promise<void> {
+    await firstValueFrom(this.spacesService.deleteSpace(spaceId));
   }
   // #endregion
 }

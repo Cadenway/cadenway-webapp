@@ -1,7 +1,16 @@
-import { Component, inject, type Signal, viewChild } from '@angular/core';
+import {
+  Component,
+  DOCUMENT,
+  inject,
+  input,
+  type InputSignal,
+  type Signal,
+  viewChild,
+} from '@angular/core';
 import { Router } from '@angular/router';
 import { CwAppRailItem } from '@cadenway/ui/components/app-rail';
 import { CwButton } from '@cadenway/ui/components/button';
+import { CwLogo } from '@cadenway/ui/components/logo';
 import {
   CwMenu,
   CwMenuItem,
@@ -12,6 +21,7 @@ import {
   CwMenuTriggerFor,
 } from '@cadenway/ui/components/menu';
 import { CwSkeleton } from '@cadenway/ui/components/skeleton';
+import { CwToastService } from '@cadenway/ui/components/toast';
 import { NgIcon } from '@ng-icons/core';
 
 import { workspacePath } from '@core/routing';
@@ -34,6 +44,17 @@ import { OrganizationMenuStore } from '../../../state/organization-menu/organiza
 type OrganizationSection = 'general' | 'members' | 'billing';
 
 /**
+ * Type OrganizationSwitcherPlacement
+ *
+ * @description
+ * Where the switcher renders its trigger: the filled square of the rail (desktop only) or the
+ * organization row of the sidebar header (every width, the phone entry point).
+ *
+ * @type {'rail' | 'sidebar'}
+ */
+export type OrganizationSwitcherPlacement = 'rail' | 'sidebar';
+
+/**
  * Constant ROLE_NAMES
  *
  * @description
@@ -52,12 +73,16 @@ const ROLE_NAMES: Readonly<Record<WorkspaceRole, string>> = {
  * Component OrganizationSwitcher
  *
  * @description
- * The filled square at the top of the rail and the organizations menu it opens (mockup
- * `App.dc.html` lines 33-35 and 74-90). The square shows the current organization's initials,
- * its name as the tooltip and « Changer d’organisation : <name> » as the accessible name. The
- * menu lists the caller's organizations as radio items (initials, name, « role · plan »), read
+ * The organizations menu (mockup `App.dc.html` lines 74-90) and its trigger, chosen by
+ * `placement`. In the rail (lines 33-35), the trigger is the filled square with the current
+ * organization's initials, its name as the tooltip and « Changer d’organisation : <name> » as the
+ * accessible name; it is hidden from the phone tab bar. In the sidebar header (lines 183-187), it
+ * is the organization row: the Cadenway mark, the organization's name, `<host>/<slug>` from the
+ * page address and an up-down caret; the shell's collapse button ends that row. The menu lists the caller's organizations as radio items (initials, name, « role · plan »), read
  * the first time it opens, with skeletons while loading and an inline error with « Réessayer »;
- * choosing another one navigates to `/<slug>`, whose guard switches the session. Then come
+ * choosing another one navigates to `/<slug>`, whose guard switches the session, and once that
+ * organization is the workspace's, confirms with « Organisation : <name> » (lines 8256-8262). Then
+ * come
  * « Paramètres de l'organisation », « Membres et invitations » (with the member count) and
  * « Facturation et quotas », which open `/<slug>/organization/<section>`, and « Créer ou
  * rejoindre une organisation », which opens `/organizations`. It provides its own
@@ -69,6 +94,7 @@ const ROLE_NAMES: Readonly<Record<WorkspaceRole, string>> = {
   imports: [
     CwAppRailItem,
     CwButton,
+    CwLogo,
     CwMenu,
     CwMenuItem,
     CwMenuItemRadio,
@@ -85,6 +111,18 @@ const ROLE_NAMES: Readonly<Record<WorkspaceRole, string>> = {
 })
 export class OrganizationSwitcher {
   // #region Properties
+  /**
+   * Property placement
+   *
+   * @description
+   * Trigger rendered: the rail square (default) or the sidebar header's organization row.
+   *
+   * @type {InputSignal<OrganizationSwitcherPlacement>}
+   * @readonly
+   */
+  public readonly placement: InputSignal<OrganizationSwitcherPlacement> =
+    input<OrganizationSwitcherPlacement>('rail');
+
   /**
    * Property workspace
    *
@@ -120,6 +158,28 @@ export class OrganizationSwitcher {
   private readonly router: Router = inject(Router);
 
   /**
+   * Property toasts
+   *
+   * @description
+   * Toasts confirming a completed organization switch.
+   *
+   * @type {CwToastService}
+   * @readonly
+   */
+  private readonly toasts: CwToastService = inject(CwToastService);
+
+  /**
+   * Property document
+   *
+   * @description
+   * Document whose address gives the host shown on the organization row.
+   *
+   * @type {Document}
+   * @readonly
+   */
+  private readonly document: Document = inject(DOCUMENT);
+
+  /**
    * Property menu
    *
    * @description
@@ -132,6 +192,19 @@ export class OrganizationSwitcher {
   // #endregion
 
   // #region Methods
+  /**
+   * Method address
+   *
+   * @description
+   * The second line of the organization row: the application host and the organization's slug
+   * (`app.cadenway.example/atelier-nord`).
+   *
+   * @returns {string} The host and the slug.
+   */
+  protected address(): string {
+    return `${this.document.location.host}/${this.workspace.organization().slug}`;
+  }
+
   /**
    * Method meta
    *
@@ -167,17 +240,26 @@ export class OrganizationSwitcher {
    *
    * @description
    * Closes the menu and opens the chosen organization's workspace; choosing the current one only
-   * closes the menu.
+   * closes the menu. Once the navigation succeeds and the workspace shows the chosen organization,
+   * a toast confirms the switch; a cancelled or redirected navigation confirms nothing.
    *
    * @param {string | undefined} id - Identifier of the chosen organization.
+   * @returns {Promise<void>} Resolves once the navigation settles.
    */
-  protected choose(id: string | undefined): void {
+  protected async choose(id: string | undefined): Promise<void> {
     this.menu()?.close();
     const entry: OrganizationMenuEntry | undefined = this.store
       .entries()
       .find((candidate: OrganizationMenuEntry) => candidate.id === id);
     if (!entry || entry.id === this.workspace.organization().id) return;
-    void this.router.navigateByUrl(workspacePath(entry.slug));
+    const opened: boolean = await this.router.navigateByUrl(workspacePath(entry.slug));
+    if (!opened || this.workspace.organization().id !== entry.id) return;
+    this.toasts.show(
+      $localize`:@@workspace.organization-menu.switched:Organization: ${entry.name}:name:`,
+      {
+        description: $localize`:@@workspace.organization-menu.switched-text:Your spaces and settings follow the chosen organization.`,
+      },
+    );
   }
 
   /**

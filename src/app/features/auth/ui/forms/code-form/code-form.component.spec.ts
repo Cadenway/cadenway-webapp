@@ -26,7 +26,7 @@ async function render(): Promise<ComponentFixture<CodeForm>> {
 }
 
 describe('CodeForm', () => {
-  it('enables the submit button with six digits and emits the code', async () => {
+  it('enables the submit button with six digits, emits the code and marks a refused one', async () => {
     const fixture: ComponentFixture<CodeForm> = await render();
     const submitted: Mock = vi.fn();
     fixture.componentInstance.codeSubmitted.subscribe(submitted);
@@ -44,6 +44,15 @@ describe('CodeForm', () => {
     await fixture.whenStable();
 
     expect(submitted).toHaveBeenCalledWith('123456');
+
+    fixture.componentRef.setInput(
+      'error',
+      'Code incorrect ou expiré : vérifiez le dernier e-mail reçu.',
+    );
+    await fixture.whenStable();
+    expect(input.value).toBe('');
+    expect(input.getAttribute('aria-invalid')).toBe('true');
+    expect(input.getAttribute('aria-describedby')).toBe('code-help');
   });
 
   it('shows the countdown, the refusal and the resent status', async () => {

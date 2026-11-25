@@ -1,4 +1,4 @@
-import { Component, computed, signal } from '@angular/core';
+import { Component, computed, signal, type WritableSignal } from '@angular/core';
 import { rxResource } from '@angular/core/rxjs-interop';
 import { TestBed } from '@angular/core/testing';
 import {
@@ -13,6 +13,7 @@ import { provideCadenwayIcons } from '@cadenway/icons';
 import { type Observable, of, throwError } from 'rxjs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { type RuntimeConfig, RuntimeConfigStore } from '@core/config';
 import {
   WORKSPACE_CONTEXT,
   type WorkspaceContextPort,
@@ -29,6 +30,7 @@ import {
 import { ErrorRecovery } from './data-access/services/error-recovery/error-recovery.service';
 import { ERRORS_ROUTES } from './errors.routes';
 import type { RestoreOutcome } from './models/error-recovery/error-recovery.type';
+import type { RouteErrorData } from './models/route-error-data/route-error-data.interface';
 import { RouteErrorBoundary } from './ui/components/route-error-boundary/route-error-boundary.component';
 
 /**
@@ -122,7 +124,10 @@ describe('ERRORS_ROUTES and the route error boundary', () => {
     restoreTask: ReturnType<typeof vi.fn<(entryId: string) => Observable<RestoreOutcome>>>;
   };
 
+  let config: WritableSignal<RuntimeConfig>;
+
   beforeEach(() => {
+    config = signal<RuntimeConfig>({ apiUrl: 'http://api.cadenway.localhost' });
     loads.count = 0;
     loads.failures = [];
     recovery = {
@@ -140,7 +145,17 @@ describe('ERRORS_ROUTES and the route error boundary', () => {
                 provideCadenwayIcons(),
                 { provide: WORKSPACE_CONTEXT, useValue: workspace },
               ],
-              children: [{ path: 'page', component: LoadingPage }, ...ERRORS_ROUTES],
+              children: [
+                { path: 'page', component: LoadingPage },
+                {
+                  path: 'tasks',
+                  component: LoadingPage,
+                  data: {
+                    unavailableTitle: 'Impossible de charger les tâches',
+                  } satisfies RouteErrorData,
+                },
+                ...ERRORS_ROUTES,
+              ],
             },
             ...ERRORS_ROUTES,
           ],
@@ -149,6 +164,7 @@ describe('ERRORS_ROUTES and the route error boundary', () => {
           withErrorBoundaries({ defaultErrorComponent: RouteErrorBoundary }),
         ),
         { provide: ErrorRecovery, useValue: recovery },
+        { provide: RuntimeConfigStore, useValue: { config } },
       ],
     });
   });
@@ -330,13 +346,36 @@ describe('ERRORS_ROUTES and the route error boundary', () => {
         ?.textContent.replace(/\s+/gu, ' ')
         .trim(),
     ).toBe('Erreur 503 · réf. REQ-7F3A');
-    expect(element.textContent).not.toContain('État des services');
+    expect(element.querySelector('[data-testid="route-error-status"]')).toBeNull();
     button(element, 'Réessayer')?.click();
     await settle(harness);
 
     expect(loads.count).toBe(2);
     expect(element.querySelector('[data-testid="loaded"]')?.textContent).toBe('Sprint 14');
     expect(element.querySelector('[data-testid="shell"]')).not.toBeNull();
+  });
+
+  it('titles the unavailable state after its route and links to a configured status page', async () => {
+    config.set({
+      apiUrl: 'http://api.cadenway.localhost',
+      statusUrl: 'https://status.cadenway.test',
+    });
+    loads.failures.push(new UnavailableRouteError(503, null));
+
+    const { element }: { harness: RouterTestingHarness; element: HTMLElement } =
+      await open('/atelier-nord/tasks');
+
+    expect(heading(element)).toBe('Impossible de charger les tâches');
+    expect(element.textContent).toContain(
+      'Le serveur n’a pas répondu à temps. Vos données ne sont pas perdues : réessayez dans un instant.',
+    );
+    expect(button(element, 'Réessayer')).toBeDefined();
+    const status: HTMLAnchorElement | null = element.querySelector(
+      '[data-testid="route-error-status"]',
+    );
+    expect(status?.textContent.trim()).toBe('État du service');
+    expect(status?.getAttribute('href')).toBe('https://status.cadenway.test');
+    expect(status?.getAttribute('target')).toBe('_blank');
   });
 
   it('renders any other failure as unavailable, and Retry keeps failing until the read succeeds', async () => {

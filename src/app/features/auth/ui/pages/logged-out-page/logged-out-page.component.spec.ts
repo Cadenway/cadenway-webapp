@@ -57,7 +57,7 @@ describe('LoggedOutPage', () => {
       await render(undefined);
 
     expect(host.querySelector('h1')?.textContent.trim()).toBe('Vous êtes déconnecté');
-    expect(host.textContent).toContain('À bientôt, Camille.');
+    expect(host.textContent).toContain('À bientôt, Camille. Votre session');
     host
       .querySelector<HTMLButtonElement>('[aria-label="Se connecter avec c.martin@lumen.coop"]')
       ?.click();

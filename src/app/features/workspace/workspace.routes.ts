@@ -17,6 +17,7 @@ import {
 } from '@features/search/providers';
 import {
   provideSpacesNavigation,
+  withSidebarFooterLinks,
   withSpacesRailItem,
   withSpacesSidebar,
   withSprintProgress,
@@ -29,7 +30,10 @@ import { organizationGuard } from './http/guards/organization/organization.guard
 import { sessionGuard } from './http/guards/session/session.guard';
 import { slugRedirectGuard } from './http/guards/slug-redirect/slug-redirect.guard';
 import { workspaceResolver } from './http/resolvers/workspace/workspace.resolver';
-import { withOrganizationSwitcher } from './providers/organization-switcher/organization-switcher.provider';
+import {
+  withOrganizationRow,
+  withOrganizationSwitcher,
+} from './providers/organization-switcher/organization-switcher.provider';
 import {
   withShortcutsButton,
   withShortcutsDialog,
@@ -83,9 +87,14 @@ export const WORKSPACE_ROUTES: Routes = [
         organizationSwitcher: [withOrganizationSwitcher()],
         railNavigation: [withHomeRailItem(), withInbox(), withSpacesRailItem()],
         railFooter: [withSearchRailItem(), withThemeRailItem(), withUserMenu()],
-        sidebarHeader: [withSearchButton()],
+        sidebarHeader: [withOrganizationRow(), withSearchButton()],
         sidebar: [withSpacesSidebar()],
-        sidebarFooter: [withSprintProgress(), withPlanSummary(), withShortcutsButton()],
+        sidebarFooter: [
+          withSprintProgress(),
+          withPlanSummary(),
+          withSidebarFooterLinks(),
+          withShortcutsButton(),
+        ],
         overlays: [withCommandPalette(), withShortcutsDialog(), withTaskCreate()],
       }),
     ],
@@ -101,6 +110,11 @@ export const WORKSPACE_ROUTES: Routes = [
         path: '',
         loadChildren: async (): Promise<Routes> =>
           (await import('@features/spaces/spaces.routes')).SPACES_ROUTES,
+      },
+      {
+        path: '',
+        loadChildren: async (): Promise<Routes> =>
+          (await import('@features/task/task.routes')).TASK_ROUTES,
       },
       {
         path: '**',

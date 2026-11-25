@@ -12,15 +12,17 @@ import { RouterTestingHarness } from '@angular/router/testing';
 import { TaskQueriesService, TasksService } from '@cadenway/api-client';
 import { provideCadenwayIcons } from '@cadenway/icons';
 import { CwToastService } from '@cadenway/ui/components/toast';
-import { of } from 'rxjs';
+import { of, throwError } from 'rxjs';
 import { beforeEach, describe, expect, it, type Mock, type MockInstance, vi } from 'vitest';
 
+import { RuntimeConfigStore } from '@core/config';
 import { RouteErrorBoundary } from '@features/errors/ui/components/route-error-boundary/route-error-boundary.component';
 
 import { ListsApi } from '../../../data-access/services/lists-api/lists-api.service';
 import { SpacesApi } from '../../../data-access/services/spaces-api/spaces-api.service';
 import type { SavedView } from '../../../models/saved-view/saved-view.interface';
-import type { Space } from '../../../models/space/space.interface';
+import { SidebarApi } from '../../../data-access/services/sidebar-api/sidebar-api.service';
+import type { SpaceDetails } from '../../../models/space/space.interface';
 import type { TaskList } from '../../../models/task-list/task-list.interface';
 import { SPACES_ROUTES } from '../../../spaces.routes';
 import { SpacesNavigationStore } from '../../../state/spaces-navigation/spaces-navigation.store';
@@ -52,11 +54,14 @@ const bugs: TaskList = {
  * @description
  * The « Produit » space.
  *
- * @type {Space}
+ * @type {SpaceDetails}
  */
-const produit: Space = {
+const produit: SpaceDetails = {
   id: 'sp-produit',
   name: 'Produit',
+  prefix: 'CAD',
+  canEdit: true,
+  canManage: true,
   description: null,
   icon: 'rocket',
   color: 'violet',
@@ -130,6 +135,10 @@ describe('ListPage', () => {
         ),
         SpacesNavigationStore,
         {
+          provide: RuntimeConfigStore,
+          useValue: { config: () => ({ apiUrl: 'http://api.test' }) },
+        },
+        {
           provide: WORKSPACE_CONTEXT,
           useValue: {
             organization: () => ({ id: 'org-1', slug: 'atelier-nord' }),
@@ -137,6 +146,14 @@ describe('ListPage', () => {
           },
         },
         { provide: ListsApi, useValue: api },
+        {
+          provide: SidebarApi,
+          useValue: {
+            seats: vi.fn(() => Promise.resolve({ plan: 'team', free: 7 })),
+            trashCount: vi.fn(() => Promise.resolve(0)),
+            archiveCount: vi.fn(() => Promise.resolve(0)),
+          },
+        },
         {
           provide: TaskQueriesService,
           useValue: {
@@ -223,13 +240,25 @@ describe('ListPage', () => {
     expect(dialog?.textContent).not.toContain('À trier');
     expect(dialog?.textContent).toContain('Moi');
     expect(dialog?.textContent).toContain('Non assigné');
-    expect(dialog?.textContent).toContain('Inès Robert');
+    expect(dialog?.textContent).not.toContain('Inès Robert');
     expect(dialog?.textContent).toContain('Front');
+    expect(dialog?.textContent).toContain('0 sur 3 tâches');
 
     dialog?.querySelector<HTMLButtonElement>('[role="checkbox"]')?.click();
     harness.detectChanges();
     await expect.poll(() => find('view-chip')?.textContent ?? '').toContain('Statut');
     expect(find('view-filter')?.textContent).toContain('1');
+  });
+
+  it('hides « Sous-tâches » once the rows read have no subtask', async () => {
+    const harness: RouterTestingHarness = await open('/atelier-nord/l/l-bugs');
+    await expect
+      .poll(() => {
+        harness.detectChanges();
+        return find('view-subtasks');
+      })
+      .toBeNull();
+    expect(find('view-group')).not.toBeNull();
   });
 
   it('applies the saved view of the address and marks it modified', async () => {
@@ -374,6 +403,24 @@ describe('ListPage', () => {
       .not.toBeNull();
   });
 
+  it('says the tasks could not be loaded below the list header when the rows read fails', async () => {
+    const queries: { countTaskGroups: Mock } = TestBed.inject(TaskQueriesService) as unknown as {
+      countTaskGroups: Mock;
+    };
+    queries.countTaskGroups.mockReturnValueOnce(throwError(() => new Error('unavailable')));
+    const harness: RouterTestingHarness = await open('/atelier-nord/l/l-bugs');
+
+    await expect
+      .poll(() => {
+        harness.detectChanges();
+        return document.querySelector('cw-route-error-boundary h1')?.textContent.trim();
+      })
+      .toBe('Impossible de charger les tâches');
+    expect(find('list-description')).not.toBeNull();
+    expect(harness.routeNativeElement?.textContent).toContain('Réessayer');
+    expect(harness.routeNativeElement?.textContent).not.toContain('État du service');
+  });
+
   it('keeps saved filters and actions unavailable until a failed read is retried', async () => {
     api['savedViews'].mockRejectedValueOnce(new Error('unavailable'));
     const harness: RouterTestingHarness = await open('/atelier-nord/l/l-bugs?savedView=sv-bugs');
@@ -492,9 +539,11 @@ describe('ListPage', () => {
     await expect.poll(() => menuItem('Dupliquer avec les tâches')).toBeTruthy();
     menuItem('Dupliquer avec les tâches')?.click();
     await expect.poll(() => show.mock.calls.length).toBe(1);
-    expect(show).toHaveBeenCalledWith('Liste dupliquée', {
-      description: 'Bugs (copie) · 3 tâches',
-    });
+    expect(show.mock.calls[0]?.[0]).toBe('Liste dupliquée');
+    expect(show.mock.calls[0]?.[1]?.description).toBe('Bugs (copie) · 3 tâches');
+    show.mock.calls[0]?.[1]?.undo?.();
+    await expect.poll(() => api['remove'].mock.calls.length).toBe(1);
+    expect(api['remove']).toHaveBeenCalledWith({ ...bugs, name: 'Bugs (copie)' });
 
     find('list-more')?.click();
     harness.detectChanges();
@@ -502,5 +551,30 @@ describe('ListPage', () => {
     menuItem('Archiver la liste')?.click();
     await expect.poll(() => error.mock.calls.length).toBe(1);
     expect(error).toHaveBeenCalledWith('Impossible d’archiver la liste');
+  });
+
+  it('opens the list dialog from the list icon and the space dialog from the menu', async () => {
+    const harness: RouterTestingHarness = await open('/atelier-nord/l/l-bugs');
+    const navigation: InstanceType<typeof SpacesNavigationStore> =
+      TestBed.inject(SpacesNavigationStore);
+    const edit: HTMLButtonElement | null = harness.routeNativeElement?.querySelector(
+      '[data-testid="list-edit"]',
+    ) as HTMLButtonElement | null;
+
+    expect(edit?.getAttribute('aria-label')).toBe('Modifier la liste');
+    edit?.click();
+    expect(navigation.dialog()).toEqual({
+      kind: 'list',
+      spaceId: 'sp-produit',
+      list: bugs,
+      sprint: false,
+    });
+
+    await expect.poll(() => navigation.spaceById('sp-produit')).toBeTruthy();
+    find('list-more')?.click();
+    harness.detectChanges();
+    await expect.poll(() => find('list-edit-space')).not.toBeNull();
+    find('list-edit-space')?.click();
+    expect(navigation.dialog()).toEqual({ kind: 'space', space: produit });
   });
 });

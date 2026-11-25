@@ -5,6 +5,7 @@ import {
   input,
   type InputSignal,
   type InputSignalWithTransform,
+  linkedSignal,
   output,
   type OutputEmitterRef,
   type Signal,
@@ -32,14 +33,15 @@ import { PRIORITY_LABELS } from '../../../constants/task-copy/task-copy.constant
     <button
       cwButton
       type="button"
-      variant="ghost"
-      size="sm"
+      variant="outline"
+      size="xs"
+      class="h-7 w-full justify-start"
       [disabled]="disabled()"
       [cwMenuTriggerFor]="menu"
       [attr.aria-label]="ariaLabel()"
       [class.text-destructive]="priority() === 'urgente'"
     >
-      <cw-priority-icon [priority]="priority()" size="3.5" />
+      <cw-priority-icon [priority]="priority()" [from]="from()" size="3.5" />
       <span>{{ label() }}</span>
     </button>
     <cw-menu #menu ariaLabel="Priority" i18n-ariaLabel="@@task.priority-picker.menu">
@@ -64,6 +66,25 @@ export class TaskPriorityPicker {
    * @readonly
    */
   public readonly priority: InputSignal<PriorityKey> = input.required<PriorityKey>();
+
+  /**
+   * Property from
+   *
+   * @description
+   * The priority the icon animates from (`PrioriteTache.dc.html`): the one shown before the last
+   * change, none at first.
+   *
+   * @type {Signal<PriorityKey | null>}
+   * @readonly
+   */
+  protected readonly from: Signal<PriorityKey | null> = linkedSignal<
+    PriorityKey,
+    PriorityKey | null
+  >({
+    source: (): PriorityKey => this.priority(),
+    computation: (_: PriorityKey, previous?: { source: PriorityKey }): PriorityKey | null =>
+      previous?.source ?? null,
+  });
 
   /**
    * Property disabled

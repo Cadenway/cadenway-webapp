@@ -1,8 +1,10 @@
 import { signal, type WritableSignal } from '@angular/core';
 import { type ComponentFixture, TestBed } from '@angular/core/testing';
+import { By } from '@angular/platform-browser';
 import { Router } from '@angular/router';
 import { provideCadenwayIcons } from '@cadenway/icons';
 import { CwToastService } from '@cadenway/ui/components/toast';
+import { CwTooltip } from '@cadenway/ui/components/tooltip';
 import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 
 import type { PresenceStatus } from '@core/realtime';
@@ -121,6 +123,12 @@ describe('UserMenu', () => {
 
     expect(trigger.textContent).toContain('Compte de Camille Martin');
     expect(trigger.textContent).not.toContain('statut');
+    expect(trigger.hasAttribute('aria-describedby')).toBe(false);
+    const tooltip: CwTooltip = fixture.debugElement
+      .query(By.css('[data-testid="user-menu-trigger"]'))
+      .query(By.directive(CwTooltip))
+      .injector.get(CwTooltip);
+    expect(tooltip.cwTooltip()).toBe('');
     expect(trigger.querySelector('cw-presence-dot')).toBeNull();
     expect(document.body.textContent).toContain('camille.martin@ateliernord.fr');
     item('Statut').click();

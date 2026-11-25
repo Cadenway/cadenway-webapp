@@ -292,3 +292,57 @@ export interface SpaceOverview {
   readonly lists: readonly ListSummary[];
   // #endregion
 }
+
+/**
+ * Interface ListDraft
+ *
+ * @description
+ * What the list dialog submits, trimmed: a list, or a sprint with its dates and goal.
+ */
+export interface ListDraft {
+  // #region Properties
+  /**
+   * Property name
+   *
+   * @description
+   * « Nom », 1 to 100 characters.
+   *
+   * @type {string}
+   * @readonly
+   */
+  readonly name: string;
+
+  /**
+   * Property icon
+   *
+   * @description
+   * « Icône », or null for the default icon.
+   *
+   * @type {LookIcon}
+   * @readonly
+   */
+  readonly icon: LookIcon;
+
+  /**
+   * Property color
+   *
+   * @description
+   * « Couleur ».
+   *
+   * @type {LookColor}
+   * @readonly
+   */
+  readonly color: LookColor;
+
+  /**
+   * Property sprint
+   *
+   * @description
+   * The dates and goal of a sprint, the end on or after the start; null for a list.
+   *
+   * @type {ListSprint | null}
+   * @readonly
+   */
+  readonly sprint: ListSprint | null;
+  // #endregion
+}

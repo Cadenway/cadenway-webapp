@@ -69,6 +69,13 @@ describe('space adapter', () => {
     const space: ReturnType<typeof toSpace> = toSpace(produit);
 
     expect(space.private).toBe(true);
+    expect(space.prefix).toBe('CAD');
+    expect(space.canEdit).toBe(true);
+    expect(space.canManage).toBe(true);
+    expect(toSpace({ ...produit, callerRole: 'view', callerCanManage: false })).toMatchObject({
+      canEdit: false,
+      canManage: false,
+    });
     expect(space.icon).toBe('rocket');
     expect(space.color).toBe('violet');
     expect(space.statuses.map((status) => status.key)).toEqual([

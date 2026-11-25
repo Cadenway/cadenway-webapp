@@ -14,6 +14,8 @@ import { CwCard } from '@cadenway/ui/components/card';
 import { CwInput } from '@cadenway/ui/components/input';
 import { NgIcon } from '@ng-icons/core';
 
+import { RuntimeConfigStore } from '@core/config';
+
 import {
   AuthFlowStore,
   type SessionResult,
@@ -22,6 +24,7 @@ import {
 import { Countdown } from '../../../utils/countdown/countdown.util';
 import { focusFirstError } from '../../../utils/form-focus/form-focus.util';
 import { CodeForm } from '../../forms/code-form/code-form.component';
+import { CodeHelp } from '../../components/code-help/code-help.component';
 
 /**
  * Constant RESEND_SECONDS
@@ -46,6 +49,7 @@ const RESEND_SECONDS: number = 30;
   selector: 'cw-code-sign-in-page',
   imports: [
     CodeForm,
+    CodeHelp,
     CwAlert,
     CwAlertDescription,
     CwButton,
@@ -91,6 +95,17 @@ export class CodeSignInPage implements OnInit {
    * @readonly
    */
   private readonly destroyRef: DestroyRef = inject(DestroyRef);
+
+  /**
+   * Property siteUrl
+   *
+   * @description
+   * The public site whose Help page the line below the card links to, or null without one.
+   *
+   * @type {string | null}
+   * @readonly
+   */
+  protected readonly siteUrl: string | null = inject(RuntimeConfigStore).config().siteUrl ?? null;
 
   /**
    * Property countdown

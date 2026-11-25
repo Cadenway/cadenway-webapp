@@ -2,7 +2,7 @@
 @let overview = store.overview.value();
 <div class="mx-auto flex w-full max-w-5xl flex-col gap-6 px-4 py-6 sm:px-6">
   @if (space && overview) {
-    <header class="flex flex-wrap items-start gap-3">
+    <header class="flex flex-wrap items-center gap-3">
       <span
         class="flex size-10 shrink-0 items-center justify-center rounded-lg border border-border bg-background text-base font-semibold"
         [class]="spaceTone(space)"
@@ -62,6 +62,39 @@
           [class.text-foreground]="favorite()"
           aria-hidden="true"
         />
+      </button>
+      @let editable = details();
+      <button
+        cwButton
+        type="button"
+        variant="outline"
+        [disabled]="!editable?.canEdit"
+        data-testid="space-edit"
+        (click)="editable && editSpace(editable)"
+      >
+        <ng-icon name="phosphorPencilSimpleBold" aria-hidden="true" />
+        <ng-container i18n="@@spaces.overview.edit">Edit</ng-container>
+      </button>
+      <button
+        cwButton
+        type="button"
+        variant="outline"
+        [disabled]="!editable?.canEdit"
+        data-testid="space-new-sprint"
+        (click)="editable && newList(editable, true)"
+      >
+        <ng-icon name="phosphorLightningBold" aria-hidden="true" />
+        <ng-container i18n="@@spaces.menu.new-sprint">New sprint</ng-container>
+      </button>
+      <button
+        cwButton
+        type="button"
+        [disabled]="!editable?.canEdit"
+        data-testid="space-new-list"
+        (click)="editable && newList(editable, false)"
+      >
+        <ng-icon name="phosphorPlusBold" aria-hidden="true" />
+        <ng-container i18n="@@spaces.menu.new-list">New list</ng-container>
       </button>
     </header>
 
@@ -135,12 +168,12 @@
                   listName(overview, milestone)
                 }}</span>
                 <span
-                  class="text-xs whitespace-nowrap tabular-nums"
+                  class="w-16 shrink-0 text-right text-xs whitespace-nowrap tabular-nums"
                   [class]="isLate(milestone) ? 'text-grenat-text' : 'text-muted-foreground'"
                   >{{ milestoneDate(milestone) }}</span
                 >
                 <span
-                  class="text-xs whitespace-nowrap"
+                  class="w-16 shrink-0 text-right text-xs whitespace-nowrap"
                   [class]="
                     isLate(milestone)
                       ? 'text-grenat-text'

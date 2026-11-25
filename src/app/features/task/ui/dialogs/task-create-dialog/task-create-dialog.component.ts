@@ -4,6 +4,7 @@ import {
   DestroyRef,
   effect,
   inject,
+  linkedSignal,
   type Signal,
   signal,
   untracked,
@@ -40,7 +41,6 @@ import { CwKbd } from '@cadenway/ui/components/kbd';
 import { CwMenu, CwMenuItem, CwMenuLabel, CwMenuTriggerFor } from '@cadenway/ui/components/menu';
 import { CwStatusIcon } from '@cadenway/ui/components/status-icon';
 import { CwSwitch } from '@cadenway/ui/components/switch';
-import { CwTextarea } from '@cadenway/ui/components/textarea';
 import { CwToastService } from '@cadenway/ui/components/toast';
 import { NgIcon } from '@ng-icons/core';
 
@@ -319,7 +319,6 @@ function addDays(date: Date, days: number): Date {
     CwMenuTriggerFor,
     CwStatusIcon,
     CwSwitch,
-    CwTextarea,
     FormField,
     NgIcon,
     TaskCancelDialog,
@@ -610,6 +609,39 @@ export class TaskCreateDialog {
   );
 
   /**
+   * Property statusFrom
+   *
+   * @description
+   * The status the picker's icon animates from: the previous status of the draft.
+   *
+   * @type {Signal<StatusKey | null>}
+   * @readonly
+   */
+  protected readonly statusFrom: Signal<StatusKey | null> = linkedSignal<
+    StatusKey,
+    StatusKey | null
+  >({
+    source: (): StatusKey => this.model().status,
+    computation: (_: StatusKey, previous?: { source: StatusKey }): StatusKey | null =>
+      previous?.source ?? null,
+  });
+
+  /**
+   * Property dueFormat
+   *
+   * @description
+   * The due date as the trigger shows it: « lun. 9 nov. ».
+   *
+   * @type {Intl.DateTimeFormatOptions}
+   * @readonly
+   */
+  protected readonly dueFormat: Intl.DateTimeFormatOptions = {
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+  };
+
+  /**
    * Property presets
    *
    * @description
@@ -864,6 +896,35 @@ export class TaskCreateDialog {
   }
 
   /**
+   * Method templateHint
+   *
+   * @description
+   * What a template drafts, under its name: « 3 sous-tâches · 4 cases · Bug, Front ».
+   *
+   * @param {TaskTemplateOption} template - The template.
+   * @returns {string} The hint, empty when it drafts nothing.
+   */
+  protected templateHint(template: TaskTemplateOption): string {
+    const subtasks: number = template.subtasks.length;
+    const checks: number = template.checklist.length;
+    return [
+      subtasks === 0
+        ? ''
+        : subtasks === 1
+          ? $localize`:@@task.create.template-subtask:${subtasks}:count: subtask`
+          : $localize`:@@task.create.template-subtasks:${subtasks}:count: subtasks`,
+      checks === 0
+        ? ''
+        : checks === 1
+          ? $localize`:@@task.create.template-check:${checks}:count: item`
+          : $localize`:@@task.create.template-checks:${checks}:count: items`,
+      template.labels.join(', '),
+    ]
+      .filter((part: string): boolean => part !== '')
+      .join(' · ');
+  }
+
+  /**
    * Method openChange
    *
    * @description
@@ -1046,7 +1107,8 @@ export class TaskCreateDialog {
    * Method blank
    *
    * @description
-   * The fields of a new opening: empty, the current user assigned, « Moyenne », then the presets.
+   * The fields of a new opening: empty, the current user assigned, « Moyenne », then the presets
+   * (status, due date, priority and assignees).
    *
    * @param {TaskCreateOptions} options - Presets of the opening.
    * @returns {TaskCreateModel} The fields.
@@ -1060,9 +1122,9 @@ export class TaskCreateDialog {
       checklist: [],
       status: options.status && options.status !== 'cancelled' ? options.status : 'todo',
       cancellation: null,
-      assigneeIds: [this.workspace.user().id],
+      assigneeIds: options.assigneeIds ? [...options.assigneeIds] : [this.workspace.user().id],
       due: options.due ? toDate(options.due) : null,
-      priority: 'moyenne',
+      priority: options.priority ?? 'moyenne',
       labels: [],
       templateId: null,
     };

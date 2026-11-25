@@ -1,3 +1,5 @@
+import type { SeatSummary } from '../../data-access/services/sidebar-api/sidebar-api.service';
+
 /**
  * Interface SidebarTip
  *
@@ -86,17 +88,67 @@ export interface SidebarTip {
 }
 
 /**
+ * Function planLabel
+ *
+ * @description
+ * The name of a plan in the invitation tip (« Équipe »), or its key for a later plan.
+ *
+ * @param {string} plan - Plan key.
+ * @returns {string} The name.
+ */
+function planLabel(plan: string): string {
+  switch (plan) {
+    case 'free':
+      return $localize`:@@spaces.tips.plan-free:Free`;
+    case 'team':
+      return $localize`:@@spaces.tips.plan-team:Team`;
+    case 'enterprise':
+      return $localize`:@@spaces.tips.plan-enterprise:Enterprise`;
+    default:
+      return plan;
+  }
+}
+
+/**
+ * Function inviteTip
+ *
+ * @description
+ * « Inviter votre équipe », with the free seats of the plan, opening the organization's members.
+ *
+ * @param {number} free - Free seats, at least one.
+ * @param {string} plan - Name of the plan.
+ * @returns {SidebarTip} The suggestion.
+ */
+function inviteTip(free: number, plan: string): SidebarTip {
+  return {
+    key: 'invite',
+    icon: 'phosphorUserPlusBold',
+    tone: 'text-primary',
+    title: $localize`:@@spaces.tips.invite-title:Invite your team`,
+    text:
+      free === 1
+        ? $localize`:@@spaces.tips.invite-text-one:1 free seat on your ${plan}:plan: plan. Invite colleagues to assign them tasks.`
+        : $localize`:@@spaces.tips.invite-text:${free}:count: free seats on your ${plan}:plan: plan. Invite colleagues to assign them tasks.`,
+    cta: $localize`:@@spaces.tips.invite-cta:Invite`,
+    path: ['organization', 'members'],
+  };
+}
+
+/**
  * Function sidebarTips
  *
  * @description
  * The suggestions this version can act on: connecting GitHub opens the organization's
- * integrations, securing the account opens its security settings. The mockup's Slack and Figma
- * tips name integrations no service provides, and its invitation tip counts free seats the
- * sidebar does not read; they are left out.
+ * integrations, inviting the team opens its members while the plan has free seats, and securing
+ * the account opens its security settings. The mockup's Slack and Figma tips name integrations no
+ * service provides; they are left out.
  *
+ * @param {SeatSummary | null} seats - The plan and its free seats, or null while unknown.
  * @returns {readonly SidebarTip[]} The suggestions, in the mockup's order.
  */
-export function sidebarTips(): readonly SidebarTip[] {
+export function sidebarTips(seats: SeatSummary | null = null): readonly SidebarTip[] {
+  const invite: readonly SidebarTip[] =
+    seats !== null && seats.free > 0 ? [inviteTip(seats.free, planLabel(seats.plan))] : [];
   return [
     {
       key: 'github',
@@ -107,6 +159,7 @@ export function sidebarTips(): readonly SidebarTip[] {
       cta: $localize`:@@spaces.tips.github-cta:Connect`,
       path: ['organization', 'integrations'],
     },
+    ...invite,
     {
       key: 'mfa',
       icon: 'phosphorShieldCheckBold',

@@ -1,5 +1,7 @@
 import { formatDate } from '@angular/common';
 
+import type { InboxReminder } from '../../models/inbox-reminder/inbox-reminder.interface';
+
 /**
  * Constant MINUTE_MS
  *
@@ -123,4 +125,20 @@ export function reminderTime(instant: string, now: Date, locale: string): string
  */
 export function tomorrowMorning(now: Date): string {
   return new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, MORNING_HOUR).toISOString();
+}
+
+/**
+ * Function overdueCount
+ *
+ * @description
+ * How many of the listed pending reminders are due at `now`, as the rows mark them « en retard ».
+ *
+ * @param {readonly InboxReminder[]} reminders - Pending reminders.
+ * @param {Date} now - The current moment.
+ * @returns {number} The due reminders.
+ */
+export function overdueCount(reminders: readonly InboxReminder[], now: Date): number {
+  return reminders.filter(
+    (reminder: InboxReminder) => Date.parse(reminder.remindAt) <= now.getTime(),
+  ).length;
 }

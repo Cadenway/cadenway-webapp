@@ -8,7 +8,7 @@
       </p>
     </div>
     @if (unavailable()) {
-      <cw-alert variant="destructive" role="alert">
+      <cw-alert variant="destructive" class="[&>ng-icon]:text-inherit" role="alert">
         <cw-alert-description i18n="@@auth.login.unavailable"
           >Sign-in is unavailable. Try again in a moment.</cw-alert-description
         >
@@ -38,13 +38,16 @@
             <ng-icon name="phosphorWarningCircleFill" class="size-3.5" aria-hidden="true" />
             {{ ssoForm.email().errors()[0]?.message }}
           </p>
+        } @else {
+          <p id="sso-email-help" class="text-xs text-muted-foreground" i18n="@@auth.sso.email-hint">
+            Enter your work address, for example prenom.nom@ateliernord.fr.
+          </p>
         }
       </div>
       <button
         cwButton
         type="submit"
         class="w-full"
-        [disabled]="ssoForm().invalid() || ssoForm().submitting()"
         [loading]="ssoForm().submitting()"
         i18n="@@auth.sso.submit"
       >

@@ -13,10 +13,10 @@
       [exportDisabled]="!!savedView() && view.savedView()?.id !== savedView()"
       [members]="store.members.hasValue() ? store.members.value() : null"
       [showSidebarToggle]="sidebar !== null && !sidebar.expanded()"
-      [saving]="renaming()"
-      [(editing)]="editing"
+      [spaceEditable]="spaceDetails()?.canEdit ?? false"
       (sidebarToggled)="sidebar?.toggle()"
-      (renamed)="rename($event)"
+      (editRequested)="editList(list)"
+      (spaceEditRequested)="editSpace()"
       (favoriteToggled)="toggleFavorite(list)"
       (duplicated)="duplicate()"
       (exported)="exportCsv()"
@@ -106,6 +106,9 @@
         [milestonesOnly]="view.milestonesOnly()"
         [milestoneCount]="store.milestoneCount.hasValue() ? store.milestoneCount.value() : null"
         [taskTotal]="store.counts.hasValue() ? store.counts.value().counts.total : null"
+        [visibleCount]="view.rows().visibleCount"
+        [hasSubtasks]="view.rows().hasSubtasks ?? true"
+        [userId]="workspace.user().id"
         [savedView]="view.savedView()"
         [modified]="view.modified()"
         [canSave]="view.canSave() && canEdit()"
@@ -156,7 +159,7 @@
     (confirm)="confirmDelete(list)"
   >
     <cw-alert-dialog-media>
-      <ng-icon name="phosphorWarningCircleFill" aria-hidden="true" />
+      <ng-icon name="phosphorWarningBold" aria-hidden="true" />
     </cw-alert-dialog-media>
     <h2 cwAlertDialogTitle>{{ deleteTitle(list) }}</h2>
     <p cwAlertDialogDescription>{{ deleteText() }}</p>

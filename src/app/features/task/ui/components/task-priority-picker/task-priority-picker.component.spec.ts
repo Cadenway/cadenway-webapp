@@ -1,5 +1,7 @@
 import { type ComponentFixture, TestBed } from '@angular/core/testing';
+import { By } from '@angular/platform-browser';
 import type { PriorityKey } from '@cadenway/contracts';
+import { CwPriorityIcon } from '@cadenway/ui/components/priority-icon';
 import { describe, expect, it } from 'vitest';
 
 import { TaskPriorityPicker } from './task-priority-picker.component';
@@ -31,5 +33,19 @@ describe('TaskPriorityPicker', () => {
     items[1].click();
 
     expect(emitted).toEqual(['haute']);
+  });
+
+  it('animates the icon from the priority shown before the last change', async () => {
+    const fixture: ComponentFixture<TaskPriorityPicker> =
+      TestBed.createComponent(TaskPriorityPicker);
+    fixture.componentRef.setInput('priority', 'moyenne');
+    await fixture.whenStable();
+    const icon: () => CwPriorityIcon = (): CwPriorityIcon =>
+      fixture.debugElement.query(By.directive(CwPriorityIcon)).componentInstance as CwPriorityIcon;
+
+    expect(icon().from()).toBeNull();
+    fixture.componentRef.setInput('priority', 'urgente');
+    await fixture.whenStable();
+    expect(icon().from()).toBe('moyenne');
   });
 });

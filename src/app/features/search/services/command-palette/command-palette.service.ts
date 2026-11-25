@@ -60,15 +60,5 @@ export class CommandPalette {
     if (open) this.overlay.open(PALETTE);
     else this.overlay.close(PALETTE);
   }
-
-  /**
-   * Method toggle
-   *
-   * @description
-   * Opens a closed palette or closes an open one, as Ctrl K does.
-   */
-  public toggle(): void {
-    this.setOpen(!this.isOpen());
-  }
   // #endregion
 }

@@ -53,19 +53,21 @@ None.
   with the mockup's toasts.
 - Focus: when a completed reminder's row disappears it moves to the row taking its place, or to the
   « Rappels » tab; when « Tout marquer comme lu » becomes disabled it moves to the popover heading.
+- The badge counts the unread notifications plus the listed pending reminders already due, checked
+  every minute (only the first page of 30 reminders, the soonest first, is read). The rail item is
+  highlighted while the popover is open, through its `aria-expanded` state.
 - The badge is hidden at zero and while the person's presence is « Ne pas déranger », and the popover
   then shows « Ne pas déranger : notifications en pause » (only for `do-not-disturb`; an unknown
   presence shows nothing).
 - Opening a notification or a reminder opens `/<slug>/t/<key>`, which renders the 404 until step 5.
-- Known gap: the mockup also adds overdue reminders to the badge; that is left out. The inbox
-  automatic loads, badge polling and realtime refreshes are passive and wait for workspace verification
+- The inbox automatic loads, badge polling and realtime refreshes are passive and wait for workspace verification
   when stale; opening and Retry are active.
 
 ## Copy not taken word for word from the mockup
 
 | Unit                                                                                                                                           | Reason                                                                                                                            |
 | ---------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
-| `inbox.verb.mention`                                                                                                                           | « vous a mentionnée » agrees with one reader; « a mentionné votre nom » is neutral.                                               |
+| `inbox.rail.badge-overdue`                                                                                                                     | The mockup gives its badge no spoken text; built from « non lues » and « en retard ».                                             |
 | `inbox.verb.status-changed`, `inbox.verb.other`                                                                                                | Contract cases the mockup does not draw: a status change without a status, and the `due-date`, `access` and `billing` categories. |
 | `inbox.notifications-empty`, `inbox.notifications-empty-text`                                                                                  | The mockup draws no empty notification list.                                                                                      |
 | `inbox.notifications-failed`, `inbox.reminders-failed`                                                                                         | The mockup draws no failed read.                                                                                                  |

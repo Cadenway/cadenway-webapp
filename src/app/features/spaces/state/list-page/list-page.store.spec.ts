@@ -95,7 +95,6 @@ describe('ListPageStore', () => {
       organizationMembers: vi.fn(() => Promise.resolve([{ userId: 'u1', name: 'Inès Robert' }])),
       labels: vi.fn(() => Promise.resolve(['Auth', 'Front'])),
       savedViews: vi.fn(() => Promise.resolve([bugsCritiques])),
-      rename: vi.fn(),
       duplicate: vi.fn(),
       exportCsv: vi.fn(),
       archive: vi.fn(),
@@ -275,21 +274,31 @@ describe('ListPageStore', () => {
     await expect.poll(() => api['counts'].mock.calls.length).toBe(3);
   });
 
-  it('shows a new name at once and restores it when the rename is refused', async () => {
+  it('shows the open list as edited elsewhere and ignores another list', async () => {
     await loaded();
-    let refuse: (reason: unknown) => void = () => undefined;
-    api['rename'].mockReturnValueOnce(
-      new Promise((_resolve, reject) => {
-        refuse = reject;
-      }),
-    );
+    const edits: Subject<TaskList> = new Subject<TaskList>();
+    store.followListEdits(edits);
 
-    const pending: Promise<boolean> = store.rename('Sprint 15');
-    expect(store.list.value()?.name).toBe('Sprint 15');
-    refuse(new Error('list.version-mismatch'));
-
-    expect(await pending).toBe(false);
+    edits.next({ ...sprint14, id: 'l-other', name: 'Autre' });
     expect(store.list.value()?.name).toBe('Sprint 14');
+    edits.next({ ...sprint14, name: 'Sprint 15', version: 9 });
+    expect(store.list.value()).toMatchObject({ name: 'Sprint 15', version: 9 });
+  });
+
+  it('creates a deleted view again at its former place', async () => {
+    await loaded();
+    const again: SavedView = { ...bugsCritiques, id: 'sv-again' };
+    api['createSavedView'].mockResolvedValueOnce(again);
+    await store.deleteView(bugsCritiques);
+
+    expect(await store.restoreView(bugsCritiques, 0)).toEqual(again);
+    expect(store.savedViews.value()).toEqual([again]);
+    expect(api['createSavedView']).toHaveBeenCalledWith('l-sprint14', {
+      name: bugsCritiques.name,
+      icon: bugsCritiques.icon,
+      layout: bugsCritiques.layout,
+      config: bugsCritiques.config,
+    });
   });
 
   it('removes a saved view at once and puts it back when the deletion is refused', async () => {

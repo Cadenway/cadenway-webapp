@@ -1,7 +1,8 @@
 import { Component, computed, inject, input, type InputSignal, type Signal } from '@angular/core';
-import { Router } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 
 import { type ApiProblem, readProblem } from '@core/api';
+import { RuntimeConfigStore } from '@core/config';
 import {
   WORKSPACE_CONTEXT,
   type WorkspaceContextPort,
@@ -14,6 +15,7 @@ import {
   UnavailableRouteError,
 } from '@shared/route-errors';
 
+import type { RouteErrorData } from '../../../models/route-error-data/route-error-data.interface';
 import { ErrorRecoveryStore } from '../../../state/error-recovery/error-recovery.store';
 import { RouteErrorState } from '../route-error-state/route-error-state.component';
 
@@ -80,8 +82,9 @@ function findProblem(error: unknown): ApiProblem | null {
  *   corbeille » inside a workspace;
  * - unavailable, and any failure that is not a typed route error: « Impossible de charger cette
  *   page », the status and request reference, and « Réessayer », which runs the route again with a
- *   same-URL reload navigation (the router re-creates an outlet whose error component is active).
- *   « État des services » waits for a configured status page.
+ *   same-URL reload navigation (the router re-creates an outlet whose error component is active);
+ *   the failing route's `unavailableTitle` (`RouteErrorData`) replaces the title, and « État du
+ *   service » links to the configured `statusUrl`, only when there is one.
  *
  * The page derives the state and sends the writes through its own `ErrorRecoveryStore`, so each
  * failure starts over. `RouteErrorState` renders it in an `@defer (on immediate)` block: this
@@ -228,6 +231,29 @@ export class RouteErrorBoundary {
   protected readonly trashLink: readonly string[] | null;
 
   /**
+   * Property unavailableTitle
+   *
+   * @description
+   * Title the failing route gives its unavailable state (`RouteErrorData`), or null for the
+   * generic one.
+   *
+   * @type {string | null}
+   * @readonly
+   */
+  protected readonly unavailableTitle: string | null;
+
+  /**
+   * Property statusUrl
+   *
+   * @description
+   * Configured status page, or null when the environment has none.
+   *
+   * @type {Signal<string | null>}
+   * @readonly
+   */
+  protected readonly statusUrl: Signal<string | null>;
+
+  /**
    * Property router
    *
    * @description
@@ -244,13 +270,20 @@ export class RouteErrorBoundary {
    * Constructor
    *
    * @description
-   * Reads the workspace, when the page renders inside one, for the trash link.
+   * Reads the workspace, when the page renders inside one, for the trash link, the failing
+   * route's error copy, and the configured status page.
    *
    * @constructor
    */
   public constructor() {
     const workspace: WorkspaceContextPort | null = inject(WORKSPACE_CONTEXT, { optional: true });
     this.trashLink = workspace ? ['/', workspace.organization().slug, 'trash'] : null;
+    const data: RouteErrorData | undefined = inject(ActivatedRoute, { optional: true })?.snapshot
+      .data;
+    this.unavailableTitle =
+      typeof data?.unavailableTitle === 'string' ? data.unavailableTitle : null;
+    const config: InstanceType<typeof RuntimeConfigStore> = inject(RuntimeConfigStore);
+    this.statusUrl = computed((): string | null => config.config().statusUrl ?? null);
   }
   // #endregion
 

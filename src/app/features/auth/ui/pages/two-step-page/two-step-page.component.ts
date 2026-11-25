@@ -8,7 +8,15 @@ import {
   signal,
   type WritableSignal,
 } from '@angular/core';
-import { type FieldTree, form, FormField, pattern, required, submit } from '@angular/forms/signals';
+import {
+  type FieldTree,
+  form,
+  FormField,
+  maxLength,
+  pattern,
+  required,
+  submit,
+} from '@angular/forms/signals';
 import { Router, RouterLink } from '@angular/router';
 import { CwAlert, CwAlertDescription } from '@cadenway/ui/components/alert';
 import { CwAvatar } from '@cadenway/ui/components/avatar';
@@ -23,8 +31,11 @@ import {
   CwInputOtpSlot,
 } from '@cadenway/ui/components/input-otp';
 import { CwSkeleton } from '@cadenway/ui/components/skeleton';
+import { CwSpinner } from '@cadenway/ui/components/spinner';
 import { CwTab, CwTabPanel, CwTabs, CwTabsList } from '@cadenway/ui/components/tabs';
 import { NgIcon } from '@ng-icons/core';
+
+import { RuntimeConfigStore } from '@core/config';
 
 import type { AuthProblem } from '../../../models/auth-problem/auth-problem.interface';
 import type { TwoStepChallenge, TwoStepMethod } from '../../../models/session/session.interface';
@@ -81,8 +92,11 @@ interface TwoStepModel {
  * @description
  * Two-step verification of `Mfa.dc.html` (`/login/two-step`), with one tab per method the account
  * has: the application code (`cw-input-otp`, « Vérifier (n / 6) »), the security key (WebAuthn
- * through `@simplewebauthn/browser`) and a backup code (`XXXX-XXXX`). After a reload the challenge
- * is read again from the tab's token; without one, it returns to `/login`.
+ * through `@simplewebauthn/browser`) and a backup code (`XXXX-XXXX`). A recognized key shows
+ * « Clé reconnue » with « Continuer », which opens the session's destination; the codes open it
+ * right away. The footer offers « Contacter l'administrateur » (the site's Help page, when a site
+ * is configured) and « Utiliser un autre compte ». After a reload the challenge is read again from
+ * the tab's token; without one, it returns to `/login`.
  */
 @Component({
   selector: 'cw-two-step-page',
@@ -104,6 +118,7 @@ interface TwoStepModel {
     CwTabsList,
     FormField,
     CwSkeleton,
+    CwSpinner,
     NgIcon,
     RouterLink,
   ],
@@ -203,7 +218,8 @@ export class TwoStepPage implements OnInit {
    * Property twoStepForm
    *
    * @description
-   * The code tabs: six digits, or eight letters and digits with an optional dash.
+   * The code tabs: six digits, or eight letters and digits with an optional dash (nine characters
+   * at most, which also sets the field's `maxlength`).
    *
    * @type {FieldTree<TwoStepModel>}
    * @readonly
@@ -213,6 +229,7 @@ export class TwoStepPage implements OnInit {
     pattern(path.appCode, /^\d{6}$/u);
     required(path.backupCode);
     pattern(path.backupCode, /^[A-Z0-9]{4}-?[A-Z0-9]{4}$/u);
+    maxLength(path.backupCode, 9);
   });
 
   /**
@@ -333,6 +350,44 @@ export class TwoStepPage implements OnInit {
     'security-key': 'phosphorKeyBold',
     'backup-code': 'phosphorLifebuoyBold',
   };
+
+  /**
+   * Property activeIcons
+   *
+   * @description
+   * Filled icon of the selected method's tab, as `Mfa.dc.html` draws it.
+   *
+   * @type {Readonly<Record<TwoStepMethod, string>>}
+   * @readonly
+   */
+  protected readonly activeIcons: Readonly<Record<TwoStepMethod, string>> = {
+    'authenticator-app': 'phosphorDeviceMobileFill',
+    'security-key': 'phosphorKeyFill',
+    'backup-code': 'phosphorLifebuoyFill',
+  };
+
+  /**
+   * Property recognized
+   *
+   * @description
+   * Destination of the session a security key opened, once the key was recognized and until the
+   * person chooses « Continuer »; null before.
+   *
+   * @type {WritableSignal<string | null>}
+   * @readonly
+   */
+  protected readonly recognized: WritableSignal<string | null> = signal(null);
+
+  /**
+   * Property siteUrl
+   *
+   * @description
+   * The public site whose Help page « Contacter l'administrateur » opens, or null without one.
+   *
+   * @type {string | null}
+   * @readonly
+   */
+  protected readonly siteUrl: string | null = inject(RuntimeConfigStore).config().siteUrl ?? null;
   // #endregion
 
   // #region Constructor
@@ -458,6 +513,21 @@ export class TwoStepPage implements OnInit {
   }
 
   /**
+   * Method proceed
+   *
+   * @description
+   * Opens the destination of the session the recognized security key opened.
+   *
+   * @param {string} destination - The application path.
+   * @returns {Promise<void>} Resolves once navigated.
+   */
+  protected async proceed(destination: string): Promise<void> {
+    if (!this.destroyRef.destroyed) {
+      await this.router.navigateByUrl(destination, { replaceUrl: true });
+    }
+  }
+
+  /**
    * Method useAnotherAccount
    *
    * @description
@@ -515,9 +585,9 @@ export class TwoStepPage implements OnInit {
       this.problem.set(result.problem);
       return;
     }
-    if (result.kind === 'signed-in' && !this.destroyRef.destroyed) {
-      await this.router.navigateByUrl(result.destination, { replaceUrl: true });
-    }
+    if (result.kind !== 'signed-in') return;
+    if (answer.method === 'security-key') this.recognized.set(result.destination);
+    else await this.proceed(result.destination);
   }
   // #endregion
 }

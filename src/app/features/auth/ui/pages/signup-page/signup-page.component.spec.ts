@@ -81,15 +81,22 @@ async function acceptAndSubmit(
 }
 
 describe('SignupPage', () => {
-  it('needs the terms, then opens the verification', async () => {
+  it('shows the terms error on submit, then opens the verification', async () => {
     const { host, fixture, navigate, signUp }: Awaited<ReturnType<typeof render>> = await render({
       ok: true,
       value: undefined,
     });
     const submit: HTMLButtonElement | null = host.querySelector('button[type="submit"]');
 
-    expect(submit?.disabled).toBe(true);
+    expect(submit?.disabled).toBe(false);
     expect(host.querySelector('cw-password-strength')).not.toBeNull();
+    host.querySelector('form')?.dispatchEvent(new Event('submit', { cancelable: true }));
+    await fixture.whenStable();
+    expect(host.querySelector('#su-terms-help')?.textContent).toContain(
+      'Acceptez les conditions pour créer votre compte.',
+    );
+    expect(signUp).not.toHaveBeenCalled();
+
     await acceptAndSubmit(host, fixture);
 
     expect(signUp).toHaveBeenCalledWith({
@@ -98,6 +105,24 @@ describe('SignupPage', () => {
       password: 'atelier-nord-2026',
     });
     expect(navigate).toHaveBeenCalledWith('/signup/verify');
+  });
+
+  it('asks for a work address when the address is not valid', async () => {
+    const { host, fixture, signUp }: Awaited<ReturnType<typeof render>> = await render({
+      ok: true,
+      value: undefined,
+    });
+    const input: HTMLInputElement | null = host.querySelector('#su-email');
+    if (input === null) throw new Error('Expected the address.');
+    input.value = 'camille';
+    input.dispatchEvent(new Event('input'));
+    await acceptAndSubmit(host, fixture);
+
+    expect(host.querySelector('#su-email-help')?.textContent).toContain(
+      'Saisissez votre adresse e-mail professionnelle, par exemple camille.martin@ateliernord.fr.',
+    );
+    expect(document.activeElement).toBe(input);
+    expect(signUp).not.toHaveBeenCalled();
   });
 
   it('sends one sign-up when the form is submitted twice before the answer', async () => {

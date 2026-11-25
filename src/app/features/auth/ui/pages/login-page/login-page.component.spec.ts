@@ -138,12 +138,23 @@ async function signIn(page: Rendered): Promise<void> {
 }
 
 describe('LoginPage', () => {
-  it('keeps the submit disabled until the form is complete, then opens the destination', async () => {
+  it('shows the errors of an incomplete form on submit, then opens the destination', async () => {
     const page: Rendered = await render({ kind: 'signed-in', destination: '/atelier-nord' });
     const submit: HTMLButtonElement | null = page.host.querySelector('button[type="submit"]');
 
     expect(page.flow['setReturnUrl']).toHaveBeenCalledWith('/invite/invitation-lumen');
-    expect(submit?.disabled).toBe(true);
+    expect(submit?.disabled).toBe(false);
+    page.host.querySelector('form')?.dispatchEvent(new Event('submit', { cancelable: true }));
+    await page.fixture.whenStable();
+
+    expect(page.host.querySelector('#login-email-help')?.textContent).toContain(
+      "Saisissez l'adresse e-mail de votre compte, par exemple camille.martin@ateliernord.fr.",
+    );
+    expect(page.host.querySelector('#login-password-help')?.textContent).toContain(
+      'Saisissez votre mot de passe.',
+    );
+    expect(document.activeElement?.id).toBe('login-email');
+    expect(page.flow['signInWithPassword']).not.toHaveBeenCalled();
     await signIn(page);
 
     expect(page.flow['signInWithPassword']).toHaveBeenCalledWith(
@@ -171,7 +182,9 @@ describe('LoginPage', () => {
 
     const alert: string = page.host.querySelector('cw-alert')?.textContent ?? '';
     expect(alert).toContain('E-mail ou mot de passe incorrect.');
-    expect(alert).toContain('Il vous reste 3 tentatives avant le verrouillage temporaire.');
+    expect(alert).toContain(
+      'Vérifiez votre saisie. Il vous reste 3 tentatives avant le verrouillage temporaire.',
+    );
     expect(page.host.querySelector('#login-password-help')?.textContent).toContain(
       'Mot de passe incorrect : vérifiez les majuscules.',
     );
@@ -188,6 +201,12 @@ describe('LoginPage', () => {
 
     expect(page.host.textContent).toContain('Compte verrouillé pendant 15 minutes.');
     expect(page.host.querySelector('cw-alert a')?.getAttribute('href')).toBe('/forgot');
+  });
+
+  it('separates the sign-up question from its link', async () => {
+    const page: Rendered = await render({ kind: 'challenge' });
+
+    expect(page.host.textContent).toContain('Pas encore de compte ? Créer un compte');
   });
 
   it('says the address of a remembered account is prefilled', async () => {

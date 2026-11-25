@@ -7,7 +7,8 @@ import type { StatusOption } from '../status-option/status-option.interface';
  *
  * @description
  * What a caller presets when it opens the task create dialog: the « + » of a group gives its
- * status, a calendar day its due date, a task its key for a new subtask. Everything is optional.
+ * status, priority or assignee, a calendar day its due date, a task its key for a new subtask.
+ * Everything is optional.
  */
 export interface TaskCreateOptions {
   // #region Properties
@@ -54,6 +55,29 @@ export interface TaskCreateOptions {
    * @readonly
    */
   readonly parentKey?: string;
+
+  /**
+   * Property priority
+   *
+   * @description
+   * Initial priority; `moyenne` by default.
+   *
+   * @type {PriorityKey | undefined}
+   * @readonly
+   */
+  readonly priority?: PriorityKey;
+
+  /**
+   * Property assigneeIds
+   *
+   * @description
+   * Initial assignees (account ids); the signed-in user by default, an empty array for nobody
+   * (the « Non assignées » group).
+   *
+   * @type {readonly string[] | undefined}
+   * @readonly
+   */
+  readonly assigneeIds?: readonly string[];
   // #endregion
 }
 

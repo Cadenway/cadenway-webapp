@@ -13,6 +13,7 @@ import {
   CwCommandLoading,
   provideCwCommandLabels,
 } from '@cadenway/ui/components/command';
+import { CwKbd } from '@cadenway/ui/components/kbd';
 import { CwStatusIcon } from '@cadenway/ui/components/status-icon';
 import { CwToastService } from '@cadenway/ui/components/toast';
 import { NgIcon } from '@ng-icons/core';
@@ -20,6 +21,12 @@ import { NgIcon } from '@ng-icons/core';
 import { ShortcutsService } from '@core/shortcuts';
 import { ThemeService } from '@core/theme';
 import { SignOut } from '@features/auth';
+import {
+  LIST_DIRECTORY,
+  type ListDirectoryEntry,
+  type ListDirectoryPort,
+} from '@features/spaces/ports/list-directory';
+import { TaskCreate } from '@features/task';
 import {
   WORKSPACE_CONTEXT,
   type WorkspaceContextPort,
@@ -55,6 +62,27 @@ const SERVER_RESULT: string = 'cw-search-server-result';
 const SEARCH_TOKEN: string = '{search}';
 
 /**
+ * Constant IDLE_LIST_COUNT
+ *
+ * @description
+ * Lists of the workspace « Listes » shows before anything is typed (`App.dc.html` line 6935).
+ *
+ * @type {number}
+ */
+const IDLE_LIST_COUNT: number = 4;
+
+/**
+ * Constant MATCHED_LIST_COUNT
+ *
+ * @description
+ * Lists of the workspace whose name matches the typed text that « Listes » shows at most
+ * (`App.dc.html` line 6935).
+ *
+ * @type {number}
+ */
+const MATCHED_LIST_COUNT: number = 20;
+
+/**
  * Function paletteFilter
  *
  * @description
@@ -81,11 +109,15 @@ const paletteFilter: CwCommandFilter = (
  *
  * @description
  * The Ctrl K command palette of mockup `App.dc.html` (lines 2778-2820, logic near line 6916), on
- * `cw-command-dialog`. Ctrl K (⌘ K) toggles it from anywhere through `ShortcutsService`; the rail
- * item and the sidebar button open it through `CommandPalette`. Its groups: « Tâches récentes »
+ * `cw-command-dialog`. Ctrl K (⌘ K) opens it through `ShortcutsService`, except while typing in a
+ * field (line 4377); the rail item and the sidebar button open it through `CommandPalette`. Its
+ * groups: « Suggestions » (« Créer une tâche », which opens Task's creation dialog, with its
+ * shortcut N), « Tâches récentes »
  * (`RecentTasks`, empty until tasks are opened from here), « Aller à » (« Accueil »; later steps add
- * their pages), « Listes » and « Tâches » from `GET /v1/search` (debounced, the latest text winning,
- * with the loading row and an inline error with « Réessayer »), « Réglages » (« Profil et
+ * their pages), « Listes » (the workspace's lists from Spaces' `LIST_DIRECTORY`: the first four
+ * before anything is typed, then those whose name contains the text, followed by the server's other
+ * list matches), « Tâches » from `GET /v1/search` (debounced, the latest text winning, with the
+ * loading row and an inline error with « Réessayer »), « Réglages » (« Profil et
  * sécurité », « Paramètres de l’organisation », « Changer d’organisation ») and « Actions » (the
  * light and dark themes, « Se déconnecter »). Local items are filtered by their label; nothing
  * matching shows « Aucun résultat pour « … ». ». The arrows and Enter follow the brick. It provides
@@ -103,6 +135,7 @@ const paletteFilter: CwCommandFilter = (
     CwCommandItem,
     CwCommandList,
     CwCommandLoading,
+    CwKbd,
     CwStatusIcon,
     NgIcon,
   ],
@@ -182,6 +215,19 @@ export class CommandPaletteDialog {
   protected readonly store: InstanceType<typeof CommandPaletteStore> = inject(CommandPaletteStore);
 
   /**
+   * Property listDirectory
+   *
+   * @description
+   * Spaces' lists of the workspace, which the sidebar already read; absent outside a workspace.
+   *
+   * @type {ListDirectoryPort | null}
+   * @readonly
+   */
+  private readonly listDirectory: ListDirectoryPort | null = inject(LIST_DIRECTORY, {
+    optional: true,
+  });
+
+  /**
    * Property recentTasks
    *
    * @description
@@ -224,6 +270,17 @@ export class CommandPaletteDialog {
    * @readonly
    */
   private readonly signOut: SignOut = inject(SignOut);
+
+  /**
+   * Property taskCreate
+   *
+   * @description
+   * Task's creation dialog, opened by « Créer une tâche ».
+   *
+   * @type {TaskCreate}
+   * @readonly
+   */
+  private readonly taskCreate: TaskCreate = inject(TaskCreate);
 
   /**
    * Property toasts
@@ -277,6 +334,49 @@ export class CommandPaletteDialog {
     (): readonly TaskSearchResult[] =>
       this.recentTasks.list(this.workspace.user().id, this.workspace.organization().id),
   );
+
+  /**
+   * Property localLists
+   *
+   * @description
+   * The workspace's lists « Listes » shows, as in the mockup: the first four before anything is
+   * typed, then up to twenty whose name contains the text, ignoring case.
+   *
+   * @type {Signal<readonly ListDirectoryEntry[]>}
+   * @readonly
+   */
+  protected readonly localLists: Signal<readonly ListDirectoryEntry[]> = computed(
+    (): readonly ListDirectoryEntry[] => {
+      const lists: readonly ListDirectoryEntry[] = this.listDirectory?.lists() ?? [];
+      const query: string = this.store.query().toLocaleLowerCase();
+      if (query === '') return lists.slice(0, IDLE_LIST_COUNT);
+      return lists
+        .filter((list: ListDirectoryEntry): boolean =>
+          list.name.toLocaleLowerCase().includes(query),
+        )
+        .slice(0, MATCHED_LIST_COUNT);
+    },
+  );
+
+  /**
+   * Property serverLists
+   *
+   * @description
+   * The server's list matches that « Listes » does not already show from the workspace's lists.
+   *
+   * @type {Signal<readonly ListSearchResult[]>}
+   * @readonly
+   */
+  protected readonly serverLists: Signal<readonly ListSearchResult[]> = computed(
+    (): readonly ListSearchResult[] => {
+      const shown: ReadonlySet<string> = new Set(
+        this.localLists().map((list: ListDirectoryEntry): string => list.id),
+      );
+      return this.store
+        .lists()
+        .filter((list: ListSearchResult): boolean => !shown.has(list.listId));
+    },
+  );
   // #endregion
 
   // #region Constructor
@@ -284,7 +384,8 @@ export class CommandPaletteDialog {
    * Constructor
    *
    * @description
-   * Binds Ctrl K (⌘ K) to the palette, in fields too, until the shell is destroyed.
+   * Binds Ctrl K (⌘ K) to opening the palette, outside fields, until the shell is destroyed; an
+   * open palette stays open.
    *
    * @constructor
    */
@@ -292,9 +393,8 @@ export class CommandPaletteDialog {
     inject(ShortcutsService).register(
       {
         keys: 'mod+k',
-        allowInEditable: true,
         handler: (): void => {
-          this.palette.toggle();
+          this.palette.setOpen(true);
         },
       },
       inject(DestroyRef),
@@ -303,6 +403,17 @@ export class CommandPaletteDialog {
   // #endregion
 
   // #region Methods
+  /**
+   * Method createTask
+   *
+   * @description
+   * Closes the palette, then opens Task's creation dialog from the current screen's defaults.
+   */
+  protected createTask(): void {
+    this.palette.setOpen(false);
+    this.taskCreate.open();
+  }
+
   /**
    * Method openTask
    *
@@ -326,6 +437,18 @@ export class CommandPaletteDialog {
    */
   protected openList(list: ListSearchResult): void {
     this.go(['l', list.listId]);
+  }
+
+  /**
+   * Method openDirectoryList
+   *
+   * @description
+   * Closes the palette and opens `/<slug>/l/<id>` for a list of the workspace.
+   *
+   * @param {ListDirectoryEntry} list - The chosen list.
+   */
+  protected openDirectoryList(list: ListDirectoryEntry): void {
+    this.go(['l', list.id]);
   }
 
   /**

@@ -209,7 +209,7 @@ export class SignupPage {
    */
   protected readonly signupForm: FieldTree<SignupModel> = form(this.model, (path) => {
     required(path.name, { message: $localize`:@@auth.signup.name-required:Enter your full name.` });
-    const emailMessage: string = $localize`:@@auth.login.email-invalid:Enter the email address of your account, for example camille.martin@ateliernord.fr.`;
+    const emailMessage: string = $localize`:@@auth.signup.email-invalid:Enter your work email address, for example camille.martin@ateliernord.fr.`;
     required(path.email, { message: emailMessage });
     email(path.email, { message: emailMessage });
     const passwordMessage: string = $localize`:@@auth.signup.password-short:Choose a password of at least 12 characters.`;

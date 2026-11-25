@@ -57,7 +57,7 @@ function type(host: HTMLElement, selector: string, value: string): void {
 }
 
 describe('ResetPage', () => {
-  it('reads the token from the fragment, hides it and resets the password', async () => {
+  it('reads the token from the fragment, hides it, enforces the 4 rules and resets the password', async () => {
     const inspectPasswordReset: Mock = vi.fn(() =>
       Promise.resolve({
         ok: true,
@@ -81,20 +81,31 @@ describe('ResetPage', () => {
     expect(host.textContent).toContain('3 appareils connectés seront déconnectés.');
 
     type(host, '#rp-new', 'atelier-nord-2026');
-    type(host, '#rp-confirm', 'atelier-nord-2025');
+    type(host, '#rp-confirm', 'atelier-nord-2026');
+    await fixture.whenStable();
+    expect(host.querySelector<HTMLButtonElement>('button[type="submit"]')?.disabled).toBe(false);
+    host.querySelector('form')?.dispatchEvent(new Event('submit', { cancelable: true }));
+    await fixture.whenStable();
+    expect(host.textContent).toContain('Choisissez un mot de passe qui respecte les 4 règles.');
+    expect(document.activeElement?.id).toBe('rp-new');
+    expect(confirmPasswordReset).not.toHaveBeenCalled();
+
+    type(host, '#rp-new', 'Atelier-Nord-2026');
+    type(host, '#rp-confirm', 'Atelier-Nord-2025');
     await fixture.whenStable();
     expect(host.textContent).toContain('Les deux mots de passe diffèrent : saisissez le même.');
-    expect(host.querySelector<HTMLButtonElement>('button[type="submit"]')?.disabled).toBe(true);
 
-    type(host, '#rp-confirm', 'atelier-nord-2026');
+    type(host, '#rp-confirm', 'Atelier-Nord-2026');
     await fixture.whenStable();
     expect(host.textContent).toContain('Les mots de passe correspondent.');
     host.querySelector('form')?.dispatchEvent(new Event('submit', { cancelable: true }));
     await fixture.whenStable();
 
-    expect(confirmPasswordReset).toHaveBeenCalledWith('reset-token', 'atelier-nord-2026', true);
+    expect(confirmPasswordReset).toHaveBeenCalledWith('reset-token', 'Atelier-Nord-2026', true);
     expect(host.textContent).toContain('Mot de passe modifié');
-    expect(host.textContent).toContain('Vos 3 autres sessions ont été fermées.');
+    expect(host.querySelector('h1 + p')?.textContent.trim()).toBe(
+      'Vos 3 autres sessions ont été fermées. Un e-mail de confirmation vient de partir vers camille.martin@ateliernord.fr.',
+    );
   });
 
   it('says an expired link has expired', async () => {

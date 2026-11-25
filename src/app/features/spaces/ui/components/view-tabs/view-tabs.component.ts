@@ -1,8 +1,10 @@
 import {
   Component,
   computed,
+  inject,
   input,
   type InputSignal,
+  LOCALE_ID,
   output,
   type OutputEmitterRef,
   type Signal,
@@ -25,6 +27,7 @@ import { NgIcon } from '@ng-icons/core';
 import { layoutLabels } from '../../../constants/view-labels/view-labels.constants';
 import type { SavedView, ViewLayout } from '../../../models/saved-view/saved-view.interface';
 import { layoutIconName, lookIconName } from '../../../utils/look/look.util';
+import { viewSummary } from '../../../utils/view-summary/view-summary.util';
 
 /**
  * Constant SAVED_PREFIX
@@ -245,6 +248,17 @@ export class ViewTabs {
   protected readonly layoutNames: Readonly<Record<ViewLayout, string>> = layoutLabels();
 
   /**
+   * Property locale
+   *
+   * @description
+   * Application locale, for the lower case of the tab tooltip's summary.
+   *
+   * @type {string}
+   * @readonly
+   */
+  private readonly locale: string = inject(LOCALE_ID);
+
+  /**
    * Property value
    *
    * @description
@@ -299,6 +313,21 @@ export class ViewTabs {
   protected viewIcon(view: SavedView): string {
     const active: boolean = view.id === this.activeViewId();
     return view.icon ? lookIconName(view.icon, active) : layoutIconName(view.layout, active);
+  }
+
+  /**
+   * Method viewTitle
+   *
+   * @description
+   * Tooltip of a saved view's tab: « Vue enregistrée · Liste · 1 filtre » (`cfgSummary` of
+   * `App.dc.html`).
+   *
+   * @param {SavedView} view - The view.
+   * @returns {string} The tooltip.
+   */
+  protected viewTitle(view: SavedView): string {
+    const summary: string = viewSummary(view.layout, view.config, this.locale);
+    return $localize`:@@spaces.saved.tab-title:Saved view · ${summary}:summary:`;
   }
 
   /**

@@ -22,7 +22,7 @@ import { listIconName, lookTone } from '../../../utils/look/look.util';
   template: `
     <a
       [routerLink]="link()"
-      class="flex flex-col gap-3 rounded-xl border border-border bg-card p-4 text-left transition-colors hover:bg-muted/50 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background focus-visible:outline-none"
+      class="flex flex-col gap-3 rounded-xl border border-border bg-card p-4 text-left transition-colors hover:bg-linear-to-b hover:from-hover hover:to-hover focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background focus-visible:outline-none"
       data-testid="list-card"
     >
       <span class="flex min-w-0 items-center gap-2">

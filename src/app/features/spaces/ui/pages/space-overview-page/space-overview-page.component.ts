@@ -8,6 +8,7 @@ import {
   LOCALE_ID,
   type Signal,
 } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { RouterLink } from '@angular/router';
 import { CwButton } from '@cadenway/ui/components/button';
 import {
@@ -24,7 +25,7 @@ import { CwToastService } from '@cadenway/ui/components/toast';
 import { NgIcon } from '@ng-icons/core';
 
 import type { Milestone } from '../../../models/milestone/milestone.interface';
-import type { Space } from '../../../models/space/space.interface';
+import type { Space, SpaceDetails } from '../../../models/space/space.interface';
 import type { ListSummary, SpaceOverview } from '../../../models/task-list/task-list.interface';
 import { SpaceOverviewStore } from '../../../state/space-overview/space-overview.store';
 import { SpacesNavigationStore } from '../../../state/spaces-navigation/spaces-navigation.store';
@@ -194,6 +195,20 @@ export class SpaceOverviewPage {
   protected readonly favorite: Signal<boolean> = computed(
     (): boolean => this.navigation.favoriteOf('space', this.spaceId()) !== undefined,
   );
+
+  /**
+   * Property details
+   *
+   * @description
+   * The space as the sidebar read it, with what its dialogs need, or undefined before that read;
+   * « Modifier », « Nouveau sprint » and « Nouvelle liste » wait for it and need `edit`.
+   *
+   * @type {Signal<SpaceDetails | undefined>}
+   * @readonly
+   */
+  protected readonly details: Signal<SpaceDetails | undefined> = computed(
+    (): SpaceDetails | undefined => this.navigation.spaceById(this.spaceId()),
+  );
   // #endregion
 
   // #region Constructor
@@ -201,12 +216,16 @@ export class SpaceOverviewPage {
    * Constructor
    *
    * @description
-   * Follows the space of the route, and the organization in the navigation for the favorite.
+   * Follows the space of the route, and the organization in the navigation for the favorite;
+   * reads the space again once its dialog recorded a change.
    *
    * @constructor
    */
   public constructor() {
     this.store.load(this.spaceId);
+    this.navigation.spaceEdited.pipe(takeUntilDestroyed()).subscribe((space: SpaceDetails) => {
+      if (space.id === this.spaceId()) this.store.space.reload();
+    });
   }
   // #endregion
 
@@ -308,15 +327,43 @@ export class SpaceOverviewPage {
    * @param {Space} space - The space.
    */
   protected async toggleFavorite(space: Space): Promise<void> {
-    const recorded: boolean = await this.navigation.setFavorite(
-      'space',
-      space.id,
-      space.name,
-      !this.favorite(),
-    );
+    const on: boolean = !this.favorite();
+    const recorded: boolean = await this.navigation.setFavorite('space', space.id, space.name, on);
     if (!recorded) {
       this.toasts.error($localize`:@@spaces.favorite.failed:The favorites could not be changed`);
+      return;
     }
+    this.toasts.show(
+      on
+        ? $localize`:@@spaces.favorite.space-added:Added to favorite spaces`
+        : $localize`:@@spaces.favorite.space-removed:Removed from favorite spaces`,
+      { description: space.name },
+    );
+  }
+
+  /**
+   * Method editSpace
+   *
+   * @description
+   * « Modifier »: opens the space dialog, which the sidebar hosts.
+   *
+   * @param {SpaceDetails} space - The space.
+   */
+  protected editSpace(space: SpaceDetails): void {
+    this.navigation.openDialog({ kind: 'space', space });
+  }
+
+  /**
+   * Method newList
+   *
+   * @description
+   * « Nouvelle liste » or « Nouveau sprint » in the space.
+   *
+   * @param {SpaceDetails} space - The space.
+   * @param {boolean} sprint - Whether the next sprint is proposed.
+   */
+  protected newList(space: SpaceDetails, sprint: boolean): void {
+    this.navigation.openDialog({ kind: 'list', spaceId: space.id, list: null, sprint });
   }
   // #endregion
 }

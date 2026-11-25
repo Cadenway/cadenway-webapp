@@ -4,6 +4,8 @@ import { provideRouter, Router } from '@angular/router';
 import { provideCadenwayIcons } from '@cadenway/icons';
 import { describe, expect, it, type Mock, vi } from 'vitest';
 
+import { RuntimeConfigStore } from '@core/config';
+
 import type { TwoStepChallenge } from '../../../models/session/session.interface';
 import { AuthFlowStore } from '../../../state/auth-flow/auth-flow.store';
 import { TwoStepPage } from './two-step-page.component';
@@ -42,6 +44,12 @@ async function render(
     providers: [
       provideRouter([]),
       provideCadenwayIcons(),
+      {
+        provide: RuntimeConfigStore,
+        useValue: {
+          config: signal({ apiUrl: 'http://api.localhost', siteUrl: 'https://cadenway.example' }),
+        },
+      },
       { provide: AuthFlowStore, useValue: { cancelChallenge: vi.fn(), ...flow } },
     ],
   });
@@ -163,5 +171,48 @@ describe('TwoStepPage', () => {
     expect(host.textContent).toContain(
       'Il vous reste 7 codes inutilisés. Pensez à en générer de nouveaux depuis votre profil.',
     );
+    const backup: HTMLInputElement | null = host.querySelector('#mfa-backup');
+    expect(backup?.getAttribute('maxlength')).toBe('9');
+  });
+
+  it('shows a recognized key and continues to the destination on request', async () => {
+    const answerChallenge: Mock = vi.fn(() =>
+      Promise.resolve({ kind: 'signed-in', destination: '/atelier-nord' }),
+    );
+    const { host, fixture, navigate }: Awaited<ReturnType<typeof render>> = await render({
+      challenge: signal({ ...challenge, securityKeys: ['YubiKey 5C NFC'] }),
+      loadChallenge: vi.fn(() => Promise.resolve(true)),
+      answerChallenge,
+    });
+    Array.from(host.querySelectorAll<HTMLButtonElement>('[role="tab"]'))
+      .find((tab: HTMLButtonElement) => tab.textContent.includes('Clé de sécurité'))
+      ?.click();
+    await fixture.whenStable();
+    Array.from(host.querySelectorAll('button'))
+      .find((button: HTMLButtonElement) => button.textContent.includes('Utiliser ma clé'))
+      ?.click();
+    await fixture.whenStable();
+
+    expect(answerChallenge).toHaveBeenCalledWith({ method: 'security-key' }, false);
+    expect(host.textContent).toContain('Clé reconnue : YubiKey 5C NFC');
+    expect(navigate).not.toHaveBeenCalled();
+    Array.from(host.querySelectorAll('button'))
+      .find((button: HTMLButtonElement) => button.textContent.trim() === 'Continuer')
+      ?.click();
+    await fixture.whenStable();
+    expect(navigate).toHaveBeenCalledWith('/atelier-nord', { replaceUrl: true });
+  });
+
+  it('links the administrator contact to the help page beside another account', async () => {
+    const { host }: Awaited<ReturnType<typeof render>> = await render({
+      challenge: signal(challenge),
+      loadChallenge: vi.fn(() => Promise.resolve(true)),
+    });
+
+    const contact: HTMLAnchorElement | undefined = Array.from(
+      host.querySelectorAll<HTMLAnchorElement>('a'),
+    ).find((link: HTMLAnchorElement) => link.textContent.includes("Contacter l'administrateur"));
+    expect(contact?.getAttribute('href')).toBe('https://cadenway.example/help');
+    expect(host.textContent).toContain('Utiliser un autre compte');
   });
 });

@@ -29,6 +29,10 @@ import { CwToastService } from '@cadenway/ui/components/toast';
 import { NgIcon } from '@ng-icons/core';
 
 import { TaskCreate } from '@features/task';
+import {
+  WORKSPACE_CONTEXT,
+  type WorkspaceContextPort,
+} from '@features/workspace/ports/workspace-context';
 import { SHELL_SIDEBAR, type ShellSidebar } from '@shared/layout-slot';
 
 import { layoutLabels, statusLabels } from '../../../constants/view-labels/view-labels.constants';
@@ -39,7 +43,7 @@ import type {
   SavedViewDraft,
   ViewLayout,
 } from '../../../models/saved-view/saved-view.interface';
-import type { Space, SpaceStatusOption } from '../../../models/space/space.interface';
+import type { Space, SpaceDetails, SpaceStatusOption } from '../../../models/space/space.interface';
 import type { TaskList } from '../../../models/task-list/task-list.interface';
 import type { ListMember } from '../../../models/list-member/list-member.interface';
 import type { ViewOption } from '../../../models/view-option/view-option.interface';
@@ -183,6 +187,17 @@ export class ListPage {
   protected readonly view: InstanceType<typeof ListViewStore> = inject(ListViewStore);
 
   /**
+   * Property workspace
+   *
+   * @description
+   * The workspace context, whose member is « Moi » in the assignee filter.
+   *
+   * @type {WorkspaceContextPort}
+   * @readonly
+   */
+  protected readonly workspace: WorkspaceContextPort = inject(WORKSPACE_CONTEXT);
+
+  /**
    * Property navigation
    *
    * @description
@@ -294,26 +309,20 @@ export class ListPage {
   protected readonly layouts: readonly ViewLayout[] = BUILT_LAYOUTS;
 
   /**
-   * Property editing
+   * Property spaceDetails
    *
    * @description
-   * Whether the title is being edited.
+   * The list's space as the sidebar read it, which « Modifier l’espace » opens, or undefined.
    *
-   * @type {WritableSignal<boolean>}
+   * @type {Signal<SpaceDetails | undefined>}
    * @readonly
    */
-  protected readonly editing: WritableSignal<boolean> = signal(false);
-
-  /**
-   * Property renaming
-   *
-   * @description
-   * Whether a rename is being recorded.
-   *
-   * @type {WritableSignal<boolean>}
-   * @readonly
-   */
-  protected readonly renaming: WritableSignal<boolean> = signal(false);
+  protected readonly spaceDetails: Signal<SpaceDetails | undefined> = computed(
+    (): SpaceDetails | undefined =>
+      this.store.list.hasValue()
+        ? this.navigation.spaceById(this.store.list.value().spaceId)
+        : undefined,
+  );
 
   /**
    * Property deleteOpen
@@ -522,7 +531,8 @@ export class ListPage {
    * Constructor
    *
    * @description
-   * Binds the list, claims the sidebar toggle and follows `?savedView=`.
+   * Binds the list, claims the sidebar toggle, follows `?savedView=` and shows the changes the
+   * navigation's dialogs record for the list and its space.
    *
    * @constructor
    */
@@ -530,6 +540,8 @@ export class ListPage {
     if (this.store.list.error()) this.store.list.reload();
     this.store.load(this.listId);
     this.sidebar?.claimToggle(inject(DestroyRef));
+    this.store.followListEdits(this.navigation.listEdited);
+    this.store.followSpaceEdits(this.navigation.spaceEdited);
 
     let previousList: string | null = null;
     effect((): void => {
@@ -537,7 +549,6 @@ export class ListPage {
       if (previousList !== null && previousList !== listId) {
         untracked((): void => {
           this.view.reset();
-          this.editing.set(false);
         });
       }
       previousList = listId;
@@ -654,22 +665,32 @@ export class ListPage {
   }
 
   /**
-   * Method rename
+   * Method editList
    *
    * @description
-   * Renames the list; a refusal restores the name and shows the failure toast.
+   * « Modifier la liste » or « Modifier le sprint »: opens the list dialog, which the sidebar
+   * hosts; the recorded list comes back through `listEdited`.
    *
-   * @param {string} name - New name.
+   * @param {TaskList} list - The list.
    */
-  protected async rename(name: string): Promise<void> {
-    this.renaming.set(true);
-    const recorded: boolean = await this.store.rename(name);
-    this.renaming.set(false);
-    if (recorded) {
-      this.navigation.refresh();
-    } else {
-      this.toasts.error($localize`:@@spaces.list.rename-failed:The list could not be renamed`);
-    }
+  protected editList(list: TaskList): void {
+    this.navigation.openDialog({
+      kind: 'list',
+      spaceId: list.spaceId,
+      list,
+      sprint: list.sprint !== null,
+    });
+  }
+
+  /**
+   * Method editSpace
+   *
+   * @description
+   * « Modifier l’espace »: opens the space dialog of the list's space.
+   */
+  protected editSpace(): void {
+    const space: SpaceDetails | undefined = this.spaceDetails();
+    if (space) this.navigation.openDialog({ kind: 'space', space });
   }
 
   /**
@@ -699,7 +720,7 @@ export class ListPage {
    * Method duplicate
    *
    * @description
-   * Copies the list with its tasks and adds the copy to the sidebar.
+   * Copies the list with its tasks and adds the copy to the sidebar; « Annuler » deletes the copy.
    */
   protected async duplicate(): Promise<void> {
     const copy: { list: TaskList; taskCount: number } | null = await this.store.duplicate();
@@ -713,7 +734,13 @@ export class ListPage {
     const name: string = copy.list.name;
     const count: number = copy.taskCount;
     this.toasts.show($localize`:@@spaces.list.duplicated:List duplicated`, {
-      description: $localize`:@@spaces.list.duplicated-text:${name}:name: · ${count}:count: tasks`,
+      description:
+        count === 1
+          ? $localize`:@@spaces.list.duplicated-text-one:${name}:name: · 1 task`
+          : $localize`:@@spaces.list.duplicated-text:${name}:name: · ${count}:count: tasks`,
+      undo: (): void => {
+        void this.removeCopy(copy.list);
+      },
     });
   }
 
@@ -762,7 +789,8 @@ export class ListPage {
    * Method archive
    *
    * @description
-   * Archives the list, then shows its space; the sidebar no longer lists it.
+   * Archives the list, then shows its space; the sidebar no longer lists it. « Annuler » brings
+   * it back and shows it again.
    *
    * @param {TaskList} list - The list.
    */
@@ -772,10 +800,19 @@ export class ListPage {
       return;
     }
     this.navigation.refresh();
+    this.navigation.archiveCount.reload();
     const name: string = list.name;
-    this.toasts.show($localize`:@@spaces.list.archived:List archived`, {
-      description: $localize`:@@spaces.list.archived-text:${name}:name: no longer shows in the sidebar.`,
-    });
+    this.toasts.show(
+      list.sprint
+        ? $localize`:@@spaces.list.sprint-archived:Sprint archived`
+        : $localize`:@@spaces.list.archived:List archived`,
+      {
+        description: $localize`:@@spaces.list.archived-text:${name}:name: no longer shows in the sidebar.`,
+        undo: (): void => {
+          void this.unarchive(list);
+        },
+      },
+    );
     void this.router.navigate(['/', this.slug(), 'spaces', list.spaceId]);
   }
 
@@ -798,12 +835,15 @@ export class ListPage {
       return;
     }
     this.navigation.refresh();
+    this.navigation.trashCount.reload();
     const name: string = list.name;
     this.toasts.show($localize`:@@spaces.list.deleted:List “${name}:name:” deleted`, {
       description:
-        count > 0
+        count > 1
           ? $localize`:@@spaces.list.deleted-text:${count}:count: tasks in the trash, restorable for 30 days.`
-          : $localize`:@@spaces.list.deleted-empty:No task to move.`,
+          : count === 1
+            ? $localize`:@@spaces.list.deleted-text-one:1 task in the trash, restorable for 30 days.`
+            : $localize`:@@spaces.list.deleted-empty:No task to move.`,
     });
     void this.router.navigate(['/', this.slug()]);
   }
@@ -831,7 +871,43 @@ export class ListPage {
    */
   protected deleteText(): string {
     const count: number = this.store.counts.hasValue() ? this.store.counts.value().counts.total : 0;
-    return $localize`:@@spaces.list.delete-text:${count}:count: tasks go to the trash; the list and its saved views are deleted. To keep it aside, archive it instead.`;
+    return count === 1
+      ? $localize`:@@spaces.list.delete-text-one:1 task goes to the trash; the list and its saved views are deleted. To keep it aside, archive it instead.`
+      : $localize`:@@spaces.list.delete-text:${count}:count: tasks go to the trash; the list and its saved views are deleted. To keep it aside, archive it instead.`;
+  }
+
+  /**
+   * Method removeCopy
+   *
+   * @description
+   * The « Annuler » of « Liste dupliquée »: deletes the copy.
+   *
+   * @param {TaskList} copy - The copy.
+   * @returns {Promise<void>} Resolves once handled.
+   */
+  private async removeCopy(copy: TaskList): Promise<void> {
+    if (!(await this.navigation.removeList(copy))) {
+      this.toasts.error($localize`:@@spaces.list.delete-failed:The list could not be deleted`);
+    }
+  }
+
+  /**
+   * Method unarchive
+   *
+   * @description
+   * The « Annuler » of « Liste archivée »: brings the list back and shows it again.
+   *
+   * @param {TaskList} list - The archived list.
+   * @returns {Promise<void>} Resolves once handled.
+   */
+  private async unarchive(list: TaskList): Promise<void> {
+    if (!(await this.navigation.unarchiveList(list.id))) {
+      this.toasts.error(
+        $localize`:@@spaces.list.unarchive-failed:The list could not be brought back`,
+      );
+      return;
+    }
+    void this.router.navigate(['/', this.slug(), 'l', list.id]);
   }
 
   /**
@@ -948,12 +1024,17 @@ export class ListPage {
    * Method deleteView
    *
    * @description
-   * Deletes a saved view; the applied one goes back to the standard tab.
+   * Deletes a saved view; the applied one goes back to the standard tab. « Annuler » creates it
+   * again at its place, with its name, icon and configuration, and applies it again when it was
+   * applied.
    *
    * @param {SavedView} saved - The view.
    */
   protected async deleteView(saved: SavedView): Promise<void> {
     const applied: boolean = this.view.savedView()?.id === saved.id;
+    const index: number = this.store.savedViews.hasValue()
+      ? this.store.savedViews.value().findIndex((item: SavedView): boolean => item.id === saved.id)
+      : -1;
     if (applied) {
       await this.router.navigate(['list'], {
         relativeTo: this.route,
@@ -965,7 +1046,32 @@ export class ListPage {
       this.toasts.error($localize`:@@spaces.saved.delete-failed:The view could not be deleted`);
       return;
     }
-    this.toasts.show($localize`:@@spaces.saved.deleted:View deleted`, { description: saved.name });
+    this.toasts.show($localize`:@@spaces.saved.deleted:View deleted`, {
+      description: saved.name,
+      undo: (): void => {
+        void this.restoreView(saved, index, applied);
+      },
+    });
+  }
+
+  /**
+   * Method restoreView
+   *
+   * @description
+   * The « Annuler » of « Vue supprimée ».
+   *
+   * @param {SavedView} saved - The deleted view.
+   * @param {number} index - Its former place among the views.
+   * @param {boolean} applied - Whether it was applied when deleted.
+   * @returns {Promise<void>} Resolves once handled.
+   */
+  private async restoreView(saved: SavedView, index: number, applied: boolean): Promise<void> {
+    const restored: SavedView | null = await this.store.restoreView(saved, index);
+    if (!restored) {
+      this.toasts.error($localize`:@@spaces.saved.failed:The view could not be saved`);
+      return;
+    }
+    if (applied && this.listId() === saved.listId) this.pickSaved(restored);
   }
 
   /**

@@ -384,8 +384,11 @@ describe('WORKSPACE_ROUTES', () => {
       'search-rail-item',
       'theme-rail-item',
       'user-menu-trigger',
+      'organization-row',
       'search-button',
       'plan-summary',
+      'sidebar-trash',
+      'sidebar-archives',
       'shortcuts-button',
       'storage-banner',
     ]) {
@@ -1440,6 +1443,22 @@ describe('WORKSPACE_ROUTES', () => {
     expect(element.querySelector('h1')?.textContent.trim()).toBe('Page introuvable');
     expect(element.querySelector('[data-testid="organization-switcher"]')).not.toBeNull();
     expect(TestBed.inject(Router).url).toBe('/atelier-nord/missing/page');
+  });
+
+  it('mounts the task deep link inside the shell and renders its 404 for an unreadable task', async () => {
+    const getTask: Mock<() => Observable<never>> = vi.fn(() =>
+      throwError(() => new HttpErrorResponse({ status: 404, url: '/tasks/CAD-482' })),
+    );
+    TestBed.configureTestingModule({
+      providers: [{ provide: TasksService, useValue: { getTask } }],
+    });
+
+    const harness: RouterTestingHarness = await open('/atelier-nord/t/CAD-482');
+
+    const element: HTMLElement = harness.fixture.nativeElement as HTMLElement;
+    expect(getTask).toHaveBeenCalledWith('CAD-482', { cache: 'no-store' });
+    expect(element.querySelector('h1')?.textContent.trim()).toBe('Page introuvable');
+    expect(element.querySelector('[data-testid="organization-switcher"]')).not.toBeNull();
   });
 
   it.each([

@@ -1,7 +1,9 @@
 <div class="flex w-full max-w-[400px] flex-col gap-5">
   <cw-card class="gap-6 p-6 sm:p-8">
-    <div class="flex flex-col gap-4">
-      <div class="flex size-10 items-center justify-center rounded-lg bg-muted text-foreground">
+    <div class="flex flex-col gap-3">
+      <div
+        class="flex size-10 items-center justify-center rounded-lg bg-muted text-muted-foreground"
+      >
         <ng-icon name="phosphorEnvelopeSimpleBold" class="size-5" aria-hidden="true" />
       </div>
       <div class="flex flex-col gap-1">
@@ -19,9 +21,9 @@
     </div>
 
     @if (unavailable()) {
-      <cw-alert variant="destructive" role="alert">
-        <cw-alert-description i18n="@@auth.login.unavailable"
-          >Sign-in is unavailable. Try again in a moment.</cw-alert-description
+      <cw-alert variant="destructive" class="[&>ng-icon]:text-inherit" role="alert">
+        <cw-alert-description i18n="@@auth.signup-verify.unavailable"
+          >Address verification is unavailable. Try again in a moment.</cw-alert-description
         >
       </cw-alert>
     }
@@ -37,4 +39,5 @@
       (resendRequested)="resend()"
     />
   </cw-card>
+  <cw-code-help [siteUrl]="siteUrl" />
 </div>

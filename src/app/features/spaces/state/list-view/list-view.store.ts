@@ -1,5 +1,12 @@
 import type { Signal, Type } from '@angular/core';
-import { patchState, signalStore, withComputed, withMethods, withState } from '@ngrx/signals';
+import {
+  patchState,
+  signalMethod,
+  signalStore,
+  withComputed,
+  withMethods,
+  withState,
+} from '@ngrx/signals';
 
 import type {
   FilterField,
@@ -11,6 +18,7 @@ import type {
   ListViewFilters,
   SubtaskMode,
 } from '../../models/list-view-config/list-view-config.interface';
+import type { ListRowsSummary } from '../../models/list-rows/list-rows.interface';
 import type { SavedView, ViewLayout } from '../../models/saved-view/saved-view.interface';
 import {
   DEFAULT_VIEW_CONFIG,
@@ -72,6 +80,17 @@ interface ListViewState {
    * @readonly
    */
   readonly savedView: SavedView | null;
+
+  /**
+   * Property rows
+   *
+   * @description
+   * What the rows of the view shown tell « Filtrer » and « Sous-tâches », published by that view.
+   *
+   * @type {ListRowsSummary}
+   * @readonly
+   */
+  readonly rows: ListRowsSummary;
 
   /**
    * Property _before
@@ -204,9 +223,31 @@ export interface ListViewStoreInstance {
    * @readonly
    */
   readonly groupQuery: Signal<ListGroupQuery | null>;
+
+  /**
+   * Property rows
+   *
+   * @description
+   * What the rows of the view shown tell « Filtrer » and « Sous-tâches »: unknown until a view
+   * publishes it with `followRows`.
+   *
+   * @type {Signal<ListRowsSummary>}
+   * @readonly
+   */
+  readonly rows: Signal<ListRowsSummary>;
   // #endregion
 
   // #region Methods
+  /**
+   * Method followRows
+   *
+   * @description
+   * Publishes the summary of the shown view's rows to the list page, until the caller is destroyed.
+   *
+   * @param {Signal<ListRowsSummary> | ListRowsSummary} summary - The rows' summary.
+   */
+  followRows(summary: Signal<ListRowsSummary> | ListRowsSummary): void;
+
   /**
    * Method toggleFilter
    *
@@ -353,6 +394,7 @@ const initialState: ListViewState = {
   search: '',
   milestonesOnly: false,
   savedView: null,
+  rows: { visibleCount: null, hasSubtasks: null },
   _before: null,
 };
 
@@ -458,6 +500,9 @@ function createListViewStore(): Type<ListViewStoreInstance> {
         reset(): void {
           patchState(store, initialState);
         },
+        followRows: signalMethod<ListRowsSummary>((rows: ListRowsSummary): void => {
+          patchState(store, { rows });
+        }),
       };
     }),
   );

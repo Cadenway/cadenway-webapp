@@ -17,6 +17,17 @@
     i18n-placeholder="@@search.palette.placeholder"
   />
   <cw-command-list>
+    <cw-command-group heading="Suggestions" i18n-heading="@@search.palette.suggestions">
+      <cw-command-item
+        value="Create a task"
+        i18n-value="@@search.palette.create-task"
+        (selected)="createTask()"
+      >
+        <ng-icon name="phosphorPlusBold" class="text-muted-foreground" aria-hidden="true" />
+        <span i18n="@@search.palette.create-task">Create a task</span>
+        <kbd cwKbd class="ml-auto" aria-hidden="true">N</kbd>
+      </cw-command-item>
+    </cw-command-group>
     @if (recent().length > 0) {
       <cw-command-group heading="Recent tasks" i18n-heading="@@search.palette.recent">
         @for (task of recent(); track task.key) {
@@ -34,9 +45,16 @@
         <span i18n="@@search.palette.home">Home</span>
       </cw-command-item>
     </cw-command-group>
-    @if (store.lists().length > 0) {
+    @if (localLists().length > 0 || serverLists().length > 0) {
       <cw-command-group heading="Lists" i18n-heading="@@search.palette.lists">
-        @for (list of store.lists(); track list.listId) {
+        @for (list of localLists(); track list.id) {
+          <cw-command-item [value]="list.name" (selected)="openDirectoryList(list)">
+            <ng-icon [name]="list.icon" [class]="list.tone" aria-hidden="true" />
+            <span class="truncate">{{ list.name }}</span>
+            <span class="ml-auto text-xs text-muted-foreground">{{ list.spaceName }}</span>
+          </cw-command-item>
+        }
+        @for (list of serverLists(); track list.listId) {
           <cw-command-item
             [value]="list.name"
             [keywords]="serverResult"

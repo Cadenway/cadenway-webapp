@@ -1,5 +1,6 @@
 import {
   Component,
+  computed,
   effect,
   input,
   type InputSignal,
@@ -7,6 +8,7 @@ import {
   type ModelSignal,
   output,
   type OutputEmitterRef,
+  type Signal,
   signal,
   untracked,
   type WritableSignal,
@@ -156,6 +158,20 @@ export class SaveViewDialog {
    * @readonly
    */
   public readonly layoutName: InputSignal<string> = input('');
+
+  /**
+   * Property defaultIconLabel
+   *
+   * @description
+   * Name of the first choice, the layout's icon: « Icône de la vue (Liste) ».
+   *
+   * @type {Signal<string>}
+   * @readonly
+   */
+  protected readonly defaultIconLabel: Signal<string> = computed((): string => {
+    const layout: string = this.layoutName();
+    return $localize`:@@spaces.save-view.default-icon:View icon (${layout}:layout:)`;
+  });
 
   /**
    * Property initialName

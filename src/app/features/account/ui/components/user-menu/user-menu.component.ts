@@ -127,7 +127,7 @@ const PRESENCE_OPTIONS: readonly PresenceOption[] = [
  *
  * @description
  * The account button at the bottom of the rail and its menu (mockup `App.dc.html` lines 65-68 and
- * 93-136): the person's initials with their presence dot; a header with their name and address;
+ * 93-136): the person's initials with their presence dot, without a tooltip; a header with their name and address;
  * the « Statut » submenu (Actif, Ne pas déranger, Absent, Invisible) writing `PRESENCE` and
  * confirming with a toast; « Mon profil », « Sécurité et connexions » and « Notifications », which
  * open `/<slug>/account/<section>`; the « Thème » submenu (Clair, Sombre) driving `ThemeService`
@@ -328,7 +328,8 @@ export class UserMenu {
    * Property label
    *
    * @description
-   * Accessible name and tooltip of the rail button: the person and, once chosen, their presence.
+   * Accessible name of the rail button, which has no tooltip: the person and, once chosen, their
+   * presence.
    *
    * @type {Signal<string>}
    * @readonly

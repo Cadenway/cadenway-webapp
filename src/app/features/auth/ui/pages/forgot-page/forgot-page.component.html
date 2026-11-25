@@ -1,15 +1,17 @@
 <div class="flex w-full max-w-[400px] flex-col gap-5">
   <cw-card class="gap-6 p-6 sm:p-8">
     @if (unavailable()) {
-      <cw-alert variant="destructive" role="alert">
+      <cw-alert variant="destructive" class="[&>ng-icon]:text-inherit" role="alert">
         <cw-alert-description i18n="@@auth.forgot.unavailable"
           >The link could not be sent. Try again in a moment.</cw-alert-description
         >
       </cw-alert>
     }
     @if (sentTo(); as address) {
-      <div class="flex flex-col gap-4" aria-live="polite">
-        <div class="flex size-10 items-center justify-center rounded-lg bg-muted text-foreground">
+      <div class="flex flex-col gap-3" aria-live="polite">
+        <div
+          class="flex size-10 items-center justify-center rounded-lg bg-muted text-muted-foreground"
+        >
           <ng-icon name="phosphorEnvelopeSimpleOpenBold" class="size-5" aria-hidden="true" />
         </div>
         <div class="flex flex-col gap-1">
@@ -23,26 +25,26 @@
           </p>
         </div>
       </div>
-      <ul class="flex flex-col gap-2 text-sm text-muted-foreground">
+      <ul class="flex flex-col gap-2 rounded-lg bg-muted px-3 py-3 text-xs text-muted-foreground">
         <li class="flex items-start gap-2">
-          <ng-icon name="phosphorTrayBold" class="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+          <ng-icon name="phosphorTrayBold" class="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
           <span i18n="@@auth.forgot.spam">Nothing received? Look in your spam folder.</span>
         </li>
         <li class="flex items-start gap-2">
           <ng-icon
             name="phosphorShieldCheckBold"
-            class="mt-0.5 size-4 shrink-0"
+            class="mt-0.5 size-3.5 shrink-0"
             aria-hidden="true"
           />
           <span i18n="@@auth.forgot.once">The link works only once.</span>
         </li>
       </ul>
-      <div class="flex flex-col gap-3">
+      <div class="flex flex-col gap-2">
         <button
           cwButton
           type="button"
           variant="outline"
-          class="w-full"
+          class="w-full tabular-nums"
           [disabled]="countdown.running()"
           (click)="resend()"
         >
@@ -54,27 +56,32 @@
           }
         </button>
         @if (resent()) {
-          <p role="status" class="flex items-center gap-1.5 text-xs text-muted-foreground">
-            <ng-icon name="phosphorCheckCircleBold" class="size-3.5" aria-hidden="true" />
+          <p
+            role="status"
+            class="flex items-center justify-center gap-1.5 text-xs text-muted-foreground"
+          >
+            <ng-icon name="phosphorCheckCircleFill" class="size-3.5 text-jade" aria-hidden="true" />
             <span i18n="@@auth.forgot.resent"
               >A new link has just been sent; the previous one no longer works.</span
             >
           </p>
         }
-        <div class="flex items-center justify-between gap-2">
-          <button cwButton type="button" variant="ghost" size="sm" (click)="edit()">
+        <div class="grid grid-cols-2 gap-2">
+          <button cwButton type="button" variant="ghost" class="w-full" (click)="edit()">
             <ng-icon name="phosphorPencilSimpleBold" aria-hidden="true" />
             <span i18n="@@auth.code.change-address">Change the address</span>
           </button>
-          <a cwButton variant="ghost" size="sm" routerLink="/login">
+          <a cwButton variant="ghost" class="w-full" routerLink="/login">
             <ng-icon name="phosphorArrowLeftBold" aria-hidden="true" />
             <span i18n="@@auth.back-to-login">Back to sign-in</span>
           </a>
         </div>
       </div>
     } @else {
-      <div class="flex flex-col gap-4">
-        <div class="flex size-10 items-center justify-center rounded-lg bg-muted text-foreground">
+      <div class="flex flex-col gap-3">
+        <div
+          class="flex size-10 items-center justify-center rounded-lg bg-muted text-muted-foreground"
+        >
           <ng-icon name="phosphorKeyBold" class="size-5" aria-hidden="true" />
         </div>
         <div class="flex flex-col gap-1">
@@ -92,6 +99,7 @@
             >Email address</label
           >
           <input
+            #emailInput
             cwInput
             id="fp-email"
             type="text"
@@ -116,7 +124,6 @@
           cwButton
           type="submit"
           class="w-full"
-          [disabled]="forgotForm().invalid() || forgotForm().submitting()"
           [loading]="forgotForm().submitting()"
           i18n="@@auth.forgot.submit"
         >

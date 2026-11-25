@@ -192,10 +192,36 @@ describe('InboxRailItem', () => {
     expect(trigger().textContent).not.toContain('1 non lues');
   });
 
-  it('lists the notifications, marks them all read and clears the badge', async () => {
+  it('adds the due reminders to the badge, which a completed reminder leaves', async () => {
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      expect(trigger().getAttribute('aria-label')).toBe(
+        'Boîte de réception, 1 non lues, 1 rappels en retard',
+      );
+      expect(trigger().textContent.trim().endsWith('2')).toBe(true);
+    });
+
+    await openPopover();
+    Array.from(document.querySelectorAll<HTMLButtonElement>('[role="tab"]'))
+      .find((tab: HTMLButtonElement) => tab.textContent.includes('Rappels'))
+      ?.click();
+    await fixture.whenStable();
+    document
+      .querySelector<HTMLButtonElement>(
+        '[data-testid="reminder-row"] button[aria-label="Marquer le rappel de CAD-479 comme fait"]',
+      )
+      ?.click();
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      expect(trigger().getAttribute('aria-label')).toBe('Boîte de réception, 1 non lues');
+    });
+    expect(trigger().textContent.trim().endsWith('1')).toBe(true);
+  });
+
+  it('lists the notifications, marks them all read and clears the unread count', async () => {
     const content: HTMLElement = await openPopover();
     expect(content.textContent).toContain('Inès Robert');
-    expect(content.textContent).toContain('a mentionné votre nom');
+    expect(content.textContent).toContain('vous a mentionnée');
     expect(content.textContent).toContain('12 min');
 
     const markAll: HTMLButtonElement | undefined = Array.from(
@@ -208,6 +234,7 @@ describe('InboxRailItem', () => {
     expect(markAll?.disabled).toBe(true);
     expect(document.activeElement?.hasAttribute('data-inbox-heading')).toBe(true);
     expect(trigger().textContent).not.toContain('1 non lues');
+    expect(trigger().textContent).toContain('0 non lues, 1 rappels en retard');
   });
 
   it('opens the task of a notification', async () => {

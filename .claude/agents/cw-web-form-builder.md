@@ -40,7 +40,7 @@ Use the `Skill` tool (fallback: `.claude/skills/<name>/SKILL.md`).
 
 1. Model the form value as a `signal()` and build it with `form()`; bind fields with `[formField]`.
 2. Rules in the schema (`required`, `minLength`, `pattern`, custom validators); messages are English source strings with `@@ids`, translated word for word to the mockup's French.
-3. Submit stays disabled while the form is invalid; the first invalid field gets focus on submit.
+3. Submit stays enabled while the form is invalid: an invalid submit shows the errors and focuses the first invalid field; it is disabled only while its request is pending.
 4. Never `ReactiveFormsModule`, `FormBuilder`, `FormGroup` or `FormControl`.
 5. Field state stays in the form; submit hands the value to a SignalStore method (or to the
    data-access service when no store owns the data). Never mirror field state into a store.

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import { relativeTime, reminderTime, tomorrowMorning } from './inbox-time.util';
+import type { InboxReminder } from '../../models/inbox-reminder/inbox-reminder.interface';
+import { overdueCount, relativeTime, reminderTime, tomorrowMorning } from './inbox-time.util';
 
 /**
  * Constant NOW
@@ -49,5 +50,25 @@ describe('reminderTime', () => {
 describe('tomorrowMorning', () => {
   it('is 9 h tomorrow, local time', () => {
     expect(tomorrowMorning(NOW)).toBe(at(9, 9));
+  });
+});
+
+describe('overdueCount', () => {
+  it('counts the reminders due at the given moment', () => {
+    const reminder: (id: string, offset: number) => InboxReminder = (
+      id: string,
+      offset: number,
+    ): InboxReminder => ({
+      id,
+      taskKey: 'CAD-479',
+      taskName: 'Prévenir le support',
+      remindAt: new Date(NOW.getTime() + offset).toISOString(),
+      note: null,
+    });
+
+    expect(
+      overdueCount([reminder('r0', -60_000), reminder('r1', 0), reminder('r2', 60_000)], NOW),
+    ).toBe(2);
+    expect(overdueCount([], NOW)).toBe(0);
   });
 });

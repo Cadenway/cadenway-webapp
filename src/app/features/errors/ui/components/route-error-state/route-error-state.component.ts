@@ -122,6 +122,29 @@ export class RouteErrorState {
   public readonly requestId: InputSignal<string | null> = input<string | null>(null);
 
   /**
+   * Property unavailableTitle
+   *
+   * @description
+   * Title of the unavailable state the failing route gives, or null for « Impossible de charger
+   * cette page ».
+   *
+   * @type {InputSignal<string | null>}
+   * @readonly
+   */
+  public readonly unavailableTitle: InputSignal<string | null> = input<string | null>(null);
+
+  /**
+   * Property statusUrl
+   *
+   * @description
+   * Status page « État du service » opens in a new tab, or null to leave the link out.
+   *
+   * @type {InputSignal<string | null>}
+   * @readonly
+   */
+  public readonly statusUrl: InputSignal<string | null> = input<string | null>(null);
+
+  /**
    * Property trashLink
    *
    * @description

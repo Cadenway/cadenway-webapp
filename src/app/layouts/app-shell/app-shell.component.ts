@@ -58,7 +58,7 @@ const FOCUSABLE: string =
  * `organizationSwitcher`, the `railNavigation` groups and the `railFooter` items, and the rounded
  * main panel. The panel holds the off-canvas space sidebar (`sidebarHeader`, `sidebar` and
  * `sidebarFooter`) with the default `cw-sidebar` behavior, and the `main` landmark with the routed
- * screen. The sidebar header always ends with a collapse button; while the sidebar is collapsed, an
+ * screen. The first row of the sidebar header ends with a collapse button; while the sidebar is collapsed, an
  * expand toggle sits above the routed screen unless a screen claimed it through `SHELL_SIDEBAR`.
  * Opening with either toggle moves focus to the first control of the sidebar; any collapse that
  * leaves focus in the sidebar or on the page body returns it to the opener, or else to the expand

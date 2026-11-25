@@ -13,6 +13,7 @@
           [value]="'saved:' + view.id"
           [active]="value() === 'saved:' + view.id"
           [cwContextMenuTriggerFor]="viewMenu"
+          [title]="viewTitle(view)"
           (opened)="menuView.set(view)"
           data-testid="saved-view-tab"
         >
@@ -43,12 +44,12 @@
       cwButton
       type="button"
       variant="ghost"
-      size="sm"
-      class="text-muted-foreground"
+      size="xs"
+      class="h-6 gap-1 px-1.5 text-xs text-muted-foreground"
       [cwMenuTriggerFor]="addMenu"
       data-testid="view-menu"
     >
-      <ng-icon name="phosphorPlusBold" aria-hidden="true" />
+      <ng-icon name="phosphorPlusBold" class="size-3.5" aria-hidden="true" />
       <ng-container i18n="@@spaces.views.menu">View</ng-container>
     </button>
   </div>
@@ -77,6 +78,7 @@
 
 <cw-menu #viewMenu ariaLabel="Saved view" i18n-ariaLabel="@@spaces.saved.menu">
   @if (menuView(); as view) {
+    <cw-menu-label>{{ view.name }}</cw-menu-label>
     @if (view.id !== activeViewId()) {
       <button cwMenuItem (triggered)="savedPicked.emit(view)">
         <ng-icon name="phosphorArrowSquareOutBold" aria-hidden="true" />

@@ -18,20 +18,45 @@ import {
   RouterLink,
   RouterLinkActive,
 } from '@angular/router';
+import {
+  CwAlertDialog,
+  CwAlertDialogAction,
+  CwAlertDialogCancel,
+  CwAlertDialogDescription,
+  CwAlertDialogMedia,
+  CwAlertDialogTitle,
+  provideCwAlertDialogLabels,
+} from '@cadenway/ui/components/alert-dialog';
 import { CwButton } from '@cadenway/ui/components/button';
+import { CwContextMenuTriggerFor } from '@cadenway/ui/components/context-menu';
+import { CwMenu, CwMenuItem, CwMenuSeparator } from '@cadenway/ui/components/menu';
 import { CwSidebarGroup, CwSidebarItem, CwSidebarSpace } from '@cadenway/ui/components/sidebar';
 import { CwSkeleton } from '@cadenway/ui/components/skeleton';
+import { CwToastService } from '@cadenway/ui/components/toast';
 import { NgIcon } from '@ng-icons/core';
 import { filter, map } from 'rxjs';
+
+import { TaskCreate } from '@features/task';
+import { WORKSPACE_CONTEXT } from '@features/workspace/ports/workspace-context';
 
 import {
   type SidebarTip,
   sidebarTips,
 } from '../../../constants/sidebar-tips/sidebar-tips.constants';
 import type { Favorite } from '../../../models/favorite/favorite.interface';
-import type { Space } from '../../../models/space/space.interface';
-import type { ListSummary, SpaceOverview } from '../../../models/task-list/task-list.interface';
-import { SpacesNavigationStore } from '../../../state/spaces-navigation/spaces-navigation.store';
+import type { SpaceDetails, SpaceDraft } from '../../../models/space/space.interface';
+import type {
+  ListDraft,
+  ListSummary,
+  SpaceOverview,
+  TaskList,
+} from '../../../models/task-list/task-list.interface';
+import {
+  type SpaceCreationResult,
+  type SpacesDialog,
+  SpacesNavigationStore,
+} from '../../../state/spaces-navigation/spaces-navigation.store';
+import { todayIso } from '../../../utils/calendar-date/calendar-date.util';
 import {
   listIconName,
   lookIconName,
@@ -39,6 +64,8 @@ import {
   sidebarColor,
 } from '../../../utils/look/look.util';
 import { injectOrganizationSlug } from '../../../utils/workspace-route/workspace-route.util';
+import { addDays, ListDialog } from '../../dialogs/list-dialog/list-dialog.component';
+import { SpaceDialog } from '../../dialogs/space-dialog/space-dialog.component';
 import { SidebarTips } from '../sidebar-tips/sidebar-tips.component';
 
 /**
@@ -62,6 +89,16 @@ const TIPS_STORAGE_KEY: string = 'cadenway-tips';
 const LIST_PATH: RegExp = /^\/[^/?#]+\/l\/([^/?#]+)/u;
 
 /**
+ * Constant SPACE_PATH
+ *
+ * @description
+ * Reads the space id of a space overview address below a slug.
+ *
+ * @type {RegExp}
+ */
+const SPACE_PATH: RegExp = /^\/[^/?#]+\/spaces\/([^/?#]+)/u;
+
+/**
  * Interface SidebarSpaceView
  *
  * @description
@@ -75,10 +112,10 @@ interface SidebarSpaceView {
    * @description
    * The space.
    *
-   * @type {Space}
+   * @type {SpaceDetails}
    * @readonly
    */
-  readonly space: Space;
+  readonly space: SpaceDetails;
 
   /**
    * Property icon
@@ -127,6 +164,49 @@ interface SidebarSpaceView {
 }
 
 /**
+ * Interface SidebarFavoriteView
+ *
+ * @description
+ * A favorite list or saved view of « Favoris », with the list it opens when it is known.
+ */
+interface SidebarFavoriteView {
+  // #region Properties
+  /**
+   * Property favorite
+   *
+   * @description
+   * The favorite.
+   *
+   * @type {Favorite}
+   * @readonly
+   */
+  readonly favorite: Favorite;
+
+  /**
+   * Property list
+   *
+   * @description
+   * The favorite list as the sidebar shows it, or null for a saved view or an unread list.
+   *
+   * @type {TaskList | null}
+   * @readonly
+   */
+  readonly list: TaskList | null;
+
+  /**
+   * Property icon
+   *
+   * @description
+   * Bold icon; the item takes the Fill weight while current.
+   *
+   * @type {string}
+   * @readonly
+   */
+  readonly icon: string;
+  // #endregion
+}
+
+/**
  * Function readDismissed
  *
  * @description
@@ -147,32 +227,86 @@ function readDismissed(storage: Storage | null): readonly string[] {
 }
 
 /**
+ * Function draftOfSpace
+ *
+ * @description
+ * The settings of a space as a draft, to put them back.
+ *
+ * @param {SpaceDetails} space - The space.
+ * @returns {SpaceDraft} Its settings.
+ */
+function draftOfSpace(space: SpaceDetails): SpaceDraft {
+  return {
+    name: space.name,
+    prefix: space.prefix,
+    description: space.description,
+    icon: space.icon,
+    color: space.color,
+    private: space.private,
+  };
+}
+
+/**
+ * Function draftOfList
+ *
+ * @description
+ * The values of a list as a draft, to open its dialog or put them back.
+ *
+ * @param {TaskList} list - The list.
+ * @returns {ListDraft} Its values.
+ */
+function draftOfList(list: TaskList): ListDraft {
+  return { name: list.name, icon: list.icon, color: list.color, sprint: list.sprint };
+}
+
+/**
  * Component SpacesSidebar
  *
  * @description
- * The body of the shell's sidebar (`App.dc.html` lines 216-259): « Favoris » (the caller's
- * favorite lists and saved views, hidden when there are none), « Espaces » (an accordion of the
- * spaces with their lists and task counts, and the space overview on hover) and the suggestion
- * carousel. A container: it follows the route's organization in the workspace's
- * `SpacesNavigationStore`, opens the space of the list shown, and keeps the dismissed suggestions
- * in browser storage. The spaces show skeletons while read and an inline « Réessayer » when the
- * read fails. The « + » button and the right-click menus, whose entries open the dialogs of step
- * 4b, are not built yet.
+ * The body of the shell's sidebar (`App.dc.html` lines 197-259): « Favoris » (the caller's
+ * favorite lists and saved views, hidden when there are none; favorite spaces sit in the rail),
+ * « Espaces » (« Créer un espace », an accordion of the spaces with their lists and task counts,
+ * and « Modifier l’espace » and the space overview on hover) and the suggestion carousel. Spaces,
+ * lists, favorites and the background open their context menus (right click, ContextMenu key,
+ * Shift + F10, long press) with the mockup's items. A container: it follows the route's
+ * organization in the workspace's `SpacesNavigationStore`, opens the space of the list shown,
+ * keeps the dismissed suggestions in browser storage, and hosts the navigation's dialogs (space,
+ * list or sprint, space deletion) for every screen that opens them through the store, with their
+ * toasts and their « Annuler ». The spaces show skeletons while read and an inline « Réessayer »
+ * when the read fails.
  */
 @Component({
   selector: 'cw-spaces-sidebar',
   imports: [
+    CwAlertDialog,
+    CwAlertDialogAction,
+    CwAlertDialogCancel,
+    CwAlertDialogDescription,
+    CwAlertDialogMedia,
+    CwAlertDialogTitle,
     CwButton,
+    CwContextMenuTriggerFor,
+    CwMenu,
+    CwMenuItem,
+    CwMenuSeparator,
     CwSidebarGroup,
     CwSidebarItem,
     CwSidebarSpace,
     CwSkeleton,
+    ListDialog,
     NgIcon,
     RouterLink,
     RouterLinkActive,
     SidebarTips,
+    SpaceDialog,
   ],
-  host: { class: 'flex min-h-0 flex-1 flex-col gap-3' },
+  providers: [
+    provideCwAlertDialogLabels(() => ({
+      confirm: $localize`:@@spaces.labels.confirm:To confirm, type`,
+      more: (count: number): string => $localize`:@@spaces.labels.more:+ ${count}:count: others`,
+    })),
+  ],
+  host: { class: 'flex min-h-0 flex-1 flex-col' },
   templateUrl: './spaces-sidebar.component.html',
 })
 export class SpacesSidebar {
@@ -212,15 +346,59 @@ export class SpacesSidebar {
   protected readonly slug: Signal<string> = injectOrganizationSlug();
 
   /**
+   * Property organizationName
+   *
+   * @description
+   * Name of the committed organization, for the confidentiality of a space.
+   *
+   * @type {Signal<string>}
+   * @readonly
+   */
+  protected readonly organizationName: Signal<string>;
+
+  /**
    * Property router
    *
    * @description
-   * Router whose address names the list shown.
+   * Router whose address names the list or space shown.
    *
    * @type {Router}
    * @readonly
    */
   private readonly router: Router = inject(Router);
+
+  /**
+   * Property toasts
+   *
+   * @description
+   * Feedback of the menus and dialogs.
+   *
+   * @type {CwToastService}
+   * @readonly
+   */
+  private readonly toasts: CwToastService = inject(CwToastService);
+
+  /**
+   * Property taskCreate
+   *
+   * @description
+   * Task's create dialog, for « Nouvelle tâche ».
+   *
+   * @type {TaskCreate}
+   * @readonly
+   */
+  private readonly taskCreate: TaskCreate = inject(TaskCreate);
+
+  /**
+   * Property document
+   *
+   * @description
+   * Document whose window holds the clipboard and the address origin.
+   *
+   * @type {Document}
+   * @readonly
+   */
+  private readonly document: Document = inject(DOCUMENT);
 
   /**
    * Property storage
@@ -240,6 +418,23 @@ export class SpacesSidebar {
   })();
 
   /**
+   * Property url
+   *
+   * @description
+   * The address shown, after redirects.
+   *
+   * @type {Signal<string>}
+   * @readonly
+   */
+  private readonly url: Signal<string> = toSignal(
+    this.router.events.pipe(
+      filter((event: RouterEvent): event is NavigationEnd => event instanceof NavigationEnd),
+      map((event: NavigationEnd): string => event.urlAfterRedirects),
+    ),
+    { initialValue: this.router.url },
+  );
+
+  /**
    * Property currentListId
    *
    * @description
@@ -248,28 +443,48 @@ export class SpacesSidebar {
    * @type {Signal<string | null>}
    * @readonly
    */
-  private readonly currentListId: Signal<string | null> = toSignal(
-    this.router.events.pipe(
-      filter((event: RouterEvent): event is NavigationEnd => event instanceof NavigationEnd),
-      map(
-        (event: NavigationEnd): string | null =>
-          LIST_PATH.exec(event.urlAfterRedirects)?.[1] ?? null,
-      ),
-    ),
-    { initialValue: LIST_PATH.exec(this.router.url)?.[1] ?? null },
+  private readonly currentListId: Signal<string | null> = computed(
+    (): string | null => LIST_PATH.exec(this.url())?.[1] ?? null,
   );
 
   /**
    * Property favorites
    *
    * @description
-   * Favorite spaces, lists and saved views, in insertion order.
+   * Favorite lists and saved views, in insertion order; favorite spaces sit in the rail.
    *
-   * @type {Signal<readonly Favorite[]>}
+   * @type {Signal<readonly SidebarFavoriteView[]>}
    * @readonly
    */
-  protected readonly favorites: Signal<readonly Favorite[]> = computed((): readonly Favorite[] =>
-    this.navigation.favorites.hasValue() ? this.navigation.favorites.value() : [],
+  protected readonly favorites: Signal<readonly SidebarFavoriteView[]> = computed(
+    (): readonly SidebarFavoriteView[] => {
+      if (!this.navigation.favorites.hasValue()) return [];
+      const lists: ReadonlyMap<string, TaskList> = new Map(
+        this.spaces().flatMap((view: SidebarSpaceView) =>
+          view.lists.map((summary: ListSummary): [string, TaskList] => [
+            summary.list.id,
+            summary.list,
+          ]),
+        ),
+      );
+      return this.navigation.favorites
+        .value()
+        .filter((favorite: Favorite): boolean => favorite.kind !== 'space')
+        .map((favorite: Favorite): SidebarFavoriteView => {
+          const list: TaskList | null =
+            favorite.kind === 'list' ? (lists.get(favorite.targetId) ?? null) : null;
+          return {
+            favorite,
+            list,
+            icon:
+              favorite.kind === 'saved-view'
+                ? 'phosphorFunnelSimpleBold'
+                : list
+                  ? listIconName(list)
+                  : 'phosphorListBulletsBold',
+          };
+        });
+    },
   );
 
   /**
@@ -286,7 +501,7 @@ export class SpacesSidebar {
       if (!this.navigation.spaces.hasValue()) return [];
       const overviews: Readonly<Record<string, SpaceOverview>> =
         this.navigation.overviews.hasValue() ? this.navigation.overviews.value() : {};
-      return this.navigation.spaces.value().map((space: Space): SidebarSpaceView => {
+      return this.navigation.spaces.value().map((space: SpaceDetails): SidebarSpaceView => {
         const overview: SpaceOverview | undefined =
           space.id in overviews ? overviews[space.id] : undefined;
         const lists: readonly ListSummary[] = overview?.lists ?? [];
@@ -331,6 +546,19 @@ export class SpacesSidebar {
   private readonly tipIndex: WritableSignal<number> = signal(0);
 
   /**
+   * Property allTips
+   *
+   * @description
+   * Every suggestion the workspace can offer now: « Inviter votre équipe » needs free seats.
+   *
+   * @type {Signal<readonly SidebarTip[]>}
+   * @readonly
+   */
+  private readonly allTips: Signal<readonly SidebarTip[]> = computed((): readonly SidebarTip[] =>
+    sidebarTips(this.navigation.seats.hasValue() ? this.navigation.seats.value() : null),
+  );
+
+  /**
    * Property tips
    *
    * @description
@@ -340,7 +568,7 @@ export class SpacesSidebar {
    * @readonly
    */
   protected readonly tips: Signal<readonly SidebarTip[]> = computed((): readonly SidebarTip[] =>
-    sidebarTips().filter((tip: SidebarTip): boolean => !this.dismissed().includes(tip.key)),
+    this.allTips().filter((tip: SidebarTip): boolean => !this.dismissed().includes(tip.key)),
   );
 
   /**
@@ -356,6 +584,196 @@ export class SpacesSidebar {
     const count: number = this.tips().length;
     return count === 0 ? 0 : ((this.tipIndex() % count) + count) % count;
   });
+
+  /**
+   * Property dialog
+   *
+   * @description
+   * The navigation's dialog open, or null.
+   *
+   * @type {Signal<SpacesDialog | null>}
+   * @readonly
+   */
+  protected readonly dialog: Signal<SpacesDialog | null> = computed((): SpacesDialog | null =>
+    this.navigation.dialog(),
+  );
+
+  /**
+   * Property spaceDialog
+   *
+   * @description
+   * The space dialog's request, or null.
+   *
+   * @type {Signal<{ kind: 'space'; space: SpaceDetails | null } | null>}
+   * @readonly
+   */
+  protected readonly spaceDialog: Signal<{ kind: 'space'; space: SpaceDetails | null } | null> =
+    computed(() => {
+      const dialog: SpacesDialog | null = this.dialog();
+      return dialog?.kind === 'space' ? dialog : null;
+    });
+
+  /**
+   * Property listDialog
+   *
+   * @description
+   * The list dialog's request, or null.
+   *
+   * @type {Signal<Extract<SpacesDialog, { kind: 'list' }> | null>}
+   * @readonly
+   */
+  protected readonly listDialog: Signal<Extract<SpacesDialog, { kind: 'list' }> | null> = computed(
+    () => {
+      const dialog: SpacesDialog | null = this.dialog();
+      return dialog?.kind === 'list' ? dialog : null;
+    },
+  );
+
+  /**
+   * Property deletedSpace
+   *
+   * @description
+   * The space whose deletion is asked, or null.
+   *
+   * @type {Signal<SpaceDetails | null>}
+   * @readonly
+   */
+  protected readonly deletedSpace: Signal<SpaceDetails | null> = computed(
+    (): SpaceDetails | null => {
+      const dialog: SpacesDialog | null = this.dialog();
+      return dialog?.kind === 'delete-space' ? dialog.space : null;
+    },
+  );
+
+  /**
+   * Property listDraft
+   *
+   * @description
+   * The values the list dialog opens with: the list edited, or the proposal of a new list or of
+   * the next sprint (« Sprint 15 », the day after the end of the last sprint or today, 14 days,
+   * the lightning and « Améthyste »).
+   *
+   * @type {Signal<ListDraft>}
+   * @readonly
+   */
+  protected readonly listDraft: Signal<ListDraft> = computed((): ListDraft => {
+    const request: Extract<SpacesDialog, { kind: 'list' }> | null = this.listDialog();
+    if (request?.list) return draftOfList(request.list);
+    if (!request?.sprint) return { name: '', icon: null, color: 'gris', sprint: null };
+    const sprints: readonly TaskList[] = (
+      this.spaces().find((view: SidebarSpaceView): boolean => view.space.id === request.spaceId)
+        ?.lists ?? []
+    )
+      .map((summary: ListSummary): TaskList => summary.list)
+      .filter((list: TaskList): boolean => list.sprint !== null);
+    const lastEnd: string | undefined = sprints
+      .map((list: TaskList): string => list.sprint?.endDate ?? '')
+      .filter(Boolean)
+      .sort()
+      .pop();
+    const start: string = lastEnd ? addDays(lastEnd, 1) : todayIso();
+    const number: RegExpExecArray | null = /(\d+)\s*$/u.exec(sprints.at(-1)?.name ?? '');
+    const next: number = number ? Number.parseInt(number[1], 10) + 1 : sprints.length + 1;
+    return {
+      name: $localize`:@@spaces.list-dialog.sprint-name:Sprint ${next}:number:`,
+      icon: 'lightning',
+      color: 'violet',
+      sprint: { startDate: start, endDate: addDays(start, 13), goal: null },
+    };
+  });
+
+  /**
+   * Property takenPrefixes
+   *
+   * @description
+   * Prefixes of the spaces other than the one edited.
+   *
+   * @type {Signal<readonly string[]>}
+   * @readonly
+   */
+  protected readonly takenPrefixes: Signal<readonly string[]> = computed((): readonly string[] => {
+    const edited: string | undefined = this.spaceDialog()?.space?.id;
+    return this.spaces()
+      .filter((view: SidebarSpaceView): boolean => view.space.id !== edited)
+      .map((view: SidebarSpaceView): string => view.space.prefix);
+  });
+
+  /**
+   * Property prefixTaken
+   *
+   * @description
+   * The prefix the gateway refused as used for the open space dialog, or null.
+   *
+   * @type {WritableSignal<string | null>}
+   * @readonly
+   */
+  protected readonly prefixTaken: WritableSignal<string | null> = signal<string | null>(null);
+
+  /**
+   * Property pending
+   *
+   * @description
+   * Whether a dialog's write is being recorded.
+   *
+   * @type {WritableSignal<boolean>}
+   * @readonly
+   */
+  protected readonly pending: WritableSignal<boolean> = signal(false);
+
+  /**
+   * Property deleteSummary
+   *
+   * @description
+   * Lists and tasks of the space whose deletion is asked.
+   *
+   * @type {Signal<{ lists: number; tasks: number }>}
+   * @readonly
+   */
+  protected readonly deleteSummary: Signal<{ lists: number; tasks: number }> = computed(() => {
+    const space: SpaceDetails | null = this.deletedSpace();
+    const overview: SpaceOverview | undefined =
+      space && this.navigation.overviews.hasValue()
+        ? this.navigation.overviews.value()[space.id]
+        : undefined;
+    return { lists: overview?.lists.length ?? 0, tasks: overview?.taskCount ?? 0 };
+  });
+
+  /**
+   * Property deleteTitle
+   *
+   * @description
+   * « Supprimer l’espace « Produit » ? ».
+   *
+   * @type {Signal<string>}
+   * @readonly
+   */
+  protected readonly deleteTitle: Signal<string> = computed((): string => {
+    const name: string = this.deletedSpace()?.name ?? '';
+    return $localize`:@@spaces.space.delete-title:Delete the space “${name}:name:”?`;
+  });
+
+  /**
+   * Property deleteText
+   *
+   * @description
+   * The consequences of the deletion, with its lists and tasks counted.
+   *
+   * @type {Signal<string>}
+   * @readonly
+   */
+  protected readonly deleteText: Signal<string> = computed((): string => {
+    const { lists: listCount, tasks: taskCount }: { lists: number; tasks: number } =
+      this.deleteSummary();
+    const lists: string =
+      listCount === 1
+        ? $localize`:@@spaces.space.delete-lists-one:1 list`
+        : $localize`:@@spaces.space.delete-lists:${listCount}:count: lists`;
+    const tasks: string =
+      taskCount === 1
+        ? $localize`:@@spaces.space.delete-tasks-one:1 task`
+        : $localize`:@@spaces.space.delete-tasks:${taskCount}:count: tasks`;
+    return $localize`:@@spaces.space.delete-text:${lists}:lists: and ${tasks}:tasks:: the tasks go to the trash, the lists and the space are deleted. Members lose access immediately.`;
+  });
   // #endregion
 
   // #region Constructor
@@ -368,6 +786,8 @@ export class SpacesSidebar {
    * @constructor
    */
   public constructor() {
+    const workspace: { organization: Signal<{ name: string }> } = inject(WORKSPACE_CONTEXT);
+    this.organizationName = computed((): string => workspace.organization().name);
     effect((): void => {
       const listId: string | null = this.currentListId();
       if (listId === null) return;
@@ -403,11 +823,24 @@ export class SpacesSidebar {
    * @description
    * Name of a space's overview link (« Vue d’ensemble de Produit »).
    *
-   * @param {Space} space - The space.
+   * @param {SpaceDetails} space - The space.
    * @returns {string} The label.
    */
-  protected overviewLabel(space: Space): string {
+  protected overviewLabel(space: SpaceDetails): string {
     return $localize`:@@spaces.sidebar.overview:Overview of ${space.name}:name:`;
+  }
+
+  /**
+   * Method editLabel
+   *
+   * @description
+   * Name of a space's edit button (« Modifier l’espace Produit »).
+   *
+   * @param {SpaceDetails} space - The space.
+   * @returns {string} The label.
+   */
+  protected editLabel(space: SpaceDetails): string {
+    return $localize`:@@spaces.sidebar.edit-space:Edit the space ${space.name}:name:`;
   }
 
   /**
@@ -423,7 +856,7 @@ export class SpacesSidebar {
     return [
       '/',
       this.slug(),
-      favorite.kind === 'space' ? 'spaces' : 'l',
+      'l',
       favorite.kind === 'saved-view' ? (favorite.listId ?? '') : favorite.targetId,
     ];
   }
@@ -455,6 +888,444 @@ export class SpacesSidebar {
   }
 
   /**
+   * Method asSpace
+   *
+   * @description
+   * The space a context menu was opened on.
+   *
+   * @param {unknown} data - The menu's data.
+   * @returns {SpaceDetails | null} The space, or null.
+   */
+  protected asSpace(data: unknown): SpaceDetails | null {
+    return typeof data === 'object' && data !== null && 'prefix' in data
+      ? (data as SpaceDetails)
+      : null;
+  }
+
+  /**
+   * Method asList
+   *
+   * @description
+   * The list a context menu was opened on.
+   *
+   * @param {unknown} data - The menu's data.
+   * @returns {TaskList | null} The list, or null.
+   */
+  protected asList(data: unknown): TaskList | null {
+    return typeof data === 'object' && data !== null && 'spaceId' in data
+      ? (data as TaskList)
+      : null;
+  }
+
+  /**
+   * Method asFavorite
+   *
+   * @description
+   * The saved view favorite a context menu was opened on.
+   *
+   * @param {unknown} data - The menu's data.
+   * @returns {Favorite | null} The favorite, or null.
+   */
+  protected asFavorite(data: unknown): Favorite | null {
+    return typeof data === 'object' && data !== null && 'targetId' in data
+      ? (data as Favorite)
+      : null;
+  }
+
+  /**
+   * Method isFavoriteList
+   *
+   * @description
+   * Whether a list is among the favorites.
+   *
+   * @param {TaskList} list - The list.
+   * @returns {boolean} Whether it is.
+   */
+  protected isFavoriteList(list: TaskList): boolean {
+    return this.navigation.favoriteOf('list', list.id) !== undefined;
+  }
+
+  /**
+   * Method isFavoriteSpace
+   *
+   * @description
+   * Whether a space is among the favorite spaces.
+   *
+   * @param {SpaceDetails} space - The space.
+   * @returns {boolean} Whether it is.
+   */
+  protected isFavoriteSpace(space: SpaceDetails): boolean {
+    return this.navigation.favoriteOf('space', space.id) !== undefined;
+  }
+
+  /**
+   * Method openList
+   *
+   * @description
+   * « Ouvrir »: shows a list.
+   *
+   * @param {TaskList} list - The list.
+   */
+  protected openList(list: TaskList): void {
+    void this.router.navigate(['/', this.slug(), 'l', list.id]);
+  }
+
+  /**
+   * Method openFavorite
+   *
+   * @description
+   * « Ouvrir » on a favorite saved view: shows its list with the view applied.
+   *
+   * @param {Favorite} favorite - The favorite.
+   */
+  protected openFavorite(favorite: Favorite): void {
+    void this.router.navigate(this.favoriteLink(favorite), {
+      queryParams: this.favoriteQuery(favorite),
+    });
+  }
+
+  /**
+   * Method newTask
+   *
+   * @description
+   * « Nouvelle tâche »: opens Task's create dialog in the list.
+   *
+   * @param {TaskList} list - The list.
+   */
+  protected newTask(list: TaskList): void {
+    this.taskCreate.open({ listId: list.id });
+  }
+
+  /**
+   * Method editList
+   *
+   * @description
+   * « Modifier la liste » or « Modifier le sprint ».
+   *
+   * @param {TaskList} list - The list.
+   */
+  protected editList(list: TaskList): void {
+    this.navigation.openDialog({
+      kind: 'list',
+      spaceId: list.spaceId,
+      list,
+      sprint: list.sprint !== null,
+    });
+  }
+
+  /**
+   * Method toggleListFavorite
+   *
+   * @description
+   * « Ajouter aux favoris » or « Retirer des favoris » on a list.
+   *
+   * @param {TaskList} list - The list.
+   */
+  protected async toggleListFavorite(list: TaskList): Promise<void> {
+    const on: boolean = !this.isFavoriteList(list);
+    if (!(await this.navigation.setFavorite('list', list.id, list.name, on))) {
+      this.toasts.error($localize`:@@spaces.favorite.failed:The favorites could not be changed`);
+      return;
+    }
+    this.toasts.show(
+      on
+        ? $localize`:@@spaces.favorite.added:Added to favorites`
+        : $localize`:@@spaces.favorite.removed:Removed from favorites`,
+      { description: list.name },
+    );
+  }
+
+  /**
+   * Method copyListLink
+   *
+   * @description
+   * « Copier le lien » of a list.
+   *
+   * @param {TaskList} list - The list.
+   */
+  protected async copyListLink(list: TaskList): Promise<void> {
+    const view: Window | null = this.document.defaultView;
+    const link: string = `${view?.location.origin ?? ''}/${this.slug()}/l/${list.id}`;
+    try {
+      await view?.navigator.clipboard.writeText(link);
+      this.toasts.show($localize`:@@spaces.list.link-copied:List link copied`, {
+        description: link,
+      });
+    } catch {
+      this.toasts.error($localize`:@@spaces.list.link-failed:The link could not be copied`, {
+        description: link,
+      });
+    }
+  }
+
+  /**
+   * Method archiveList
+   *
+   * @description
+   * « Archiver »: takes the list out of the sidebar, opens its space when it was shown, and offers
+   * « Annuler », which brings it back and shows it again.
+   *
+   * @param {TaskList} list - The list.
+   */
+  protected async archiveList(list: TaskList): Promise<void> {
+    const shown: boolean = this.currentListId() === list.id;
+    if (!(await this.navigation.archiveList(list))) {
+      this.toasts.error($localize`:@@spaces.list.archive-failed:The list could not be archived`);
+      return;
+    }
+    if (shown) void this.router.navigate(['/', this.slug(), 'spaces', list.spaceId]);
+    const name: string = list.name;
+    this.toasts.show(
+      list.sprint
+        ? $localize`:@@spaces.list.sprint-archived:Sprint archived`
+        : $localize`:@@spaces.list.archived:List archived`,
+      {
+        description: $localize`:@@spaces.list.archived-text:${name}:name: no longer shows in the sidebar.`,
+        undo: (): void => {
+          void this.restoreList(list, shown);
+        },
+      },
+    );
+  }
+
+  /**
+   * Method openOverview
+   *
+   * @description
+   * « Vue d’ensemble »: shows a space's overview with its lists open.
+   *
+   * @param {SpaceDetails} space - The space.
+   */
+  protected openOverview(space: SpaceDetails): void {
+    this.navigation.setExpanded(space.id, true);
+    void this.router.navigate(['/', this.slug(), 'spaces', space.id]);
+  }
+
+  /**
+   * Method editSpace
+   *
+   * @description
+   * « Modifier l’espace ».
+   *
+   * @param {SpaceDetails} space - The space.
+   */
+  protected editSpace(space: SpaceDetails): void {
+    this.navigation.openDialog({ kind: 'space', space });
+  }
+
+  /**
+   * Method createSpace
+   *
+   * @description
+   * « Créer un espace » and « Nouvel espace ».
+   */
+  protected createSpace(): void {
+    this.navigation.openDialog({ kind: 'space', space: null });
+  }
+
+  /**
+   * Method newList
+   *
+   * @description
+   * « Nouvelle liste » or « Nouveau sprint » in a space.
+   *
+   * @param {SpaceDetails} space - The space.
+   * @param {boolean} sprint - Whether a sprint is proposed.
+   */
+  protected newList(space: SpaceDetails, sprint: boolean): void {
+    this.navigation.openDialog({ kind: 'list', spaceId: space.id, list: null, sprint });
+  }
+
+  /**
+   * Method toggleSpaceFavorite
+   *
+   * @description
+   * « Ajouter aux espaces favoris » or « Retirer des espaces favoris ».
+   *
+   * @param {SpaceDetails} space - The space.
+   */
+  protected async toggleSpaceFavorite(space: SpaceDetails): Promise<void> {
+    const on: boolean = !this.isFavoriteSpace(space);
+    if (!(await this.navigation.setFavorite('space', space.id, space.name, on))) {
+      this.toasts.error($localize`:@@spaces.favorite.failed:The favorites could not be changed`);
+      return;
+    }
+    this.toasts.show(
+      on
+        ? $localize`:@@spaces.favorite.space-added:Added to favorite spaces`
+        : $localize`:@@spaces.favorite.space-removed:Removed from favorite spaces`,
+      { description: space.name },
+    );
+  }
+
+  /**
+   * Method askDeleteSpace
+   *
+   * @description
+   * « Supprimer l’espace »: asks for the typed name first.
+   *
+   * @param {SpaceDetails} space - The space.
+   */
+  protected askDeleteSpace(space: SpaceDetails): void {
+    this.navigation.openDialog({ kind: 'delete-space', space });
+  }
+
+  /**
+   * Method dialogOpenChanged
+   *
+   * @description
+   * Closes the navigation's dialog when a dialog closes itself (Annuler, Escape, outside click).
+   *
+   * @param {boolean} open - Whether the dialog stays open.
+   */
+  protected dialogOpenChanged(open: boolean): void {
+    if (!open) {
+      this.prefixTaken.set(null);
+      this.navigation.closeDialog();
+    }
+  }
+
+  /**
+   * Method saveSpace
+   *
+   * @description
+   * Records the space dialog: « Espace créé » opens its first list, « Espace modifié » offers
+   * « Annuler », which puts the previous settings back. A used prefix stays in the dialog with its
+   * error.
+   *
+   * @param {SpaceDraft} draft - The dialog's values.
+   */
+  protected async saveSpace(draft: SpaceDraft): Promise<void> {
+    const edited: SpaceDetails | null = this.spaceDialog()?.space ?? null;
+    this.pending.set(true);
+    if (edited) {
+      const recorded: SpaceDetails | 'prefix-taken' | null = await this.navigation.updateSpace(
+        edited,
+        draft,
+      );
+      this.pending.set(false);
+      if (recorded === 'prefix-taken') {
+        this.prefixTaken.set(draft.prefix);
+        return;
+      }
+      if (!recorded) {
+        this.toasts.error($localize`:@@spaces.space.save-failed:The space could not be saved`);
+        return;
+      }
+      this.dialogOpenChanged(false);
+      this.toasts.show($localize`:@@spaces.space.updated:Space updated`, {
+        description: recorded.name,
+        undo: (): void => {
+          void this.navigation.updateSpace(recorded, draftOfSpace(edited));
+        },
+      });
+      return;
+    }
+    const created: SpaceCreationResult = await this.navigation.createSpace(draft);
+    this.pending.set(false);
+    if (created === 'prefix-taken') {
+      this.prefixTaken.set(draft.prefix);
+      return;
+    }
+    if (!created) {
+      this.toasts.error($localize`:@@spaces.space.save-failed:The space could not be saved`);
+      return;
+    }
+    this.dialogOpenChanged(false);
+    const name: string = created.space.name;
+    this.toasts.show($localize`:@@spaces.space.created:Space created`, {
+      description: $localize`:@@spaces.space.created-text:${name}:name: · a first list is ready.`,
+    });
+    void this.router.navigate(['/', this.slug(), 'l', created.firstList.id]);
+  }
+
+  /**
+   * Method saveList
+   *
+   * @description
+   * Records the list dialog: a created list or sprint opens; a change offers « Annuler », which
+   * puts the previous values back.
+   *
+   * @param {ListDraft} draft - The dialog's values.
+   */
+  protected async saveList(draft: ListDraft): Promise<void> {
+    const request: Extract<SpacesDialog, { kind: 'list' }> | null = this.listDialog();
+    if (!request) return;
+    this.pending.set(true);
+    const edited: TaskList | null = request.list;
+    const recorded: TaskList | null = edited
+      ? await this.navigation.updateList(edited, draft)
+      : await this.navigation.createList(request.spaceId, draft);
+    this.pending.set(false);
+    if (!recorded) {
+      this.toasts.error($localize`:@@spaces.list.save-failed:The list could not be saved`);
+      return;
+    }
+    this.dialogOpenChanged(false);
+    if (edited) {
+      this.toasts.show(
+        recorded.sprint
+          ? $localize`:@@spaces.list.sprint-updated:Sprint updated`
+          : $localize`:@@spaces.list.updated:List updated`,
+        {
+          description: recorded.name,
+          undo: (): void => {
+            void this.navigation.updateList(recorded, draftOfList(edited));
+          },
+        },
+      );
+      return;
+    }
+    this.toasts.show(
+      recorded.sprint
+        ? $localize`:@@spaces.list.sprint-created:Sprint created`
+        : $localize`:@@spaces.list.created:List created`,
+      { description: recorded.name },
+    );
+    this.openList(recorded);
+  }
+
+  /**
+   * Method confirmDeleteSpace
+   *
+   * @description
+   * Deletes the space once its name is typed, and leaves it for the home screen when it was
+   * shown.
+   *
+   * @param {SpaceDetails} space - The space.
+   */
+  protected async confirmDeleteSpace(space: SpaceDetails): Promise<void> {
+    const shownSpace: string | null = SPACE_PATH.exec(this.url())?.[1] ?? null;
+    const listId: string | null = this.currentListId();
+    const shown: boolean =
+      shownSpace === space.id ||
+      (listId !== null &&
+        (this.spaces()
+          .find((view: SidebarSpaceView): boolean => view.space.id === space.id)
+          ?.lists.some((summary: ListSummary): boolean => summary.list.id === listId) ??
+          false));
+    const tasks: number = this.deleteSummary().tasks;
+    this.pending.set(true);
+    const deleted: boolean = await this.navigation.deleteSpace(space);
+    this.pending.set(false);
+    this.dialogOpenChanged(false);
+    if (!deleted) {
+      this.toasts.error($localize`:@@spaces.space.delete-failed:The space could not be deleted`);
+      return;
+    }
+    const name: string = space.name;
+    this.toasts.show($localize`:@@spaces.space.deleted:Space “${name}:name:” deleted`, {
+      description:
+        tasks > 1
+          ? $localize`:@@spaces.list.deleted-text:${tasks}:count: tasks in the trash, restorable for 30 days.`
+          : tasks === 1
+            ? $localize`:@@spaces.list.deleted-text-one:1 task in the trash, restorable for 30 days.`
+            : $localize`:@@spaces.list.deleted-empty:No task to move.`,
+    });
+    if (shown) void this.router.navigate(['/', this.slug()]);
+  }
+
+  /**
    * Method moveTip
    *
    * @description
@@ -473,13 +1344,38 @@ export class SpacesSidebar {
    * Hides every suggestion and remembers it in browser storage.
    */
   protected dismissTips(): void {
-    const all: readonly string[] = sidebarTips().map((tip: SidebarTip): string => tip.key);
+    const all: readonly string[] = [
+      ...new Set([
+        ...this.dismissed(),
+        ...this.allTips().map((tip: SidebarTip): string => tip.key),
+      ]),
+    ];
     this.dismissed.set(all);
     try {
       this.storage?.setItem(TIPS_STORAGE_KEY, JSON.stringify(all));
     } catch {
       return;
     }
+  }
+
+  /**
+   * Method restoreList
+   *
+   * @description
+   * The « Annuler » of an archiving: brings the list back and shows it again when it was shown.
+   *
+   * @param {TaskList} list - The archived list.
+   * @param {boolean} shown - Whether it was shown when archived.
+   * @returns {Promise<void>} Resolves once handled.
+   */
+  private async restoreList(list: TaskList, shown: boolean): Promise<void> {
+    if (!(await this.navigation.unarchiveList(list.id))) {
+      this.toasts.error(
+        $localize`:@@spaces.list.unarchive-failed:The list could not be brought back`,
+      );
+      return;
+    }
+    if (shown) this.openList(list);
   }
   // #endregion
 }

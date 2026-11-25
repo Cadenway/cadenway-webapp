@@ -3,6 +3,7 @@ import type { SlotContribution, SlotFeature } from '@shared/layout-slot';
 
 import { RuntimeConfigStore } from '@core/config';
 
+import { HostName } from '../../ui/components/host-name/host-name.component';
 import { LegalLinks } from '../../ui/components/legal-links/legal-links.component';
 import { ThemeToggle } from '../../ui/components/theme-toggle/theme-toggle.component';
 
@@ -17,6 +18,21 @@ import { ThemeToggle } from '../../ui/components/theme-toggle/theme-toggle.compo
 export function withThemeToggle(): SlotFeature<SlotContribution> {
   return {
     useFactory: (): SlotContribution => ({ id: 'auth-theme', order: 20, component: ThemeToggle }),
+  };
+}
+
+/**
+ * Function withHostName
+ *
+ * @description
+ * Contributes the application host, before the theme button, to the header actions of the
+ * sign-in frame.
+ *
+ * @returns {SlotFeature<SlotContribution>} The contribution factory.
+ */
+export function withHostName(): SlotFeature<SlotContribution> {
+  return {
+    useFactory: (): SlotContribution => ({ id: 'auth-host', order: 10, component: HostName }),
   };
 }
 

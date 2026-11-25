@@ -8,6 +8,7 @@ import { provideAuthLayoutSlots } from '@layouts/auth-layout/providers';
 import { openInvitation } from './http/guards/invitation/invitation.guard';
 import { requireSession } from './http/guards/session/session.guard';
 import {
+  withHostName,
   withLegalLinks,
   withThemeToggle,
 } from './providers/auth-layout-slots/auth-layout-slots.provider';
@@ -18,7 +19,7 @@ import { AuthFlowStore } from './state/auth-flow/auth-flow.store';
  *
  * @description
  * The public entry screens, mounted at `''` by `APP_ROUTES`. The root route loads the sign-in
- * frame (`AuthLayout`), binds its header theme button and footer legal links, provides the icons,
+ * frame (`AuthLayout`), binds its header host name and theme button and its footer legal links, provides the icons,
  * the English labels of the code and password-strength bricks, and the `AuthFlowStore` the
  * screens share. A path none of the children matches falls through to the next application
  * route (the workspace under `/:org`). Paths are the ones e-mails and the gateway link to.
@@ -31,7 +32,7 @@ export const AUTH_ROUTES: Routes = [
     providers: [
       provideCadenwayIcons(),
       provideAuthLayoutSlots({
-        headerActions: [withThemeToggle()],
+        headerActions: [withHostName(), withThemeToggle()],
         footerLinks: [withLegalLinks()],
       }),
       provideCwInputOtpLabels(() => ({
@@ -73,7 +74,7 @@ export const AUTH_ROUTES: Routes = [
       },
       {
         path: 'login/code',
-        title: $localize`:@@auth.code-sign-in.title:Sign in with a code`,
+        title: $localize`:@@auth.code-sign-in.title:One-time code`,
         loadComponent: async (): Promise<Type<unknown>> =>
           (await import('./ui/pages/code-sign-in-page/code-sign-in-page.component')).CodeSignInPage,
       },
@@ -85,13 +86,13 @@ export const AUTH_ROUTES: Routes = [
       },
       {
         path: 'signup',
-        title: $localize`:@@auth.signup.title:Create an account`,
+        title: $localize`:@@auth.signup.title:Sign up`,
         loadComponent: async (): Promise<Type<unknown>> =>
           (await import('./ui/pages/signup-page/signup-page.component')).SignupPage,
       },
       {
         path: 'signup/verify',
-        title: $localize`:@@auth.signup-verify.title:Confirm your email address`,
+        title: $localize`:@@auth.signup-verify.title:One-time code`,
         loadComponent: async (): Promise<Type<unknown>> =>
           (await import('./ui/pages/signup-verify-page/signup-verify-page.component'))
             .SignupVerifyPage,
@@ -104,7 +105,7 @@ export const AUTH_ROUTES: Routes = [
       },
       {
         path: 'reset',
-        title: $localize`:@@auth.reset.title:Choose a new password`,
+        title: $localize`:@@auth.reset.title:New password`,
         loadComponent: async (): Promise<Type<unknown>> =>
           (await import('./ui/pages/reset-page/reset-page.component')).ResetPage,
       },
@@ -116,7 +117,7 @@ export const AUTH_ROUTES: Routes = [
       },
       {
         path: 'organizations',
-        title: $localize`:@@auth.organizations.title:Choose an organization`,
+        title: $localize`:@@auth.organizations.title:Organizations`,
         canActivate: [requireSession],
         loadComponent: async (): Promise<Type<unknown>> =>
           (await import('./ui/pages/organizations-page/organizations-page.component'))
@@ -124,7 +125,7 @@ export const AUTH_ROUTES: Routes = [
       },
       {
         path: 'organizations/new',
-        title: $localize`:@@auth.organization-create.title:Create an organization`,
+        title: $localize`:@@auth.organization-create.title:Organizations`,
         canActivate: [requireSession],
         loadComponent: async (): Promise<Type<unknown>> =>
           (await import('./ui/pages/organization-create-page/organization-create-page.component'))

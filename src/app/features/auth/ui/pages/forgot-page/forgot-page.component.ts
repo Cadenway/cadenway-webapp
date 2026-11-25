@@ -1,4 +1,12 @@
-import { Component, inject, signal, type WritableSignal } from '@angular/core';
+import {
+  Component,
+  type ElementRef,
+  inject,
+  type Signal,
+  signal,
+  viewChild,
+  type WritableSignal,
+} from '@angular/core';
 import { email, type FieldTree, form, FormField, required, submit } from '@angular/forms/signals';
 import { RouterLink } from '@angular/router';
 import { CwAlert, CwAlertDescription } from '@cadenway/ui/components/alert';
@@ -92,6 +100,19 @@ export class ForgotPage {
   protected readonly unavailable: WritableSignal<boolean> = signal(false);
 
   /**
+   * Property emailInput
+   *
+   * @description
+   * The address field, focused and selected by « Modifier l'adresse »; undefined while the sent
+   * state shows.
+   *
+   * @type {Signal<ElementRef<HTMLInputElement> | undefined>}
+   * @readonly
+   */
+  private readonly emailInput: Signal<ElementRef<HTMLInputElement> | undefined> =
+    viewChild<ElementRef<HTMLInputElement>>('emailInput');
+
+  /**
    * Property model
    *
    * @description
@@ -164,7 +185,9 @@ export class ForgotPage {
     this.resent.set(false);
     this.countdown.start(0);
     setTimeout(() => {
-      this.forgotForm.email().focusBoundControl();
+      const input: HTMLInputElement | undefined = this.emailInput()?.nativeElement;
+      input?.focus();
+      input?.select();
     });
   }
 

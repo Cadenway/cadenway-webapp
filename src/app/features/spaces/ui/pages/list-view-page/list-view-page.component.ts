@@ -1,8 +1,5 @@
 import { BreakpointObserver } from '@angular/cdk/layout';
-import { toSignal } from '@angular/core/rxjs-interop';
-import { map } from 'rxjs';
-
-import { SPACES_RETRY } from '../../../constants/data-table-texts/data-table-texts.constants';
+import { DOCUMENT } from '@angular/common';
 import {
   afterRenderEffect,
   Component,
@@ -13,13 +10,21 @@ import {
   inject,
   input,
   type InputSignal,
+  LOCALE_ID,
   type Signal,
   signal,
   untracked,
   type WritableSignal,
 } from '@angular/core';
+import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router } from '@angular/router';
-import type { PriorityKey, StatusKey } from '@cadenway/contracts';
+import {
+  type CancelReason,
+  type PriorityKey,
+  STATUS_CATEGORIES,
+  type StatusCategory,
+  type StatusKey,
+} from '@cadenway/contracts';
 import {
   CwAlertDialog,
   CwAlertDialogAction,
@@ -37,11 +42,14 @@ import {
   CwDataTableGroup,
   type CwDataTableSelection,
   type CwGroupDef,
+  type CwSort,
 } from '@cadenway/ui/components/data-table';
 import { CwEmpty, CwEmptyHeader, CwEmptyMedia, CwEmptyTitle } from '@cadenway/ui/components/empty';
 import {
   CwMenu,
+  CwMenuGroup,
   CwMenuItem,
+  CwMenuItemCheckbox,
   CwMenuLabel,
   CwMenuSeparator,
   CwMenuShortcut,
@@ -51,15 +59,26 @@ import { CwPriorityIcon } from '@cadenway/ui/components/priority-icon';
 import { CwStatusIcon } from '@cadenway/ui/components/status-icon';
 import { CwToastService } from '@cadenway/ui/components/toast';
 import { NgIcon } from '@ng-icons/core';
+import { map } from 'rxjs';
 
 import {
+  CANCEL_REASON_LABELS,
   defaultStatusOptions,
   initialsOf,
+  isMilestoneStatus,
+  MILESTONE_STATUS_HINTS,
   type Person,
   personOf,
   pickableStatuses,
   PRIORITY_LABELS,
+  STATUS_CATEGORY_LABELS,
+  STATUS_HINTS,
+  statusLabel,
   type StatusOption,
+  type TaskBulkAction,
+  type TaskBulkEntry,
+  type TaskBulkOutcome,
+  type TaskBulkSelection,
   TaskCancelDialog,
   type TaskCancellation,
   TaskCreate,
@@ -81,22 +100,33 @@ import {
   bulkPartialText,
   bulkUpdatedText,
 } from '../../../constants/bulk-copy/bulk-copy.constants';
-import type {
-  BulkAction,
-  BulkOutcome,
-  BulkSelection,
-} from '../../../models/bulk-action/bulk-action.interface';
+import { SPACES_RETRY } from '../../../constants/data-table-texts/data-table-texts.constants';
+import { groupLabels, sortLabels } from '../../../constants/view-labels/view-labels.constants';
+import type { ListExport } from '../../../data-access/services/lists-api/lists-api.service';
 import type { ListMember } from '../../../models/list-member/list-member.interface';
 import type { ListRow, ListRowsQuery } from '../../../models/list-rows/list-rows.interface';
+import type {
+  ListGroupBy,
+  ListSortField,
+} from '../../../models/list-view-config/list-view-config.interface';
 import type { Space, SpaceStatusOption } from '../../../models/space/space.interface';
-import type { ListSummary, SpaceOverview } from '../../../models/task-list/task-list.interface';
-import type { ViewOption } from '../../../models/view-option/view-option.interface';
+import type {
+  ListSummary,
+  SpaceOverview,
+  TaskList,
+} from '../../../models/task-list/task-list.interface';
 import { ListPageStore } from '../../../state/list-page/list-page.store';
 import { ListRowsStore } from '../../../state/list-rows/list-rows.store';
 import { ListViewStore } from '../../../state/list-view/list-view.store';
 import { SpacesNavigationStore } from '../../../state/spaces-navigation/spaces-navigation.store';
+import { saveTextFile } from '../../../utils/file-download/file-download.util';
 import { NO_ASSIGNEE_GROUP } from '../../../utils/list-rows/list-rows.util';
-import { BulkBar, type MoveTarget } from '../../components/bulk-bar/bulk-bar.component';
+import { listIconName, lookTone } from '../../../utils/look/look.util';
+import {
+  BulkBar,
+  type BulkPerson,
+  type MoveTarget,
+} from '../../components/bulk-bar/bulk-bar.component';
 
 /**
  * Constant DEFAULT_STATUS_GROUPS
@@ -109,20 +139,189 @@ import { BulkBar, type MoveTarget } from '../../components/bulk-bar/bulk-bar.com
 const DEFAULT_STATUS_GROUPS: readonly string[] = ['progress', 'review', 'todo', 'blocked', 'done'];
 
 /**
+ * Constant PRIORITY_ORDER
+ *
+ * @description
+ * The four priorities of the row menu, from the most urgent.
+ *
+ * @type {readonly PriorityKey[]}
+ */
+const PRIORITY_ORDER: readonly PriorityKey[] = ['urgente', 'haute', 'moyenne', 'basse'];
+
+/**
+ * Constant STATUS_FROM_MS
+ *
+ * @description
+ * How long a row's status icon keeps the status it animates from, in milliseconds: the icon's
+ * transition, so a row drawn again later does not replay it.
+ *
+ * @type {number}
+ */
+const STATUS_FROM_MS: number = 600;
+
+/**
+ * Constant REMINDER_HOUR
+ *
+ * @description
+ * Hour of « Me rappeler demain matin », in the caller's time zone (`REM_PRESETS` of `App.dc.html`).
+ *
+ * @type {number}
+ */
+const REMINDER_HOUR: number = 9;
+
+/**
+ * Interface StatusMenuGroup
+ *
+ * @description
+ * The statuses of one category of the row menu's « Statut », under its heading, each with its
+ * hint; a milestone's menu has one group without a heading.
+ */
+interface StatusMenuGroup {
+  // #region Properties
+  /**
+   * Property category
+   *
+   * @description
+   * Category of the statuses, or null for a milestone's single group.
+   *
+   * @type {StatusCategory | null}
+   * @readonly
+   */
+  readonly category: StatusCategory | null;
+
+  /**
+   * Property heading
+   *
+   * @description
+   * « Non commencé », « Actif » or « Fermé »; empty for a milestone.
+   *
+   * @type {string}
+   * @readonly
+   */
+  readonly heading: string;
+
+  /**
+   * Property entries
+   *
+   * @description
+   * The statuses with their hint, in workflow order.
+   *
+   * @type {readonly { option: StatusOption; hint: string }[]}
+   * @readonly
+   */
+  readonly entries: readonly { readonly option: StatusOption; readonly hint: string }[];
+  // #endregion
+}
+
+/**
+ * Interface ActionToast
+ *
+ * @description
+ * The toast of an applied action and what its « Annuler » sends back.
+ */
+interface ActionToast {
+  // #region Properties
+  /**
+   * Property title
+   *
+   * @description
+   * Title of the toast.
+   *
+   * @type {string}
+   * @readonly
+   */
+  readonly title: string;
+
+  /**
+   * Property description
+   *
+   * @description
+   * Second line of the toast.
+   *
+   * @type {string}
+   * @readonly
+   */
+  readonly description: string;
+
+  /**
+   * Property undo
+   *
+   * @description
+   * Puts back what the action changed, or null when it cannot be undone.
+   *
+   * @type {(() => void) | null}
+   * @readonly
+   */
+  readonly undo: (() => void) | null;
+  // #endregion
+}
+
+/**
+ * Function csvRecordCount
+ *
+ * @description
+ * Rows of a CSV file, header left out; line breaks inside quoted fields do not count.
+ *
+ * @param {string} content - CSV text.
+ * @returns {number} The row count.
+ */
+function csvRecordCount(content: string): number {
+  let quoted: boolean = false;
+  let records: number = 0;
+  let filled: boolean = false;
+  for (const character of content) {
+    if (character === '"') quoted = !quoted;
+    if (character === '\n' && !quoted) {
+      if (filled) records += 1;
+      filled = false;
+    } else if (character !== '\r') {
+      filled = true;
+    }
+  }
+  if (filled) records += 1;
+  return Math.max(0, records - 1);
+}
+
+/**
+ * Function groupBy
+ *
+ * @description
+ * Splits tasks by a key, in order of first appearance.
+ *
+ * @param {readonly T[]} items - The items.
+ * @param {(item: T) => string} keyOf - The key of an item.
+ * @returns {readonly T[][]} The groups.
+ */
+function groupBy<T>(items: readonly T[], keyOf: (item: T) => string): readonly T[][] {
+  const groups: Map<string, T[]> = new Map<string, T[]>();
+  for (const item of items) {
+    const key: string = keyOf(item);
+    const group: T[] | undefined = groups.get(key);
+    if (group) group.push(item);
+    else groups.set(key, [item]);
+  }
+  return [...groups.values()];
+}
+
+/**
  * Component ListViewPage
  *
  * @description
  * The « Liste » view of a list (`/:org/l/:listId/list`): the grouped task rows of `ListRowsStore`
  * in a virtualized `cw-data-table`, read page by page as the table scrolls. A row shows the
- * status and the name (`cw-task-title-cell`), the
- * assignees and the priority, the due date and
- * the labels; its « … » button and its right click open the menu of the task or of the
- * selection, whose « Statut » sets any status (« Annulé » asks its reason first). A click on the
- * name or Enter opens the task (`?task=<KEY>`, the detail comes in step 5). Each group's add row
- * and `N` create in this list. The selection fills the selection bar, whose actions go through
- * `executeBulkTaskAction` in chunks of 50; a refused chunk stays selected and is reported. Under
- * 768 px the rows keep the name and the due date. A failed first read reaches the route's error
- * boundary; a failed next page or subtask read offers « Réessayer » in place.
+ * status and the name (`cw-task-title-cell`, the icon animating from the previous status), the
+ * assignees, the due date, the priority (« Urgente » in red) and the labels. A click on the name,
+ * Enter or the « … » button opens the task (`?task=<KEY>`, the detail comes in step 5); a right
+ * click, the Menu key or Shift F10 on a row opens its menu, which acts on the selection when the
+ * row is selected: « Ouvrir », « Statut » (by category, with hints), « Priorité », « Assigner »,
+ * « Déplacer vers », the reminder, « Dupliquer », the two copies and « Supprimer ». A right click
+ * elsewhere in the view opens the list menu (« Nouvelle tâche », « Grouper par », « Trier par »,
+ * « Tout sélectionner », « Exporter en CSV »). « Nom » sorts by name. Each group's add row presets
+ * its status, priority or assignee; `N` creates in this list. The selection fills the selection
+ * bar. Every write goes through `ListRowsStore.act`: the rows change at once, a refusal puts them
+ * back, and the toast's « Annuler » sends the reverse write (a deletion restores the trash
+ * entries). Under 768 px the rows keep the name and the due date. A failed first read reaches the
+ * route's error boundary; a failed next page or subtask read offers « Réessayer » in place.
  */
 @Component({
   selector: 'cw-list-view-page',
@@ -145,7 +344,9 @@ const DEFAULT_STATUS_GROUPS: readonly string[] = ['progress', 'review', 'todo', 
     CwEmptyMedia,
     CwEmptyTitle,
     CwMenu,
+    CwMenuGroup,
     CwMenuItem,
+    CwMenuItemCheckbox,
     CwMenuLabel,
     CwMenuSeparator,
     CwMenuShortcut,
@@ -175,6 +376,58 @@ export class ListViewPage {
   protected readonly retryLabel: string = SPACES_RETRY;
 
   /**
+   * Property priorities
+   *
+   * @description
+   * The priorities of the row menu, from the most urgent.
+   *
+   * @type {readonly PriorityKey[]}
+   * @readonly
+   */
+  protected readonly priorities: readonly PriorityKey[] = PRIORITY_ORDER;
+
+  /**
+   * Property groupOptions
+   *
+   * @description
+   * « Grouper par » of the list menu: Statut, Priorité, Assigné, Aucun.
+   *
+   * @type {readonly { value: ListGroupBy; label: string }[]}
+   * @readonly
+   */
+  protected readonly groupOptions: readonly { value: ListGroupBy; label: string }[] = ((): {
+    value: ListGroupBy;
+    label: string;
+  }[] => {
+    const labels: ReturnType<typeof groupLabels> = groupLabels();
+    return [
+      { value: 'status', label: labels.status },
+      { value: 'priority', label: labels.priority },
+      { value: 'assignee', label: labels.assignee },
+      { value: null, label: labels.none },
+    ];
+  })();
+
+  /**
+   * Property sortOptions
+   *
+   * @description
+   * « Trier par » of the list menu, in the mockup's order.
+   *
+   * @type {readonly { value: ListSortField; label: string }[]}
+   * @readonly
+   */
+  protected readonly sortOptions: readonly { value: ListSortField; label: string }[] = ((): {
+    value: ListSortField;
+    label: string;
+  }[] => {
+    const labels: Readonly<Record<ListSortField, string>> = sortLabels();
+    return (['manual', 'dueDate', 'priority', 'name', 'createdAt'] as const).map(
+      (value: ListSortField) => ({ value, label: labels[value] }),
+    );
+  })();
+
+  /**
    * Property listId
    *
    * @description
@@ -200,7 +453,7 @@ export class ListViewPage {
    * Property view
    *
    * @description
-   * The view configuration: query, grouping, subtask display and search.
+   * The view configuration: query, grouping, sort, subtask display and search.
    *
    * @type {InstanceType<typeof ListViewStore>}
    * @readonly
@@ -211,7 +464,7 @@ export class ListViewPage {
    * Property rows
    *
    * @description
-   * The rows of the view.
+   * The rows of the view and their writes.
    *
    * @type {InstanceType<typeof ListRowsStore>}
    * @readonly
@@ -234,7 +487,7 @@ export class ListViewPage {
    * Property navigation
    *
    * @description
-   * The workspace's navigation, for the destinations of a move.
+   * The workspace's navigation, for the destinations of a move and the list dialog.
    *
    * @type {InstanceType<typeof SpacesNavigationStore>}
    * @readonly
@@ -309,6 +562,28 @@ export class ListViewPage {
   private readonly route: ActivatedRoute = inject(ActivatedRoute);
 
   /**
+   * Property document
+   *
+   * @description
+   * Document of the downloads and of the clipboard.
+   *
+   * @type {Document}
+   * @readonly
+   */
+  private readonly document: Document = inject(DOCUMENT);
+
+  /**
+   * Property locale
+   *
+   * @description
+   * Locale of the reminder date.
+   *
+   * @type {string}
+   * @readonly
+   */
+  private readonly locale: string = inject(LOCALE_ID);
+
+  /**
    * Property host
    *
    * @description
@@ -368,27 +643,10 @@ export class ListViewPage {
   );
 
   /**
-   * Property selection
-   *
-   * @description
-   * The selected tasks with the version they are shown at, for the selection bar.
-   *
-   * @type {Signal<readonly BulkSelection[]>}
-   * @readonly
-   */
-  protected readonly selection: Signal<readonly BulkSelection[]> = computed(
-    (): readonly BulkSelection[] =>
-      this.selectedTasks().map((task: TaskSummary): BulkSelection => ({
-        taskKey: task.key,
-        version: task.version,
-      })),
-  );
-
-  /**
    * Property pending
    *
    * @description
-   * Whether a bulk action is being recorded.
+   * Whether a deletion is being recorded (its confirmation shows it).
    *
    * @type {WritableSignal<boolean>}
    * @readonly
@@ -399,7 +657,7 @@ export class ListViewPage {
    * Property confirmDelete
    *
    * @description
-   * Whether the deletion of the selection is being confirmed.
+   * Whether the deletion of `deleteTasks` is being confirmed.
    *
    * @type {WritableSignal<boolean>}
    * @readonly
@@ -407,10 +665,25 @@ export class ListViewPage {
   protected readonly confirmDelete: WritableSignal<boolean> = signal(false);
 
   /**
+   * Property deleteTasks
+   *
+   * @description
+   * The tasks the confirmation deletes, and whether the row menu asked (its wording names the
+   * task) rather than the selection bar.
+   *
+   * @type {WritableSignal<{ tasks: readonly TaskSummary[]; menu: boolean }>}
+   * @readonly
+   */
+  protected readonly deleteTasks: WritableSignal<{
+    tasks: readonly TaskSummary[];
+    menu: boolean;
+  }> = signal({ tasks: [], menu: false });
+
+  /**
    * Property bulkCancelTasks
    *
    * @description
-   * Selected tasks awaiting a shared cancellation reason.
+   * Tasks awaiting a shared cancellation reason, those not cancelled already.
    *
    * @type {WritableSignal<readonly TaskSummary[] | null>}
    * @readonly
@@ -421,7 +694,7 @@ export class ListViewPage {
    * Property bulkCancelKeys
    *
    * @description
-   * Keys named by the bulk cancellation dialog.
+   * Keys named by the cancellation dialog.
    *
    * @type {Signal<readonly string[] | null>}
    * @readonly
@@ -489,9 +762,25 @@ export class ListViewPage {
    */
   protected readonly menuStatus: Signal<StatusKey | null> = computed((): StatusKey | null => {
     const statuses: Set<StatusKey> = new Set<StatusKey>(
-      this.menuTasks().map((task: TaskSummary) => this.statusChanges.displayedStatus(task)),
+      this.menuTasks().map((task: TaskSummary) => this.shownStatus(task)),
     );
     return statuses.size === 1 ? [...statuses][0] : null;
+  });
+
+  /**
+   * Property menuPriority
+   *
+   * @description
+   * The priority every task of the menu has, or null when they differ.
+   *
+   * @type {Signal<PriorityKey | null>}
+   * @readonly
+   */
+  protected readonly menuPriority: Signal<PriorityKey | null> = computed((): PriorityKey | null => {
+    const priorities: Set<PriorityKey> = new Set<PriorityKey>(
+      this.menuTasks().map((task: TaskSummary) => task.priority),
+    );
+    return priorities.size === 1 ? [...priorities][0] : null;
   });
 
   /**
@@ -517,20 +806,49 @@ export class ListViewPage {
   );
 
   /**
-   * Property menuStatuses
+   * Property menuMilestone
    *
    * @description
-   * The statuses the row menu offers, a milestone's four when every task is a milestone.
+   * Whether every task of the menu is a milestone, which offers a milestone's four statuses.
    *
-   * @type {Signal<readonly StatusOption[]>}
+   * @type {Signal<boolean>}
    * @readonly
    */
-  protected readonly menuStatuses: Signal<readonly StatusOption[]> = computed(
-    (): readonly StatusOption[] => {
-      const tasks: readonly TaskSummary[] = this.menuTasks();
-      const milestone: boolean =
-        tasks.length > 0 && tasks.every((task: TaskSummary): boolean => task.milestone);
-      return pickableStatuses(this.statusOptions(), this.menuStatus() ?? 'todo', milestone);
+  protected readonly menuMilestone: Signal<boolean> = computed((): boolean => {
+    const tasks: readonly TaskSummary[] = this.menuTasks();
+    return tasks.length > 0 && tasks.every((task: TaskSummary): boolean => task.milestone);
+  });
+
+  /**
+   * Property menuStatusGroups
+   *
+   * @description
+   * « Statut » of the row menu: the statuses under « Non commencé », « Actif » and « Fermé », each
+   * with its hint (`App.dc.html` near line 3406); a milestone's four in one group.
+   *
+   * @type {Signal<readonly StatusMenuGroup[]>}
+   * @readonly
+   */
+  protected readonly menuStatusGroups: Signal<readonly StatusMenuGroup[]> = computed(
+    (): readonly StatusMenuGroup[] => {
+      const milestone: boolean = this.menuMilestone();
+      const entries: { option: StatusOption; hint: string }[] = pickableStatuses(
+        this.statusOptions(),
+        this.menuStatus() ?? 'todo',
+        milestone,
+      ).map((option: StatusOption) => ({
+        option,
+        hint:
+          milestone && isMilestoneStatus(option.key)
+            ? MILESTONE_STATUS_HINTS[option.key]
+            : STATUS_HINTS[option.key],
+      }));
+      if (milestone) return [{ category: null, heading: '', entries }];
+      return STATUS_CATEGORIES.map((category: StatusCategory): StatusMenuGroup => ({
+        category,
+        heading: STATUS_CATEGORY_LABELS[category],
+        entries: entries.filter((entry) => entry.option.category === category),
+      })).filter((group: StatusMenuGroup) => group.entries.length > 0);
     },
   );
 
@@ -538,25 +856,26 @@ export class ListViewPage {
    * Property people
    *
    * @description
-   * The members the assignees are chosen among.
+   * The members the assignees are chosen among, the signed-in member first.
    *
    * @type {Signal<readonly Person[]>}
    * @readonly
    */
-  protected readonly people: Signal<readonly Person[]> = computed((): readonly Person[] =>
-    this.store.organizationMembers.hasValue()
-      ? this.store.organizationMembers
-          .value()
-          .filter((member: ListMember): boolean => member.name !== null)
-          .map((member: ListMember): Person => personOf(member.userId, member.name ?? ''))
-      : [],
-  );
+  protected readonly people: Signal<readonly Person[]> = computed((): readonly Person[] => {
+    if (!this.store.organizationMembers.hasValue()) return [];
+    const me: string = this.workspace.user().id;
+    return this.store.organizationMembers
+      .value()
+      .filter((member: ListMember): boolean => member.name !== null)
+      .map((member: ListMember): Person => personOf(member.userId, member.name ?? ''))
+      .sort((a: Person, b: Person): number => Number(b.id === me) - Number(a.id === me));
+  });
 
   /**
    * Property userId
    *
    * @description
-   * The signed-in member, shown « (moi) » in the people picker.
+   * The signed-in member, shown « (moi) » in the row menu.
    *
    * @type {Signal<string>}
    * @readonly
@@ -567,21 +886,30 @@ export class ListViewPage {
    * Property bulkPeople
    *
    * @description
-   * People the selection may be assigned to.
+   * People of the selection bar's « Assigner », ticked when every selected task has them.
    *
-   * @type {Signal<readonly ViewOption[]>}
+   * @type {Signal<readonly BulkPerson[]>}
    * @readonly
    */
-  protected readonly bulkPeople: Signal<readonly ViewOption[]> = computed(
-    (): readonly ViewOption[] =>
-      this.people().map((person: Person): ViewOption => ({ value: person.id, label: person.name })),
+  protected readonly bulkPeople: Signal<readonly BulkPerson[]> = computed(
+    (): readonly BulkPerson[] => {
+      const selected: readonly TaskSummary[] = this.selectedTasks();
+      return this.people().map((person: Person): BulkPerson => ({
+        id: person.id,
+        name: person.name,
+        initials: person.initials,
+        assigned:
+          selected.length > 0 &&
+          selected.every((task: TaskSummary): boolean => task.assigneeIds.includes(person.id)),
+      }));
+    },
   );
 
   /**
    * Property targets
    *
    * @description
-   * The other lists of the sidebar, with their space.
+   * The other lists of the sidebar, with their icon, their tone and their space.
    *
    * @type {Signal<readonly MoveTarget[]>}
    * @readonly
@@ -599,10 +927,47 @@ export class ListViewPage {
                 listId: summary.list.id,
                 name: summary.list.name,
                 spaceName: space.name,
+                icon: listIconName(summary.list),
+                tone:
+                  summary.list.color === 'gris'
+                    ? 'text-muted-foreground'
+                    : lookTone(summary.list.color),
               }))
           : [],
       );
     },
+  );
+
+  /**
+   * Property menuTargets
+   *
+   * @description
+   * « Déplacer vers » of the row menu: the lists not every task of the menu already sits in.
+   *
+   * @type {Signal<readonly MoveTarget[]>}
+   * @readonly
+   */
+  protected readonly menuTargets: Signal<readonly MoveTarget[]> = computed(
+    (): readonly MoveTarget[] => {
+      const tasks: readonly TaskSummary[] = this.menuTasks();
+      return this.targets().filter(
+        (target: MoveTarget): boolean =>
+          !tasks.every((task: TaskSummary): boolean => task.listId === target.listId),
+      );
+    },
+  );
+
+  /**
+   * Property list
+   *
+   * @description
+   * The open list, once read.
+   *
+   * @type {Signal<TaskList | null>}
+   * @readonly
+   */
+  protected readonly list: Signal<TaskList | null> = computed((): TaskList | null =>
+    this.store.list.hasValue() ? this.store.list.value() : null,
   );
 
   /**
@@ -615,7 +980,7 @@ export class ListViewPage {
    * @readonly
    */
   protected readonly tableLabel: Signal<string> = computed((): string => {
-    const name: string = this.store.list.hasValue() ? this.store.list.value().name : '';
+    const name: string = this.list()?.name ?? '';
     return $localize`:@@spaces.rows.table:Tasks of the list ${name}:name:`;
   });
 
@@ -644,6 +1009,46 @@ export class ListViewPage {
   protected readonly filtered: Signal<boolean> = computed(
     (): boolean =>
       this.view.filterCount() > 0 || this.view.search().trim() !== '' || this.view.milestonesOnly(),
+  );
+
+  /**
+   * Property tableSort
+   *
+   * @description
+   * The sort the « Nom » header shows: by name when the view sorts by name, else none.
+   *
+   * @type {Signal<readonly CwSort[]>}
+   * @readonly
+   */
+  protected readonly tableSort: Signal<readonly CwSort[]> = computed((): readonly CwSort[] => {
+    const sort: { field: ListSortField; direction: 'asc' | 'desc' } = this.view.config().sort;
+    return sort.field === 'name' ? [{ key: 'name', dir: sort.direction }] : [];
+  });
+
+  /**
+   * Property loadedCount
+   *
+   * @description
+   * Tasks the view has read, each once (« Tout sélectionner » of the list menu).
+   *
+   * @type {Signal<number>}
+   * @readonly
+   */
+  protected readonly loadedCount: Signal<number> = computed(
+    (): number => new Set(this.rows.rows().map((row: ListRow) => row.task.key)).size,
+  );
+
+  /**
+   * Property statusFrom
+   *
+   * @description
+   * The status each row's icon animates from, for a moment after its status changed.
+   *
+   * @type {WritableSignal<ReadonlyMap<string, StatusKey>>}
+   * @readonly
+   */
+  protected readonly statusFrom: WritableSignal<ReadonlyMap<string, StatusKey>> = signal(
+    new Map<string, StatusKey>(),
   );
 
   /**
@@ -765,8 +1170,9 @@ export class ListViewPage {
    *
    * @description
    * Reads the rows of the list with the view's query, follows the subtask display and the
-   * space's hidden statuses and makes `N` create in this list while the view lives. A failed first
-   * read is retried when the error boundary runs the route again.
+   * space's hidden statuses and makes `N` create in this list while the view lives. Remembers the
+   * status each row changed from, for its icon, and keeps the focus on a row that moved. A failed
+   * first read is retried when the error boundary runs the route again.
    *
    * @constructor
    */
@@ -780,6 +1186,7 @@ export class ListViewPage {
       })),
     );
     this.rows.useSubtasks(computed(() => this.view.config().subtasks));
+    this.view.followRows(this.rows.summary);
     this.rows.hideStatuses(
       computed((): readonly string[] =>
         this.statusOptions()
@@ -790,7 +1197,12 @@ export class ListViewPage {
     this.taskCreate.useDefaults(() => ({ listId: this.listId() }), this.destroyRef);
 
     let previousGroups: Map<string, string> = new Map<string, string>();
+    let previousStatuses: Map<string, StatusKey> = new Map<string, StatusKey>();
     let restoreFocus: { key: string; element: Element } | null = null;
+    const timers: Set<ReturnType<typeof setTimeout>> = new Set<ReturnType<typeof setTimeout>>();
+    this.destroyRef.onDestroy((): void => {
+      for (const timer of timers) clearTimeout(timer);
+    });
     effect((): void => {
       const current: readonly ListRow[] = this.rows.rows();
       const active: Element | null = this.host.nativeElement.ownerDocument.activeElement;
@@ -806,7 +1218,30 @@ export class ListViewPage {
       ) {
         restoreFocus = { key, element: active };
       }
+      const changed: [string, StatusKey][] = current.flatMap(
+        (item: ListRow): [string, StatusKey][] => {
+          const before: StatusKey | undefined = previousStatuses.get(item.task.key);
+          return before !== undefined && before !== item.status ? [[item.task.key, before]] : [];
+        },
+      );
+      if (changed.length > 0) {
+        untracked((): void => {
+          this.statusFrom.update(
+            (from: ReadonlyMap<string, StatusKey>) => new Map([...from, ...changed]),
+          );
+        });
+        const timer: ReturnType<typeof setTimeout> = setTimeout((): void => {
+          timers.delete(timer);
+          this.statusFrom.update((from: ReadonlyMap<string, StatusKey>) => {
+            const next: Map<string, StatusKey> = new Map<string, StatusKey>(from);
+            for (const [taskKey] of changed) next.delete(taskKey);
+            return next;
+          });
+        }, STATUS_FROM_MS);
+        timers.add(timer);
+      }
       previousGroups = new Map(current.map((item: ListRow) => [item.task.key, item.group]));
+      previousStatuses = new Map(current.map((item: ListRow) => [item.task.key, item.status]));
     });
     afterRenderEffect((): void => {
       if (this.rows.rows().length === 0) return;
@@ -901,86 +1336,616 @@ export class ListViewPage {
   }
 
   /**
+   * Method personLabel
+   *
+   * @description
+   * A person of the row menu's « Assigner »: the signed-in member reads « Nom (moi) ».
+   *
+   * @param {Person} person - The person.
+   * @returns {string} The label.
+   */
+  protected personLabel(person: Person): string {
+    const name: string = person.name;
+    return person.id === this.userId()
+      ? $localize`:@@spaces.rows.assign-me:${name}:name: (me)`
+      : name;
+  }
+
+  /**
+   * Method assignedToAll
+   *
+   * @description
+   * Whether every task of the row menu has the person.
+   *
+   * @param {string} userId - The person.
+   * @returns {boolean} Whether all have it.
+   */
+  protected assignedToAll(userId: string): boolean {
+    const tasks: readonly TaskSummary[] = this.menuTasks();
+    return (
+      tasks.length > 0 &&
+      tasks.every((task: TaskSummary): boolean => task.assigneeIds.includes(userId))
+    );
+  }
+
+  /**
+   * Method remindLabel
+   *
+   * @description
+   * « Me rappeler demain matin », or « Me rappeler ces tâches demain matin » for several.
+   *
+   * @returns {string} The label.
+   */
+  protected remindLabel(): string {
+    return this.menuTasks().length > 1
+      ? $localize`:@@spaces.rows.remind-many:Remind me of these tasks tomorrow morning`
+      : $localize`:@@spaces.rows.remind:Remind me tomorrow morning`;
+  }
+
+  /**
+   * Method deleteMenuLabel
+   *
+   * @description
+   * « Supprimer la tâche », or « Supprimer les N tâches » for several.
+   *
+   * @returns {string} The label.
+   */
+  protected deleteMenuLabel(): string {
+    const count: number = this.menuTasks().length;
+    return count > 1
+      ? $localize`:@@spaces.rows.delete-many:Delete the ${count}:count: tasks`
+      : $localize`:@@spaces.bulk.delete-action-one:Delete the task`;
+  }
+
+  /**
+   * Method selectAllHint
+   *
+   * @description
+   * Hint of « Tout sélectionner »: the tasks read (« 12 tâches »).
+   *
+   * @returns {string} The hint.
+   */
+  protected selectAllHint(): string {
+    const count: number = this.loadedCount();
+    return count === 1
+      ? $localize`:@@spaces.rows.count-one:${count}:count: task`
+      : $localize`:@@spaces.rows.count-many:${count}:count: tasks`;
+  }
+
+  /**
    * Method open
    *
    * @description
    * Opens a task in the address (`?task=<KEY>`), keeping the view and its other parameters; the
    * task detail that reads it comes in step 5.
    *
-   * @param {TaskSummary} task - The task.
+   * @param {string} taskKey - Key of the task.
    */
-  protected open(task: TaskSummary): void {
+  protected open(taskKey: string): void {
     void this.router.navigate([], {
       relativeTo: this.route,
-      queryParams: { task: task.key },
+      queryParams: { task: taskKey },
       queryParamsHandling: 'merge',
     });
+  }
+
+  /**
+   * Method sortChanged
+   *
+   * @description
+   * The « Nom » header: ascending, then descending, then ascending again (`sortByName` of
+   * `App.dc.html`).
+   *
+   * @param {readonly CwSort[]} sort - The sort the table asks for.
+   */
+  protected sortChanged(sort: readonly CwSort[]): void {
+    const direction: 'asc' | 'desc' =
+      sort.find((item: CwSort) => item.key === 'name')?.dir ?? 'asc';
+    this.view.setSort('name');
+    if (this.view.config().sort.direction !== direction) this.view.toggleSortDirection();
+  }
+
+  /**
+   * Method setGroupBy
+   *
+   * @description
+   * « Grouper par » of the list menu.
+   *
+   * @param {ListGroupBy} groupBy - The grouping.
+   */
+  protected setGroupBy(groupBy: ListGroupBy): void {
+    this.view.setGroupBy(groupBy);
+  }
+
+  /**
+   * Method setSortField
+   *
+   * @description
+   * « Trier par » of the list menu, keeping the direction.
+   *
+   * @param {ListSortField} field - The criterion.
+   */
+  protected setSortField(field: ListSortField): void {
+    this.view.setSort(field);
+  }
+
+  /**
+   * Method selectAll
+   *
+   * @description
+   * « Tout sélectionner » of the list menu: ticks every row read.
+   */
+  protected selectAll(): void {
+    this.tableSelection.set(this.rows.rows().map((row: ListRow): string => row.id));
+  }
+
+  /**
+   * Method editList
+   *
+   * @description
+   * « Modifier la liste » or « Modifier le sprint » of the list menu (`App.dc.html` line 7310):
+   * opens the list dialog, which the sidebar hosts, as the header does.
+   *
+   * @param {TaskList} list - The open list.
+   */
+  protected editList(list: TaskList): void {
+    this.navigation.openDialog({
+      kind: 'list',
+      spaceId: list.spaceId,
+      list,
+      sprint: list.sprint !== null,
+    });
+  }
+
+  /**
+   * Method exportCsv
+   *
+   * @description
+   * « Exporter en CSV » of the list menu: downloads the tasks the view shows, as the header does.
+   */
+  protected async exportCsv(): Promise<void> {
+    const file: ListExport | null = await this.store.exportCsv(this.view.taskQuery());
+    if (this.destroyRef.destroyed) return;
+    if (!file || !saveTextFile(this.document, file.fileName, file.content)) {
+      this.toasts.error($localize`:@@spaces.list.export-failed:Export not possible here`);
+      return;
+    }
+    const count: number = csvRecordCount(file.content);
+    this.toasts.show($localize`:@@spaces.list.exported:CSV export ready`, {
+      description: $localize`:@@spaces.list.exported-text:${count}:count: tasks exported.`,
+    });
+  }
+
+  /**
+   * Method clearSearch
+   *
+   * @description
+   * « Effacer la recherche » of the empty result: empties the search, or the filters and
+   * « Jalons » when there is no search, so the button always shows tasks again.
+   */
+  protected clearSearch(): void {
+    if (this.view.search().trim() !== '') {
+      this.view.setSearch('');
+      return;
+    }
+    this.view.clearFilters();
+    if (this.view.milestonesOnly()) this.view.toggleMilestones();
   }
 
   /**
    * Method setStatus
    *
    * @description
-   * « Statut » of the row menu: sets the status of its tasks; « Annulé » asks the reason first,
-   * once for all of them.
+   * « Statut » of the row menu: sets the status of its tasks at once. « Annulé » asks the reason
+   * first, for the tasks not cancelled already, and only when there is one.
    *
    * @param {readonly TaskSummary[]} tasks - The tasks of the menu.
    * @param {StatusKey} status - The status.
    */
   protected setStatus(tasks: readonly TaskSummary[], status: StatusKey): void {
-    if (tasks.length === 1) {
-      this.statusChanges.request(tasks[0], status, this.statusOptions());
-    } else if (tasks.length > 1 && status === 'cancelled') {
-      this.bulkCancelTasks.set(tasks);
-    } else if (tasks.length > 1) {
-      this.bulkStatus(status, tasks);
+    if (status === 'cancelled') {
+      const open: readonly TaskSummary[] = tasks.filter(
+        (task: TaskSummary): boolean => this.shownStatus(task) !== 'cancelled',
+      );
+      if (open.length > 0) this.bulkCancelTasks.set(open);
+      return;
     }
+    const changed: readonly TaskSummary[] = tasks.filter(
+      (task: TaskSummary): boolean => this.shownStatus(task) !== status,
+    );
+    if (changed.length === 0) return;
+    const word: string = statusLabel(status, this.statusOptions(), this.menuMilestone());
+    const label: string = this.tasksLabel(tasks);
+    void this.perform(changed, { type: 'status', status }, (done: readonly TaskBulkEntry[]) => ({
+      title: $localize`:@@spaces.rows.status-toast:${label}:label: · ${word}:status:`,
+      description:
+        tasks.length > 1
+          ? bulkUpdatedText(done.length)
+          : $localize`:@@spaces.rows.status-changed:Status changed.`,
+      undo: (): void => {
+        this.undoStatuses(changed, done);
+      },
+    }));
   }
 
   /**
    * Method confirmBulkCancel
    *
    * @description
-   * Sends the shared cancellation reason to the bulk action.
+   * Cancels the tasks of the dialog with their shared reason; the toast names the reason and
+   * offers « Annuler ».
    *
    * @param {TaskCancellation} cancellation - The reason and optional note.
    */
   protected confirmBulkCancel(cancellation: TaskCancellation): void {
     const tasks: readonly TaskSummary[] = this.bulkCancelTasks() ?? [];
     this.bulkCancelTasks.set(null);
-    this.bulkStatus('cancelled', tasks, cancellation);
+    if (tasks.length === 0) return;
+    const reason: string = CANCEL_REASON_LABELS[cancellation.reason];
+    void this.perform(
+      tasks,
+      {
+        type: 'status',
+        status: 'cancelled',
+        cancelReason: cancellation.reason,
+        cancelNote: cancellation.note || null,
+      },
+      (done: readonly TaskBulkEntry[]) => {
+        const count: number = done.length;
+        const key: string = done[0]?.taskKey ?? '';
+        return {
+          title:
+            count > 1
+              ? $localize`:@@spaces.rows.cancelled-many:${count}:count: tasks cancelled`
+              : $localize`:@@spaces.rows.cancelled-one:${key}:key: cancelled`,
+          description: $localize`:@@spaces.rows.cancel-reason:Reason: ${reason}:reason:.`,
+          undo: (): void => {
+            this.undoStatuses(tasks, done);
+          },
+        };
+      },
+    );
   }
 
   /**
-   * Method bulkStatus
+   * Method setPriority
    *
    * @description
-   * Sends one bulk status action for the selection.
+   * « Priorité » of the row menu.
    *
-   * @param {StatusKey} status - The target status.
-   * @param {readonly TaskSummary[]} tasks - Tasks selected when the action was requested.
-   * @param {TaskCancellation} [cancellation] - The cancellation reason.
+   * @param {readonly TaskSummary[]} tasks - The tasks of the menu.
+   * @param {PriorityKey} priority - The priority.
    */
-  protected bulkStatus(
-    status: StatusKey,
-    tasks: readonly TaskSummary[],
-    cancellation?: TaskCancellation,
-  ): void {
-    const label: string =
-      this.statusOptions().find((option: StatusOption) => option.key === status)?.label ?? status;
-    void this.run(
-      {
-        type: 'status',
-        status,
-        ...(cancellation
-          ? { cancelReason: cancellation.reason, cancelNote: cancellation.note || null }
-          : {}),
-      },
-      (count: number) => ({
-        title: $localize`:@@spaces.bulk.status-toast:${label}:label: · Status`,
-        description: bulkUpdatedText(count),
+  protected setPriority(tasks: readonly TaskSummary[], priority: PriorityKey): void {
+    const changed: readonly TaskSummary[] = tasks.filter(
+      (task: TaskSummary): boolean => task.priority !== priority,
+    );
+    if (changed.length === 0) return;
+    const label: string = this.tasksLabel(tasks);
+    const word: string = PRIORITY_LABELS[priority].toLocaleLowerCase(this.locale);
+    void this.perform(
+      changed,
+      { type: 'priority', priority },
+      (done: readonly TaskBulkEntry[]) => ({
+        title: $localize`:@@spaces.rows.priority-toast:${label}:label: · ${word}:priority: priority`,
+        description:
+          tasks.length > 1
+            ? bulkUpdatedText(done.length)
+            : $localize`:@@spaces.rows.priority-changed:Priority changed.`,
+        undo: (): void => {
+          for (const group of groupBy(changed, (task: TaskSummary) => task.priority)) {
+            void this.reverse(group, done, { type: 'priority', priority: group[0].priority });
+          }
+        },
       }),
-      tasks.map((task: TaskSummary) => ({ taskKey: task.key, version: task.version })),
+    );
+  }
+
+  /**
+   * Method toggleAssignee
+   *
+   * @description
+   * « Assigner » of the row menu or of the selection bar: assigns the person to every task, or
+   * removes the person when every task has them already.
+   *
+   * @param {readonly TaskSummary[]} tasks - The tasks.
+   * @param {string} userId - The person.
+   * @param {boolean} [bar] - Whether the selection bar asked (its toast counts the tasks).
+   */
+  protected toggleAssignee(
+    tasks: readonly TaskSummary[],
+    userId: string,
+    bar: boolean = false,
+  ): void {
+    if (tasks.length === 0) return;
+    const name: string =
+      this.people().find((person: Person): boolean => person.id === userId)?.name ?? '';
+    const all: boolean = tasks.every((task: TaskSummary): boolean =>
+      task.assigneeIds.includes(userId),
+    );
+    const changed: readonly TaskSummary[] = all
+      ? tasks
+      : tasks.filter((task: TaskSummary): boolean => !task.assigneeIds.includes(userId));
+    const label: string = this.tasksLabel(tasks);
+    void this.perform(
+      changed,
+      { type: all ? 'unassign' : 'assign', userId },
+      (done: readonly TaskBulkEntry[]) => ({
+        title: all
+          ? $localize`:@@spaces.bulk.unassigned:${name}:name: removed`
+          : $localize`:@@spaces.bulk.assigned:${name}:name: assigned`,
+        description: bar ? bulkUpdatedText(done.length) : label,
+        undo: (): void => {
+          void this.reverse(changed, done, { type: all ? 'assign' : 'unassign', userId });
+        },
+      }),
+    );
+  }
+
+  /**
+   * Method moveTo
+   *
+   * @description
+   * « Déplacer vers » of the row menu or of the selection bar; the rows leave the view at once.
+   *
+   * @param {readonly TaskSummary[]} tasks - The tasks.
+   * @param {string} listId - The destination.
+   * @param {boolean} [bar] - Whether the selection bar asked, which clears the selection.
+   */
+  protected moveTo(tasks: readonly TaskSummary[], listId: string, bar: boolean = false): void {
+    const moved: readonly TaskSummary[] = tasks.filter(
+      (task: TaskSummary): boolean => task.listId !== listId,
+    );
+    if (moved.length === 0) return;
+    if (bar) this.clearSelection();
+    const name: string =
+      this.targets().find((target: MoveTarget): boolean => target.listId === listId)?.name ?? '';
+    const key: string = moved[0].key;
+    void this.perform(moved, { type: 'move', listId }, (done: readonly TaskBulkEntry[]) => ({
+      title:
+        bar || tasks.length > 1
+          ? bulkMovedText(done.length)
+          : $localize`:@@spaces.rows.moved-one:${key}:key: moved`,
+      description: $localize`:@@spaces.bulk.moved-text:To ${name}:name:.`,
+      undo: (): void => {
+        for (const group of groupBy(moved, (task: TaskSummary) => task.listId)) {
+          void this.reverse(group, done, { type: 'move', listId: group[0].listId });
+        }
+      },
+    }));
+  }
+
+  /**
+   * Method remind
+   *
+   * @description
+   * « Me rappeler demain matin »: a reminder tomorrow at 9 for each task of the menu.
+   *
+   * @param {readonly TaskSummary[]} tasks - The tasks.
+   */
+  protected async remind(tasks: readonly TaskSummary[]): Promise<void> {
+    const at: Date = new Date();
+    at.setDate(at.getDate() + 1);
+    at.setHours(REMINDER_HOUR, 0, 0, 0);
+    const keys: readonly string[] = await this.rows.remind(
+      tasks.map((task: TaskSummary): string => task.key),
+      at,
+    );
+    if (this.destroyRef.destroyed) return;
+    if (keys.length === 0) {
+      this.toasts.error($localize`:@@spaces.rows.remind-failed:The reminder could not be set`);
+      return;
+    }
+    const day: string = new Intl.DateTimeFormat(this.locale, {
+      weekday: 'short',
+      day: 'numeric',
+      month: 'short',
+    }).format(at);
+    const when: string = `${day.charAt(0).toLocaleUpperCase(this.locale)}${day.slice(1)}`;
+    const count: number = keys.length;
+    this.toasts.show(
+      count > 1
+        ? $localize`:@@spaces.rows.reminded-many:${count}:count: reminders set`
+        : $localize`:@@spaces.rows.reminded:Reminder set`,
+      {
+        description: $localize`:@@spaces.rows.reminded-text:${when}:date:, 9 AM · ${keys.join(', ')}:keys:`,
+      },
+    );
+  }
+
+  /**
+   * Method duplicate
+   *
+   * @description
+   * « Dupliquer »: copies each task of the menu; the toast names the copies and « Ouvrir » opens
+   * a single copy.
+   *
+   * @param {readonly TaskSummary[]} tasks - The tasks.
+   */
+  protected duplicate(tasks: readonly TaskSummary[]): void {
+    void this.perform(tasks, { type: 'duplicate' }, (done: readonly TaskBulkEntry[]) => {
+      const copies: readonly string[] = done
+        .map((entry: TaskBulkEntry) => entry.newTaskKey)
+        .filter((key: string | null): key is string => key !== null);
+      const count: number = copies.length;
+      return {
+        title:
+          tasks.length > 1
+            ? $localize`:@@spaces.rows.duplicated-many:${count}:count: tasks duplicated`
+            : $localize`:@@spaces.rows.duplicated:Task duplicated`,
+        description: copies.join(', '),
+        undo: null,
+        open: count === 1 ? copies[0] : null,
+      };
+    });
+  }
+
+  /**
+   * Method copyLinks
+   *
+   * @description
+   * « Copier le lien »: the shareable addresses of the tasks (`/<slug>/t/<KEY>`), one per line.
+   *
+   * @param {readonly TaskSummary[]} tasks - The tasks.
+   */
+  protected copyLinks(tasks: readonly TaskSummary[]): void {
+    const origin: string = this.document.defaultView?.location.origin ?? '';
+    const slug: string = this.workspace.organization().slug;
+    const count: number = tasks.length;
+    void this.copy(
+      tasks.map((task: TaskSummary): string => `${origin}/${slug}/t/${task.key}`).join('\n'),
+      count > 1
+        ? $localize`:@@spaces.rows.links-copied:${count}:count: links copied`
+        : $localize`:@@spaces.rows.link-copied:Link copied`,
+    );
+  }
+
+  /**
+   * Method copyKeys
+   *
+   * @description
+   * « Copier l’identifiant »: the keys of the tasks, comma-separated.
+   *
+   * @param {readonly TaskSummary[]} tasks - The tasks.
+   */
+  protected copyKeys(tasks: readonly TaskSummary[]): void {
+    void this.copy(
+      tasks.map((task: TaskSummary): string => task.key).join(', '),
+      tasks.length > 1
+        ? $localize`:@@spaces.rows.keys-copied:Identifiers copied`
+        : $localize`:@@spaces.rows.key-copied:Identifier copied`,
+    );
+  }
+
+  /**
+   * Method askDelete
+   *
+   * @description
+   * Opens the deletion confirmation of the row menu or of the selection bar.
+   *
+   * @param {readonly TaskSummary[]} tasks - The tasks.
+   * @param {boolean} menu - Whether the row menu asked.
+   */
+  protected askDelete(tasks: readonly TaskSummary[], menu: boolean): void {
+    if (tasks.length === 0) return;
+    this.deleteTasks.set({ tasks, menu });
+    this.confirmDelete.set(true);
+  }
+
+  /**
+   * Method trash
+   *
+   * @description
+   * Moves the confirmed tasks to the trash; the toast counts their subtasks and « Annuler »
+   * restores the trash entries.
+   */
+  protected async trash(): Promise<void> {
+    const { tasks, menu }: { tasks: readonly TaskSummary[]; menu: boolean } = this.deleteTasks();
+    if (tasks.length === 0 || this.pending()) return;
+    this.pending.set(true);
+    const key: string = tasks[0].key;
+    await this.perform(
+      tasks,
+      { type: 'trash' },
+      (done: readonly TaskBulkEntry[], outcome: TaskBulkOutcome) => {
+        const count: number = done.length;
+        const subtasks: number = Math.max(0, outcome.affected - count);
+        const kept: string = $localize`:@@spaces.bulk.deleted-text:Kept 30 days in the trash.`;
+        const entries: readonly string[] = [
+          ...new Set(
+            done
+              .map((entry: TaskBulkEntry) => entry.trashEntryId)
+              .filter((id: string | null): id is string => id !== null),
+          ),
+        ];
+        return {
+          title:
+            menu && tasks.length === 1
+              ? $localize`:@@spaces.rows.deleted-one:${key}:key: deleted`
+              : bulkDeletedText(count),
+          description:
+            subtasks === 0
+              ? kept
+              : subtasks === 1
+                ? $localize`:@@spaces.bulk.deleted-subtask:With ${subtasks}:count: subtask. ${kept}:kept:`
+                : $localize`:@@spaces.bulk.deleted-subtasks:With ${subtasks}:count: subtasks. ${kept}:kept:`,
+          undo:
+            entries.length > 0
+              ? (): void => {
+                  void this.restore(entries);
+                }
+              : null,
+        };
+      },
+    );
+    if (this.destroyRef.destroyed) return;
+    this.pending.set(false);
+    this.confirmDelete.set(false);
+  }
+
+  /**
+   * Method deleteTitle
+   *
+   * @description
+   * Question of the deletion: « Supprimer « nom » ? » from the row menu, else « Supprimer cette
+   * tâche ? »; « Supprimer N tâches ? » for several.
+   *
+   * @returns {string} The title.
+   */
+  protected deleteTitle(): string {
+    const { tasks, menu }: { tasks: readonly TaskSummary[]; menu: boolean } = this.deleteTasks();
+    const count: number = tasks.length;
+    if (count > 1) return $localize`:@@spaces.bulk.delete-title:Delete ${count}:count: tasks?`;
+    const name: string = tasks[0]?.name ?? '';
+    return menu
+      ? $localize`:@@spaces.rows.delete-title:Delete “${name}:name:”?`
+      : $localize`:@@spaces.bulk.delete-title-one:Delete this task?`;
+  }
+
+  /**
+   * Method deleteText
+   *
+   * @description
+   * What the deletion does, in the wording of its origin.
+   *
+   * @returns {string} The text.
+   */
+  protected deleteText(): string {
+    const { tasks, menu }: { tasks: readonly TaskSummary[]; menu: boolean } = this.deleteTasks();
+    if (!menu) {
+      return $localize`:@@spaces.bulk.delete-text:The selected tasks go to the trash with their subtasks, where they stay 30 days.`;
+    }
+    return tasks.length > 1
+      ? $localize`:@@spaces.rows.delete-text-many:They go to the trash with their subtasks, where they stay 30 days.`
+      : $localize`:@@spaces.rows.delete-text-one:It goes to the trash with its subtasks, where it stays 30 days.`;
+  }
+
+  /**
+   * Method deleteAction
+   *
+   * @description
+   * Action of the deletion.
+   *
+   * @returns {string} The label.
+   */
+  protected deleteAction(): string {
+    const count: number = this.deleteTasks().tasks.length;
+    return count > 1
+      ? $localize`:@@spaces.bulk.delete-action:Delete ${count}:count: tasks`
+      : $localize`:@@spaces.bulk.delete-action-one:Delete the task`;
+  }
+
+  /**
+   * Method deleteItems
+   *
+   * @description
+   * The tasks the confirmation lists (« CAD-482 · nom »).
+   *
+   * @returns {readonly string[]} The items.
+   */
+  protected deleteItems(): readonly string[] {
+    return this.deleteTasks().tasks.map(
+      (task: TaskSummary): string => `${task.key} · ${task.name}`,
     );
   }
 
@@ -1039,23 +2004,41 @@ export class ListViewPage {
    * Method addInGroup
    *
    * @description
-   * The trailing row of a group creates in this list, with the group's status when grouping by status.
+   * The trailing row of a group creates in this list with the group's value: its status, its
+   * priority or its assignee (nobody for « Non assignées »).
    *
    * @param {string | null} group - The group value.
    */
   protected addInGroup(group: string | null): void {
-    this.taskCreate.open(
-      this.rows.groupBy() === 'status' && group !== null
-        ? { listId: this.listId(), status: group as StatusKey }
-        : { listId: this.listId() },
-    );
+    const listId: string = this.listId();
+    if (group === null) {
+      this.taskCreate.open({ listId });
+      return;
+    }
+    switch (this.rows.groupBy()) {
+      case 'status':
+        this.taskCreate.open({ listId, status: group as StatusKey });
+        return;
+      case 'priority':
+        this.taskCreate.open({ listId, priority: group as PriorityKey });
+        return;
+      case 'assignee':
+        this.taskCreate.open({
+          listId,
+          assigneeIds: group === NO_ASSIGNEE_GROUP ? [] : [group],
+        });
+        return;
+      default:
+        this.taskCreate.open({ listId });
+    }
   }
 
   /**
    * Method create
    *
    * @description
-   * « Ajouter une tâche » of the empty state: creates in this list.
+   * « Ajouter une tâche » of the empty state and « Nouvelle tâche » of the list menu: creates in
+   * this list.
    */
   protected create(): void {
     this.taskCreate.open({ listId: this.listId() });
@@ -1072,166 +2055,260 @@ export class ListViewPage {
   }
 
   /**
-   * Method run
+   * Method markDone
    *
    * @description
-   * Runs a bulk action on the selection, then reads the rows again in place. The tasks of a
-   * refused chunk stay selected and a second toast counts them; a refusal of everything changes
-   * nothing and shows the failure toast.
-   *
-   * @param {BulkAction} action - The action.
-   * @param {(count: number) => { title: string; description: string }} toast - The success toast.
-   * @param {readonly BulkSelection[]} [selected] - Tasks captured when the action was requested.
+   * « Marquer terminé » of the selection bar: the icons change at once, the rows join « Terminé »
+   * 460 ms later and the selection empties at once.
    */
-  protected async run(
-    action: BulkAction,
-    toast: (count: number) => { title: string; description: string },
-    selected: readonly BulkSelection[] = this.selection(),
+  protected markDone(): void {
+    const tasks: readonly TaskSummary[] = this.selectedTasks().filter(
+      (task: TaskSummary): boolean => this.shownStatus(task) !== 'done',
+    );
+    this.clearSelection();
+    if (tasks.length === 0) return;
+    void this.perform(
+      tasks,
+      { type: 'status', status: 'done' },
+      (done: readonly TaskBulkEntry[]) => ({
+        title: bulkDoneText(done.length),
+        description: $localize`:@@spaces.bulk.done-toast-text:Status: Done.`,
+        undo: (): void => {
+          this.undoStatuses(tasks, done);
+        },
+      }),
+    );
+  }
+
+  /**
+   * Method assignSelection
+   *
+   * @description
+   * « Assigner » of the selection bar.
+   *
+   * @param {string} userId - The person.
+   */
+  protected assignSelection(userId: string): void {
+    this.toggleAssignee(this.selectedTasks(), userId, true);
+  }
+
+  /**
+   * Method moveSelection
+   *
+   * @description
+   * « Déplacer vers… » of the selection bar.
+   *
+   * @param {string} listId - The destination.
+   */
+  protected moveSelection(listId: string): void {
+    this.moveTo(this.selectedTasks(), listId, true);
+  }
+
+  /**
+   * Method shownStatus
+   *
+   * @description
+   * The status a task shows in the view, a pending change or an optimistic write included.
+   *
+   * @param {TaskSummary} task - The task.
+   * @returns {StatusKey} The status.
+   */
+  private shownStatus(task: TaskSummary): StatusKey {
+    return (
+      this.rows.rows().find((row: ListRow): boolean => row.task.key === task.key)?.status ??
+      this.statusChanges.displayedStatus(task)
+    );
+  }
+
+  /**
+   * Method tasksLabel
+   *
+   * @description
+   * How a toast names the tasks: « CAD-482 » or « 3 tâches ».
+   *
+   * @param {readonly TaskSummary[]} tasks - The tasks.
+   * @returns {string} The label.
+   */
+  private tasksLabel(tasks: readonly TaskSummary[]): string {
+    const count: number = tasks.length;
+    return count > 1
+      ? $localize`:@@spaces.rows.count-many:${count}:count: tasks`
+      : (tasks[0]?.key ?? '');
+  }
+
+  /**
+   * Method perform
+   *
+   * @description
+   * Applies an action through `ListRowsStore.act`, then reports it. Tasks of a refused chunk stay
+   * selected and a second toast counts them; a refusal of everything shows the failure toast; an
+   * uncertain answer warns and the rows are read again. The success toast offers « Annuler » when
+   * the action can be undone, or « Ouvrir » for a single copy. The list's counts are read again.
+   *
+   * @param {readonly TaskSummary[]} tasks - The tasks, as shown.
+   * @param {TaskBulkAction} action - The action.
+   * @param {(done: readonly TaskBulkEntry[], outcome: TaskBulkOutcome) => ActionToast & { open?: string | null }} toast - The success toast.
+   * @returns {Promise<void>} Resolves once reported.
+   */
+  private async perform(
+    tasks: readonly TaskSummary[],
+    action: TaskBulkAction,
+    toast: (
+      done: readonly TaskBulkEntry[],
+      outcome: TaskBulkOutcome,
+    ) => ActionToast & { readonly open?: string | null },
   ): Promise<void> {
-    if (selected.length === 0 || this.pending()) return;
+    if (tasks.length === 0) return;
     const organizationId: string = this.workspace.organization().id;
-    this.pending.set(true);
-    const outcome: BulkOutcome = await this.store.bulk(selected, action);
-    if (this.destroyRef.destroyed) return;
-    this.pending.set(false);
-    if (this.workspace.organization().id !== organizationId) return;
-    this.confirmDelete.set(false);
+    const outcome: TaskBulkOutcome = await this.rows.act(tasks, action);
+    if (this.destroyRef.destroyed || this.workspace.organization().id !== organizationId) return;
+    if (outcome.done.length > 0 || outcome.unknown.length > 0) this.store.refreshCounts();
     if (outcome.notSent.length > 0) {
       this.toasts.warning($localize`:@@spaces.bulk.not-sent:Some selected tasks were not sent.`);
     }
     if (outcome.unknown.length > 0) {
-      this.rows.reload();
       this.toasts.warning(
         $localize`:@@spaces.bulk.unknown:The outcome is unknown. The tasks are being refreshed.`,
       );
     }
-    if (outcome.done.length === 0 && (outcome.unknown.length > 0 || outcome.notSent.length > 0))
-      return;
     if (outcome.done.length === 0) {
-      this.toasts.error($localize`:@@spaces.bulk.failed:The selection could not be changed`);
+      if (outcome.unknown.length === 0 && outcome.notSent.length === 0) {
+        this.toasts.error($localize`:@@spaces.bulk.failed:The selection could not be changed`);
+      }
       return;
     }
-    const failedKeys: readonly string[] = [
-      ...outcome.failed,
-      ...outcome.unknown,
-      ...outcome.notSent,
-    ].map((item: BulkSelection): string => item.taskKey);
-    this.tableSelection.set(
-      this.rows
-        .rows()
-        .filter((row: ListRow): boolean => failedKeys.includes(row.task.key))
-        .map((row: ListRow): string => row.id),
+    const failedKeys: readonly string[] = outcome.failed.map(
+      (item: TaskBulkSelection): string => item.taskKey,
     );
-    const message: { title: string; description: string } = toast(outcome.done.length);
-    this.toasts.show(message.title, { description: message.description });
+    if (failedKeys.length > 0) {
+      this.tableSelection.set(
+        this.rows
+          .rows()
+          .filter((row: ListRow): boolean => failedKeys.includes(row.task.key))
+          .map((row: ListRow): string => row.id),
+      );
+    }
+    const message: ActionToast & { readonly open?: string | null } = toast(outcome.done, outcome);
+    const copy: string | null = message.open ?? null;
+    this.toasts.show(message.title, {
+      description: message.description,
+      ...(copy
+        ? {
+            action: {
+              label: $localize`:@@spaces.rows.open:Open`,
+              run: (): void => {
+                this.open(copy);
+              },
+            },
+          }
+        : message.undo
+          ? { undo: message.undo }
+          : {}),
+    });
     if (outcome.failed.length > 0) {
-      this.toasts.error(bulkPartialText(outcome.failed.length, selected.length), {
+      this.toasts.error(bulkPartialText(outcome.failed.length, tasks.length), {
         description: $localize`:@@spaces.bulk.partial-text:They stay selected.`,
       });
     }
-    this.rows.reload();
   }
 
   /**
-   * Method markDone
+   * Method reverse
    *
    * @description
-   * Marks the selection done.
+   * Sends the reverse write of an undone action for the tasks it applied to, at the versions the
+   * gateway returned; a refusal shows the failure toast.
+   *
+   * @param {readonly TaskSummary[]} tasks - The tasks as they were before the action.
+   * @param {readonly TaskBulkEntry[]} done - What the action applied.
+   * @param {TaskBulkAction} action - The reverse action.
+   * @returns {Promise<void>} Resolves once sent.
    */
-  protected markDone(): void {
-    void this.run({ type: 'done' }, (count: number) => ({
-      title: bulkDoneText(count),
-      description: $localize`:@@spaces.bulk.done-toast-text:Status: Done.`,
-    }));
+  private async reverse(
+    tasks: readonly TaskSummary[],
+    done: readonly TaskBulkEntry[],
+    action: TaskBulkAction,
+  ): Promise<void> {
+    const versions: Map<string, number | null> = new Map<string, number | null>(
+      done.map((entry: TaskBulkEntry) => [entry.taskKey, entry.version]),
+    );
+    const applied: TaskSummary[] = tasks.flatMap((task: TaskSummary): TaskSummary[] => {
+      if (!versions.has(task.key)) return [];
+      const version: number | null | undefined = versions.get(task.key);
+      return [{ ...task, version: version ?? task.version }];
+    });
+    if (applied.length === 0) return;
+    const outcome: TaskBulkOutcome = await this.rows.act(applied, action);
+    if (this.destroyRef.destroyed) return;
+    if (outcome.done.length > 0) this.store.refreshCounts();
+    if (outcome.done.length === 0 && outcome.unknown.length === 0) {
+      this.toasts.error($localize`:@@spaces.bulk.failed:The selection could not be changed`);
+    }
   }
 
   /**
-   * Method assign
+   * Method undoStatuses
    *
    * @description
-   * Assigns the selection to a person.
+   * Puts back each task's previous status, with its cancellation reason when it was cancelled.
    *
-   * @param {string} userId - The person.
+   * @param {readonly TaskSummary[]} tasks - The tasks before the change.
+   * @param {readonly TaskBulkEntry[]} done - What the change applied.
    */
-  protected assign(userId: string): void {
-    const name: string =
-      this.bulkPeople().find((person: ViewOption): boolean => person.value === userId)?.label ?? '';
-    void this.run({ type: 'assign', userId }, (count: number) => ({
-      title: $localize`:@@spaces.bulk.assigned:${name}:name: assigned`,
-      description: bulkUpdatedText(count),
-    }));
+  private undoStatuses(tasks: readonly TaskSummary[], done: readonly TaskBulkEntry[]): void {
+    for (const group of groupBy(
+      tasks,
+      (task: TaskSummary) => `${task.status}\u0000${task.cancelReason ?? ''}`,
+    )) {
+      const status: StatusKey = group[0].status;
+      const reason: CancelReason | null = group[0].cancelReason;
+      void this.reverse(
+        group,
+        done,
+        status === 'cancelled' && reason
+          ? { type: 'status', status, cancelReason: reason }
+          : { type: 'status', status },
+      );
+    }
   }
 
   /**
-   * Method move
+   * Method restore
    *
    * @description
-   * Moves the selection to another list.
+   * « Annuler » of a deletion: takes the trash entries back.
    *
-   * @param {string} listId - The destination.
+   * @param {readonly string[]} entryIds - The trash entries.
+   * @returns {Promise<void>} Resolves once restored.
    */
-  protected move(listId: string): void {
-    const name: string =
-      this.targets().find((target: MoveTarget): boolean => target.listId === listId)?.name ?? '';
-    void this.run({ type: 'move', listId }, (count: number) => ({
-      title: bulkMovedText(count),
-      description: $localize`:@@spaces.bulk.moved-text:To ${name}:name:.`,
-    }));
+  private async restore(entryIds: readonly string[]): Promise<void> {
+    const restored: boolean = await this.rows.restore(entryIds);
+    if (this.destroyRef.destroyed) return;
+    this.store.refreshCounts();
+    if (!restored) {
+      this.toasts.error($localize`:@@spaces.bulk.restore-failed:The tasks could not be restored`);
+    }
   }
 
   /**
-   * Method trash
+   * Method copy
    *
    * @description
-   * Moves the confirmed selection to the trash.
+   * Writes text to the clipboard and confirms it.
+   *
+   * @param {string} text - The text.
+   * @param {string} title - The confirmation.
+   * @returns {Promise<void>} Resolves once copied or refused.
    */
-  protected trash(): void {
-    void this.run({ type: 'trash' }, (count: number) => ({
-      title: bulkDeletedText(count),
-      description: $localize`:@@spaces.bulk.deleted-text:Kept 30 days in the trash.`,
-    }));
-  }
-
-  /**
-   * Method deleteTitle
-   *
-   * @description
-   * Question of the deletion of the selection.
-   *
-   * @returns {string} The title.
-   */
-  protected deleteTitle(): string {
-    const count: number = this.selection().length;
-    return count > 1
-      ? $localize`:@@spaces.bulk.delete-title:Delete ${count}:count: tasks?`
-      : $localize`:@@spaces.bulk.delete-title-one:Delete this task?`;
-  }
-
-  /**
-   * Method deleteAction
-   *
-   * @description
-   * Action of the deletion of the selection.
-   *
-   * @returns {string} The label.
-   */
-  protected deleteAction(): string {
-    const count: number = this.selection().length;
-    return count > 1
-      ? $localize`:@@spaces.bulk.delete-action:Delete ${count}:count: tasks`
-      : $localize`:@@spaces.bulk.delete-action-one:Delete the task`;
-  }
-
-  /**
-   * Method selectedItems
-   *
-   * @description
-   * Keys of the selected tasks, listed by the confirmation.
-   *
-   * @returns {readonly string[]} The keys.
-   */
-  protected selectedItems(): readonly string[] {
-    return this.selection().map((item: BulkSelection): string => item.taskKey);
+  private async copy(text: string, title: string): Promise<void> {
+    try {
+      await this.document.defaultView?.navigator.clipboard.writeText(text);
+      this.toasts.show(title, { description: text });
+    } catch {
+      this.toasts.error($localize`:@@spaces.rows.copy-failed:Could not copy`, {
+        description: text,
+      });
+    }
   }
   // #endregion
 }

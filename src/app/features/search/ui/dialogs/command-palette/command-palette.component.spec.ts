@@ -7,6 +7,8 @@ import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vite
 
 import { ThemeService } from '@core/theme';
 import { SignOut } from '@features/auth';
+import { LIST_DIRECTORY, type ListDirectoryEntry } from '@features/spaces/ports/list-directory';
+import { TaskCreate } from '@features/task';
 import {
   WORKSPACE_CONTEXT,
   type WorkspaceContextPort,
@@ -48,6 +50,43 @@ const workspace: WorkspaceContextPort = {
 };
 
 /**
+ * Function entry
+ *
+ * @description
+ * A list of the workspace as Spaces' list directory gives it.
+ *
+ * @param {string} id - List identifier.
+ * @param {string} name - List name.
+ * @returns {ListDirectoryEntry} The directory entry.
+ */
+function entry(id: string, name: string): ListDirectoryEntry {
+  return {
+    id,
+    name,
+    spaceId: 'produit',
+    spaceName: 'Produit',
+    icon: 'phosphorListBulletsBold',
+    tone: 'text-violet',
+  };
+}
+
+/**
+ * Constant directory
+ *
+ * @description
+ * The five lists of the workspace, in sidebar order.
+ *
+ * @type {readonly ListDirectoryEntry[]}
+ */
+const directory: readonly ListDirectoryEntry[] = [
+  entry('l1', 'Sprint 14'),
+  entry('l2', 'Backlog produit'),
+  entry('l3', 'Roadmap'),
+  entry('l4', 'Bugs'),
+  entry('l5', 'Sprint 15'),
+];
+
+/**
  * Function optionNamed
  *
  * @description
@@ -67,6 +106,7 @@ describe('CommandPaletteDialog', () => {
   let navigate: Mock<(commands: readonly unknown[]) => Promise<boolean>>;
   let run: Mock<() => Promise<boolean>>;
   let toggle: Mock<() => void>;
+  let createTask: Mock<() => boolean>;
   let fixture: ComponentFixture<CommandPaletteDialog>;
 
   beforeEach(async () => {
@@ -76,15 +116,18 @@ describe('CommandPaletteDialog', () => {
     navigate = vi.fn(() => Promise.resolve(true));
     run = vi.fn(() => Promise.resolve(true));
     toggle = vi.fn();
+    createTask = vi.fn(() => true);
     TestBed.configureTestingModule({
       imports: [CommandPaletteDialog],
       providers: [
         { provide: SearchApi, useValue: { search } },
         { provide: Router, useValue: { navigate, navigateByUrl: navigate } },
         { provide: SignOut, useValue: { run } },
+        { provide: TaskCreate, useValue: { open: createTask } },
         { provide: ThemeService, useValue: { resolved: () => 'light', toggle } },
         { provide: WORKSPACE_CONTEXT, useValue: workspace },
         { provide: CwToastService, useValue: { error: vi.fn() } },
+        { provide: LIST_DIRECTORY, useValue: { lists: signal(directory) } },
       ],
     });
     fixture = TestBed.createComponent(CommandPaletteDialog);
@@ -111,6 +154,37 @@ describe('CommandPaletteDialog', () => {
     expect(TestBed.inject(CommandPalette).isOpen()).toBe(false);
   });
 
+  it('keeps the palette open on Ctrl K and ignores Ctrl K typed in a field', async () => {
+    const field: HTMLInputElement = document.createElement('input');
+    document.body.append(field);
+    field.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', ctrlKey: true, bubbles: true }));
+    await fixture.whenStable();
+    expect(TestBed.inject(CommandPalette).isOpen()).toBe(false);
+    field.remove();
+
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', ctrlKey: true }));
+    await fixture.whenStable();
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', ctrlKey: true }));
+    await fixture.whenStable();
+
+    expect(TestBed.inject(CommandPalette).isOpen()).toBe(true);
+  });
+
+  it('suggests « Créer une tâche » first, which opens the task creation', async () => {
+    TestBed.inject(CommandPalette).setOpen(true);
+    await fixture.whenStable();
+
+    const first: HTMLElement | undefined =
+      document.querySelector<HTMLElement>('[role="option"]') ?? undefined;
+    expect(first?.textContent).toContain('Créer une tâche');
+    expect(first?.textContent).toContain('N');
+    first?.click();
+    await fixture.whenStable();
+
+    expect(TestBed.inject(CommandPalette).isOpen()).toBe(false);
+    expect(createTask).toHaveBeenCalledOnce();
+  });
+
   it('shows the server matches, opens a task and remembers it', async () => {
     TestBed.inject(CommandPalette).setOpen(true);
     await fixture.whenStable();
@@ -128,6 +202,50 @@ describe('CommandPaletteDialog', () => {
 
     expect(navigate).toHaveBeenCalledWith(['/', 'atelier-nord', 't', 'CAD-482']);
     expect(localStorage.getItem('cadenway-recent-tasks:u1:o1')).toContain('CAD-482');
+  });
+
+  it('shows the first four lists of the workspace before anything is typed', async () => {
+    TestBed.inject(CommandPalette).setOpen(true);
+    await fixture.whenStable();
+
+    const list: HTMLElement | undefined = optionNamed('Sprint 14');
+    expect(list?.textContent).toContain('Produit');
+    expect(list?.querySelector('ng-icon')?.classList).toContain('text-violet');
+    expect(optionNamed('Bugs')).toBeDefined();
+    expect(optionNamed('Sprint 15')).toBeUndefined();
+    list?.click();
+
+    expect(navigate).toHaveBeenCalledWith(['/', 'atelier-nord', 'l', 'l1']);
+  });
+
+  it('filters the lists of the workspace by name beside the server list matches', async () => {
+    search.mockReturnValue(
+      of([
+        { kind: 'list', listId: 'l5', name: 'Sprint 15', spaceName: 'Produit' },
+        { kind: 'list', listId: 'l9', name: 'Sprint archive', spaceName: 'Ops' },
+      ]),
+    );
+    TestBed.inject(CommandPalette).setOpen(true);
+    await fixture.whenStable();
+    const input: HTMLInputElement | null = document.querySelector('input[role="combobox"]');
+    if (!input) throw new Error('No palette field');
+    input.value = 'sprint';
+    input.dispatchEvent(new Event('input'));
+
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      expect(optionNamed('Sprint archive')).toBeDefined();
+    });
+    const names: readonly string[] = Array.from(
+      document.querySelectorAll<HTMLElement>('[role="option"]'),
+    )
+      .map((option: HTMLElement): string => option.textContent)
+      .filter((text: string): boolean => text.includes('Sprint'));
+    expect(names).toHaveLength(3);
+    expect(names[0]).toContain('Sprint 14');
+    expect(names[1]).toContain('Sprint 15');
+    expect(names[2]).toContain('Sprint archive');
+    expect(optionNamed('Roadmap')).toBeUndefined();
   });
 
   it('says nothing matched the text', async () => {

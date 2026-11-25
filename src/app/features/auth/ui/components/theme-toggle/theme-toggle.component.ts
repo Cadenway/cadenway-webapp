@@ -21,7 +21,7 @@ import { ThemeService } from '@core/theme';
       cwButton
       type="button"
       variant="ghost"
-      size="icon-sm"
+      size="icon"
       class="text-muted-foreground"
       [attr.aria-label]="label()"
       (click)="toggle($event)"

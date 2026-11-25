@@ -17,18 +17,21 @@ renders inside the shell. The page keeps the unknown address in the browser.
 | Entry point     | Consumers      |
 | --------------- | -------------- |
 | `errors.routes` | app, workspace |
-| `.`             | app            |
+| `.`             | app, spaces    |
 
 `.` publishes `RouteErrorBoundary`, the `defaultErrorComponent` of `withErrorBoundaries` in
 `app.config.ts`, a component under `ui/components/route-error-boundary`. A route that needs its
-own `errorComponent` uses the same component; the 404 route loads it too.
+own `errorComponent` uses the same component; the 404 route loads it too. It also publishes the
+`RouteErrorData` type: a route's `data` (`satisfies RouteErrorData`) may set `unavailableTitle`, the
+localized title of its unavailable state (Spaces' `list` view: « Impossible de charger les
+tâches »); every other route keeps « Impossible de charger cette page ».
 
 ## Dependencies
 
 - `@cadenway/api-client`: `AccessRequestsService.createAccessRequest` and
   `TrashService.restoreTrashEntry`, through `ErrorRecovery`.
 - Workspace's `ports/workspace-context`, optional, for the trash link of the current workspace.
-- `@core/api` problem readers, `@cadenway/ui` and `@cadenway/icons`.
+- `@core/api` problem readers, `@core/config` (`statusUrl`), `@cadenway/ui` and `@cadenway/icons`.
 
 ## Invariants
 
@@ -42,7 +45,8 @@ own `errorComponent` uses the same component; the 404 route loads it too.
 - Retry runs the route again with a same-URL navigation and `onSameUrlNavigation: 'reload'`: the
   router re-creates a page whose outlet shows its error component, and re-runs the guards and
   resolvers its `runGuardsAndResolvers` allows. `errors.routes.spec.ts` covers it.
-- « État des services » shows only when a status page URL is configured; none exists yet.
+- « État du service » (`App.dc.html` line 497) links to the runtime `statusUrl` in a new tab and
+  shows only in the unavailable state when it is configured; no environment sets one yet.
 - `ErrorRecoveryStore` is page-scoped (component providers), so each failure starts over. A failed
   access request or restore returns to its idle state; its failure message waits for the shell's
   toaster.

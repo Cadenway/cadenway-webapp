@@ -11,15 +11,21 @@ composes these blocks; the task detail page comes in step 5.
 
 ## Routes
 
-None yet: `/:org/t/:taskKey` comes in step 5 (the create toast's « Ouvrir » leads there and renders
-the 404 meanwhile).
+`TASK_ROUTES` (`task.routes.ts`), mounted by Workspace below `/:org`:
+
+- `t/:taskKey`, the shareable deep link of a task (the create toast's « Ouvrir », « Copier le lien »):
+  `taskLinkResolver` reads the task by key (`TaskApi.read`) once the workspace context is committed
+  and redirects with a `RedirectCommand` to `/<slug>/l/<listId>/list?task=<KEY>`; a task it cannot
+  read renders the workspace's 404 at the same address (`skipLocationChange`). The route has no
+  component; the task detail comes in step 5.
 
 ## Public entry points
 
-| Entry point | Consumers |
-| ----------- | --------- |
-| `.`         | spaces    |
-| `providers` | workspace |
+| Entry point   | Consumers      |
+| ------------- | -------------- |
+| `.`           | spaces, search |
+| `providers`   | workspace      |
+| `task.routes` | workspace      |
 
 `providers` publishes `withTaskCreate()` (`overlays`, order 20), bound on `/:org`.
 
@@ -27,14 +33,19 @@ the 404 meanwhile).
 
 - Models: `TaskSummary` (`id` is the key, `version` is the `If-Match` precondition), `TaskProgress`,
   `StatusOption`, `Person`, `TaskStatusChange`, `TaskCancellation`, `TaskCancelRequest`,
-  `TaskCreateOptions`, `CreatedTask`; the words `STATUS_LABELS` and
-  `PRIORITY_LABELS`; the rules `nextStatus`, `isClosedStatus`, `statusLabel`, `pickableStatuses` and
-  `defaultStatusOptions`; `initialsOf` and `personOf(userId, name)` for members another feature read.
+  `TaskCreateOptions` (list, status, due date, parent, priority and assignees), `CreatedTask`,
+  `TaskBulkAction`, `TaskBulkSelection`, `TaskBulkEntry`, `TaskBulkOutcome`; the words
+  `STATUS_LABELS`, `STATUS_HINTS`, `MILESTONE_STATUS_HINTS`, `STATUS_CATEGORY_LABELS`,
+  `CANCEL_REASON_LABELS` and `PRIORITY_LABELS`; the rules `nextStatus`, `isClosedStatus`,
+  `isMilestoneStatus`, `statusLabel`, `pickableStatuses` and `defaultStatusOptions`; `initialsOf` and `personOf(userId, name)` for members another feature read.
 - `TaskStatusChangesStore`, a SignalStore the consumer provides on its route: `request(task, status,
 options?)`, `requestCancel(tasks, options?)`, `pendingStatus(taskId)`, `displayedStatus(task)`,
   `settledStatus(task)`, `settledTask(task)`, `undo(taskId)`, `cancelRequest` with
   `confirmCancel(cancellation)` and `keepTask()`, the `changed` stream, and the `completed` stream
   after each write succeeds or fails; `STATUS_SETTLE_MS` (460).
+- `TaskActionsApi` (root): `bulk(selection, action, current)` (chunks of 50, idempotent, one retry
+  after an uncertain answer, per-task versions, copies and trash entries), `remind(taskKey, at)` and
+  `restore(entryId)`, for the stores of the screens that act on several tasks.
 - `TaskCreate` (root): `open(options?)`, `useDefaults(defaults, destroyRef)`, `close()`, `isOpen`,
   `options`, `created`.
 - Presentational components, inputs and outputs only: `cw-task-status-picker`,
@@ -43,7 +54,8 @@ options?)`, `requestCancel(tasks, options?)`, `pendingStatus(taskId)`, `displaye
 
 ## Dependencies
 
-- `@cadenway/api-client` through `data-access/`: `TasksService.updateTask` (status with `If-Match`), `getTask`, `createTask` and `createSubtask` (with `Idempotency-Key`), `listLabels`;
+- `@cadenway/api-client` through `data-access/`: `TasksService.updateTask` (status with `If-Match`), `getTask`, `createTask` and `createSubtask` (with `Idempotency-Key`), `executeBulkTaskAction` (with `Idempotency-Key`), `listLabels`;
+  `RemindersService.setTaskReminder`, `TrashService.restoreTrashEntry`;
   `SpacesService.listSpaces`, `getSpace` (`cache: 'no-store'`), `listTaskTemplates`;
   `ListsService.listLists`; `MembersService.listMembers` (owners, admins and members). Every
   collection is read to its last cursor page.
@@ -89,8 +101,8 @@ options?)`, `requestCancel(tasks, options?)`, `pendingStatus(taskId)`, `displaye
   reuses its `Idempotency-Key`, including across dialog openings in the same organization; a changed
   body or organization gets a new one. A subtask (`parentKey`) goes to
   `createSubtask`, which takes no drafted subtasks or checklist. The parent key requires its list id.
-- The create dialog starts each opening afresh: the presets, the current user assigned, « À faire »
-  and « Moyenne ». « Créer d'autres tâches » keeps it open and empties the name, the description,
+- The create dialog starts each opening afresh: the current user assigned, « À faire » and
+  « Moyenne », unless the presets give a status, a priority or assignees (none for « Non assignées »). « Créer d'autres tâches » keeps it open and empties the name, the description,
   and the subtasks while retaining the template's checklist. Its toast « Ouvrir » leads to `/<slug>/t/<key>`.
   A refused creation's issues (422) stay on their fields until each field changes, and all go when
   another destination list is picked or the dialog opens again. An issue on a field edited, or a
@@ -99,8 +111,12 @@ options?)`, `requestCancel(tasks, options?)`, `pendingStatus(taskId)`, `displaye
 - Known gaps: the comment count of a row is null (task summaries carry none); the Git chip is left
   out (B4, no API yet); the dialog's file drop is not built (attachments need the task first); the
   mockup's built-in templates (Bug, Fonctionnalité, Mise en production) appear only when the space
-  returns them from `listTaskTemplates`; avatars draw initials (members give an avatar id, no
-  address).
+  returns them from `listTaskTemplates`, and the template menu has no icon or tone (the DTO carries
+  none); avatars draw initials (members give an avatar id, no address). The people and label
+  triggers show the combobox's own content (the chosen option, « (moi) » included, or « n
+  personnes »), and the due trigger shows the short date without « Demain · » or the
+  « Aujourd’hui » tone, until `cw-combobox` and `cw-date-picker` take a trigger template; the dialog
+  is `size="lg"`, not the mockup's `max-w-4xl`.
 
 ## Copy not taken word for word from the mockup
 

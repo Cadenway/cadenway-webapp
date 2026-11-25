@@ -246,6 +246,41 @@ export class ViewTools {
   public readonly taskTotal: InputSignal<number | null> = input<number | null>(null);
 
   /**
+   * Property visibleCount
+   *
+   * @description
+   * Tasks the view shows with its filters, for « n sur m tâches » in the filter dialog, or null
+   * when unknown (the footer then shows « Tout effacer » alone).
+   *
+   * @type {InputSignal<number | null>}
+   * @readonly
+   */
+  public readonly visibleCount: InputSignal<number | null> = input<number | null>(null);
+
+  /**
+   * Property hasSubtasks
+   *
+   * @description
+   * Whether the list has subtasks; « Sous-tâches : … » shows only then (`listHasKids` of
+   * `App.dc.html`). True by default, so the display stays reachable while it is unknown.
+   *
+   * @type {InputSignal<boolean>}
+   * @readonly
+   */
+  public readonly hasSubtasks: InputSignal<boolean> = input(true);
+
+  /**
+   * Property userId
+   *
+   * @description
+   * The signed-in member, offered once as « Moi » in the assignee filter rather than by name.
+   *
+   * @type {InputSignal<string | null>}
+   * @readonly
+   */
+  public readonly userId: InputSignal<string | null> = input<string | null>(null);
+
+  /**
    * Property savedView
    *
    * @description
@@ -543,8 +578,10 @@ export class ViewTools {
           title: this.fieldLabels.assignee,
           options: [
             { value: 'me', label: $localize`:@@spaces.filter.me:Me` },
+            ...this.people().filter(
+              (person: ViewOption): boolean => person.value !== this.userId(),
+            ),
             { value: 'none', label: $localize`:@@spaces.filter.unassigned:Unassigned` },
-            ...this.people(),
           ],
         },
         {
@@ -560,7 +597,8 @@ export class ViewTools {
    * Property chips
    *
    * @description
-   * The active filters, a chip per field.
+   * The active filters, a chip per field. An assignee id names its member, the signed-in one
+   * included (a saved view may name them).
    *
    * @type {Signal<readonly FilterChip[]>}
    * @readonly
@@ -570,8 +608,11 @@ export class ViewTools {
     return FIELDS.flatMap((field: FilterField): FilterChip[] => {
       const values: readonly string[] = this.config().filters[field];
       if (values.length === 0) return [];
-      const options: readonly ViewOption[] =
-        sections.find((section: FilterSection): boolean => section.field === field)?.options ?? [];
+      const options: readonly ViewOption[] = [
+        ...(sections.find((section: FilterSection): boolean => section.field === field)?.options ??
+          []),
+        ...(field === 'assignee' ? this.people() : []),
+      ];
       return [
         {
           field,
@@ -760,6 +801,22 @@ export class ViewTools {
    */
   protected asStatus(value: string): StatusKey {
     return value as StatusKey;
+  }
+
+  /**
+   * Method visibleLabel
+   *
+   * @description
+   * Footer of the filter dialog: « 3 sur 12 tâches ».
+   *
+   * @returns {string} The label.
+   */
+  protected visibleLabel(): string {
+    const shown: number = this.visibleCount() ?? 0;
+    const total: number = this.taskTotal() ?? 0;
+    return total === 1
+      ? $localize`:@@spaces.filter.visible-one:${shown}:shown: of ${total}:total: task`
+      : $localize`:@@spaces.filter.visible-many:${shown}:shown: of ${total}:total: tasks`;
   }
 
   /**

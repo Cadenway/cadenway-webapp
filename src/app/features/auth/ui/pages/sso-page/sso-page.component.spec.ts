@@ -8,7 +8,7 @@ import { AuthFlowStore } from '../../../state/auth-flow/auth-flow.store';
 import { SsoPage } from './sso-page.component';
 
 describe('SsoPage', () => {
-  it('says when no SSO is set up for the domain of the work address', async () => {
+  it('shows the format error on submit, then says when no SSO is set up for the domain', async () => {
     const startSso: Mock = vi.fn(() => Promise.resolve({ kind: 'no-sso' }));
     TestBed.configureTestingModule({
       imports: [SsoPage],
@@ -24,7 +24,17 @@ describe('SsoPage', () => {
     const input: HTMLInputElement | null = host.querySelector('#sso-email');
     if (input === null) throw new Error('Expected the work address.');
 
-    expect(host.querySelector<HTMLButtonElement>('button[type="submit"]')?.disabled).toBe(true);
+    expect(input.getAttribute('aria-describedby')).toBe('sso-email-help');
+    expect(host.querySelector('#sso-email-help')?.textContent).toContain(
+      'Saisissez votre adresse professionnelle, par exemple prenom.nom@ateliernord.fr.',
+    );
+    expect(host.querySelector<HTMLButtonElement>('button[type="submit"]')?.disabled).toBe(false);
+    host.querySelector('form')?.dispatchEvent(new Event('submit', { cancelable: true }));
+    await fixture.whenStable();
+    expect(host.querySelector('#sso-email-help')?.getAttribute('role')).toBe('alert');
+    expect(document.activeElement).toBe(input);
+    expect(startSso).not.toHaveBeenCalled();
+
     input.value = 'camille@gmail.com';
     input.dispatchEvent(new Event('input'));
     await fixture.whenStable();
