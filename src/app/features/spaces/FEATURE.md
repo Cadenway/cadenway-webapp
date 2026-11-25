@@ -134,12 +134,11 @@ breadcrumb, dialog, inline edit, toolbar).
   row menu uses the same bulk path for a selected group, including a shared cancellation reason.
 - Under 768 px the table hides the assignees, priority, labels and actions columns.
 
-## Gateway follow-up
+## Organization pin
 
 `listSpaces`, `getSpaceOverview`, favorites, `getListCounts`, saved views, `listLabels`,
-`listMembers` and `listListGrants` are not yet pinned by the gateway. They await B20
-(`cadenway-api-contracts#118`, then the gateway); afterward the webapp adds them to
-`ORGANIZATION_PIN_OPERATIONS`.
+`listMembers` and `listListGrants` carry `If-Organization-Match` since contracts 0.42.0 (B20): the
+gateway checks them and `ORGANIZATION_PIN_OPERATIONS` lists them.
 
 ## Known gaps
 
