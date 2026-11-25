@@ -130,6 +130,27 @@ describe('SpaceOverviewPage', () => {
     expect(api['overview']).toHaveBeenCalledTimes(1);
   });
 
+  it('follows the sidebar overview of the space once it changes', async () => {
+    const harness: RouterTestingHarness = await RouterTestingHarness.create(
+      '/atelier-nord/spaces/sp-design',
+    );
+    await expect.poll(() => text(harness, 'list-card')).toContain('32 tâches');
+    const navigation: InstanceType<typeof SpacesNavigationStore> =
+      TestBed.inject(SpacesNavigationStore);
+    await expect.poll(() => navigation.overviews.hasValue()).toBe(true);
+
+    navigation.overviews.set({
+      ...navigation.overviews.value(),
+      'sp-design': {
+        ...overview,
+        taskCount: 33,
+        lists: [{ ...overview.lists[0], counts: { ...overview.lists[0].counts, total: 33 } }],
+      },
+    });
+
+    await expect.poll(() => text(harness, 'list-card')).toContain('33 tâches');
+  });
+
   it('retries a failed primary space read through the route boundary', async () => {
     api['space'].mockRejectedValueOnce(new Error('unavailable'));
     const harness: RouterTestingHarness = await RouterTestingHarness.create(

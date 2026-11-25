@@ -1,7 +1,15 @@
-import { inject, resource, type ResourceRef, type Signal, type Type } from '@angular/core';
+import {
+  computed,
+  inject,
+  resource,
+  type ResourceRef,
+  type Signal,
+  type Type,
+} from '@angular/core';
 import {
   patchState,
   signalMethod,
+  withHooks,
   signalStore,
   withMethods,
   withProps,
@@ -103,6 +111,16 @@ export interface SpaceOverviewStoreInstance {
 }
 
 /**
+ * Type SpacesNavigationStoreOverviews
+ *
+ * @description
+ * The overviews resource of the sidebar's navigation store.
+ *
+ * @type {InstanceType<typeof SpacesNavigationStore>['overviews']}
+ */
+type SpacesNavigationStoreOverviews = InstanceType<typeof SpacesNavigationStore>['overviews'];
+
+/**
  * Function createSpaceOverviewStore
  *
  * @description
@@ -121,6 +139,7 @@ function createSpaceOverviewStore(): Type<SpaceOverviewStoreInstance> {
         return spaceId === null ? undefined : { spaceId };
       };
       return {
+        _navigation: navigation,
         space: resource({
           params: bySpace,
           loader: ({
@@ -163,7 +182,34 @@ function createSpaceOverviewStore(): Type<SpaceOverviewStoreInstance> {
       load: signalMethod<string>((spaceId: string): void => {
         if (spaceId !== store.spaceId()) patchState(store, { spaceId });
       }),
+      _followNavigation: signalMethod<SpaceOverview | undefined>(
+        (next: SpaceOverview | undefined): void => {
+          if (next === undefined) return;
+          if (
+            next.spaceId !== store.spaceId() ||
+            store.overview.isLoading() ||
+            !store.overview.hasValue() ||
+            store.overview.value() === next
+          ) {
+            return;
+          }
+          store.overview.set(next);
+        },
+      ),
     })),
+    withHooks({
+      onInit(store): void {
+        store._followNavigation(
+          computed((): SpaceOverview | undefined => {
+            const spaceId: string | null = store.spaceId();
+            const overviews: SpacesNavigationStoreOverviews = store._navigation.overviews;
+            return spaceId !== null && overviews.hasValue()
+              ? overviews.value()[spaceId]
+              : undefined;
+          }),
+        );
+      },
+    }),
   );
 }
 
@@ -172,7 +218,9 @@ function createSpaceOverviewStore(): Type<SpaceOverviewStoreInstance> {
  *
  * @description
  * The overview of a space (« Vue d’ensemble »), provided by its page. The space and its lists are
- * the primary reads; the milestones keep an inline error with « Réessayer ».
+ * the primary reads; the milestones keep an inline error with « Réessayer ». The lists follow the
+ * sidebar's overview of the same space once it changes (a task created from this tab reads it
+ * again), so both show the same counts.
  *
  * @type {ReturnType<typeof createSpaceOverviewStore>}
  */
