@@ -16,18 +16,10 @@ import {
   withState,
 } from '@ngrx/signals';
 import { rxMethod } from '@ngrx/signals/rxjs-interop';
-import {
-  catchError,
-  debounceTime,
-  EMPTY,
-  filter,
-  type Observable,
-  pipe,
-  switchMap,
-  tap,
-} from 'rxjs';
+import { auditTime, catchError, EMPTY, filter, type Observable, pipe, switchMap, tap } from 'rxjs';
 
 import { type RealtimeChange, RealtimeConnection } from '@core/realtime';
+import { type CreatedTask, TaskCreate } from '@features/task';
 import { WORKSPACE_CONTEXT } from '@features/workspace/ports/workspace-context';
 
 import {
@@ -380,6 +372,7 @@ function createListPageStore(): Type<ListPageStoreInstance> {
         _workspace: inject(WORKSPACE_CONTEXT),
         _destroyRef: inject(DestroyRef),
         _realtime: inject(RealtimeConnection, { optional: true }),
+        _taskCreate: inject(TaskCreate),
         list,
         space: resource({
           params: () => (list.hasValue() ? { spaceId: list.value().spaceId } : undefined),
@@ -480,16 +473,22 @@ function createListPageStore(): Type<ListPageStoreInstance> {
             ),
             filter((notice: RealtimeChange): boolean => {
               const data: unknown = notice.data;
-              return (
-                typeof data === 'object' &&
-                data !== null &&
-                (('listId' in data && data.listId === store.listId()) ||
-                  ('spaceId' in data &&
-                    store.list.hasValue() &&
-                    data.spaceId === store.list.value().spaceId))
-              );
+              if (typeof data !== 'object' || data === null) return false;
+              if ('listId' in data) return data.listId === store.listId();
+              if ('spaceId' in data) {
+                return store.list.hasValue() && data.spaceId === store.list.value().spaceId;
+              }
+              return COUNTED_TASK_NOTICES.has(notice.type);
             }),
-            debounceTime(300),
+            auditTime(300),
+            tap((): void => {
+              reloadCounts();
+            }),
+          ),
+        ),
+        _countCreations: rxMethod<CreatedTask>(
+          pipe(
+            filter((task: CreatedTask): boolean => task.listId === store.listId()),
             tap((): void => {
               reloadCounts();
             }),
@@ -654,12 +653,27 @@ function createListPageStore(): Type<ListPageStoreInstance> {
     withHooks({
       onInit(store): void {
         store._watch(store.listId);
+        store._countCreations(store._taskCreate.created);
         store._flushCounts(store.counts.status);
         store._flushMilestones(store.milestoneCount.status);
       },
     }),
   );
 }
+
+/**
+ * Constant COUNTED_TASK_NOTICES
+ *
+ * @description
+ * The task notices that can change the counts or the milestone count. A comment or Git link
+ * notice cannot, and the socket hands notices of every watched room to every watch.
+ *
+ * @type {ReadonlySet<string>}
+ */
+const COUNTED_TASK_NOTICES: ReadonlySet<string> = new Set([
+  'task.updated.v1',
+  'task.status-changed.v1',
+]);
 
 /**
  * Constant ListPageStore
@@ -669,9 +683,14 @@ function createListPageStore(): Type<ListPageStoreInstance> {
  * rejects with the typed route error (« Accès refusé » for a list the gateway does not show, not
  * found for a malformed id, unavailable otherwise), which the page lets reach the boundary. The
  * space, counts, milestones, members, labels and saved views are secondary reads with their own
- * state. While the page lives it watches the list's realtime room; the gateway broadcasts every
- * change to every watch, so matching list or space notices are debounced before refreshing counts. Writes report whether the gateway
- * recorded them; renaming and deleting a saved view are optimistic and restore on a refusal.
+ * state. While the page lives it watches the list's realtime room and refreshes the counts 300 ms
+ * after a notice, once for every notice of that window, so a steady flow of changes cannot hold the
+ * refresh back. The socket hands every notice to every watch: a notice naming another list or space
+ * is ignored, and so is a comment or Git link notice; a task update or status change, which names
+ * only its task (`{ taskId, changed }`), counts. A task created in the list from this tab refreshes
+ * them at once.
+ * Writes report whether the gateway recorded them; renaming and deleting a saved view are
+ * optimistic and restore on a refusal.
  *
  * @type {ReturnType<typeof createListPageStore>}
  */
