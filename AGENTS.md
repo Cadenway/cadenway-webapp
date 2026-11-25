@@ -12,7 +12,7 @@ the skills relevant to the task.
   `cw-ui-consumer` for markup. Build a missing generic brick in cadenway-design-system, then bump the
   exact `@cadenway/ui` version here; feature-specific wrappers (forms, dialogs, sheets) stay in the feature.
 - For screens and services that fetch data, apply the data-access rule for the generated client,
-  DTO ownership and loading, error with Réessayer, and empty states.
+  DTO ownership and loading, error with Retry, and empty states.
 - For ownership decisions, consult the webapp section of the repositories document.
 - Get versions and scripts from `package.json`. Keep version declarations there.
 
@@ -41,9 +41,11 @@ src/app/
 
 - Everything written in the repository is **English**: code, comments, docs, agent prompts, rules,
   skills, commit messages, branch names, PR titles and descriptions.
-- That includes URL paths and the user-facing source copy: English strings with a stable
-  `@@feature.area.key` id (`$localize`, `i18n`). The mockup's French wording, word for word, is the `fr`
-  translation users see. Keep copy out of logic.
+- That includes URL paths and the user-facing copy: English strings with a stable
+  `@@feature.area.key` id (`$localize`, `i18n`). No French text anywhere in the sources (code,
+  comments, specs, fixtures). English is the default locale; the mockup's French wording, word for
+  word, lives only in the French catalog `src/locale/messages.fr.json`, loaded at runtime when
+  `?lang=fr` selects French (see `core/locale`). Keep copy out of logic.
 - Follow the user's language in the conversation only. No emojis.
 - Never invent facts about the product, the contracts, the mockup or the tooling: cite the file or
   the document. When something does not exist yet, say so and say which step of the start-up plan
@@ -51,7 +53,7 @@ src/app/
 
 ## Architectural ownership
 
-- Business UI belongs to its owner under `features/`. `core` owns app-wide infrastructure (config, API client setup, realtime, theme and shortcuts). `layouts` owns shells and `shared` owns generic non-visual helpers.
+- Business UI belongs to its owner under `features/`. `core` owns app-wide infrastructure (config, API client setup, realtime, theme, shortcuts and locale). `layouts` owns shells and `shared` owns generic non-visual helpers.
 - Pages orchestrate under `ui/pages/`; presentational components take inputs and emit outputs. Place unit specs beside their subjects and browser scenarios under `tests/e2e/`.
 - Generic visual bricks belong to cadenway-design-system, never here.
 

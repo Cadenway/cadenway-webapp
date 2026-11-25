@@ -25,8 +25,8 @@ Copy fidelity.
 
 ## What to check
 
-1. The `fr` translation matches the mockup word for word, including typographic apostrophes and non-breaking spaces before « ; : ? ! ».
-2. Every source string is English, carries a stable `@@feature.area.key` id and stays out of logic.
+1. The French catalog `src/locale/messages.fr.json` matches the mockup word for word, including typographic apostrophes and non-breaking spaces before « ; : ? ! ».
+2. Every source string is English, carries a stable `@@feature.area.key` id and stays out of logic; no French text remains in code, comments, specs or fixtures.
 3. Every state has its text: empty, error, confirmation, toast.
 
 ## Review method

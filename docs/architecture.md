@@ -141,11 +141,22 @@ Layouts never import features. Features fill them in three ways:
 
 ## Localization
 
-- `@angular/localize`, with English as the source locale. Every string uses `$localize` or `i18n` and
-  carries a stable `@@feature.area.key` id. `src/locale/messages.fr.xlf` holds the mockup's French
-  wording, word for word, and missing translations fail the build.
-- Bricks with their own text receive English source labels from `core/locale` through their labels
-  providers. Route titles use `$localize` and go through the application `TitleStrategy`.
+- `@angular/localize` at runtime, in one build whose source and default locale is English. Every
+  string uses `$localize` or `i18n` and carries a stable `@@feature.area.key` id; the sources hold no
+  French text. `src/locale/messages.json` is the extracted English catalog and
+  `src/locale/messages.fr.json` (Angular's JSON format) holds the mockup's French wording, word for
+  word. `pnpm i18n:check` fails on a stale source catalog and on a missing, empty, orphan or
+  placeholder-mismatched French text.
+- `core/locale` chooses the locale before bootstrap: `?lang=fr` or `?lang=en` selects it and is
+  remembered on the device, otherwise the remembered choice applies, else English. French fetches
+  `/i18n/messages.fr.json` and its locale data, calls `loadTranslations()`, then sets
+  `$localize.locale` (read by Angular's default `LOCALE_ID`) and `<html lang>`; only then does
+  `main.ts` import the application modules, since messages are translated when their module
+  evaluates. English loads nothing extra. A failed French load starts in English.
+  `LocaleService.use()` switches by reloading the page with `?lang=`.
+- Bricks with their own text receive English source labels through their labels providers, given by
+  the layout or feature that renders them. Route titles use `$localize` and go through the
+  application `TitleStrategy`.
 
 The account menu uses `cw-avatar` presence indicators for the rail and menu header; their
 localized labels describe the presence, while the avatars are decorative beside the account name.
