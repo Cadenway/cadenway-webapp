@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vite
 
 import { HttpErrorResponse } from '@angular/common/http';
 
-import { OrganizationPin } from '@core/api';
+import { OrganizationPin, OrganizationSwitchPendingError } from '@core/api';
 import { RuntimeConfigStore } from '@core/config';
 
 import {
@@ -897,6 +897,27 @@ describe('RealtimeConnection', () => {
     await flush();
     expect(ticket).toHaveBeenCalledTimes(2);
     expect(sockets).toHaveLength(1);
+  });
+
+  it.each([
+    new OrganizationSwitchPendingError(),
+    new HttpErrorResponse({ status: 412, error: { code: 'organization.context-changed' } }),
+  ])('backs off and retries a nonterminal ticket failure', async (error: Error) => {
+    const {
+      connection,
+      ticket,
+      terminal,
+    }: { connection: RealtimeConnection; ticket: Mock; terminal: Mock } = setup();
+    ticket.mockRejectedValueOnce(error);
+    connection.presenceChanges.subscribe();
+    await flush();
+    expect(connection.status()).toBe('reconnecting');
+    expect(terminal).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(999);
+    expect(ticket).toHaveBeenCalledOnce();
+    await vi.advanceTimersByTimeAsync(1);
+    await flush();
+    expect(ticket).toHaveBeenCalledTimes(2);
   });
 
   it('retries when hello does not arrive before the admission timeout', async () => {

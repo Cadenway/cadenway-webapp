@@ -32,7 +32,11 @@ The root transport provides Angular HTTP to the generated `@cadenway/api-client`
   uses the browser's session cookie there.
 - `OrganizationPin` attaches the expected organization to supported gateway operations and reports
   `organization.context-changed`; the guard may explicitly read the actual session organization
-  without the pin to recover.
+  without the pin to recover. The operation list follows the installed public contracts and a drift
+  spec checks it in both directions. Member avatars and organization logos rendered via an `img`,
+  and CSV exports fetched via a direct download link, bypass HttpClient and remain unpinned. The
+  current account avatar uses initials; the list CSV export uses the generated client and is pinned
+  before its content is saved through an object URL.
 - Realtime uses one lazy connection per workspace, fresh tickets on reconnect and ref-counted rooms.
   The route-scoped connection survives an in-place slug change and reconnects for the new organization.
   The gateway envelope does not identify the delivering room, so validated deduplicated changes are

@@ -108,6 +108,30 @@ describe('organizationPinInterceptor', () => {
     await result;
   });
 
+  it('pins a realtime ticket and reports its context mismatch', async () => {
+    const pin: OrganizationPin = TestBed.inject(OrganizationPin);
+    pin.set('organization-id');
+    const changed: Mock<() => void> = vi.fn();
+    pin.contextChanged.subscribe(changed);
+    const response: Promise<unknown> = firstValueFrom(
+      TestBed.inject(HttpClient).post('/v1/realtime/tickets', {}),
+    );
+    const request: TestRequest =
+      TestBed.inject(HttpTestingController).expectOne('/v1/realtime/tickets');
+    expect(request.request.headers.get('If-Organization-Match')).toBe('organization-id');
+    request.flush(
+      { code: 'organization.context-changed' },
+      { status: 412, statusText: 'Precondition Failed' },
+    );
+    await expect(response).rejects.toBeInstanceOf(HttpErrorResponse);
+    expect(changed).toHaveBeenCalledOnce();
+    pin.beginSwitch();
+    await expect(
+      firstValueFrom(TestBed.inject(HttpClient).post('/v1/realtime/tickets', {})),
+    ).rejects.toBeInstanceOf(OrganizationSwitchPendingError);
+    TestBed.inject(HttpTestingController).expectNone('/v1/realtime/tickets');
+  });
+
   it('reports only a context-changed 412 and preserves the error', async () => {
     const pin: OrganizationPin = TestBed.inject(OrganizationPin);
     pin.set('organization-id');

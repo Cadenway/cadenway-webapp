@@ -147,14 +147,6 @@ Layouts never import features. Features fill them in three ways:
 - Bricks with their own text receive English source labels from `core/locale` through their labels
   providers. Route titles use `$localize` and go through the application `TitleStrategy`.
 
-## Backend follow-ups
-
-- B20, contract work: the inbox, reminder, search and billing operations do not declare
-  `If-Organization-Match`. The `OrganizationPin` only fences requests locally, so a switch made in
-  another tab can redirect a write such as « Tout marquer comme lu » to the other organization.
-  Until the contracts declare the header, the shell's widgets only drop answers that belong to a
-  previous organization of their own tab.
-
 ## Design-system follow-ups
 
 Generic gaps met while building the shell (step 3). Each is a request to cadenway-design-system,
