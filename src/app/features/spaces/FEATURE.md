@@ -19,7 +19,8 @@ breadcrumb, dialog, inline edit, toolbar).
 - `spaces/:spaceId` loads `SpaceOverviewPage` (« Vue d’ensemble »).
 - `l/:listId` loads `ListPage` and provides `ListPageStore` and `ListViewStore` to its views; `''`
   redirects to `list`, which loads `ListViewPage` and provides `ListRowsStore`, Task's
-  `TaskStatusChangesStore`, and the English texts of `cw-data-table`.
+  `TaskStatusChangesStore`, `ListTasksApi` (so it can read the workspace-scoped user for `me`),
+  and the English texts of `cw-data-table`.
   `?savedView=<id>` applies a saved view of the list; `?task=<KEY>` is set when a row opens (the
   detail host that reads it comes in step 5).
 - Failed primary reads render the router's default error component, `RouteErrorBoundary`, in the

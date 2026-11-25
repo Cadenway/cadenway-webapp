@@ -18,7 +18,18 @@ import {
   withRouterConfig,
 } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
-import { BillingService, InboxService, RealtimeService } from '@cadenway/api-client';
+import {
+  AccessService,
+  ArchivesService,
+  BillingService,
+  InboxService,
+  ListsService,
+  MembersService,
+  RealtimeService,
+  SpacesService,
+  TaskQueriesService,
+  TasksService,
+} from '@cadenway/api-client';
 import { filter, firstValueFrom, Observable, of, Subject, throwError } from 'rxjs';
 import { io, type Socket } from 'socket.io-client';
 import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
@@ -260,7 +271,13 @@ describe('WORKSPACE_ROUTES', () => {
     });
     vi.stubGlobal(
       'matchMedia',
-      vi.fn(() => ({ matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn() })),
+      vi.fn(() => ({
+        matches: false,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+      })),
     );
   });
 
@@ -297,6 +314,62 @@ describe('WORKSPACE_ROUTES', () => {
     expect(switcher?.textContent).toContain('AN');
     expect(switcher?.textContent).toContain('Changer d’organisation : Atelier Nord');
     expect(session.switchOrganization).not.toHaveBeenCalled();
+  });
+
+  it('renders the list grid inside the workspace route', async () => {
+    const list: Record<string, unknown> = {
+      id: 'sprint-14',
+      spaceId: 'produit',
+      name: 'Sprint 14',
+      icon: null,
+      color: null,
+      sprint: null,
+      version: 1,
+    };
+    const counts: Record<string, number> = { total: 0, open: 0, done: 0, cancelled: 0, late: 0 };
+    const empty: { items: readonly never[]; nextCursor: null; total: number } = {
+      items: [],
+      nextCursor: null,
+      total: 0,
+    };
+    TestBed.configureTestingModule({
+      providers: [
+        {
+          provide: ListsService,
+          useValue: {
+            getList: () => of(list),
+            getListCounts: () => of({ list, counts }),
+            listSavedViews: () => of(empty),
+          },
+        },
+        {
+          provide: SpacesService,
+          useValue: {
+            getSpace: () => of({ id: 'produit', name: 'Produit', statuses: {} }),
+            listSpaces: () => of(empty),
+            listFavorites: () => of(empty),
+          },
+        },
+        {
+          provide: TaskQueriesService,
+          useValue: {
+            countTaskGroups: () => of({ ...empty, groupBy: 'status' }),
+            queryListTasks: () => of(empty),
+          },
+        },
+        { provide: TasksService, useValue: { listLabels: () => of(empty) } },
+        { provide: MembersService, useValue: { listMembers: () => of(empty) } },
+        { provide: AccessService, useValue: { listListGrants: () => of(empty) } },
+        { provide: ArchivesService, useValue: {} },
+      ],
+    });
+    const harness: RouterTestingHarness = await open('/atelier-nord/l/sprint-14/list');
+    await vi.waitFor(() => {
+      harness.detectChanges();
+      expect(
+        (harness.fixture.nativeElement as HTMLElement).querySelector('[role="grid"]'),
+      ).not.toBeNull();
+    });
   });
 
   it('binds every shell contribution on the workspace route', async () => {

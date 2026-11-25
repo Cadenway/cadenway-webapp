@@ -9,13 +9,14 @@ import {
   withRouterConfig,
 } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
+import { TaskQueriesService, TasksService } from '@cadenway/api-client';
 import { provideCadenwayIcons } from '@cadenway/icons';
 import { CwToastService } from '@cadenway/ui/components/toast';
+import { of } from 'rxjs';
 import { beforeEach, describe, expect, it, type Mock, type MockInstance, vi } from 'vitest';
 
 import { RouteErrorBoundary } from '@features/errors/ui/components/route-error-boundary/route-error-boundary.component';
 
-import { ListTasksApi } from '../../../data-access/services/list-tasks-api/list-tasks-api.service';
 import { ListsApi } from '../../../data-access/services/lists-api/lists-api.service';
 import { SpacesApi } from '../../../data-access/services/spaces-api/spaces-api.service';
 import type { SavedView } from '../../../models/saved-view/saved-view.interface';
@@ -130,17 +131,27 @@ describe('ListPage', () => {
         SpacesNavigationStore,
         {
           provide: WORKSPACE_CONTEXT,
-          useValue: { organization: () => ({ id: 'org-1', slug: 'atelier-nord' }) },
+          useValue: {
+            organization: () => ({ id: 'org-1', slug: 'atelier-nord' }),
+            user: () => ({ id: 'u1' }),
+          },
         },
         { provide: ListsApi, useValue: api },
         {
-          provide: ListTasksApi,
+          provide: TaskQueriesService,
           useValue: {
-            groups: vi.fn(() => Promise.resolve([{ value: 'todo', count: 0 }])),
-            page: vi.fn(() => Promise.resolve({ items: [], nextCursor: null, total: 0 })),
-            subtasks: vi.fn(() => Promise.resolve([])),
+            countTaskGroups: vi.fn(() =>
+              of({
+                items: [{ value: 'todo', count: 0 }],
+                nextCursor: null,
+                total: 0,
+                groupBy: 'status',
+              }),
+            ),
+            queryListTasks: vi.fn(() => of({ items: [], nextCursor: null, total: 0 })),
           },
         },
+        { provide: TasksService, useValue: {} },
         {
           provide: SpacesApi,
           useValue: {
