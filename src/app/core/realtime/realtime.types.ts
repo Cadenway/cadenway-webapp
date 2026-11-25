@@ -105,3 +105,15 @@ export interface RealtimeChange {
   readonly data: unknown;
   // #endregion
 }
+
+/**
+ * Type PersonalNotice
+ *
+ * @description
+ * Validated invalidation delivered to the signed-in member's room.
+ *
+ * @type {{ type: 'notification.created.v1' } | { type: 'reminder.due.v1'; reminderId: string; taskId: string }}
+ */
+export type PersonalNotice =
+  | { type: 'notification.created.v1' }
+  | { type: 'reminder.due.v1'; reminderId: string; taskId: string };

@@ -13,7 +13,13 @@ import { io, type Socket } from 'socket.io-client';
 import { type ApiProblem, OrganizationPin, readProblem } from '@core/api';
 import { RuntimeConfigStore } from '@core/config';
 
-import { heartbeatInterval, parseChange, parsePresence } from './realtime-protocol.util';
+import {
+  heartbeatInterval,
+  parseChange,
+  parsePresence,
+  parsePresencePage,
+  parsePersonalNotice,
+} from './realtime-protocol.util';
 import {
   REALTIME_ORGANIZATION,
   REALTIME_TERMINAL_FAILURE,
@@ -21,6 +27,7 @@ import {
 } from './realtime.token';
 import {
   type MemberPresenceChange,
+  type PersonalNotice,
   type PresenceStatus,
   type RealtimeChange,
   type RealtimeRoom,
@@ -242,6 +249,40 @@ export class RealtimeConnection {
   private readonly presence: Subject<MemberPresenceChange> = new Subject<MemberPresenceChange>();
 
   /**
+   * Property presenceMap
+   *
+   * @description
+   * Latest reconciled visible member statuses.
+   *
+   * @type {WritableSignal<ReadonlyMap<string, Exclude<PresenceStatus, 'invisible'>>>}
+   * @readonly
+   */
+  private readonly presenceMap: WritableSignal<
+    ReadonlyMap<string, Exclude<PresenceStatus, 'invisible'>>
+  > = signal(new Map());
+
+  /**
+   * Property snapshotNotices
+   *
+   * @description
+   * Notices received during the current snapshot, or null outside reconciliation.
+   *
+   * @type {MemberPresenceChange[] | null}
+   */
+  private snapshotNotices: MemberPresenceChange[] | null = null;
+
+  /**
+   * Property personal
+   *
+   * @description
+   * Validated member-room invalidations.
+   *
+   * @type {Subject<PersonalNotice>}
+   * @readonly
+   */
+  private readonly personal: Subject<PersonalNotice> = new Subject<PersonalNotice>();
+
+  /**
    * Property reconnects
    *
    * @description
@@ -440,6 +481,18 @@ export class RealtimeConnection {
   public readonly ownStatus: Signal<PresenceStatus | null> = this.preference.asReadonly();
 
   /**
+   * Property presences
+   *
+   * @description
+   * Visible member statuses; an absent member is offline.
+   *
+   * @type {Signal<ReadonlyMap<string, Exclude<PresenceStatus, 'invisible'>>>}
+   * @readonly
+   */
+  public readonly presences: Signal<ReadonlyMap<string, Exclude<PresenceStatus, 'invisible'>>> =
+    this.presenceMap.asReadonly();
+
+  /**
    * Property reconnected
    *
    * @description
@@ -449,6 +502,22 @@ export class RealtimeConnection {
    * @readonly
    */
   public readonly reconnected: Observable<void> = this.reconnects.asObservable();
+
+  /**
+   * Property personalNotices
+   *
+   * @description
+   * Deduplicated personal invalidations; subscribing starts the connection.
+   *
+   * @type {Observable<PersonalNotice>}
+   * @readonly
+   */
+  public readonly personalNotices: Observable<PersonalNotice> = this.url
+    ? new Observable((subscriber) => {
+        this.start();
+        return this.personal.subscribe(subscriber);
+      })
+    : EMPTY;
 
   /**
    * Property presenceChanges
@@ -575,6 +644,7 @@ export class RealtimeConnection {
     clearTimeout(this.retryTimer);
     this.closeSocket();
     this.seen.clear();
+    this.presenceMap.set(new Map());
     this.confirmedPresence = null;
     for (const [key, entry] of this.rooms) {
       entry.joined = false;
@@ -703,6 +773,7 @@ export class RealtimeConnection {
     }
     clearTimeout(this.admissionTimer);
     this.heartbeat = setInterval(() => socket.volatile.emit('presence:heartbeat', {}), cadence);
+    void this.loadPresences(socket, generation);
     const presence: Promise<void> = this.syncPresence(socket, generation);
     while (generation === this.generation) {
       const pending: [string, RoomEntry][] = [...this.rooms].filter(
@@ -810,7 +881,7 @@ export class RealtimeConnection {
    */
   private syncPresence(socket: Socket, generation: number): Promise<void> {
     if (this.presencePending) return this.presencePending;
-    if (this.preference() === null) return Promise.resolve();
+    if (this.preference() === null || this.presenceVersion === 0) return Promise.resolve();
     const pending: Promise<void> = this.applyPresence(socket, generation);
     this.presencePending = pending;
     void pending.then(() => {
@@ -860,6 +931,94 @@ export class RealtimeConnection {
         return;
       }
     }
+  }
+
+  /**
+   * Method loadPresences
+   *
+   * @description
+   * Reads socket-bound pages serially and reconciles notices received during the read.
+   *
+   * @param {Socket} socket - Admitted socket.
+   * @param {number} generation - Identity of the connection attempt.
+   * @returns {Promise<void>} Completion or cancellation of reconciliation.
+   */
+  private async loadPresences(socket: Socket, generation: number): Promise<void> {
+    let cursor: string | null = null;
+    let lastFirst: number = 0;
+    let firstSent: boolean = false;
+    let members: Map<string, Exclude<PresenceStatus, 'invisible'>> = new Map<
+      string,
+      Exclude<PresenceStatus, 'invisible'>
+    >();
+    this.snapshotNotices = [];
+    while (generation === this.generation && !this.destroyed) {
+      if (cursor === null) {
+        if (firstSent) await this.wait(Math.max(0, 5000 - (Date.now() - lastFirst)));
+        if (generation !== this.generation) return;
+        lastFirst = Date.now();
+        firstSent = true;
+        members = new Map();
+      }
+      const result: unknown = await new Promise((resolve) => {
+        socket
+          .timeout(5000)
+          .emit(
+            'presence:list',
+            cursor === null ? {} : { cursor },
+            (error: Error | null, ack: unknown) => {
+              resolve(error ? { ok: false, code: 'realtime.unavailable' } : ack);
+            },
+          );
+      });
+      if (generation !== this.generation) return;
+      const page: ReturnType<typeof parsePresencePage> = parsePresencePage(result);
+      if (!page) {
+        if (
+          result &&
+          typeof result === 'object' &&
+          'code' in result &&
+          result.code === 'request.invalid'
+        )
+          cursor = null;
+        else await this.wait(1000);
+        continue;
+      }
+      if (this.presenceVersion === 0) {
+        this.confirmedPresence = page.status;
+        this.preference.set(page.status);
+      }
+      for (const member of page.members) {
+        if (member.status !== 'offline') members.set(member.memberId, member.status);
+      }
+      cursor = page.nextCursor;
+      if (cursor !== null) continue;
+      for (const notice of this.snapshotNotices) {
+        if (notice.status === 'offline') members.delete(notice.memberId);
+        else members.set(notice.memberId, notice.status);
+      }
+      this.snapshotNotices = null;
+      this.presenceMap.set(members);
+      return;
+    }
+  }
+
+  /**
+   * Method applyPresenceNotice
+   *
+   * @description
+   * Applies a live presence change to the visible member map.
+   *
+   * @param {MemberPresenceChange} notice - Validated member change.
+   */
+  private applyPresenceNotice(notice: MemberPresenceChange): void {
+    const members: Map<string, Exclude<PresenceStatus, 'invisible'>> = new Map<
+      string,
+      Exclude<PresenceStatus, 'invisible'>
+    >(this.presenceMap());
+    if (notice.status === 'offline') members.delete(notice.memberId);
+    else members.set(notice.memberId, notice.status);
+    this.presenceMap.set(members);
   }
 
   /**
@@ -921,8 +1080,9 @@ export class RealtimeConnection {
   private receive(notice: unknown): void {
     const change: RealtimeChange | null = parseChange(notice);
     const presence: MemberPresenceChange | null = parsePresence(notice);
+    const personal: PersonalNotice | null = parsePersonalNotice(notice);
     if (
-      (!change && !presence) ||
+      (!change && !presence && !personal) ||
       !notice ||
       typeof notice !== 'object' ||
       !('id' in notice) ||
@@ -932,7 +1092,12 @@ export class RealtimeConnection {
       return;
     if (this.seen.size === 128) this.seen.delete(this.seen.values().next().value ?? '');
     this.seen.add(notice.id);
-    if (presence) this.presence.next(presence);
+    if (presence) {
+      if (this.snapshotNotices) this.snapshotNotices.push(presence);
+      else this.applyPresenceNotice(presence);
+      this.presence.next(presence);
+    }
+    if (personal) this.personal.next(personal);
     if (change) for (const entry of this.rooms.values()) entry.changes.next(change);
   }
 
@@ -981,6 +1146,7 @@ export class RealtimeConnection {
     this.waits.clear();
     this.roomQueue = Promise.resolve();
     this.presencePending = undefined;
+    this.snapshotNotices = null;
     this.socket?.removeAllListeners();
     this.socket?.disconnect();
     this.socket = undefined;
@@ -1000,6 +1166,7 @@ export class RealtimeConnection {
     for (const entry of this.rooms.values()) entry.changes.complete();
     this.rooms.clear();
     this.presence.complete();
+    this.personal.complete();
     this.reconnects.complete();
   }
   // #endregion

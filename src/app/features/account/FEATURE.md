@@ -34,8 +34,8 @@ Until then the menu's links open the 404 inside the shell.
 ## Invariants
 
 - `providePresence()` binds `PRESENCE` to the workspace's `RealtimeConnection` (provided by
-  Workspace's runtime on `/:org`). `ownStatus` is null until the person chooses a presence in this
-  tab, since the gateway keeps the saved preference and `hello` does not return it: until then the
+  Workspace's runtime on `/:org`). `ownStatus` is null until the presence snapshot returns the saved preference or the person chooses
+  a presence in this tab: until then the
   rail button names the person only, the presence dots are hidden and « Statut » checks nothing.
 - Choosing a presence closes the menu and confirms with the toast « Statut : <presence> ». When the
   gateway refuses it and `ownStatus` returns to the confirmed value, an error toast says so.
@@ -50,10 +50,10 @@ Until then the menu's links open the 404 inside the shell.
 
 ## Copy not taken word for word from the mockup
 
-| Unit                                                                                                                                        | Reason                                                                            |
-| ------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
-| `account.user-menu.label-no-status`                                                                                                         | The mockup always knows the presence; here it is unknown until chosen in the tab. |
-| `account.user-menu.status-unavailable`                                                                                                      | The mockup has no state without realtime.                                         |
-| `account.user-menu.status-failed`, `account.user-menu.status-failed-text`                                                                   | The mockup draws no refused presence.                                             |
-| `account.user-menu.sign-out-failed`, `account.user-menu.sign-out-failed-text`                                                               | The mockup draws no refused sign-out.                                             |
-| `account.user-menu.avatar-unknown`, `account.user-menu.avatar-online`, `account.user-menu.avatar-away`, `account.user-menu.avatar-disabled` | Texts of the avatar brick, taken from its French defaults.                        |
+| Unit                                                                                                                                        | Reason                                                                                         |
+| ------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| `account.user-menu.label-no-status`                                                                                                         | The mockup always knows the presence; here it is unknown until the snapshot or a local choice. |
+| `account.user-menu.status-unavailable`                                                                                                      | The mockup has no state without realtime.                                                      |
+| `account.user-menu.status-failed`, `account.user-menu.status-failed-text`                                                                   | The mockup draws no refused presence.                                                          |
+| `account.user-menu.sign-out-failed`, `account.user-menu.sign-out-failed-text`                                                               | The mockup draws no refused sign-out.                                                          |
+| `account.user-menu.avatar-unknown`, `account.user-menu.avatar-online`, `account.user-menu.avatar-away`, `account.user-menu.avatar-disabled` | Texts of the avatar brick, taken from its French defaults.                                     |

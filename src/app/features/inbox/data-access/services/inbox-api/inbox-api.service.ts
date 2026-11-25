@@ -138,6 +138,21 @@ export class InboxApi {
   }
 
   /**
+   * Method reminder
+   *
+   * @description
+   * Revalidates a due reminder against the current session before it is displayed.
+   *
+   * @param {string} reminderId - Reminder identifier.
+   * @returns {Promise<InboxReminder>} The current reminder.
+   */
+  public async reminder(reminderId: string): Promise<InboxReminder> {
+    return toInboxReminder(
+      await firstValueFrom(this.reminders.getReminder(reminderId, { cache: 'no-store' })),
+    );
+  }
+
+  /**
    * Method snooze
    *
    * @description
