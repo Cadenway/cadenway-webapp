@@ -72,7 +72,12 @@ class FakeSocket {
       this.pending.push({ name, complete });
       if (this.automatic)
         void Promise.resolve().then(() => {
-          this.respond(name);
+          this.respond(
+            name,
+            name === 'presence:list'
+              ? { ok: true, status: 'online', members: [], nextCursor: null }
+              : { ok: true },
+          );
         });
     },
   );
@@ -334,10 +339,12 @@ async function flush(): Promise<void> {
 describe('RealtimeConnection', () => {
   beforeEach(() => {
     vi.useFakeTimers();
+    vi.spyOn(Math, 'random').mockReturnValue(0.5);
   });
   afterEach(() => {
     TestBed.resetTestingModule();
     vi.useRealTimers();
+    vi.restoreAllMocks();
     vi.resetAllMocks();
   });
 
@@ -387,7 +394,7 @@ describe('RealtimeConnection', () => {
     ).toHaveLength(1);
   });
 
-  it('reconnects with a new ticket, rejoins, and restores presence before notifying', async () => {
+  it('reconnects with a new ticket, rejoins, and adopts the saved presence', async () => {
     const {
       connection,
       sockets,
@@ -411,11 +418,12 @@ describe('RealtimeConnection', () => {
     second.trigger('hello', hello);
     await flush();
     expect(ticket).toHaveBeenCalledTimes(2);
-    expect(second.emit).toHaveBeenCalledWith(
+    expect(second.emit).not.toHaveBeenCalledWith(
       'presence:set',
-      { status: 'away' },
-      expect.any(Function),
+      expect.anything(),
+      expect.anything(),
     );
+    expect(connection.ownStatus()).toBe('online');
     expect(second.emit).toHaveBeenCalledWith(
       'room:join',
       { kind: 'list', listId: 'list' },
@@ -464,6 +472,265 @@ describe('RealtimeConnection', () => {
     expect(error).toHaveBeenCalledWith(new Error('room.not-found'));
   });
 
+  it('reconciles paginated presence after notices and retains a busy cursor', async () => {
+    const { connection, sockets }: { connection: RealtimeConnection; sockets: FakeSocket[] } =
+      setup();
+    connection.presenceChanges.subscribe();
+    await flush();
+    const socket: FakeSocket = sockets[0];
+    socket.automatic = false;
+    socket.trigger('hello', hello);
+    await flush();
+    socket.respond('presence:list', {
+      ok: true,
+      status: 'away',
+      members: [{ memberId: organization, status: 'online' }],
+      nextCursor: 'next',
+    });
+    await flush();
+    socket.trigger('change', {
+      ...change,
+      type: 'user.status-changed.v1',
+      data: { memberId: organization, status: 'offline' },
+    });
+    socket.respond('presence:list', { ok: false, code: 'realtime.unavailable' });
+    await flush();
+    await vi.advanceTimersByTimeAsync(6000);
+    expect(
+      socket.emit.mock.calls
+        .filter((args: unknown[]) => args[0] === 'presence:list')
+        .map((args: unknown[]) => args[1]),
+    ).toEqual([{}, { cursor: 'next' }, { cursor: 'next' }]);
+    socket.respond('presence:list', {
+      ok: true,
+      status: 'away',
+      members: [{ memberId: organization, status: 'do-not-disturb' }],
+      nextCursor: null,
+    });
+    await flush();
+    expect(connection.presences().has(organization)).toBe(false);
+    expect(connection.ownStatus()).toBe('away');
+  });
+
+  it('restarts invalid cursors no sooner than five seconds and preserves a local choice', async () => {
+    const { connection, sockets }: { connection: RealtimeConnection; sockets: FakeSocket[] } =
+      setup();
+    connection.presenceChanges.subscribe();
+    await flush();
+    const socket: FakeSocket = sockets[0];
+    socket.automatic = false;
+    socket.trigger('hello', hello);
+    await flush();
+    connection.setPresence('invisible');
+    socket.respond('presence:list', { ok: false, code: 'request.invalid' });
+    await flush();
+    await vi.advanceTimersByTimeAsync(4999);
+    expect(
+      socket.emit.mock.calls.filter((args: unknown[]) => args[0] === 'presence:list'),
+    ).toHaveLength(1);
+    await vi.advanceTimersByTimeAsync(1001);
+    expect(
+      socket.emit.mock.calls.filter((args: unknown[]) => args[0] === 'presence:list'),
+    ).toHaveLength(2);
+    socket.respond('presence:list', { ok: true, status: 'away', members: [], nextCursor: null });
+    await flush();
+    expect(connection.ownStatus()).toBe('invisible');
+  });
+
+  it('keeps live changes during repeated failures and reconciles the last change per member', async () => {
+    const { connection, sockets }: { connection: RealtimeConnection; sockets: FakeSocket[] } =
+      setup();
+    connection.presenceChanges.subscribe();
+    await flush();
+    const socket: FakeSocket = sockets[0];
+    socket.automatic = false;
+    socket.trigger('hello', hello);
+    await flush();
+    for (let i: number = 0; i < 20; i++) {
+      socket.trigger('change', {
+        ...change,
+        id: `019a7005-6f7a-7b8c-9d0e-${String(i).padStart(12, '0')}`,
+        type: 'user.status-changed.v1',
+        data: { memberId: organization, status: i === 19 ? 'away' : 'online' },
+      });
+    }
+    expect(connection.presences().get(organization)).toBe('away');
+    expect(
+      (connection as unknown as { snapshotNotices: Map<string, unknown> }).snapshotNotices.size,
+    ).toBe(1);
+    socket.respond('presence:list', { ok: false, code: 'realtime.unavailable' });
+    await flush();
+    await vi.advanceTimersByTimeAsync(4999);
+    expect(
+      socket.emit.mock.calls.filter((args: unknown[]) => args[0] === 'presence:list'),
+    ).toHaveLength(1);
+    await vi.advanceTimersByTimeAsync(1);
+    await vi.advanceTimersByTimeAsync(1);
+    socket.respond('presence:list', {
+      ok: true,
+      status: 'online',
+      members: [{ memberId: organization, status: 'online' }],
+      nextCursor: null,
+    });
+    await flush();
+    expect(connection.presences().get(organization)).toBe('away');
+    expect(connection.ownStatus()).toBe('online');
+  });
+
+  it('uses first-page acknowledgement time for cooldown and increases retry delay', async () => {
+    const { connection, sockets }: { connection: RealtimeConnection; sockets: FakeSocket[] } =
+      setup();
+    connection.presenceChanges.subscribe();
+    await flush();
+    const socket: FakeSocket = sockets[0];
+    socket.automatic = false;
+    socket.trigger('hello', hello);
+    await vi.advanceTimersByTimeAsync(4000);
+    socket.respond('presence:list', { ok: false, code: 'request.invalid' });
+    await flush();
+    await vi.advanceTimersByTimeAsync(4999);
+    expect(
+      socket.emit.mock.calls.filter((args: unknown[]) => args[0] === 'presence:list'),
+    ).toHaveLength(1);
+    await vi.advanceTimersByTimeAsync(2);
+    expect(
+      socket.emit.mock.calls.filter((args: unknown[]) => args[0] === 'presence:list'),
+    ).toHaveLength(2);
+    socket.respond('presence:list', { ok: false, code: 'request.invalid' });
+    await flush();
+    await vi.advanceTimersByTimeAsync(9999);
+    expect(
+      socket.emit.mock.calls.filter((args: unknown[]) => args[0] === 'presence:list'),
+    ).toHaveLength(2);
+    await vi.advanceTimersByTimeAsync(2);
+    expect(
+      socket.emit.mock.calls.filter((args: unknown[]) => args[0] === 'presence:list'),
+    ).toHaveLength(3);
+  });
+
+  it('does not let an older snapshot overwrite an acknowledged choice', async () => {
+    const { connection, sockets }: { connection: RealtimeConnection; sockets: FakeSocket[] } =
+      setup();
+    connection.presenceChanges.subscribe();
+    await flush();
+    const socket: FakeSocket = sockets[0];
+    socket.automatic = false;
+    socket.trigger('hello', hello);
+    await flush();
+    connection.setPresence('away');
+    socket.respond('presence:set');
+    await flush();
+    socket.respond('presence:list', { ok: true, status: 'online', members: [], nextCursor: null });
+    await flush();
+    expect(connection.ownStatus()).toBe('away');
+  });
+
+  it('rolls an early refused choice back to the snapshot preference', async () => {
+    const { connection, sockets }: { connection: RealtimeConnection; sockets: FakeSocket[] } =
+      setup();
+    connection.setPresence('invisible');
+    await flush();
+    const socket: FakeSocket = sockets[0];
+    socket.automatic = false;
+    socket.trigger('hello', hello);
+    await flush();
+    socket.respond('presence:list', { ok: true, status: 'away', members: [], nextCursor: null });
+    await flush();
+    expect(connection.ownStatus()).toBe('invisible');
+    socket.respond('presence:set', { ok: false, code: 'request.invalid' });
+    await flush();
+    expect(connection.ownStatus()).toBe('away');
+  });
+
+  it('resends an unacknowledged choice on reconnect and resets on organization change', async () => {
+    const {
+      connection,
+      sockets,
+      organizationSignal,
+    }: {
+      connection: RealtimeConnection;
+      sockets: FakeSocket[];
+      organizationSignal: WritableSignal<string | null>;
+    } = setup();
+    connection.setPresence('away');
+    await flush();
+    sockets[0].automatic = false;
+    sockets[0].trigger('hello', hello);
+    await flush();
+    sockets[0].trigger('disconnect');
+    await vi.advanceTimersByTimeAsync(1000);
+    await flush();
+    const second: FakeSocket = sockets[1];
+    second.automatic = false;
+    second.trigger('hello', hello);
+    await flush();
+    expect(second.emit).toHaveBeenCalledWith(
+      'presence:set',
+      { status: 'away' },
+      expect.any(Function),
+    );
+    organizationSignal.set('019a7002-3c4d-7e5f-8a6b-7c8d9e0f1a23');
+    TestBed.tick();
+    await flush();
+    expect(connection.ownStatus()).toBeNull();
+    expect(sockets[2].emit).not.toHaveBeenCalledWith(
+      'presence:set',
+      expect.anything(),
+      expect.anything(),
+    );
+  });
+
+  it('ignores a snapshot completion after teardown', async () => {
+    const { connection, sockets }: { connection: RealtimeConnection; sockets: FakeSocket[] } =
+      setup();
+    connection.presenceChanges.subscribe();
+    await flush();
+    const socket: FakeSocket = sockets[0];
+    socket.automatic = false;
+    socket.trigger('hello', hello);
+    await flush();
+    TestBed.resetTestingModule();
+    socket.respond('presence:list', { ok: true, status: 'away', members: [], nextCursor: null });
+    await flush();
+    expect(connection.ownStatus()).toBeNull();
+  });
+
+  it('validates and deduplicates personal notices by envelope id', async () => {
+    const { connection, sockets }: { connection: RealtimeConnection; sockets: FakeSocket[] } =
+      setup();
+    const notices: Mock = vi.fn();
+    connection.personalNotices.subscribe(notices);
+    await flush();
+    const socket: FakeSocket = sockets[0];
+    socket.trigger('hello', hello);
+    await flush();
+    const notification: object = { ...change, type: 'notification.created.v1', data: {} };
+    socket.trigger('change', notification);
+    socket.trigger('change', notification);
+    socket.trigger('change', {
+      ...change,
+      id: '019a7005-6f7a-7b8c-9d0e-1f2a3b4c5d50',
+      type: 'reminder.due.v1',
+      data: { reminderId: organization, taskId: organization },
+    });
+    socket.trigger('change', {
+      ...change,
+      id: '019a7005-6f7a-7b8c-9d0e-1f2a3b4c5d51',
+      type: 'reminder.due.v1',
+      data: { reminderId: 'invalid', taskId: organization },
+    });
+    socket.trigger('change', {
+      ...change,
+      id: '019a7005-6f7a-7b8c-9d0e-1f2a3b4c5d52',
+      type: 'notification.created.v1',
+      data: { unread: 2 },
+    });
+    expect(notices.mock.calls).toEqual([
+      [{ type: 'notification.created.v1' }],
+      [{ type: 'reminder.due.v1', reminderId: organization, taskId: organization }],
+    ]);
+  });
+
   it('emits validated presence notices and broadcasts to distinct watched rooms', async () => {
     const { connection, sockets }: { connection: RealtimeConnection; sockets: FakeSocket[] } =
       setup();
@@ -501,10 +768,14 @@ describe('RealtimeConnection', () => {
     first.automatic = false;
     first.trigger('hello', hello);
     await flush();
-    expect(first.pending.map((entry) => entry.name)).toEqual(['room:join']);
+    expect(
+      first.pending.filter((entry) => entry.name !== 'presence:list').map((entry) => entry.name),
+    ).toEqual(['room:join']);
     first.respond('room:join');
     await flush();
-    expect(first.pending.map((entry) => entry.name)).toEqual(['room:join']);
+    expect(
+      first.pending.filter((entry) => entry.name !== 'presence:list').map((entry) => entry.name),
+    ).toEqual(['room:join']);
     first.respond('room:join');
     await flush();
     expect(connection.status()).toBe('connected');
@@ -538,11 +809,15 @@ describe('RealtimeConnection', () => {
     watch.unsubscribe();
     socket.respond('room:join');
     await flush();
-    expect(socket.pending.map((entry) => entry.name)).toEqual(['room:leave']);
+    expect(
+      socket.pending.filter((entry) => entry.name !== 'presence:list').map((entry) => entry.name),
+    ).toEqual(['room:leave']);
     socket.respond('room:leave', { ok: false, code: 'realtime.unavailable' });
     await vi.advanceTimersByTimeAsync(1000);
     await flush();
-    expect(socket.pending.map((entry) => entry.name)).toEqual(['room:leave']);
+    expect(
+      socket.pending.filter((entry) => entry.name !== 'presence:list').map((entry) => entry.name),
+    ).toEqual(['room:leave']);
     socket.respond('room:leave');
     await flush();
     expect(socket.roomBusy).toBe(false);
@@ -562,7 +837,7 @@ describe('RealtimeConnection', () => {
       expect.anything(),
       expect.anything(),
     );
-    expect(connection.ownStatus()).toBeNull();
+    expect(connection.ownStatus()).toBe('online');
   });
 
   it('retries a transient presence refusal and rolls back a final refusal', async () => {
@@ -676,10 +951,14 @@ describe('RealtimeConnection', () => {
     socket.respond('room:join');
     await vi.advanceTimersByTimeAsync(1000);
     await flush();
-    expect(socket.pending.map((entry) => entry.name)).toEqual(['room:join']);
+    expect(
+      socket.pending.filter((entry) => entry.name !== 'presence:list').map((entry) => entry.name),
+    ).toEqual(['room:join']);
     socket.respond('room:join');
     await flush();
-    expect(socket.pending.map((entry) => entry.name)).toEqual(['room:leave']);
+    expect(
+      socket.pending.filter((entry) => entry.name !== 'presence:list').map((entry) => entry.name),
+    ).toEqual(['room:leave']);
     socket.respond('room:leave');
     await flush();
     expect(connection.status()).toBe('connected');

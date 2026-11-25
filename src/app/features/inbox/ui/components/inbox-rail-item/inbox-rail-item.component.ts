@@ -46,8 +46,8 @@ import { ReminderRow } from '../reminder-row/reminder-row.component';
  *
  * @description
  * The « Boîte de réception » item of the rail and its popover (mockup `App.dc.html` lines 39-43
- * and 139-174). The item's badge counts the unread notifications (polled every 60 s and on window
- * focus) and is hidden while the person's presence is « Ne pas déranger ». The popover has the
+ * and 139-174). The badge counts unread notifications, refreshed by realtime, focus and polling.
+ * It is hidden while the person's presence is « Ne pas déranger ». The popover has the
  * title with the unread count, « Tout marquer comme lu » (disabled with nothing to read), the
  * « Notifications » and « Rappels » tabs with their counts, the do-not-disturb notice, the rows,
  * the empty states, skeletons while loading, an inline error with « Réessayer », and « Tout
@@ -272,7 +272,10 @@ export class InboxRailItem {
    */
   protected setOpen(open: boolean): void {
     this.open.set(open);
-    if (!open) return;
+    if (!open) {
+      this.store.close();
+      return;
+    }
     this.now.set(new Date());
     this.store.open();
   }
@@ -320,6 +323,7 @@ export class InboxRailItem {
    */
   protected openTask(taskKey: string): void {
     this.open.set(false);
+    this.store.close();
     void this.router.navigate(['/', this.workspace.organization().slug, 't', taskKey]);
   }
 
@@ -331,6 +335,7 @@ export class InboxRailItem {
    */
   protected openHome(): void {
     this.open.set(false);
+    this.store.close();
     void this.router.navigate(['/', this.workspace.organization().slug]);
   }
 

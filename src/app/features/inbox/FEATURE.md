@@ -22,7 +22,8 @@ None.
 
 - `@cadenway/api-client`: `InboxService` (`getInboxUnreadCount`, `listInboxNotifications`,
   `markInboxNotificationsRead`, `markInboxNotificationRead`) and `RemindersService`
-  (`listReminders`, `snoozeReminder`, `completeReminder`) through `data-access/`.
+  (`getReminder`, `listReminders`, `snoozeReminder`, `completeReminder`) through `data-access/`.
+- `@core/realtime` for personal invalidations and reconnection.
 - Account's `ports/presence` (do-not-disturb), Workspace's `ports/workspace-context`.
 - `@cadenway/ui` (`app-rail`, `button`, `empty`, `popover`, `skeleton`, `tabs`, `toast`) and
   `@cadenway/icons`.
@@ -32,9 +33,14 @@ None.
 - `InboxStore` is provided by the rail item and keyed on the workspace's organization. A committed
   organization switch clears the count and the lists at once and restarts the poll; any answer or
   write result that belongs to the previous organization is ignored.
-- The unread count is read at once, every 60 seconds and when the window regains focus; a failed
-  poll keeps the last count. The notifications and the reminders are read at each opening of the
-  popover; a failed read shows an inline « Réessayer ».
+- The unread count is read at once, on window focus, on every transition to connected and every
+  minute, connected or not, because notices only flow once the gateway enables them; a failed read
+  keeps the last count. A notification notice
+  refreshes the badge and the open notification list. A due-reminder notice first revalidates the
+  reminder with `getReminder`; a failed read is retried once before refreshing the reminders list.
+  The badge and reminders are read after reconnect because notices are not replayed. Personal notices require `REALTIME_PERSONAL_NOTICES_ENABLED` on the gateway.
+  Reminders are read on load, and both lists are refreshed on opening; failed list reads show an
+  inline « Réessayer ».
 - Every write bumps a version: a poll answer or a notifications load that began before it is
   dropped (a load is sent again, up to three times), so a stale badge never comes back after
   « Tout marquer comme lu ».
@@ -49,10 +55,8 @@ None.
   then shows « Ne pas déranger : notifications en pause » (only for `do-not-disturb`; an unknown
   presence shows nothing).
 - Opening a notification or a reminder opens `/<slug>/t/<key>`, which renders the 404 until step 5.
-- Known gaps: realtime personal notices are not pushed by the gateway yet, hence the polling; the
-  mockup also adds overdue reminders to the badge, which needs the reminders read with every poll and
-  is left out. The inbox and reminder operations do not declare `If-Organization-Match` (see
-  Workspace).
+- Known gap: the mockup also adds overdue reminders to the badge; that is left out. The inbox
+  and reminder operations do not declare `If-Organization-Match` (see Workspace).
 
 ## Copy not taken word for word from the mockup
 

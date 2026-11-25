@@ -1,6 +1,8 @@
 import { signal, type WritableSignal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { type Observable, of, throwError } from 'rxjs';
+import { type Observable, of, Subject, throwError } from 'rxjs';
+
+import { RealtimeConnection, type PersonalNotice } from '@core/realtime';
 import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 
 import {
@@ -221,6 +223,17 @@ interface InboxApiFake {
   readonly pendingReminders: Mock<() => Promise<InboxReminderPage>>;
 
   /**
+   * Property reminder
+   *
+   * @description
+   * Fake of the single-reminder read.
+   *
+   * @type {Mock<(id: string) => Promise<InboxReminder>>}
+   * @readonly
+   */
+  readonly reminder: Mock<(id: string) => Promise<InboxReminder>>;
+
+  /**
    * Property markAllRead
    *
    * @description
@@ -269,13 +282,22 @@ interface InboxApiFake {
 describe('InboxStore', () => {
   let api: InboxApiFake;
   let current: WritableSignal<WorkspaceOrganization>;
+  let notices: Subject<PersonalNotice>;
+  let reconnects: Subject<void>;
+  let connectionStatus: WritableSignal<'connected' | 'connecting' | 'reconnecting' | 'disabled'>;
 
   beforeEach(() => {
     vi.useFakeTimers();
+    notices = new Subject<PersonalNotice>();
+    reconnects = new Subject<void>();
+    connectionStatus = signal<'connected' | 'connecting' | 'reconnecting' | 'disabled'>(
+      'connected',
+    );
     api = {
       unreadCount: vi.fn(() => of(1)),
       notifications: vi.fn(() => Promise.resolve({ items: [mention], unreadCount: 1 })),
       pendingReminders: vi.fn(() => Promise.resolve(reminders)),
+      reminder: vi.fn(() => Promise.resolve(reminders.items[0])),
       markAllRead: vi.fn(() => Promise.resolve(0)),
       markRead: vi.fn(() => Promise.resolve()),
       snooze: vi.fn(() => Promise.resolve({})),
@@ -286,6 +308,10 @@ describe('InboxStore', () => {
       providers: [
         InboxStore,
         { provide: InboxApi, useValue: api },
+        {
+          provide: RealtimeConnection,
+          useValue: { personalNotices: notices, reconnected: reconnects, status: connectionStatus },
+        },
         { provide: WORKSPACE_CONTEXT, useValue: { organization: current } },
       ],
     });
@@ -321,13 +347,220 @@ describe('InboxStore', () => {
     expect(store.unreadCount()).toBe(1);
 
     api.unreadCount.mockReturnValue(of(3));
-    await vi.advanceTimersByTimeAsync(POLL_MS);
+    expect(POLL_MS).toBe(60_000);
+    await vi.advanceTimersByTimeAsync(POLL_MS - 1);
+    expect(api.unreadCount).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1);
     expect(store.unreadCount()).toBe(3);
 
     api.unreadCount.mockReturnValue(of(4));
     window.dispatchEvent(new Event('focus'));
     expect(store.unreadCount()).toBe(4);
     expect(api.unreadCount).toHaveBeenCalledTimes(3);
+  });
+
+  it('refreshes the badge and open notifications on a notification notice', async () => {
+    const store: InstanceType<typeof InboxStore> = await opened();
+    await vi.advanceTimersByTimeAsync(0);
+    api.unreadCount.mockReturnValue(of(4));
+    api.notifications.mockResolvedValue({ items: [mention], unreadCount: 4 });
+    const count: number = api.notifications.mock.calls.length;
+    notices.next({ type: 'notification.created.v1' });
+    await vi.advanceTimersByTimeAsync(300);
+    TestBed.tick();
+    await vi.waitFor(() => {
+      expect(api.notifications).toHaveBeenCalledTimes(count + 1);
+    });
+    expect(store.unreadCount()).toBe(4);
+    store.close();
+    notices.next({ type: 'notification.created.v1' });
+    await vi.advanceTimersByTimeAsync(300);
+    TestBed.tick();
+    expect(api.notifications).toHaveBeenCalledTimes(count + 1);
+  });
+
+  it('checks a due reminder before refreshing and ignores a failed check', async () => {
+    await opened();
+    const count: number = api.pendingReminders.mock.calls.length;
+    let resolve: (value: InboxReminder) => void = () => undefined;
+    api.reminder.mockReturnValueOnce(
+      new Promise<InboxReminder>((done) => {
+        resolve = done;
+      }),
+    );
+    notices.next({ type: 'reminder.due.v1', reminderId: 'r1', taskId: 't1' });
+    await vi.advanceTimersByTimeAsync(300);
+    expect(api.reminder).toHaveBeenCalledWith('r1');
+    expect(api.pendingReminders).toHaveBeenCalledTimes(count);
+    resolve(reminders.items[0]);
+    await Promise.resolve();
+    TestBed.tick();
+    await vi.waitFor(() => {
+      expect(api.pendingReminders).toHaveBeenCalledTimes(count + 1);
+    });
+    api.reminder.mockRejectedValueOnce(new Error('not found'));
+    api.reminder.mockRejectedValueOnce(new Error('not found again'));
+    notices.next({ type: 'reminder.due.v1', reminderId: 'r2', taskId: 't2' });
+    await vi.advanceTimersByTimeAsync(1300);
+    await Promise.resolve();
+    await Promise.resolve();
+    TestBed.tick();
+    expect(api.pendingReminders).toHaveBeenCalledTimes(count + 2);
+  });
+
+  it('retries a failed reminder lookup once before refreshing', async () => {
+    await opened();
+    const count: number = api.pendingReminders.mock.calls.length;
+    api.reminder.mockRejectedValueOnce(new Error('temporary'));
+    notices.next({ type: 'reminder.due.v1', reminderId: 'r1', taskId: 't1' });
+    await vi.advanceTimersByTimeAsync(300);
+    expect(api.reminder).toHaveBeenCalledTimes(1);
+    expect(api.pendingReminders).toHaveBeenCalledTimes(count);
+    await vi.advanceTimersByTimeAsync(1000);
+    TestBed.tick();
+    expect(api.reminder).toHaveBeenCalledTimes(2);
+    await vi.waitFor(() => {
+      TestBed.tick();
+      expect(api.pendingReminders).toHaveBeenCalledTimes(count + 1);
+    });
+  });
+
+  it('refetches badge, reminders and the open notification list after reconnect', async () => {
+    const store: InstanceType<typeof InboxStore> = await opened();
+    await vi.advanceTimersByTimeAsync(0);
+    const count: number = api.pendingReminders.mock.calls.length;
+    const listCount: number = api.notifications.mock.calls.length;
+    api.unreadCount.mockReturnValue(of(7));
+    api.notifications.mockResolvedValue({ items: [mention], unreadCount: 7 });
+    connectionStatus.set('reconnecting');
+    TestBed.tick();
+    connectionStatus.set('connected');
+    TestBed.tick();
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.waitFor(() => {
+      expect(api.pendingReminders).toHaveBeenCalledTimes(count + 1);
+    });
+    await vi.waitFor(() => {
+      TestBed.tick();
+      expect(api.notifications).toHaveBeenCalledTimes(listCount + 1);
+    });
+    expect(store.unreadCount()).toBe(7);
+    expect(store.notifications.value()?.items).toEqual([mention]);
+  });
+
+  it('discards a due-reminder answer after switching organizations', async () => {
+    await opened();
+    let resolve: (value: InboxReminder) => void = () => undefined;
+    api.reminder.mockReturnValueOnce(
+      new Promise<InboxReminder>((done) => {
+        resolve = done;
+      }),
+    );
+    notices.next({ type: 'reminder.due.v1', reminderId: 'r1', taskId: 't1' });
+    await vi.advanceTimersByTimeAsync(300);
+    current.set(workspaceOrganization('another'));
+    TestBed.tick();
+    await vi.waitFor(() => {
+      expect(api.pendingReminders.mock.calls.length).toBeGreaterThan(1);
+    });
+    const count: number = api.pendingReminders.mock.calls.length;
+    resolve(reminders.items[0]);
+    await Promise.resolve();
+    TestBed.tick();
+    expect(api.pendingReminders).toHaveBeenCalledTimes(count);
+  });
+
+  it('defers a notice refresh until an optimistic read write settles', async () => {
+    const store: InstanceType<typeof InboxStore> = await opened();
+    await vi.advanceTimersByTimeAsync(0);
+    let resolve: (value: number) => void = () => undefined;
+    api.markAllRead.mockReturnValueOnce(
+      new Promise<number>((done) => {
+        resolve = done;
+      }),
+    );
+    const pending: Promise<boolean> = store.markAllRead();
+    const count: number = api.unreadCount.mock.calls.length;
+    notices.next({ type: 'notification.created.v1' });
+    await vi.advanceTimersByTimeAsync(300);
+    expect(api.unreadCount).toHaveBeenCalledTimes(count);
+    expect(store.unreadCount()).toBe(0);
+    api.unreadCount.mockReturnValue(of(0));
+    api.notifications.mockResolvedValue({ items: [], unreadCount: 0 });
+    resolve(0);
+    await pending;
+    TestBed.tick();
+    expect(api.unreadCount).toHaveBeenCalledTimes(count + 1);
+    expect(store.unreadCount()).toBe(0);
+  });
+
+  it('retains both lists while refreshing and queues one reload during a load', async () => {
+    const store: InstanceType<typeof InboxStore> = await opened();
+    let finish: (value: InboxNotificationPage) => void = () => undefined;
+    api.notifications.mockReturnValueOnce(
+      new Promise<InboxNotificationPage>((resolve) => {
+        finish = resolve;
+      }),
+    );
+    const initial: number = api.notifications.mock.calls.length;
+    notices.next({ type: 'notification.created.v1' });
+    await vi.advanceTimersByTimeAsync(300);
+    TestBed.tick();
+    expect(store.notifications.hasValue()).toBe(true);
+    expect(store.notifications.value()?.items).toEqual([mention]);
+    expect(store.pendingCount()).toBe(reminders.pendingCount);
+    notices.next({ type: 'notification.created.v1' });
+    await vi.advanceTimersByTimeAsync(300);
+    TestBed.tick();
+    finish({ items: [mention], unreadCount: 1 });
+    await Promise.resolve();
+    TestBed.tick();
+    await vi.waitFor(() => {
+      TestBed.tick();
+      expect(api.notifications).toHaveBeenCalledTimes(initial + 2);
+    });
+    expect(store.notifications.hasValue()).toBe(true);
+  });
+
+  it('coalesces notification and reminder bursts by reminder id', async () => {
+    await opened();
+    await vi.advanceTimersByTimeAsync(0);
+    const count: number = api.unreadCount.mock.calls.length;
+    notices.next({ type: 'notification.created.v1' });
+    notices.next({ type: 'notification.created.v1' });
+    notices.next({ type: 'reminder.due.v1', reminderId: 'r1', taskId: 't1' });
+    notices.next({ type: 'reminder.due.v1', reminderId: 'r1', taskId: 't1' });
+    expect(api.reminder).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(300);
+    TestBed.tick();
+    expect(api.unreadCount).toHaveBeenCalledTimes(count + 1);
+    expect(api.reminder).toHaveBeenCalledTimes(1);
+  });
+
+  it('polls every minute, connected or not, and refreshes on first admission', async () => {
+    connectionStatus.set('connecting');
+    const store: InstanceType<typeof InboxStore> = TestBed.inject(InboxStore);
+    TestBed.tick();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(api.unreadCount).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(59_999);
+    expect(api.unreadCount).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(api.unreadCount).toHaveBeenCalledTimes(2);
+    const remindersCount: number = api.pendingReminders.mock.calls.length;
+    api.unreadCount.mockReturnValue(of(9));
+    connectionStatus.set('connected');
+    TestBed.tick();
+    await vi.advanceTimersByTimeAsync(0);
+    TestBed.tick();
+    expect(store.unreadCount()).toBe(9);
+    await vi.waitFor(() => {
+      TestBed.tick();
+      expect(api.pendingReminders).toHaveBeenCalledTimes(remindersCount + 1);
+    });
+    const count: number = api.unreadCount.mock.calls.length;
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(api.unreadCount).toHaveBeenCalledTimes(count + 1);
   });
 
   it('keeps the last count when a poll fails', async () => {
