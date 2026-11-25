@@ -33,7 +33,10 @@ import {
   signInRedirect,
 } from '../../navigation/access-redirect/access-redirect.util';
 import { WORKSPACE_CONTEXT } from '../../ports/workspace-context/workspace-context.token';
-import { WorkspaceRevalidation } from './workspace-revalidation.service';
+import {
+  WORKSPACE_RECOVERY_NAVIGATION,
+  WorkspaceRevalidation,
+} from './workspace-revalidation.service';
 
 /**
  * Function shouldRevalidateWorkspace
@@ -123,7 +126,10 @@ export function provideWorkspaceRuntime(): (Provider | EnvironmentProviders)[] {
           foreground();
         };
         void router
-          .navigateByUrl(router.url, { onSameUrlNavigation: 'reload' })
+          .navigateByUrl(router.url, {
+            onSameUrlNavigation: 'reload',
+            info: WORKSPACE_RECOVERY_NAVIGATION,
+          })
           .then(finish, finish);
       };
       const foreground: () => void = () => {

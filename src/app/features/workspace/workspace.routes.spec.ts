@@ -332,6 +332,64 @@ describe('WORKSPACE_ROUTES', () => {
     expect(pin.current()).toBe(atelierNord.id);
   });
 
+  it.each(['focus', 'visibility'] as const)(
+    'defers a recovery switch when the tab loses %s during the organization read',
+    async (lost: 'focus' | 'visibility') => {
+      const harness: RouterTestingHarness = await open('/atelier-nord');
+      const router: Router = TestBed.inject(Router);
+      const pin: OrganizationPin = TestBed.inject(OrganizationPin);
+      const focus: Mock<() => boolean> = vi.spyOn(document, 'hasFocus').mockReturnValue(true);
+      const visibility: Mock<() => DocumentVisibilityState> = vi
+        .spyOn(document, 'visibilityState', 'get')
+        .mockReturnValue('visible');
+      const clock: Mock<() => number> = vi.spyOn(Date, 'now');
+      const read: Subject<WorkspaceResult<WorkspaceOrganization>> = new Subject<
+        WorkspaceResult<WorkspaceOrganization>
+      >();
+      session.currentOrganization.mockReturnValueOnce(read).mockReturnValue(ok(lumen));
+      const cancelled: Promise<NavigationCancel> = firstValueFrom(
+        router.events.pipe(
+          filter((event): event is NavigationCancel => event instanceof NavigationCancel),
+        ),
+      );
+      pin.notifyContextChanged();
+      await vi.waitFor(() => {
+        expect(session.currentOrganization).toHaveBeenCalledTimes(2);
+      });
+      if (lost === 'focus') focus.mockReturnValue(false);
+      else visibility.mockReturnValue('hidden');
+      read.next({ ok: true, value: lumen });
+      read.complete();
+      await cancelled;
+      await vi.waitFor(() => {
+        expect(router.currentNavigation()).toBeNull();
+      });
+      await Promise.resolve();
+      expect(session.switchOrganization).not.toHaveBeenCalled();
+      expect(pin.stale()).toBe(true);
+      expect(pin.isSwitching()).toBe(false);
+      expect(router.url).toBe('/atelier-nord');
+      clock.mockReturnValue(Date.now() + 2000);
+      const verified: Promise<void> = firstValueFrom(pin.organizationVerified);
+      focus.mockReturnValue(true);
+      visibility.mockReturnValue('visible');
+      window.dispatchEvent(new Event('focus'));
+      await verified;
+      await harness.fixture.whenStable();
+      expect(session.switchOrganization).toHaveBeenCalledExactlyOnceWith(atelierNord.id);
+      expect(pin.stale()).toBe(false);
+      clock.mockRestore();
+    },
+  );
+
+  it('allows an explicit organization navigation while the document is unfocused', async () => {
+    const harness: RouterTestingHarness = await open('/atelier-nord');
+    vi.spyOn(document, 'hasFocus').mockReturnValue(false);
+    await harness.navigateByUrl('/lumen');
+    expect(session.switchOrganization).toHaveBeenCalledExactlyOnceWith(lumen.id);
+    expect(TestBed.inject(OrganizationPin).current()).toBe(lumen.id);
+  });
+
   it('does not interrupt an in-progress organization navigation on a context change', async () => {
     const harness: RouterTestingHarness = await open('/atelier-nord');
     const pending: Subject<WorkspaceResult<void>> = new Subject<WorkspaceResult<void>>();

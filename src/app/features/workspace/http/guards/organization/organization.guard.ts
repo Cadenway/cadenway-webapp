@@ -1,4 +1,4 @@
-import { inject } from '@angular/core';
+import { DOCUMENT, inject } from '@angular/core';
 import {
   type ActivatedRouteSnapshot,
   type CanActivateFn,
@@ -22,6 +22,7 @@ import {
   organizationChoiceRedirect,
 } from '../../../navigation/access-redirect/access-redirect.util';
 import { WorkspaceContextStore } from '../../../state/workspace-context/workspace-context.store';
+import { WORKSPACE_RECOVERY_NAVIGATION } from '../../../providers/workspace-runtime/workspace-revalidation.service';
 
 /**
  * Constant SWITCHABLE_CODES
@@ -53,6 +54,19 @@ const UNKNOWN_SLUG: WorkspaceResult<WorkspaceOrganization> = {
 };
 
 /**
+ * Constant RECOVERY_DEFERRED
+ *
+ * @description
+ * Local guard result that cancels recovery after the document leaves the foreground.
+ *
+ * @type {WorkspaceResult<WorkspaceOrganization>}
+ */
+const RECOVERY_DEFERRED: WorkspaceResult<WorkspaceOrganization> = {
+  ok: false,
+  problem: { status: 0, code: null },
+};
+
+/**
  * Function mayNameAnotherOrganization
  *
  * @description
@@ -80,9 +94,9 @@ function mayNameAnotherOrganization(problem: WorkspaceProblem): boolean {
  *   organization choice (`/organizations`); a `401` goes to sign-in with the return URL.
  *
  * The current-organization read, the lookup and the switch run under one exclusive session lock,
- * so another tab cannot switch in between, and a navigation cancelled once the lock is held still
- * lets the switch complete: the session is never left half switched. The store only takes the
- * organization when the guard answers.
+ * so another tab cannot switch in between. A recovery navigation that leaves the foreground before
+ * dispatching a switch is cancelled; a dispatched switch completes even if navigation is cancelled.
+ * The store only takes the organization when the guard answers.
  *
  * Use it on the route that provides `WorkspaceContextStore` and reruns guards for organization
  * changes and requested context revalidation.
@@ -98,6 +112,9 @@ export const organizationGuard: CanActivateFn = (
   const router: Router = inject(Router);
   const session: WorkspaceSession = inject(WorkspaceSession);
   const pin: OrganizationPin = inject(OrganizationPin);
+  const document: Document = inject(DOCUMENT);
+  const recovery: boolean =
+    router.currentNavigation()?.extras.info === WORKSPACE_RECOVERY_NAVIGATION;
   const store: InstanceType<typeof WorkspaceContextStore> = inject(WorkspaceContextStore);
   const slug: string = route.paramMap.get('org') ?? '';
   if (isReservedSlug(slug)) return of(organizationChoiceRedirect(router));
@@ -115,6 +132,8 @@ export const organizationGuard: CanActivateFn = (
             (organization: WorkspaceOrganization) => organization.slug === slug,
           );
           if (!match) return of(UNKNOWN_SLUG);
+          if (recovery && (document.visibilityState !== 'visible' || !document.hasFocus()))
+            return of(RECOVERY_DEFERRED);
           pin.beginSwitch();
           return session
             .switchOrganization(match.id)
@@ -143,6 +162,7 @@ export const organizationGuard: CanActivateFn = (
 
   return session.exclusive(enter).pipe(
     map((result: WorkspaceResult<WorkspaceOrganization>): boolean | UrlTree => {
+      if (result === RECOVERY_DEFERRED) return false;
       if (!result.ok) return accessRedirect(router, result.problem, state.url);
       store.verifyOrganization(result.value);
       return true;

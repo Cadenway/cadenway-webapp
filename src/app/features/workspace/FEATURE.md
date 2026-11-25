@@ -72,9 +72,9 @@ injects it as optional.
   never changes what the shell shows. Leaving `/:org` destroys the store.
 - The URL slug and the session's current organization agree before anything below `/:org` is
   created: the guard reads the current organization, looks the slug up and switches the session
-  inside one exclusive browser session lock (`WorkspaceSession.exclusive`). Once granted, the
-  sequence runs to its end even if the navigation is cancelled, so the session is never left half
-  switched; the store only takes the organization when the guard answers.
+  inside one exclusive browser session lock (`WorkspaceSession.exclusive`). A recovery switch is
+  deferred if the tab leaves the foreground before dispatch. Once dispatched, a switch completes even
+  if navigation is cancelled; the store only takes the organization when the guard answers.
 - `WorkspaceContextStore` is destroyed with its route (`withAutoCleanupInjectors`).
 - The organizations menu provides `OrganizationMenuStore`, which reads every page of
   `listMyOrganizations` the first time the menu opens, with skeletons and an inline « Réessayer ».
@@ -96,8 +96,8 @@ injects it as optional.
   marks the context stale and fences passive requests until the next verified commit; a response from
   an older revision is ignored. While the document is visible and focused, recovery reruns guards and
   the resolver immediately or after an in-progress navigation. Otherwise it waits for focus or
-  visibility. Failed recovery retries with bounded backoff. Query-only navigation does not trigger
-  revalidation. The guard's uncached current organization read skips the pin so it can discover and
+  visibility. The guard checks focus and visibility again immediately before a recovery switch. Failed
+  recovery retries with bounded backoff. Query-only navigation does not trigger revalidation. The guard's uncached current organization read skips the pin so it can discover and
   switch the session under the lock. Before a session switch the guard fences pinned requests locally
   until the resolver commits the new pin.
 - A session holds one current organization across tabs. A hidden or unfocused tab does not switch it
