@@ -266,7 +266,10 @@ test('a saved view saves and reopens', async ({ page }) => {
   await dialog.getByRole('textbox', { name: 'Nom' }).fill('Par personne');
   await dialog.getByRole('button', { name: 'Enregistrer la vue' }).click();
 
-  await expect(page.getByRole('tab', { name: 'Par personne' })).toContainText('Par personne');
+  await expect(page.getByRole('tab', { name: 'Par personne' })).toHaveAttribute(
+    'aria-selected',
+    'true',
+  );
   await expect(page).toHaveURL(/savedView=/);
   await expect(dialog).toHaveCount(0);
   expect(gateway.calls).toContain(`POST /v1/lists/${sprint14.id}/saved-views`);

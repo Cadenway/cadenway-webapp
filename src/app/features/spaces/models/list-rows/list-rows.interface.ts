@@ -135,7 +135,7 @@ export interface GroupProgress {
    * Property count
    *
    * @description
-   * Tasks of the group from `countTaskGroups`, null for a view that does not group.
+   * Tasks of the group from `countTaskGroups`, or the page total for an ungrouped view; null before that page.
    *
    * @type {number | null}
    * @readonly

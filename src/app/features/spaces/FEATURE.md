@@ -86,7 +86,7 @@ breadcrumb, dialog, inline edit, toolbar).
     nears its end. When the grouped field is filtered, only selected group values are shown and
     each group is read with its value as a server-side filter. A task assigned to several people
     appears only in the selected assignee groups; `me` resolves to the signed-in user. A folded group (« Annulé » by default when
-    grouping by status) reads its first page only, so its header shows, and reads on when opened.
+    grouping by status) prefetches its first page, and reads on when opened.
     Hidden status groups do not consume the initial loading target or pagination reads. When no
     renderable rows remain, the store reads visible groups until a row is available or every
     visible group is exhausted; a failed continuation offers Retry instead of an empty state.
@@ -121,7 +121,7 @@ breadcrumb, dialog, inline edit, toolbar).
 - Deleting a list asks for its typed name (`cw-alert-dialog` with `confirmText`), then opens the
   home screen; archiving opens the space overview. The export downloads the gateway's CSV with the
   view's filters, sort and level.
-- « Créer une tâche » (`ViewTools.taskCreated`), each group's « + » (with the group's status when
+- « Créer une tâche » (`ViewTools.taskCreated`), each group's trailing « Ajouter une tâche » row (with the group's status when
   grouping by status), the empty state's « Ajouter une tâche » and `N` (`TaskCreate.useDefaults`)
   open the create dialog in the open list.
 - A row: the status icon moves the task to its next status; the people and priority pickers edit
@@ -139,7 +139,7 @@ breadcrumb, dialog, inline edit, toolbar).
   stops the remaining chunks. An unresolved response is reported as
   unknown and triggers a reload; a refused chunk stays selected and a second toast counts it. The
   row menu uses the same bulk path for a selected group, including a shared cancellation reason.
-- Under 768 px the table hides the assignees, priority, labels and actions columns.
+- The table declares gateway groups in order, omitting hidden and empty groups except the five default empty status groups in an unfiltered view. Filtered empty results show the empty state. `nearEnd` requests further pages with a threshold accounting for unread group lines. Under 768 px the grid keeps selection, name and due date.
 
 ## Organization pin
 

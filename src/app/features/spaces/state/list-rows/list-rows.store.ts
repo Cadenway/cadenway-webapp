@@ -474,7 +474,7 @@ function uniqueTasks(tasks: readonly TaskSummary[]): TaskSummary[] {
  * @description
  * The primary read of the rows: the group counts, then pages of the groups in order until
  * `want` tasks of visible open groups are read; a folded group met on the way gets its first page
- * so its header shows. Hidden status groups are left unread.
+ * as a prefetch. Hidden status groups are left unread.
  *
  * @param {ListTasksApi} api - The rows' data access.
  * @param {RowsParams} params - The read.
@@ -580,6 +580,17 @@ export interface ListRowsStoreInstance {
    * @readonly
    */
   readonly groupOrder: Signal<readonly string[]>;
+
+  /**
+   * Property nearEndThreshold
+   *
+   * @description
+   * Base virtual window threshold plus header and add-row lines of unread visible groups.
+   *
+   * @type {Signal<number>}
+   * @readonly
+   */
+  readonly nearEndThreshold: Signal<number>;
 
   /**
    * Property collapsed
@@ -695,7 +706,7 @@ export interface ListRowsStoreInstance {
    * Method groupCount
    *
    * @description
-   * Tasks of a group from `countTaskGroups`, null without grouping or for an unknown group.
+   * Displayed task count, adjusted for loaded tasks that changed groups; null for an unknown group.
    *
    * @param {string} value - The group value.
    * @returns {number | null} The count.
@@ -840,6 +851,17 @@ function createListRowsStore(): Type<ListRowsStoreInstance> {
         groupOrder: (): readonly string[] =>
           store._groups().map((group: GroupProgress): string => group.value),
         collapsed: (): readonly string[] => collapsedOf(store._collapsed(), groupBy()),
+        nearEndThreshold: (): number => {
+          const hidden: readonly string[] = groupBy() === 'status' ? store._hidden() : [];
+          const folded: readonly string[] = collapsedOf(store._collapsed(), groupBy());
+          return (
+            10 +
+            store
+              ._groups()
+              .filter((group) => !group.started && !hidden.includes(group.value))
+              .reduce((lines, group) => lines + (folded.includes(group.value) ? 1 : 2), 0)
+          );
+        },
         initialLoading: (): boolean => store._key() === null && store._params() !== undefined,
         hasCurrentSnapshot: (): boolean =>
           store._params() !== undefined && store._key() === store._params()?.key,
@@ -1043,6 +1065,8 @@ function createListRowsStore(): Type<ListRowsStoreInstance> {
             (page: ListTaskPage): void => {
               if (controller.signal.aborted || store._key() !== key) return;
               moreController = null;
+              const known: ReadonlySet<string> = new Set(store.entities().map((task) => task.id));
+              const noNewRows: boolean = page.items.every((task) => known.has(task.id));
               patchState(
                 store,
                 addEntities([...page.items]),
@@ -1058,7 +1082,7 @@ function createListRowsStore(): Type<ListRowsStoreInstance> {
                   },
                 }),
               );
-              if (folded) loadMore();
+              if (folded || noNewRows) loadMore();
             },
             (): void => {
               if (controller.signal.aborted || store._key() !== key) return;
@@ -1186,10 +1210,22 @@ function createListRowsStore(): Type<ListRowsStoreInstance> {
           patchState(store, { _hidden: keys });
         }),
         groupCount(value: string): number | null {
-          return (
-            store._groups().find((group: GroupProgress): boolean => group.value === value)?.count ??
-            null
+          const count: number | null =
+            store._groups().find((group) => group.value === value)?.count ?? null;
+          if (count === null || store.groupBy() !== 'status') return count;
+          const serverKeys: ReadonlySet<string> = new Set(store._groupKeys()[value] ?? []);
+          const effectiveKeys: ReadonlySet<string> = new Set(
+            store
+              .entities()
+              .filter(
+                (task) =>
+                  (store._reduceMotion
+                    ? store._status.displayedStatus(task)
+                    : store._status.settledTask(task).status) === value,
+              )
+              .map((task) => task.key),
           );
+          return count + effectiveKeys.size - serverKeys.size;
         },
         setCollapsed(values: readonly string[]): void {
           const grouping: string = groupingOf(store._params()) ?? 'all';

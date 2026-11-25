@@ -1,3 +1,7 @@
+import { BreakpointObserver } from '@angular/cdk/layout';
+import { toSignal } from '@angular/core/rxjs-interop';
+import { map } from 'rxjs';
+
 import { SPACES_RETRY } from '../../../constants/data-table-texts/data-table-texts.constants';
 import {
   afterRenderEffect,
@@ -93,6 +97,16 @@ import { ListViewStore } from '../../../state/list-view/list-view.store';
 import { SpacesNavigationStore } from '../../../state/spaces-navigation/spaces-navigation.store';
 import { NO_ASSIGNEE_GROUP } from '../../../utils/list-rows/list-rows.util';
 import { BulkBar, type MoveTarget } from '../../components/bulk-bar/bulk-bar.component';
+
+/**
+ * Constant DEFAULT_STATUS_GROUPS
+ *
+ * @description
+ * Status groups shown when empty in the unfiltered mockup list.
+ *
+ * @type {readonly string[]}
+ */
+const DEFAULT_STATUS_GROUPS: readonly string[] = ['progress', 'review', 'todo', 'blocked', 'done'];
 
 /**
  * Component ListViewPage
@@ -298,12 +312,28 @@ export class ListViewPage {
    * Property host
    *
    * @description
-   * The page element, which hears the scrolling of the table.
+   * The page element, used to restore focus after a row moves.
    *
    * @type {ElementRef<HTMLElement>}
    * @readonly
    */
   private readonly host: ElementRef<HTMLElement> = inject<ElementRef<HTMLElement>>(ElementRef);
+
+  /**
+   * Property dueWidth
+   *
+   * @description
+   * Due-date column width in pixels at the phone and desktop breakpoints.
+   *
+   * @type {Signal<number>}
+   * @readonly
+   */
+  protected readonly dueWidth: Signal<number> = toSignal(
+    inject(BreakpointObserver)
+      .observe('(max-width: 767.98px)')
+      .pipe(map((state) => (state.matches ? 88 : 120))),
+    { initialValue: 120 },
+  );
 
   /**
    * Property tableSelection
@@ -667,6 +697,24 @@ export class ListViewPage {
   };
 
   /**
+   * Property tableRows
+   *
+   * @description
+   * Rows constrained to the gateway groups when the grouped field has a filter.
+   *
+   * @type {Signal<readonly ListRow[]>}
+   * @readonly
+   */
+  protected readonly tableRows: Signal<readonly ListRow[]> = computed(() => {
+    const grouping: 'status' | 'priority' | 'assignee' | null = this.rows.groupBy();
+    const selected: readonly string[] | undefined =
+      grouping === null ? undefined : this.view.taskQuery()[grouping];
+    if (!selected?.length) return this.rows.rows();
+    const groups: ReadonlySet<string> = new Set(this.rows.groupOrder());
+    return this.rows.rows().filter((row) => groups.has(row.group));
+  });
+
+  /**
    * Property tableGroups
    *
    * @description
@@ -676,30 +724,26 @@ export class ListViewPage {
    * @readonly
    */
   protected readonly tableGroups: Signal<readonly CwGroupDef[]> = computed(() => {
-    const values: readonly string[] = this.rows.groupOrder();
-    const visible: readonly string[] =
-      this.rows.groupBy() === 'status'
-        ? [
-            ...new Set([
-              ...this.statusOptions()
-                .filter(
-                  (option) =>
-                    !option.hidden &&
-                    !['triage', 'backlog', 'testing', 'waiting', 'cancelled'].includes(option.key),
-                )
-                .map((option) => option.key),
-              ...values,
-            ]),
-          ].filter(
-            (value) =>
-              !this.statusOptions().some((option) => option.key === value && option.hidden),
-          )
-        : values;
-    return visible.map((value) => ({
-      value,
-      label: this.groupLabel(value),
-      count: this.rows.groupCount(value) ?? (this.rows.groupBy() === null ? undefined : 0),
-    }));
+    const grouping: 'status' | 'priority' | 'assignee' | null = this.rows.groupBy();
+    const loaded: ReadonlySet<string> = new Set(this.tableRows().map((row) => row.group));
+    return this.rows
+      .groupOrder()
+      .filter((value) => {
+        const hidden: boolean =
+          grouping === 'status' &&
+          this.statusOptions().some((option) => option.key === value && option.hidden);
+        return (
+          !hidden &&
+          ((this.rows.groupCount(value) ?? 0) > 0 ||
+            loaded.has(value) ||
+            (grouping === 'status' && !this.filtered() && DEFAULT_STATUS_GROUPS.includes(value)))
+        );
+      })
+      .map((value) => ({
+        value,
+        label: this.groupLabel(value),
+        count: this.rows.groupCount(value) ?? undefined,
+      }));
   });
 
   /**
@@ -721,9 +765,8 @@ export class ListViewPage {
    *
    * @description
    * Reads the rows of the list with the view's query, follows the subtask display and the
-   * space's hidden statuses, makes `N` create in this list while the view lives, and reads the
-   * next page when the table nears its end. A first read
-   * that failed is read again when the error boundary runs the route again.
+   * space's hidden statuses and makes `N` create in this list while the view lives. A failed first
+   * read is retried when the error boundary runs the route again.
    *
    * @constructor
    */
