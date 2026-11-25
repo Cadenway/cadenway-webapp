@@ -66,7 +66,7 @@ breadcrumb, dialog, inline edit, toolbar).
 
 - Stores and scopes:
   - `SpacesNavigationStore`, route-scoped on `/:org` (`provideSpacesNavigation()`): the spaces,
-    one overview per space read at most four at a time (a failed one offers Retry), the favorites and the
+    one overview per space read at most four at a time, each given 10 s (a failed one offers Retry), the favorites and the
     open spaces. Keyed on the committed organization id: a switch closes every space and
     reads again. A task created from this tab (`TaskCreate.created`) reads the overview of its
     list's space again, one creation after the other, each read given 10 s; a failed read, an

@@ -33,8 +33,9 @@ import { isWithin, todayIso } from '../../utils/calendar-date/calendar-date.util
  * Constant OVERVIEW_TIMEOUT_MS
  *
  * @description
- * Longest wait for the overview a creation reads, in milliseconds: the creations are read one after
- * the other, so a stalled read must not hold the next ones back.
+ * Longest wait for one space overview, in milliseconds: a stalled space must neither hold back the
+ * batch of four it is read with, nor the creations read one after the other. A space that times
+ * out is left out of the overviews, which offers its Retry.
  *
  * @type {number}
  */
@@ -250,7 +251,11 @@ function createSpacesNavigationStore(): Type<SpacesNavigationStoreInstance> {
                 params.ids
                   .slice(offset, offset + 4)
                   .map((id: string): Promise<SpaceOverview> =>
-                    api.overview(id, today, abortSignal),
+                    api.overview(
+                      id,
+                      today,
+                      AbortSignal.any([abortSignal, AbortSignal.timeout(OVERVIEW_TIMEOUT_MS)]),
+                    ),
                   ),
               );
               for (const result of settled) {
