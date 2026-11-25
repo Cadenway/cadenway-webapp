@@ -130,6 +130,7 @@ export function toSpace(dto: SpaceDto): SpaceDetails {
     prefix: dto.prefix,
     canEdit: dto.callerRole === undefined || dto.callerRole === 'edit',
     canManage: dto.callerCanManage ?? true,
+    version: dto.version,
     description: dto.description,
     icon: toLookIcon(dto.icon),
     color: toLookColor(dto.color),

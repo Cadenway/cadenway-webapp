@@ -14,7 +14,11 @@ import { SidebarApi } from '../../data-access/services/sidebar-api/sidebar-api.s
 import { SpacesApi } from '../../data-access/services/spaces-api/spaces-api.service';
 import type { Favorite } from '../../models/favorite/favorite.interface';
 import type { SpaceDetails, SpaceDraft } from '../../models/space/space.interface';
-import type { SpaceOverview, TaskList } from '../../models/task-list/task-list.interface';
+import type {
+  ListDraft,
+  SpaceOverview,
+  TaskList,
+} from '../../models/task-list/task-list.interface';
 import { todayIso } from '../../utils/calendar-date/calendar-date.util';
 import { SpacesNavigationStore } from './spaces-navigation.store';
 
@@ -35,6 +39,7 @@ function space(id: string, name: string): SpaceDetails {
     prefix: name.slice(0, 3).toUpperCase(),
     canEdit: true,
     canManage: true,
+    version: 3,
     description: null,
     icon: null,
     color: 'gris',
@@ -363,6 +368,46 @@ describe('SpacesNavigationStore', () => {
     expect(api.createSpace.mock.calls[0][1]).toBe(api.createSpace.mock.calls[1][1]);
     expect(store.expanded()['sp-hr']).toBe(true);
     await expect.poll(() => api.spaces.mock.calls.length).toBe(2);
+  });
+
+  it('creates a space with a new key in another organization or after the dialog closed', async () => {
+    await expect.poll(() => store.overviews.hasValue()).toBe(true);
+    const created: SpaceDetails = space('sp-hr', 'Human resources');
+    const draft: SpaceDraft = draftOf(created, 'Human resources');
+    api.createSpace.mockRejectedValue(new Error('unavailable'));
+
+    await store.createSpace(draft);
+    store.closeDialog();
+    await store.createSpace(draft);
+    organization.set({ id: 'org-2', slug: 'lumen' });
+    TestBed.tick();
+    await store.createSpace(draft);
+
+    const keys: readonly unknown[] = api.createSpace.mock.calls.map((call: unknown[]) => call[1]);
+    expect(new Set(keys).size).toBe(3);
+  });
+
+  it('creates a list with one key per draft, reused for a retry and renewed after a change', async () => {
+    await expect.poll(() => store.overviews.hasValue()).toBe(true);
+    const draft: ListDraft = {
+      name: 'Sprint 15',
+      icon: 'lightning',
+      color: 'violet',
+      sprint: { startDate: '2026-11-17', endDate: '2026-11-30', goal: null },
+    };
+    lists['create']
+      .mockRejectedValueOnce(new Error('unavailable'))
+      .mockResolvedValueOnce(list('l-sprint15', 'sp-product'))
+      .mockResolvedValueOnce(list('l-sprint16', 'sp-product'));
+
+    expect(await store.createList('sp-product', draft)).toBeNull();
+    expect(await store.createList('sp-product', draft)).toMatchObject({ id: 'l-sprint15' });
+    await store.createList('sp-product', { ...draft, name: 'Sprint 16' });
+
+    const keys: readonly unknown[] = lists['create'].mock.calls.map((call: unknown[]) => call[2]);
+    expect(keys[0]).toEqual(expect.any(String));
+    expect(keys[1]).toBe(keys[0]);
+    expect(keys[2]).not.toBe(keys[0]);
   });
 
   it('shows a list change in the sidebar at once and restores it when refused', async () => {

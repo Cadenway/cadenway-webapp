@@ -82,6 +82,7 @@ const product: SpaceDetails = {
   prefix: 'CAD',
   canEdit: true,
   canManage: true,
+  version: 3,
   description: null,
   icon: null,
   color: 'violet',
@@ -414,6 +415,40 @@ describe('SpacesSidebar', () => {
     show.mock.calls[0]?.[1]?.undo?.();
     await expect.poll(() => lists['unarchive'].mock.calls.length).toBe(1);
     expect(lists['unarchive']).toHaveBeenCalledWith('l-backlog');
+  });
+
+  it('shows the failure toast when the Undo of a list change is refused', async () => {
+    const toasts: CwToastService = TestBed.inject(CwToastService);
+    const show: MockInstance<CwToastService['show']> = vi.spyOn(toasts, 'show');
+    const error: MockInstance<CwToastService['error']> = vi.spyOn(toasts, 'error');
+    lists['update']
+      .mockResolvedValueOnce({ ...list('l-backlog', 'Notebook'), version: 4 })
+      .mockRejectedValueOnce(new Error('412'));
+    const harness: RouterTestingHarness = await RouterTestingHarness.create('/atelier-nord');
+    await expect.poll(() => text(harness, 'sidebar-spaces')).toContain('Backlog');
+
+    rightClick(harness, sidebarLink(harness, 'Backlog'));
+    menuItem(harness, 'Edit the list')?.click();
+    harness.detectChanges();
+    const name: HTMLInputElement | null = document.querySelector(
+      '[data-testid="list-dialog-name"]',
+    );
+    if (!name) throw new Error('No dialog');
+    name.value = 'Notebook';
+    name.dispatchEvent(new Event('input'));
+    harness.detectChanges();
+    document.querySelector<HTMLButtonElement>('[data-testid="list-dialog-submit"]')?.click();
+    await expect.poll(() => show.mock.calls.length).toBe(1);
+    expect(show.mock.calls[0]?.[0]).toBe('List updated');
+
+    show.mock.calls[0]?.[1]?.undo?.();
+
+    await expect.poll(() => error.mock.calls.length).toBe(1);
+    expect(error).toHaveBeenCalledWith('The list could not be saved');
+    expect(lists['update']).toHaveBeenLastCalledWith(
+      expect.objectContaining({ id: 'l-backlog', version: 4 }),
+      expect.objectContaining({ name: 'Backlog' }),
+    );
   });
 
   it('creates a space from the Spaces heading and opens its first list', async () => {

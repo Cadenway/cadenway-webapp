@@ -220,20 +220,18 @@ describe('ListsApi', () => {
 
   it('creates a sprint with its dates in a space', async () => {
     const sprint: ListSprint = { startDate: '2026-11-18', endDate: '2026-12-01', goal: null };
-    const created: Awaited<ReturnType<ListsApi['create']>> = await api.create('sp-product', {
-      name: 'Sprint 15',
-      icon: 'lightning',
-      color: 'violet',
-      sprint,
-    });
+    const created: Awaited<ReturnType<ListsApi['create']>> = await api.create(
+      'sp-product',
+      { name: 'Sprint 15', icon: 'lightning', color: 'violet', sprint },
+      'key-15',
+    );
 
     expect(created.name).toBe('Sprint 15');
-    expect(lists['createList']).toHaveBeenCalledWith('sp-product', {
-      name: 'Sprint 15',
-      icon: 'lightning',
-      color: 'violet',
-      sprint,
-    });
+    expect(lists['createList']).toHaveBeenCalledWith(
+      'sp-product',
+      { name: 'Sprint 15', icon: 'lightning', color: 'violet', sprint },
+      { headers: { 'Idempotency-Key': 'key-15' } },
+    );
   });
 
   it('creates and deletes saved views and runs a bulk action', async () => {

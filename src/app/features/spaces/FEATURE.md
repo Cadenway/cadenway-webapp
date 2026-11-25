@@ -99,9 +99,11 @@ computed from the navigation's reads, for the command palette's `Lists`.
     `total`), the last spaces address of the tab, and the open dialog (`dialog`, opened with
     `openDialog` by the rail, the sidebar, the overview and the list page, rendered by the
     sidebar). Its writes: `updateSpace`, `deleteSpace`, `updateList` and `archiveList` change the
-    sidebar at once and restore it when refused; `createSpace` (one idempotency key per draft,
-    `409 space.prefix-taken` reported to the dialog) and `createList` read the sidebar again and
-    open the new space; `unarchiveList` and `removeList` serve the undos. The recorded lists and
+    sidebar at once and restore it when refused (`updateSpace` and `updateList` send the shown
+    version as `If-Match`); `createSpace` (`409 space.prefix-taken` reported to the dialog) and
+    `createList` each keep one idempotency key per organization and draft (and space, for a list),
+    reused by a retry and renewed when the dialog closes or the organization changes, and read the
+    sidebar again and open the new space; `unarchiveList` and `removeList` serve the undos. The recorded lists and
     spaces are emitted by `listEdited` and `spaceEdited`, which `ListPageStore.followListEdits` /
     `followSpaceEdits` and the overview page follow.
   - `ListPageStore`, route-scoped on `l/:listId`: the list (primary read) and its space, counts,
@@ -180,8 +182,8 @@ computed from the navigation's reads, for the command palette's `Lists`.
   unfold, `Delete the space` (its typed name first); a favorite saved view `Open`; the
   sidebar background `New space`, `Expand all spaces` and `Collapse all spaces`. Rights: list items need `canEdit`, space edits `SpaceDetails.canEdit`, the deletion
   and the confidentiality `canManage`.
-- Dialog outcomes: `Space created` opens its first list; `Space updated`, `List updated` and `Sprint updated` offer `Undo`, which writes the previous values back; a
-  created list or sprint opens. `New sprint` proposes `Sprint N+1`, the day after the end
+- Dialog outcomes: `Space created` opens its first list; `Space updated`, `List updated` and `Sprint updated` offer `Undo`, which writes the previous values back from the recorded version (a refusal shows the
+  failure toast); a created list or sprint opens. `New sprint` proposes `Sprint N+1`, the day after the end
   of the space's last sprint (else today), 14 days, the lightning and `Amethyst`.
 - List page undos: `List archived` brings it back (`unarchiveList`) and opens it; `List duplicated` deletes the copy; `View deleted` creates the view again at its place (with a new
   id) and applies it again when it was applied.

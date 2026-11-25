@@ -62,6 +62,7 @@ const product: SpaceDetails = {
   prefix: 'CAD',
   canEdit: true,
   canManage: true,
+  version: 3,
   description: null,
   icon: 'rocket',
   color: 'violet',

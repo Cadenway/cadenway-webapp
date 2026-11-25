@@ -173,6 +173,17 @@ export interface SpaceDetails extends Space {
    * @readonly
    */
   readonly canManage: boolean;
+
+  /**
+   * Property version
+   *
+   * @description
+   * Version of the space, sent as `If-Match` by its changes.
+   *
+   * @type {number}
+   * @readonly
+   */
+  readonly version: number;
   // #endregion
 }
 

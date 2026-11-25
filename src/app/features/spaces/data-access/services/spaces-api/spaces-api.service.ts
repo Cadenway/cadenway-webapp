@@ -262,8 +262,9 @@ export class SpacesApi {
    * Method updateSpace
    *
    * @description
-   * Changes a space's settings. The visibility is sent only when it changes, since only the
-   * people who manage the space may send it.
+   * Changes a space's settings from the version shown (`If-Match`, `412 request.version-mismatch`
+   * when it changed meanwhile). The visibility is sent only when it changes, since only the people
+   * who manage the space may send it.
    *
    * @param {SpaceDetails} space - The space as shown.
    * @param {SpaceDraft} draft - The dialog's values.
@@ -272,16 +273,20 @@ export class SpacesApi {
   public async updateSpace(space: SpaceDetails, draft: SpaceDraft): Promise<SpaceDetails> {
     return toSpace(
       await firstValueFrom(
-        this.spacesService.updateSpace(space.id, {
-          name: draft.name,
-          prefix: draft.prefix,
-          description: draft.description,
-          icon: draft.icon,
-          color: draft.color,
-          ...(draft.private === space.private
-            ? {}
-            : { visibility: draft.private ? 'private' : 'organization' }),
-        }),
+        this.spacesService.updateSpace(
+          space.id,
+          {
+            name: draft.name,
+            prefix: draft.prefix,
+            description: draft.description,
+            icon: draft.icon,
+            color: draft.color,
+            ...(draft.private === space.private
+              ? {}
+              : { visibility: draft.private ? 'private' : 'organization' }),
+          },
+          { headers: { 'If-Match': `"${String(space.version)}"` } },
+        ),
       ),
     );
   }

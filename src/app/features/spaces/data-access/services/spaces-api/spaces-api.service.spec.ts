@@ -45,7 +45,14 @@ describe('SpacesApi', () => {
       deleteFavorite: vi.fn(() => of(undefined)),
       createSpace: vi.fn(() =>
         of({
-          space: { id: 'sp-hr', name: 'HR', prefix: 'HR', statuses: {}, visibility: 'private' },
+          space: {
+            id: 'sp-hr',
+            name: 'HR',
+            prefix: 'HR',
+            statuses: {},
+            visibility: 'private',
+            version: 2,
+          },
           firstList: { id: 'l-1', spaceId: 'sp-hr', name: 'First list', version: 1 },
         }),
       ),
@@ -126,13 +133,17 @@ describe('SpacesApi', () => {
       { headers: { 'Idempotency-Key': 'key-1' } },
     );
     await api.updateSpace(created.space, { ...draft, name: 'HR 2' });
-    expect(spaces['updateSpace']).toHaveBeenCalledWith('sp-hr', {
-      name: 'HR 2',
-      prefix: 'HR',
-      description: null,
-      icon: null,
-      color: 'gris',
-    });
+    expect(spaces['updateSpace']).toHaveBeenCalledWith(
+      'sp-hr',
+      {
+        name: 'HR 2',
+        prefix: 'HR',
+        description: null,
+        icon: null,
+        color: 'gris',
+      },
+      { headers: { 'If-Match': '"2"' } },
+    );
     await api.deleteSpace('sp-hr');
     expect(spaces['deleteSpace']).toHaveBeenCalledWith('sp-hr');
   });

@@ -359,21 +359,26 @@ export class ListsApi {
    * Method create
    *
    * @description
-   * Creates a list, or a sprint when the draft has dates, after the other lists of a space.
+   * Creates a list, or a sprint when the draft has dates, after the other lists of a space. A
+   * retry of the same creation reuses its idempotency key, so a lost answer creates nothing twice.
    *
    * @param {string} spaceId - The space.
    * @param {ListDraft} draft - The dialog's values.
+   * @param {string} idempotencyKey - Key of this creation.
    * @returns {Promise<TaskList>} The list as recorded.
    */
-  public async create(spaceId: string, draft: ListDraft): Promise<TaskList> {
+  public async create(
+    spaceId: string,
+    draft: ListDraft,
+    idempotencyKey: string,
+  ): Promise<TaskList> {
     return toTaskList(
       await firstValueFrom(
-        this.lists.createList(spaceId, {
-          name: draft.name,
-          icon: draft.icon,
-          color: draft.color,
-          sprint: draft.sprint,
-        }),
+        this.lists.createList(
+          spaceId,
+          { name: draft.name, icon: draft.icon, color: draft.color, sprint: draft.sprint },
+          { headers: { 'Idempotency-Key': idempotencyKey } },
+        ),
       ),
     );
   }

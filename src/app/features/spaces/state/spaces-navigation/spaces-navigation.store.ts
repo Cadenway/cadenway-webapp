@@ -344,7 +344,8 @@ interface SpacesNavigationStoreInstance {
    * Method follow
    *
    * @description
-   * Follows the committed organization; a switch clears the open spaces and reads again.
+   * Follows the committed organization; a switch clears the open spaces, forgets the creations
+   * being tried and reads again.
    *
    * @param {Signal<string> | string} organizationId - Organization id.
    */
@@ -409,7 +410,7 @@ interface SpacesNavigationStoreInstance {
    * Method closeDialog
    *
    * @description
-   * Closes the dialog open.
+   * Closes the dialog open; the next creation is a new one (a new idempotency key).
    */
   closeDialog(): void;
 
@@ -428,7 +429,8 @@ interface SpacesNavigationStoreInstance {
    *
    * @description
    * Creates a space with its first list, then reads the spaces again with the new space open.
-   * A retry of the same draft reuses its idempotency key.
+   * A retry of the same draft in the same organization reuses its idempotency key, until the
+   * dialog closes.
    *
    * @param {SpaceDraft} draft - The dialog's values.
    * @returns {Promise<SpaceCreationResult>} The space and its list, or why it failed.
@@ -467,7 +469,8 @@ interface SpacesNavigationStoreInstance {
    * Method createList
    *
    * @description
-   * Creates a list or a sprint in a space, then reads the overviews again.
+   * Creates a list or a sprint in a space, then reads the overviews again. A retry of the same
+   * draft in the same space and organization reuses its idempotency key, until the dialog closes.
    *
    * @param {string} spaceId - The space.
    * @param {ListDraft} draft - The dialog's values.
@@ -741,8 +744,10 @@ function createSpacesNavigationStore(): Type<SpacesNavigationStoreInstance> {
       };
       const currentSpaces: () => readonly SpaceDetails[] = () =>
         store.spaces.hasValue() ? store.spaces.value() : [];
-      // The idempotency key of the space creation being tried, reused while its draft is the same.
+      // The idempotency keys of the space and list creations being tried, each reused while its
+      // organization and draft (and space, for a list) stay the same.
       let creationKey: { fingerprint: string; key: string } | null = null;
+      let listCreationKey: { fingerprint: string; key: string } | null = null;
       // Puts a space in place of the one with this id, unless the shown one was replaced since.
       const replaceSpace: (
         spaceId: string,
@@ -901,6 +906,8 @@ function createSpacesNavigationStore(): Type<SpacesNavigationStoreInstance> {
         }),
         follow: signalMethod<string>((organizationId: string): void => {
           if (organizationId === store._organizationId()) return;
+          creationKey = null;
+          listCreationKey = null;
           store._offered.clear();
           store._landed.clear();
           patchState(store, {
@@ -948,6 +955,8 @@ function createSpacesNavigationStore(): Type<SpacesNavigationStoreInstance> {
           patchState(store, { dialog });
         },
         closeDialog(): void {
+          creationKey = null;
+          listCreationKey = null;
           patchState(store, { dialog: null });
         },
         rememberSpacesUrl(url: string): void {
@@ -955,7 +964,7 @@ function createSpacesNavigationStore(): Type<SpacesNavigationStoreInstance> {
         },
         async createSpace(draft: SpaceDraft): Promise<SpaceCreationResult> {
           const organizationId: string | null = store._organizationId();
-          const fingerprint: string = JSON.stringify(draft);
+          const fingerprint: string = JSON.stringify([organizationId, draft]);
           if (creationKey?.fingerprint !== fingerprint) {
             creationKey = { fingerprint, key: crypto.randomUUID() };
           }
@@ -1020,8 +1029,14 @@ function createSpacesNavigationStore(): Type<SpacesNavigationStoreInstance> {
           }
         },
         async createList(spaceId: string, draft: ListDraft): Promise<TaskList | null> {
+          const fingerprint: string = JSON.stringify([store._organizationId(), spaceId, draft]);
+          if (listCreationKey?.fingerprint !== fingerprint) {
+            listCreationKey = { fingerprint, key: crypto.randomUUID() };
+          }
+          const attempt: { fingerprint: string; key: string } = listCreationKey;
           try {
-            const created: TaskList = await store._lists.create(spaceId, draft);
+            const created: TaskList = await store._lists.create(spaceId, draft, attempt.key);
+            if (listCreationKey === attempt) listCreationKey = null;
             patchState(store, { expanded: { ...store.expanded(), [spaceId]: true } });
             reloadOverviews();
             return created;

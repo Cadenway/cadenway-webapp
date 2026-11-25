@@ -1216,7 +1216,7 @@ export class SpacesSidebar {
       this.toasts.show($localize`:@@spaces.space.updated:Space updated`, {
         description: recorded.name,
         undo: (): void => {
-          void this.navigation.updateSpace(recorded, draftOfSpace(edited));
+          void this.undoSpace(recorded, edited);
         },
       });
       return;
@@ -1237,6 +1237,44 @@ export class SpacesSidebar {
       description: $localize`:@@spaces.space.created-text:${name}:name: · a first list is ready.`,
     });
     void this.router.navigate(['/', this.slug(), 'l', created.firstList.id]);
+  }
+
+  /**
+   * Method undoSpace
+   *
+   * @description
+   * The `Undo` of `Space updated`: writes the previous settings back from the recorded version;
+   * a refusal shows the failure toast.
+   *
+   * @param {SpaceDetails} recorded - The space as the change recorded it.
+   * @param {SpaceDetails} previous - The space before the change.
+   * @returns {Promise<void>} Resolves once handled.
+   */
+  private async undoSpace(recorded: SpaceDetails, previous: SpaceDetails): Promise<void> {
+    const restored: SpaceDetails | 'prefix-taken' | null = await this.navigation.updateSpace(
+      recorded,
+      draftOfSpace(previous),
+    );
+    if (restored === null || restored === 'prefix-taken') {
+      this.toasts.error($localize`:@@spaces.space.save-failed:The space could not be saved`);
+    }
+  }
+
+  /**
+   * Method undoList
+   *
+   * @description
+   * The `Undo` of `List updated` or `Sprint updated`: writes the previous values back from the
+   * recorded version; a refusal shows the failure toast.
+   *
+   * @param {TaskList} recorded - The list as the change recorded it.
+   * @param {TaskList} previous - The list before the change.
+   * @returns {Promise<void>} Resolves once handled.
+   */
+  private async undoList(recorded: TaskList, previous: TaskList): Promise<void> {
+    if (!(await this.navigation.updateList(recorded, draftOfList(previous)))) {
+      this.toasts.error($localize`:@@spaces.list.save-failed:The list could not be saved`);
+    }
   }
 
   /**
@@ -1270,7 +1308,7 @@ export class SpacesSidebar {
         {
           description: recorded.name,
           undo: (): void => {
-            void this.navigation.updateList(recorded, draftOfList(edited));
+            void this.undoList(recorded, edited);
           },
         },
       );

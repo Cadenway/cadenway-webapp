@@ -37,6 +37,7 @@ const design: SpaceDetails = {
   prefix: 'DES',
   canEdit: true,
   canManage: true,
+  version: 3,
   description: 'Design system and user research.',
   icon: 'paint',
   color: 'rose',
