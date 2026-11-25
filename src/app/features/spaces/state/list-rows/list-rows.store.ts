@@ -1109,8 +1109,7 @@ function createListRowsStore(): Type<ListRowsStoreInstance> {
               return (
                 typeof data === 'object' &&
                 data !== null &&
-                'listId' in data &&
-                data.listId === listId
+                (!('listId' in data) || data.listId === listId)
               );
             }),
             debounceTime(NOTICE_DEBOUNCE_MS),

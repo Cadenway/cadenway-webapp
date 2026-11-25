@@ -6,6 +6,7 @@ import { type Observable, of, Subject, throwError } from 'rxjs';
 import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 
 import { type RealtimeChange, RealtimeConnection } from '@core/realtime';
+import { parseChange } from '@core/realtime/realtime-protocol.util';
 import { TaskStatusChangesStore, type TaskSummary } from '@features/task';
 import { TaskApi } from '@features/task/data-access/services/task-api/task-api.service';
 import { WORKSPACE_CONTEXT } from '@features/workspace/ports/workspace-context';
@@ -365,17 +366,20 @@ describe('ListRowsStore', () => {
       TestBed.inject(TaskStatusChangesStore);
 
     status.request(cad482, 'review');
-    notices.next({
-      id: 'n1',
+    const notice: RealtimeChange | null = parseChange({
+      id: '019a6000-0000-7000-8000-000000000001',
       type: 'task.updated.v1',
       at: '2026-11-08T09:00:00Z',
-      data: { listId: 'sprint-14', taskKey: 'CAD-482' },
+      version: 1,
+      data: { taskId: '019a6000-0000-7000-8000-000000000002', changed: ['name'] },
     });
+    expect(notice).not.toBeNull();
+    if (notice) notices.next(notice);
     notices.next({
       id: 'n2',
       type: 'task.updated.v1',
       at: '2026-11-08T09:00:00Z',
-      data: { listId: 'backlog' },
+      data: { listId: 'backlog', taskId: 'CAD-482' },
     });
     await vi.advanceTimersByTimeAsync(300);
     await settle();
@@ -383,6 +387,97 @@ describe('ListRowsStore', () => {
     expect(groups).toHaveBeenCalledTimes(2);
     expect(page).toHaveBeenCalledTimes(2);
     expect(rowOf(store, 'CAD-482')).toMatchObject({ status: 'review', group: 'todo' });
+  });
+
+  it.each([
+    ['task.updated.v1', { taskId: '019a6000-0000-7000-8000-000000000002', changed: ['name'] }],
+    [
+      'task.status-changed.v1',
+      { taskId: '019a6000-0000-7000-8000-000000000002', changed: ['status'] },
+    ],
+    [
+      'comment.created.v1',
+      {
+        taskId: '019a6000-0000-7000-8000-000000000002',
+        commentId: '019a6000-0000-7000-8000-000000000003',
+      },
+    ],
+    ['git.links-changed.v1', { taskId: '019a6000-0000-7000-8000-000000000002' }],
+  ])('reloads for a parsed %s notice without a list id', async (type, data) => {
+    const store: InstanceType<typeof ListRowsStore> = setup(flat);
+    await settle();
+    const notice: RealtimeChange | null = parseChange({
+      id: '019a6000-0000-7000-8000-000000000001',
+      type,
+      at: '2026-11-08T09:00:00Z',
+      version: 1,
+      data,
+    });
+    expect(notice).not.toBeNull();
+    if (notice) notices.next(notice);
+    await vi.advanceTimersByTimeAsync(299);
+    await settle();
+    expect(page).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1);
+    await settle();
+    expect(page).toHaveBeenCalledTimes(2);
+    expect(store.rows()).toHaveLength(1);
+  });
+
+  it('ignores a notice that names a different list', async () => {
+    setup(flat);
+    await settle();
+    notices.next({
+      id: 'n1',
+      type: 'task.updated.v1',
+      at: '2026-11-08T09:00:00Z',
+      data: { listId: 'backlog', taskId: 'CAD-482' },
+    });
+    await vi.advanceTimersByTimeAsync(300);
+    await settle();
+    expect(page).toHaveBeenCalledTimes(1);
+  });
+
+  it('reloads for parsed notices about a loaded task and its subtask', async () => {
+    const parentId: string = '019a6000-0000-7000-8000-000000000002';
+    const childId: string = '019a6000-0000-7000-8000-000000000003';
+    page.mockResolvedValue(
+      pageOf([{ ...cad482, id: parentId, subtasks: { closed: 0, total: 1 } }]),
+    );
+    subtasks.mockResolvedValue([task('CAD-483', 'todo', { id: childId, parentKey: 'CAD-482' })]);
+    const store: InstanceType<typeof ListRowsStore> = setup(flat);
+    await settle();
+    store.toggleSubtasks('CAD-482');
+    await settle();
+
+    for (const taskId of [parentId, childId]) {
+      const notice: RealtimeChange | null = parseChange({
+        id: '019a6000-0000-7000-8000-000000000001',
+        type: 'task.updated.v1',
+        at: '2026-11-08T09:00:00Z',
+        version: 1,
+        data: { taskId, changed: ['name'] },
+      });
+      expect(notice).not.toBeNull();
+      if (notice) notices.next(notice);
+      await vi.advanceTimersByTimeAsync(300);
+      await settle();
+    }
+    expect(page).toHaveBeenCalledTimes(3);
+  });
+
+  it('reloads for a notice that names the current list', async () => {
+    setup(flat);
+    await settle();
+    notices.next({
+      id: 'n1',
+      type: 'task.updated.v1',
+      at: '2026-11-08T09:00:00Z',
+      data: { listId: 'sprint-14' },
+    });
+    await vi.advanceTimersByTimeAsync(300);
+    await settle();
+    expect(page).toHaveBeenCalledTimes(2);
   });
 
   it('empties the rows at once when the organization switches and drops the late answer', async () => {
