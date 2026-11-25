@@ -171,6 +171,7 @@ describe('ListViewPage', () => {
         done: [{ taskKey: 'CAD-482', version: 3 }],
         failed: [],
         unknown: [],
+        notSent: [],
       }),
     );
     toasts = { show: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn(), dismiss: vi.fn() };
@@ -320,6 +321,22 @@ describe('ListViewPage', () => {
     expect(document.body.textContent).toContain('CAD-483 · Page des quotas d’organisation');
   });
 
+  it('does not emit a destroyed output when a row menu is open during teardown', async () => {
+    const fixture: ComponentFixture<ListViewPage> = await render();
+    const warn: MockInstance = vi.spyOn(console, 'warn');
+    const name: HTMLButtonElement = required(
+      [
+        ...(fixture.nativeElement as HTMLElement).querySelectorAll<HTMLButtonElement>('button'),
+      ].find((element: HTMLButtonElement) => element.textContent.includes('Page des quotas')),
+    );
+    name.dispatchEvent(new KeyboardEvent('keydown', { key: 'F10', shiftKey: true, bubbles: true }));
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.destroy();
+    expect(warn).not.toHaveBeenCalledWith(expect.stringContaining('NG0953'));
+    warn.mockRestore();
+  });
+
   it('opens the menu for the row receiving a touch long press', async () => {
     const fixture: ComponentFixture<ListViewPage> = await render();
     const name: HTMLButtonElement = required(
@@ -364,6 +381,7 @@ describe('ListViewPage', () => {
       done: [{ taskKey: 'CAD-482', version: 3 }],
       failed: [{ taskKey: 'CAD-483', version: 3 }],
       unknown: [],
+      notSent: [],
     });
     const fixture: ComponentFixture<ListViewPage> = await render();
 
@@ -400,6 +418,7 @@ describe('ListViewPage', () => {
       ],
       failed: [],
       unknown: [],
+      notSent: [],
     });
     const fixture: ComponentFixture<ListViewPage> = await render();
     required(checkbox('Sélectionner CAD-482')).click();
@@ -410,6 +429,31 @@ describe('ListViewPage', () => {
     await fixture.whenStable();
 
     expect(toasts['show']).toHaveBeenCalledWith('2 tâches terminées', expect.anything());
+  });
+
+  it('does not update the page or show a toast when a bulk action completes after destruction', async () => {
+    let finish: (outcome: BulkOutcome) => void = () => undefined;
+    bulk.mockReturnValueOnce(
+      new Promise<BulkOutcome>((resolve) => {
+        finish = resolve;
+      }),
+    );
+    const fixture: ComponentFixture<ListViewPage> = await render();
+    required(checkbox('Sélectionner CAD-482')).click();
+    fixture.detectChanges();
+    required(button('Marquer terminé')).click();
+    fixture.destroy();
+    finish({
+      affected: 1,
+      done: [{ taskKey: 'CAD-482', version: 3 }],
+      failed: [],
+      unknown: [],
+      notSent: [],
+    });
+    await Promise.resolve();
+    expect(toasts['show']).not.toHaveBeenCalled();
+    expect(toasts['warning']).not.toHaveBeenCalled();
+    expect(toasts['error']).not.toHaveBeenCalled();
   });
 
   it('changes the status of a selection through one bulk action', async () => {

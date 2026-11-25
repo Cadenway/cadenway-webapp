@@ -116,5 +116,16 @@ export interface BulkOutcome {
    * @readonly
    */
   readonly unknown: readonly BulkSelection[];
+
+  /**
+   * Property notSent
+   *
+   * @description
+   * Tasks not sent after an unresolved chunk, a workspace change or store destruction.
+   *
+   * @type {readonly BulkSelection[]}
+   * @readonly
+   */
+  readonly notSent: readonly BulkSelection[];
   // #endregion
 }

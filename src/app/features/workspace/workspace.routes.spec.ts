@@ -456,6 +456,7 @@ describe('WORKSPACE_ROUTES', () => {
       .subscribe();
     await vi.waitFor(() => {
       expect(handlers).toHaveLength(1);
+      expect(handlers[0].has('hello')).toBe(true);
     });
     handlers[0].get('hello')?.({
       id: '019a7005-6f7a-7b8c-9d0e-1f2a3b4c5d4f',
@@ -468,14 +469,19 @@ describe('WORKSPACE_ROUTES', () => {
         heartbeatIntervalSeconds: 10,
       },
     });
-    await harness.fixture.whenStable();
+    await vi.waitFor(() => {
+      expect(joins).toHaveLength(1);
+    });
     await harness.navigateByUrl('/lumen');
     await harness.fixture.whenStable();
     expect(disconnects[0]).toHaveBeenCalledOnce();
     await vi.waitFor(() => {
       expect(tickets).toHaveBeenCalledTimes(2);
     });
-    expect(handlers).toHaveLength(2);
+    await vi.waitFor(() => {
+      expect(handlers).toHaveLength(2);
+      expect(handlers[1].has('hello')).toBe(true);
+    });
     handlers[1].get('hello')?.({
       id: '019a7005-6f7a-7b8c-9d0e-1f2a3b4c5d4f',
       type: 'connection.ready.v1',

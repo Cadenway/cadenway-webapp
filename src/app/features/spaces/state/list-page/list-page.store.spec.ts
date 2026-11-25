@@ -1,10 +1,17 @@
 import { HttpErrorResponse } from '@angular/common/http';
+import {
+  createEnvironmentInjector,
+  EnvironmentInjector,
+  signal,
+  type WritableSignal,
+} from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { type Observable, Subject } from 'rxjs';
 import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 
 import { type RealtimeChange, RealtimeConnection } from '@core/realtime';
 import { AccessDeniedRouteError } from '@shared/route-errors';
+import { WORKSPACE_CONTEXT } from '@features/workspace/ports/workspace-context';
 
 import { ListsApi } from '../../data-access/services/lists-api/lists-api.service';
 import { SpacesApi } from '../../data-access/services/spaces-api/spaces-api.service';
@@ -66,8 +73,10 @@ describe('ListPageStore', () => {
   let notices: Subject<RealtimeChange>;
   let watch: Mock;
   let store: InstanceType<typeof ListPageStore>;
+  let organization: WritableSignal<{ id: string }>;
 
   beforeEach(() => {
+    organization = signal({ id: 'org-atelier-nord' });
     notices = new Subject<RealtimeChange>();
     watch = vi.fn((): Observable<RealtimeChange> => notices.asObservable());
     api = {
@@ -97,6 +106,7 @@ describe('ListPageStore', () => {
     TestBed.configureTestingModule({
       providers: [
         ListPageStore,
+        { provide: WORKSPACE_CONTEXT, useValue: { organization } },
         { provide: ListsApi, useValue: api },
         {
           provide: SpacesApi,
@@ -342,6 +352,7 @@ describe('ListPageStore', () => {
       done: [{ taskKey: 'CAD-482' }],
       failed: [],
       unknown: [],
+      notSent: [],
     });
     await expect.poll(() => api['counts'].mock.calls.length).toBe(calls + 1);
 
@@ -351,12 +362,14 @@ describe('ListPageStore', () => {
       done: [],
       failed: [{ taskKey: 'CAD-482' }],
       unknown: [],
+      notSent: [],
     });
     expect(await store.bulk([], { type: 'trash' })).toEqual({
       affected: 0,
       done: [],
       failed: [],
       unknown: [],
+      notSent: [],
     });
   });
 
@@ -396,6 +409,103 @@ describe('ListPageStore', () => {
     expect(outcome.unknown).toEqual(selection);
     expect(outcome.failed).toEqual([]);
     expect(api['bulk'].mock.calls[0][2]).toBe(api['bulk'].mock.calls[1][2]);
+  });
+
+  it('does not send later chunks after the organization changes', async () => {
+    await loaded();
+    let finish: (affected: number) => void = () => undefined;
+    api['bulk'].mockReturnValueOnce(
+      new Promise<number>((resolve) => {
+        finish = resolve;
+      }),
+    );
+    const selection: { taskKey: string }[] = Array.from({ length: 75 }, (_, index: number) => ({
+      taskKey: `CAD-${String(index)}`,
+    }));
+    const pending: Promise<import('../../models/bulk-action/bulk-action.interface').BulkOutcome> =
+      store.bulk(selection, { type: 'done' });
+    organization.set({ id: 'org-lumen' });
+    finish(50);
+    const outcome: import('../../models/bulk-action/bulk-action.interface').BulkOutcome =
+      await pending;
+    expect(api['bulk']).toHaveBeenCalledTimes(1);
+    expect(outcome.done).toEqual(selection.slice(0, 50));
+    expect(outcome.notSent).toEqual(selection.slice(50));
+    expect(outcome.unknown).toEqual([]);
+  });
+
+  it('does not retry an uncertain chunk after the organization changes', async () => {
+    await loaded();
+    let reject: (reason: unknown) => void = () => undefined;
+    api['bulk'].mockReturnValueOnce(
+      new Promise<number>((_resolve, fail) => {
+        reject = fail;
+      }),
+    );
+    const selection: { taskKey: string }[] = Array.from({ length: 75 }, (_, index: number) => ({
+      taskKey: `CAD-${String(index)}`,
+    }));
+    const pending: Promise<import('../../models/bulk-action/bulk-action.interface').BulkOutcome> =
+      store.bulk(selection, { type: 'done' });
+    organization.set({ id: 'org-lumen' });
+    reject(new HttpErrorResponse({ status: 0 }));
+    const outcome: import('../../models/bulk-action/bulk-action.interface').BulkOutcome =
+      await pending;
+    expect(api['bulk']).toHaveBeenCalledTimes(1);
+    expect(outcome.unknown).toEqual(selection.slice(0, 50));
+    expect(outcome.notSent).toEqual(selection.slice(50));
+  });
+
+  it('does not send later chunks after the store is destroyed', async () => {
+    const injector: EnvironmentInjector = createEnvironmentInjector(
+      [ListPageStore],
+      TestBed.inject(EnvironmentInjector),
+    );
+    const scoped: InstanceType<typeof ListPageStore> = injector.get(ListPageStore);
+    let finish: (affected: number) => void = () => undefined;
+    api['bulk'].mockReturnValueOnce(
+      new Promise<number>((resolve) => {
+        finish = resolve;
+      }),
+    );
+    const selection: { taskKey: string }[] = Array.from({ length: 75 }, (_, index: number) => ({
+      taskKey: `CAD-${String(index)}`,
+    }));
+    const pending: Promise<import('../../models/bulk-action/bulk-action.interface').BulkOutcome> =
+      scoped.bulk(selection, { type: 'done' });
+    injector.destroy();
+    finish(50);
+    const outcome: import('../../models/bulk-action/bulk-action.interface').BulkOutcome =
+      await pending;
+    expect(api['bulk']).toHaveBeenCalledTimes(1);
+    expect(outcome.done).toEqual(selection.slice(0, 50));
+    expect(outcome.notSent).toEqual(selection.slice(50));
+  });
+
+  it('does not retry an uncertain chunk after the store is destroyed', async () => {
+    const injector: EnvironmentInjector = createEnvironmentInjector(
+      [ListPageStore],
+      TestBed.inject(EnvironmentInjector),
+    );
+    const scoped: InstanceType<typeof ListPageStore> = injector.get(ListPageStore);
+    let reject: (reason: unknown) => void = () => undefined;
+    api['bulk'].mockReturnValueOnce(
+      new Promise<number>((_resolve, fail) => {
+        reject = fail;
+      }),
+    );
+    const selection: { taskKey: string }[] = Array.from({ length: 75 }, (_, index: number) => ({
+      taskKey: `CAD-${String(index)}`,
+    }));
+    const pending: Promise<import('../../models/bulk-action/bulk-action.interface').BulkOutcome> =
+      scoped.bulk(selection, { type: 'done' });
+    injector.destroy();
+    reject(new HttpErrorResponse({ status: 0 }));
+    const outcome: import('../../models/bulk-action/bulk-action.interface').BulkOutcome =
+      await pending;
+    expect(api['bulk']).toHaveBeenCalledTimes(1);
+    expect(outcome.unknown).toEqual(selection.slice(0, 50));
+    expect(outcome.notSent).toEqual(selection.slice(50));
   });
 
   it('reports the list writes', async () => {

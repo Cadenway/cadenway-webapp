@@ -126,9 +126,10 @@ breadcrumb, dialog, inline edit, toolbar).
 - `ListViewPage` holds the table's selection; the selection bar sends it explicitly, with each
   task's shown version, through `ListPageStore.bulk`, in chunks of 50 `executeBulkTaskAction` calls
   one after the other. Each chunk has an idempotency key, reused for one retry after an uncertain
-  response. An unresolved response is reported as unknown and triggers a reload; a refused chunk
-  stays selected and a second toast counts it. The row menu uses the same bulk path for a selected
-  group, including a shared cancellation reason.
+  response. Each send and retry checks the starting organization and the store's lifetime; when
+  either changes, remaining tasks are reported as not sent. An unresolved response is reported as
+  unknown and triggers a reload; a refused chunk stays selected and a second toast counts it. The
+  row menu uses the same bulk path for a selected group, including a shared cancellation reason.
 - Under 768 px the table hides the assignees, priority, labels and actions columns.
 
 ## Gateway follow-up

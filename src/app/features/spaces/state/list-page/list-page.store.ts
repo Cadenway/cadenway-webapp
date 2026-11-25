@@ -1,4 +1,11 @@
-import { inject, resource, type ResourceRef, type Signal, type Type } from '@angular/core';
+import {
+  DestroyRef,
+  inject,
+  resource,
+  type ResourceRef,
+  type Signal,
+  type Type,
+} from '@angular/core';
 import {
   patchState,
   signalMethod,
@@ -21,6 +28,7 @@ import {
 } from 'rxjs';
 
 import { type RealtimeChange, RealtimeConnection } from '@core/realtime';
+import { WORKSPACE_CONTEXT } from '@features/workspace/ports/workspace-context';
 
 import {
   isUncertainBulkFailure,
@@ -317,8 +325,9 @@ export interface ListPageStoreInstance {
    *
    * @description
    * Applies an action of the selection bar in chunks of 50 tasks, one `executeBulkTaskAction`
-   * call after the other (each chunk succeeds or fails as a whole), then reads the counts again
-   * when a chunk changed something.
+   * call after the other. An uncertain response is retried with the same key. Stops before a
+   * send or retry if the organization changed or the store was destroyed, reporting tasks not
+   * sent separately from refused and uncertain chunks.
    *
    * @param {readonly BulkSelection[]} selection - Selected tasks.
    * @param {BulkAction} action - Action.
@@ -368,6 +377,8 @@ function createListPageStore(): Type<ListPageStoreInstance> {
       });
       return {
         _api: api,
+        _workspace: inject(WORKSPACE_CONTEXT),
+        _destroyRef: inject(DestroyRef),
         _realtime: inject(RealtimeConnection, { optional: true }),
         list,
         space: resource({
@@ -593,11 +604,19 @@ function createListPageStore(): Type<ListPageStoreInstance> {
           }
         },
         async bulk(selection: readonly BulkSelection[], action: BulkAction): Promise<BulkOutcome> {
+          const organizationId: string = store._workspace.organization().id;
+          const current: () => boolean = (): boolean =>
+            !store._destroyRef.destroyed && store._workspace.organization().id === organizationId;
           let affected: number = 0;
           const done: BulkSelection[] = [];
           const failed: BulkSelection[] = [];
           const unknown: BulkSelection[] = [];
+          const notSent: BulkSelection[] = [];
           for (let start: number = 0; start < selection.length; start += BULK_CHUNK_SIZE) {
+            if (!current()) {
+              notSent.push(...selection.slice(start));
+              break;
+            }
             const chunk: readonly BulkSelection[] = selection.slice(start, start + BULK_CHUNK_SIZE);
             const key: string = crypto.randomUUID();
             let uncertain: boolean = false;
@@ -608,6 +627,11 @@ function createListPageStore(): Type<ListPageStoreInstance> {
               } catch (error: unknown) {
                 if (!isUncertainBulkFailure(error)) throw error;
                 uncertain = true;
+                if (!current()) {
+                  unknown.push(...chunk);
+                  notSent.push(...selection.slice(start + BULK_CHUNK_SIZE));
+                  break;
+                }
                 changed = await store._api.bulk(chunk, action, key);
               }
               affected += changed;
@@ -617,13 +641,13 @@ function createListPageStore(): Type<ListPageStoreInstance> {
                 failed.push(...chunk);
               } else {
                 unknown.push(...chunk);
-                failed.push(...selection.slice(start + BULK_CHUNK_SIZE));
+                notSent.push(...selection.slice(start + BULK_CHUNK_SIZE));
                 break;
               }
             }
           }
-          if (done.length > 0 || unknown.length > 0) reloadCounts();
-          return { affected, done, failed, unknown };
+          if (current() && (done.length > 0 || unknown.length > 0)) reloadCounts();
+          return { affected, done, failed, unknown, notSent };
         },
       };
     }),

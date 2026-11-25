@@ -7484,6 +7484,10 @@
         <source><x id="label" equiv-text="label"/> · Status</source>
         <target><x id="label" equiv-text="label"/> · Statut</target>
       </trans-unit>
+      <trans-unit id="spaces.bulk.not-sent" datatype="html">
+        <source>Some selected tasks were not sent.</source>
+        <target>Certaines tâches sélectionnées n’ont pas été envoyées.</target>
+      </trans-unit>
       <trans-unit id="spaces.bulk.unknown" datatype="html">
         <source>The outcome is unknown. The tasks are being refreshed.</source>
         <target>Le résultat est inconnu. Les tâches sont en cours d’actualisation.</target>

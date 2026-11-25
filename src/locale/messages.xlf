@@ -5230,140 +5230,147 @@
         <source><x id="count" equiv-text="count"/> tasks selected</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/spaces/ui/pages/list-view-page/list-view-page.component.ts</context>
-          <context context-type="linenumber">503</context>
+          <context context-type="linenumber">514</context>
         </context-group>
       </trans-unit>
       <trans-unit id="spaces.rows.table" datatype="html">
         <source>Tasks of the list <x id="name" equiv-text="name"/></source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/spaces/ui/pages/list-view-page/list-view-page.component.ts</context>
-          <context context-type="linenumber">645</context>
+          <context context-type="linenumber">656</context>
         </context-group>
       </trans-unit>
       <trans-unit id="spaces.rows.unassigned" datatype="html">
         <source>Unassigned</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/spaces/ui/pages/list-view-page/list-view-page.component.ts</context>
-          <context context-type="linenumber">718</context>
+          <context context-type="linenumber">729</context>
         </context-group>
       </trans-unit>
       <trans-unit id="spaces.rows.all" datatype="html">
         <source>All tasks</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/spaces/ui/pages/list-view-page/list-view-page.component.ts</context>
-          <context context-type="linenumber">721</context>
+          <context context-type="linenumber">732</context>
         </context-group>
       </trans-unit>
       <trans-unit id="spaces.rows.hide-subtasks" datatype="html">
         <source>Hide the <x id="count" equiv-text="count"/> subtasks of <x id="key" equiv-text="key"/></source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/spaces/ui/pages/list-view-page/list-view-page.component.ts</context>
-          <context context-type="linenumber">880</context>
+          <context context-type="linenumber">890</context>
         </context-group>
       </trans-unit>
       <trans-unit id="spaces.rows.show-subtasks" datatype="html">
         <source>Show the <x id="count" equiv-text="count"/> subtasks of <x id="key" equiv-text="key"/></source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/spaces/ui/pages/list-view-page/list-view-page.component.ts</context>
-          <context context-type="linenumber">881</context>
+          <context context-type="linenumber">891</context>
         </context-group>
       </trans-unit>
       <trans-unit id="spaces.rows.actions" datatype="html">
         <source>Actions on <x id="key" equiv-text="key"/></source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/spaces/ui/pages/list-view-page/list-view-page.component.ts</context>
-          <context context-type="linenumber">895</context>
+          <context context-type="linenumber">905</context>
         </context-group>
       </trans-unit>
       <trans-unit id="spaces.bulk.status-toast" datatype="html">
         <source><x id="label" equiv-text="label"/> · Status</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/spaces/ui/pages/list-view-page/list-view-page.component.ts</context>
-          <context context-type="linenumber">975</context>
+          <context context-type="linenumber">985</context>
         </context-group>
       </trans-unit>
       <trans-unit id="spaces.rows.add-subtask" datatype="html">
         <source>Add a subtask to <x id="key" equiv-text="row.task.key"/></source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/spaces/ui/pages/list-view-page/list-view-page.component.ts</context>
-          <context context-type="linenumber">1018</context>
+          <context context-type="linenumber">1028</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="spaces.bulk.not-sent" datatype="html">
+        <source>Some selected tasks were not sent.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/spaces/ui/pages/list-view-page/list-view-page.component.ts</context>
+          <context context-type="linenumber">1105</context>
         </context-group>
       </trans-unit>
       <trans-unit id="spaces.bulk.unknown" datatype="html">
         <source>The outcome is unknown. The tasks are being refreshed.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/spaces/ui/pages/list-view-page/list-view-page.component.ts</context>
-          <context context-type="linenumber">1094</context>
+          <context context-type="linenumber">1110</context>
         </context-group>
       </trans-unit>
       <trans-unit id="spaces.bulk.failed" datatype="html">
         <source>The selection could not be changed</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/spaces/ui/pages/list-view-page/list-view-page.component.ts</context>
-          <context context-type="linenumber">1099</context>
+          <context context-type="linenumber">1116</context>
         </context-group>
       </trans-unit>
       <trans-unit id="spaces.bulk.partial-text" datatype="html">
         <source>They stay selected.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/spaces/ui/pages/list-view-page/list-view-page.component.ts</context>
-          <context context-type="linenumber">1115</context>
+          <context context-type="linenumber">1134</context>
         </context-group>
       </trans-unit>
       <trans-unit id="spaces.bulk.done-toast-text" datatype="html">
         <source>Status: Done.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/spaces/ui/pages/list-view-page/list-view-page.component.ts</context>
-          <context context-type="linenumber">1130</context>
+          <context context-type="linenumber">1149</context>
         </context-group>
       </trans-unit>
       <trans-unit id="spaces.bulk.assigned" datatype="html">
         <source><x id="name" equiv-text="name"/> assigned</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/spaces/ui/pages/list-view-page/list-view-page.component.ts</context>
-          <context context-type="linenumber">1146</context>
+          <context context-type="linenumber">1165</context>
         </context-group>
       </trans-unit>
       <trans-unit id="spaces.bulk.moved-text" datatype="html">
         <source>To <x id="name" equiv-text="name"/>.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/spaces/ui/pages/list-view-page/list-view-page.component.ts</context>
-          <context context-type="linenumber">1164</context>
+          <context context-type="linenumber">1183</context>
         </context-group>
       </trans-unit>
       <trans-unit id="spaces.bulk.deleted-text" datatype="html">
         <source>Kept 30 days in the trash.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/spaces/ui/pages/list-view-page/list-view-page.component.ts</context>
-          <context context-type="linenumber">1177</context>
+          <context context-type="linenumber">1196</context>
         </context-group>
       </trans-unit>
       <trans-unit id="spaces.bulk.delete-title" datatype="html">
         <source>Delete <x id="count" equiv-text="count"/> tasks?</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/spaces/ui/pages/list-view-page/list-view-page.component.ts</context>
-          <context context-type="linenumber">1192</context>
+          <context context-type="linenumber">1211</context>
         </context-group>
       </trans-unit>
       <trans-unit id="spaces.bulk.delete-title-one" datatype="html">
         <source>Delete this task?</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/spaces/ui/pages/list-view-page/list-view-page.component.ts</context>
-          <context context-type="linenumber">1193</context>
+          <context context-type="linenumber">1212</context>
         </context-group>
       </trans-unit>
       <trans-unit id="spaces.bulk.delete-action" datatype="html">
         <source>Delete <x id="count" equiv-text="count"/> tasks</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/spaces/ui/pages/list-view-page/list-view-page.component.ts</context>
-          <context context-type="linenumber">1207</context>
+          <context context-type="linenumber">1226</context>
         </context-group>
       </trans-unit>
       <trans-unit id="spaces.bulk.delete-action-one" datatype="html">
         <source>Delete the task</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/spaces/ui/pages/list-view-page/list-view-page.component.ts</context>
-          <context context-type="linenumber">1208</context>
+          <context context-type="linenumber">1227</context>
         </context-group>
       </trans-unit>
       <trans-unit id="spaces.private" datatype="html">

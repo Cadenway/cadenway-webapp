@@ -278,6 +278,17 @@ export class ListViewPage {
   private readonly workspace: WorkspaceContextPort = inject(WORKSPACE_CONTEXT);
 
   /**
+   * Property destroyRef
+   *
+   * @description
+   * Prevents a completed asynchronous action from updating a destroyed page.
+   *
+   * @type {DestroyRef}
+   * @readonly
+   */
+  private readonly destroyRef: DestroyRef = inject(DestroyRef);
+
+  /**
    * Property taskCreate
    *
    * @description
@@ -752,8 +763,7 @@ export class ListViewPage {
           .map((option: StatusOption): string => option.key),
       ),
     );
-    const destroyRef: DestroyRef = inject(DestroyRef);
-    this.taskCreate.useDefaults(() => ({ listId: this.listId() }), destroyRef);
+    this.taskCreate.useDefaults(() => ({ listId: this.listId() }), this.destroyRef);
 
     const scrolled: (event: Event) => void = (event: Event): void => {
       if (event.target instanceof HTMLElement) this.nearEnd(event.target);
@@ -764,7 +774,7 @@ export class ListViewPage {
         passive: true,
       });
     });
-    destroyRef.onDestroy((): void => {
+    this.destroyRef.onDestroy((): void => {
       this.host.nativeElement.removeEventListener('scroll', scrolled, { capture: true });
     });
     let previousGroups: Map<string, string> = new Map<string, string>();
@@ -1084,24 +1094,33 @@ export class ListViewPage {
     selected: readonly BulkSelection[] = this.selection(),
   ): Promise<void> {
     if (selected.length === 0 || this.pending()) return;
+    const organizationId: string = this.workspace.organization().id;
     this.pending.set(true);
     const outcome: BulkOutcome = await this.store.bulk(selected, action);
+    if (this.destroyRef.destroyed) return;
     this.pending.set(false);
+    if (this.workspace.organization().id !== organizationId) return;
     this.confirmDelete.set(false);
+    if (outcome.notSent.length > 0) {
+      this.toasts.warning($localize`:@@spaces.bulk.not-sent:Some selected tasks were not sent.`);
+    }
     if (outcome.unknown.length > 0) {
       this.rows.reload();
       this.toasts.warning(
         $localize`:@@spaces.bulk.unknown:The outcome is unknown. The tasks are being refreshed.`,
       );
     }
-    if (outcome.done.length === 0 && outcome.unknown.length > 0) return;
+    if (outcome.done.length === 0 && (outcome.unknown.length > 0 || outcome.notSent.length > 0))
+      return;
     if (outcome.done.length === 0) {
       this.toasts.error($localize`:@@spaces.bulk.failed:The selection could not be changed`);
       return;
     }
-    const failedKeys: readonly string[] = [...outcome.failed, ...outcome.unknown].map(
-      (item: BulkSelection): string => item.taskKey,
-    );
+    const failedKeys: readonly string[] = [
+      ...outcome.failed,
+      ...outcome.unknown,
+      ...outcome.notSent,
+    ].map((item: BulkSelection): string => item.taskKey);
     this.tableSelection.set(
       this.rows
         .rows()
