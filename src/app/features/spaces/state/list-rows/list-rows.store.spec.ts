@@ -292,6 +292,129 @@ describe('ListRowsStore', () => {
     ]);
   });
 
+  it('skips a full hidden status group and reads the following visible group', async () => {
+    groups.mockResolvedValue([
+      { value: 'triage', count: LIST_PAGE_SIZE },
+      { value: 'todo', count: 1 },
+    ]);
+    page.mockImplementation((_listId, _query, group) =>
+      Promise.resolve(
+        group?.value === 'triage'
+          ? pageOf(
+              Array.from({ length: LIST_PAGE_SIZE }, (_, index: number) =>
+                task(`CAD-hidden-${String(index)}`, 'triage'),
+              ),
+            )
+          : pageOf([cad482]),
+      ),
+    );
+    const store: InstanceType<typeof ListRowsStore> = setup(byStatus);
+    store.hideStatuses(['triage']);
+    await settle();
+
+    expect(store.rows().map((row: ListRow) => row.task.key)).toEqual(['CAD-482']);
+    expect(page.mock.calls.map((call: Parameters<PageRead>) => call[2]?.value)).toEqual(['todo']);
+    expect(store.empty()).toBe(false);
+  });
+
+  it('continues loading when a status becomes hidden during the first read', async () => {
+    groups.mockResolvedValue([
+      { value: 'triage', count: LIST_PAGE_SIZE },
+      { value: 'todo', count: 1 },
+    ]);
+    let finishHidden: (page: ListTaskPage) => void = () => undefined;
+    let finishVisible: (page: ListTaskPage) => void = () => undefined;
+    page.mockImplementation(
+      (_listId, _query, group) =>
+        new Promise<ListTaskPage>((resolve) => {
+          if (group?.value === 'triage') finishHidden = resolve;
+          else finishVisible = resolve;
+        }),
+    );
+    const store: InstanceType<typeof ListRowsStore> = setup(byStatus);
+    await settle();
+    expect(page).toHaveBeenCalledTimes(1);
+    store.hideStatuses(['triage']);
+    await settle();
+    finishHidden(
+      pageOf(
+        Array.from({ length: LIST_PAGE_SIZE }, (_, index: number) =>
+          task(`CAD-hidden-${String(index)}`, 'triage'),
+        ),
+      ),
+    );
+    await settle();
+
+    expect(page).toHaveBeenCalledTimes(2);
+    expect(store.rows()).toEqual([]);
+    expect(store.seekingRows()).toBe(true);
+    expect(store.empty()).toBe(false);
+    finishVisible(pageOf([cad482]));
+    await settle();
+    expect(store.rows().map((row: ListRow) => row.task.key)).toEqual(['CAD-482']);
+    expect(store.seekingRows()).toBe(false);
+  });
+
+  it('shows an empty result when every visible group has been read', async () => {
+    groups.mockResolvedValue([
+      { value: 'triage', count: LIST_PAGE_SIZE },
+      { value: 'todo', count: 0 },
+    ]);
+    const store: InstanceType<typeof ListRowsStore> = setup(byStatus);
+    store.hideStatuses(['triage']);
+    await settle();
+
+    expect(store.rows()).toEqual([]);
+    expect(store.seekingRows()).toBe(false);
+    expect(store.empty()).toBe(true);
+    expect(page).not.toHaveBeenCalled();
+  });
+
+  it('does not show an empty result while a visible folded group has unread pages', async () => {
+    groups.mockResolvedValue([{ value: 'cancelled', count: 1 }]);
+    page
+      .mockResolvedValueOnce(pageOf([], 'next'))
+      .mockResolvedValueOnce(pageOf([task('CAD-483', 'cancelled')]));
+    const store: InstanceType<typeof ListRowsStore> = setup(byStatus);
+    await settle();
+
+    expect(page).toHaveBeenCalledTimes(2);
+    expect(store.rows().map((row: ListRow) => row.task.key)).toEqual(['CAD-483']);
+    expect(store.empty()).toBe(false);
+  });
+
+  it('keeps a failed visible continuation distinct from an empty result and retries it', async () => {
+    groups.mockResolvedValue([
+      { value: 'triage', count: 50 },
+      { value: 'todo', count: 1 },
+    ]);
+    let finishHidden: (page: ListTaskPage) => void = () => undefined;
+    page
+      .mockReturnValueOnce(new Promise<ListTaskPage>((resolve) => (finishHidden = resolve)))
+      .mockRejectedValueOnce(new Error('503'))
+      .mockResolvedValueOnce(pageOf([cad482]));
+    const store: InstanceType<typeof ListRowsStore> = setup(byStatus);
+    await settle();
+    store.hideStatuses(['triage']);
+    await settle();
+    finishHidden(
+      pageOf(
+        Array.from({ length: 50 }, (_, index: number) =>
+          task(`CAD-hidden-${String(index)}`, 'triage'),
+        ),
+      ),
+    );
+    await settle();
+
+    expect(store.moreFailed()).toBe(true);
+    expect(store.empty()).toBe(false);
+    expect(store.seekingRows()).toBe(false);
+    store.retryMore();
+    await settle();
+    expect(store.moreFailed()).toBe(false);
+    expect(store.rows().map((row: ListRow) => row.task.key)).toEqual(['CAD-482']);
+  });
+
   it('shows a status at once and files the row under it 460 ms after the click', async () => {
     const store: InstanceType<typeof ListRowsStore> = setup(byStatus);
     await settle();

@@ -22,7 +22,9 @@
     [groupOrder]="rows.groupOrder()"
     [collapsed]="rows.collapsed()"
     [columnVisibility]="columnVisibility()"
-    [loading]="!snapshot && !rows.hasCurrentSnapshot() && rows.primary.isLoading()"
+    [loading]="
+      (!snapshot && !rows.hasCurrentSnapshot() && rows.primary.isLoading()) || rows.seekingRows()
+    "
     [ariaLabel]="tableLabel()"
     [(selection)]="tableSelection"
     (collapsedChange)="rows.setCollapsed($event)"
@@ -213,41 +215,43 @@
     </cw-data-table-column>
 
     <div cwDataTableEmpty>
-      <cw-empty size="sm" role="status">
-        <cw-empty-header>
-          <cw-empty-media>
-            <ng-icon name="phosphorTrayBold" aria-hidden="true" />
-          </cw-empty-media>
-          @if (filtered()) {
-            <cw-empty-title i18n="@@spaces.rows.no-match">No task matches</cw-empty-title>
-          } @else {
-            <cw-empty-title i18n="@@spaces.rows.empty">No task</cw-empty-title>
+      @if (rows.empty()) {
+        <cw-empty size="sm" role="status">
+          <cw-empty-header>
+            <cw-empty-media>
+              <ng-icon name="phosphorTrayBold" aria-hidden="true" />
+            </cw-empty-media>
+            @if (filtered()) {
+              <cw-empty-title i18n="@@spaces.rows.no-match">No task matches</cw-empty-title>
+            } @else {
+              <cw-empty-title i18n="@@spaces.rows.empty">No task</cw-empty-title>
+            }
+          </cw-empty-header>
+          @if (view.search().trim() !== '') {
+            <button
+              cwButton
+              type="button"
+              variant="outline"
+              size="sm"
+              (click)="view.setSearch('')"
+              i18n="@@spaces.rows.clear-search"
+            >
+              Clear the search
+            </button>
+          } @else if (!filtered()) {
+            <button
+              cwButton
+              type="button"
+              variant="outline"
+              size="sm"
+              (click)="create()"
+              i18n="@@spaces.rows.add"
+            >
+              Add a task
+            </button>
           }
-        </cw-empty-header>
-        @if (view.search().trim() !== '') {
-          <button
-            cwButton
-            type="button"
-            variant="outline"
-            size="sm"
-            (click)="view.setSearch('')"
-            i18n="@@spaces.rows.clear-search"
-          >
-            Clear the search
-          </button>
-        } @else if (!filtered()) {
-          <button
-            cwButton
-            type="button"
-            variant="outline"
-            size="sm"
-            (click)="create()"
-            i18n="@@spaces.rows.add"
-          >
-            Add a task
-          </button>
-        }
-      </cw-empty>
+        </cw-empty>
+      }
     </div>
   </cw-data-table>
 

@@ -91,6 +91,7 @@ function ready(value: unknown): object {
 
 describe('ListViewPage', () => {
   let page: Mock<ListTasksApi['page']>;
+  let groups: Mock<ListTasksApi['groups']>;
   let bulk: Mock<(selection: unknown[], action: unknown) => Promise<BulkOutcome>>;
   let toasts: Record<string, Mock>;
 
@@ -158,6 +159,13 @@ describe('ListViewPage', () => {
   }
 
   beforeEach(() => {
+    groups = vi.fn(() =>
+      Promise.resolve([
+        { value: 'todo', count: 1 },
+        { value: 'progress', count: 1 },
+        { value: 'cancelled', count: 0 },
+      ]),
+    );
     page = vi.fn<ListTasksApi['page']>((_listId, _query, group): Promise<ListTaskPage> =>
       Promise.resolve({
         items: sprintTasks.filter((item: TaskSummary) => item.status === group?.value),
@@ -186,13 +194,7 @@ describe('ListViewPage', () => {
         {
           provide: ListTasksApi,
           useValue: {
-            groups: vi.fn(() =>
-              Promise.resolve([
-                { value: 'todo', count: 1 },
-                { value: 'progress', count: 1 },
-                { value: 'cancelled', count: 0 },
-              ]),
-            ),
+            groups,
             page,
             subtasks: vi.fn(() => Promise.resolve([])),
           },
@@ -243,6 +245,41 @@ describe('ListViewPage', () => {
     expect(text).toContain('Refondre l’écran de connexion SSO');
     expect(text).toContain('CAD-482');
     expect(checkbox('Sélectionner CAD-482')).toBeDefined();
+  });
+
+  it('renders visible tasks after a full hidden status group', async () => {
+    groups.mockResolvedValue([
+      { value: 'triage', count: 50 },
+      { value: 'todo', count: 1 },
+    ]);
+    vi.spyOn(TestBed.inject(ListPageStore).space, 'value').mockReturnValue({
+      id: 'produit',
+      name: 'Produit',
+      description: null,
+      icon: null,
+      color: 'gris',
+      private: false,
+      statuses: [{ key: 'triage', name: null, hidden: true }],
+    });
+    page.mockImplementation((_list, _query, group) =>
+      Promise.resolve({
+        items:
+          group?.value === 'triage'
+            ? Array.from({ length: 50 }, (_, index: number) =>
+                task(`CAD-${String(index)}`, 'Hidden', 'triage'),
+              )
+            : [sprintTasks[0]],
+        nextCursor: null,
+        total: group?.value === 'triage' ? 50 : 1,
+      }),
+    );
+
+    const fixture: ComponentFixture<ListViewPage> = await render();
+    expect((fixture.nativeElement as HTMLElement).textContent).toContain(
+      'Refondre l’écran de connexion SSO',
+    );
+    expect((fixture.nativeElement as HTMLElement).textContent).not.toContain('Aucune tâche');
+    expect(page.mock.calls.map((call) => call[2]?.value)).toEqual(['todo']);
   });
 
   it('opens the task from its status icon and creates a subtask with its parent', async () => {

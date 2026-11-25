@@ -472,12 +472,13 @@ function uniqueTasks(tasks: readonly TaskSummary[]): TaskSummary[] {
  *
  * @description
  * The primary read of the rows: the group counts, then pages of the groups in order until
- * `want` tasks of open groups are read; a folded group met on the way gets its first page so its
- * header shows.
+ * `want` tasks of visible open groups are read; a folded group met on the way gets its first page
+ * so its header shows. Hidden status groups are left unread.
  *
  * @param {ListTasksApi} api - The rows' data access.
  * @param {RowsParams} params - The read.
  * @param {readonly string[]} collapsed - Folded group values.
+ * @param {readonly string[]} hidden - Hidden status group values.
  * @param {number} want - Tasks of open groups to read at least.
  * @param {AbortSignal} signal - Cancels a superseded read.
  * @returns {Promise<RowsSnapshot>} What was read.
@@ -486,6 +487,7 @@ async function loadSnapshot(
   api: ListTasksApi,
   params: RowsParams,
   collapsed: readonly string[],
+  hidden: readonly string[],
   want: number,
   signal: AbortSignal,
 ): Promise<RowsSnapshot> {
@@ -497,9 +499,15 @@ async function loadSnapshot(
   const groupKeys: Record<string, string[]> = {};
   let shown: number = 0;
   for (
-    let target: GroupProgress | null = nextGroup(groups, collapsed);
+    let target: GroupProgress | null = nextGroup(
+      groups.filter((group) => !hidden.includes(group.value)),
+      collapsed,
+    );
     target !== null;
-    target = nextGroup(groups, collapsed)
+    target = nextGroup(
+      groups.filter((group) => !hidden.includes(group.value)),
+      collapsed,
+    )
   ) {
     const folded: boolean = collapsed.includes(target.value);
     if (!folded && shown >= want) break;
@@ -593,6 +601,17 @@ export interface ListRowsStoreInstance {
    * @readonly
    */
   readonly initialLoading: Signal<boolean>;
+
+  /**
+   * Property seekingRows
+   *
+   * @description
+   * Whether visible groups remain unread while no renderable rows are available.
+   *
+   * @type {Signal<boolean>}
+   * @readonly
+   */
+  readonly seekingRows: Signal<boolean>;
 
   /**
    * Property hasCurrentSnapshot
@@ -775,6 +794,8 @@ function createListRowsStore(): Type<ListRowsStoreInstance> {
           const collapsed: readonly string[] = untracked(() =>
             collapsedOf(store._collapsed(), groupingOf(read)),
           );
+          const hidden: readonly string[] =
+            groupingOf(read) === 'status' ? untracked(store._hidden) : [];
           const want: number = Math.max(
             LIST_PAGE_SIZE,
             sameKey
@@ -784,13 +805,14 @@ function createListRowsStore(): Type<ListRowsStoreInstance> {
                       .entities()
                       .filter((task: TaskSummary): boolean =>
                         groupValuesOf(task, groupingOf(read)).some(
-                          (group: string): boolean => !collapsed.includes(group),
+                          (group: string): boolean =>
+                            !collapsed.includes(group) && !hidden.includes(group),
                         ),
                       ).length,
                 )
               : 0,
           );
-          return loadSnapshot(api, read, collapsed, want, abortSignal);
+          return loadSnapshot(api, read, collapsed, hidden, want, abortSignal);
         },
       });
       return {
@@ -819,7 +841,6 @@ function createListRowsStore(): Type<ListRowsStoreInstance> {
         initialLoading: (): boolean => store._key() === null && store._params() !== undefined,
         hasCurrentSnapshot: (): boolean =>
           store._params() !== undefined && store._key() === store._params()?.key,
-        empty: (): boolean => store._key() !== null && store.ids().length === 0,
         rows: (): readonly ListRow[] => {
           const grouping: ListGroupQuery['groupBy'] | null = groupBy();
           const mode: SubtaskMode = store._subtasks();
@@ -887,6 +908,12 @@ function createListRowsStore(): Type<ListRowsStoreInstance> {
       };
     }),
     withComputed((store) => ({
+      _hasMoreVisible: (): boolean => {
+        const hidden: readonly string[] = store.groupBy() === 'status' ? store._hidden() : [];
+        return store
+          ._groups()
+          .some((group: GroupProgress) => !hidden.includes(group.value) && !group.done);
+      },
       _visibleChildren: (): readonly string[] => {
         const collapsed: readonly string[] = store.collapsed();
         return [
@@ -898,6 +925,15 @@ function createListRowsStore(): Type<ListRowsStoreInstance> {
           ),
         ];
       },
+    })),
+    withComputed((store) => ({
+      seekingRows: (): boolean =>
+        store.hasCurrentSnapshot() &&
+        store.rows().length === 0 &&
+        store._hasMoreVisible() &&
+        !store.moreFailed(),
+      empty: (): boolean =>
+        store.hasCurrentSnapshot() && store.rows().length === 0 && !store._hasMoreVisible(),
     })),
     withMethods((store) => {
       let moreController: AbortController | null = null;
@@ -981,7 +1017,11 @@ function createListRowsStore(): Type<ListRowsStoreInstance> {
         )
           return;
         const collapsed: readonly string[] = store.collapsed();
-        const target: GroupProgress | null = nextGroup(store._groups(), collapsed);
+        const hidden: readonly string[] = store.groupBy() === 'status' ? store._hidden() : [];
+        const target: GroupProgress | null = nextGroup(
+          store._groups().filter((group: GroupProgress) => !hidden.includes(group.value)),
+          store.rows().length === 0 ? [] : collapsed,
+        );
         if (!target) return;
         const folded: boolean = collapsed.includes(target.value);
         const grouping: ListGroupQuery | null = params.groupQuery;
@@ -1074,6 +1114,9 @@ function createListRowsStore(): Type<ListRowsStoreInstance> {
             reloadQueued = false;
             store.primary.reload();
           }
+        }),
+        _fillEmpty: signalMethod<boolean>((needed: boolean): void => {
+          if (needed) loadMore();
         }),
         _syncChildren: signalMethod<readonly string[]>((keys: readonly string[]): void => {
           const visible: Set<string> = new Set<string>(keys);
@@ -1185,6 +1228,12 @@ function createListRowsStore(): Type<ListRowsStoreInstance> {
           ),
         );
         store._flushReload(store.primary.status);
+        store._fillEmpty(
+          computed(
+            (): boolean =>
+              store.seekingRows() && !store.loadingMore() && !store.primary.isLoading(),
+          ),
+        );
         store._syncChildren(store._visibleChildren);
         store._watch(computed((): string | null => store._params()?.listId ?? null));
         const changes: { unsubscribe: () => void } = store._status.changed.subscribe(

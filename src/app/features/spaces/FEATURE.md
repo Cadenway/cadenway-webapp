@@ -87,6 +87,9 @@ breadcrumb, dialog, inline edit, toolbar).
     each group is read with its value as a server-side filter. A task assigned to several people
     appears only in the selected assignee groups; `me` resolves to the signed-in user. A folded group (« Annulé » by default when
     grouping by status) reads its first page only, so its header shows, and reads on when opened.
+    Hidden status groups do not consume the initial loading target or pagination reads. When no
+    renderable rows remain, the store reads visible groups until a row is available or every
+    visible group is exhausted; a failed continuation offers Retry instead of an empty state.
     Another query reads again and keeps the rows until the answer (superseded reads are aborted);
     another list or organization (`WORKSPACE_CONTEXT`) empties them at once and drops late answers.
     A first primary read fails to the route's error boundary; a failed background refresh, next
