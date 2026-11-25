@@ -3,7 +3,7 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { type ComponentFixture, TestBed } from '@angular/core/testing';
 import { Router } from '@angular/router';
 import { CwToastService, type CwToastOptions } from '@cadenway/ui/components/toast';
-import { type Observable, of, Subject, throwError } from 'rxjs';
+import { Observable, of, Subject, throwError } from 'rxjs';
 import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 
 import {
@@ -445,6 +445,96 @@ describe('TaskCreateDialog', () => {
     await fixture.whenStable();
     expect(error).not.toHaveBeenCalled();
     expect(document.querySelector('#task-create-name ~ [role="alert"]')?.textContent).toBeTruthy();
+    expect(document.querySelector('cw-dialog-footer [role="alert"]')).toBeNull();
+  });
+
+  it('shows no stale issue on a field edited while the creation ran, and says it was refused', async () => {
+    let refuse: (error: unknown) => void = () => undefined;
+    create.mockReturnValueOnce(
+      new Observable<CreatedTask>((subscriber) => {
+        refuse = (error: unknown): void => {
+          subscriber.error(error);
+        };
+      }),
+    );
+    TestBed.inject(TaskCreate).open({ listId: 'sprint-14' });
+    await fixture.whenStable();
+    typeName('Préparer la démo');
+    await fixture.whenStable();
+    buttonNamed('Créer la tâche')?.click();
+    await fixture.whenStable();
+
+    typeName('Préparer la démo du jeudi');
+    await fixture.whenStable();
+    refuse(
+      new HttpErrorResponse({ status: 422, error: { details: { issues: [{ path: 'name' }] } } }),
+    );
+    await fixture.whenStable();
+
+    await expect.poll(() => error.mock.calls.length).toBe(1);
+    expect(document.querySelector('#task-create-name ~ [role="alert"]')).toBeNull();
+    expect(error.mock.calls[0][1]?.description).toBe(
+      'Impossible de créer la tâche. Vérifiez les informations et réessayez.',
+    );
+  });
+
+  it('drops a server issue for good once its field changes', async () => {
+    create.mockReturnValueOnce(
+      throwError(
+        () =>
+          new HttpErrorResponse({
+            status: 422,
+            error: { details: { issues: [{ path: 'name' }] } },
+          }),
+      ),
+    );
+    TestBed.inject(TaskCreate).open({ listId: 'sprint-14' });
+    await fixture.whenStable();
+    typeName('Préparer la démo');
+    await fixture.whenStable();
+    buttonNamed('Créer la tâche')?.click();
+    await fixture.whenStable();
+    expect(buttonNamed('Créer la tâche')?.disabled).toBe(true);
+
+    typeName('Préparer la démo du jeudi');
+    await fixture.whenStable();
+    typeName('Préparer la démo');
+    await fixture.whenStable();
+
+    expect(buttonNamed('Créer la tâche')?.disabled).toBe(false);
+  });
+
+  it('starts each opening without the issues a refused creation left', async () => {
+    create.mockReturnValueOnce(
+      throwError(
+        () =>
+          new HttpErrorResponse({
+            status: 422,
+            error: { details: { issues: [{ path: 'status' }] } },
+          }),
+      ),
+    );
+    const service: TaskCreate = TestBed.inject(TaskCreate);
+    service.open({ listId: 'sprint-14' });
+    await fixture.whenStable();
+    typeName('Préparer la démo');
+    await fixture.whenStable();
+    buttonNamed('Créer la tâche')?.click();
+    await fixture.whenStable();
+    expect(document.querySelector('cw-dialog-footer [role="alert"]')?.textContent).toContain(
+      'Vérifiez cette information.',
+    );
+
+    service.close();
+    await fixture.whenStable();
+    service.open({ listId: 'sprint-14' });
+    await fixture.whenStable();
+    typeName('Préparer la démo');
+    await fixture.whenStable();
+    document.querySelector('#task-create-name')?.dispatchEvent(new Event('blur'));
+    await fixture.whenStable();
+
+    expect(buttonNamed('Créer la tâche')?.disabled).toBe(false);
     expect(document.querySelector('cw-dialog-footer [role="alert"]')).toBeNull();
   });
 

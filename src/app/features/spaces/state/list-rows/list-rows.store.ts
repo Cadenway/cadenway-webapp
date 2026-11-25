@@ -29,7 +29,7 @@ import {
 import { rxMethod } from '@ngrx/signals/rxjs-interop';
 import {
   catchError,
-  debounceTime,
+  auditTime,
   EMPTY,
   filter,
   type Observable,
@@ -103,15 +103,16 @@ const SUBTASK_DEPTH: number = 2;
 const ENTER_MS: number = 520;
 
 /**
- * Constant NOTICE_DEBOUNCE_MS
+ * Constant NOTICE_REFRESH_MS
  *
  * @description
- * Quiet time after the last realtime notice or completed status write of the list before the rows are read again, in
- * milliseconds.
+ * Time between the first realtime notice or completed status write of a window and the read of the
+ * rows it gathers, in milliseconds: one read per window, so a steady flow of changes cannot hold
+ * the rows back, and wide enough that the reads leave room for « load more » while it lasts.
  *
  * @type {number}
  */
-const NOTICE_DEBOUNCE_MS: number = 300;
+const NOTICE_REFRESH_MS: number = 1000;
 
 /**
  * Constant CHILD_READS
@@ -1277,7 +1278,7 @@ function createListRowsStore(): Type<ListRowsStoreInstance> {
         );
         store._syncChildren(store._visibleChildren);
         const reloads: { unsubscribe: () => void } = store._reloadRequests
-          .pipe(debounceTime(NOTICE_DEBOUNCE_MS))
+          .pipe(auditTime(NOTICE_REFRESH_MS))
           .subscribe((): void => {
             store.reload();
           });
@@ -1333,7 +1334,7 @@ function createListRowsStore(): Type<ListRowsStoreInstance> {
  * its first page only, so its header shows. A row is filed under its settled status, so it joins
  * its new group 460 ms after the last click while its icon and word change at once. Subtasks are
  * read under each opened parent (`listSubtasks`), two levels deep. A realtime notice of the list
- * reads the rows again in place, after 300 ms of quiet; the status store keeps pending
+ * reads the rows again in place, 1 s after the first notice of a window; the status store keeps pending
  * and in-flight changes over what it reads. The rows follow the committed organization: a switch
  * or another list empties them at once and drops late answers.
  *

@@ -92,6 +92,10 @@ options?)`, `requestCancel(tasks, options?)`, `pendingStatus(taskId)`, `displaye
 - The create dialog starts each opening afresh: the presets, the current user assigned, « À faire »
   and « Moyenne ». « Créer d'autres tâches » keeps it open and empties the name, the description,
   and the subtasks while retaining the template's checklist. Its toast « Ouvrir » leads to `/<slug>/t/<key>`.
+  A refused creation's issues (422) stay on their fields until each field changes, and all go when
+  another destination list is picked or the dialog opens again. An issue on a field edited, or a
+  destination changed, while the creation ran is not shown; when none is left, the toast says the
+  creation was refused.
 - Known gaps: the comment count of a row is null (task summaries carry none); the Git chip is left
   out (B4, no API yet); the dialog's file drop is not built (attachments need the task first); the
   mockup's built-in templates (Bug, Fonctionnalité, Mise en production) appear only when the space

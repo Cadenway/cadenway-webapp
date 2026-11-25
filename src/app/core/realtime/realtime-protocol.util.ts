@@ -112,6 +112,12 @@ export function parseChange(value: unknown): RealtimeChange | null {
   if (!envelope(value) || !record(value['data'])) return null;
   const data: Record<string, unknown> = value['data'];
   const type: unknown = value['type'];
+  if (type === 'list.tasks-changed.v1') {
+    const listId: unknown = data['listId'];
+    return exactKeys(data, ['listId']) && typeof listId === 'string' && UUID.test(listId)
+      ? { id: value['id'] as string, type, at: value['at'] as string, data }
+      : null;
+  }
   const taskId: unknown = data['taskId'];
   if (typeof taskId !== 'string' || !UUID.test(taskId)) return null;
   if (type === 'task.updated.v1' || type === 'task.status-changed.v1') {

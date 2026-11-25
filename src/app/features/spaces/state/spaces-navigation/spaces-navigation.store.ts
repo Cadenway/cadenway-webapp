@@ -43,6 +43,49 @@ import { isWithin, todayIso } from '../../utils/calendar-date/calendar-date.util
 const OVERVIEW_PAGE_TIMEOUT_MS: number = 10_000;
 
 /**
+ * Interface OverviewReadOrder
+ *
+ * @description
+ * The order in which space overview reads begin, so a reader of a space overview can tell whether
+ * a value the sidebar holds comes from a read begun before or after its own.
+ */
+export interface OverviewReadOrder {
+  // #region Methods
+  /**
+   * Method next
+   *
+   * @description
+   * Takes the place of a read that begins now; every later read gets a higher number.
+   *
+   * @returns {number} The read's place in the order.
+   */
+  next(): number;
+
+  /**
+   * Method of
+   *
+   * @description
+   * The place of the read that returned an overview the sidebar holds.
+   *
+   * @param {SpaceOverview} overview - The overview, as the sidebar holds it.
+   * @returns {number | undefined} Its place, or undefined when no recorded read returned it.
+   */
+  of(overview: SpaceOverview): number | undefined;
+
+  /**
+   * Method record
+   *
+   * @description
+   * Records the place of the read that returned an overview.
+   *
+   * @param {SpaceOverview} overview - The overview the read returned.
+   * @param {number} order - The read's place from `next`.
+   */
+  record(overview: SpaceOverview, order: number): void;
+  // #endregion
+}
+
+/**
  * Interface SpacesNavigationState
  *
  * @description
@@ -116,6 +159,17 @@ interface SpacesNavigationStoreInstance {
   readonly overviews: ResourceRef<Readonly<Record<string, SpaceOverview>> | undefined>;
 
   /**
+   * Property overviewOrder
+   *
+   * @description
+   * The order of the space overview reads, which the space overview page compares with its own.
+   *
+   * @type {OverviewReadOrder}
+   * @readonly
+   */
+  readonly overviewOrder: OverviewReadOrder;
+
+  /**
    * Property favorites
    *
    * @description
@@ -148,6 +202,19 @@ interface SpacesNavigationStoreInstance {
    * @param {Signal<string> | string} organizationId - Organization id.
    */
   follow(organizationId: Signal<string> | string): void;
+
+  /**
+   * Method offerOverview
+   *
+   * @description
+   * Gives the sidebar a space overview read elsewhere, at its place in the read order. It
+   * replaces the sidebar's value of the space only when that value comes from an older read, at
+   * once or when the sidebar read in flight ends; a space of another organization is ignored.
+   *
+   * @param {SpaceOverview} overview - The overview read.
+   * @param {number} order - The read's place, from `overviewOrder.next()` when it began.
+   */
+  offerOverview(overview: SpaceOverview, order: number): void;
 
   /**
    * Method setExpanded
@@ -227,10 +294,35 @@ function createSpacesNavigationStore(): Type<SpacesNavigationStoreInstance> {
         loader: ({ abortSignal }: { abortSignal: AbortSignal }): Promise<readonly Space[]> =>
           api.spaces(abortSignal),
       });
+      const readOrders: WeakMap<SpaceOverview, number> = new WeakMap<SpaceOverview, number>();
+      // The place of the newest read of each space that landed, whoever read it.
+      const landed: Map<string, number> = new Map<string, number>();
+      // A read of a space offered by a reader of a space overview, kept while no newer read of
+      // that space has landed, which a sidebar read begun before it never replaces.
+      const offered: Map<string, { overview: SpaceOverview; order: number }> = new Map<
+        string,
+        { overview: SpaceOverview; order: number }
+      >();
+      let lastOrder: number = 0;
+      const overviewOrder: OverviewReadOrder = {
+        next: (): number => ++lastOrder,
+        of: (overview: SpaceOverview): number | undefined => readOrders.get(overview),
+        record: (overview: SpaceOverview, order: number): void => {
+          readOrders.set(overview, order);
+          if (order > (landed.get(overview.spaceId) ?? 0)) landed.set(overview.spaceId, order);
+          const kept: { overview: SpaceOverview; order: number } | undefined = offered.get(
+            overview.spaceId,
+          );
+          if (kept !== undefined && kept.order < order) offered.delete(overview.spaceId);
+        },
+      };
       return {
         _api: api,
         _workspace: inject(WORKSPACE_CONTEXT),
         _taskCreate: inject(TaskCreate),
+        _landed: landed,
+        _offered: offered,
+        overviewOrder,
         spaces,
         overviews: resource({
           params: () =>
@@ -248,16 +340,25 @@ function createSpacesNavigationStore(): Type<SpacesNavigationStoreInstance> {
             const byId: Record<string, SpaceOverview> = {};
             for (let offset: number = 0; offset < params.ids.length; offset += 4) {
               abortSignal.throwIfAborted();
+              const batch: readonly string[] = params.ids.slice(offset, offset + 4);
+              const batchOrders: readonly number[] = batch.map((): number => overviewOrder.next());
               const settled: PromiseSettledResult<SpaceOverview>[] = await Promise.allSettled(
-                params.ids
-                  .slice(offset, offset + 4)
-                  .map((id: string): Promise<SpaceOverview> =>
-                    api.overview(id, today, abortSignal, OVERVIEW_PAGE_TIMEOUT_MS),
-                  ),
+                batch.map((id: string): Promise<SpaceOverview> =>
+                  api.overview(id, today, abortSignal, OVERVIEW_PAGE_TIMEOUT_MS),
+                ),
               );
-              for (const result of settled) {
-                if (result.status === 'fulfilled') byId[result.value.spaceId] = result.value;
-              }
+              settled.forEach(
+                (result: PromiseSettledResult<SpaceOverview>, index: number): void => {
+                  if (result.status !== 'fulfilled') return;
+                  byId[result.value.spaceId] = result.value;
+                  overviewOrder.record(result.value, batchOrders[index]);
+                },
+              );
+            }
+            for (const id of params.ids) {
+              const newer: { overview: SpaceOverview; order: number } | undefined = offered.get(id);
+              const read: number = id in byId ? (readOrders.get(byId[id]) ?? 0) : 0;
+              if (newer !== undefined && newer.order > read) byId[id] = newer.overview;
             }
             return byId;
           },
@@ -333,12 +434,14 @@ function createSpacesNavigationStore(): Type<SpacesNavigationStoreInstance> {
                 reloadOverviews();
                 return EMPTY;
               }
+              const order: number = store.overviewOrder.next();
               return from(
                 store._api.overview(spaceId, todayIso(), undefined, OVERVIEW_PAGE_TIMEOUT_MS),
               ).pipe(
                 tapResponse({
                   next: (overview: SpaceOverview): void => {
                     if (store._organizationId() !== organizationId) return;
+                    store.overviewOrder.record(overview, order);
                     if (
                       store.overviews.isLoading() ||
                       !store.overviews.hasValue() ||
@@ -365,11 +468,32 @@ function createSpacesNavigationStore(): Type<SpacesNavigationStoreInstance> {
         }),
         follow: signalMethod<string>((organizationId: string): void => {
           if (organizationId === store._organizationId()) return;
+          store._offered.clear();
+          store._landed.clear();
           patchState(store, {
             _organizationId: organizationId,
             expanded: {},
           });
         }),
+        offerOverview(overview: SpaceOverview, order: number): void {
+          // A newer read of the space already landed, offered or not.
+          if ((store._landed.get(overview.spaceId) ?? 0) > order) return;
+          store.overviewOrder.record(overview, order);
+          store._offered.set(overview.spaceId, { overview, order });
+          // A read in flight takes the offered value when it ends.
+          if (store.overviews.isLoading() || !store.overviews.hasValue()) return;
+          if (
+            !store.spaces.hasValue() ||
+            !store.spaces.value().some((space: Space): boolean => space.id === overview.spaceId)
+          ) {
+            return;
+          }
+          const current: Readonly<Record<string, SpaceOverview>> = store.overviews.value();
+          const held: SpaceOverview | undefined =
+            overview.spaceId in current ? current[overview.spaceId] : undefined;
+          if (held !== undefined && (store.overviewOrder.of(held) ?? 0) >= order) return;
+          store.overviews.set({ ...current, [overview.spaceId]: overview });
+        },
         setExpanded(spaceId: string, open: boolean): void {
           patchState(store, { expanded: { ...store.expanded(), [spaceId]: open } });
         },

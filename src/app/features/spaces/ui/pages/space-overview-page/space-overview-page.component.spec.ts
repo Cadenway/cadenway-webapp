@@ -130,6 +130,223 @@ describe('SpaceOverviewPage', () => {
     expect(api['overview']).toHaveBeenCalledTimes(1);
   });
 
+  it('follows the sidebar overview of the space once it changes', async () => {
+    const harness: RouterTestingHarness = await RouterTestingHarness.create(
+      '/atelier-nord/spaces/sp-design',
+    );
+    await expect.poll(() => text(harness, 'list-card')).toContain('32 tâches');
+    const navigation: InstanceType<typeof SpacesNavigationStore> =
+      TestBed.inject(SpacesNavigationStore);
+    await expect.poll(() => navigation.overviews.hasValue()).toBe(true);
+
+    api['overview'].mockResolvedValueOnce({
+      ...overview,
+      taskCount: 33,
+      lists: [{ ...overview.lists[0], counts: { ...overview.lists[0].counts, total: 33 } }],
+    });
+    navigation.overviews.reload();
+
+    await expect.poll(() => text(harness, 'list-card')).toContain('33 tâches');
+  });
+
+  it('keeps a sidebar overview read after its own began, even while its own runs', async () => {
+    const navigation: InstanceType<typeof SpacesNavigationStore> =
+      TestBed.inject(SpacesNavigationStore);
+    let answer: (value: SpaceOverview) => void = () => undefined;
+    api['overview'].mockRejectedValueOnce(new Error('unavailable'));
+    api['overview'].mockImplementationOnce(
+      () =>
+        new Promise<SpaceOverview>((resolve: (value: SpaceOverview) => void) => {
+          answer = resolve;
+        }),
+    );
+    await expect.poll(() => navigation.overviews.hasValue()).toBe(true);
+    const created: Promise<RouterTestingHarness> = RouterTestingHarness.create(
+      '/atelier-nord/spaces/sp-design',
+    );
+    await expect.poll(() => api['overview'].mock.calls.length).toBe(2);
+
+    api['overview'].mockResolvedValueOnce({
+      ...overview,
+      taskCount: 34,
+      lists: [{ ...overview.lists[0], counts: { ...overview.lists[0].counts, total: 34 } }],
+    });
+    navigation.overviews.reload();
+    await expect
+      .poll(() =>
+        navigation.overviews.hasValue()
+          ? (navigation.overviews.value()['sp-design'] as SpaceOverview | undefined)?.taskCount
+          : undefined,
+      )
+      .toBe(34);
+    TestBed.tick();
+    answer(overview);
+    const harness: RouterTestingHarness = await created;
+
+    await expect.poll(() => text(harness, 'list-card')).toContain('34 tâches');
+  });
+
+  it('keeps its own read over a sidebar read begun before it, and gives it to the sidebar', async () => {
+    let finish: (value: SpaceOverview) => void = () => undefined;
+    api['overview'].mockImplementationOnce(
+      () =>
+        new Promise<SpaceOverview>((resolve: (value: SpaceOverview) => void) => {
+          finish = resolve;
+        }),
+    );
+    const navigation: InstanceType<typeof SpacesNavigationStore> =
+      TestBed.inject(SpacesNavigationStore);
+    await expect.poll(() => api['overview'].mock.calls.length).toBe(1);
+
+    const created: Promise<RouterTestingHarness> = RouterTestingHarness.create(
+      '/atelier-nord/spaces/sp-design',
+    );
+    await expect.poll(() => api['overview'].mock.calls.length).toBe(2);
+    TestBed.tick();
+    finish({
+      ...overview,
+      taskCount: 30,
+      lists: [{ ...overview.lists[0], counts: { ...overview.lists[0].counts, total: 30 } }],
+    });
+    const harness: RouterTestingHarness = await created;
+    await expect.poll(() => navigation.overviews.status()).toBe('resolved');
+
+    expect(navigation.overviews.value()?.['sp-design'].taskCount).toBe(32);
+
+    expect(text(harness, 'list-card')).toContain('32 tâches');
+  });
+
+  it('gives its own read to a sidebar that failed to read the space', async () => {
+    const navigation: InstanceType<typeof SpacesNavigationStore> =
+      TestBed.inject(SpacesNavigationStore);
+    api['overview'].mockRejectedValueOnce(new Error('unavailable'));
+    await expect.poll(() => navigation.overviews.hasValue()).toBe(true);
+    expect(navigation.overviews.value()).toEqual({});
+
+    const harness: RouterTestingHarness = await RouterTestingHarness.create(
+      '/atelier-nord/spaces/sp-design',
+    );
+
+    await expect.poll(() => text(harness, 'list-card')).toContain('32 tâches');
+    expect(navigation.overviews.value()?.['sp-design']).toEqual(overview);
+  });
+
+  it('never brings its offered read back after a newer sidebar read and a failed one', async () => {
+    const navigation: InstanceType<typeof SpacesNavigationStore> =
+      TestBed.inject(SpacesNavigationStore);
+    api['overview'].mockRejectedValueOnce(new Error('unavailable'));
+    await expect.poll(() => navigation.overviews.hasValue()).toBe(true);
+    const harness: RouterTestingHarness = await RouterTestingHarness.create(
+      '/atelier-nord/spaces/sp-design',
+    );
+    await expect.poll(() => navigation.overviews.value()?.['sp-design']).toEqual(overview);
+
+    api['overview'].mockResolvedValueOnce({
+      ...overview,
+      taskCount: 33,
+      lists: [{ ...overview.lists[0], counts: { ...overview.lists[0].counts, total: 33 } }],
+    });
+    navigation.overviews.reload();
+    await expect.poll(() => text(harness, 'list-card')).toContain('33 tâches');
+    api['overview'].mockRejectedValueOnce(new Error('unavailable'));
+    navigation.overviews.reload();
+    await expect.poll(() => navigation.overviews.status()).toBe('resolved');
+
+    expect(navigation.overviews.value()).toEqual({});
+    expect(text(harness, 'list-card')).toContain('33 tâches');
+  });
+
+  it('recovers a failed own read with a newer sidebar value received during it', async () => {
+    const navigation: InstanceType<typeof SpacesNavigationStore> =
+      TestBed.inject(SpacesNavigationStore);
+    let fail: (reason: Error) => void = () => undefined;
+    api['overview'].mockRejectedValueOnce(new Error('unavailable'));
+    api['overview'].mockImplementationOnce(
+      () =>
+        new Promise<SpaceOverview>(
+          (_resolve: (value: SpaceOverview) => void, reject: (reason: Error) => void) => {
+            fail = reject;
+          },
+        ),
+    );
+    await expect.poll(() => navigation.overviews.hasValue()).toBe(true);
+    const created: Promise<RouterTestingHarness> = RouterTestingHarness.create(
+      '/atelier-nord/spaces/sp-design',
+    );
+    await expect.poll(() => api['overview'].mock.calls.length).toBe(2);
+
+    api['overview'].mockResolvedValueOnce({
+      ...overview,
+      taskCount: 34,
+      lists: [{ ...overview.lists[0], counts: { ...overview.lists[0].counts, total: 34 } }],
+    });
+    navigation.overviews.reload();
+    await expect
+      .poll(() =>
+        navigation.overviews.hasValue()
+          ? (navigation.overviews.value()['sp-design'] as SpaceOverview | undefined)?.taskCount
+          : undefined,
+      )
+      .toBe(34);
+    fail(new Error('unavailable'));
+    const harness: RouterTestingHarness = await created;
+
+    await expect.poll(() => text(harness, 'list-card')).toContain('34 tâches');
+  });
+
+  it('reads on its own instead of waiting for a slow sidebar read of another space', async () => {
+    const other: Space = { ...design, id: 'sp-marketing', name: 'Marketing' };
+    let release: (value: SpaceOverview) => void = () => undefined;
+    api['spaces'].mockResolvedValue([design, other]);
+    api['overview'].mockImplementation((spaceId: string) =>
+      spaceId === other.id
+        ? new Promise<SpaceOverview>((resolve: (value: SpaceOverview) => void) => {
+            release = resolve;
+          })
+        : Promise.resolve(overview),
+    );
+    TestBed.inject(SpacesNavigationStore);
+    await expect.poll(() => api['overview'].mock.calls.length).toBe(2);
+
+    const created: Promise<RouterTestingHarness> = RouterTestingHarness.create(
+      '/atelier-nord/spaces/sp-design',
+    );
+    await expect.poll(() => api['overview'].mock.calls.length).toBe(3);
+    release({ ...overview, spaceId: other.id, taskCount: 0, lists: [] });
+    const harness: RouterTestingHarness = await created;
+
+    await expect.poll(() => text(harness, 'list-card')).toContain('32 tâches');
+  });
+
+  it('shows the sidebar value at once while the sidebar reads again, then its newer one', async () => {
+    const navigation: InstanceType<typeof SpacesNavigationStore> =
+      TestBed.inject(SpacesNavigationStore);
+    await expect.poll(() => navigation.overviews.hasValue()).toBe(true);
+    let finish: (value: SpaceOverview) => void = () => undefined;
+    api['overview'].mockImplementationOnce(
+      () =>
+        new Promise<SpaceOverview>((resolve: (value: SpaceOverview) => void) => {
+          finish = resolve;
+        }),
+    );
+    navigation.overviews.reload();
+    await expect.poll(() => navigation.overviews.isLoading()).toBe(true);
+    const created: Promise<RouterTestingHarness> = RouterTestingHarness.create(
+      '/atelier-nord/spaces/sp-design',
+    );
+    await expect.poll(() => api['space'].mock.calls.length).toBe(1);
+    TestBed.tick();
+    finish({
+      ...overview,
+      taskCount: 33,
+      lists: [{ ...overview.lists[0], counts: { ...overview.lists[0].counts, total: 33 } }],
+    });
+    const harness: RouterTestingHarness = await created;
+
+    await expect.poll(() => text(harness, 'list-card')).toContain('33 tâches');
+    expect(api['overview']).toHaveBeenCalledTimes(2);
+  });
+
   it('retries a failed primary space read through the route boundary', async () => {
     api['space'].mockRejectedValueOnce(new Error('unavailable'));
     const harness: RouterTestingHarness = await RouterTestingHarness.create(

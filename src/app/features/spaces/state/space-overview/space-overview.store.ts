@@ -1,7 +1,16 @@
-import { inject, resource, type ResourceRef, type Signal, type Type } from '@angular/core';
+import {
+  computed,
+  inject,
+  resource,
+  type ResourceRef,
+  type ResourceStatus,
+  type Signal,
+  type Type,
+} from '@angular/core';
 import {
   patchState,
   signalMethod,
+  withHooks,
   signalStore,
   withMethods,
   withProps,
@@ -103,6 +112,16 @@ export interface SpaceOverviewStoreInstance {
 }
 
 /**
+ * Type SpacesNavigationStoreOverviews
+ *
+ * @description
+ * The overviews resource of the sidebar's navigation store.
+ *
+ * @type {InstanceType<typeof SpacesNavigationStore>['overviews']}
+ */
+type SpacesNavigationStoreOverviews = InstanceType<typeof SpacesNavigationStore>['overviews'];
+
+/**
  * Function createSpaceOverviewStore
  *
  * @description
@@ -120,7 +139,13 @@ function createSpaceOverviewStore(): Type<SpaceOverviewStoreInstance> {
         const spaceId: string | null = store.spaceId();
         return spaceId === null ? undefined : { spaceId };
       };
+      const following: { baseline: SpaceOverview | undefined; own: number | undefined } = {
+        baseline: undefined,
+        own: undefined,
+      };
       return {
+        _navigation: navigation,
+        _following: following,
         space: resource({
           params: bySpace,
           loader: ({
@@ -139,13 +164,35 @@ function createSpaceOverviewStore(): Type<SpaceOverviewStoreInstance> {
           }: {
             params: { spaceId: string };
             abortSignal: AbortSignal;
-          }): Promise<SpaceOverview> =>
-            (navigation.overviews.status() === 'resolved' ||
-              navigation.overviews.status() === 'local') &&
-            navigation.overviews.hasValue() &&
-            params.spaceId in navigation.overviews.value()
-              ? Promise.resolve(navigation.overviews.value()[params.spaceId])
-              : api.overview(params.spaceId, todayIso(), abortSignal),
+          }): Promise<SpaceOverview> => {
+            // The sidebar's value of the space, even while it reads again, is shown at once and
+            // followed. The page reads on its own only when the sidebar has none: it then ignores
+            // any sidebar value read before its own read began, gives its result to the sidebar,
+            // and recovers a failed read with a newer sidebar value.
+            const held: () => SpaceOverview | undefined = (): SpaceOverview | undefined =>
+              navigation.overviews.hasValue()
+                ? navigation.overviews.value()[params.spaceId]
+                : undefined;
+            const current: SpaceOverview | undefined = held();
+            following.baseline = current;
+            following.own = undefined;
+            if (current !== undefined) return Promise.resolve(current);
+            const own: number = navigation.overviewOrder.next();
+            following.own = own;
+            return api.overview(params.spaceId, todayIso(), abortSignal).then(
+              (overview: SpaceOverview): SpaceOverview => {
+                navigation.offerOverview(overview, own);
+                return overview;
+              },
+              (error: unknown): SpaceOverview => {
+                const newer: SpaceOverview | undefined = held();
+                if (newer !== undefined && (navigation.overviewOrder.of(newer) ?? 0) > own) {
+                  return newer;
+                }
+                throw error;
+              },
+            );
+          },
         }),
         milestones: resource({
           params: bySpace,
@@ -159,11 +206,60 @@ function createSpaceOverviewStore(): Type<SpaceOverviewStoreInstance> {
         }),
       };
     }),
-    withMethods((store) => ({
-      load: signalMethod<string>((spaceId: string): void => {
-        if (spaceId !== store.spaceId()) patchState(store, { spaceId });
-      }),
-    })),
+    withMethods((store) => {
+      // The sidebar's overview received while the page's own read runs, applied once it ends.
+      let pending: SpaceOverview | undefined;
+      const apply: (next: SpaceOverview) => void = (next: SpaceOverview): void => {
+        if (
+          next.spaceId === store.spaceId() &&
+          store.overview.hasValue() &&
+          store.overview.value() !== next
+        ) {
+          store.overview.set(next);
+        }
+      };
+      return {
+        load: signalMethod<string>((spaceId: string): void => {
+          if (spaceId !== store.spaceId()) patchState(store, { spaceId });
+        }),
+        _followNavigation: signalMethod<SpaceOverview | undefined>(
+          (next: SpaceOverview | undefined): void => {
+            // The value the sidebar held when the page's read began predates that read.
+            if (next === undefined || next === store._following.baseline) {
+              pending = undefined;
+              return;
+            }
+            if (next.spaceId !== store.spaceId()) return;
+            const own: number | undefined = store._following.own;
+            if (own !== undefined && (store._navigation.overviewOrder.of(next) ?? 0) < own) {
+              return;
+            }
+            if (store.overview.isLoading()) pending = next;
+            else apply(next);
+          },
+        ),
+        _flushNavigation: signalMethod<ResourceStatus>((status: ResourceStatus): void => {
+          if (status === 'loading' || status === 'reloading' || pending === undefined) return;
+          const next: SpaceOverview = pending;
+          pending = undefined;
+          apply(next);
+        }),
+      };
+    }),
+    withHooks({
+      onInit(store): void {
+        store._followNavigation(
+          computed((): SpaceOverview | undefined => {
+            const spaceId: string | null = store.spaceId();
+            const overviews: SpacesNavigationStoreOverviews = store._navigation.overviews;
+            return spaceId !== null && overviews.hasValue()
+              ? overviews.value()[spaceId]
+              : undefined;
+          }),
+        );
+        store._flushNavigation(store.overview.status);
+      },
+    }),
   );
 }
 
@@ -172,7 +268,9 @@ function createSpaceOverviewStore(): Type<SpaceOverviewStoreInstance> {
  *
  * @description
  * The overview of a space (« Vue d’ensemble »), provided by its page. The space and its lists are
- * the primary reads; the milestones keep an inline error with « Réessayer ».
+ * the primary reads; the milestones keep an inline error with « Réessayer ». The lists follow the
+ * sidebar's overview of the same space once it changes (a task created from this tab reads it
+ * again), so both show the same counts.
  *
  * @type {ReturnType<typeof createSpaceOverviewStore>}
  */

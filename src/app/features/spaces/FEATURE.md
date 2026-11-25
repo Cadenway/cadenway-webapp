@@ -80,8 +80,9 @@ breadcrumb, dialog, inline edit, toolbar).
     refreshes the counts 300 ms after a notice, once per window, so a steady flow cannot hold them
     back; since the socket hands every notice to every watch, it ignores a notice naming another
     list or space and the comment and Git link notices, while a task update or status change
-    (`{ taskId, changed }`) counts. A task created in the list from this tab (`TaskCreate.created`) refreshes the
-    counts at once.
+    (`{ taskId, changed }`) and `list.tasks-changed.v1` naming this list (a task joined or left it)
+    count. A task created in the list from this tab (`TaskCreate.created`) refreshes the counts at
+    once; its echoed notice reads them once more.
   - `ListViewStore`, route-scoped on `l/:listId`: filters, sort, grouping, subtask display, search,
     « Jalons » and the applied saved view. It exposes `taskQuery` (the `queryListTasks` body
     without cursor and limit) and `groupQuery` (the `countTaskGroups` parameters, null when not
@@ -109,13 +110,22 @@ breadcrumb, dialog, inline edit, toolbar).
     levels deep; closed and folded parents are pruned and stale answers are ignored. « Dépliées » opens every parent and a mode change
     forgets the parents opened by hand; « À part » reads `level: all` and shows the parent's key.
     Subtask creation is offered only when loaded ancestry proves the depth limit is not reached.
-    It watches the list's realtime room and reads again in place 300 ms after the last notice of
-    the list; the status store keeps pending and in-flight changes over what it reads. A
+    It watches the list's realtime room and reads again in place 1 s after the first notice of a
+    window, once per window (`list.tasks-changed.v1` included: a task created, archived,
+    unarchived, trashed, restored or moved out); the status store keeps pending and in-flight
+    changes over what it reads. A
     task created in the list (`TaskCreate.created`), a completed local status write and a bulk action
     read the rows again.
   - `TaskStatusChangesStore` (Task), route-scoped on `list`, so pending
     changes die with the view.
-  - `SpaceOverviewStore`, page-scoped on `SpaceOverviewPage`.
+  - `SpaceOverviewStore`, page-scoped on `SpaceOverviewPage`. Its lists come from the sidebar's
+    overview of the same space, shown at once even while the sidebar reads again, and follow it
+    once it changes. The page reads on its own only when the sidebar has no value for the space,
+    without waiting for the sidebar; it then ignores a sidebar value from a read begun before its
+    own (`SpacesNavigationStore.overviewOrder`), gives its result to the sidebar
+    (`offerOverview`, which a sidebar read begun earlier never replaces), and takes a newer
+    sidebar value received during its read when that read ends, even if its own failed, so both
+    converge on the newest counts.
 - Route errors: the gateway answers `404 space.not-found` or `list.not-found` for a deleted
   resource and for a private one the caller does not see alike, and the access request never
   reveals which; that answer renders « Accès refusé » with « Demander l’accès ». Any other `404` or

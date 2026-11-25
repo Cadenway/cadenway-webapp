@@ -539,7 +539,7 @@ describe('ListRowsStore', () => {
     matchesFilter = false;
     response.next({ ...cad482, status: 'progress', version: 4 });
     response.complete();
-    await vi.advanceTimersByTimeAsync(300);
+    await vi.advanceTimersByTimeAsync(1000);
     await settle();
     expect(store.rows()).toHaveLength(0);
     expect(store.groupCount('todo')).toBe(0);
@@ -587,7 +587,7 @@ describe('ListRowsStore', () => {
     );
   });
 
-  it('reads again on a realtime notice without overwriting a pending status change', async () => {
+  it('reads again on a realtime notice without overwriting an unconfirmed status change', async () => {
     const store: InstanceType<typeof ListRowsStore> = setup(byStatus);
     await settle();
     const status: InstanceType<typeof TaskStatusChangesStore> =
@@ -609,12 +609,12 @@ describe('ListRowsStore', () => {
       at: '2026-11-08T09:00:00Z',
       data: { listId: 'backlog', taskId: 'CAD-482' },
     });
-    await vi.advanceTimersByTimeAsync(300);
+    await vi.advanceTimersByTimeAsync(1000);
     await settle();
 
     expect(groups).toHaveBeenCalledTimes(2);
     expect(page).toHaveBeenCalledTimes(2);
-    expect(rowOf(store, 'CAD-482')).toMatchObject({ status: 'review', group: 'todo' });
+    expect(rowOf(store, 'CAD-482')).toMatchObject({ status: 'review', group: 'review' });
   });
 
   it.each([
@@ -643,13 +643,49 @@ describe('ListRowsStore', () => {
     });
     expect(notice).not.toBeNull();
     if (notice) notices.next(notice);
-    await vi.advanceTimersByTimeAsync(299);
+    await vi.advanceTimersByTimeAsync(999);
     await settle();
     expect(page).toHaveBeenCalledTimes(1);
     await vi.advanceTimersByTimeAsync(1);
     await settle();
     expect(page).toHaveBeenCalledTimes(2);
     expect(store.rows()).toHaveLength(1);
+  });
+
+  it('parses list.tasks-changed.v1 with its list id alone', () => {
+    const packet: (data: unknown) => unknown = (data: unknown): unknown => ({
+      id: '019a6000-0000-7000-8000-000000000001',
+      type: 'list.tasks-changed.v1',
+      at: '2026-11-08T09:00:00Z',
+      version: 1,
+      data,
+    });
+
+    expect(parseChange(packet({ listId: '019a6000-0000-7000-8000-000000000004' }))).not.toBeNull();
+    for (const data of [
+      { taskKey: 'CAD-482' },
+      { listId: 'sprint-14' },
+      { listId: '019a6000-0000-7000-8000-000000000004', taskKey: 'CAD-482' },
+    ]) {
+      expect(parseChange(packet(data))).toBeNull();
+    }
+  });
+
+  it('reads the rows again while notices keep arriving faster than the refresh window', async () => {
+    setup(flat);
+    await settle();
+    for (let sent: number = 0; sent < 25; sent++) {
+      notices.next({
+        id: `n${String(sent)}`,
+        type: 'task.updated.v1',
+        at: '2026-11-08T09:00:00Z',
+        data: { taskId: '019a6000-0000-7000-8000-000000000002', changed: ['name'] },
+      });
+      await vi.advanceTimersByTimeAsync(100);
+      await settle();
+    }
+
+    expect(page.mock.calls.length).toBeGreaterThan(2);
   });
 
   it('ignores a notice that names a different list', async () => {
@@ -661,7 +697,7 @@ describe('ListRowsStore', () => {
       at: '2026-11-08T09:00:00Z',
       data: { listId: 'backlog', taskId: 'CAD-482' },
     });
-    await vi.advanceTimersByTimeAsync(300);
+    await vi.advanceTimersByTimeAsync(1000);
     await settle();
     expect(page).toHaveBeenCalledTimes(1);
   });
@@ -688,7 +724,7 @@ describe('ListRowsStore', () => {
       });
       expect(notice).not.toBeNull();
       if (notice) notices.next(notice);
-      await vi.advanceTimersByTimeAsync(300);
+      await vi.advanceTimersByTimeAsync(1000);
       await settle();
     }
     expect(page).toHaveBeenCalledTimes(3);
@@ -703,7 +739,7 @@ describe('ListRowsStore', () => {
       at: '2026-11-08T09:00:00Z',
       data: { listId: 'sprint-14' },
     });
-    await vi.advanceTimersByTimeAsync(300);
+    await vi.advanceTimersByTimeAsync(1000);
     await settle();
     expect(page).toHaveBeenCalledTimes(2);
   });

@@ -172,6 +172,19 @@ describe('ListPageStore', () => {
     await expect.poll(() => api['counts'].mock.calls.length).toBe(2);
   });
 
+  it('reads the counts again when a task joins or leaves the list', async () => {
+    await loaded();
+
+    notices.next({
+      id: 'n1',
+      type: 'list.tasks-changed.v1',
+      at: '2026-11-08T09:00:00Z',
+      data: { listId: 'l-sprint14' },
+    });
+
+    await expect.poll(() => api['counts'].mock.calls.length).toBe(2);
+  });
+
   it('ignores the comment and Git link notices, which cannot change the counts', async () => {
     await loaded();
 
