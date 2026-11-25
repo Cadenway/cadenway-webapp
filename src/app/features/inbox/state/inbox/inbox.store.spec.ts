@@ -371,6 +371,7 @@ describe('InboxStore', () => {
     await vi.waitFor(() => {
       expect(api.notifications).toHaveBeenCalledTimes(count + 1);
     });
+    expect(api.notifications).toHaveBeenLastCalledWith(true);
     expect(store.unreadCount()).toBe(4);
     store.close();
     notices.next({ type: 'notification.created.v1' });
@@ -398,6 +399,7 @@ describe('InboxStore', () => {
     await vi.waitFor(() => {
       expect(api.pendingReminders).toHaveBeenCalledTimes(count + 1);
     });
+    expect(api.pendingReminders).toHaveBeenLastCalledWith(true);
     api.reminder.mockRejectedValueOnce(new Error('not found'));
     api.reminder.mockRejectedValueOnce(new Error('not found again'));
     notices.next({ type: 'reminder.due.v1', reminderId: 'r2', taskId: 't2' });

@@ -438,6 +438,16 @@ export class RealtimeConnection {
   private generation: number = 0;
 
   /**
+   * Property waitingForVerification
+   *
+   * @description
+   * Stops ticket attempts after a passive context mismatch until the workspace is verified.
+   *
+   * @type {boolean}
+   */
+  private waitingForVerification: boolean = false;
+
+  /**
    * Property started
    *
    * @description
@@ -562,6 +572,14 @@ export class RealtimeConnection {
     this.destroyRef.onDestroy(() => {
       commits.unsubscribe();
     });
+    const verifications: Subscription = this.pin.organizationVerified.subscribe(() => {
+      if (!this.waitingForVerification || this.destroyed || this.terminal) return;
+      this.waitingForVerification = false;
+      void this.connect();
+    });
+    this.destroyRef.onDestroy(() => {
+      verifications.unsubscribe();
+    });
     const organizations: Subscription = toObservable(this.organization).subscribe(
       (organization: string | null) => {
         this.organizationChanged(organization);
@@ -650,6 +668,7 @@ export class RealtimeConnection {
     if (this.destroyed || !this.started || this.terminal || organization === this.boundOrganization)
       return;
     this.boundOrganization = organization;
+    this.waitingForVerification = false;
     this.generation++;
     clearTimeout(this.retryTimer);
     this.closeSocket();
@@ -745,6 +764,11 @@ export class RealtimeConnection {
         this.closeSocket();
         this.state.set('disabled');
         this.terminalFailure?.(problem.status === 401 ? 401 : 403);
+        return;
+      }
+      if (this.pin.stale()) {
+        this.waitingForVerification = true;
+        this.state.set('reconnecting');
         return;
       }
       this.failed(generation);

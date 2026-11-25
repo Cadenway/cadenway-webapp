@@ -88,19 +88,18 @@ injects it as optional.
 - Every shell contribution is a container that injects `WORKSPACE_CONTEXT` itself (none takes it as
   an input). `ShortcutsHelp` and Search's `CommandPalette` go through `ShellOverlay`
   (`@shared/layout-slot`), so the shortcuts dialog and the palette never open over each other.
-- Backend gap, planned as contract work (B20): the inbox, reminder, search and billing operations do
-  not declare `If-Organization-Match`, so a switch made in another tab between the pin and the
-  request can redirect a write such as « Tout marquer comme lu » to the other organization.
 - The route runtime supplies the workspace organization and fresh tickets to the shared realtime
   connection. The gateway notice envelope does not name the delivering room: changes are broadcast
   to every active watch, whose consumer filters or refetches. A later contract should add the room.
 - The resolver sets `OrganizationPin` after committing the verified context, before child resolvers;
-  route destruction clears it. A `412 organization.context-changed` requests one same-URL guard and
-  resolver rerun. Query-only navigation does not trigger revalidation. The guard's uncached current
-  organization read skips the pin so it can discover and switch the session under the lock. Before
+  route destruction clears it. An active `412 organization.context-changed` requests one same-URL
+  guard and resolver rerun. A passive mismatch marks the context stale; foreground focus or visibility
+  requests recovery, and passive requests wait for the next verified commit. Query-only navigation
+  does not trigger revalidation. The guard's uncached current organization read skips the pin so it can discover and switch the session under the lock. Before
   a session switch the guard fences pinned requests locally until the resolver commits the new pin.
-- A session holds one current organization across tabs. Tabs on different organizations can take
-  turns switching the session; each committed workspace switch reconnects its realtime client.
+- A session holds one current organization across tabs. Passive work in a stale tab cannot switch it
+  back; user activity or returning to that tab can revalidate its workspace. Each committed workspace
+  switch reconnects its realtime client.
 - Guards and the resolver never reach the error boundary: they redirect with a `UrlTree` or a
   `RedirectCommand`.
 - The `settings-shell` binding comes with the account and organization settings steps.

@@ -337,6 +337,27 @@ describe('WORKSPACE_ROUTES', () => {
     expect(pin.isSwitching()).toBe(false);
   });
 
+  it('revalidates a stale context once when the document returns to the foreground', async () => {
+    const harness: RouterTestingHarness = await open('/atelier-nord');
+    const router: Router = TestBed.inject(Router);
+    const pin: OrganizationPin = TestBed.inject(OrganizationPin);
+    vi.spyOn(document, 'hasFocus').mockReturnValue(true);
+    vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('hidden');
+    pin.markStale();
+    window.dispatchEvent(new Event('focus'));
+    expect(session.currentOrganization).toHaveBeenCalledTimes(1);
+    vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible');
+    const navigation: Promise<NavigationEnd> = firstValueFrom(
+      router.events.pipe(filter((event): event is NavigationEnd => event instanceof NavigationEnd)),
+    );
+    document.dispatchEvent(new Event('visibilitychange'));
+    window.dispatchEvent(new Event('focus'));
+    await navigation;
+    await harness.fixture.whenStable();
+    expect(session.currentOrganization).toHaveBeenCalledTimes(2);
+    expect(pin.stale()).toBe(false);
+  });
+
   it('coalesces multiple context changes into one revalidation', async () => {
     const harness: RouterTestingHarness = await open('/atelier-nord');
     const router: Router = TestBed.inject(Router);

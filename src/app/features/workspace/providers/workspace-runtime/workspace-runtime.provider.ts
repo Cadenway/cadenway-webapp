@@ -1,3 +1,4 @@
+import { DOCUMENT } from '@angular/common';
 import {
   computed,
   DestroyRef,
@@ -91,15 +92,24 @@ export function provideWorkspaceRuntime(): (Provider | EnvironmentProviders)[] {
       const router: Router = inject(Router);
       const revalidation: WorkspaceRevalidation = inject(WorkspaceRevalidation);
       let recovering: boolean = false;
-      const subscription: Subscription = pin.contextChanged.subscribe(() => {
+      const document: Document = inject(DOCUMENT);
+      const recover: () => void = () => {
         if (recovering || router.currentNavigation()) return;
         recovering = true;
         revalidation.request();
         void router.navigateByUrl(router.url, { onSameUrlNavigation: 'reload' }).finally(() => {
           recovering = false;
         });
-      });
+      };
+      const subscription: Subscription = pin.contextChanged.subscribe(recover);
+      const foreground: () => void = () => {
+        if (pin.stale() && document.visibilityState === 'visible' && document.hasFocus()) recover();
+      };
+      document.addEventListener('visibilitychange', foreground);
+      document.defaultView?.addEventListener('focus', foreground);
       inject(DestroyRef).onDestroy(() => {
+        document.removeEventListener('visibilitychange', foreground);
+        document.defaultView?.removeEventListener('focus', foreground);
         subscription.unsubscribe();
         pin.set(null);
       });

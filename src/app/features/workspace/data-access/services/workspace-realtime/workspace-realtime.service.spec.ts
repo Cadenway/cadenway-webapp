@@ -1,7 +1,13 @@
 import { provideHttpClient } from '@angular/common/http';
-import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
+import {
+  HttpTestingController,
+  provideHttpClientTesting,
+  type TestRequest,
+} from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
 import { afterEach, describe, expect, it } from 'vitest';
+
+import { PASSIVE_REQUEST } from '@core/api';
 
 import { WorkspaceRealtime } from './workspace-realtime.service';
 
@@ -15,9 +21,12 @@ describe('WorkspaceRealtime', () => {
       providers: [provideHttpClient(), provideHttpClientTesting()],
     });
     const result: Promise<string> = TestBed.inject(WorkspaceRealtime).issueTicket();
-    TestBed.inject(HttpTestingController)
-      .expectOne({ method: 'POST', url: '/v1/realtime/tickets' })
-      .flush({ token: 'test-ticket', expiresAt: '2026-11-08T11:00:00Z' });
+    const request: TestRequest = TestBed.inject(HttpTestingController).expectOne({
+      method: 'POST',
+      url: '/v1/realtime/tickets',
+    });
+    expect(request.request.context.get(PASSIVE_REQUEST)).toBe(true);
+    request.flush({ token: 'test-ticket', expiresAt: '2026-11-08T11:00:00Z' });
     await expect(result).resolves.toBe('test-ticket');
   });
 });

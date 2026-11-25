@@ -56,7 +56,7 @@ None.
   presence shows nothing).
 - Opening a notification or a reminder opens `/<slug>/t/<key>`, which renders the 404 until step 5.
 - Known gap: the mockup also adds overdue reminders to the badge; that is left out. The inbox
-  and reminder operations do not declare `If-Organization-Match` (see Workspace).
+  badge polling and realtime refreshes are passive and wait for workspace verification when stale.
 
 ## Copy not taken word for word from the mockup
 

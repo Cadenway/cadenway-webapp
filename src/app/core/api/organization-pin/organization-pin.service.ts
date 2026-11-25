@@ -32,6 +32,72 @@ export class OrganizationPin {
   private switching: boolean = false;
 
   /**
+   * Property revisionValue
+   *
+   * @description
+   * Advances on each commit so late failures cannot stale a newer verified context.
+   *
+   * @type {WritableSignal<number>}
+   * @readonly
+   */
+  private readonly revisionValue: WritableSignal<number> = signal(0);
+
+  /**
+   * Property revision
+   *
+   * @description
+   * Current verified context generation for rejecting obsolete passive failures.
+   *
+   * @type {Signal<number>}
+   * @readonly
+   */
+  public readonly revision: Signal<number> = this.revisionValue.asReadonly();
+
+  /**
+   * Property staleValue
+   *
+   * @description
+   * Whether a passive request discovered that the session context changed.
+   *
+   * @type {WritableSignal<boolean>}
+   * @readonly
+   */
+  private readonly staleValue: WritableSignal<boolean> = signal(false);
+
+  /**
+   * Property verifications
+   *
+   * @description
+   * Notifications for every verified workspace commit.
+   *
+   * @type {Subject<void>}
+   * @readonly
+   */
+  private readonly verifications: Subject<void> = new Subject<void>();
+
+  /**
+   * Property stale
+   *
+   * @description
+   * Whether passive requests must wait for workspace verification.
+   *
+   * @type {Signal<boolean>}
+   * @readonly
+   */
+  public readonly stale: Signal<boolean> = this.staleValue.asReadonly();
+
+  /**
+   * Property organizationVerified
+   *
+   * @description
+   * Emits on every non-null verified commit, including the same organization.
+   *
+   * @type {Observable<void>}
+   * @readonly
+   */
+  public readonly organizationVerified: Observable<void> = this.verifications.asObservable();
+
+  /**
    * Property changes
    *
    * @description
@@ -99,8 +165,11 @@ export class OrganizationPin {
   public set(organizationId: string | null): void {
     const changed: boolean = this.value() !== organizationId;
     this.value.set(organizationId);
+    this.revisionValue.update((revision: number) => revision + 1);
     this.switching = false;
+    this.staleValue.set(false);
     if (changed) this.commits.next();
+    if (organizationId) this.verifications.next();
   }
 
   /**
@@ -123,6 +192,16 @@ export class OrganizationPin {
    */
   public isSwitching(): boolean {
     return this.switching;
+  }
+
+  /**
+   * Method markStale
+   *
+   * @description
+   * Fences passive requests until a workspace context is verified again.
+   */
+  public markStale(): void {
+    this.staleValue.set(true);
   }
 
   /**

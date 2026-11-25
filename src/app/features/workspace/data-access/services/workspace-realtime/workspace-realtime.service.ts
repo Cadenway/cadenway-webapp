@@ -1,6 +1,9 @@
+import { HttpContext } from '@angular/common/http';
 import { inject, Service } from '@angular/core';
 import { RealtimeService } from '@cadenway/api-client';
 import { firstValueFrom } from 'rxjs';
+
+import { PASSIVE_REQUEST } from '@core/api';
 
 /**
  * Service WorkspaceRealtime
@@ -33,7 +36,14 @@ export class WorkspaceRealtime {
    * @returns {Promise<string>} Opaque single-use ticket.
    */
   public async issueTicket(): Promise<string> {
-    return (await firstValueFrom(this.realtime.issueRealtimeTicket({}))).token;
+    return (
+      await firstValueFrom(
+        this.realtime.issueRealtimeTicket(
+          {},
+          { context: new HttpContext().set(PASSIVE_REQUEST, true) },
+        ),
+      )
+    ).token;
   }
   // #endregion
 }

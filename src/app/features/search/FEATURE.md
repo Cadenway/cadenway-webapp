@@ -48,7 +48,7 @@ None.
   `localStorage` (`cadenway-recent-tasks:<userId>:<organizationId>`); Auth's `SignOut` removes them.
   The task page (step 5) will add to it.
 - A task opens `/<slug>/t/<key>` and a list `/<slug>/l/<listId>`; both render the 404 until steps
-  5 and 4a. The search operation does not declare `If-Organization-Match` (see Workspace).
+  5 and 4a. Search requests carry the workspace organization pin (see Core).
 
 ## Copy not taken word for word from the mockup
 

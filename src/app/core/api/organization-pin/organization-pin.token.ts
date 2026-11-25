@@ -11,3 +11,15 @@ import { HttpContextToken } from '@angular/common/http';
 export const SKIP_ORGANIZATION_PIN: HttpContextToken<boolean> = new HttpContextToken<boolean>(
   () => false,
 );
+
+/**
+ * Constant PASSIVE_REQUEST
+ *
+ * @description
+ * Marks background requests that must not switch the session organization on a mismatch.
+ *
+ * @type {HttpContextToken<boolean>}
+ */
+export const PASSIVE_REQUEST: HttpContextToken<boolean> = new HttpContextToken<boolean>(
+  () => false,
+);

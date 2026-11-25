@@ -1,3 +1,4 @@
+import { HttpContext } from '@angular/common/http';
 import { inject, Service } from '@angular/core';
 import {
   type InboxPage,
@@ -9,6 +10,8 @@ import {
   RemindersService,
 } from '@cadenway/api-client';
 import { firstValueFrom, map, type Observable } from 'rxjs';
+
+import { PASSIVE_REQUEST } from '@core/api';
 
 import type { InboxNotificationPage } from '../../../models/inbox-notification/inbox-notification.interface';
 import type {
@@ -75,7 +78,10 @@ export class InboxApi {
    */
   public unreadCount(): Observable<number> {
     return this.inbox
-      .getInboxUnreadCount({ cache: 'no-store' })
+      .getInboxUnreadCount({
+        cache: 'no-store',
+        context: new HttpContext().set(PASSIVE_REQUEST, true),
+      })
       .pipe(map((count: InboxUnreadCount) => count.unreadCount));
   }
 
@@ -85,11 +91,15 @@ export class InboxApi {
    * @description
    * Reads the newest active notifications, read and unread.
    *
+   * @param {boolean} passive - Whether the read was triggered in the background.
    * @returns {Promise<InboxNotificationPage>} The page and the unread count.
    */
-  public async notifications(): Promise<InboxNotificationPage> {
+  public async notifications(passive: boolean = false): Promise<InboxNotificationPage> {
     const page: InboxPage = await firstValueFrom(
-      this.inbox.listInboxNotifications({ limit: PAGE_SIZE, state: 'active' }),
+      this.inbox.listInboxNotifications(
+        { limit: PAGE_SIZE, state: 'active' },
+        { context: new HttpContext().set(PASSIVE_REQUEST, passive) },
+      ),
     );
     return toInboxNotificationPage(page);
   }
@@ -128,11 +138,15 @@ export class InboxApi {
    * @description
    * Reads the pending reminders, overdue ones included, the soonest first.
    *
+   * @param {boolean} passive - Whether the read was triggered in the background.
    * @returns {Promise<InboxReminderPage>} The page and the pending count.
    */
-  public async pendingReminders(): Promise<InboxReminderPage> {
+  public async pendingReminders(passive: boolean = false): Promise<InboxReminderPage> {
     const page: ReminderPage = await firstValueFrom(
-      this.reminders.listReminders({ limit: PAGE_SIZE }),
+      this.reminders.listReminders(
+        { limit: PAGE_SIZE },
+        { context: new HttpContext().set(PASSIVE_REQUEST, passive) },
+      ),
     );
     return toInboxReminderPage(page);
   }
@@ -148,7 +162,12 @@ export class InboxApi {
    */
   public async reminder(reminderId: string): Promise<InboxReminder> {
     return toInboxReminder(
-      await firstValueFrom(this.reminders.getReminder(reminderId, { cache: 'no-store' })),
+      await firstValueFrom(
+        this.reminders.getReminder(reminderId, {
+          cache: 'no-store',
+          context: new HttpContext().set(PASSIVE_REQUEST, true),
+        }),
+      ),
     );
   }
 

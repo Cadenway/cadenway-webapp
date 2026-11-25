@@ -37,6 +37,12 @@ The root transport provides Angular HTTP to the generated `@cadenway/api-client`
   and CSV exports fetched via a direct download link, bypass HttpClient and remain unpinned. The
   current account avatar uses initials; the list CSV export uses the generated client and is pinned
   before its content is saved through an object URL.
+- Passive requests mark a mismatched pin stale without revalidating. Further passive pinned requests
+  are fenced locally until verification; foreground focus or visibility while stale requests recovery.
+  A rejected realtime ticket waits for a verified commit before reconnecting.
+- Pinned cross-origin GETs are not CORS-simple: each distinct URL requires a preflight, including
+  search-as-you-type and cursor pages. The gateway caches preflight results for 600 seconds. Deploy a
+  gateway release including `cadenway-api-gateway#57` before shipping this image.
 - Realtime uses one lazy connection per workspace, fresh tickets on reconnect and ref-counted rooms.
   The route-scoped connection survives an in-place slug change and reconnects for the new organization.
   The gateway envelope does not identify the delivering room, so validated deduplicated changes are
@@ -45,7 +51,7 @@ The root transport provides Angular HTTP to the generated `@cadenway/api-client`
   unacknowledged choice in this tab takes precedence and is retried after reconnection. The
   snapshot reconciles concurrent notices, and an absent member is offline. Whether guests should see presence remains a product
   question; the gateway currently sends both snapshots and notices to them.
-- Socket acknowledgement types are local: generated `@cadenway/contracts` 0.41.0
+- Socket acknowledgement types are local: generated `@cadenway/contracts` 0.42.0
   `events/realtime-gateway.ts` describes producer facts, not socket acknowledgements.
 - Personal `notification.created.v1` and `reminder.due.v1` notices are validated and deduplicated
   by their envelope ID. They are invalidations, not replayed data; consumers refetch after reconnect.
