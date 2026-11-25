@@ -2,7 +2,10 @@ import { signal, type WritableSignal } from '@angular/core';
 import { WORKSPACE_CONTEXT } from '@features/workspace/ports/workspace-context';
 
 import { TestBed } from '@angular/core/testing';
+import { Subject } from 'rxjs';
 import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
+
+import { type CreatedTask, TaskCreate } from '@features/task';
 
 import { SpacesApi } from '../../data-access/services/spaces-api/spaces-api.service';
 import type { Favorite } from '../../models/favorite/favorite.interface';
@@ -123,6 +126,7 @@ describe('SpacesNavigationStore', () => {
   let organization: WritableSignal<{ id: string; slug: string }>;
   let api: SpacesApiFake;
   let store: InstanceType<typeof SpacesNavigationStore>;
+  let creations: Subject<CreatedTask>;
   const today: string = todayIso();
   const roadmap: Favorite = {
     id: 'f1',
@@ -134,6 +138,7 @@ describe('SpacesNavigationStore', () => {
 
   beforeEach(() => {
     organization = signal({ id: 'org-1', slug: 'atelier-nord' });
+    creations = new Subject<CreatedTask>();
     api = {
       spaces: vi.fn(() =>
         Promise.resolve([space('sp-produit', 'Produit'), space('sp-design', 'Design')]),
@@ -164,6 +169,7 @@ describe('SpacesNavigationStore', () => {
         SpacesNavigationStore,
         { provide: SpacesApi, useValue: api },
         { provide: WORKSPACE_CONTEXT, useValue: { organization } },
+        { provide: TaskCreate, useValue: { created: creations.asObservable() } },
       ],
     });
     store = TestBed.inject(SpacesNavigationStore);
@@ -276,6 +282,16 @@ describe('SpacesNavigationStore', () => {
       finish();
     });
     await expect.poll(() => store.overviews.hasValue()).toBe(true);
+  });
+
+  it('reads the list counts again when a task is created', async () => {
+    await expect.poll(() => store.overviews.hasValue()).toBe(true);
+    const reads: number = api.overview.mock.calls.length;
+
+    creations.next({ key: 'CAD-483', listId: 'l-backlog', status: 'todo', subtasks: 0 });
+
+    await expect.poll(() => api.overview.mock.calls.length).toBe(reads * 2);
+    expect(api.spaces).toHaveBeenCalledTimes(1);
   });
 
   it('reads the spaces again on refresh', async () => {

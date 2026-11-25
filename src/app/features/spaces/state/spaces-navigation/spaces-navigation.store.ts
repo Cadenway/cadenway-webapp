@@ -16,7 +16,10 @@ import {
   withProps,
   withState,
 } from '@ngrx/signals';
+import { rxMethod } from '@ngrx/signals/rxjs-interop';
+import { tap } from 'rxjs';
 
+import { type CreatedTask, TaskCreate } from '@features/task';
 import { WORKSPACE_CONTEXT } from '@features/workspace/ports/workspace-context';
 
 import { SpacesApi } from '../../data-access/services/spaces-api/spaces-api.service';
@@ -213,6 +216,7 @@ function createSpacesNavigationStore(): Type<SpacesNavigationStoreInstance> {
       return {
         _api: api,
         _workspace: inject(WORKSPACE_CONTEXT),
+        _taskCreate: inject(TaskCreate),
         spaces,
         overviews: resource({
           params: () =>
@@ -291,6 +295,13 @@ function createSpacesNavigationStore(): Type<SpacesNavigationStoreInstance> {
             store.spaces.reload();
           }
         }),
+        _countCreations: rxMethod<CreatedTask>(
+          tap((): void => {
+            if (!store.overviews.reload() && store.overviews.isLoading()) {
+              overviewRefreshQueued = true;
+            }
+          }),
+        ),
         _flushOverviews: signalMethod<string>((status: string): void => {
           if (status !== 'loading' && status !== 'reloading' && overviewRefreshQueued) {
             overviewRefreshQueued = false;
@@ -392,6 +403,7 @@ function createSpacesNavigationStore(): Type<SpacesNavigationStoreInstance> {
         store.follow(organizationId);
         store._flushRefresh(store.spaces.status);
         store._flushOverviews(store.overviews.status);
+        store._countCreations(store._taskCreate.created);
       },
     }),
   );
@@ -404,8 +416,9 @@ function createSpacesNavigationStore(): Type<SpacesNavigationStoreInstance> {
  * The spaces navigation of a workspace, provided on `/:org` by `provideSpacesNavigation()` so the
  * sidebar, the sprint progress and the list screens share one read. Keyed on the organization
  * id committed by the workspace. A switch closes every space and reads again. At most four
- * overviews run at once; a failed read offers an inline retry. Favorites change optimistically;
- * a refusal restores the previous list.
+ * overviews run at once; a failed read offers an inline retry. A task created from this tab reads
+ * the overviews, and so the lists' counts, again. Favorites change optimistically; a refusal
+ * restores the previous list.
  *
  * @type {ReturnType<typeof createSpacesNavigationStore>}
  */
