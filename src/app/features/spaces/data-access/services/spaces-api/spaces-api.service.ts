@@ -119,6 +119,8 @@ export class SpacesApi {
    * @param {string} spaceId - The space.
    * @param {string} today - The caller's date, `YYYY-MM-DD`, for the late tasks.
    * @param {AbortSignal | undefined} signal - Cancels a superseded read.
+   * @param {number | undefined} pageTimeoutMs - Longest wait for each page, in milliseconds; a
+   * page that takes longer fails the read, however many pages came before.
    * @returns {Promise<SpaceOverview>} The overview.
    * @throws {Error} The typed route error of the failure.
    */
@@ -126,6 +128,7 @@ export class SpacesApi {
     spaceId: string,
     today: string,
     signal?: AbortSignal,
+    pageTimeoutMs?: number,
   ): Promise<SpaceOverview> {
     const items: ListSummaryDto[] = [];
     let cursor: string | undefined;
@@ -138,7 +141,9 @@ export class SpacesApi {
             limit: PAGE_LIMIT,
             ...(cursor ? { cursor } : {}),
           }),
-          signal,
+          pageTimeoutMs === undefined
+            ? signal
+            : AbortSignal.any([...(signal ? [signal] : []), AbortSignal.timeout(pageTimeoutMs)]),
         );
         items.push(...page.items);
         taskCount = page.taskCount;

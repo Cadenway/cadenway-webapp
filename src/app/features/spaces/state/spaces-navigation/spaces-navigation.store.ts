@@ -30,16 +30,17 @@ import type { ListSummary, SpaceOverview } from '../../models/task-list/task-lis
 import { isWithin, todayIso } from '../../utils/calendar-date/calendar-date.util';
 
 /**
- * Constant OVERVIEW_TIMEOUT_MS
+ * Constant OVERVIEW_PAGE_TIMEOUT_MS
  *
  * @description
- * Longest wait for one space overview, in milliseconds: a stalled space must neither hold back the
- * batch of four it is read with, nor the creations read one after the other. A space that times
- * out is left out of the overviews, which offers its Retry.
+ * Longest wait for each page of a space overview, in milliseconds: a stalled page must neither hold
+ * back the batch of four spaces it is read with, nor the creations read one after the other, while
+ * a large space read page after page keeps all the time it needs. A space whose page times out is
+ * left out of the overviews, which offers its Retry.
  *
  * @type {number}
  */
-const OVERVIEW_TIMEOUT_MS: number = 10_000;
+const OVERVIEW_PAGE_TIMEOUT_MS: number = 10_000;
 
 /**
  * Interface SpacesNavigationState
@@ -251,11 +252,7 @@ function createSpacesNavigationStore(): Type<SpacesNavigationStoreInstance> {
                 params.ids
                   .slice(offset, offset + 4)
                   .map((id: string): Promise<SpaceOverview> =>
-                    api.overview(
-                      id,
-                      today,
-                      AbortSignal.any([abortSignal, AbortSignal.timeout(OVERVIEW_TIMEOUT_MS)]),
-                    ),
+                    api.overview(id, today, abortSignal, OVERVIEW_PAGE_TIMEOUT_MS),
                   ),
               );
               for (const result of settled) {
@@ -337,7 +334,7 @@ function createSpacesNavigationStore(): Type<SpacesNavigationStoreInstance> {
                 return EMPTY;
               }
               return from(
-                store._api.overview(spaceId, todayIso(), AbortSignal.timeout(OVERVIEW_TIMEOUT_MS)),
+                store._api.overview(spaceId, todayIso(), undefined, OVERVIEW_PAGE_TIMEOUT_MS),
               ).pipe(
                 tapResponse({
                   next: (overview: SpaceOverview): void => {
@@ -475,7 +472,7 @@ function createSpacesNavigationStore(): Type<SpacesNavigationStoreInstance> {
  * id committed by the workspace. A switch closes every space and reads again. At most four
  * overviews run at once; a failed read offers an inline retry. A task created from this tab reads
  * the overview of its list's space again, and only that one, one creation after the other, each
- * read given 10 s. When that space is unknown, the overviews are loading, they changed while the
+ * page given 10 s. When that space is unknown, the overviews are loading, they changed while the
  * space was read, or the read failed, every overview is read again instead (after the read in
  * flight): an answer never overwrites a newer one, no creation is missed, and a space that still
  * fails shows its Retry.

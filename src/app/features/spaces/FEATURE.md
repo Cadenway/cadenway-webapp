@@ -66,10 +66,11 @@ breadcrumb, dialog, inline edit, toolbar).
 
 - Stores and scopes:
   - `SpacesNavigationStore`, route-scoped on `/:org` (`provideSpacesNavigation()`): the spaces,
-    one overview per space read at most four at a time, each given 10 s (a failed one offers Retry), the favorites and the
-    open spaces. Keyed on the committed organization id: a switch closes every space and
+    one overview per space read at most four at a time, each page given 10 s (a failed one
+    offers Retry), the favorites and the open spaces. Keyed on the committed organization id: a
+    switch closes every space and
     reads again. A task created from this tab (`TaskCreate.created`) reads the overview of its
-    list's space again, one creation after the other, each read given 10 s; a failed read, an
+    list's space again, one creation after the other, each page given 10 s; a failed read, an
     unknown space or a full read in flight makes every overview be read again after it.
     Favorites change optimistically and a refusal restores the previous list. The
     current sprint is the first sprint, in sidebar order, whose dates hold the caller's today.

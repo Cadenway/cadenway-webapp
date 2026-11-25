@@ -1,7 +1,7 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { TestBed } from '@angular/core/testing';
 import { SpacesService } from '@cadenway/api-client';
-import { of, throwError } from 'rxjs';
+import { delay, NEVER, of, throwError } from 'rxjs';
 import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 
 import { UnavailableRouteError } from '@shared/route-errors';
@@ -50,6 +50,28 @@ describe('SpacesApi', () => {
   it('follows every page of the spaces', async () => {
     expect((await api.spaces()).map((space) => space.name)).toEqual(['Produit', 'Design']);
     expect(spaces['listSpaces']).toHaveBeenLastCalledWith({ limit: 100, cursor: 'c2' });
+  });
+
+  it('fails an overview whose page takes longer than its page deadline', async () => {
+    spaces['getSpaceOverview'].mockReturnValueOnce(NEVER);
+
+    await expect(api.overview('sp-1', '2026-11-08', undefined, 10)).rejects.toBeInstanceOf(Error);
+  });
+
+  it('gives each overview page its own deadline, not the whole read', async () => {
+    spaces['getSpaceOverview']
+      .mockReturnValueOnce(
+        of({ spaceId: 'sp-1', listCount: 0, taskCount: 4, items: [], nextCursor: 'c2' }).pipe(
+          delay(30),
+        ),
+      )
+      .mockReturnValueOnce(
+        of({ spaceId: 'sp-1', listCount: 0, taskCount: 4, items: [], nextCursor: null }).pipe(
+          delay(30),
+        ),
+      );
+
+    expect((await api.overview('sp-1', '2026-11-08', undefined, 50)).taskCount).toBe(4);
   });
 
   it('turns a failed space read into the unavailable state', async () => {
