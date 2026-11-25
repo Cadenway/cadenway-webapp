@@ -172,6 +172,20 @@ describe('ListPageStore', () => {
     await expect.poll(() => api['counts'].mock.calls.length).toBe(2);
   });
 
+  it('ignores the comment and Git link notices, which cannot change the counts', async () => {
+    await loaded();
+
+    for (const type of ['comment.created.v1', 'git.links-changed.v1']) {
+      notices.next({ id: type, type, at: '2026-11-08T09:00:00Z', data: { taskId: 'CAD-482' } });
+    }
+    await new Promise<void>((resolve) => {
+      setTimeout(resolve, 400);
+    });
+
+    expect(api['counts']).toHaveBeenCalledTimes(1);
+    expect(api['milestoneCount']).toHaveBeenCalledTimes(1);
+  });
+
   it('reads the counts again while task notices keep arriving faster than 300 ms', async () => {
     await loaded();
     const notice: RealtimeChange = {

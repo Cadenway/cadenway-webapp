@@ -478,7 +478,7 @@ function createListPageStore(): Type<ListPageStoreInstance> {
               if ('spaceId' in data) {
                 return store.list.hasValue() && data.spaceId === store.list.value().spaceId;
               }
-              return true;
+              return COUNTED_TASK_NOTICES.has(notice.type);
             }),
             auditTime(300),
             tap((): void => {
@@ -662,6 +662,20 @@ function createListPageStore(): Type<ListPageStoreInstance> {
 }
 
 /**
+ * Constant COUNTED_TASK_NOTICES
+ *
+ * @description
+ * The task notices that can change the counts or the milestone count. A comment or Git link
+ * notice cannot, and the socket hands notices of every watched room to every watch.
+ *
+ * @type {ReadonlySet<string>}
+ */
+const COUNTED_TASK_NOTICES: ReadonlySet<string> = new Set([
+  'task.updated.v1',
+  'task.status-changed.v1',
+]);
+
+/**
  * Constant ListPageStore
  *
  * @description
@@ -672,8 +686,9 @@ function createListPageStore(): Type<ListPageStoreInstance> {
  * state. While the page lives it watches the list's realtime room and refreshes the counts 300 ms
  * after a notice, once for every notice of that window, so a steady flow of changes cannot hold the
  * refresh back. The socket hands every notice to every watch: a notice naming another list or space
- * is ignored, and a task notice, which names only its task (`{ taskId, changed }`), counts, as for
- * the rows. A task created in the list from this tab refreshes them at once.
+ * is ignored, and so is a comment or Git link notice; a task update or status change, which names
+ * only its task (`{ taskId, changed }`), counts. A task created in the list from this tab refreshes
+ * them at once.
  * Writes report whether the gateway recorded them; renaming and deleting a saved view are
  * optimistic and restore on a refusal.
  *

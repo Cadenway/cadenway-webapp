@@ -75,7 +75,8 @@ breadcrumb, dialog, inline edit, toolbar).
     selection bar's writes. It watches the list's realtime room while the page lives and
     refreshes the counts 300 ms after a notice, once per window, so a steady flow cannot hold them
     back; since the socket hands every notice to every watch, it ignores a notice naming another
-    list or space, while a task notice (`{ taskId, changed }`) counts. A task created in the list from this tab (`TaskCreate.created`) refreshes the
+    list or space and the comment and Git link notices, while a task update or status change
+    (`{ taskId, changed }`) counts. A task created in the list from this tab (`TaskCreate.created`) refreshes the
     counts at once.
   - `ListViewStore`, route-scoped on `l/:listId`: filters, sort, grouping, subtask display, search,
     « Jalons » and the applied saved view. It exposes `taskQuery` (the `queryListTasks` body
