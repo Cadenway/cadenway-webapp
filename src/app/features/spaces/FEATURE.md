@@ -154,25 +154,11 @@ gateway checks them and `ORGANIZATION_PIN_OPERATIONS` lists them.
 - The « + » of « Espaces », the right-click menus of the sidebar, « Modifier », « Nouveau sprint »,
   « Nouvelle liste », « Partager », « Rapport de sprint » and the space dialogs open the dialogs of
   step 4b and are not built.
-- `cw-tabs` of `@cadenway/ui` 0.7.0 reads the required value of a tab that is not bound yet when
-  no earlier tab is active (NG0950): `ViewTabs` activates a saved view's tab only from the render
-  after its creation. To fix in the design system.
 - « Modifier la liste » uses inline editing until the list edit dialog in step 4b.
 - Realtime notices without a list or space id cannot be attributed to the open list and do not
   refresh its counts; the notice contract needs to include that context.
 - The filter dialog does not count the visible tasks (« n sur m tâches »): the rows store, provided
   on the `list` view, is not reachable from the list page's tools yet.
-- `cw-data-table` (`@cadenway/ui` 0.7.0) gaps, to add in the design system:
-  - the group header draws the count of the loaded rows, not the `countTaskGroups` count, and a
-    group shows only once one of its rows is loaded, so the empty default groups of `App.dc.html`
-    and the full count of a group read in part do not show (it needs a group count input and
-    declared groups);
-  - no output tells that the virtual window nears its end: the page listens to the scroller in the
-    capture phase and finds it from the grid;
-  - no per-row class, so the row-in motion plays on the name cell only;
-  - under 768 px it turns the rows into cards instead of the mockup's three-column grid;
-  - the « + » of a group sits in the group header, where `App.dc.html` draws a trailing
-    « Ajouter une tâche » row.
 - The row's status icon and name open the task; the row menu changes its status. Assignees,
   priority, due date and labels are display only. A row can create a subtask with its parent key.
 - The row menu holds « Ouvrir » and « Statut » only; « Priorité », « Assigner », « Déplacer vers »,

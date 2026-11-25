@@ -1,6 +1,8 @@
 import { signal } from '@angular/core';
 import { type ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideRouter, Router } from '@angular/router';
+import { By } from '@angular/platform-browser';
+import { CwDataTable } from '@cadenway/ui/components/data-table';
 import type { StatusKey } from '@cadenway/contracts';
 import { provideCadenwayIcons } from '@cadenway/icons';
 import { CwToastService } from '@cadenway/ui/components/toast';
@@ -245,6 +247,39 @@ describe('ListViewPage', () => {
     expect(text).toContain('Refondre l’écran de connexion SSO');
     expect(text).toContain('CAD-482');
     expect(checkbox('Sélectionner CAD-482')).toBeDefined();
+  });
+
+  it('passes server counts, phone columns and row motion to the table', async () => {
+    groups.mockResolvedValue([
+      { value: 'todo', count: 25 },
+      { value: 'progress', count: 0 },
+    ]);
+    const fixture: ComponentFixture<ListViewPage> = await render();
+    const table: CwDataTable<unknown> = fixture.debugElement.query(By.directive(CwDataTable))
+      .componentInstance as CwDataTable<unknown>;
+    expect(table.groups()).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ value: 'todo', count: 25 }),
+        expect.objectContaining({ value: 'progress', count: 0 }),
+      ]),
+    );
+    expect(table.phoneLayout()).toBe('grid');
+    expect(table.phoneColumns()).toEqual(['due']);
+    expect(table.rowMotion()?.({ entering: true })).toBe('in');
+    expect(table.rowMotion()?.({ entering: false })).toBeNull();
+  });
+
+  it('shows the empty state instead of groups when a search has no matches', async () => {
+    groups.mockResolvedValue([]);
+    const view: InstanceType<typeof ListViewStore> = TestBed.inject(ListViewStore);
+    view.setSearch('missing');
+    const fixture: ComponentFixture<ListViewPage> = await render();
+    const table: CwDataTable<unknown> = fixture.debugElement.query(By.directive(CwDataTable))
+      .componentInstance as CwDataTable<unknown>;
+    expect(table.filtered()).toBe(true);
+    expect((fixture.nativeElement as HTMLElement).textContent).toContain(
+      'Aucune tâche ne correspond',
+    );
   });
 
   it('renders visible tasks after a full hidden status group', async () => {
@@ -541,15 +576,15 @@ describe('ListViewPage', () => {
     });
   });
 
-  it('distinguishes an empty list, whose button creates in the list', async () => {
+  it('shows empty groups and creates a task with the selected status', async () => {
     page.mockResolvedValue({ items: [], nextCursor: null, total: 0 });
     const open: MockInstance = vi.spyOn(TestBed.inject(TaskCreate), 'open');
     await render();
 
-    expect(document.body.textContent).toContain('Aucune tâche');
+    expect(document.body.textContent).toContain('À faire');
     required(button('Ajouter une tâche')).click();
 
-    expect(open).toHaveBeenCalledWith({ listId: 'sprint-14' });
+    expect(open).toHaveBeenCalledWith({ listId: 'sprint-14', status: 'todo' });
   });
 
   it('offers Retry in place when the next page fails', async () => {
@@ -562,6 +597,11 @@ describe('ListViewPage', () => {
       .mockResolvedValue({ items: [], nextCursor: null, total: 2 });
     const fixture: ComponentFixture<ListViewPage> = await render();
     const host: HTMLElement = fixture.nativeElement as HTMLElement;
+    const table: CwDataTable<unknown> = fixture.debugElement.query(By.directive(CwDataTable))
+      .componentInstance as CwDataTable<unknown>;
+    table.nearEnd.emit();
+    await fixture.whenStable();
+    fixture.detectChanges();
 
     const alert: Element | undefined = [...host.querySelectorAll('[role="alert"]')].find(
       (element: Element) =>

@@ -1,5 +1,4 @@
 import {
-  afterRenderEffect,
   Component,
   computed,
   input,
@@ -256,25 +255,8 @@ export class ViewTabs {
    */
   protected readonly value: Signal<string> = computed((): string => {
     const active: string | null = this.activeViewId();
-    return active !== null && this.renderedViews().has(active)
-      ? `${SAVED_PREFIX}${active}`
-      : this.layout();
+    return active !== null ? `${SAVED_PREFIX}${active}` : this.layout();
   });
-
-  /**
-   * Property renderedViews
-   *
-   * @description
-   * Saved views whose tab has been rendered once. A saved view's tab becomes active only from the
-   * render after its creation: `cw-tabs` of `@cadenway/ui` 0.7.0 reads the required value of a
-   * tab that is not bound yet when no earlier tab is active (NG0950).
-   *
-   * @type {WritableSignal<ReadonlySet<string>>}
-   * @readonly
-   */
-  private readonly renderedViews: WritableSignal<ReadonlySet<string>> = signal<ReadonlySet<string>>(
-    new Set<string>(),
-  );
 
   /**
    * Property activeView
@@ -289,28 +271,6 @@ export class ViewTabs {
     (): SavedView | null =>
       this.savedViews().find((view: SavedView): boolean => view.id === this.activeViewId()) ?? null,
   );
-  // #endregion
-
-  // #region Constructor
-  /**
-   * Constructor
-   *
-   * @description
-   * Records the rendered saved view tabs after each render.
-   *
-   * @constructor
-   */
-  public constructor() {
-    afterRenderEffect({
-      write: (): void => {
-        const ids: readonly string[] = this.savedViews().map((view: SavedView): string => view.id);
-        const rendered: ReadonlySet<string> = this.renderedViews();
-        if (ids.length !== rendered.size || ids.some((id: string): boolean => !rendered.has(id))) {
-          this.renderedViews.set(new Set<string>(ids));
-        }
-      },
-    });
-  }
   // #endregion
 
   // #region Methods

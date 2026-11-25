@@ -52,8 +52,7 @@ export const LIST_TABLE_TEXTS: Provider = provideCwDataTableTexts(() => ({
     collapsed
       ? $localize`:@@spaces.table.group-collapsed:Group ${label}:label: collapsed`
       : $localize`:@@spaces.table.group-expanded:Group ${label}:label: expanded`,
-  groupAdd: (label: string): string =>
-    $localize`:@@spaces.table.group-add:Add a task in ${label}:label:`,
+  addRow: $localize`:@@spaces.table.add-row:Add a task`,
   columnWidth: (header: string): string =>
     $localize`:@@spaces.table.column-width:Width of the ${header}:header: column`,
   columnResized: (header: string, width: number): string =>

@@ -235,6 +235,7 @@ describe('ListPage', () => {
   it('applies the saved view of the address and marks it modified', async () => {
     const harness: RouterTestingHarness = await open('/atelier-nord/l/l-bugs?savedView=sv-bugs');
     await expect.poll(() => find('view-chip')?.textContent ?? '').toContain('Urgente, Haute');
+    expect(find('saved-view-tab')?.getAttribute('aria-selected')).toBe('true');
     expect(find('view-sort')?.textContent).toContain('Tri : échéance');
 
     find('view-chip')?.querySelector<HTMLButtonElement>('button')?.click();

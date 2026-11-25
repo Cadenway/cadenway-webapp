@@ -11,7 +11,8 @@
     manual
     selectable
     editable
-    groupAddable
+    addRow
+    phoneLayout="grid"
     density="default"
     groupBy="group"
     [page]="null"
@@ -19,9 +20,11 @@
     [trackBy]="rowId"
     [rowLabel]="rowLabel"
     [groupLabel]="groupLabel"
-    [groupOrder]="rows.groupOrder()"
+    [groups]="tableGroups()"
+    [phoneColumns]="['due']"
+    [rowMotion]="rowMotion"
+    [filtered]="filtered()"
     [collapsed]="rows.collapsed()"
-    [columnVisibility]="columnVisibility()"
     [loading]="
       (!snapshot && !rows.hasCurrentSnapshot() && rows.primary.isLoading()) || rows.seekingRows()
     "
@@ -29,7 +32,8 @@
     [(selection)]="tableSelection"
     (collapsedChange)="rows.setCollapsed($event)"
     (rowOpen)="open($event.task)"
-    (groupAdd)="addInGroup($event)"
+    (rowAdd)="addInGroup($event)"
+    (nearEnd)="rows.loadMore()"
   >
     <ng-template cwDataTableGroup let-key>
       @switch (rows.groupBy()) {
@@ -65,10 +69,9 @@
     >
       <ng-template cwCell [cwCellOf]="rows.rows()" let-row>
         <span
-          class="flex min-w-0 items-center gap-0.5 motion-reduce:animate-none"
+          class="flex min-w-0 items-center gap-0.5"
           [class.pl-6]="row.depth === 1"
           [class.pl-12]="row.depth === 2"
-          [class.animate-row-in]="row.entering"
           [attr.data-task-row]="row.task.key"
           [cwContextMenuTriggerFor]="rowMenu"
           (opened)="menuRow.set(row)"
