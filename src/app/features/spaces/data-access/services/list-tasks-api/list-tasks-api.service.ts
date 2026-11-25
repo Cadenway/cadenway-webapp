@@ -8,6 +8,10 @@ import {
 } from '@cadenway/api-client';
 
 import type { TaskSummary } from '@features/task';
+import {
+  WORKSPACE_CONTEXT,
+  type WorkspaceContextPort,
+} from '@features/workspace/ports/workspace-context';
 
 import type {
   GroupFilter,
@@ -38,6 +42,28 @@ import { abortableRead } from '../../utils/abortable-read/abortable-read.util';
  * @type {number}
  */
 const SUBTASK_PAGE_LIMIT: number = 100;
+
+/**
+ * Function groupAllowed
+ *
+ * @description
+ * Keeps only group values selected in a filter on the grouped field. The gateway resolves `me`
+ * to the current user's id when naming assignee groups.
+ *
+ * @param {ListTaskQuery} query - The view's filters.
+ * @param {GroupFilter} group - The group being considered.
+ * @param {string} userId - The signed-in user id.
+ * @returns {boolean} Whether the group belongs in the view.
+ */
+function groupAllowed(query: ListTaskQuery, group: GroupFilter, userId: string): boolean {
+  const values: readonly string[] | undefined = query[group.groupBy];
+  if (!values || values.length === 0) return true;
+  const value: string = group.value.toLowerCase();
+  return values.some(
+    (item: string): boolean =>
+      (group.groupBy === 'assignee' && item === 'me' ? userId : item).toLowerCase() === value,
+  );
+}
 
 /**
  * Service ListTasksApi
@@ -73,6 +99,17 @@ export class ListTasksApi {
    * @readonly
    */
   private readonly tasks: TasksService = inject(TasksService);
+
+  /**
+   * Property workspace
+   *
+   * @description
+   * Resolves the `me` filter to the id returned in assignee group counts.
+   *
+   * @type {WorkspaceContextPort}
+   * @readonly
+   */
+  private readonly workspace: WorkspaceContextPort = inject(WORKSPACE_CONTEXT);
   // #endregion
 
   // #region Methods
@@ -105,7 +142,17 @@ export class ListTasksApi {
           }),
           signal,
         );
-        groups.push(...page.items.map((group: TaskGroup) => toTaskGroupCount(group)));
+        groups.push(
+          ...page.items
+            .filter((group: TaskGroup): boolean =>
+              groupAllowed(
+                groupQuery.query,
+                { groupBy: groupQuery.groupBy, value: group.value },
+                this.workspace.user().id,
+              ),
+            )
+            .map((group: TaskGroup) => toTaskGroupCount(group)),
+        );
         cursor = page.nextCursor;
       } while (cursor !== null);
       return groups;
@@ -118,8 +165,8 @@ export class ListTasksApi {
    * Method page
    *
    * @description
-   * Reads tasks in the view's order, retaining its filters and checking group membership locally.
-   * Pages with no matching group members are skipped until a match or the last cursor.
+   * Reads one server-filtered page in the view's order. A group outside the view's filter is
+   * empty and does not cause a request.
    *
    * @param {string} listId - The list.
    * @param {ListTaskQuery} query - The view's query.
@@ -139,32 +186,16 @@ export class ListTasksApi {
     signal?: AbortSignal,
   ): Promise<ListTaskPage> {
     try {
-      let nextCursor: string | null = cursor;
-      for (;;) {
-        const page: TaskSummaryPage = await abortableRead(
-          this.queries.queryListTasks(listId, toListTasksQuery(query, group, nextCursor, limit), {
-            cache: 'no-store',
-          }),
-          signal,
-        );
-        const mapped: ListTaskPage = toListTaskPage(page);
-        const items: readonly TaskSummary[] = group
-          ? mapped.items.filter((task: TaskSummary): boolean => {
-              switch (group.groupBy) {
-                case 'status':
-                  return task.status === group.value;
-                case 'priority':
-                  return task.priority === group.value;
-                case 'assignee':
-                  return group.value === 'none'
-                    ? task.assigneeIds.length === 0
-                    : task.assigneeIds.includes(group.value);
-              }
-            })
-          : mapped.items;
-        if (items.length > 0 || mapped.nextCursor === null) return { ...mapped, items };
-        nextCursor = mapped.nextCursor;
+      if (group && !groupAllowed(query, group, this.workspace.user().id)) {
+        return { items: [], nextCursor: null, total: 0 };
       }
+      const page: TaskSummaryPage = await abortableRead(
+        this.queries.queryListTasks(listId, toListTasksQuery(query, group, cursor, limit), {
+          cache: 'no-store',
+        }),
+        signal,
+      );
+      return toListTaskPage(page);
     } catch (error: unknown) {
       throw toRouteError(error, 'list', listId);
     }

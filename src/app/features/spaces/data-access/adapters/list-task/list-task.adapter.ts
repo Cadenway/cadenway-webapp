@@ -82,9 +82,8 @@ export function toTaskGroupCount(group: TaskGroup): TaskGroupCount {
  * Function withGroup
  *
  * @description
- * Adds the group value only when the grouped field has no existing filter. Values within one
- * filter are alternatives, so an existing filter is retained and group membership is checked
- * against each returned task by the data-access service.
+ * Narrows the grouped field to one group. The data-access service first ensures that the group
+ * is allowed by any existing filter on that field.
  *
  * @param {ListTaskQuery} query - The view's query.
  * @param {GroupFilter | null} group - The group to read, or null for every task.
@@ -94,15 +93,14 @@ export function withGroup(query: ListTaskQuery, group: GroupFilter | null): List
   if (!group) return query;
   switch (group.groupBy) {
     case 'status':
-      return query.status
-        ? query
-        : { ...query, status: [group.value as NonNullable<ListTaskQuery['status']>[number]] };
+      return { ...query, status: [group.value as NonNullable<ListTaskQuery['status']>[number]] };
     case 'priority':
-      return query.priority
-        ? query
-        : { ...query, priority: [group.value as NonNullable<ListTaskQuery['priority']>[number]] };
+      return {
+        ...query,
+        priority: [group.value as NonNullable<ListTaskQuery['priority']>[number]],
+      };
     case 'assignee':
-      return query.assignee ? query : { ...query, assignee: [group.value] };
+      return { ...query, assignee: [group.value] };
   }
 }
 

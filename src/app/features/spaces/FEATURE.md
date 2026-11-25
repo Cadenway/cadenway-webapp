@@ -82,9 +82,9 @@ breadcrumb, dialog, inline edit, toolbar).
   - `ListRowsStore`, route-scoped on `list`: the rows of the « Liste » view. Grouping is a filter:
     the primary read takes `countTaskGroups`, then cursor pages of each group in the gateway's
     order, until 50 tasks of open groups are read; `loadMore` reads the next page when the table
-    nears its end. Existing filters on the grouped field are retained: the data-access service
-    checks membership locally and skips pages without matching members, so a multi-assignee task
-    appears in each matching group without widening the view's filters. A folded group (« Annulé » by default when
+    nears its end. When the grouped field is filtered, only selected group values are shown and
+    each group is read with its value as a server-side filter. A task assigned to several people
+    appears only in the selected assignee groups; `me` resolves to the signed-in user. A folded group (« Annulé » by default when
     grouping by status) reads its first page only, so its header shows, and reads on when opened.
     Another query reads again and keeps the rows until the answer (superseded reads are aborted);
     another list or organization (`WORKSPACE_CONTEXT`) empties them at once and drops late answers.

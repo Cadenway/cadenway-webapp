@@ -194,12 +194,12 @@ interface SessionFake {
  * Constant RECONNECT_WAIT
  *
  * @description
- * Wait options of the realtime reconnect scenario: a CI runner needs more than the 1 s default to
- * walk the two admissions.
+ * Wait options of the realtime reconnect scenario: a CI runner with coverage needs more than the
+ * 1 s default to load the routes and walk the two admissions; the scenario itself gets 20 s.
  *
  * @type {{ timeout: number }}
  */
-const RECONNECT_WAIT: { timeout: number } = { timeout: 5000 };
+const RECONNECT_WAIT: { timeout: number } = { timeout: 10_000 };
 
 describe('WORKSPACE_ROUTES', () => {
   let session: SessionFake;
@@ -509,7 +509,7 @@ describe('WORKSPACE_ROUTES', () => {
     }, RECONNECT_WAIT);
     expect(joins[1]).toEqual({ kind: 'task', taskKey: 'CAD-1' });
     watch.unsubscribe();
-  });
+  }, 20_000);
 
   it('switches when the session has no current organization and the slug matches one', async () => {
     session.currentOrganization.mockReturnValue(

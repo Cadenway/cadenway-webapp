@@ -6,13 +6,17 @@ import {
   type TaskGroupPage,
   type TaskSummary as TaskSummaryDto,
 } from '@cadenway/api-client';
+import { CwToastService } from '@cadenway/ui/components/toast';
 import { of, throwError } from 'rxjs';
 import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 
+import { WORKSPACE_CONTEXT } from '@features/workspace/ports/workspace-context';
+import { TaskStatusChangesStore } from '@features/task';
 import { UnavailableRouteError } from '@shared/route-errors';
 
-import type { ListTaskPage } from '../../../models/list-rows/list-rows.interface';
+import type { ListTaskPage, TaskGroupCount } from '../../../models/list-rows/list-rows.interface';
 import type { ListTaskQuery } from '../../../models/list-view-config/list-view-config.interface';
+import { ListRowsStore } from '../../../state/list-rows/list-rows.store';
 import { ListTasksApi } from './list-tasks-api.service';
 
 /**
@@ -72,6 +76,16 @@ describe('ListTasksApi', () => {
       providers: [
         { provide: TaskQueriesService, useValue: { countTaskGroups, queryListTasks } },
         { provide: TasksService, useValue: { listSubtasks } },
+        {
+          provide: WORKSPACE_CONTEXT,
+          useValue: { user: () => ({ id: 'a' }), organization: () => ({ id: 'org-a' }) },
+        },
+        {
+          provide: CwToastService,
+          useValue: { show: vi.fn(), error: vi.fn(), warning: vi.fn(), dismiss: vi.fn() },
+        },
+        TaskStatusChangesStore,
+        ListRowsStore,
       ],
     });
     api = TestBed.inject(ListTasksApi);
@@ -125,11 +139,23 @@ describe('ListTasksApi', () => {
     expect(listSubtasks).toHaveBeenCalledWith('CAD-482', { limit: 100 }, { cache: 'no-store' });
   });
 
-  it('preserves the assignee filter and scans pages for each overlapping group', async () => {
+  it('shows only filtered assignee groups and makes a single read for the allowed group', async () => {
     const aOnly: TaskSummaryDto = task('CAD-A', ['a']);
     const bOnly: TaskSummaryDto = task('CAD-B', ['b']);
     const both: TaskSummaryDto = task('CAD-AB', ['a', 'b']);
     const dataset: readonly TaskSummaryDto[] = [aOnly, bOnly, both];
+    const sparseGroups: { value: string; count: number }[] = Array.from(
+      { length: 80 },
+      (_: unknown, index: number) => ({ value: `other-${String(index)}`, count: 1 }),
+    );
+    countTaskGroups.mockReturnValueOnce(
+      of({
+        groupBy: 'assignee',
+        items: [{ value: 'a', count: 2 }, { value: 'b', count: 1 }, ...sparseGroups],
+        nextCursor: null,
+        total: 2,
+      }),
+    );
     queryListTasks.mockImplementation(
       (_list: string, body: { assignee: string[]; cursor?: string }) => {
         const filtered: readonly TaskSummaryDto[] = dataset.filter((item: TaskSummaryDto) =>
@@ -137,46 +163,150 @@ describe('ListTasksApi', () => {
         );
         const index: number = body.cursor ? Number(body.cursor) : 0;
         return of({
-          items: filtered.slice(index, index + 1),
-          nextCursor: index + 1 < filtered.length ? String(index + 1) : null,
+          items: filtered.slice(index, index + 50),
+          nextCursor: index + 50 < filtered.length ? String(index + 50) : null,
           total: filtered.length,
         });
       },
     );
     const filtered: ListTaskQuery = { ...query, assignee: ['a'] };
+    const groups: readonly TaskGroupCount[] = await api.groups('sprint-14', {
+      groupBy: 'assignee',
+      query: filtered,
+    });
     const firstA: ListTaskPage = await api.page(
       'sprint-14',
       filtered,
       { groupBy: 'assignee', value: 'a' },
       null,
-      1,
-    );
-    const nextA: ListTaskPage = await api.page(
-      'sprint-14',
-      filtered,
-      { groupBy: 'assignee', value: 'a' },
-      firstA.nextCursor,
-      1,
+      50,
     );
     const groupB: ListTaskPage = await api.page(
       'sprint-14',
       filtered,
       { groupBy: 'assignee', value: 'b' },
       null,
-      1,
+      50,
     );
 
-    expect([...firstA.items, ...nextA.items].map((item) => item.key)).toEqual(['CAD-A', 'CAD-AB']);
-    expect(groupB.items.map((item) => item.key)).toEqual(['CAD-AB']);
-    expect(
-      queryListTasks.mock.calls.every(
-        (call: unknown[]) => (call[1] as { assignee: string[] }).assignee.join(',') === 'a',
-      ),
-    ).toBe(true);
+    expect(groups).toEqual([{ value: 'a', count: 2 }]);
+    expect(firstA.items.map((item) => item.key)).toEqual(['CAD-A', 'CAD-AB']);
+    expect(groupB.items).toEqual([]);
+    expect(queryListTasks).toHaveBeenCalledTimes(1);
+    expect(countTaskGroups).toHaveBeenCalledTimes(1);
+    expect(queryListTasks).toHaveBeenCalledWith(
+      'sprint-14',
+      { assignee: ['a'], level: 'roots', sort: 'manual', limit: 50 },
+      { cache: 'no-store' },
+    );
     expect(groupB.nextCursor).toBeNull();
   });
 
-  it('preserves status, priority and label filters while checking group membership', async () => {
+  it('resolves me and none when selecting assignee groups', async () => {
+    countTaskGroups.mockReturnValue(
+      of({
+        groupBy: 'assignee',
+        items: [
+          { value: 'a', count: 1 },
+          { value: 'b', count: 1 },
+          { value: 'none', count: 1 },
+        ],
+        nextCursor: null,
+        total: 3,
+      }),
+    );
+    const filtered: ListTaskQuery = { ...query, assignee: ['me', 'none'] };
+    await expect(
+      api.groups('sprint-14', { groupBy: 'assignee', query: filtered }),
+    ).resolves.toEqual([
+      { value: 'a', count: 1 },
+      { value: 'none', count: 1 },
+    ]);
+    queryListTasks.mockReturnValue(
+      of({ items: [task('CAD-A', ['a'])], nextCursor: null, total: 1 }),
+    );
+    await api.page('sprint-14', filtered, { groupBy: 'assignee', value: 'a' }, null, 50);
+    expect(queryListTasks).toHaveBeenCalledWith(
+      'sprint-14',
+      { assignee: ['a'], level: 'roots', sort: 'manual', limit: 50 },
+      { cache: 'no-store' },
+    );
+  });
+
+  it('renders the filtered assignee group without querying sparse groups', async () => {
+    const items: readonly TaskSummaryDto[] = [
+      task('CAD-A', ['a']),
+      task('CAD-B', ['b']),
+      task('CAD-AB', ['a', 'b']),
+    ];
+    const sparse: { value: string; count: number }[] = Array.from(
+      { length: 80 },
+      (_: unknown, index: number) => ({ value: `other-${String(index)}`, count: 1 }),
+    );
+    countTaskGroups.mockReturnValue(
+      of({
+        groupBy: 'assignee',
+        items: [{ value: 'a', count: 2 }, { value: 'b', count: 1 }, ...sparse],
+        nextCursor: null,
+        total: 2,
+      }),
+    );
+    queryListTasks.mockImplementation((_list: string, body: { assignee: string[] }) =>
+      of({
+        items: items.filter((item: TaskSummaryDto) =>
+          item.assignees.some((person) => body.assignee.includes(person.userId)),
+        ),
+        nextCursor: null,
+        total: 2,
+      }),
+    );
+    const store: InstanceType<typeof ListRowsStore> = TestBed.inject(ListRowsStore);
+    const filtered: ListTaskQuery = { ...query, assignee: ['a'] };
+    store.load({
+      listId: 'sprint-14',
+      query: filtered,
+      groupQuery: { groupBy: 'assignee', query: filtered },
+    });
+    await vi.waitFor(() => {
+      TestBed.tick();
+      expect(store.rows().map((row) => row.id)).toEqual(['a/CAD-A', 'a/CAD-AB']);
+    });
+    expect(store.groupOrder()).toEqual(['a']);
+    expect(countTaskGroups).toHaveBeenCalledTimes(1);
+    expect(queryListTasks).toHaveBeenCalledTimes(1);
+    store.reload();
+    await vi.waitFor(() => {
+      TestBed.tick();
+      expect(queryListTasks).toHaveBeenCalledTimes(2);
+    });
+    expect(countTaskGroups).toHaveBeenCalledTimes(2);
+  });
+
+  it.each([
+    [
+      'status',
+      { ...query, status: ['todo'] },
+      [
+        { value: 'todo', count: 1 },
+        { value: 'done', count: 0 },
+      ],
+    ],
+    [
+      'priority',
+      { ...query, priority: ['haute'] },
+      [
+        { value: 'haute', count: 1 },
+        { value: 'basse', count: 0 },
+      ],
+    ],
+  ] as const)('only retains filtered %s groups', async (groupBy, filtered, items) => {
+    countTaskGroups.mockReturnValue(of({ groupBy, items, nextCursor: null, total: 1 }));
+    await expect(api.groups('sprint-14', { groupBy, query: filtered })).resolves.toEqual([
+      items[0],
+    ]);
+  });
+
+  it('rejects status and priority groups outside the filter without reading tasks', async () => {
     const filtered: ListTaskQuery = {
       ...query,
       status: ['todo'],
@@ -203,18 +333,6 @@ describe('ListTasksApi', () => {
 
     expect(status.items).toEqual([]);
     expect(priority.items).toEqual([]);
-    expect(queryListTasks).toHaveBeenCalledTimes(2);
-    expect(queryListTasks).toHaveBeenLastCalledWith(
-      'sprint-14',
-      {
-        status: ['todo'],
-        priority: ['haute'],
-        label: ['Auth'],
-        level: 'roots',
-        sort: 'manual',
-        limit: 50,
-      },
-      { cache: 'no-store' },
-    );
+    expect(queryListTasks).not.toHaveBeenCalled();
   });
 });
