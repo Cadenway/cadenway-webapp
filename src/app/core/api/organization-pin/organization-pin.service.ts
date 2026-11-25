@@ -65,6 +65,28 @@ export class OrganizationPin {
   private readonly staleValue: WritableSignal<boolean> = signal(false);
 
   /**
+   * Property staleTransitions
+   *
+   * @description
+   * Synchronous notifications when the pin first becomes stale.
+   *
+   * @type {Subject<void>}
+   * @readonly
+   */
+  private readonly staleTransitions: Subject<void> = new Subject<void>();
+
+  /**
+   * Property becameStale
+   *
+   * @description
+   * Emits once per stale period, after the stale signal changes.
+   *
+   * @type {Observable<void>}
+   * @readonly
+   */
+  public readonly becameStale: Observable<void> = this.staleTransitions.asObservable();
+
+  /**
    * Property verifications
    *
    * @description
@@ -201,7 +223,9 @@ export class OrganizationPin {
    * Fences passive requests until a workspace context is verified again.
    */
   public markStale(): void {
+    if (this.staleValue()) return;
     this.staleValue.set(true);
+    this.staleTransitions.next();
   }
 
   /**

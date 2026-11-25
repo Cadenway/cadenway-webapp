@@ -382,10 +382,12 @@ function createInboxStore(): Type<InboxStoreInstance> {
     withState(initialState),
     withProps((store) => {
       const api: InboxApi = inject(InboxApi);
-      const reloadKinds: { notifications: boolean; reminders: boolean } = {
-        notifications: false,
-        reminders: false,
+      const reloadKinds: { notifications: boolean | null; reminders: boolean | null } = {
+        notifications: null,
+        reminders: null,
       };
+      let notificationsOrganization: string | null = null;
+      let remindersOrganization: string | null = null;
       const workspace: WorkspaceContextPort = inject(WORKSPACE_CONTEXT);
       const opened: () => { organizationId: string } | undefined = () => {
         const organizationId: string | null = store._organizationId();
@@ -406,8 +408,12 @@ function createInboxStore(): Type<InboxStoreInstance> {
           }: {
             params: { organizationId: string };
           }): Promise<InboxNotificationPage> => {
-            const passive: boolean = reloadKinds.notifications;
-            reloadKinds.notifications = false;
+            const passive: boolean =
+              reloadKinds.notifications ??
+              (notificationsOrganization !== null &&
+                notificationsOrganization !== params.organizationId);
+            notificationsOrganization = params.organizationId;
+            reloadKinds.notifications = null;
             let page: InboxNotificationPage | undefined;
             for (let attempt: number = 0; attempt < LOAD_ATTEMPTS; attempt += 1) {
               const version: number = store._version();
@@ -431,9 +437,15 @@ function createInboxStore(): Type<InboxStoreInstance> {
             const organizationId: string | null = store._organizationId();
             return organizationId ? { organizationId } : undefined;
           },
-          loader: (): Promise<InboxReminderPage> => {
-            const passive: boolean = reloadKinds.reminders;
-            reloadKinds.reminders = false;
+          loader: ({
+            params,
+          }: {
+            params: { organizationId: string };
+          }): Promise<InboxReminderPage> => {
+            const passive: boolean =
+              remindersOrganization !== params.organizationId || (reloadKinds.reminders ?? false);
+            remindersOrganization = params.organizationId;
+            reloadKinds.reminders = null;
             return api.pendingReminders(passive);
           },
         }),
@@ -664,6 +676,8 @@ function createInboxStore(): Type<InboxStoreInstance> {
           notificationRefreshPending = false;
           notificationReloadQueued = null;
           reminderReloadQueued = null;
+          store._reloadKinds.notifications = null;
+          store._reloadKinds.reminders = null;
           claims = new Map<number, ReadClaim>();
           confirmedIds = new Set<string>();
           confirmedAll = false;
@@ -676,6 +690,7 @@ function createInboxStore(): Type<InboxStoreInstance> {
         }),
         open(): void {
           const previouslyOpened: boolean = store._openings() > 0;
+          if (!previouslyOpened) store._reloadKinds.notifications = false;
           patchState(store, { _openings: 1, _isOpen: true });
           if (previouslyOpened) reloadNotifications();
           refreshReminders(false);

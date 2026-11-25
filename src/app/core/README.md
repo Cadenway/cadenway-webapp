@@ -38,7 +38,8 @@ The root transport provides Angular HTTP to the generated `@cadenway/api-client`
   current account avatar uses initials; the list CSV export uses the generated client and is pinned
   before its content is saved through an object URL.
 - Passive requests mark a mismatched pin stale without revalidating. Further passive pinned requests
-  are fenced locally until verification; foreground focus or visibility while stale requests recovery.
+  are fenced locally until verification; a visible, focused tab requests recovery on becoming stale,
+  otherwise foreground focus or visibility requests it later.
   A rejected realtime ticket waits for a verified commit before reconnecting.
 - Pinned cross-origin GETs are not CORS-simple: each distinct URL requires a preflight, including
   search-as-you-type and cursor pages. The gateway caches preflight results for 600 seconds. Deploy a

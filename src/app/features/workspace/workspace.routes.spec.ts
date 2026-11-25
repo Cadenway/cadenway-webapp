@@ -1,3 +1,4 @@
+import { HttpContext, HttpErrorResponse, HttpRequest } from '@angular/common/http';
 import { Component } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import {
@@ -10,11 +11,11 @@ import {
 } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { BillingService, InboxService, RealtimeService } from '@cadenway/api-client';
-import { filter, firstValueFrom, type Observable, of, Subject } from 'rxjs';
+import { filter, firstValueFrom, type Observable, of, Subject, throwError } from 'rxjs';
 import { io, type Socket } from 'socket.io-client';
 import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 
-import { OrganizationPin } from '@core/api';
+import { OrganizationPin, organizationPinInterceptor, PASSIVE_REQUEST } from '@core/api';
 import { RuntimeConfigStore } from '@core/config';
 import { REALTIME_TERMINAL_FAILURE, RealtimeConnection } from '@core/realtime';
 
@@ -337,13 +338,71 @@ describe('WORKSPACE_ROUTES', () => {
     expect(pin.isSwitching()).toBe(false);
   });
 
+  it('revalidates a passive mismatch that arrives while already focused', async () => {
+    TestBed.overrideProvider(RuntimeConfigStore, {
+      useValue: { config: () => ({ apiUrl: 'https://api.example.test' }) },
+    });
+    vi.spyOn(document, 'hasFocus').mockReturnValue(true);
+    vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible');
+    const harness: RouterTestingHarness = await open('/atelier-nord');
+    const router: Router = TestBed.inject(Router);
+    session.currentOrganization.mockReturnValue(ok(lumen));
+    const navigation: Promise<NavigationEnd> = firstValueFrom(
+      router.events.pipe(filter((event): event is NavigationEnd => event instanceof NavigationEnd)),
+    );
+    const response: Promise<unknown> = TestBed.runInInjectionContext(() =>
+      firstValueFrom(
+        organizationPinInterceptor(
+          new HttpRequest('GET', '/v1/tasks/CAD-1', {
+            context: new HttpContext().set(PASSIVE_REQUEST, true),
+          }),
+          () =>
+            throwError(
+              () =>
+                new HttpErrorResponse({
+                  status: 412,
+                  error: { code: 'organization.context-changed' },
+                }),
+            ),
+        ),
+      ),
+    );
+    await expect(response).rejects.toBeDefined();
+    await navigation;
+    await harness.fixture.whenStable();
+    expect(session.currentOrganization).toHaveBeenCalledTimes(2);
+    expect(session.switchOrganization).toHaveBeenCalledWith(atelierNord.id);
+    expect(TestBed.inject(OrganizationPin).stale()).toBe(false);
+  });
+
   it('revalidates a stale context once when the document returns to the foreground', async () => {
+    TestBed.overrideProvider(RuntimeConfigStore, {
+      useValue: { config: () => ({ apiUrl: 'https://api.example.test' }) },
+    });
     const harness: RouterTestingHarness = await open('/atelier-nord');
     const router: Router = TestBed.inject(Router);
     const pin: OrganizationPin = TestBed.inject(OrganizationPin);
     vi.spyOn(document, 'hasFocus').mockReturnValue(true);
     vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('hidden');
-    pin.markStale();
+    const response: Promise<unknown> = TestBed.runInInjectionContext(() =>
+      firstValueFrom(
+        organizationPinInterceptor(
+          new HttpRequest('GET', '/v1/tasks/CAD-1', {
+            context: new HttpContext().set(PASSIVE_REQUEST, true),
+          }),
+          () =>
+            throwError(
+              () =>
+                new HttpErrorResponse({
+                  status: 412,
+                  error: { code: 'organization.context-changed' },
+                }),
+            ),
+        ),
+      ),
+    );
+    await expect(response).rejects.toBeDefined();
+    expect(pin.stale()).toBe(true);
     window.dispatchEvent(new Event('focus'));
     expect(session.currentOrganization).toHaveBeenCalledTimes(1);
     vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible');

@@ -8,7 +8,14 @@ import {
   type Provider,
   type Signal,
 } from '@angular/core';
-import { type ActivatedRouteSnapshot, Router } from '@angular/router';
+import {
+  type ActivatedRouteSnapshot,
+  NavigationCancel,
+  NavigationEnd,
+  NavigationError,
+  NavigationSkipped,
+  Router,
+} from '@angular/router';
 import { type Subscription } from 'rxjs';
 
 import { OrganizationPin } from '@core/api';
@@ -92,6 +99,7 @@ export function provideWorkspaceRuntime(): (Provider | EnvironmentProviders)[] {
       const router: Router = inject(Router);
       const revalidation: WorkspaceRevalidation = inject(WorkspaceRevalidation);
       let recovering: boolean = false;
+      let staleRecoveryRequested: boolean = false;
       const document: Document = inject(DOCUMENT);
       const recover: () => void = () => {
         if (recovering || router.currentNavigation()) return;
@@ -99,18 +107,46 @@ export function provideWorkspaceRuntime(): (Provider | EnvironmentProviders)[] {
         revalidation.request();
         void router.navigateByUrl(router.url, { onSameUrlNavigation: 'reload' }).finally(() => {
           recovering = false;
+          foreground();
         });
       };
       const subscription: Subscription = pin.contextChanged.subscribe(recover);
       const foreground: () => void = () => {
-        if (pin.stale() && document.visibilityState === 'visible' && document.hasFocus()) recover();
+        if (
+          pin.stale() &&
+          !staleRecoveryRequested &&
+          !recovering &&
+          !router.currentNavigation() &&
+          document.visibilityState === 'visible' &&
+          document.hasFocus()
+        ) {
+          staleRecoveryRequested = true;
+          recover();
+        }
       };
+      const staleSubscription: Subscription = pin.becameStale.subscribe(foreground);
+      const verifiedSubscription: Subscription = pin.organizationVerified.subscribe(() => {
+        staleRecoveryRequested = false;
+      });
+      const navigationSubscription: Subscription = router.events.subscribe((event) => {
+        if (
+          event instanceof NavigationEnd ||
+          event instanceof NavigationCancel ||
+          event instanceof NavigationError ||
+          event instanceof NavigationSkipped
+        ) {
+          queueMicrotask(foreground);
+        }
+      });
       document.addEventListener('visibilitychange', foreground);
       document.defaultView?.addEventListener('focus', foreground);
       inject(DestroyRef).onDestroy(() => {
         document.removeEventListener('visibilitychange', foreground);
         document.defaultView?.removeEventListener('focus', foreground);
         subscription.unsubscribe();
+        staleSubscription.unsubscribe();
+        verifiedSubscription.unsubscribe();
+        navigationSubscription.unsubscribe();
         pin.set(null);
       });
     }),
