@@ -284,14 +284,38 @@ describe('SpacesNavigationStore', () => {
     await expect.poll(() => store.overviews.hasValue()).toBe(true);
   });
 
-  it('reads the list counts again when a task is created', async () => {
+  it('reads the counts of the space of the created task again, and only that space', async () => {
     await expect.poll(() => store.overviews.hasValue()).toBe(true);
     const reads: number = api.overview.mock.calls.length;
+    api.overview.mockResolvedValueOnce({
+      spaceId: 'sp-produit',
+      taskCount: 31,
+      lists: [
+        {
+          list: list('l-backlog', 'sp-produit'),
+          counts: { total: 11, open: 9, done: 2, cancelled: 0, late: 0 },
+        },
+      ],
+    });
 
     creations.next({ key: 'CAD-483', listId: 'l-backlog', status: 'todo', subtasks: 0 });
 
-    await expect.poll(() => api.overview.mock.calls.length).toBe(reads * 2);
+    await expect.poll(() => store.overviews.value()?.['sp-produit']?.taskCount).toBe(31);
+    expect(api.overview).toHaveBeenCalledTimes(reads + 1);
+    expect(api.overview.mock.calls.at(-1)?.[0]).toBe('sp-produit');
     expect(api.spaces).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps the previous counts when reading the space of the created task fails', async () => {
+    await expect.poll(() => store.overviews.hasValue()).toBe(true);
+    const reads: number = api.overview.mock.calls.length;
+    api.overview.mockRejectedValueOnce(new Error('unavailable'));
+
+    creations.next({ key: 'CAD-483', listId: 'l-backlog', status: 'todo', subtasks: 0 });
+
+    await expect.poll(() => api.overview.mock.calls.length).toBe(reads + 1);
+    await Promise.resolve();
+    expect(store.overviews.value()?.['sp-produit']?.taskCount).toBe(30);
   });
 
   it('reads the spaces again on refresh', async () => {

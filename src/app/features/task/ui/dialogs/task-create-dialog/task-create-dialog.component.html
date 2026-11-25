@@ -130,7 +130,7 @@
           [formField]="createForm.name"
         />
         @if (createForm.name().touched() && createForm.name().invalid()) {
-          @for (error of createForm.name().errors(); track error.kind) {
+          @for (error of createForm.name().errors(); track $index) {
             <p class="text-xs text-destructive" role="alert">{{ error.message }}</p>
           }
         }

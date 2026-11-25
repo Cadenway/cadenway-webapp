@@ -17,7 +17,8 @@ import {
   withState,
 } from '@ngrx/signals';
 import { rxMethod } from '@ngrx/signals/rxjs-interop';
-import { tap } from 'rxjs';
+import { tapResponse } from '@ngrx/operators';
+import { concatMap, EMPTY, from, type Observable, pipe } from 'rxjs';
 
 import { type CreatedTask, TaskCreate } from '@features/task';
 import { WORKSPACE_CONTEXT } from '@features/workspace/ports/workspace-context';
@@ -296,11 +297,32 @@ function createSpacesNavigationStore(): Type<SpacesNavigationStoreInstance> {
           }
         }),
         _countCreations: rxMethod<CreatedTask>(
-          tap((): void => {
-            if (!store.overviews.reload() && store.overviews.isLoading()) {
-              overviewRefreshQueued = true;
-            }
-          }),
+          pipe(
+            concatMap((task: CreatedTask): Observable<SpaceOverview> => {
+              const organizationId: string | null = store._organizationId();
+              const spaceId: string | undefined = store.overviews.hasValue()
+                ? Object.values(store.overviews.value()).find((overview: SpaceOverview): boolean =>
+                    overview.lists.some(
+                      (summary: ListSummary): boolean => summary.list.id === task.listId,
+                    ),
+                  )?.spaceId
+                : undefined;
+              if (spaceId === undefined) return EMPTY;
+              return from(store._api.overview(spaceId, todayIso())).pipe(
+                tapResponse({
+                  next: (overview: SpaceOverview): void => {
+                    if (store._organizationId() !== organizationId) return;
+                    if (store.overviews.isLoading()) {
+                      overviewRefreshQueued = true;
+                    } else if (store.overviews.hasValue()) {
+                      store.overviews.set({ ...store.overviews.value(), [spaceId]: overview });
+                    }
+                  },
+                  error: (): void => undefined,
+                }),
+              );
+            }),
+          ),
         ),
         _flushOverviews: signalMethod<string>((status: string): void => {
           if (status !== 'loading' && status !== 'reloading' && overviewRefreshQueued) {
@@ -417,8 +439,10 @@ function createSpacesNavigationStore(): Type<SpacesNavigationStoreInstance> {
  * sidebar, the sprint progress and the list screens share one read. Keyed on the organization
  * id committed by the workspace. A switch closes every space and reads again. At most four
  * overviews run at once; a failed read offers an inline retry. A task created from this tab reads
- * the overviews, and so the lists' counts, again. Favorites change optimistically; a refusal
- * restores the previous list.
+ * the overview of its list's space again, and only that one, one creation after the other so an
+ * older answer never overwrites a newer one: a failed read keeps the previous counts, and a read
+ * while every overview is being read again queues one more full read.
+ * Favorites change optimistically; a refusal restores the previous list.
  *
  * @type {ReturnType<typeof createSpacesNavigationStore>}
  */

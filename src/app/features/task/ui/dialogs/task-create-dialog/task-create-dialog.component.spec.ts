@@ -444,7 +444,8 @@ describe('TaskCreateDialog', () => {
     buttonNamed('Créer la tâche')?.click();
     await fixture.whenStable();
     expect(error).not.toHaveBeenCalled();
-    expect(document.querySelector('[role="alert"]')?.textContent).toBeTruthy();
+    expect(document.querySelector('#task-create-name ~ [role="alert"]')?.textContent).toBeTruthy();
+    expect(document.querySelector('cw-dialog-footer [role="alert"]')).toBeNull();
   });
 
   it('keeps field and unmapped validation issues in the form', async () => {
