@@ -139,8 +139,10 @@ function createSpaceOverviewStore(): Type<SpaceOverviewStoreInstance> {
         const spaceId: string | null = store.spaceId();
         return spaceId === null ? undefined : { spaceId };
       };
+      const following: { baseline: SpaceOverview | undefined } = { baseline: undefined };
       return {
         _navigation: navigation,
+        _following: following,
         space: resource({
           params: bySpace,
           loader: ({
@@ -159,13 +161,17 @@ function createSpaceOverviewStore(): Type<SpaceOverviewStoreInstance> {
           }: {
             params: { spaceId: string };
             abortSignal: AbortSignal;
-          }): Promise<SpaceOverview> =>
-            (navigation.overviews.status() === 'resolved' ||
+          }): Promise<SpaceOverview> => {
+            const current: SpaceOverview | undefined = navigation.overviews.hasValue()
+              ? navigation.overviews.value()[params.spaceId]
+              : undefined;
+            following.baseline = current;
+            return (navigation.overviews.status() === 'resolved' ||
               navigation.overviews.status() === 'local') &&
-            navigation.overviews.hasValue() &&
-            params.spaceId in navigation.overviews.value()
-              ? Promise.resolve(navigation.overviews.value()[params.spaceId])
-              : api.overview(params.spaceId, todayIso(), abortSignal),
+              current !== undefined
+              ? Promise.resolve(current)
+              : api.overview(params.spaceId, todayIso(), abortSignal);
+          },
         }),
         milestones: resource({
           params: bySpace,
@@ -197,7 +203,11 @@ function createSpaceOverviewStore(): Type<SpaceOverviewStoreInstance> {
         }),
         _followNavigation: signalMethod<SpaceOverview | undefined>(
           (next: SpaceOverview | undefined): void => {
-            if (next === undefined) return;
+            // The value the sidebar held when the page's read began predates that read.
+            if (next === undefined || next === store._following.baseline) {
+              pending = undefined;
+              return;
+            }
             if (next.spaceId !== store.spaceId()) return;
             if (store.overview.isLoading()) pending = next;
             else apply(next);

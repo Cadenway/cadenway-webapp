@@ -509,8 +509,8 @@ export class TaskCreateDialog {
    *
    * @description
    * The fields a refused creation (422) named, each with the value it had then. A field's error
-   * goes for good once its value changes, even if it comes back to the refused value; each opening
-   * starts without any, which submission errors of Signal Forms could not offer (they survive a
+   * goes for good once its value changes, even if it comes back to the refused value, and all go
+   * when another destination list is picked; each opening starts without any, which submission errors of Signal Forms could not offer (they survive a
    * reset).
    *
    * @type {WritableSignal<Readonly<Partial<Record<ServerIssueField, unknown>>>>}
@@ -673,6 +673,15 @@ export class TaskCreateDialog {
       },
       this.destroyRef,
     );
+    let destination: string | null = null;
+    effect(() => {
+      const listId: string | null = this.store.destination()?.listId ?? null;
+      if (listId === destination) return;
+      destination = listId;
+      untracked((): void => {
+        if (Object.keys(this.serverIssues()).length > 0) this.serverIssues.set({});
+      });
+    });
     effect(() => {
       const issues: Readonly<Partial<Record<ServerIssueField, unknown>>> = this.serverIssues();
       const model: TaskCreateModel = this.model();
@@ -936,13 +945,16 @@ export class TaskCreateDialog {
             Array.isArray(issues) &&
             issues.length
           ) {
+            // Keyed to the fields as they are now: an edit made while the request ran must not
+            // hide the issue before it is ever shown.
+            const now: TaskCreateModel = this.model();
             const refused: Partial<Record<ServerIssueField, unknown>> = {};
             for (const issue of issues as unknown[]) {
               const path: unknown =
                 typeof issue === 'object' && issue !== null && 'path' in issue ? issue.path : null;
               const root: string = typeof path === 'string' ? path.split('.')[0].split('[')[0] : '';
               const field: ServerIssueField = SERVER_ISSUE_FIELDS[root] ?? 'form';
-              refused[field] = field === 'form' ? model : model[field];
+              refused[field] = field === 'form' ? now : now[field];
             }
             this.serverIssues.set(refused);
             return undefined;

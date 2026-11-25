@@ -407,10 +407,10 @@ describe('RealtimeConnection', () => {
     await flush();
     const moved: Record<string, unknown> = {
       id: '019a6000-0000-7000-8000-000000000009',
-      type: 'task.moved.v1',
+      type: 'list.tasks-changed.v1',
       at: '2026-11-08T09:00:00Z',
       version: 5,
-      data: { taskKey: 'CAD-482' },
+      data: { listId: '019a6000-0000-7000-8000-000000000004' },
     };
 
     sockets[0].trigger('change', {
@@ -423,7 +423,7 @@ describe('RealtimeConnection', () => {
 
     expect(received.mock.calls.map((call: unknown[]) => (call[0] as RealtimeChange).type)).toEqual([
       'task.updated.v1',
-      'task.moved.v1',
+      'list.tasks-changed.v1',
     ]);
     watch.unsubscribe();
   });

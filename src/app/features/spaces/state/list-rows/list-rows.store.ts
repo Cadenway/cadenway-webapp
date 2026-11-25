@@ -108,11 +108,11 @@ const ENTER_MS: number = 520;
  * @description
  * Time between the first realtime notice or completed status write of a window and the read of the
  * rows it gathers, in milliseconds: one read per window, so a steady flow of changes cannot hold
- * the rows back.
+ * the rows back, and wide enough that the reads leave room for « load more » while it lasts.
  *
  * @type {number}
  */
-const NOTICE_REFRESH_MS: number = 300;
+const NOTICE_REFRESH_MS: number = 1000;
 
 /**
  * Constant CHILD_READS
@@ -1334,7 +1334,7 @@ function createListRowsStore(): Type<ListRowsStoreInstance> {
  * its first page only, so its header shows. A row is filed under its settled status, so it joins
  * its new group 460 ms after the last click while its icon and word change at once. Subtasks are
  * read under each opened parent (`listSubtasks`), two levels deep. A realtime notice of the list
- * reads the rows again in place, 300 ms after the first notice of a window; the status store keeps pending
+ * reads the rows again in place, 1 s after the first notice of a window; the status store keeps pending
  * and in-flight changes over what it reads. The rows follow the committed organization: a switch
  * or another list empties them at once and drops late answers.
  *

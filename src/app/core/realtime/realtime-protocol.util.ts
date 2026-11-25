@@ -17,16 +17,6 @@ import type {
 const UUID: RegExp = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
- * Constant TASK_KEY
- *
- * @description
- * A task key (`CAD-482`), as the realtime contract's `taskMembership` notice data carries it.
- *
- * @type {RegExp}
- */
-const TASK_KEY: RegExp = /^[A-Z]{2,5}-[1-9][0-9]{0,8}$/;
-
-/**
  * Function record
  *
  * @description
@@ -110,24 +100,6 @@ export function heartbeatInterval(value: unknown, organization: string | null): 
 }
 
 /**
- * Constant TASK_MEMBERSHIP_NOTICES
- *
- * @description
- * The notices that tell a list room a task joined or left it; their data is the task key alone,
- * since a trashed task can no longer be authorized by itself.
- *
- * @type {ReadonlySet<string>}
- */
-const TASK_MEMBERSHIP_NOTICES: ReadonlySet<string> = new Set([
-  'task.created.v1',
-  'task.archived.v1',
-  'task.unarchived.v1',
-  'task.trashed.v1',
-  'task.restored.v1',
-  'task.moved.v1',
-]);
-
-/**
  * Function parseChange
  *
  * @description
@@ -140,9 +112,9 @@ export function parseChange(value: unknown): RealtimeChange | null {
   if (!envelope(value) || !record(value['data'])) return null;
   const data: Record<string, unknown> = value['data'];
   const type: unknown = value['type'];
-  if (typeof type === 'string' && TASK_MEMBERSHIP_NOTICES.has(type)) {
-    const taskKey: unknown = data['taskKey'];
-    return exactKeys(data, ['taskKey']) && typeof taskKey === 'string' && TASK_KEY.test(taskKey)
+  if (type === 'list.tasks-changed.v1') {
+    const listId: unknown = data['listId'];
+    return exactKeys(data, ['listId']) && typeof listId === 'string' && UUID.test(listId)
       ? { id: value['id'] as string, type, at: value['at'] as string, data }
       : null;
   }

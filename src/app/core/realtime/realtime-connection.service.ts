@@ -298,7 +298,7 @@ export class RealtimeConnection {
    *
    * @description
    * Most recent browser notices, by type and ID: the contract deduplicates on both, since a move
-   * gives `task.updated.v1` and `task.moved.v1` the same ID for two different lists.
+   * gives `task.updated.v1` and `list.tasks-changed.v1` the same ID for two different lists.
    *
    * @type {Set<string>}
    * @readonly
@@ -1136,7 +1136,7 @@ export class RealtimeConnection {
     )
       return;
     const type: unknown = 'type' in notice ? notice.type : undefined;
-    const key: string = `${typeof type === 'string' ? type : ''} ${notice.id}`;
+    const key: string = `${typeof type === 'string' ? type : ''}\u0000${notice.id}`;
     if (this.seen.has(key)) return;
     if (this.seen.size === 128) this.seen.delete(this.seen.values().next().value ?? '');
     this.seen.add(key);
