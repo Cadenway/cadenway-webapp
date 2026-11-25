@@ -47,7 +47,7 @@ options?)`, `requestCancel(tasks, options?)`, `pendingStatus(taskId)`, `displaye
   collection is read to its last cursor page.
 - `@cadenway/contracts` enums: `STATUS_KEYS`, `STATUS_CATEGORIES`, `STATUS_CATEGORY_BY_KEY`,
   `MILESTONE_STATUS_KEYS`, `PRIORITY_KEYS`, `CANCEL_REASONS`, `RECURRENCES`.
-- `@core/api` (`hasProblemCode`), `@core/shortcuts` (`N`, Ctrl Entrée), `@shared/layout-slot`
+- `@core/api` (`hasProblemCode`, `OrganizationPin`), `@core/shortcuts` (`N`, Ctrl Entrée), `@shared/layout-slot`
   (`ShellOverlay`, slot contribution), Workspace's `ports/workspace-context`.
 - `@cadenway/ui` (`badge`, `button`, `combobox`, `date-picker`, `dialog`, `input`, `kbd`, `menu`,
   `priority-icon`, `radio-group`, `split-button`, `status-icon`, `switch`, `textarea`, `toast`) and
@@ -67,6 +67,8 @@ options?)`, `requestCancel(tasks, options?)`, `pendingStatus(taskId)`, `displaye
   the failure toast. A confirmed change shows a 6 s toast whose « Annuler » sends the previous
   status at once, only while the task still has the status that change gave it. Undoing a change
   away from « Annulé » sends its reason again without its note, which task summaries do not carry.
+  A pending write flushed after destruction is dropped if its queued organization is no longer
+  the committed organization.
 - « Annulé » always opens the cancel reason dialog first (`cancelRequest`): Doublon, Ne sera pas
   fait, Hors périmètre, Obsolète and an optional « Précision »; « Garder la tâche » changes nothing.
   The consumer renders `cw-task-cancel-dialog` bound to `cancelRequest`, `confirmCancel` and
@@ -80,7 +82,8 @@ options?)`, `requestCancel(tasks, options?)`, `pendingStatus(taskId)`, `displaye
   labels the first time the dialog opens; the statuses, the next key and the templates follow the
   chosen list's space, and the next key is read again after each creation. Failed reads expose
   « Réessayer », never a successful empty result. A creation sent again with the same body
-  reuses its `Idempotency-Key`; a changed body gets a new one. A subtask (`parentKey`) goes to
+  reuses its `Idempotency-Key`, including across dialog openings in the same organization; a changed
+  body or organization gets a new one. A subtask (`parentKey`) goes to
   `createSubtask`, which takes no drafted subtasks or checklist. The parent key requires its list id.
 - The create dialog starts each opening afresh: the presets, the current user assigned, « À faire »
   and « Moyenne ». « Créer d'autres tâches » keeps it open and empties the name, the description,

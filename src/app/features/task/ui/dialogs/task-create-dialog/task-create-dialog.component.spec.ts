@@ -349,6 +349,27 @@ describe('TaskCreateDialog', () => {
     expect(create.mock.calls[1][2]).toBe(create.mock.calls[0][2]);
   });
 
+  it('reuses the unresolved creation key after closing and reopening', async () => {
+    create.mockReturnValueOnce(throwError(() => new Error('503')));
+    const service: TaskCreate = TestBed.inject(TaskCreate);
+    service.open();
+    await fixture.whenStable();
+    typeName('Préparer la démo');
+    await fixture.whenStable();
+    buttonNamed('Créer la tâche')?.click();
+    await fixture.whenStable();
+    service.close();
+    await fixture.whenStable();
+    service.open();
+    await fixture.whenStable();
+    typeName('Préparer la démo');
+    await fixture.whenStable();
+    buttonNamed('Créer la tâche')?.click();
+    await fixture.whenStable();
+    expect(create).toHaveBeenCalledTimes(2);
+    expect(create.mock.calls[1][2]).toBe(create.mock.calls[0][2]);
+  });
+
   it.each([
     { status: 403, code: 'access.role-insufficient' },
     { status: 422, code: 'task.status-hidden' },

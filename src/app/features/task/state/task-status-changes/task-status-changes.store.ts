@@ -22,7 +22,7 @@ import {
 } from 'rxjs';
 
 import { CANCEL_REASON_LABELS } from '../../constants/task-copy/task-copy.constants';
-import { hasProblemCode, OrganizationSwitchPendingError } from '@core/api';
+import { hasProblemCode, OrganizationPin, OrganizationSwitchPendingError } from '@core/api';
 import { TaskApi } from '../../data-access/services/task-api/task-api.service';
 import type { StatusOption } from '../../models/status-option/status-option.interface';
 import type {
@@ -83,6 +83,17 @@ interface PendingChange {
    * @readonly
    */
   readonly cancellation: TaskCancellation | null;
+
+  /**
+   * Property organizationId
+   *
+   * @description
+   * Committed organization when this change was queued.
+   *
+   * @type {string | null}
+   * @readonly
+   */
+  readonly organizationId: string | null;
   // #endregion
 }
 
@@ -570,6 +581,7 @@ function createTaskStatusChanges(): Type<TaskStatusChangesInstance> {
     withMethods(
       (store, api: TaskApi = inject(TaskApi), toasts: CwToastService = inject(CwToastService)) => {
         const destroyRef: DestroyRef = inject(DestroyRef);
+        const organizationPin: OrganizationPin = inject(OrganizationPin);
         const inFlight: Map<string, Observable<unknown>> = new Map<string, Observable<unknown>>();
         const batches: Map<
           string,
@@ -660,7 +672,12 @@ function createTaskStatusChanges(): Type<TaskStatusChangesInstance> {
         }: StatusRequest): Observable<unknown> => {
           const pending: PendingChange | undefined = store._pending()[id];
           const task: TaskSummary | undefined = store._tasks()[id];
-          if (pending?.status !== status || !task) return EMPTY;
+          if (
+            pending?.status !== status ||
+            !task ||
+            pending.organizationId !== organizationPin.current()
+          )
+            return EMPTY;
           const before: SettledStatus | undefined = store._settled()[id];
           const current: SettledStatus | null = settledOf(store._settled(), task);
           const from: StatusKey = current?.status ?? task.status;
@@ -817,7 +834,10 @@ function createTaskStatusChanges(): Type<TaskStatusChangesInstance> {
             return;
           }
           patchState(store, (state: TaskStatusChangesState) => ({
-            _pending: { ...state._pending, [task.id]: { status, cancellation } },
+            _pending: {
+              ...state._pending,
+              [task.id]: { status, cancellation, organizationId: organizationPin.current() },
+            },
           }));
           send({ id: task.id, status, undo: false });
         };
@@ -844,6 +864,7 @@ function createTaskStatusChanges(): Type<TaskStatusChangesInstance> {
                 cancellation: snapshot.cancelReason
                   ? { reason: snapshot.cancelReason, note: '' }
                   : null,
+                organizationId: organizationPin.current(),
               },
             },
           }));

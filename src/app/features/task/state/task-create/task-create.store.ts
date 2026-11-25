@@ -451,7 +451,6 @@ function createTaskCreateStore(): Type<TaskCreateStoreInstance> {
           _active: true,
           _listId: listId ?? store._listId(),
           creating: false,
-          _attempt: null,
         });
       },
       reset(organizationId: string): void {
@@ -476,20 +475,21 @@ function createTaskCreateStore(): Type<TaskCreateStoreInstance> {
         const attempt: { readonly key: string; readonly body: string } | null = store._attempt();
         const key: string = attempt?.body === body ? attempt.key : crypto.randomUUID();
         const organizationId: string = store._organizationId();
-        patchState(store, { creating: true, _attempt: { key, body } });
+        const submittedAttempt: { readonly key: string; readonly body: string } = { key, body };
+        patchState(store, { creating: true, _attempt: submittedAttempt });
         try {
           const created: CreatedTask = await firstValueFrom(
             parentKey === null
               ? api.create(listId ?? '', draft, key)
               : api.createSubtask(parentKey, draft, key),
           );
-          if (organizationId === store._organizationId() && store._attempt()?.key === key) {
+          if (organizationId === store._organizationId() && store._attempt() === submittedAttempt) {
             patchState(store, { creating: false, _attempt: null });
             store._space.reload();
           }
           return created;
         } catch (error: unknown) {
-          if (organizationId === store._organizationId() && store._attempt()?.key === key)
+          if (organizationId === store._organizationId() && store._attempt() === submittedAttempt)
             patchState(store, { creating: false });
           throw error;
         }

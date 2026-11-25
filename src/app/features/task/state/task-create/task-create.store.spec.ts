@@ -1,5 +1,5 @@
 import { TestBed } from '@angular/core/testing';
-import { type Observable, of, throwError } from 'rxjs';
+import { type Observable, of, Subject, throwError } from 'rxjs';
 import { describe, expect, it, type Mock, vi } from 'vitest';
 
 import { TaskCreateApi } from '../../data-access/services/task-create-api/task-create-api.service';
@@ -201,5 +201,49 @@ describe('TaskCreateStore', () => {
     await store.create({ ...draft, name: 'Autre' }, null);
     await store.create({ ...draft, name: 'Encore' }, null);
     expect(create.mock.calls[0][2]).not.toBe(create.mock.calls[1][2]);
+  });
+
+  it('replaces an unresolved key when the body or organization changes', async () => {
+    const create: Mock<(listId: string, value: TaskDraft, key: string) => Observable<CreatedTask>> =
+      vi.fn(() => throwError(() => new Error('offline')));
+    const { store }: ReturnType<typeof setup> = setup({ create });
+    store.reset('org-one');
+    store.activate(null);
+    await vi.waitFor(() => {
+      expect(store.destination()?.listId).toBe('backlog');
+    });
+    await expect(store.create(draft, null)).rejects.toThrow('offline');
+    await expect(store.create({ ...draft, name: 'Changed' }, null)).rejects.toThrow('offline');
+    expect(create.mock.calls[1][2]).not.toBe(create.mock.calls[0][2]);
+    store.reset('org-two');
+    store.activate(null);
+    await vi.waitFor(() => {
+      expect(store.destination()?.listId).toBe('backlog');
+    });
+    await expect(store.create({ ...draft, name: 'Changed' }, null)).rejects.toThrow('offline');
+    expect(create.mock.calls[2][2]).not.toBe(create.mock.calls[1][2]);
+  });
+
+  it('keeps a newer retry in flight when an earlier submission settles', async () => {
+    const first: Subject<CreatedTask> = new Subject<CreatedTask>();
+    const second: Subject<CreatedTask> = new Subject<CreatedTask>();
+    const create: Mock<(listId: string, value: TaskDraft, key: string) => Observable<CreatedTask>> =
+      vi.fn().mockReturnValueOnce(first).mockReturnValueOnce(second);
+    const { store }: ReturnType<typeof setup> = setup({ create });
+    store.activate(null);
+    await vi.waitFor(() => {
+      expect(store.destination()?.listId).toBe('backlog');
+    });
+    const original: Promise<CreatedTask> = store.create(draft, null);
+    store.activate(null);
+    const retry: Promise<CreatedTask> = store.create(draft, null);
+    expect(create.mock.calls[1][2]).toBe(create.mock.calls[0][2]);
+    const created: CreatedTask = { key: 'CAD-495', listId: 'backlog', status: 'todo', subtasks: 0 };
+    first.next(created);
+    await original;
+    expect(store.creating()).toBe(true);
+    second.next(created);
+    await retry;
+    expect(store.creating()).toBe(false);
   });
 });

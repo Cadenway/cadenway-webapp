@@ -6,7 +6,7 @@ import { type Observable, of, Subject, throwError } from 'rxjs';
 import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 
 import { CANCEL_REASON_LABELS, STATUS_LABELS } from '../../constants/task-copy/task-copy.constants';
-import { OrganizationSwitchPendingError } from '@core/api';
+import { OrganizationPin, OrganizationSwitchPendingError } from '@core/api';
 import { TaskApi } from '../../data-access/services/task-api/task-api.service';
 import type {
   TaskCancellation,
@@ -378,6 +378,25 @@ describe('TaskStatusChangesStore', () => {
     expect(changeStatus).toHaveBeenLastCalledWith('CAD-482', 4, 'review', null);
     expect(changeStatus).toHaveBeenCalledTimes(2);
     expect(show).not.toHaveBeenCalled();
+  });
+
+  it('drops the deferred write if the organization changes after destruction', async () => {
+    const response: Subject<TaskSummary> = new Subject<TaskSummary>();
+    changeStatus.mockReturnValueOnce(response);
+    const store: InstanceType<typeof TaskStatusChangesStore> = setup();
+    const pin: OrganizationPin = TestBed.inject(OrganizationPin);
+    pin.set('atelier-nord');
+    store.request(task, 'progress');
+    await vi.advanceTimersByTimeAsync(STATUS_SETTLE_MS);
+    store.request(task, 'review');
+    TestBed.resetTestingModule();
+    pin.set('other-organization');
+    response.next(saved('progress', 4));
+    response.complete();
+    expect(changeStatus).toHaveBeenCalledTimes(1);
+    expect(show).not.toHaveBeenCalled();
+    expect(error).not.toHaveBeenCalled();
+    expect(warning).not.toHaveBeenCalled();
   });
 
   it('allows retrying a failed undo from the same toast', async () => {
