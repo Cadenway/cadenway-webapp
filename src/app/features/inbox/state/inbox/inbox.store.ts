@@ -42,6 +42,12 @@ import {
   timer,
 } from 'rxjs';
 
+import {
+  OrganizationPin,
+  OrganizationSwitchPendingError,
+  readProblem,
+  type ApiProblem,
+} from '@core/api';
 import { RealtimeConnection, type PersonalNotice } from '@core/realtime';
 
 import {
@@ -386,6 +392,38 @@ function createInboxStore(): Type<InboxStoreInstance> {
         notifications: null,
         reminders: null,
       };
+      const pin: OrganizationPin = inject(OrganizationPin);
+      const refused: {
+        badge: boolean;
+        notifications: boolean;
+        reminders: boolean;
+        retriedRevision: Record<'badge' | 'notifications' | 'reminders', number>;
+        connectedSkip: Record<'badge' | 'notifications' | 'reminders', number>;
+      } = {
+        badge: false,
+        notifications: false,
+        reminders: false,
+        retriedRevision: { badge: -1, notifications: -1, reminders: -1 },
+        connectedSkip: { badge: -1, notifications: -1, reminders: -1 },
+      };
+      const recordRefusal: (
+        kind: 'badge' | 'notifications' | 'reminders',
+        error: unknown,
+        revision: number,
+      ) => void = (
+        kind: 'badge' | 'notifications' | 'reminders',
+        error: unknown,
+        revision: number,
+      ): void => {
+        const problem: ApiProblem | null = readProblem(error);
+        if (
+          (error instanceof OrganizationSwitchPendingError ||
+            (problem?.status === 412 && problem.code === 'organization.context-changed')) &&
+          revision === pin.revision() &&
+          revision !== refused.retriedRevision[kind]
+        )
+          refused[kind] = true;
+      };
       let notificationsOrganization: string | null = null;
       let remindersOrganization: string | null = null;
       const workspace: WorkspaceContextPort = inject(WORKSPACE_CONTEXT);
@@ -396,6 +434,9 @@ function createInboxStore(): Type<InboxStoreInstance> {
       return {
         _api: api,
         _workspace: workspace,
+        _pin: pin,
+        _refused: refused,
+        _recordRefusal: recordRefusal,
         _window: inject(DOCUMENT).defaultView,
         _realtime: inject(RealtimeConnection, { optional: true }),
         _destroyRef: inject(DestroyRef),
@@ -414,11 +455,17 @@ function createInboxStore(): Type<InboxStoreInstance> {
                 notificationsOrganization !== params.organizationId);
             notificationsOrganization = params.organizationId;
             reloadKinds.notifications = null;
+            const revision: number = pin.revision();
             let page: InboxNotificationPage | undefined;
             for (let attempt: number = 0; attempt < LOAD_ATTEMPTS; attempt += 1) {
               const version: number = store._version();
               const badgeVersion: number = store._badgeVersion();
-              page = await api.notifications(passive);
+              try {
+                page = await api.notifications(passive);
+              } catch (error: unknown) {
+                if (passive) recordRefusal('notifications', error, revision);
+                throw error;
+              }
               if (version !== store._version()) continue;
               if (
                 params.organizationId === store._organizationId() &&
@@ -446,7 +493,11 @@ function createInboxStore(): Type<InboxStoreInstance> {
               remindersOrganization !== params.organizationId || (reloadKinds.reminders ?? false);
             remindersOrganization = params.organizationId;
             reloadKinds.reminders = null;
-            return api.pendingReminders(passive);
+            const revision: number = pin.revision();
+            return api.pendingReminders(passive).catch((error: unknown) => {
+              if (passive) recordRefusal('reminders', error, revision);
+              throw error;
+            });
           },
         }),
       };
@@ -464,6 +515,8 @@ function createInboxStore(): Type<InboxStoreInstance> {
       let reminderWrites: number = 0;
       let reminderRefreshPending: boolean | null = null;
       let notificationRefreshPending: boolean = false;
+      let recoveryBadgePending: boolean = false;
+      let recoveryNotificationsPending: boolean = false;
       let notificationReloadQueued: boolean | null = null;
       let reminderReloadQueued: boolean | null = null;
 
@@ -559,9 +612,21 @@ function createInboxStore(): Type<InboxStoreInstance> {
           if (
             organizationAtStart === organizationVersion &&
             claims.size === 0 &&
+            !notificationRefreshPending
+          ) {
+            if (recoveryBadgePending) store._refreshBadge.next();
+            if (recoveryNotificationsPending && store._isOpen()) reloadNotifications(true);
+            recoveryBadgePending = false;
+            recoveryNotificationsPending = false;
+          }
+          if (
+            organizationAtStart === organizationVersion &&
+            claims.size === 0 &&
             notificationRefreshPending
           ) {
             notificationRefreshPending = false;
+            recoveryBadgePending = false;
+            recoveryNotificationsPending = false;
             refreshNotifications();
           }
         }
@@ -634,38 +699,84 @@ function createInboxStore(): Type<InboxStoreInstance> {
               if (organizationAtStart === organizationVersion) refreshReminders();
             });
         },
+        _verified(): void {
+          const refused: typeof store._refused = store._refused;
+          if (!refused.badge && !refused.notifications && !refused.reminders) return;
+          for (const kind of ['badge', 'notifications', 'reminders'] as const) {
+            if (refused[kind]) {
+              refused.retriedRevision[kind] = store._pin.revision();
+              if (
+                (kind === 'badge' || store._isOpen()) &&
+                (store._realtime?.status() === 'connecting' ||
+                  store._realtime?.status() === 'reconnecting')
+              )
+                refused.connectedSkip[kind] = store._pin.revision();
+            }
+          }
+          if (claims.size > 0) {
+            recoveryBadgePending ||= refused.badge;
+            recoveryNotificationsPending ||= refused.notifications;
+          } else {
+            if (refused.badge) store._refreshBadge.next();
+            if (refused.notifications && store._isOpen()) reloadNotifications(true);
+          }
+          if (refused.reminders && store._isOpen()) refreshReminders();
+          refused.badge = false;
+          refused.notifications = false;
+          refused.reminders = false;
+        },
         _connected(): void {
-          refreshReminders();
-          if (!store._isOpen()) return;
+          store._refused.badge = false;
+          store._refused.notifications = false;
+          store._refused.reminders = false;
+          const revision: number = store._pin.revision();
+          if (store._refused.connectedSkip.reminders !== revision) refreshReminders();
+          store._refused.connectedSkip.reminders = -1;
+          const skipNotifications: boolean =
+            store._refused.connectedSkip.notifications === revision;
+          store._refused.connectedSkip.notifications = -1;
+          if (!store._isOpen() || skipNotifications) return;
           if (claims.size > 0) notificationRefreshPending = true;
           else reloadNotifications(true);
         },
         _poll: rxMethod<{ organizationId: string; connected: boolean }>(
           pipe(
-            switchMap(({ organizationId }: { organizationId: string; connected: boolean }) => {
-              const triggers: Observable<unknown>[] = [timer(0, POLL_MS), store._refreshBadge];
-              if (store._window) triggers.push(fromEvent(store._window, 'focus'));
-              return merge(...triggers).pipe(
-                switchMap(() => {
-                  const version: number = store._version();
-                  return store._api.unreadCount().pipe(
-                    catchError(() => EMPTY),
-                    tap((unreadCount: number) => {
-                      if (
-                        sameOrganization(organizationId) &&
-                        version === store._version() &&
-                        claims.size === 0
-                      ) {
-                        patchState(store, {
-                          unreadCount,
-                          _badgeVersion: store._badgeVersion() + 1,
-                        });
-                      }
-                    }),
-                  );
-                }),
-              );
-            }),
+            switchMap(
+              ({ organizationId, connected }: { organizationId: string; connected: boolean }) => {
+                const skip: boolean =
+                  connected && store._refused.connectedSkip.badge === store._pin.revision();
+                if (connected) store._refused.connectedSkip.badge = -1;
+                const triggers: Observable<unknown>[] = [
+                  timer(skip ? POLL_MS : 0, POLL_MS),
+                  store._refreshBadge,
+                ];
+                if (store._window) triggers.push(fromEvent(store._window, 'focus'));
+                return merge(...triggers).pipe(
+                  switchMap(() => {
+                    const version: number = store._version();
+                    const revision: number = store._pin.revision();
+                    return store._api.unreadCount().pipe(
+                      catchError((error: unknown) => {
+                        store._recordRefusal('badge', error, revision);
+                        return EMPTY;
+                      }),
+                      tap((unreadCount: number) => {
+                        if (
+                          sameOrganization(organizationId) &&
+                          version === store._version() &&
+                          claims.size === 0
+                        ) {
+                          patchState(store, {
+                            unreadCount,
+                            _badgeVersion: store._badgeVersion() + 1,
+                          });
+                        }
+                      }),
+                    );
+                  }),
+                );
+              },
+            ),
           ),
         ),
         _followOrganization: signalMethod<string>((organizationId: string): void => {
@@ -674,6 +785,13 @@ function createInboxStore(): Type<InboxStoreInstance> {
           reminderWrites = 0;
           reminderRefreshPending = null;
           notificationRefreshPending = false;
+          recoveryBadgePending = false;
+          recoveryNotificationsPending = false;
+          store._refused.badge = false;
+          store._refused.notifications = false;
+          store._refused.reminders = false;
+          store._refused.retriedRevision = { badge: -1, notifications: -1, reminders: -1 };
+          store._refused.connectedSkip = { badge: -1, notifications: -1, reminders: -1 };
           notificationReloadQueued = null;
           reminderReloadQueued = null;
           store._reloadKinds.notifications = null;
@@ -791,6 +909,9 @@ function createInboxStore(): Type<InboxStoreInstance> {
           .subscribe(() => {
             store._connected();
           });
+        store._pin.organizationVerified.pipe(takeUntilDestroyed()).subscribe(() => {
+          if (store._pin.current() === store._organizationId()) store._verified();
+        });
         const personalNotices: Observable<PersonalNotice> =
           store._realtime?.personalNotices ?? EMPTY;
         toObservable(organizationId)

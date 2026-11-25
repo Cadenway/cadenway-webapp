@@ -2,7 +2,7 @@
   <button
     cwAppRailItem
     icon="phosphorTrayBold"
-    activeIcon="phosphorTrayBold"
+    activeIcon="phosphorTrayFill"
     [badge]="badge()"
     [badgeLabel]="badgeLabel()"
     [cwPopoverTrigger]="popover"
@@ -17,21 +17,20 @@
   #popover
   side="right"
   align="start"
-  size="lg"
-  ariaLabel="Inbox"
-  i18n-ariaLabel="@@inbox.title"
+  size="xl"
+  padding="none"
+  [ariaLabel]="title"
   [open]="open()"
   (openChange)="setOpen($event)"
 >
   <div #popoverContent class="flex min-w-0 flex-col" data-testid="inbox-popover">
-    <div class="flex h-9 items-center gap-2 border-b border-border pb-2">
+    <div class="flex h-11 items-center gap-2 border-b border-border pr-2 pl-3.5">
       <p
         class="min-w-0 truncate rounded-sm text-sm font-medium focus-visible:outline-none"
         tabindex="-1"
         data-inbox-heading
-        i18n="@@inbox.title"
       >
-        Inbox
+        {{ title }}
       </p>
       @if (unread() > 0) {
         <span
@@ -56,7 +55,7 @@
 
     <cw-tabs variant="bar" size="sm" [value]="tab()" (valueChange)="tab.set($event)">
       <cw-tabs-list
-        class="border-b border-border"
+        class="border-b border-border px-3.5"
         ariaLabel="Inbox content"
         i18n-ariaLabel="@@inbox.tabs"
       >
@@ -75,7 +74,7 @@
 
       @if (doNotDisturb()) {
         <p
-          class="flex items-center gap-2 border-b border-border py-2 text-xs whitespace-nowrap text-muted-foreground"
+          class="flex items-center gap-2 border-b border-border px-3.5 py-2 text-xs whitespace-nowrap text-muted-foreground"
           data-testid="inbox-do-not-disturb"
         >
           <span
@@ -134,7 +133,7 @@
               </cw-empty-header>
             </cw-empty>
           } @else {
-            <ul class="-mx-2 flex max-h-[26rem] flex-col gap-px overflow-y-auto py-1">
+            <ul class="flex max-h-[26rem] flex-col gap-px overflow-y-auto p-1">
               @for (notification of store.notifications.value().items; track notification.id) {
                 <li>
                   <cw-notification-row
@@ -193,7 +192,7 @@
               </cw-empty-header>
             </cw-empty>
           } @else {
-            <ul class="-mx-2 flex max-h-[26rem] flex-col gap-px overflow-y-auto py-1">
+            <ul class="flex max-h-[26rem] flex-col gap-px overflow-y-auto p-1">
               @for (reminder of store.reminders.value().items; track reminder.id) {
                 <li>
                   <cw-reminder-row
@@ -211,7 +210,7 @@
       </cw-tab-panel>
     </cw-tabs>
 
-    <div class="border-t border-border pt-1">
+    <div class="border-t border-border p-1">
       <button
         type="button"
         class="flex h-8 w-full items-center justify-center gap-1.5 rounded-md text-xs font-medium whitespace-nowrap text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none focus-visible:ring-inset"

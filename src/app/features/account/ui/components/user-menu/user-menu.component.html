@@ -5,15 +5,12 @@
   [tooltip]="label()"
   data-testid="user-menu-trigger"
 >
-  <span cwAppRailItemMedia class="relative inline-flex">
-    <cw-avatar [name]="workspace.user().name" />
-    @if (presence.ownStatus(); as status) {
-      <cw-presence-dot
-        class="absolute -right-0.5 -bottom-0.5 size-3 ring-2 ring-canvas"
-        [status]="status"
-      />
-    }
-  </span>
+  <cw-avatar
+    cwAppRailItemMedia
+    [name]="workspace.user().name"
+    [presence]="avatarPresence()"
+    aria-hidden="true"
+  />
   {{ label() }}
 </button>
 
@@ -25,15 +22,7 @@
   i18n-ariaLabel="@@account.user-menu.aria-label"
 >
   <div class="flex items-center gap-2 px-2 py-1.5">
-    <span class="relative inline-flex shrink-0">
-      <cw-avatar [name]="workspace.user().name" />
-      @if (presence.ownStatus(); as status) {
-        <cw-presence-dot
-          class="absolute -right-0.5 -bottom-0.5 size-3 ring-2 ring-popover"
-          [status]="status"
-        />
-      }
-    </span>
+    <cw-avatar [name]="workspace.user().name" [presence]="avatarPresence()" aria-hidden="true" />
     <span class="flex min-w-0 flex-col">
       <span class="truncate font-medium">{{ workspace.user().name }}</span>
       <span class="truncate text-xs text-muted-foreground">{{ workspace.user().email }}</span>

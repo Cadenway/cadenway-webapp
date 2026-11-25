@@ -203,14 +203,14 @@ importers:
         specifier: 0.42.0
         version: 0.42.0
       '@cadenway/icons':
-        specifier: ^0.3.0
-        version: 0.3.0(@angular/core@22.3.0(@angular/compiler@22.3.0)(rxjs@7.8.2))(@ng-icons/core@36.1.0(@angular-devkit/schematics@22.3.0(chokidar@6.0.0))(@angular/common@22.3.0(@angular/core@22.3.0(@angular/compiler@22.3.0)(rxjs@7.8.2))(rxjs@7.8.2))(@angular/core@22.3.0(@angular/compiler@22.3.0)(rxjs@7.8.2))(@schematics/angular@22.3.0(chokidar@6.0.0))(rxjs@7.8.2))
+        specifier: ^0.4.0
+        version: 0.4.0(@angular/core@22.3.0(@angular/compiler@22.3.0)(rxjs@7.8.2))(@ng-icons/core@36.1.0(@angular-devkit/schematics@22.3.0(chokidar@6.0.0))(@angular/common@22.3.0(@angular/core@22.3.0(@angular/compiler@22.3.0)(rxjs@7.8.2))(rxjs@7.8.2))(@angular/core@22.3.0(@angular/compiler@22.3.0)(rxjs@7.8.2))(@schematics/angular@22.3.0(chokidar@6.0.0))(rxjs@7.8.2))
       '@cadenway/tokens':
         specifier: ^0.2.0
         version: 0.2.0
       '@cadenway/ui':
-        specifier: 0.7.0
-        version: 0.7.0(8b7b9b8bd2ba717883413a0a0267d68d)
+        specifier: 0.8.0
+        version: 0.8.0(8b7b9b8bd2ba717883413a0a0267d68d)
       '@ng-icons/core':
         specifier: ^36.1.0
         version: 36.1.0(@angular-devkit/schematics@22.3.0(chokidar@6.0.0))(@angular/common@22.3.0(@angular/core@22.3.0(@angular/compiler@22.3.0)(rxjs@7.8.2))(rxjs@7.8.2))(@angular/core@22.3.0(@angular/compiler@22.3.0)(rxjs@7.8.2))(@schematics/angular@22.3.0(chokidar@6.0.0))(rxjs@7.8.2)
@@ -655,8 +655,8 @@ packages:
   '@cadenway/contracts@0.42.0':
     resolution: {integrity: sha512-L0nA9UshsBhR4WJxbaWCVx06iElh7BgkwZD8EFKvcuv4J6v+qp7vDo5s5zBZTAEkTx04zKihyjteVw2qrevQfA==, tarball: https://npm.pkg.github.com/download/@cadenway/contracts/0.42.0/8b5feed83965e0d4b127ea4d86e89b20cb5020c2}
 
-  '@cadenway/icons@0.3.0':
-    resolution: {integrity: sha512-1lJxXly3bNCyXsrwZwc2Y1K99HZSCaqaMAcq/+VZj/HbDldIJ52FbL/5qF33JniT5lCTMOWOejN1fd3pl2BE1g==, tarball: https://npm.pkg.github.com/download/@cadenway/icons/0.3.0/b990063d093c24c775947543ab19dc2208e958cf}
+  '@cadenway/icons@0.4.0':
+    resolution: {integrity: sha512-Hb5jO7lvFgLmSFjUGiO6WfcWV+mNZtG+SS3YFn8D2R8xRBxSoUJAlJ0IRhk9i7HhNHdgDZSqzXItD/xvix7wew==, tarball: https://npm.pkg.github.com/download/@cadenway/icons/0.4.0/b9c8987b58bbc8db217cb7c5961231871babb900}
     peerDependencies:
       '@angular/core': ^22.2.0
       '@ng-icons/core': ^36.0.0
@@ -664,8 +664,8 @@ packages:
   '@cadenway/tokens@0.2.0':
     resolution: {integrity: sha512-QkPPDUW/1xXlWSm/tkRC+iaF54jmc8TQL1Wjmtl5dGZre3uFDWic8qTttwRUYc0MEGUJ4KC3xZCP+AIxpnySvw==, tarball: https://npm.pkg.github.com/download/@cadenway/tokens/0.2.0/2d60fd8943bb680a432f67a1890a77dd640365d6}
 
-  '@cadenway/ui@0.7.0':
-    resolution: {integrity: sha512-yfjAcnISrQ9kEIbg9FPASn3MbN0MkM8aHJz+OS40mb0ZEtDXMRAmyWljwsw6+YshwVyJXmJa9wwMF0lNpydXIA==, tarball: https://npm.pkg.github.com/download/@cadenway/ui/0.7.0/3acf157e9a08796527f9a00e15e252883040022b}
+  '@cadenway/ui@0.8.0':
+    resolution: {integrity: sha512-DNNrAWQu+cCleM+mUjivcldIRYqtumWn0wBw6mfPoNoPW3QnuaBYvZa2t8cygroKdDa2PuyB7jurqshX9cTJBA==, tarball: https://npm.pkg.github.com/download/@cadenway/ui/0.8.0/f798f9789b1630b8aac95b2262d7dbb444220368}
     peerDependencies:
       '@angular/aria': ^22.2.0
       '@angular/cdk': ^22.2.0
@@ -4369,7 +4369,7 @@ snapshots:
     dependencies:
       zod: 4.6.7
 
-  '@cadenway/icons@0.3.0(@angular/core@22.3.0(@angular/compiler@22.3.0)(rxjs@7.8.2))(@ng-icons/core@36.1.0(@angular-devkit/schematics@22.3.0(chokidar@6.0.0))(@angular/common@22.3.0(@angular/core@22.3.0(@angular/compiler@22.3.0)(rxjs@7.8.2))(rxjs@7.8.2))(@angular/core@22.3.0(@angular/compiler@22.3.0)(rxjs@7.8.2))(@schematics/angular@22.3.0(chokidar@6.0.0))(rxjs@7.8.2))':
+  '@cadenway/icons@0.4.0(@angular/core@22.3.0(@angular/compiler@22.3.0)(rxjs@7.8.2))(@ng-icons/core@36.1.0(@angular-devkit/schematics@22.3.0(chokidar@6.0.0))(@angular/common@22.3.0(@angular/core@22.3.0(@angular/compiler@22.3.0)(rxjs@7.8.2))(rxjs@7.8.2))(@angular/core@22.3.0(@angular/compiler@22.3.0)(rxjs@7.8.2))(@schematics/angular@22.3.0(chokidar@6.0.0))(rxjs@7.8.2))':
     dependencies:
       '@angular/core': 22.3.0(@angular/compiler@22.3.0)(rxjs@7.8.2)
       '@ng-icons/core': 36.1.0(@angular-devkit/schematics@22.3.0(chokidar@6.0.0))(@angular/common@22.3.0(@angular/core@22.3.0(@angular/compiler@22.3.0)(rxjs@7.8.2))(rxjs@7.8.2))(@angular/core@22.3.0(@angular/compiler@22.3.0)(rxjs@7.8.2))(@schematics/angular@22.3.0(chokidar@6.0.0))(rxjs@7.8.2)
@@ -4380,7 +4380,7 @@ snapshots:
 
   '@cadenway/tokens@0.2.0': {}
 
-  '@cadenway/ui@0.7.0(8b7b9b8bd2ba717883413a0a0267d68d)':
+  '@cadenway/ui@0.8.0(8b7b9b8bd2ba717883413a0a0267d68d)':
     dependencies:
       '@angular/aria': 22.3.0(@angular/cdk@22.3.0(@angular/common@22.3.0(@angular/core@22.3.0(@angular/compiler@22.3.0)(rxjs@7.8.2))(rxjs@7.8.2))(@angular/core@22.3.0(@angular/compiler@22.3.0)(rxjs@7.8.2))(@angular/forms@22.3.0(@angular/common@22.3.0(@angular/core@22.3.0(@angular/compiler@22.3.0)(rxjs@7.8.2))(rxjs@7.8.2))(@angular/core@22.3.0(@angular/compiler@22.3.0)(rxjs@7.8.2))(@angular/platform-browser@22.3.0(@angular/common@22.3.0(@angular/core@22.3.0(@angular/compiler@22.3.0)(rxjs@7.8.2))(rxjs@7.8.2))(@angular/core@22.3.0(@angular/compiler@22.3.0)(rxjs@7.8.2)))(rxjs@7.8.2))(@angular/platform-browser@22.3.0(@angular/common@22.3.0(@angular/core@22.3.0(@angular/compiler@22.3.0)(rxjs@7.8.2))(rxjs@7.8.2))(@angular/core@22.3.0(@angular/compiler@22.3.0)(rxjs@7.8.2)))(rxjs@7.8.2))(@angular/core@22.3.0(@angular/compiler@22.3.0)(rxjs@7.8.2))
       '@angular/cdk': 22.3.0(@angular/common@22.3.0(@angular/core@22.3.0(@angular/compiler@22.3.0)(rxjs@7.8.2))(rxjs@7.8.2))(@angular/core@22.3.0(@angular/compiler@22.3.0)(rxjs@7.8.2))(@angular/forms@22.3.0(@angular/common@22.3.0(@angular/core@22.3.0(@angular/compiler@22.3.0)(rxjs@7.8.2))(rxjs@7.8.2))(@angular/core@22.3.0(@angular/compiler@22.3.0)(rxjs@7.8.2))(@angular/platform-browser@22.3.0(@angular/common@22.3.0(@angular/core@22.3.0(@angular/compiler@22.3.0)(rxjs@7.8.2))(rxjs@7.8.2))(@angular/core@22.3.0(@angular/compiler@22.3.0)(rxjs@7.8.2)))(rxjs@7.8.2))(@angular/platform-browser@22.3.0(@angular/common@22.3.0(@angular/core@22.3.0(@angular/compiler@22.3.0)(rxjs@7.8.2))(rxjs@7.8.2))(@angular/core@22.3.0(@angular/compiler@22.3.0)(rxjs@7.8.2)))(rxjs@7.8.2)

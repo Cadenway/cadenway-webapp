@@ -9,7 +9,11 @@ import {
 } from '@angular/core';
 import { Router } from '@angular/router';
 import { CwAppRailItem } from '@cadenway/ui/components/app-rail';
-import { CwAvatar, provideCwAvatarLabels } from '@cadenway/ui/components/avatar';
+import {
+  CwAvatar,
+  provideCwAvatarLabels,
+  type CwAvatarPresence,
+} from '@cadenway/ui/components/avatar';
 import {
   CwMenu,
   CwMenuItem,
@@ -152,6 +156,8 @@ const PRESENCE_OPTIONS: readonly PresenceOption[] = [
       unknown: $localize`:@@account.user-menu.avatar-unknown:Unknown user`,
       online: $localize`:@@account.user-menu.avatar-online:online`,
       away: $localize`:@@account.user-menu.avatar-away:away`,
+      dnd: $localize`:@@account.user-menu.avatar-dnd:do not disturb`,
+      invisible: $localize`:@@account.user-menu.avatar-invisible:invisible`,
       disabled: $localize`:@@account.user-menu.avatar-disabled:deactivated`,
     })),
   ],
@@ -278,6 +284,20 @@ export class UserMenu {
         (option: PresenceOption) => option.status === this.presence.ownStatus(),
       ) ?? null,
   );
+
+  /**
+   * Property avatarPresence
+   *
+   * @description
+   * The current presence in the avatar's vocabulary, or null before it is known.
+   *
+   * @type {Signal<CwAvatarPresence | null>}
+   * @readonly
+   */
+  protected readonly avatarPresence: Signal<CwAvatarPresence | null> = computed(() => {
+    const status: PresenceStatus | null = this.presence.ownStatus();
+    return status === 'do-not-disturb' ? 'dnd' : status;
+  });
 
   /**
    * Property presenceAvailable

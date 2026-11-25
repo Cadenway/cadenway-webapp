@@ -1,4 +1,4 @@
-import { provideHttpClient, withInterceptors } from '@angular/common/http';
+import { HttpErrorResponse, provideHttpClient, withInterceptors } from '@angular/common/http';
 import {
   HttpTestingController,
   provideHttpClientTesting,
@@ -9,7 +9,12 @@ import { TestBed } from '@angular/core/testing';
 import { type Observable, of, Subject, throwError } from 'rxjs';
 
 import { RealtimeConnection, type PersonalNotice } from '@core/realtime';
-import { OrganizationPin, organizationPinInterceptor, PASSIVE_REQUEST } from '@core/api';
+import {
+  OrganizationPin,
+  OrganizationSwitchPendingError,
+  organizationPinInterceptor,
+  PASSIVE_REQUEST,
+} from '@core/api';
 import { RuntimeConfigStore } from '@core/config';
 import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 
@@ -765,6 +770,162 @@ describe('InboxStore', () => {
     expect(store.unreadCount()).toBe(0);
   });
 
+  it('recovers passive reads after verification while still connected', async () => {
+    const pin: OrganizationPin = TestBed.inject(OrganizationPin);
+    pin.set('atelier-nord');
+    const store: InstanceType<typeof InboxStore> = await opened();
+    pin.markStale();
+    api.unreadCount.mockReturnValue(throwError(() => new OrganizationSwitchPendingError()));
+    api.notifications.mockRejectedValue(new OrganizationSwitchPendingError());
+    api.pendingReminders.mockRejectedValue(new OrganizationSwitchPendingError());
+    connectionStatus.set('reconnecting');
+    TestBed.tick();
+    connectionStatus.set('connected');
+    TestBed.tick();
+    await vi.advanceTimersByTimeAsync(0);
+    TestBed.tick();
+    expect(store.notifications.status()).toBe('error');
+    expect(store.reminders.status()).toBe('error');
+
+    api.unreadCount.mockReturnValue(of(3));
+    api.notifications.mockResolvedValue({ items: [mention], unreadCount: 3 });
+    api.pendingReminders.mockResolvedValue(reminders);
+    pin.set('atelier-nord');
+    await vi.advanceTimersByTimeAsync(0);
+    TestBed.tick();
+    await vi.waitFor(() => {
+      TestBed.tick();
+      expect(store.notifications.hasValue()).toBe(true);
+      expect(store.reminders.hasValue()).toBe(true);
+      expect(store.unreadCount()).toBe(3);
+    });
+    expect(connectionStatus()).toBe('connected');
+  });
+
+  it('does not retry an unrelated read failure on verification', async () => {
+    const pin: OrganizationPin = TestBed.inject(OrganizationPin);
+    pin.set('atelier-nord');
+    await opened();
+    api.unreadCount.mockReturnValue(throwError(() => new Error('unavailable')));
+    window.dispatchEvent(new Event('focus'));
+    api.unreadCount.mockClear();
+    api.notifications.mockClear();
+    api.pendingReminders.mockClear();
+    pin.set('atelier-nord');
+    expect(api.unreadCount).not.toHaveBeenCalled();
+    expect(api.notifications).not.toHaveBeenCalled();
+    expect(api.pendingReminders).not.toHaveBeenCalled();
+  });
+
+  it('does not recover old reads under a newly committed organization pin', async () => {
+    const pin: OrganizationPin = TestBed.inject(OrganizationPin);
+    pin.set('atelier-nord');
+    await opened();
+    api.unreadCount.mockReturnValue(throwError(() => new OrganizationSwitchPendingError()));
+    window.dispatchEvent(new Event('focus'));
+    api.unreadCount.mockClear();
+    current.set(workspaceOrganization('lumen'));
+    pin.set('lumen');
+    expect(api.unreadCount).not.toHaveBeenCalled();
+    TestBed.tick();
+  });
+
+  it('recovers a first passive 412 without another fenced request', async () => {
+    const pin: OrganizationPin = TestBed.inject(OrganizationPin);
+    pin.set('atelier-nord');
+    const store: InstanceType<typeof InboxStore> = await opened();
+    api.notifications.mockRejectedValueOnce(
+      new HttpErrorResponse({
+        status: 412,
+        error: { code: 'organization.context-changed' },
+      }),
+    );
+    notices.next({ type: 'notification.created.v1' });
+    await vi.advanceTimersByTimeAsync(300);
+    TestBed.tick();
+    await vi.waitFor(() => {
+      expect(store.notifications.status()).toBe('error');
+    });
+    api.notifications.mockClear();
+    pin.set('atelier-nord');
+    TestBed.tick();
+    await vi.waitFor(() => {
+      TestBed.tick();
+      expect(store.notifications.hasValue()).toBe(true);
+    });
+    expect(api.notifications).toHaveBeenCalledTimes(1);
+    expect(api.notifications).toHaveBeenCalledWith(true);
+  });
+
+  it('recovers while reconnecting and skips the same reads on connection', async () => {
+    const pin: OrganizationPin = TestBed.inject(OrganizationPin);
+    pin.set('atelier-nord');
+    const store: InstanceType<typeof InboxStore> = await opened();
+    api.unreadCount.mockReturnValue(throwError(() => new OrganizationSwitchPendingError()));
+    api.notifications.mockRejectedValue(new OrganizationSwitchPendingError());
+    api.pendingReminders.mockRejectedValue(new OrganizationSwitchPendingError());
+    connectionStatus.set('reconnecting');
+    TestBed.tick();
+    connectionStatus.set('connected');
+    TestBed.tick();
+    await vi.advanceTimersByTimeAsync(0);
+    TestBed.tick();
+    expect(store.notifications.status()).toBe('error');
+    expect(store.reminders.status()).toBe('error');
+    connectionStatus.set('reconnecting');
+    TestBed.tick();
+    await vi.advanceTimersByTimeAsync(0);
+    api.unreadCount.mockReturnValue(of(3));
+    api.notifications.mockResolvedValue({ items: [mention], unreadCount: 3 });
+    api.pendingReminders.mockResolvedValue(reminders);
+    api.unreadCount.mockClear();
+    api.notifications.mockClear();
+    api.pendingReminders.mockClear();
+    pin.set('atelier-nord');
+    TestBed.tick();
+    await vi.waitFor(() => {
+      TestBed.tick();
+      expect(store.notifications.hasValue()).toBe(true);
+      expect(store.reminders.hasValue()).toBe(true);
+      expect(store.unreadCount()).toBe(3);
+    });
+    expect(connectionStatus()).toBe('reconnecting');
+    expect(api.unreadCount).toHaveBeenCalledTimes(1);
+    expect(api.notifications).toHaveBeenCalledTimes(1);
+    expect(api.pendingReminders).toHaveBeenCalledTimes(1);
+    connectionStatus.set('connected');
+    TestBed.tick();
+    await vi.advanceTimersByTimeAsync(0);
+    TestBed.tick();
+    expect(api.unreadCount).toHaveBeenCalledTimes(1);
+    expect(api.notifications).toHaveBeenCalledTimes(1);
+    expect(api.pendingReminders).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not cycle verification after a refused recovery read', async () => {
+    const pin: OrganizationPin = TestBed.inject(OrganizationPin);
+    pin.set('atelier-nord');
+    await opened();
+    api.unreadCount.mockReturnValue(throwError(() => new OrganizationSwitchPendingError()));
+    window.dispatchEvent(new Event('focus'));
+    api.unreadCount.mockClear();
+    api.unreadCount.mockReturnValueOnce(
+      throwError(
+        () =>
+          new HttpErrorResponse({
+            status: 412,
+            error: { code: 'organization.context-changed' },
+          }),
+      ),
+    );
+    pin.set('atelier-nord');
+    expect(api.unreadCount).toHaveBeenCalledTimes(1);
+    window.dispatchEvent(new Event('focus'));
+    api.unreadCount.mockClear();
+    pin.set('atelier-nord');
+    expect(api.unreadCount).not.toHaveBeenCalled();
+  });
+
   it('clears everything and polls the new organization on a switch, ignoring the old answers', async () => {
     const store: InstanceType<typeof InboxStore> = await openedWithTwo();
     const all: Deferred<number> = deferred<number>();
@@ -832,6 +993,7 @@ describe('InboxStore passive requests', () => {
     expect(changed).toHaveBeenCalledOnce();
     expect(store.reminders.error()).toBeDefined();
     pin.set('organization-a');
+    TestBed.tick();
     store.reminders.reload();
     TestBed.tick();
     const retry: TestRequest = http.expectOne((request) => request.url === '/v1/reminders');

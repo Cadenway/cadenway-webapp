@@ -133,8 +133,31 @@ describe('UserMenu', () => {
     const trigger: HTMLButtonElement = await openMenu();
 
     expect(trigger.textContent).toContain('Compte de Camille Martin, statut : Absent');
-    expect(trigger.querySelector('cw-presence-dot')?.getAttribute('data-status')).toBe('away');
+    expect(trigger.querySelector('cw-avatar')?.getAttribute('title')).toBe(
+      'Camille Martin (absent)',
+    );
   });
+
+  it.each([
+    ['online', 'en ligne'],
+    ['away', 'absent'],
+    ['do-not-disturb', 'ne pas déranger'],
+    ['invisible', 'invisible'],
+  ] as const)(
+    'shows %s on both avatars without repeating it in the button name',
+    async (presence, label) => {
+      status.set(presence);
+      const trigger: HTMLButtonElement = await openMenu();
+      const avatars: NodeListOf<HTMLElement> = document.querySelectorAll('cw-avatar');
+      expect(avatars).toHaveLength(2);
+      for (const avatar of avatars) {
+        expect(avatar.getAttribute('title')).toBe(`Camille Martin (${label})`);
+        expect(avatar.getAttribute('aria-hidden')).toBe('true');
+        expect(avatar.querySelector('span[aria-hidden="true"]')).not.toBeNull();
+      }
+      expect(trigger.querySelector('cw-presence-dot')).toBeNull();
+    },
+  );
 
   it('disables « Statut » without realtime, and never confirms anything', async () => {
     connection.set('disabled');
