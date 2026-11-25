@@ -482,14 +482,12 @@ function createListPageStore(): Type<ListPageStoreInstance> {
             ),
             filter((notice: RealtimeChange): boolean => {
               const data: unknown = notice.data;
-              return (
-                typeof data === 'object' &&
-                data !== null &&
-                (('listId' in data && data.listId === store.listId()) ||
-                  ('spaceId' in data &&
-                    store.list.hasValue() &&
-                    data.spaceId === store.list.value().spaceId))
-              );
+              if (typeof data !== 'object' || data === null) return false;
+              if ('listId' in data) return data.listId === store.listId();
+              if ('spaceId' in data) {
+                return store.list.hasValue() && data.spaceId === store.list.value().spaceId;
+              }
+              return true;
             }),
             debounceTime(300),
             tap((): void => {
@@ -680,9 +678,10 @@ function createListPageStore(): Type<ListPageStoreInstance> {
  * rejects with the typed route error (« Accès refusé » for a list the gateway does not show, not
  * found for a malformed id, unavailable otherwise), which the page lets reach the boundary. The
  * space, counts, milestones, members, labels and saved views are secondary reads with their own
- * state. While the page lives it watches the list's realtime room; the gateway broadcasts every
- * change to every watch, so matching list or space notices are debounced before refreshing counts.
- * A task created in the list from this tab refreshes them at once, without waiting for its notice.
+ * state. While the page lives it watches the list's realtime room and refreshes the counts after
+ * 300 ms of quiet. The socket hands every notice to every watch: a notice naming another list or
+ * space is ignored, and a task notice, which names only its task (`{ taskId, changed }`), counts,
+ * as for the rows. A task created in the list from this tab refreshes them at once.
  * Writes report whether the gateway recorded them; renaming and deleting a saved view are
  * optimistic and restore on a refusal.
  *

@@ -160,6 +160,18 @@ describe('ListPageStore', () => {
     expect(api['milestoneCount']).toHaveBeenCalledTimes(2);
   });
 
+  it('reads the counts again on a task notice, which names only its task', async () => {
+    await loaded();
+
+    notices.next({
+      id: 'n1',
+      type: 'task.status-changed.v1',
+      at: '2026-11-08T09:00:00Z',
+      data: { taskId: 'CAD-482', changed: ['status'] },
+    });
+    await expect.poll(() => api['counts'].mock.calls.length).toBe(2);
+  });
+
   it('ignores unrelated notices and debounces matching notices', async () => {
     await loaded();
     const notice: RealtimeChange = {

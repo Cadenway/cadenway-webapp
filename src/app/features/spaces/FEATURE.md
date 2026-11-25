@@ -72,9 +72,9 @@ breadcrumb, dialog, inline edit, toolbar).
     current sprint is the first sprint, in sidebar order, whose dates hold the caller's today.
   - `ListPageStore`, route-scoped on `l/:listId`: the list (primary read) and its space, counts,
     milestone count, members, labels and saved views (secondary reads), the header's and the
-    selection bar's writes. It watches the list's realtime room while the page lives; since the
-    gateway broadcasts notices to every watch, it filters by list or space and debounces count
-    refreshes. A task created in the list from this tab (`TaskCreate.created`) refreshes the
+    selection bar's writes. It watches the list's realtime room while the page lives and
+    debounces count refreshes; since the socket hands every notice to every watch, it ignores a
+    notice naming another list or space, while a task notice (`{ taskId, changed }`) counts. A task created in the list from this tab (`TaskCreate.created`) refreshes the
     counts at once.
   - `ListViewStore`, route-scoped on `l/:listId`: filters, sort, grouping, subtask display, search,
     « Jalons » and the applied saved view. It exposes `taskQuery` (the `queryListTasks` body
