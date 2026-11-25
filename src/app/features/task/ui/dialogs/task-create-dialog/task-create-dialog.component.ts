@@ -266,8 +266,9 @@ function addDays(date: Date, days: number): Date {
  * labels. « Créer la tâche » or Ctrl Entrée creates the task with an `Idempotency-Key`, then a
  * toast offers « Ouvrir » towards `/<slug>/t/<key>`; « Créer d'autres tâches » keeps the dialog
  * open with an empty name. Escape closes an open menu first, then the dialog. An empty name only
- * disables « Créer la tâche », as in the mockup: the footer's error summary, an alert, shows once a
- * field was left or a creation was refused. It provides its own `TaskCreateStore`.
+ * disables « Créer la tâche », as in the mockup, and is said under the field once it was left. The
+ * footer's error summary, an alert, holds the other fields' errors once a field was left or a
+ * creation was refused. It provides its own `TaskCreateStore`.
  */
 @Component({
   selector: 'cw-task-create-dialog',
@@ -322,6 +323,28 @@ export class TaskCreateDialog {
    * @readonly
    */
   protected readonly retryLabel: string = $localize`:@@task.retry:Retry`;
+
+  /**
+   * Property footerErrors
+   *
+   * @description
+   * The errors of the footer summary: none before a field was left or a creation was tried, and
+   * never the name's, which its field already says, so that one error is announced once.
+   *
+   * @type {Signal<readonly ValidationError.WithFieldTree[]>}
+   * @readonly
+   */
+  protected readonly footerErrors: Signal<readonly ValidationError.WithFieldTree[]> = computed(
+    (): readonly ValidationError.WithFieldTree[] =>
+      this.createForm().touched()
+        ? this.createForm()
+            .errorSummary()
+            .filter(
+              (error: ValidationError.WithFieldTree): boolean =>
+                error.fieldTree() !== this.createForm.name(),
+            )
+        : [],
+  );
 
   /**
    * Property dueName
@@ -791,7 +814,7 @@ export class TaskCreateDialog {
               subtasks: [],
               subtaskDraft: '',
             });
-            this.createForm.name().reset();
+            this.createForm().reset();
             this.createForm.name().focusBoundControl();
           } else {
             this.taskCreate.close();
