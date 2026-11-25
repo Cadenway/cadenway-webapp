@@ -8,12 +8,7 @@ import { of } from 'rxjs';
 import { beforeEach, describe, expect, it, type Mock, type MockInstance, vi } from 'vitest';
 
 import { RealtimeConnection } from '@core/realtime';
-import {
-  TaskCreate,
-  TaskFieldChangesStore,
-  TaskStatusChangesStore,
-  type TaskSummary,
-} from '@features/task';
+import { TaskCreate, TaskStatusChangesStore, type TaskSummary } from '@features/task';
 import { TaskApi } from '@features/task/data-access/services/task-api/task-api.service';
 import { WORKSPACE_CONTEXT } from '@features/workspace/ports/workspace-context';
 
@@ -134,22 +129,6 @@ describe('ListViewPage', () => {
   }
 
   /**
-   * Function buttons
-   *
-   * @description
-   * Every button of an accessible name in the document.
-   *
-   * @param {string} name - Their accessible name, `aria-label` or text.
-   * @returns {HTMLButtonElement[]} The buttons.
-   */
-  function buttons(name: string): HTMLButtonElement[] {
-    return [...document.querySelectorAll<HTMLButtonElement>('button')].filter(
-      (element: HTMLButtonElement): boolean =>
-        (element.getAttribute('aria-label') ?? element.textContent.trim()) === name,
-    );
-  }
-
-  /**
    * Function required
    *
    * @description
@@ -187,7 +166,12 @@ describe('ListViewPage', () => {
       }),
     );
     bulk = vi.fn(() =>
-      Promise.resolve({ affected: 1, done: [{ taskKey: 'CAD-482', version: 3 }], failed: [] }),
+      Promise.resolve({
+        affected: 1,
+        done: [{ taskKey: 'CAD-482', version: 3 }],
+        failed: [],
+        unknown: [],
+      }),
     );
     toasts = { show: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn(), dismiss: vi.fn() };
     TestBed.configureTestingModule({
@@ -196,7 +180,6 @@ describe('ListViewPage', () => {
         provideRouter([]),
         ListViewStore,
         TaskStatusChangesStore,
-        TaskFieldChangesStore,
         ListRowsStore,
         LIST_TABLE_TEXTS,
         {
@@ -261,16 +244,45 @@ describe('ListViewPage', () => {
     expect(checkbox('Sélectionner CAD-482')).toBeDefined();
   });
 
-  it('changes the status from the icon at once', async () => {
+  it('opens the task from its status icon and creates a subtask with its parent', async () => {
     const fixture: ComponentFixture<ListViewPage> = await render();
-    const advance: string = 'En cours · passer à « En revue »';
-    expect(buttons(advance)).toHaveLength(1);
+    const navigate: MockInstance = vi.spyOn(TestBed.inject(Router), 'navigate');
+    const create: MockInstance = vi.spyOn(TestBed.inject(TaskCreate), 'open');
+    const host: HTMLElement = fixture.nativeElement as HTMLElement;
+    const taskButton: HTMLButtonElement = required(
+      [...host.querySelectorAll<HTMLButtonElement>('button')].find((element: HTMLButtonElement) =>
+        element.textContent.includes('Refondre l’écran de connexion SSO'),
+      ),
+    );
+    required(taskButton.querySelector<HTMLElement>('cw-status-icon')).click();
+    expect(navigate).toHaveBeenCalledWith(
+      [],
+      expect.objectContaining({ queryParams: { task: 'CAD-482' } }),
+    );
+    required(button('Ajouter une sous-tâche à CAD-482')).click();
+    expect(create).toHaveBeenCalledWith({ parentKey: 'CAD-482', listId: 'sprint-14' });
+  });
 
-    required(button('À faire · passer à « En cours »')).click();
+  it('keeps focus on the task after its status group changes', async () => {
+    const fixture: ComponentFixture<ListViewPage> = await render();
+    const host: HTMLElement = fixture.nativeElement as HTMLElement;
+    const taskButton: HTMLButtonElement = required(
+      [...host.querySelectorAll<HTMLButtonElement>('cw-task-title-cell button')].find(
+        (element: HTMLButtonElement) => element.textContent.includes('Refondre l’écran'),
+      ),
+    );
+    taskButton.focus();
+    TestBed.inject(TaskStatusChangesStore).request(sprintTasks[0], 'progress');
+    await new Promise<void>((resolve) => setTimeout(resolve, 500));
     fixture.detectChanges();
-
-    expect(button('À faire · passer à « En cours »')).toBeUndefined();
-    expect(buttons(advance)).toHaveLength(2);
+    await fixture.whenStable();
+    fixture.detectChanges();
+    expect(
+      TestBed.inject(ListRowsStore)
+        .rows()
+        .find((row) => row.task.key === 'CAD-482')?.group,
+    ).toBe('progress');
+    expect(document.activeElement?.textContent).toContain('Refondre l’écran');
   });
 
   it('opens a task in the address from its name', async () => {
@@ -293,11 +305,65 @@ describe('ListViewPage', () => {
     );
   });
 
+  it('opens the menu for the row receiving Shift+F10', async () => {
+    const fixture: ComponentFixture<ListViewPage> = await render();
+    const name: HTMLButtonElement = required(
+      [
+        ...(fixture.nativeElement as HTMLElement).querySelectorAll<HTMLButtonElement>('button'),
+      ].find((element: HTMLButtonElement) => element.textContent.includes('Page des quotas')),
+    );
+    name.dispatchEvent(new KeyboardEvent('keydown', { key: 'F10', shiftKey: true, bubbles: true }));
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(document.body.textContent).toContain('CAD-483 · Page des quotas d’organisation');
+  });
+
+  it('opens the menu for the row receiving a touch long press', async () => {
+    const fixture: ComponentFixture<ListViewPage> = await render();
+    const name: HTMLButtonElement = required(
+      [
+        ...(fixture.nativeElement as HTMLElement).querySelectorAll<HTMLButtonElement>('button'),
+      ].find((element: HTMLButtonElement) => element.textContent.includes('Page des quotas')),
+    );
+    const press: Event = new Event('pointerdown', { bubbles: true });
+    Object.defineProperties(press, {
+      pointerType: { value: 'touch' },
+      clientX: { value: 20 },
+      clientY: { value: 20 },
+    });
+    name.dispatchEvent(press);
+    await new Promise<void>((resolve) => setTimeout(resolve, 520));
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    expect(document.body.textContent).toContain('CAD-483 · Page des quotas d’organisation');
+  });
+
+  it('retains rows and selection on a failed refresh and retries in place', async () => {
+    const fixture: ComponentFixture<ListViewPage> = await render();
+    required(checkbox('Sélectionner CAD-482')).click();
+    page.mockRejectedValueOnce(new Error('503'));
+    TestBed.inject(ListRowsStore).reload();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect((fixture.nativeElement as HTMLElement).textContent).toContain('1 sélectionnée');
+    expect(button('Réessayer')).toBeDefined();
+    required(button('Réessayer')).click();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    expect(button('Réessayer')).toBeUndefined();
+    expect((fixture.nativeElement as HTMLElement).textContent).toContain('CAD-482');
+  });
+
   it('runs a bulk action on the selection and keeps a refused chunk selected', async () => {
     bulk.mockResolvedValueOnce({
       affected: 1,
       done: [{ taskKey: 'CAD-482', version: 3 }],
       failed: [{ taskKey: 'CAD-483', version: 3 }],
+      unknown: [],
     });
     const fixture: ComponentFixture<ListViewPage> = await render();
 
@@ -317,12 +383,81 @@ describe('ListViewPage', () => {
       ],
       { type: 'done' },
     );
-    expect(toasts['show']).toHaveBeenCalledWith('1 tâches terminées', expect.anything());
+    expect(toasts['show']).toHaveBeenCalledWith('1 tâche terminée', expect.anything());
     expect(toasts['error']).toHaveBeenCalledWith(
-      '1 tâches sur 2 n’ont pas pu être modifiées',
+      '1 tâche sur 2 n’a pas pu être modifiée',
       expect.anything(),
     );
     expect((fixture.nativeElement as HTMLElement).textContent).toContain('1 sélectionnée');
+  });
+
+  it('shows the plural toast when two selected tasks are marked done', async () => {
+    bulk.mockResolvedValueOnce({
+      affected: 2,
+      done: [
+        { taskKey: 'CAD-482', version: 3 },
+        { taskKey: 'CAD-483', version: 3 },
+      ],
+      failed: [],
+      unknown: [],
+    });
+    const fixture: ComponentFixture<ListViewPage> = await render();
+    required(checkbox('Sélectionner CAD-482')).click();
+    required(checkbox('Sélectionner CAD-483')).click();
+    fixture.detectChanges();
+
+    required(button('Marquer terminé')).click();
+    await fixture.whenStable();
+
+    expect(toasts['show']).toHaveBeenCalledWith('2 tâches terminées', expect.anything());
+  });
+
+  it('changes the status of a selection through one bulk action', async () => {
+    const fixture: ComponentFixture<ListViewPage> = await render();
+    required(checkbox('Sélectionner CAD-482')).click();
+    required(checkbox('Sélectionner CAD-483')).click();
+    fixture.detectChanges();
+    required(button('Actions sur CAD-482')).click();
+    fixture.detectChanges();
+    await fixture.whenStable();
+    required(button('Statut')).click();
+    fixture.detectChanges();
+    await fixture.whenStable();
+    required(button('En cours')).click();
+    await fixture.whenStable();
+
+    expect(bulk).toHaveBeenCalledWith(
+      [
+        { taskKey: 'CAD-482', version: 3 },
+        { taskKey: 'CAD-483', version: 3 },
+      ],
+      { type: 'status', status: 'progress' },
+    );
+  });
+
+  it('sends a shared cancellation reason for a selected group', async () => {
+    const fixture: ComponentFixture<ListViewPage> = await render();
+    required(checkbox('Sélectionner CAD-482')).click();
+    required(checkbox('Sélectionner CAD-483')).click();
+    fixture.detectChanges();
+    required(button('Actions sur CAD-482')).click();
+    fixture.detectChanges();
+    await fixture.whenStable();
+    required(button('Statut')).click();
+    fixture.detectChanges();
+    await fixture.whenStable();
+    required(button('Annulé')).click();
+    fixture.detectChanges();
+    await fixture.whenStable();
+    required(button('Annuler la tâche')).click();
+    await fixture.whenStable();
+
+    expect(bulk).toHaveBeenCalledWith(expect.anything(), {
+      type: 'status',
+      status: 'cancelled',
+      cancelReason: 'duplicate',
+      cancelNote: null,
+    });
   });
 
   it('distinguishes an empty list, whose button creates in the list', async () => {

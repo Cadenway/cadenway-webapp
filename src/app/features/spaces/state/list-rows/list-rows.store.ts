@@ -1,3 +1,4 @@
+import { MediaMatcher } from '@angular/cdk/layout';
 import {
   computed,
   DestroyRef,
@@ -23,7 +24,6 @@ import {
   addEntities,
   removeAllEntities,
   setAllEntities,
-  updateEntity,
   withEntities,
 } from '@ngrx/signals/entities';
 import { rxMethod } from '@ngrx/signals/rxjs-interop';
@@ -42,7 +42,6 @@ import { type RealtimeChange, RealtimeConnection } from '@core/realtime';
 import {
   type CreatedTask,
   TaskCreate,
-  TaskFieldChangesStore,
   type TaskStatusChange,
   TaskStatusChangesStore,
   type TaskSummary,
@@ -186,6 +185,17 @@ export interface RowsSnapshot {
   readonly groups: readonly GroupProgress[];
 
   /**
+   * Property groupKeys
+   *
+   * @description
+   * Task keys in the order returned for each group.
+   *
+   * @type {Readonly<Record<string, readonly string[]>>}
+   * @readonly
+   */
+  readonly groupKeys: Readonly<Record<string, readonly string[]>>;
+
+  /**
    * Property tasks
    *
    * @description
@@ -305,6 +315,17 @@ interface ListRowsState {
   readonly _groups: readonly GroupProgress[];
 
   /**
+   * Property _groupKeys
+   *
+   * @description
+   * Loaded task keys in each group's gateway sort order.
+   *
+   * @type {Readonly<Record<string, readonly string[]>>}
+   * @readonly
+   */
+  readonly _groupKeys: Readonly<Record<string, readonly string[]>>;
+
+  /**
    * Property _collapsed
    *
    * @description
@@ -387,6 +408,7 @@ const initialState: ListRowsState = {
   _scope: null,
   _key: null,
   _groups: [],
+  _groupKeys: {},
   _collapsed: {},
   _subtasks: 'nested',
   _open: {},
@@ -472,6 +494,7 @@ async function loadSnapshot(
     grouping ? await api.groups(params.listId, grouping, signal) : null,
   );
   const tasks: TaskSummary[] = [];
+  const groupKeys: Record<string, string[]> = {};
   let shown: number = 0;
   for (
     let target: GroupProgress | null = nextGroup(groups, collapsed);
@@ -490,9 +513,10 @@ async function loadSnapshot(
     );
     groups = advanceGroup(groups, target.value, page);
     tasks.push(...page.items);
+    (groupKeys[target.value] ??= []).push(...page.items.map((task: TaskSummary) => task.key));
     if (!folded) shown += page.items.length;
   }
-  return { key: params.key, groups, tasks };
+  return { key: params.key, groups, tasks, groupKeys };
 }
 
 /**
@@ -569,6 +593,17 @@ export interface ListRowsStoreInstance {
    * @readonly
    */
   readonly initialLoading: Signal<boolean>;
+
+  /**
+   * Property hasCurrentSnapshot
+   *
+   * @description
+   * Whether the current query has already produced rows, including an empty result.
+   *
+   * @type {Signal<boolean>}
+   * @readonly
+   */
+  readonly hasCurrentSnapshot: Signal<boolean>;
 
   /**
    * Property empty
@@ -737,12 +772,23 @@ function createListRowsStore(): Type<ListRowsStoreInstance> {
           abortSignal: AbortSignal;
         }): Promise<RowsSnapshot> => {
           const sameKey: boolean = untracked(store._key) === read.key;
-          const want: number = Math.max(
-            LIST_PAGE_SIZE,
-            sameKey ? untracked(() => store.ids().length) : 0,
-          );
           const collapsed: readonly string[] = untracked(() =>
             collapsedOf(store._collapsed(), groupingOf(read)),
+          );
+          const want: number = Math.max(
+            LIST_PAGE_SIZE,
+            sameKey
+              ? untracked(
+                  () =>
+                    store
+                      .entities()
+                      .filter((task: TaskSummary): boolean =>
+                        groupValuesOf(task, groupingOf(read)).some(
+                          (group: string): boolean => !collapsed.includes(group),
+                        ),
+                      ).length,
+                )
+              : 0,
           );
           return loadSnapshot(api, read, collapsed, want, abortSignal);
         },
@@ -751,15 +797,19 @@ function createListRowsStore(): Type<ListRowsStoreInstance> {
         _api: api,
         _params: params,
         _status: inject(TaskStatusChangesStore),
-        _fields: inject(TaskFieldChangesStore),
+        _reduceMotion: inject(MediaMatcher).matchMedia('(prefers-reduced-motion: reduce)').matches,
         _taskCreate: inject(TaskCreate),
         _realtime: inject(RealtimeConnection, { optional: true }),
         primary,
       };
     }),
     withComputed((store) => {
-      const effective: (task: TaskSummary) => TaskSummary = (task: TaskSummary): TaskSummary =>
-        store._fields.displayed(store._status.settledTask(task));
+      const effective: (task: TaskSummary) => TaskSummary = (task: TaskSummary): TaskSummary => {
+        const settled: TaskSummary = store._status.settledTask(task);
+        return store._reduceMotion
+          ? { ...settled, status: store._status.displayedStatus(settled) }
+          : settled;
+      };
       const groupBy: () => ListGroupQuery['groupBy'] | null = () => groupingOf(store._params());
       return {
         groupBy,
@@ -767,6 +817,8 @@ function createListRowsStore(): Type<ListRowsStoreInstance> {
           store._groups().map((group: GroupProgress): string => group.value),
         collapsed: (): readonly string[] => collapsedOf(store._collapsed(), groupBy()),
         initialLoading: (): boolean => store._key() === null && store._params() !== undefined,
+        hasCurrentSnapshot: (): boolean =>
+          store._params() !== undefined && store._key() === store._params()?.key,
         empty: (): boolean => store._key() !== null && store.ids().length === 0,
         rows: (): readonly ListRow[] => {
           const grouping: ListGroupQuery['groupBy'] | null = groupBy();
@@ -775,6 +827,7 @@ function createListRowsStore(): Type<ListRowsStoreInstance> {
           const open: Readonly<Partial<Record<string, boolean>>> = store._open();
           const children: Readonly<Partial<Record<string, ChildRows>>> = store._children();
           const entering: readonly string[] = store._entering();
+          const entities: Readonly<Partial<Record<string, TaskSummary>>> = store.entityMap();
           const rows: ListRow[] = [];
           const walk: (task: TaskSummary, group: string, depth: number) => void = (
             task: TaskSummary,
@@ -786,12 +839,26 @@ function createListRowsStore(): Type<ListRowsStoreInstance> {
               mode !== 'separate' && depth < SUBTASK_DEPTH && shown.subtasks.total > 0;
             const expanded: boolean = expandable && (open[shown.key] ?? mode === 'expanded');
             const kids: ChildRows | undefined = children[shown.key];
+            let actualDepth: number = depth;
+            if (mode === 'separate') {
+              let parent: string | null = shown.parentKey;
+              while (parent !== null && actualDepth < SUBTASK_DEPTH) {
+                const ancestor: TaskSummary | undefined = entities[parent];
+                if (!ancestor) {
+                  actualDepth = SUBTASK_DEPTH;
+                  break;
+                }
+                actualDepth++;
+                parent = ancestor.parentKey;
+              }
+            }
             rows.push({
               id: grouping === 'assignee' ? `${group}/${shown.key}` : shown.key,
               group,
               task: shown,
               status: store._status.displayedStatus(shown),
               depth,
+              canAddSubtask: actualDepth < SUBTASK_DEPTH && shown.subtasks.total < 25,
               expandable,
               expanded,
               childrenFailed: expanded && kids?.status === 'failed',
@@ -801,9 +868,18 @@ function createListRowsStore(): Type<ListRowsStoreInstance> {
               for (const child of kids.tasks) walk(child, group, depth + 1);
             }
           };
-          for (const task of store.entities()) {
-            for (const group of groupValuesOf(effective(task), grouping)) {
-              if (!hidden.includes(group)) walk(task, group, 0);
+          if (grouping === 'assignee') {
+            for (const group of store._groups()) {
+              for (const key of store._groupKeys()[group.value] ?? []) {
+                const task: TaskSummary | undefined = entities[key];
+                if (task) walk(task, group.value, 0);
+              }
+            }
+          } else {
+            for (const task of store.entities()) {
+              for (const group of groupValuesOf(effective(task), grouping)) {
+                if (!hidden.includes(group)) walk(task, group, 0);
+              }
             }
           }
           return rows;
@@ -811,22 +887,25 @@ function createListRowsStore(): Type<ListRowsStoreInstance> {
       };
     }),
     withComputed((store) => ({
-      _wantedChildren: (): readonly string[] => {
+      _visibleChildren: (): readonly string[] => {
         const collapsed: readonly string[] = store.collapsed();
-        const children: Readonly<Partial<Record<string, ChildRows>>> = store._children();
-        return store
-          .rows()
-          .filter(
-            (row: ListRow): boolean =>
-              row.expanded && !collapsed.includes(row.group) && !children[row.task.key],
-          )
-          .map((row: ListRow): string => row.task.key);
+        return [
+          ...new Set(
+            store
+              .rows()
+              .filter((row: ListRow): boolean => row.expanded && !collapsed.includes(row.group))
+              .map((row: ListRow): string => row.task.key),
+          ),
+        ];
       },
     })),
     withMethods((store) => {
       let moreController: AbortController | null = null;
       let reloadQueued: boolean = false;
       const childQueue: string[] = [];
+      const childVersions: Map<string, number> = new Map<string, number>();
+      const childInFlight: Set<string> = new Set<string>();
+      let childVersion: number = 0;
       let childReads: number = 0;
 
       const abortMore: () => void = (): void => {
@@ -836,21 +915,25 @@ function createListRowsStore(): Type<ListRowsStoreInstance> {
 
       const pumpChildren: () => void = (): void => {
         while (childReads < CHILD_READS) {
-          const taskKey: string | undefined = childQueue.shift();
-          if (taskKey === undefined) return;
+          const index: number = childQueue.findIndex((key: string) => !childInFlight.has(key));
+          if (index < 0) return;
+          const taskKey: string = childQueue.splice(index, 1)[0];
+          const version: number | undefined = childVersions.get(taskKey);
+          if (version === undefined) continue;
           const scope: string | null = store._scope();
+          childInFlight.add(taskKey);
           childReads++;
           store._api
             .subtasks(taskKey)
             .then(
               (tasks: readonly TaskSummary[]): void => {
-                if (scope !== store._scope()) return;
+                if (scope !== store._scope() || childVersions.get(taskKey) !== version) return;
                 patchState(store, (state: ListRowsState): Partial<ListRowsState> => ({
                   _children: { ...state._children, [taskKey]: { status: 'loaded', tasks } },
                 }));
               },
               (): void => {
-                if (scope !== store._scope()) return;
+                if (scope !== store._scope() || childVersions.get(taskKey) !== version) return;
                 patchState(store, (state: ListRowsState): Partial<ListRowsState> => ({
                   _children: {
                     ...state._children,
@@ -860,14 +943,23 @@ function createListRowsStore(): Type<ListRowsStoreInstance> {
               },
             )
             .finally((): void => {
+              childInFlight.delete(taskKey);
               childReads--;
               pumpChildren();
             });
         }
       };
 
-      const readChildren: (taskKey: string) => void = (taskKey: string): void => {
-        if (childQueue.includes(taskKey)) return;
+      const readChildren: (taskKey: string, refresh?: boolean) => void = (
+        taskKey: string,
+        refresh: boolean = false,
+      ): void => {
+        if (
+          childQueue.includes(taskKey) ||
+          (!refresh && childInFlight.has(taskKey) && childVersions.has(taskKey))
+        )
+          return;
+        childVersions.set(taskKey, ++childVersion);
         patchState(store, (state: ListRowsState): Partial<ListRowsState> => ({
           _children: {
             ...state._children,
@@ -915,6 +1007,13 @@ function createListRowsStore(): Type<ListRowsStoreInstance> {
                 (state: ListRowsState): Partial<ListRowsState> => ({
                   loadingMore: false,
                   _groups: advanceGroup(state._groups, target.value, page),
+                  _groupKeys: {
+                    ...state._groupKeys,
+                    [target.value]: [
+                      ...(state._groupKeys[target.value] ?? []),
+                      ...page.items.map((task: TaskSummary) => task.key),
+                    ],
+                  },
                 }),
               );
               if (folded) loadMore();
@@ -938,10 +1037,12 @@ function createListRowsStore(): Type<ListRowsStoreInstance> {
           if (scope === store._scope()) return;
           abortMore();
           childQueue.length = 0;
+          childVersions.clear();
           patchState(store, removeAllEntities(), {
             _scope: scope,
             _key: null,
             _groups: [],
+            _groupKeys: {},
             _children: {},
             _open: {},
             _entering: [],
@@ -957,11 +1058,14 @@ function createListRowsStore(): Type<ListRowsStoreInstance> {
             patchState(store, setAllEntities(uniqueTasks(snapshot.tasks)), {
               _key: snapshot.key,
               _groups: snapshot.groups,
+              _groupKeys: snapshot.groupKeys,
               loadingMore: false,
               moreFailed: false,
             });
             if (sameKey) {
-              for (const taskKey of Object.keys(store._children())) readChildren(taskKey);
+              for (const taskKey of store._visibleChildren()) {
+                if (store._children()[taskKey]) readChildren(taskKey, true);
+              }
             }
           },
         ),
@@ -971,8 +1075,26 @@ function createListRowsStore(): Type<ListRowsStoreInstance> {
             store.primary.reload();
           }
         }),
-        _readWanted: signalMethod<readonly string[]>((keys: readonly string[]): void => {
-          for (const taskKey of keys) readChildren(taskKey);
+        _syncChildren: signalMethod<readonly string[]>((keys: readonly string[]): void => {
+          const visible: Set<string> = new Set<string>(keys);
+          const stale: string[] = Object.keys(store._children()).filter(
+            (key: string) => !visible.has(key),
+          );
+          if (stale.length > 0) {
+            for (const key of stale) {
+              childVersions.delete(key);
+              const index: number = childQueue.indexOf(key);
+              if (index >= 0) childQueue.splice(index, 1);
+            }
+            patchState(store, (state: ListRowsState): Partial<ListRowsState> => ({
+              _children: Object.fromEntries(
+                Object.entries(state._children).filter(([key]: [string, ChildRows | undefined]) =>
+                  visible.has(key),
+                ),
+              ),
+            }));
+          }
+          for (const key of keys) if (!store._children()[key]) readChildren(key);
         }),
         _watch: rxMethod<string | null>(
           pipe(
@@ -1010,27 +1132,6 @@ function createListRowsStore(): Type<ListRowsStoreInstance> {
           patchState(store, (state: ListRowsState): Partial<ListRowsState> => ({
             _entering: state._entering.filter((key: string): boolean => key !== taskKey),
           }));
-        },
-        _refresh(task: TaskSummary): void {
-          if (task.id in store.entityMap()) {
-            patchState(store, updateEntity({ id: task.id, changes: task }));
-          }
-          const parent: string | null = task.parentKey;
-          const kids: ChildRows | undefined =
-            parent === null ? undefined : store._children()[parent];
-          if (parent !== null && kids) {
-            patchState(store, (state: ListRowsState): Partial<ListRowsState> => ({
-              _children: {
-                ...state._children,
-                [parent]: {
-                  ...kids,
-                  tasks: kids.tasks.map((child: TaskSummary): TaskSummary =>
-                    child.id === task.id ? task : child,
-                  ),
-                },
-              },
-            }));
-          }
         },
         load: signalMethod<ListRowsQuery>((query: ListRowsQuery): void => {
           patchState(store, { _query: query });
@@ -1085,7 +1186,7 @@ function createListRowsStore(): Type<ListRowsStoreInstance> {
           ),
         );
         store._flushReload(store.primary.status);
-        store._readWanted(store._wantedChildren);
+        store._syncChildren(store._visibleChildren);
         store._watch(computed((): string | null => store._params()?.listId ?? null));
         const changes: { unsubscribe: () => void } = store._status.changed.subscribe(
           (change: TaskStatusChange): void => {
@@ -1102,15 +1203,9 @@ function createListRowsStore(): Type<ListRowsStoreInstance> {
             if (task.listId === store._params()?.listId) store.reload();
           },
         );
-        const refreshed: { unsubscribe: () => void } = store._fields.refreshed.subscribe(
-          (task: TaskSummary): void => {
-            store._refresh(task);
-          },
-        );
         destroyRef.onDestroy((): void => {
           changes.unsubscribe();
           created.unsubscribe();
-          refreshed.unsubscribe();
           for (const timer of timers) clearTimeout(timer);
         });
       },
@@ -1122,14 +1217,13 @@ function createListRowsStore(): Type<ListRowsStoreInstance> {
  * Constant ListRowsStore
  *
  * @description
- * The rows of the « Liste » view, provided by the `list` route with `TaskStatusChangesStore`
- * and `TaskFieldChangesStore`. Grouping is a filter: the primary read takes the group counts
+ * The rows of the « Liste » view, provided by the `list` route with `TaskStatusChangesStore`. Grouping is a filter: the primary read takes the group counts
  * (`countTaskGroups`), then cursor pages of each group in order (`queryListTasks` with the
  * group's value); `loadMore` reads the next page as the table scrolls, and a folded group reads
  * its first page only, so its header shows. A row is filed under its settled status, so it joins
  * its new group 460 ms after the last click while its icon and word change at once. Subtasks are
  * read under each opened parent (`listSubtasks`), two levels deep. A realtime notice of the list
- * reads the rows again in place, after 300 ms of quiet; the status and field stores keep pending
+ * reads the rows again in place, after 300 ms of quiet; the status store keeps pending
  * and in-flight changes over what it reads. The rows follow the committed organization: a switch
  * or another list empties them at once and drops late answers.
  *

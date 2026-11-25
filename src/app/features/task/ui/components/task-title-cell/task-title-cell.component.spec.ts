@@ -1,5 +1,4 @@
 import { type ComponentFixture, TestBed } from '@angular/core/testing';
-import type { StatusKey } from '@cadenway/contracts';
 import { describe, expect, it } from 'vitest';
 
 import type { TaskSummary } from '../../../models/task-summary/task-summary.interface';
@@ -77,36 +76,11 @@ describe('TaskTitleCell', () => {
     expect(host.textContent).toContain('CAD-470');
   });
 
-  it('emits the next status from the icon and opens from the name', async () => {
+  it('opens the task when its status icon is clicked', async () => {
     const fixture: ComponentFixture<TaskTitleCell> = await render(task);
-    const statuses: (StatusKey | null)[] = [];
     let opened: number = 0;
-    fixture.componentInstance.statusClicked.subscribe((status: StatusKey | null) =>
-      statuses.push(status),
-    );
     fixture.componentInstance.opened.subscribe(() => (opened += 1));
-    const [statusButton, nameButton]: HTMLButtonElement[] = Array.from(
-      (fixture.nativeElement as HTMLElement).querySelectorAll('button'),
-    );
-
-    statusButton.click();
-    nameButton.click();
-
-    expect(statuses).toEqual(['progress']);
+    (fixture.nativeElement as HTMLElement).querySelector<HTMLElement>('cw-status-icon')?.click();
     expect(opened).toBe(1);
-  });
-
-  it('shows the displayed status rather than the saved one', async () => {
-    const fixture: ComponentFixture<TaskTitleCell> = await render(task);
-    const statuses: (StatusKey | null)[] = [];
-    fixture.componentInstance.statusClicked.subscribe((status: StatusKey | null) =>
-      statuses.push(status),
-    );
-    fixture.componentRef.setInput('status', 'done');
-    await fixture.whenStable();
-
-    (fixture.nativeElement as HTMLElement).querySelector('button')?.click();
-
-    expect(statuses).toEqual([null]);
   });
 });

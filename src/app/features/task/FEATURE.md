@@ -27,16 +27,13 @@ the 404 meanwhile).
 
 - Models: `TaskSummary` (`id` is the key, `version` is the `If-Match` precondition), `TaskProgress`,
   `StatusOption`, `Person`, `TaskStatusChange`, `TaskCancellation`, `TaskCancelRequest`,
-  `TaskFieldChange`, `TaskCreateOptions`, `CreatedTask`; the words `STATUS_LABELS` and
+  `TaskCreateOptions`, `CreatedTask`; the words `STATUS_LABELS` and
   `PRIORITY_LABELS`; the rules `nextStatus`, `isClosedStatus`, `statusLabel`, `pickableStatuses` and
   `defaultStatusOptions`; `initialsOf` and `personOf(userId, name)` for members another feature read.
 - `TaskStatusChangesStore`, a SignalStore the consumer provides on its route: `request(task, status,
 options?)`, `requestCancel(tasks, options?)`, `pendingStatus(taskId)`, `displayedStatus(task)`,
   `settledStatus(task)`, `settledTask(task)`, `undo(taskId)`, `cancelRequest` with
   `confirmCancel(cancellation)` and `keepTask()`, and the `changed` stream; `STATUS_SETTLE_MS` (460).
-- `TaskFieldChangesStore`, a SignalStore the consumer provides on its route: `edit(task, change)` for
-  the priority and the assignees, `displayed(task)`, and the `refreshed` stream of tasks read again
-  after a conflict.
 - `TaskCreate` (root): `open(options?)`, `useDefaults(defaults, destroyRef)`, `close()`, `isOpen`,
   `options`, `created`.
 - Presentational components, inputs and outputs only: `cw-task-status-picker`,
@@ -45,9 +42,7 @@ options?)`, `requestCancel(tasks, options?)`, `pendingStatus(taskId)`, `displaye
 
 ## Dependencies
 
-- `@cadenway/api-client` through `data-access/`: `TasksService.updateTask` (status and priority,
-  with `If-Match`), `assignTask` and `unassignTask` (with `If-Match`; the version after an unassign
-  comes from `ETag`), `getTask`, `createTask` and `createSubtask` (with `Idempotency-Key`), `listLabels`;
+- `@cadenway/api-client` through `data-access/`: `TasksService.updateTask` (status with `If-Match`), `getTask`, `createTask` and `createSubtask` (with `Idempotency-Key`), `listLabels`;
   `SpacesService.listSpaces`, `getSpace` (`cache: 'no-store'`), `listTaskTemplates`;
   `ListsService.listLists`; `MembersService.listMembers` (owners, admins and members). Every
   collection is read to its last cursor page.
@@ -75,14 +70,6 @@ options?)`, `requestCancel(tasks, options?)`, `pendingStatus(taskId)`, `displaye
   away from « Annulé » sends its reason again without its note, which task summaries do not carry.
   A pending write flushed after destruction is dropped if its queued organization is no longer
   the committed organization.
-- `TaskFieldChangesStore` is never provided at the root either. An edit shows at once; the edits of
-  one task are written in order, each against the version the previous one returned (and never
-  below the version of the task the caller passes, so chain it after `settledTask`). An assignee
-  change becomes one `assignTask` or `unassignTask` per person. A refusal restores the value the
-  edit replaced, unless a later edit changed it again, and shows the failure toast; a `412` reads
-  the task again, emits it on `refreshed` and warns. `displayed(task)` prefers the edit while it is
-  written or while its version is newer than the caller's task. An edit queued before an
-  organization switch is dropped. Labels and the due date are not edited in place yet.
 - « Annulé » always opens the cancel reason dialog first (`cancelRequest`): Doublon, Ne sera pas
   fait, Hors périmètre, Obsolète and an optional « Précision »; « Garder la tâche » changes nothing.
   The consumer renders `cw-task-cancel-dialog` bound to `cancelRequest`, `confirmCancel` and
@@ -123,6 +110,5 @@ options?)`, `requestCancel(tasks, options?)`, `pendingStatus(taskId)`, `displaye
 | `task.create.failed`, `task.create.failed-text`                                             | The mockup draws no refused creation.                            |
 | `task.status-change.failed*`, `task.status-change.conflict*`                                | The mockup draws no refused or conflicting status change.        |
 | `task.status-change.cancel-failed-*`                                                        | The mockup draws no refused cancellation.                        |
-| `task.field-change.*`                                                                       | The mockup draws no refused or conflicting in-place edit.        |
 | `task.title-cell.subtasks`, `task.title-cell.checklist`, `task.title-cell.comments`         | Screen reader texts and tooltips the mockup does not write out.  |
 | `task.cancel-dialog.close`, `task.create.close`                                             | Close button of the dialog brick.                                |

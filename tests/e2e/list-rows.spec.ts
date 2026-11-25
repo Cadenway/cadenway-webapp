@@ -313,31 +313,23 @@ test('the list view shows the rows of Sprint 14 under their status', async ({ pa
   await expect(grid).toBeVisible();
   await expect(grid.getByText('Refondre l’écran de connexion SSO')).toBeVisible();
   await expect(grid.getByText('Page des quotas d’organisation')).toBeVisible();
-  await expect(grid.getByRole('button', { name: /À faire/ }).first()).toBeVisible();
+  await expect(
+    grid.getByRole('button', { name: /Refondre l’écran de connexion SSO/ }),
+  ).toBeVisible();
   expect(gateway.calls).toContain(`GET /v1/lists/${sprint14.id}/task-groups`);
   expect(gateway.calls).toContain(`QUERY /v1/lists/${sprint14.id}/tasks`);
 });
 
-test('a status change shows at once and « Annuler » puts the previous status back', async ({
-  page,
-}) => {
+test('the row status icon opens the task without changing its status', async ({ page }) => {
   const gateway = await stubGateway(page);
   await page.goto(`/atelier-nord/l/${sprint14.id}/list`);
   const grid = page.getByRole('grid', { name: 'Tâches de la liste Sprint 14' });
-  await expect(grid.getByText('Refondre l’écran de connexion SSO')).toBeVisible();
-
-  await grid.getByRole('button', { name: 'À faire · passer à « En cours »' }).first().click();
-  await expect(
-    grid.getByRole('button', { name: 'En cours · passer à « En revue »' }),
-  ).toBeVisible();
-  await expect(page.getByText('CAD-482 passée en En cours')).toBeVisible();
-
-  await page.getByRole('button', { name: 'Annuler', exact: true }).click();
-  await expect(grid.getByRole('button', { name: 'En cours · passer à « En revue »' })).toBeHidden();
-  expect(gateway.writes.map((write) => write.body)).toEqual([
-    { status: 'progress' },
-    { status: 'todo' },
-  ]);
+  await grid
+    .getByRole('button', { name: /Refondre l’écran de connexion SSO/ })
+    .locator('cw-status-icon')
+    .click();
+  await expect(page).toHaveURL(/task=CAD-482/);
+  expect(gateway.writes).toEqual([]);
 });
 
 test('« Créer une tâche » creates in the list and the row shows', async ({ page }) => {
@@ -369,7 +361,9 @@ test('the selection marks its tasks done through the bulk action', async ({ page
   await expect(bar).toContainText('2 sélectionnées');
   await bar.getByRole('button', { name: 'Marquer terminé' }).click();
 
-  await expect(page.getByText('2 tâches terminées')).toBeVisible();
+  await expect(
+    page.getByRole('region', { name: 'Notifications (F8)' }).getByText('2 tâches terminées'),
+  ).toBeVisible();
   await expect(bar).toBeHidden();
   expect(gateway.writes).toContainEqual({
     key: 'POST /v1/tasks/bulk-actions',

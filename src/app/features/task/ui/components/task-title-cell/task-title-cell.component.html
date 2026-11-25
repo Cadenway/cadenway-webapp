@@ -1,17 +1,9 @@
 <button
   type="button"
-  class="inline-flex size-6 shrink-0 items-center justify-center rounded-md transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-  [attr.aria-label]="statusName()"
-  [title]="statusName()"
-  (click)="clickStatus($event)"
->
-  <cw-status-icon [status]="shown()" [from]="from()" [milestone]="task().milestone" size="4" />
-</button>
-<button
-  type="button"
   class="flex w-full min-w-0 items-center gap-2 rounded-md px-1 py-1 text-left focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none focus-visible:ring-inset"
   (click)="opened.emit()"
 >
+  <cw-status-icon [status]="shown()" [from]="from()" [milestone]="task().milestone" size="4" />
   <span
     class="truncate font-medium"
     [class.text-muted-foreground]="shown() === 'done' || shown() === 'cancelled'"

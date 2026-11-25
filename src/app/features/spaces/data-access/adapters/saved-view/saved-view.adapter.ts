@@ -217,6 +217,17 @@ export function toBulkTaskAction(
     case 'done':
       value = { type: 'status', status: 'done' };
       break;
+    case 'status':
+      value =
+        action.status === 'cancelled'
+          ? {
+              type: 'status',
+              status: action.status,
+              cancelReason: action.cancelReason,
+              cancelNote: action.cancelNote,
+            }
+          : { type: 'status', status: action.status };
+      break;
     case 'assign':
       value = { type: 'assign', userId: action.userId };
       break;

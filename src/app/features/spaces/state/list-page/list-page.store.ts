@@ -22,7 +22,11 @@ import {
 
 import { type RealtimeChange, RealtimeConnection } from '@core/realtime';
 
-import { type ListExport, ListsApi } from '../../data-access/services/lists-api/lists-api.service';
+import {
+  isUncertainBulkFailure,
+  type ListExport,
+  ListsApi,
+} from '../../data-access/services/lists-api/lists-api.service';
 import { SpacesApi } from '../../data-access/services/spaces-api/spaces-api.service';
 import {
   BULK_CHUNK_SIZE,
@@ -592,18 +596,34 @@ function createListPageStore(): Type<ListPageStoreInstance> {
           let affected: number = 0;
           const done: BulkSelection[] = [];
           const failed: BulkSelection[] = [];
+          const unknown: BulkSelection[] = [];
           for (let start: number = 0; start < selection.length; start += BULK_CHUNK_SIZE) {
             const chunk: readonly BulkSelection[] = selection.slice(start, start + BULK_CHUNK_SIZE);
-            const changed: number | null = await attempt(() => store._api.bulk(chunk, action));
-            if (changed === null) {
-              failed.push(...chunk);
-            } else {
+            const key: string = crypto.randomUUID();
+            let uncertain: boolean = false;
+            try {
+              let changed: number;
+              try {
+                changed = await store._api.bulk(chunk, action, key);
+              } catch (error: unknown) {
+                if (!isUncertainBulkFailure(error)) throw error;
+                uncertain = true;
+                changed = await store._api.bulk(chunk, action, key);
+              }
               affected += changed;
               done.push(...chunk);
+            } catch (error: unknown) {
+              if (!uncertain && !isUncertainBulkFailure(error)) {
+                failed.push(...chunk);
+              } else {
+                unknown.push(...chunk);
+                failed.push(...selection.slice(start + BULK_CHUNK_SIZE));
+                break;
+              }
             }
           }
-          if (done.length > 0) reloadCounts();
-          return { affected, done, failed };
+          if (done.length > 0 || unknown.length > 0) reloadCounts();
+          return { affected, done, failed, unknown };
         },
       };
     }),

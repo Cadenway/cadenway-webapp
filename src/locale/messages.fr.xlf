@@ -4064,30 +4064,6 @@
           <context context-type="linenumber">171</context>
         </context-group>
       </trans-unit>
-      <trans-unit id="task.field-change.conflict" datatype="html">
-        <source><x id="key" equiv-text="before.key"/> changed elsewhere</source>
-        <target><x id="key" equiv-text="before.key"/> modifiée ailleurs</target>
-        <context-group purpose="location">
-          <context context-type="sourcefile">src/app/features/task/state/task-field-changes/task-field-changes.store.ts</context>
-          <context context-type="linenumber">406</context>
-        </context-group>
-      </trans-unit>
-      <trans-unit id="task.field-change.conflict-text" datatype="html">
-        <source>Its latest values are shown.</source>
-        <target>Ses dernières valeurs sont affichées.</target>
-        <context-group purpose="location">
-          <context context-type="sourcefile">src/app/features/task/state/task-field-changes/task-field-changes.store.ts</context>
-          <context context-type="linenumber">408</context>
-        </context-group>
-      </trans-unit>
-      <trans-unit id="task.field-change.failed" datatype="html">
-        <source>The change could not be saved</source>
-        <target>Impossible d’enregistrer la modification</target>
-        <context-group purpose="location">
-          <context context-type="sourcefile">src/app/features/task/state/task-field-changes/task-field-changes.store.ts</context>
-          <context context-type="linenumber">424</context>
-        </context-group>
-      </trans-unit>
       <trans-unit id="task.status-change.failed-text" datatype="html">
         <source>The server did not answer. Try again in a moment.</source>
         <target>Le serveur n’a pas répondu. Réessayez dans un instant.</target>
@@ -4386,14 +4362,6 @@
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/task/ui/components/task-title-cell/task-title-cell.component.html</context>
           <context context-type="linenumber">69,70</context>
-        </context-group>
-      </trans-unit>
-      <trans-unit id="task.title-cell.advance" datatype="html">
-        <source><x id="status" equiv-text="label"/> · move to “<x id="next" equiv-text="statusLabel(next, this.options(), task.milestone)"/>”</source>
-        <target><x id="status" equiv-text="label"/> · passer à « <x id="next" equiv-text="statusLabel(next, this.options(), task.milestone)"/> »</target>
-        <context-group purpose="location">
-          <context context-type="sourcefile">src/app/features/task/ui/components/task-title-cell/task-title-cell.component.ts</context>
-          <context context-type="linenumber">149</context>
         </context-group>
       </trans-unit>
       <trans-unit id="task.cancel-dialog.title-count" datatype="html">
@@ -7512,6 +7480,22 @@
           <context context-type="linenumber">228,229</context>
         </context-group>
       </trans-unit>
+      <trans-unit id="spaces.bulk.status-toast" datatype="html">
+        <source><x id="label" equiv-text="label"/> · Status</source>
+        <target><x id="label" equiv-text="label"/> · Statut</target>
+      </trans-unit>
+      <trans-unit id="spaces.bulk.unknown" datatype="html">
+        <source>The outcome is unknown. The tasks are being refreshed.</source>
+        <target>Le résultat est inconnu. Les tâches sont en cours d’actualisation.</target>
+      </trans-unit>
+      <trans-unit id="spaces.rows.add-subtask" datatype="html">
+        <source>Add a subtask to <x id="key" equiv-text="row.task.key"/></source>
+        <target>Ajouter une sous-tâche à <x id="key" equiv-text="row.task.key"/></target>
+      </trans-unit>
+      <trans-unit id="spaces.rows.reload-failed" datatype="html">
+        <source>The tasks could not be refreshed.</source>
+        <target>Les tâches n’ont pas pu être actualisées.</target>
+      </trans-unit>
       <trans-unit id="spaces.rows.more-failed" datatype="html">
         <source>The next tasks could not be loaded.</source>
         <target>Les tâches suivantes n’ont pas pu être chargées.</target>
@@ -7628,12 +7612,84 @@
           <context context-type="linenumber">192</context>
         </context-group>
       </trans-unit>
-      <trans-unit id="spaces.bulk.partial" datatype="html">
+      <trans-unit id="spaces.bulk.done-toast-one" datatype="html">
+        <source><x id="count" equiv-text="count"/> task done</source>
+        <target><x id="count" equiv-text="count"/> tâche terminée</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/spaces/constants/bulk-copy/bulk-copy.constants.ts</context>
+          <context context-type="linenumber">12</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="spaces.bulk.done-toast-many" datatype="html">
+        <source><x id="count" equiv-text="count"/> tasks done</source>
+        <target><x id="count" equiv-text="count"/> tâches terminées</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/spaces/constants/bulk-copy/bulk-copy.constants.ts</context>
+          <context context-type="linenumber">13</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="spaces.bulk.moved-one" datatype="html">
+        <source><x id="count" equiv-text="count"/> task moved</source>
+        <target><x id="count" equiv-text="count"/> tâche déplacée</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/spaces/constants/bulk-copy/bulk-copy.constants.ts</context>
+          <context context-type="linenumber">27</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="spaces.bulk.moved-many" datatype="html">
+        <source><x id="count" equiv-text="count"/> tasks moved</source>
+        <target><x id="count" equiv-text="count"/> tâches déplacées</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/spaces/constants/bulk-copy/bulk-copy.constants.ts</context>
+          <context context-type="linenumber">28</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="spaces.bulk.deleted-one" datatype="html">
+        <source><x id="count" equiv-text="count"/> task deleted</source>
+        <target><x id="count" equiv-text="count"/> tâche supprimée</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/spaces/constants/bulk-copy/bulk-copy.constants.ts</context>
+          <context context-type="linenumber">42</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="spaces.bulk.deleted-many" datatype="html">
+        <source><x id="count" equiv-text="count"/> tasks deleted</source>
+        <target><x id="count" equiv-text="count"/> tâches supprimées</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/spaces/constants/bulk-copy/bulk-copy.constants.ts</context>
+          <context context-type="linenumber">43</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="spaces.bulk.updated-one" datatype="html">
+        <source><x id="count" equiv-text="count"/> task updated.</source>
+        <target><x id="count" equiv-text="count"/> tâche mise à jour.</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/spaces/constants/bulk-copy/bulk-copy.constants.ts</context>
+          <context context-type="linenumber">57</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="spaces.bulk.updated-many" datatype="html">
+        <source><x id="count" equiv-text="count"/> tasks updated.</source>
+        <target><x id="count" equiv-text="count"/> tâches mises à jour.</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/spaces/constants/bulk-copy/bulk-copy.constants.ts</context>
+          <context context-type="linenumber">58</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="spaces.bulk.partial-one" datatype="html">
+        <source><x id="failed" equiv-text="failed"/> of <x id="total" equiv-text="total"/> tasks could not be changed</source>
+        <target><x id="failed" equiv-text="failed"/> tâche sur <x id="total" equiv-text="total"/> n’a pas pu être modifiée</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/spaces/constants/bulk-copy/bulk-copy.constants.ts</context>
+          <context context-type="linenumber">73</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="spaces.bulk.partial-many" datatype="html">
         <source><x id="failed" equiv-text="failed"/> of <x id="total" equiv-text="total"/> tasks could not be changed</source>
         <target><x id="failed" equiv-text="failed"/> tâches sur <x id="total" equiv-text="total"/> n’ont pas pu être modifiées</target>
         <context-group purpose="location">
-          <context context-type="sourcefile">src/app/features/spaces/ui/pages/list-view-page/list-view-page.component.ts</context>
-          <context context-type="linenumber">1001</context>
+          <context context-type="sourcefile">src/app/features/spaces/constants/bulk-copy/bulk-copy.constants.ts</context>
+          <context context-type="linenumber">74</context>
         </context-group>
       </trans-unit>
       <trans-unit id="spaces.bulk.partial-text" datatype="html">
@@ -7642,14 +7698,6 @@
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/spaces/ui/pages/list-view-page/list-view-page.component.ts</context>
           <context context-type="linenumber">1002</context>
-        </context-group>
-      </trans-unit>
-      <trans-unit id="spaces.bulk.done-toast" datatype="html">
-        <source><x id="count" equiv-text="count"/> tasks done</source>
-        <target><x id="count" equiv-text="count"/> tâches terminées</target>
-        <context-group purpose="location">
-          <context context-type="sourcefile">src/app/features/spaces/ui/pages/list-view-page/list-view-page.component.ts</context>
-          <context context-type="linenumber">208</context>
         </context-group>
       </trans-unit>
       <trans-unit id="spaces.bulk.done-toast-text" datatype="html">
@@ -7668,36 +7716,12 @@
           <context context-type="linenumber">225</context>
         </context-group>
       </trans-unit>
-      <trans-unit id="spaces.bulk.updated" datatype="html">
-        <source><x id="count" equiv-text="count"/> tasks updated.</source>
-        <target><x id="count" equiv-text="count"/> tâches mises à jour.</target>
-        <context-group purpose="location">
-          <context context-type="sourcefile">src/app/features/spaces/ui/pages/list-view-page/list-view-page.component.ts</context>
-          <context context-type="linenumber">226</context>
-        </context-group>
-      </trans-unit>
-      <trans-unit id="spaces.bulk.moved" datatype="html">
-        <source><x id="count" equiv-text="count"/> tasks moved</source>
-        <target><x id="count" equiv-text="count"/> tâches déplacées</target>
-        <context-group purpose="location">
-          <context context-type="sourcefile">src/app/features/spaces/ui/pages/list-view-page/list-view-page.component.ts</context>
-          <context context-type="linenumber">242</context>
-        </context-group>
-      </trans-unit>
       <trans-unit id="spaces.bulk.moved-text" datatype="html">
         <source>To <x id="name" equiv-text="name"/>.</source>
         <target>Vers <x id="name" equiv-text="name"/>.</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/spaces/ui/pages/list-view-page/list-view-page.component.ts</context>
           <context context-type="linenumber">243</context>
-        </context-group>
-      </trans-unit>
-      <trans-unit id="spaces.bulk.deleted" datatype="html">
-        <source><x id="count" equiv-text="count"/> tasks deleted</source>
-        <target><x id="count" equiv-text="count"/> tâches supprimées</target>
-        <context-group purpose="location">
-          <context context-type="sourcefile">src/app/features/spaces/ui/pages/list-view-page/list-view-page.component.ts</context>
-          <context context-type="linenumber">255</context>
         </context-group>
       </trans-unit>
       <trans-unit id="spaces.bulk.deleted-text" datatype="html">

@@ -122,6 +122,19 @@ describe('saved view adapter', () => {
       selection: [{ taskKey: 'CAD-482', version: 3 }, { taskKey: 'CAD-479' }],
       action: { type: 'status', status: 'done' },
     });
+    expect(
+      toBulkTaskAction(selection, {
+        type: 'status',
+        status: 'cancelled',
+        cancelReason: 'obsolete',
+        cancelNote: 'Replaced',
+      }).action,
+    ).toEqual({
+      type: 'status',
+      status: 'cancelled',
+      cancelReason: 'obsolete',
+      cancelNote: 'Replaced',
+    });
     expect(toBulkTaskAction(selection, { type: 'assign', userId: 'u1' }).action).toEqual({
       type: 'assign',
       userId: 'u1',

@@ -121,40 +121,4 @@ describe('TaskApi', () => {
     request.flush(task);
     await expect(answer).resolves.toMatchObject({ key: 'CAD-482', version: 4 });
   });
-
-  it('sends a priority change with If-Match', async () => {
-    const answer: Promise<TaskSummary> = firstValueFrom(
-      api.changePriority('CAD-482', 3, 'urgente'),
-    );
-    const request: TestRequest = http.expectOne('/v1/tasks/CAD-482');
-
-    expect(request.request.method).toBe('PATCH');
-    expect(request.request.headers.get('If-Match')).toBe('"3"');
-    expect(request.request.body).toEqual({ priority: 'urgente' });
-    request.flush({ ...task, priority: 'urgente' });
-    await expect(answer).resolves.toMatchObject({ priority: 'urgente', version: 4 });
-  });
-
-  it('assigns a person with If-Match and maps a mismatch to TaskVersionConflict', async () => {
-    const answer: Promise<TaskSummary> = firstValueFrom(api.assign('CAD-482', 3, 'u-ines'));
-    const request: TestRequest = http.expectOne('/v1/tasks/CAD-482/assignees/u-ines');
-
-    expect(request.request.method).toBe('PUT');
-    expect(request.request.headers.get('If-Match')).toBe('"3"');
-    request.flush(
-      { code: 'request.version-mismatch', status: 412 },
-      { status: 412, statusText: 'Precondition Failed' },
-    );
-    await expect(answer).rejects.toBeInstanceOf(TaskVersionConflict);
-  });
-
-  it('removes an assignee and reads the new version from the ETag', async () => {
-    const answer: Promise<number | null> = firstValueFrom(api.unassign('CAD-482', 4, 'u-ines'));
-    const request: TestRequest = http.expectOne('/v1/tasks/CAD-482/assignees/u-ines');
-
-    expect(request.request.method).toBe('DELETE');
-    expect(request.request.headers.get('If-Match')).toBe('"4"');
-    request.flush(null, { status: 204, statusText: 'No Content', headers: { ETag: 'W/"5"' } });
-    await expect(answer).resolves.toBe(5);
-  });
 });

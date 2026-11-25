@@ -1,3 +1,4 @@
+import { SPACES_RETRY } from '../../../constants/data-table-texts/data-table-texts.constants';
 import {
   Component,
   computed,
@@ -176,6 +177,17 @@ function readDismissed(storage: Storage | null): readonly string[] {
 })
 export class SpacesSidebar {
   // #region Properties
+  /**
+   * Property retryLabel
+   *
+   * @description
+   * Label for retrying a failed read.
+   *
+   * @type {string}
+   * @readonly
+   */
+  protected readonly retryLabel: string = SPACES_RETRY;
+
   /**
    * Property navigation
    *

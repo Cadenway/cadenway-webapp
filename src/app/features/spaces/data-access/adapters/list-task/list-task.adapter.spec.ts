@@ -1,6 +1,8 @@
 import type { TaskSummary as TaskSummaryDto } from '@cadenway/api-client';
 import { describe, expect, it } from 'vitest';
 
+import { toTaskSummary } from '@features/task/data-access/adapters/task-summary/task-summary.adapter';
+
 import type { ListTaskQuery } from '../../../models/list-view-config/list-view-config.interface';
 import { toGroupCountParams, toListTask, toListTasksQuery, withGroup } from './list-task.adapter';
 
@@ -50,6 +52,10 @@ const query: ListTaskQuery = {
 };
 
 describe('list task adapter', () => {
+  it('maps the same summary as the task feature', () => {
+    expect(toListTask(dto)).toEqual(toTaskSummary(dto));
+  });
+
   it('maps a task of a list page, its key as its id', () => {
     expect(toListTask(dto)).toEqual({
       id: 'CAD-482',

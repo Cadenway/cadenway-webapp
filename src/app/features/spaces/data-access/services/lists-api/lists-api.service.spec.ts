@@ -223,6 +223,9 @@ describe('ListsApi', () => {
     expect(view.config.groupBy).toBe('assignee');
     await api.deleteSavedView(view);
     expect(lists['deleteSavedView']).toHaveBeenCalledWith('l-bugs', 'sv-1');
-    expect(await api.bulk([{ taskKey: 'CAD-499' }], { type: 'done' })).toBe(2);
+    expect(await api.bulk([{ taskKey: 'CAD-499' }], { type: 'done' }, 'key-1')).toBe(2);
+    expect(tasks['executeBulkTaskAction']).toHaveBeenCalledWith(expect.anything(), {
+      headers: { 'Idempotency-Key': 'key-1' },
+    });
   });
 });

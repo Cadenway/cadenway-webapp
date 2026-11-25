@@ -258,7 +258,7 @@ export interface ListRow {
    * Property task
    *
    * @description
-   * The task with its settled status and its in-place edits applied.
+   * The task with its settled status applied.
    *
    * @type {TaskSummary}
    * @readonly
@@ -286,6 +286,17 @@ export interface ListRow {
    * @readonly
    */
   readonly depth: number;
+
+  /**
+   * Property canAddSubtask
+   *
+   * @description
+   * Whether the known ancestry and child count permit adding another subtask.
+   *
+   * @type {boolean}
+   * @readonly
+   */
+  readonly canAddSubtask: boolean;
 
   /**
    * Property expandable

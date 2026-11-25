@@ -1,14 +1,8 @@
 @if (navigation.favorites.error()) {
   <div role="alert">
     <span i18n="@@spaces.secondary.favorites-failed">The favorites could not be loaded.</span>
-    <button
-      cwButton
-      variant="outline"
-      size="xs"
-      (click)="navigation.favorites.reload()"
-      i18n="@@spaces.retry"
-    >
-      Retry
+    <button cwButton variant="outline" size="xs" (click)="navigation.favorites.reload()">
+      {{ retryLabel }}
     </button>
   </div>
 }
@@ -54,9 +48,8 @@
         variant="outline"
         size="xs"
         (click)="navigation.spaces.reload()"
-        i18n="@@spaces.retry"
       >
-        Retry
+        {{ retryLabel }}
       </button>
     </div>
   } @else if (!navigation.spaces.hasValue()) {
@@ -93,14 +86,8 @@
         @if (navigation.overviews.hasValue() && !navigation.overviews.value()[view.space.id]) {
           <div role="alert">
             <span i18n="@@spaces.secondary.overview-failed">The lists could not be loaded.</span>
-            <button
-              cwButton
-              variant="outline"
-              size="xs"
-              (click)="navigation.overviews.reload()"
-              i18n="@@spaces.retry"
-            >
-              Retry
+            <button cwButton variant="outline" size="xs" (click)="navigation.overviews.reload()">
+              {{ retryLabel }}
             </button>
           </div>
         }

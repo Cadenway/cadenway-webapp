@@ -8,7 +8,7 @@ import { provideCwInlineEditLabels } from '@cadenway/ui/components/inline-edit';
 import { provideCwStatusLabels } from '@cadenway/ui/components/status-icon';
 import { provideCwToolbarLabels } from '@cadenway/ui/components/toolbar';
 
-import { TaskFieldChangesStore, TaskStatusChangesStore } from '@features/task';
+import { TaskStatusChangesStore } from '@features/task';
 
 import { LIST_TABLE_TEXTS } from './constants/data-table-texts/data-table-texts.constants';
 import { statusLabels } from './constants/view-labels/view-labels.constants';
@@ -89,12 +89,7 @@ export const SPACES_ROUTES: Routes = [
           { path: '', pathMatch: 'full', redirectTo: 'list' },
           {
             path: 'list',
-            providers: [
-              TaskStatusChangesStore,
-              TaskFieldChangesStore,
-              ListRowsStore,
-              LIST_TABLE_TEXTS,
-            ],
+            providers: [TaskStatusChangesStore, ListRowsStore, LIST_TABLE_TEXTS],
             loadComponent: async (): Promise<Type<unknown>> =>
               (await import('./ui/pages/list-view-page/list-view-page.component')).ListViewPage,
           },

@@ -1,3 +1,5 @@
+import type { CancelReason, StatusKey } from '@cadenway/contracts';
+
 /**
  * Interface BulkSelection
  *
@@ -41,6 +43,12 @@ export interface BulkSelection {
  */
 export type BulkAction =
   | { readonly type: 'done' }
+  | {
+      readonly type: 'status';
+      readonly status: StatusKey;
+      readonly cancelReason?: CancelReason;
+      readonly cancelNote?: string | null;
+    }
   | { readonly type: 'assign'; readonly userId: string }
   | { readonly type: 'move'; readonly listId: string }
   | { readonly type: 'trash' };
@@ -97,5 +105,16 @@ export interface BulkOutcome {
    * @readonly
    */
   readonly failed: readonly BulkSelection[];
+
+  /**
+   * Property unknown
+   *
+   * @description
+   * Tasks whose chunk may have been applied but whose response was lost.
+   *
+   * @type {readonly BulkSelection[]}
+   * @readonly
+   */
+  readonly unknown: readonly BulkSelection[];
   // #endregion
 }

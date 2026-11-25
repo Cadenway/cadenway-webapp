@@ -2,6 +2,16 @@ import type { Provider } from '@angular/core';
 import { provideCwDataTableTexts } from '@cadenway/ui/components/data-table';
 
 /**
+ * Constant SPACES_RETRY
+ *
+ * @description
+ * Label for retrying a failed spaces read.
+ *
+ * @type {string}
+ */
+export const SPACES_RETRY: string = $localize`:@@spaces.retry:Retry`;
+
+/**
  * Constant LIST_TABLE_TEXTS
  *
  * @description
@@ -51,7 +61,7 @@ export const LIST_TABLE_TEXTS: Provider = provideCwDataTableTexts(() => ({
   columnMoved: (header: string, position: number): string =>
     $localize`:@@spaces.table.column-moved:${header}:header: column in position ${position}:position:`,
   loading: $localize`:@@spaces.table.loading:Loading`,
-  retry: $localize`:@@spaces.retry:Retry`,
+  retry: SPACES_RETRY,
   bulkBar: $localize`:@@spaces.bulk.label:Actions on the selection`,
   deselect: $localize`:@@spaces.table.deselect:Deselect`,
   pagination: $localize`:@@spaces.table.pagination:Pagination`,

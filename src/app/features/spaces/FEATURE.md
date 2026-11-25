@@ -19,7 +19,7 @@ breadcrumb, dialog, inline edit, toolbar).
 - `spaces/:spaceId` loads `SpaceOverviewPage` (« Vue d’ensemble »).
 - `l/:listId` loads `ListPage` and provides `ListPageStore` and `ListViewStore` to its views; `''`
   redirects to `list`, which loads `ListViewPage` and provides `ListRowsStore`, Task's
-  `TaskStatusChangesStore` and `TaskFieldChangesStore`, and the English texts of `cw-data-table`.
+  `TaskStatusChangesStore`, and the English texts of `cw-data-table`.
   `?savedView=<id>` applies a saved view of the list; `?task=<KEY>` is set when a row opens (the
   detail host that reads it comes in step 5).
 - Failed primary reads render the router's default error component, `RouteErrorBoundary`, in the
@@ -50,8 +50,8 @@ breadcrumb, dialog, inline edit, toolbar).
   `MembersService.listMembers`, `TasksService` (`listLabels`, `executeBulkTaskAction`,
   `listSubtasks`) and `TaskQueriesService` (`queryListTasks` for the rows and the milestone count,
   `countTaskGroups` for the groups). Every rows read bypasses the HTTP cache.
-- Task (`@features/task`): `TaskSummary`, `TaskStatusChangesStore`, `TaskFieldChangesStore`,
-  `TaskCreate`, `cw-task-title-cell`, `cw-task-people-picker`, `cw-task-priority-picker`,
+- Task (`@features/task`): `TaskSummary`, `TaskStatusChangesStore`,
+  `TaskCreate`, `cw-task-title-cell`,
   `cw-task-due-date`, `cw-task-label-chips`, `cw-task-cancel-dialog`, `personOf` and the status
   rules.
 - `@core/api` (problem readers), `@core/realtime` (`watch({ kind: 'list' })`), `@shared/layout-slot`
@@ -86,17 +86,19 @@ breadcrumb, dialog, inline edit, toolbar).
     grouping by status) reads its first page only, so its header shows, and reads on when opened.
     Another query reads again and keeps the rows until the answer (superseded reads are aborted);
     another list or organization (`WORKSPACE_CONTEXT`) empties them at once and drops late answers.
-    The primary read fails to the route's error boundary; a next page or a subtask read fails in
-    place with « Réessayer ». A row is filed under the task's settled status, so it joins its new
-    group 460 ms after the last click (`STATUS_SETTLE_MS`) while the icon and word change at once,
-    and plays `animate-row-in` for 520 ms (`motion-reduce:animate-none`). Grouping by assignee
-    shows a task under each assignee. Subtasks are read under each opened parent (`listSubtasks`,
-    four reads at a time), two levels deep; « Dépliées » opens every parent and a mode change
+    A first primary read fails to the route's error boundary; a failed background refresh, next
+    page or subtask read offers « Réessayer » in place. A row is filed under the task's settled status, so it joins its new
+    group 460 ms after the last click (`STATUS_SETTLE_MS`), or immediately with reduced motion,
+    while the icon and word change at once. The row retains focus when it moves. Grouping by
+    assignee uses the gateway's order for each group, including a task with several assignees.
+    Subtasks are read under visible opened parents (`listSubtasks`, four reads at a time), two
+    levels deep; closed and folded parents are pruned and stale answers are ignored. « Dépliées » opens every parent and a mode change
     forgets the parents opened by hand; « À part » reads `level: all` and shows the parent's key.
+    Subtask creation is offered only when loaded ancestry proves the depth limit is not reached.
     It watches the list's realtime room and reads again in place 300 ms after the last notice of
-    the list; the status and field stores keep pending and in-flight changes over what it reads. A
+    the list; the status store keeps pending and in-flight changes over what it reads. A
     task created in the list (`TaskCreate.created`) and a bulk action read the rows again.
-  - `TaskStatusChangesStore` and `TaskFieldChangesStore` (Task), route-scoped on `list`, so pending
+  - `TaskStatusChangesStore` (Task), route-scoped on `list`, so pending
     changes die with the view.
   - `SpaceOverviewStore`, page-scoped on `SpaceOverviewPage`.
 - Route errors: the gateway answers `404 space.not-found` or `list.not-found` for a deleted
@@ -123,7 +125,10 @@ breadcrumb, dialog, inline edit, toolbar).
   (`requestCancel(tasks)`). The status store's toasts offer « Annuler ».
 - `ListViewPage` holds the table's selection; the selection bar sends it explicitly, with each
   task's shown version, through `ListPageStore.bulk`, in chunks of 50 `executeBulkTaskAction` calls
-  one after the other. A refused chunk stays selected and a second toast counts it.
+  one after the other. Each chunk has an idempotency key, reused for one retry after an uncertain
+  response. An unresolved response is reported as unknown and triggers a reload; a refused chunk
+  stays selected and a second toast counts it. The row menu uses the same bulk path for a selected
+  group, including a shared cancellation reason.
 - Under 768 px the table hides the assignees, priority, labels and actions columns.
 
 ## Gateway follow-up
@@ -159,12 +164,10 @@ breadcrumb, dialog, inline edit, toolbar).
   - under 768 px it turns the rows into cards instead of the mockup's three-column grid;
   - the « + » of a group sits in the group header, where `App.dc.html` draws a trailing
     « Ajouter une tâche » row.
-- The rows show the status icon of `cw-task-title-cell` (advance to the next status) and the
-  menu's « Statut », as `App.dc.html` does, rather than `cw-task-status-picker`'s split button,
-  which does not fit a 36 px row.
+- The row's status icon and name open the task; the row menu changes its status. Assignees,
+  priority, due date and labels are display only. A row can create a subtask with its parent key.
 - The row menu holds « Ouvrir » and « Statut » only; « Priorité », « Assigner », « Déplacer vers »,
   the reminder, « Dupliquer », the copies and « Supprimer » come with the context menus of step 4b.
-- In-place edits cover the assignees and the priority; the due date and the labels show only.
 - A row's status icon does not animate from the previous status (`from` is not tracked).
 - Creating from a priority or assignee group presets only the list: `TaskCreateOptions` has no
   priority or assignee preset.

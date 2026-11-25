@@ -6,7 +6,7 @@ import { type Observable, of, Subject, throwError } from 'rxjs';
 import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 
 import { type RealtimeChange, RealtimeConnection } from '@core/realtime';
-import { TaskStatusChangesStore, type TaskSummary, TaskFieldChangesStore } from '@features/task';
+import { TaskStatusChangesStore, type TaskSummary } from '@features/task';
 import { TaskApi } from '@features/task/data-access/services/task-api/task-api.service';
 import { WORKSPACE_CONTEXT } from '@features/workspace/ports/workspace-context';
 
@@ -149,7 +149,6 @@ describe('ListRowsStore', () => {
     TestBed.configureTestingModule({
       providers: [
         TaskStatusChangesStore,
-        TaskFieldChangesStore,
         ListRowsStore,
         { provide: ListTasksApi, useValue: { groups, page, subtasks } },
         { provide: TaskApi, useValue: { changeStatus, read: vi.fn() } },
@@ -320,6 +319,23 @@ describe('ListRowsStore', () => {
     expect(rowOf(store, 'CAD-482')?.entering).toBe(false);
   });
 
+  it('moves the row immediately when reduced motion is requested', async () => {
+    vi.stubGlobal(
+      'matchMedia',
+      vi.fn(() => ({ matches: true })),
+    );
+    try {
+      const store: InstanceType<typeof ListRowsStore> = setup(byStatus);
+      await settle();
+      TestBed.inject(TaskStatusChangesStore).request(cad482, 'progress');
+      TestBed.tick();
+      expect(rowOf(store, 'CAD-482')).toMatchObject({ status: 'progress', group: 'progress' });
+      expect(changeStatus).not.toHaveBeenCalled();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it('brings the confirmed status back when the gateway refuses the change', async () => {
     changeStatus.mockReturnValue(throwError(() => new Error('503')));
     const store: InstanceType<typeof ListRowsStore> = setup(byStatus);
@@ -440,6 +456,48 @@ describe('ListRowsStore', () => {
     expect(store.rows().map((row: ListRow) => row.task.key)).toEqual(['CAD-482']);
   });
 
+  it('keeps the snapshot when a background reload fails and retries it', async () => {
+    const store: InstanceType<typeof ListRowsStore> = setup(flat);
+    await settle();
+    page.mockRejectedValueOnce(new Error('503'));
+
+    store.reload();
+    await settle();
+    expect(store.hasCurrentSnapshot()).toBe(true);
+    expect(store.primary.error()).toBeDefined();
+    expect(store.rows().map((row: ListRow) => row.task.key)).toEqual(['CAD-482']);
+
+    store.reload();
+    await settle();
+    expect(store.primary.error()).toBeUndefined();
+    expect(store.rows()).toHaveLength(1);
+  });
+
+  it('does not count loaded folded rows toward the reload depth', async () => {
+    const open: TaskSummary[] = Array.from({ length: LIST_PAGE_SIZE }, (_, index: number) =>
+      task(`CAD-${String(index)}`, 'todo'),
+    );
+    groups.mockResolvedValue([
+      { value: 'cancelled', count: 1 },
+      { value: 'todo', count: 100 },
+    ]);
+    page.mockImplementation((_listId, _query, group, cursor) =>
+      Promise.resolve(
+        group?.value === 'cancelled'
+          ? pageOf([task('CAD-closed', 'cancelled')])
+          : pageOf(cursor ? [task('CAD-next', 'todo')] : open, cursor ? null : 'next'),
+      ),
+    );
+    const store: InstanceType<typeof ListRowsStore> = setup(byStatus);
+    await settle();
+    page.mockClear();
+
+    store.reload();
+    await settle();
+
+    expect(page.mock.calls.map((call: Parameters<PageRead>) => call[3])).toEqual([null, null]);
+  });
+
   it('shows the subtasks of an opened task under it', async () => {
     page.mockResolvedValue(pageOf([{ ...cad482, subtasks: { closed: 1, total: 2 } }]));
     subtasks.mockResolvedValue([
@@ -458,6 +516,101 @@ describe('ListRowsStore', () => {
       ['CAD-482', 0, 'todo'],
       ['CAD-484', 1, 'todo'],
       ['CAD-485', 1, 'todo'],
+    ]);
+  });
+
+  it('prunes folded parents and reloads only parents that remain visible', async () => {
+    groups.mockResolvedValue([
+      { value: 'todo', count: 1 },
+      { value: 'progress', count: 1 },
+    ]);
+    page.mockImplementation((_listId, _query, group) =>
+      Promise.resolve(
+        pageOf([
+          task(group?.value === 'todo' ? 'CAD-482' : 'CAD-483', group?.value as StatusKey, {
+            subtasks: { closed: 0, total: 1 },
+          }),
+        ]),
+      ),
+    );
+    const store: InstanceType<typeof ListRowsStore> = setup(byStatus);
+    await settle();
+    store.toggleSubtasks('CAD-482');
+    store.toggleSubtasks('CAD-483');
+    await settle();
+    expect(subtasks).toHaveBeenCalledTimes(2);
+    store.setCollapsed(['todo']);
+    await settle();
+    subtasks.mockClear();
+    store.reload();
+    await settle();
+    expect(subtasks).toHaveBeenCalledExactlyOnceWith('CAD-483');
+    store.setCollapsed([]);
+    await settle();
+    expect(subtasks).toHaveBeenCalledWith('CAD-482');
+  });
+
+  it('discards a late child response after closing and reopening a parent', async () => {
+    let resolveFirst: (tasks: readonly TaskSummary[]) => void = () => undefined;
+    page.mockResolvedValue(pageOf([{ ...cad482, subtasks: { closed: 0, total: 1 } }]));
+    subtasks
+      .mockReturnValueOnce(new Promise((resolve) => (resolveFirst = resolve)))
+      .mockResolvedValueOnce([task('CAD-new', 'todo', { parentKey: 'CAD-482' })]);
+    const store: InstanceType<typeof ListRowsStore> = setup(flat);
+    await settle();
+    store.toggleSubtasks('CAD-482');
+    await settle();
+    store.toggleSubtasks('CAD-482');
+    await settle();
+    store.toggleSubtasks('CAD-482');
+    await settle();
+    resolveFirst([task('CAD-old', 'todo', { parentKey: 'CAD-482' })]);
+    await settle();
+    expect(store.rows().map((row: ListRow) => row.task.key)).toEqual(['CAD-482', 'CAD-new']);
+    expect(subtasks).toHaveBeenCalledTimes(2);
+  });
+
+  it('uses each assignee group page order for tasks with multiple assignees', async () => {
+    const shared: TaskSummary = task('CAD-shared', 'todo', { assigneeIds: ['a', 'b'] });
+    const other: TaskSummary = task('CAD-other', 'todo', { assigneeIds: ['b'] });
+    groups.mockResolvedValue([
+      { value: 'a', count: 1 },
+      { value: 'b', count: 2 },
+    ]);
+    page.mockImplementation((_list, _query, group) =>
+      Promise.resolve(pageOf(group?.value === 'a' ? [shared] : [other, shared])),
+    );
+    const store: InstanceType<typeof ListRowsStore> = setup({
+      ...flat,
+      groupQuery: { groupBy: 'assignee', query },
+    });
+    await settle();
+    expect(store.rows().map((row: ListRow) => row.id)).toEqual([
+      'a/CAD-shared',
+      'b/CAD-other',
+      'b/CAD-shared',
+    ]);
+  });
+
+  it('only offers subtask creation within the known depth in separate mode', async () => {
+    page.mockResolvedValue(
+      pageOf([
+        task('CAD-root', 'todo'),
+        task('CAD-child', 'todo', { parentKey: 'CAD-root' }),
+        task('CAD-grandchild', 'todo', { parentKey: 'CAD-child' }),
+        task('CAD-unknown', 'todo', { parentKey: 'CAD-missing' }),
+        task('CAD-full', 'todo', { subtasks: { closed: 0, total: 25 } }),
+      ]),
+    );
+    const store: InstanceType<typeof ListRowsStore> = setup(flat);
+    store.useSubtasks('separate');
+    await settle();
+    expect(store.rows().map((row: ListRow) => [row.task.key, row.canAddSubtask])).toEqual([
+      ['CAD-root', true],
+      ['CAD-child', true],
+      ['CAD-grandchild', false],
+      ['CAD-unknown', false],
+      ['CAD-full', false],
     ]);
   });
 });

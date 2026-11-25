@@ -1,3 +1,4 @@
+import { HttpErrorResponse } from '@angular/common/http';
 import { TestBed } from '@angular/core/testing';
 import { type Observable, Subject } from 'rxjs';
 import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
@@ -340,16 +341,23 @@ describe('ListPageStore', () => {
       affected: 3,
       done: [{ taskKey: 'CAD-482' }],
       failed: [],
+      unknown: [],
     });
     await expect.poll(() => api['counts'].mock.calls.length).toBe(calls + 1);
 
-    api['bulk'].mockRejectedValueOnce(new Error('request.version-mismatch'));
+    api['bulk'].mockRejectedValueOnce(new HttpErrorResponse({ status: 412 }));
     expect(await store.bulk([{ taskKey: 'CAD-482' }], { type: 'trash' })).toEqual({
       affected: 0,
       done: [],
       failed: [{ taskKey: 'CAD-482' }],
+      unknown: [],
     });
-    expect(await store.bulk([], { type: 'trash' })).toEqual({ affected: 0, done: [], failed: [] });
+    expect(await store.bulk([], { type: 'trash' })).toEqual({
+      affected: 0,
+      done: [],
+      failed: [],
+      unknown: [],
+    });
   });
 
   it('sends a selection over 50 in chunks and reports the refused chunk', async () => {
@@ -360,7 +368,7 @@ describe('ListPageStore', () => {
     );
     api['bulk']
       .mockResolvedValueOnce(50)
-      .mockRejectedValueOnce(new Error('request.version-mismatch'))
+      .mockRejectedValueOnce(new HttpErrorResponse({ status: 412 }))
       .mockResolvedValueOnce(20);
 
     const outcome: Awaited<ReturnType<typeof store.bulk>> = await store.bulk(selection, {
@@ -374,6 +382,20 @@ describe('ListPageStore', () => {
     expect(outcome.affected).toBe(70);
     expect(outcome.done).toHaveLength(70);
     expect(outcome.failed).toEqual(selection.slice(50, 100));
+  });
+
+  it('retries an uncertain chunk with the same key and reports a lost response', async () => {
+    await loaded();
+    api['bulk']
+      .mockRejectedValueOnce(new HttpErrorResponse({ status: 0 }))
+      .mockRejectedValueOnce(new HttpErrorResponse({ status: 503 }));
+    const selection: { taskKey: string }[] = [{ taskKey: 'CAD-482' }];
+    const outcome: Awaited<ReturnType<typeof store.bulk>> = await store.bulk(selection, {
+      type: 'done',
+    });
+    expect(outcome.unknown).toEqual(selection);
+    expect(outcome.failed).toEqual([]);
+    expect(api['bulk'].mock.calls[0][2]).toBe(api['bulk'].mock.calls[1][2]);
   });
 
   it('reports the list writes', async () => {

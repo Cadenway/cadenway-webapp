@@ -1,4 +1,4 @@
-@let snapshot = rows.primary.value();
+@let snapshot = rows.hasCurrentSnapshot() ? undefined : rows.primary.value();
 <section
   class="flex min-h-0 flex-1 flex-col px-4 pt-2 pb-4 sm:px-6"
   aria-label="Tasks"
@@ -22,7 +22,7 @@
     [groupOrder]="rows.groupOrder()"
     [collapsed]="rows.collapsed()"
     [columnVisibility]="columnVisibility()"
-    [loading]="!snapshot && rows.initialLoading()"
+    [loading]="!snapshot && !rows.hasCurrentSnapshot() && rows.primary.isLoading()"
     [ariaLabel]="tableLabel()"
     [(selection)]="tableSelection"
     (collapsedChange)="rows.setCollapsed($event)"
@@ -67,8 +67,9 @@
           [class.pl-6]="row.depth === 1"
           [class.pl-12]="row.depth === 2"
           [class.animate-row-in]="row.entering"
+          [attr.data-task-row]="row.task.key"
           [cwContextMenuTriggerFor]="rowMenu"
-          (contextmenu)="menuRow.set(row)"
+          (opened)="menuRow.set(row)"
         >
           @if (row.expandable) {
             <button
@@ -94,11 +95,22 @@
             class="flex-1"
             [task]="row.task"
             [status]="row.status"
-            [options]="statusOptions()"
             [showParent]="separate()"
-            (statusClicked)="advance(row, $event)"
             (opened)="open(row.task)"
           />
+          @if (row.canAddSubtask) {
+            <button
+              cwButton
+              type="button"
+              variant="ghost"
+              size="icon-xs"
+              [attr.aria-label]="addSubtaskLabel(row)"
+              [title]="addSubtaskLabel(row)"
+              (click)="addSubtask(row)"
+            >
+              <ng-icon name="phosphorTreeStructureBold" aria-hidden="true" />
+            </button>
+          }
           @if (row.childrenFailed) {
             <span class="flex shrink-0 items-center gap-1 text-xs" role="alert">
               <span class="text-muted-foreground" i18n="@@spaces.rows.subtasks-failed"
@@ -110,9 +122,8 @@
                 variant="outline"
                 size="xs"
                 (click)="rows.retrySubtasks(row.task.key)"
-                i18n="@@spaces.retry"
               >
-                Retry
+                {{ retryLabel }}
               </button>
             </span>
           }
@@ -127,15 +138,22 @@
       [width]="136"
     >
       <ng-template cwCell [cwCellOf]="rows.rows()" let-row>
-        <cw-task-people-picker
-          [people]="people()"
-          [currentUserId]="userId()"
-          [value]="row.task.assigneeIds"
-          [loading]="store.organizationMembers.isLoading()"
-          [failed]="!!store.organizationMembers.error()"
-          (valueChange)="setAssignees(row, $event)"
-          (retry)="store.organizationMembers.reload()"
-        />
+        <span class="flex -space-x-1">
+          @for (person of rowPeople(row); track person.id) {
+            <span
+              class="flex size-6 items-center justify-center rounded-full bg-secondary text-[10px] font-semibold text-secondary-foreground ring-2 ring-background"
+              [title]="person.name"
+              >{{ person.initials }}</span
+            >
+          }
+          @if (row.task.assigneeIds.length === 0) {
+            <span
+              class="flex size-6 items-center justify-center rounded-full border border-dashed border-input text-muted-foreground"
+              [title]="groupLabel('none')"
+              ><ng-icon name="phosphorUserBold" aria-hidden="true"
+            /></span>
+          }
+        </span>
       </ng-template>
     </cw-data-table-column>
 
@@ -152,10 +170,11 @@
       [width]="120"
     >
       <ng-template cwCell [cwCellOf]="rows.rows()" let-row>
-        <cw-task-priority-picker
-          [priority]="row.task.priority"
-          (priorityChanged)="setPriority(row, $event)"
-        />
+        <span class="flex items-center gap-1.5 text-xs"
+          ><cw-priority-icon [priority]="row.task.priority" size="3.5" />{{
+            priorityLabel(row.task.priority)
+          }}</span
+        >
       </ng-template>
     </cw-data-table-column>
 
@@ -232,18 +251,19 @@
     </div>
   </cw-data-table>
 
+  @if (rows.hasCurrentSnapshot() && rows.primary.error()) {
+    <div class="flex items-center gap-2 pt-2 text-sm" role="alert">
+      <span i18n="@@spaces.rows.reload-failed">The tasks could not be refreshed.</span>
+      <button cwButton type="button" variant="outline" size="xs" (click)="rows.reload()">
+        {{ retryLabel }}
+      </button>
+    </div>
+  }
   @if (rows.moreFailed()) {
     <div class="flex items-center gap-2 pt-2 text-sm" role="alert">
       <span i18n="@@spaces.rows.more-failed">The next tasks could not be loaded.</span>
-      <button
-        cwButton
-        type="button"
-        variant="outline"
-        size="xs"
-        (click)="rows.retryMore()"
-        i18n="@@spaces.retry"
-      >
-        Retry
+      <button cwButton type="button" variant="outline" size="xs" (click)="rows.retryMore()">
+        {{ retryLabel }}
       </button>
     </div>
   }
@@ -283,6 +303,12 @@
   [taskKeys]="statusChanges.cancelRequest()?.taskKeys ?? null"
   (confirmed)="statusChanges.confirmCancel($event)"
   (kept)="statusChanges.keepTask()"
+/>
+
+<cw-task-cancel-dialog
+  [taskKeys]="bulkCancelKeys()"
+  (confirmed)="confirmBulkCancel($event)"
+  (kept)="bulkCancelTasks.set(null)"
 />
 
 <div class="pointer-events-none absolute inset-x-0 bottom-4 z-20 flex justify-center px-4">
