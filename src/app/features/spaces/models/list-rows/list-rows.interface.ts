@@ -1,6 +1,6 @@
 import type { StatusKey } from '@cadenway/contracts';
 
-import type { TaskSummary } from '@features/task';
+import type { TaskBulkOutcome, TaskSummary } from '@features/task';
 
 import type { ListGroupQuery, ListTaskQuery } from '../list-view-config/list-view-config.interface';
 
@@ -374,5 +374,51 @@ export interface ListRowsSummary {
    * @readonly
    */
   readonly hasSubtasks: boolean | null;
+  // #endregion
+}
+
+/**
+ * Interface ConfirmedTask
+ *
+ * @description
+ * A task as the gateway last confirmed it when an action of the view was sent: the values its
+ * `Undo` puts back and the version that action was sent with.
+ */
+export interface ConfirmedTask extends TaskSummary {
+  // #region Properties
+  /**
+   * Property cancelNote
+   *
+   * @description
+   * The note of the task's cancellation when this view recorded it, null when there is none or
+   * it is not known (task summaries carry no note).
+   *
+   * @type {string | null}
+   * @readonly
+   */
+  readonly cancelNote: string | null;
+  // #endregion
+}
+
+/**
+ * Interface ListActOutcome
+ *
+ * @description
+ * What an action of the view ended with, and each sent task as confirmed just before it was
+ * sent. A task whose queued status change a newer one replaced is in no list: the newer change
+ * reports it.
+ */
+export interface ListActOutcome extends TaskBulkOutcome {
+  // #region Properties
+  /**
+   * Property before
+   *
+   * @description
+   * The sent tasks as confirmed before the action, by key.
+   *
+   * @type {Readonly<Partial<Record<string, ConfirmedTask>>>}
+   * @readonly
+   */
+  readonly before: Readonly<Partial<Record<string, ConfirmedTask>>>;
   // #endregion
 }

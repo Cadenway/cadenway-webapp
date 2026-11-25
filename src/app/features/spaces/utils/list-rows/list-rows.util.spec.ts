@@ -3,7 +3,13 @@ import { describe, expect, it } from 'vitest';
 import type { TaskSummary } from '@features/task';
 
 import type { GroupProgress } from '../../models/list-rows/list-rows.interface';
-import { advanceGroup, groupValuesOf, nextGroup, startGroups } from './list-rows.util';
+import {
+  advanceGroup,
+  groupValuesOf,
+  nextGroup,
+  settleLimited,
+  startGroups,
+} from './list-rows.util';
 
 /**
  * Constant cad482
@@ -58,5 +64,34 @@ describe('list rows utils', () => {
     expect(groupValuesOf(cad482, 'assignee')).toEqual(['u-camille', 'u-ines']);
     expect(groupValuesOf({ ...cad482, assigneeIds: [] }, 'assignee')).toEqual(['none']);
     expect(groupValuesOf(cad482, null)).toEqual(['all']);
+  });
+});
+
+describe('settleLimited', () => {
+  it('keeps at most the limit in flight and reports every outcome in order', async () => {
+    let inFlight: number = 0;
+    let peak: number = 0;
+    const results: PromiseSettledResult<string>[] = await settleLimited(
+      ['CAD-1', 'CAD-2', 'CAD-3', 'CAD-4', 'CAD-5', 'CAD-6'],
+      4,
+      async (key: string): Promise<string> => {
+        inFlight++;
+        peak = Math.max(peak, inFlight);
+        await Promise.resolve();
+        inFlight--;
+        if (key === 'CAD-3') throw new Error('refused');
+        return key;
+      },
+    );
+
+    expect(peak).toBe(4);
+    expect(results.map((result: PromiseSettledResult<string>) => result.status)).toEqual([
+      'fulfilled',
+      'fulfilled',
+      'rejected',
+      'fulfilled',
+      'fulfilled',
+      'fulfilled',
+    ]);
   });
 });

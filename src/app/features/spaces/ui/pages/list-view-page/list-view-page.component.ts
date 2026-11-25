@@ -19,7 +19,6 @@ import {
 import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router } from '@angular/router';
 import {
-  type CancelReason,
   type PriorityKey,
   STATUS_CATEGORIES,
   type StatusCategory,
@@ -104,7 +103,12 @@ import { SPACES_RETRY } from '../../../constants/data-table-texts/data-table-tex
 import { groupLabels, sortLabels } from '../../../constants/view-labels/view-labels.constants';
 import type { ListExport } from '../../../data-access/services/lists-api/lists-api.service';
 import type { ListMember } from '../../../models/list-member/list-member.interface';
-import type { ListRow, ListRowsQuery } from '../../../models/list-rows/list-rows.interface';
+import type {
+  ConfirmedTask,
+  ListActOutcome,
+  ListRow,
+  ListRowsQuery,
+} from '../../../models/list-rows/list-rows.interface';
 import type {
   ListGroupBy,
   ListSortField,
@@ -304,6 +308,54 @@ function groupBy<T>(items: readonly T[], keyOf: (item: T) => string): readonly T
 }
 
 /**
+ * Interface ReverseWrite
+ *
+ * @description
+ * One write of an `Undo`: tasks that get the same values back.
+ */
+interface ReverseWrite {
+  // #region Properties
+  /**
+   * Property tasks
+   *
+   * @description
+   * The tasks as confirmed before the undone action.
+   *
+   * @type {readonly ConfirmedTask[]}
+   * @readonly
+   */
+  readonly tasks: readonly ConfirmedTask[];
+
+  /**
+   * Property action
+   *
+   * @description
+   * The write that puts their values back.
+   *
+   * @type {TaskBulkAction}
+   * @readonly
+   */
+  readonly action: TaskBulkAction;
+  // #endregion
+}
+
+/**
+ * Function confirmedOf
+ *
+ * @description
+ * The tasks an action applied to, as confirmed before it: what its `Undo` puts back.
+ *
+ * @param {ListActOutcome} outcome - What the action ended with.
+ * @returns {readonly ConfirmedTask[]} The applied tasks, in the order of the outcome.
+ */
+function confirmedOf(outcome: ListActOutcome): readonly ConfirmedTask[] {
+  return outcome.done.flatMap((entry: TaskBulkEntry): ConfirmedTask[] => {
+    const task: ConfirmedTask | undefined = outcome.before[entry.taskKey];
+    return task ? [task] : [];
+  });
+}
+
+/**
  * Component ListViewPage
  *
  * @description
@@ -319,8 +371,9 @@ function groupBy<T>(items: readonly T[], keyOf: (item: T) => string): readonly T
  * `Select all`, `Export as CSV`). `name` sorts by name. Each group's add row presets
  * its status, priority or assignee; `N` creates in this list. The selection fills the selection
  * bar. Every write goes through `ListRowsStore.act`: the rows change at once, a refusal puts them
- * back, and the toast's `Undo` sends the reverse write (a deletion restores the trash
- * entries). Under 768 px the rows keep the name and the due date. A failed first read reaches the
+ * back, and the toast's `Undo` sends the reverse write of the values confirmed before the action
+ * (a deletion restores the trash entries), reported like the action; leaving the view dismisses
+ * those toasts. Under 768 px the rows keep the name and the due date. A failed first read reaches the
  * route's error boundary; a failed next page or subtask read offers `Retry` in place.
  */
 @Component({
@@ -593,6 +646,18 @@ export class ListViewPage {
    * @readonly
    */
   private readonly host: ElementRef<HTMLElement> = inject<ElementRef<HTMLElement>>(ElementRef);
+
+  /**
+   * Property undoToasts
+   *
+   * @description
+   * Ids of the shown toasts whose `Undo` writes through this view's rows; leaving the view
+   * dismisses them, as leaving it ends the status toasts of `TaskStatusChangesStore`.
+   *
+   * @type {Set<string>}
+   * @readonly
+   */
+  private readonly undoToasts: Set<string> = new Set<string>();
 
   /**
    * Property dueWidth
@@ -1202,6 +1267,8 @@ export class ListViewPage {
     const timers: Set<ReturnType<typeof setTimeout>> = new Set<ReturnType<typeof setTimeout>>();
     this.destroyRef.onDestroy((): void => {
       for (const timer of timers) clearTimeout(timer);
+      for (const id of this.undoToasts) this.toasts.dismiss(id);
+      this.undoToasts.clear();
     });
     effect((): void => {
       const current: readonly ListRow[] = this.rows.rows();
@@ -1556,16 +1623,20 @@ export class ListViewPage {
     if (changed.length === 0) return;
     const word: string = statusLabel(status, this.statusOptions(), this.menuMilestone());
     const label: string = this.tasksLabel(tasks);
-    void this.perform(changed, { type: 'status', status }, (done: readonly TaskBulkEntry[]) => ({
-      title: $localize`:@@spaces.rows.status-toast:${label}:label: · ${word}:status:`,
-      description:
-        tasks.length > 1
-          ? bulkUpdatedText(done.length)
-          : $localize`:@@spaces.rows.status-changed:Status changed.`,
-      undo: (): void => {
-        this.undoStatuses(changed, done);
-      },
-    }));
+    void this.perform(
+      changed,
+      { type: 'status', status },
+      (done: readonly TaskBulkEntry[], outcome: ListActOutcome) => ({
+        title: $localize`:@@spaces.rows.status-toast:${label}:label: · ${word}:status:`,
+        description:
+          tasks.length > 1
+            ? bulkUpdatedText(done.length)
+            : $localize`:@@spaces.rows.status-changed:Status changed.`,
+        undo: (): void => {
+          this.undoStatuses(outcome);
+        },
+      }),
+    );
   }
 
   /**
@@ -1590,7 +1661,7 @@ export class ListViewPage {
         cancelReason: cancellation.reason,
         cancelNote: cancellation.note || null,
       },
-      (done: readonly TaskBulkEntry[]) => {
+      (done: readonly TaskBulkEntry[], outcome: ListActOutcome) => {
         const count: number = done.length;
         const key: string = done[0]?.taskKey ?? '';
         return {
@@ -1600,7 +1671,7 @@ export class ListViewPage {
               : $localize`:@@spaces.rows.cancelled-one:${key}:key: cancelled`,
           description: $localize`:@@spaces.rows.cancel-reason:Reason: ${reason}:reason:.`,
           undo: (): void => {
-            this.undoStatuses(tasks, done);
+            this.undoStatuses(outcome);
           },
         };
       },
@@ -1626,16 +1697,21 @@ export class ListViewPage {
     void this.perform(
       changed,
       { type: 'priority', priority },
-      (done: readonly TaskBulkEntry[]) => ({
+      (done: readonly TaskBulkEntry[], outcome: ListActOutcome) => ({
         title: $localize`:@@spaces.rows.priority-toast:${label}:label: · ${word}:priority: priority`,
         description:
           tasks.length > 1
             ? bulkUpdatedText(done.length)
             : $localize`:@@spaces.rows.priority-changed:Priority changed.`,
         undo: (): void => {
-          for (const group of groupBy(changed, (task: TaskSummary) => task.priority)) {
-            void this.reverse(group, done, { type: 'priority', priority: group[0].priority });
-          }
+          void this.reverse(
+            groupBy(confirmedOf(outcome), (task: ConfirmedTask) => task.priority).map(
+              (group: readonly ConfirmedTask[]): ReverseWrite => ({
+                tasks: group,
+                action: { type: 'priority', priority: group[0].priority },
+              }),
+            ),
+          );
         },
       }),
     );
@@ -1670,13 +1746,18 @@ export class ListViewPage {
     void this.perform(
       changed,
       { type: all ? 'unassign' : 'assign', userId },
-      (done: readonly TaskBulkEntry[]) => ({
+      (done: readonly TaskBulkEntry[], outcome: ListActOutcome) => ({
         title: all
           ? $localize`:@@spaces.bulk.unassigned:${name}:name: removed`
           : $localize`:@@spaces.bulk.assigned:${name}:name: assigned`,
         description: bar ? bulkUpdatedText(done.length) : label,
         undo: (): void => {
-          void this.reverse(changed, done, { type: all ? 'assign' : 'unassign', userId });
+          void this.reverse([
+            {
+              tasks: confirmedOf(outcome),
+              action: { type: all ? 'assign' : 'unassign', userId },
+            },
+          ]);
         },
       }),
     );
@@ -1701,18 +1782,27 @@ export class ListViewPage {
     const name: string =
       this.targets().find((target: MoveTarget): boolean => target.listId === listId)?.name ?? '';
     const key: string = moved[0].key;
-    void this.perform(moved, { type: 'move', listId }, (done: readonly TaskBulkEntry[]) => ({
-      title:
-        bar || tasks.length > 1
-          ? bulkMovedText(done.length)
-          : $localize`:@@spaces.rows.moved-one:${key}:key: moved`,
-      description: $localize`:@@spaces.bulk.moved-text:To ${name}:name:.`,
-      undo: (): void => {
-        for (const group of groupBy(moved, (task: TaskSummary) => task.listId)) {
-          void this.reverse(group, done, { type: 'move', listId: group[0].listId });
-        }
-      },
-    }));
+    void this.perform(
+      moved,
+      { type: 'move', listId },
+      (done: readonly TaskBulkEntry[], outcome: ListActOutcome) => ({
+        title:
+          bar || tasks.length > 1
+            ? bulkMovedText(done.length)
+            : $localize`:@@spaces.rows.moved-one:${key}:key: moved`,
+        description: $localize`:@@spaces.bulk.moved-text:To ${name}:name:.`,
+        undo: (): void => {
+          void this.reverse(
+            groupBy(confirmedOf(outcome), (task: ConfirmedTask) => task.listId).map(
+              (group: readonly ConfirmedTask[]): ReverseWrite => ({
+                tasks: group,
+                action: { type: 'move', listId: group[0].listId },
+              }),
+            ),
+          );
+        },
+      }),
+    );
   }
 
   /**
@@ -1847,7 +1937,7 @@ export class ListViewPage {
     await this.perform(
       tasks,
       { type: 'trash' },
-      (done: readonly TaskBulkEntry[], outcome: TaskBulkOutcome) => {
+      (done: readonly TaskBulkEntry[], outcome: ListActOutcome) => {
         const count: number = done.length;
         const subtasks: number = Math.max(0, outcome.affected - count);
         const kept: string = $localize`:@@spaces.bulk.deleted-text:Kept 30 days in the trash.`;
@@ -2070,11 +2160,11 @@ export class ListViewPage {
     void this.perform(
       tasks,
       { type: 'status', status: 'done' },
-      (done: readonly TaskBulkEntry[]) => ({
+      (done: readonly TaskBulkEntry[], outcome: ListActOutcome) => ({
         title: bulkDoneText(done.length),
         description: $localize`:@@spaces.bulk.done-toast-text:Status: Done.`,
         undo: (): void => {
-          this.undoStatuses(tasks, done);
+          this.undoStatuses(outcome);
         },
       }),
     );
@@ -2144,10 +2234,12 @@ export class ListViewPage {
    * selected and a second toast counts them; a refusal of everything shows the failure toast; an
    * uncertain answer warns and the rows are read again. The success toast offers `Undo` when
    * the action can be undone, or `Open` for a single copy. The list's counts are read again.
+   * An action answered after the view was left reports only what failed: no `Undo` is offered
+   * once the view is gone. An action a newer status change replaced reports nothing.
    *
    * @param {readonly TaskSummary[]} tasks - The tasks, as shown.
    * @param {TaskBulkAction} action - The action.
-   * @param {(done: readonly TaskBulkEntry[], outcome: TaskBulkOutcome) => ActionToast & { open?: string | null }} toast - The success toast.
+   * @param {(done: readonly TaskBulkEntry[], outcome: ListActOutcome) => ActionToast & { open?: string | null }} toast - The success toast.
    * @returns {Promise<void>} Resolves once reported.
    */
   private async perform(
@@ -2155,14 +2247,68 @@ export class ListViewPage {
     action: TaskBulkAction,
     toast: (
       done: readonly TaskBulkEntry[],
-      outcome: TaskBulkOutcome,
+      outcome: ListActOutcome,
     ) => ActionToast & { readonly open?: string | null },
   ): Promise<void> {
     if (tasks.length === 0) return;
     const organizationId: string = this.workspace.organization().id;
-    const outcome: TaskBulkOutcome = await this.rows.act(tasks, action);
-    if (this.destroyRef.destroyed || this.workspace.organization().id !== organizationId) return;
-    if (outcome.done.length > 0 || outcome.unknown.length > 0) this.store.refreshCounts();
+    const outcome: ListActOutcome = await this.rows.act(tasks, action);
+    if (this.workspace.organization().id !== organizationId) return;
+    const live: boolean = !this.destroyRef.destroyed;
+    if (live && (outcome.done.length > 0 || outcome.unknown.length > 0)) {
+      this.store.refreshCounts();
+    }
+    if (!this.reportProblems(outcome)) return;
+    const failedKeys: readonly string[] = outcome.failed.map(
+      (item: TaskBulkSelection): string => item.taskKey,
+    );
+    if (live && failedKeys.length > 0) {
+      this.tableSelection.set(
+        this.rows
+          .rows()
+          .filter((row: ListRow): boolean => failedKeys.includes(row.task.key))
+          .map((row: ListRow): string => row.id),
+      );
+    }
+    if (live) {
+      const message: ActionToast & { readonly open?: string | null } = toast(outcome.done, outcome);
+      const copy: string | null = message.open ?? null;
+      const id: string = this.toasts.show(message.title, {
+        description: message.description,
+        ...(copy
+          ? {
+              action: {
+                label: $localize`:@@spaces.rows.open:Open`,
+                run: (): void => {
+                  this.open(copy);
+                },
+              },
+            }
+          : message.undo
+            ? { undo: message.undo }
+            : {}),
+      });
+      if (!copy && message.undo) this.keepUndoToast(id);
+    }
+    if (outcome.failed.length > 0) {
+      this.toasts.error(
+        bulkPartialText(outcome.failed.length, tasks.length),
+        live ? { description: $localize`:@@spaces.bulk.partial-text:They stay selected.` } : {},
+      );
+    }
+  }
+
+  /**
+   * Method reportProblems
+   *
+   * @description
+   * Reports the tasks of an action that were not sent, have no certain outcome, or were all
+   * refused; resolves whether some task was applied.
+   *
+   * @param {TaskBulkOutcome} outcome - What the action ended with.
+   * @returns {boolean} Whether some task was applied.
+   */
+  private reportProblems(outcome: TaskBulkOutcome): boolean {
     if (outcome.notSent.length > 0) {
       this.toasts.warning($localize`:@@spaces.bulk.not-sent:Some selected tasks were not sent.`);
     }
@@ -2171,78 +2317,67 @@ export class ListViewPage {
         $localize`:@@spaces.bulk.unknown:The outcome is unknown. The tasks are being refreshed.`,
       );
     }
-    if (outcome.done.length === 0) {
-      if (outcome.unknown.length === 0 && outcome.notSent.length === 0) {
-        this.toasts.error($localize`:@@spaces.bulk.failed:The selection could not be changed`);
-      }
-      return;
+    if (outcome.done.length > 0) return true;
+    if (outcome.failed.length > 0 && outcome.unknown.length === 0 && outcome.notSent.length === 0) {
+      this.toasts.error($localize`:@@spaces.bulk.failed:The selection could not be changed`);
     }
-    const failedKeys: readonly string[] = outcome.failed.map(
-      (item: TaskBulkSelection): string => item.taskKey,
+    return false;
+  }
+
+  /**
+   * Method keepUndoToast
+   *
+   * @description
+   * Remembers a toast whose `Undo` writes through this view, so leaving the view dismisses it,
+   * and forgets the toasts already closed.
+   *
+   * @param {string} id - The toast.
+   */
+  private keepUndoToast(id: string): void {
+    const shown: ReadonlySet<string> = new Set(
+      this.toasts.toasts().map((item: { readonly id: string }): string => item.id),
     );
-    if (failedKeys.length > 0) {
-      this.tableSelection.set(
-        this.rows
-          .rows()
-          .filter((row: ListRow): boolean => failedKeys.includes(row.task.key))
-          .map((row: ListRow): string => row.id),
-      );
-    }
-    const message: ActionToast & { readonly open?: string | null } = toast(outcome.done, outcome);
-    const copy: string | null = message.open ?? null;
-    this.toasts.show(message.title, {
-      description: message.description,
-      ...(copy
-        ? {
-            action: {
-              label: $localize`:@@spaces.rows.open:Open`,
-              run: (): void => {
-                this.open(copy);
-              },
-            },
-          }
-        : message.undo
-          ? { undo: message.undo }
-          : {}),
-    });
-    if (outcome.failed.length > 0) {
-      this.toasts.error(bulkPartialText(outcome.failed.length, tasks.length), {
-        description: $localize`:@@spaces.bulk.partial-text:They stay selected.`,
-      });
-    }
+    for (const kept of this.undoToasts) if (!shown.has(kept)) this.undoToasts.delete(kept);
+    this.undoToasts.add(id);
   }
 
   /**
    * Method reverse
    *
    * @description
-   * Sends the reverse write of an undone action for the tasks it applied to, at the versions the
-   * gateway returned; a refusal shows the failure toast.
+   * The `Undo` of an action: sends each reverse write with the values confirmed before the
+   * action; `ListRowsStore.act` sends each task at the version the gateway last returned. Reports
+   * like the action does (tasks not sent, without a certain outcome, refused in part or in full)
+   * and reads the rows again after a refusal, even when the view was left meanwhile.
    *
-   * @param {readonly TaskSummary[]} tasks - The tasks as they were before the action.
-   * @param {readonly TaskBulkEntry[]} done - What the action applied.
-   * @param {TaskBulkAction} action - The reverse action.
-   * @returns {Promise<void>} Resolves once sent.
+   * @param {readonly ReverseWrite[]} writes - The reverse writes.
+   * @returns {Promise<void>} Resolves once reported.
    */
-  private async reverse(
-    tasks: readonly TaskSummary[],
-    done: readonly TaskBulkEntry[],
-    action: TaskBulkAction,
-  ): Promise<void> {
-    const versions: Map<string, number | null> = new Map<string, number | null>(
-      done.map((entry: TaskBulkEntry) => [entry.taskKey, entry.version]),
+  private async reverse(writes: readonly ReverseWrite[]): Promise<void> {
+    const sent: readonly ReverseWrite[] = writes.filter(
+      (write: ReverseWrite): boolean => write.tasks.length > 0,
     );
-    const applied: TaskSummary[] = tasks.flatMap((task: TaskSummary): TaskSummary[] => {
-      if (!versions.has(task.key)) return [];
-      const version: number | null | undefined = versions.get(task.key);
-      return [{ ...task, version: version ?? task.version }];
-    });
-    if (applied.length === 0) return;
-    const outcome: TaskBulkOutcome = await this.rows.act(applied, action);
-    if (this.destroyRef.destroyed) return;
-    if (outcome.done.length > 0) this.store.refreshCounts();
-    if (outcome.done.length === 0 && outcome.unknown.length === 0) {
-      this.toasts.error($localize`:@@spaces.bulk.failed:The selection could not be changed`);
+    if (sent.length === 0) return;
+    const outcomes: readonly ListActOutcome[] = await Promise.all(
+      sent.map((write: ReverseWrite) => this.rows.act(write.tasks, write.action)),
+    );
+    const outcome: TaskBulkOutcome = {
+      affected: outcomes.reduce((sum: number, item: ListActOutcome) => sum + item.affected, 0),
+      done: outcomes.flatMap((item: ListActOutcome) => item.done),
+      failed: outcomes.flatMap((item: ListActOutcome) => item.failed),
+      unknown: outcomes.flatMap((item: ListActOutcome) => item.unknown),
+      notSent: outcomes.flatMap((item: ListActOutcome) => item.notSent),
+    };
+    if (!this.destroyRef.destroyed) {
+      if (outcome.done.length > 0 || outcome.unknown.length > 0) this.store.refreshCounts();
+      if (outcome.failed.length > 0) this.rows.reload();
+    }
+    const total: number = sent.reduce(
+      (sum: number, write: ReverseWrite): number => sum + write.tasks.length,
+      0,
+    );
+    if (this.reportProblems(outcome) && outcome.failed.length > 0) {
+      this.toasts.error(bulkPartialText(outcome.failed.length, total));
     }
   }
 
@@ -2250,41 +2385,43 @@ export class ListViewPage {
    * Method undoStatuses
    *
    * @description
-   * Puts back each task's previous status, with its cancellation reason when it was cancelled.
+   * Puts back each task's status as confirmed before the change, with its cancellation reason
+   * and note when it was cancelled.
    *
-   * @param {readonly TaskSummary[]} tasks - The tasks before the change.
-   * @param {readonly TaskBulkEntry[]} done - What the change applied.
+   * @param {ListActOutcome} outcome - What the change ended with.
    */
-  private undoStatuses(tasks: readonly TaskSummary[], done: readonly TaskBulkEntry[]): void {
-    for (const group of groupBy(
-      tasks,
-      (task: TaskSummary) => `${task.status}\u0000${task.cancelReason ?? ''}`,
-    )) {
-      const status: StatusKey = group[0].status;
-      const reason: CancelReason | null = group[0].cancelReason;
-      void this.reverse(
-        group,
-        done,
-        status === 'cancelled' && reason
-          ? { type: 'status', status, cancelReason: reason }
-          : { type: 'status', status },
-      );
-    }
+  private undoStatuses(outcome: ListActOutcome): void {
+    void this.reverse(
+      groupBy(
+        confirmedOf(outcome),
+        (task: ConfirmedTask) =>
+          `${task.status}\u0000${task.cancelReason ?? ''}\u0000${task.cancelNote ?? ''}`,
+      ).map((group: readonly ConfirmedTask[]): ReverseWrite => {
+        const { status, cancelReason, cancelNote }: ConfirmedTask = group[0];
+        return {
+          tasks: group,
+          action:
+            status === 'cancelled' && cancelReason
+              ? { type: 'status', status, cancelReason, cancelNote }
+              : { type: 'status', status },
+        };
+      }),
+    );
   }
 
   /**
    * Method restore
    *
    * @description
-   * `Undo` of a deletion: takes the trash entries back.
+   * `Undo` of a deletion: takes the trash entries back; a refusal is reported even when the view
+   * was left meanwhile.
    *
    * @param {readonly string[]} entryIds - The trash entries.
    * @returns {Promise<void>} Resolves once restored.
    */
   private async restore(entryIds: readonly string[]): Promise<void> {
     const restored: boolean = await this.rows.restore(entryIds);
-    if (this.destroyRef.destroyed) return;
-    this.store.refreshCounts();
+    if (!this.destroyRef.destroyed) this.store.refreshCounts();
     if (!restored) {
       this.toasts.error($localize`:@@spaces.bulk.restore-failed:The tasks could not be restored`);
     }

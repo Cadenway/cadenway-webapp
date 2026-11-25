@@ -20,6 +20,7 @@ import { WORKSPACE_CONTEXT } from '@features/workspace/ports/workspace-context';
 import { ListTasksApi } from '../../data-access/services/list-tasks-api/list-tasks-api.service';
 import type {
   GroupFilter,
+  ListActOutcome,
   ListRow,
   ListRowsQuery,
   ListTaskPage,
@@ -1074,5 +1075,183 @@ describe('ListRowsStore', () => {
       ['CAD-unknown', false],
       ['CAD-full', false],
     ]);
+  });
+  /**
+   * Function deferred
+   *
+   * @description
+   * Makes the next bulk call wait until its answer is given.
+   *
+   * @returns {(outcome: TaskBulkOutcome) => void} Gives the answer.
+   */
+  function deferred(): (outcome: TaskBulkOutcome) => void {
+    let answer: (outcome: TaskBulkOutcome) => void = () => undefined;
+    bulk.mockReturnValueOnce(
+      new Promise<TaskBulkOutcome>((resolve) => {
+        answer = resolve;
+      }),
+    );
+    return (outcome: TaskBulkOutcome): void => {
+      answer(outcome);
+    };
+  }
+
+  /**
+   * Function applied
+   *
+   * @description
+   * A bulk answer that applied CAD-482 at a version.
+   *
+   * @param {number} version - The returned version.
+   * @returns {TaskBulkOutcome} The answer.
+   */
+  function applied(version: number): TaskBulkOutcome {
+    return {
+      affected: 1,
+      done: [{ taskKey: 'CAD-482', version, newTaskKey: null, trashEntryId: null }],
+      failed: [],
+      unknown: [],
+      notSent: [],
+    };
+  }
+
+  it('sends a second action on a task once the first is answered, at the version it returned', async () => {
+    const answer: (outcome: TaskBulkOutcome) => void = deferred();
+    const store: InstanceType<typeof ListRowsStore> = setup(byStatus);
+    await settle();
+
+    const first: Promise<ListActOutcome> = store.act([cad482], { type: 'status', status: 'done' });
+    const second: Promise<ListActOutcome> = store.act([cad482], {
+      type: 'priority',
+      priority: 'urgente',
+    });
+    expect(bulk).toHaveBeenCalledOnce();
+    expect(rowOf(store, 'CAD-482')).toMatchObject({ status: 'done' });
+    expect(rowOf(store, 'CAD-482')?.task.priority).toBe('urgente');
+
+    answer(applied(4));
+    await first;
+    await second;
+
+    expect(bulk).toHaveBeenLastCalledWith(
+      [{ taskKey: 'CAD-482', version: 4 }],
+      { type: 'priority', priority: 'urgente' },
+      expect.any(Function),
+    );
+  });
+
+  it('sends only the latest of status changes that wait for the same task', async () => {
+    const answer: (outcome: TaskBulkOutcome) => void = deferred();
+    const store: InstanceType<typeof ListRowsStore> = setup(byStatus);
+    await settle();
+
+    const first: Promise<ListActOutcome> = store.act([cad482], {
+      type: 'status',
+      status: 'progress',
+    });
+    const replaced: Promise<ListActOutcome> = store.act([cad482], {
+      type: 'status',
+      status: 'review',
+    });
+    const latest: Promise<ListActOutcome> = store.act([cad482], {
+      type: 'status',
+      status: 'done',
+    });
+    expect(rowOf(store, 'CAD-482')).toMatchObject({ status: 'done' });
+    answer(applied(4));
+    await first;
+
+    await expect(replaced).resolves.toMatchObject({ done: [], failed: [], notSent: [] });
+    await latest;
+    expect(bulk).toHaveBeenCalledTimes(2);
+    expect(bulk).toHaveBeenLastCalledWith(
+      [{ taskKey: 'CAD-482', version: 4 }],
+      { type: 'status', status: 'done' },
+      expect.any(Function),
+    );
+  });
+
+  it('rolls back only the change of the refused action when actions overlap', async () => {
+    const answer: (outcome: TaskBulkOutcome) => void = deferred();
+    const store: InstanceType<typeof ListRowsStore> = setup(byStatus);
+    await settle();
+
+    const refused: Promise<ListActOutcome> = store.act([cad482], {
+      type: 'priority',
+      priority: 'urgente',
+    });
+    const later: Promise<ListActOutcome> = store.act([cad482], { type: 'status', status: 'done' });
+    answer({
+      affected: 0,
+      done: [],
+      failed: [{ taskKey: 'CAD-482', version: 3 }],
+      unknown: [],
+      notSent: [],
+    });
+    await refused;
+
+    expect(rowOf(store, 'CAD-482')?.task.priority).toBe('haute');
+    expect(rowOf(store, 'CAD-482')).toMatchObject({ status: 'done' });
+    await later;
+    expect(bulk).toHaveBeenLastCalledWith(
+      [{ taskKey: 'CAD-482', version: 3 }],
+      { type: 'status', status: 'done' },
+      expect.any(Function),
+    );
+  });
+
+  it('keeps a confirmed change over an older read and lets a read at its version replace it', async () => {
+    const store: InstanceType<typeof ListRowsStore> = setup(flat);
+    await settle();
+    bulk.mockResolvedValueOnce(applied(4));
+    page.mockResolvedValue(pageOf([cad482]));
+
+    await store.act([cad482], { type: 'priority', priority: 'urgente' });
+    await settle();
+    expect(rowOf(store, 'CAD-482')?.task.priority).toBe('urgente');
+
+    page.mockResolvedValue(pageOf([{ ...cad482, priority: 'basse', version: 4 }]));
+    store.reload();
+    await settle();
+    expect(rowOf(store, 'CAD-482')?.task.priority).toBe('basse');
+  });
+
+  it('records the cancellation note so the next change can put it back', async () => {
+    const store: InstanceType<typeof ListRowsStore> = setup(flat);
+    await settle();
+    bulk.mockResolvedValueOnce(applied(4)).mockResolvedValueOnce(applied(5));
+
+    await store.act([cad482], {
+      type: 'status',
+      status: 'cancelled',
+      cancelReason: 'duplicate',
+      cancelNote: 'Replaced by CAD-490',
+    });
+    const reopened: ListActOutcome = await store.act([cad482], { type: 'status', status: 'todo' });
+
+    expect(reopened.before['CAD-482']).toMatchObject({
+      status: 'cancelled',
+      cancelReason: 'duplicate',
+      cancelNote: 'Replaced by CAD-490',
+      version: 4,
+    });
+  });
+
+  it('restores at most four trash entries at a time', async () => {
+    const store: InstanceType<typeof ListRowsStore> = setup(flat);
+    await settle();
+    const actions: TaskActionsApi = TestBed.inject(TaskActionsApi);
+    let inFlight: number = 0;
+    let peak: number = 0;
+    vi.mocked(actions.restore).mockImplementation(async (): Promise<void> => {
+      inFlight++;
+      peak = Math.max(peak, inFlight);
+      await Promise.resolve();
+      inFlight--;
+    });
+
+    await expect(store.restore(['t-1', 't-2', 't-3', 't-4', 't-5', 't-6'])).resolves.toBe(true);
+    expect(peak).toBe(4);
+    expect(actions.restore).toHaveBeenCalledTimes(6);
   });
 });

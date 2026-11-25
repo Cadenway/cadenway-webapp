@@ -21,6 +21,7 @@ import {
 import { TaskApi } from '@features/task/data-access/services/task-api/task-api.service';
 import { WORKSPACE_CONTEXT } from '@features/workspace/ports/workspace-context';
 
+import { bulkPartialText } from '../../../constants/bulk-copy/bulk-copy.constants';
 import { LIST_TABLE_TEXTS } from '../../../constants/data-table-texts/data-table-texts.constants';
 import { ListTasksApi } from '../../../data-access/services/list-tasks-api/list-tasks-api.service';
 import type { ListTaskPage } from '../../../models/list-rows/list-rows.interface';
@@ -285,7 +286,14 @@ describe('ListViewPage', () => {
     bulk = vi.fn<TaskActionsApi['bulk']>(() => Promise.resolve(outcome(['CAD-482'])));
     restore = vi.fn<TaskActionsApi['restore']>(() => Promise.resolve());
     refreshCounts = vi.fn();
-    toasts = { show: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn(), dismiss: vi.fn() };
+    toasts = {
+      show: vi.fn(() => 'toast-1'),
+      error: vi.fn(),
+      warning: vi.fn(),
+      info: vi.fn(),
+      dismiss: vi.fn(),
+      toasts: vi.fn(() => []),
+    };
     openDialog = vi.fn();
     TestBed.configureTestingModule({
       providers: [
@@ -1001,6 +1009,99 @@ describe('ListViewPage', () => {
       'cursor-2',
       50,
       expect.any(AbortSignal),
+    );
+  });
+  it('reports the tasks of an Undo that were not sent or have no certain outcome', async () => {
+    bulk.mockResolvedValueOnce(outcome(['CAD-482', 'CAD-483']));
+    const fixture: ComponentFixture<ListViewPage> = await render();
+    required(checkbox('Select CAD-482')).click();
+    required(checkbox('Select CAD-483')).click();
+    fixture.detectChanges();
+    required(button('Mark done')).click();
+    await settle(fixture);
+    bulk
+      .mockResolvedValueOnce(outcome([], { unknown: [{ taskKey: 'CAD-482', version: 4 }] }))
+      .mockResolvedValueOnce(outcome([], { notSent: [{ taskKey: 'CAD-483', version: 4 }] }));
+
+    (toasts['show'].mock.calls[0][1] as { undo: () => void }).undo();
+    await settle(fixture);
+
+    expect(toasts['warning']).toHaveBeenCalledWith('Some selected tasks were not sent.');
+    expect(toasts['warning']).toHaveBeenCalledWith(
+      'The outcome is unknown. The tasks are being refreshed.',
+    );
+    expect(toasts['error']).not.toHaveBeenCalled();
+  });
+
+  it('counts the refused tasks of an Undo and reads the rows again', async () => {
+    bulk.mockResolvedValueOnce(outcome(['CAD-482', 'CAD-483']));
+    const fixture: ComponentFixture<ListViewPage> = await render();
+    required(checkbox('Select CAD-482')).click();
+    required(checkbox('Select CAD-483')).click();
+    fixture.detectChanges();
+    required(button('Mark done')).click();
+    await settle(fixture);
+    const reads: number = page.mock.calls.length;
+    bulk
+      .mockResolvedValueOnce(outcome(['CAD-482']))
+      .mockResolvedValueOnce(outcome([], { failed: [{ taskKey: 'CAD-483', version: 4 }] }));
+
+    (toasts['show'].mock.calls[0][1] as { undo: () => void }).undo();
+    await settle(fixture);
+
+    expect(toasts['error']).toHaveBeenCalledWith(bulkPartialText(1, 2));
+    expect(page.mock.calls.length).toBeGreaterThan(reads);
+  });
+
+  it('dismisses the toasts whose Undo writes through the view when the view is left', async () => {
+    const fixture: ComponentFixture<ListViewPage> = await render();
+    await openRowMenu(fixture, 'CAD-482');
+    await openSubmenu(fixture, 'Priority');
+    required(menuItem('Urgent')).click();
+    await settle(fixture);
+    expect(toasts['show']).toHaveBeenCalledWith('CAD-482 · urgent priority', expect.anything());
+
+    fixture.destroy();
+
+    expect(toasts['dismiss']).toHaveBeenCalledWith('toast-1');
+  });
+
+  it('puts the cancellation reason and note back when the change from Cancelled is undone', async () => {
+    const fixture: ComponentFixture<ListViewPage> = await render();
+    await openRowMenu(fixture, 'CAD-482');
+    await openSubmenu(fixture, 'Status');
+    required(menuItem('Cancelled')).click();
+    fixture.detectChanges();
+    await settle(fixture);
+    const note: HTMLTextAreaElement = required(
+      document.querySelector<HTMLTextAreaElement>('#task-cancel-note'),
+    );
+    note.value = 'Replaced by CAD-490';
+    note.dispatchEvent(new Event('input'));
+    required(button('Cancel the task')).click();
+    await settle(fixture);
+    bulk.mockResolvedValue({
+      ...outcome(['CAD-482']),
+      done: [{ taskKey: 'CAD-482', version: 5, newTaskKey: null, trashEntryId: null }],
+    });
+    toasts['show'].mockClear();
+
+    await openRowMenu(fixture, 'CAD-482');
+    await openSubmenu(fixture, 'Status');
+    required(menuItem('To do')).click();
+    await settle(fixture);
+    (toasts['show'].mock.calls[0][1] as { undo: () => void }).undo();
+    await settle(fixture);
+
+    expect(bulk).toHaveBeenLastCalledWith(
+      [{ taskKey: 'CAD-482', version: 5 }],
+      {
+        type: 'status',
+        status: 'cancelled',
+        cancelReason: 'duplicate',
+        cancelNote: 'Replaced by CAD-490',
+      },
+      expect.any(Function),
     );
   });
 });

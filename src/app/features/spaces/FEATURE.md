@@ -205,18 +205,26 @@ computed from the navigation's reads, for the command palette's `Lists`.
   dialog through `SpacesNavigationStore.openDialog`. `Name` sorts by name,
   ascending then descending. The row's icon animates from its previous status.
 - `ListViewPage` holds the table's selection. The row menu and the selection bar write through
-  `ListRowsStore.act`, with each task's shown version, which sends Task's `TaskActionsApi.bulk`: chunks
+  `ListRowsStore.act`, which sends Task's `TaskActionsApi.bulk`: chunks
   of 50 `executeBulkTaskAction` calls one after the other, each with an idempotency key reused for
   one retry after an uncertain response; each send and retry checks the starting organization and
-  the store's lifetime, and the remaining tasks are reported as not sent when either changes. The
-  rows change at once (`_patches`, applied only while the task keeps the version it was changed
-  on): the icon, the word or the people at once, the group 460 ms later, a moved or deleted row
-  leaves at once; `Mark done` and a move empty the selection at once. A refused, uncertain or
-  unsent task gets its confirmed values back; a refused chunk stays selected and a second toast
-  counts it; an unresolved response warns and the rows are read again. Each applied action reads
-  the list's counts again (`ListPageStore.refreshCounts`) and shows a toast whose `Undo` sends
-  the reverse write at the returned versions (previous statuses with their reasons, priorities,
-  assignees, lists) or restores the trash entries of a deletion (`restoreTrashEntry`); a copy's
+  the store's lifetime, and the remaining tasks are reported as not sent when either changes.
+  Writes are serialized per task: an action waits for the earlier actions of its tasks, then sends
+  each task at its newest known version (the last read, or the version the gateway returned to an
+  earlier action), so a second action never fails on a version the first one superseded; a waiting
+  status change gives way to a newer status change of the same task, which alone is sent. The
+  rows change at once (`_patches`, one patch per action and task, merged in order; a confirmed
+  patch applies until a read reaches the version the gateway returned): the icon, the word or the
+  people at once, the group 460 ms after the task's last action, a moved or deleted row leaves at
+  once; `Mark done` and a move empty the selection at once. A refused, uncertain or unsent task
+  loses only that action's patch; a refused chunk stays selected and a second toast counts it; an
+  unresolved response warns and the rows are read again. Each applied action reads the list's
+  counts again (`ListPageStore.refreshCounts`) and shows a toast whose `Undo` writes back the
+  values confirmed before the action (statuses with their reasons and the cancellation notes
+  recorded by the view, priorities, assignees, lists) or restores the trash entries of a deletion
+  (`restoreTrashEntry`, four at a time, like the reminders); an `Undo` reports tasks not sent,
+  uncertain or refused like the action and reads the rows again after a refusal. Leaving the view
+  dismisses its `Undo` toasts, as `TaskStatusChangesStore` does for the status toasts. A copy's
   toast offers `Open`.
 - The table declares gateway groups in order, omitting hidden and empty groups except the five default empty status groups in an unfiltered view. Filtered empty results show the empty state. `nearEnd` requests further pages with a threshold accounting for unread group lines. Under 768 px the grid keeps selection, name and due date.
 
@@ -227,6 +235,12 @@ computed from the navigation's reads, for the command palette's `Lists`.
 gateway checks them and `ORGANIZATION_PIN_OPERATIONS` lists them.
 
 ## Known gaps
+
+- Task summaries (`queryListTasks`) carry no cancellation note: the `Undo` of a change from
+  `Cancelled` puts back the note only when this view recorded it (a cancellation made here);
+  otherwise it restores the reason without a note.
+- Row writes and the status icon's writes (`TaskStatusChangesStore`) are serialized separately;
+  each reads the other's confirmed version only once it is read or settled.
 
 - `cw-sidebar-space` has no slot next to the name: the private lock of a space shows on its
   overview, not in the sidebar, until the design system adds one.
