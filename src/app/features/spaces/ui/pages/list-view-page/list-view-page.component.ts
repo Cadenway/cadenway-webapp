@@ -1,7 +1,5 @@
 import { SPACES_RETRY } from '../../../constants/data-table-texts/data-table-texts.constants';
-import { BreakpointObserver, type BreakpointState } from '@angular/cdk/layout';
 import {
-  afterNextRender,
   afterRenderEffect,
   Component,
   computed,
@@ -16,7 +14,6 @@ import {
   untracked,
   type WritableSignal,
 } from '@angular/core';
-import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router } from '@angular/router';
 import type { PriorityKey, StatusKey } from '@cadenway/contracts';
 import {
@@ -35,6 +32,7 @@ import {
   CwDataTableEmpty,
   CwDataTableGroup,
   type CwDataTableSelection,
+  type CwGroupDef,
 } from '@cadenway/ui/components/data-table';
 import { CwEmpty, CwEmptyHeader, CwEmptyMedia, CwEmptyTitle } from '@cadenway/ui/components/empty';
 import {
@@ -49,7 +47,6 @@ import { CwPriorityIcon } from '@cadenway/ui/components/priority-icon';
 import { CwStatusIcon } from '@cadenway/ui/components/status-icon';
 import { CwToastService } from '@cadenway/ui/components/toast';
 import { NgIcon } from '@ng-icons/core';
-import { map } from 'rxjs';
 
 import {
   defaultStatusOptions,
@@ -98,41 +95,6 @@ import { NO_ASSIGNEE_GROUP } from '../../../utils/list-rows/list-rows.util';
 import { BulkBar, type MoveTarget } from '../../components/bulk-bar/bulk-bar.component';
 
 /**
- * Constant NEAR_END_PX
- *
- * @description
- * Distance to the end of the table, in pixels, under which the next page is read.
- *
- * @type {number}
- */
-const NEAR_END_PX: number = 480;
-
-/**
- * Constant PHONE_QUERY
- *
- * @description
- * Width under which the rows keep the name and the due date only (`max-md` of `App.dc.html`).
- *
- * @type {string}
- */
-const PHONE_QUERY: string = '(max-width: 767.98px)';
-
-/**
- * Constant PHONE_COLUMNS
- *
- * @description
- * Columns hidden under 768 px, where the mockup keeps the checkbox, the name and the due date.
- *
- * @type {Readonly<Record<string, boolean>>}
- */
-const PHONE_COLUMNS: Readonly<Record<string, boolean>> = {
-  assignees: false,
-  priority: false,
-  labels: false,
-  actions: false,
-};
-
-/**
  * Component ListViewPage
  *
  * @description
@@ -142,7 +104,7 @@ const PHONE_COLUMNS: Readonly<Record<string, boolean>> = {
  * assignees and the priority, the due date and
  * the labels; its « … » button and its right click open the menu of the task or of the
  * selection, whose « Statut » sets any status (« Annulé » asks its reason first). A click on the
- * name or Enter opens the task (`?task=<KEY>`, the detail comes in step 5). Each group's « + »
+ * name or Enter opens the task (`?task=<KEY>`, the detail comes in step 5). Each group's add row
  * and `N` create in this list. The selection fills the selection bar, whose actions go through
  * `executeBulkTaskAction` in chunks of 50; a refused chunk stays selected and is reported. Under
  * 768 px the rows keep the name and the due date. A failed first read reaches the route's error
@@ -342,35 +304,6 @@ export class ListViewPage {
    * @readonly
    */
   private readonly host: ElementRef<HTMLElement> = inject<ElementRef<HTMLElement>>(ElementRef);
-
-  /**
-   * Property phone
-   *
-   * @description
-   * Whether the screen is under 768 px.
-   *
-   * @type {Signal<boolean>}
-   * @readonly
-   */
-  private readonly phone: Signal<boolean> = toSignal(
-    inject(BreakpointObserver)
-      .observe(PHONE_QUERY)
-      .pipe(map((state: BreakpointState): boolean => state.matches)),
-    { initialValue: false },
-  );
-
-  /**
-   * Property columnVisibility
-   *
-   * @description
-   * Columns shown: the name and the due date only under 768 px.
-   *
-   * @type {Signal<Readonly<Record<string, boolean>>>}
-   * @readonly
-   */
-  protected readonly columnVisibility: Signal<Readonly<Record<string, boolean>>> = computed(
-    (): Readonly<Record<string, boolean>> => (this.phone() ? PHONE_COLUMNS : {}),
-  );
 
   /**
    * Property tableSelection
@@ -732,6 +665,54 @@ export class ListViewPage {
         return $localize`:@@spaces.rows.all:All tasks`;
     }
   };
+
+  /**
+   * Property tableGroups
+   *
+   * @description
+   * Visible groups with server counts, including empty default status groups.
+   *
+   * @type {Signal<readonly CwGroupDef[]>}
+   * @readonly
+   */
+  protected readonly tableGroups: Signal<readonly CwGroupDef[]> = computed(() => {
+    const values: readonly string[] = this.rows.groupOrder();
+    const visible: readonly string[] =
+      this.rows.groupBy() === 'status'
+        ? [
+            ...new Set([
+              ...this.statusOptions()
+                .filter(
+                  (option) =>
+                    !option.hidden &&
+                    !['triage', 'backlog', 'testing', 'waiting', 'cancelled'].includes(option.key),
+                )
+                .map((option) => option.key),
+              ...values,
+            ]),
+          ].filter(
+            (value) =>
+              !this.statusOptions().some((option) => option.key === value && option.hidden),
+          )
+        : values;
+    return visible.map((value) => ({
+      value,
+      label: this.groupLabel(value),
+      count: this.rows.groupCount(value) ?? (this.rows.groupBy() === null ? undefined : 0),
+    }));
+  });
+
+  /**
+   * Property rowMotion
+   *
+   * @description
+   * Requests entry motion for rows that have just changed groups.
+   *
+   * @type {(row: ListRow) => 'in' | null}
+   * @readonly
+   */
+  protected readonly rowMotion: (row: ListRow) => 'in' | null = (row) =>
+    row.entering ? 'in' : null;
   // #endregion
 
   // #region Constructor
@@ -741,7 +722,7 @@ export class ListViewPage {
    * @description
    * Reads the rows of the list with the view's query, follows the subtask display and the
    * space's hidden statuses, makes `N` create in this list while the view lives, and reads the
-   * next page when the table nears its end, after a scroll or after rows render. A first read
+   * next page when the table nears its end. A first read
    * that failed is read again when the error boundary runs the route again.
    *
    * @constructor
@@ -765,18 +746,6 @@ export class ListViewPage {
     );
     this.taskCreate.useDefaults(() => ({ listId: this.listId() }), this.destroyRef);
 
-    const scrolled: (event: Event) => void = (event: Event): void => {
-      if (event.target instanceof HTMLElement) this.nearEnd(event.target);
-    };
-    afterNextRender((): void => {
-      this.host.nativeElement.addEventListener('scroll', scrolled, {
-        capture: true,
-        passive: true,
-      });
-    });
-    this.destroyRef.onDestroy((): void => {
-      this.host.nativeElement.removeEventListener('scroll', scrolled, { capture: true });
-    });
     let previousGroups: Map<string, string> = new Map<string, string>();
     let restoreFocus: { key: string; element: Element } | null = null;
     effect((): void => {
@@ -810,29 +779,12 @@ export class ListViewPage {
           }
           restoreFocus = null;
         }
-        const scroller: HTMLElement | null | undefined =
-          this.host.nativeElement.querySelector('table[role="grid"]')?.parentElement;
-        if (scroller) this.nearEnd(scroller);
       });
     });
   }
   // #endregion
 
   // #region Methods
-  /**
-   * Method nearEnd
-   *
-   * @description
-   * Reads the next page when the table's scroller is close to its end.
-   *
-   * @param {HTMLElement} scroller - The scrolled element.
-   */
-  private nearEnd(scroller: HTMLElement): void {
-    if (scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight < NEAR_END_PX) {
-      this.rows.loadMore();
-    }
-  }
-
   /**
    * Method statusOf
    *
@@ -1044,13 +996,13 @@ export class ListViewPage {
    * Method addInGroup
    *
    * @description
-   * The « + » of a group: creates in this list, with the group's status when grouping by status.
+   * The trailing row of a group creates in this list, with the group's status when grouping by status.
    *
-   * @param {string} group - The group value.
+   * @param {string | null} group - The group value.
    */
-  protected addInGroup(group: string): void {
+  protected addInGroup(group: string | null): void {
     this.taskCreate.open(
-      this.rows.groupBy() === 'status'
+      this.rows.groupBy() === 'status' && group !== null
         ? { listId: this.listId(), status: group as StatusKey }
         : { listId: this.listId() },
     );
