@@ -67,6 +67,18 @@ import { TaskStatusPicker } from '../../components/task-status-picker/task-statu
 import { TaskCancelDialog } from '../task-cancel-dialog/task-cancel-dialog.component';
 
 /**
+ * Function dueLabel
+ *
+ * @description
+ * « Échéance »: the due date picker's placeholder, and its name once a date is picked.
+ *
+ * @returns {string} The label.
+ */
+function dueLabel(): string {
+  return $localize`:@@task.create.due:Due date`;
+}
+
+/**
  * Interface TaskCreateModel
  *
  * @description
@@ -286,7 +298,7 @@ function addDays(date: Date, days: number): Date {
     TaskCreateStore,
     provideCwDialogLabels(() => ({ close: $localize`:@@task.create.close:Close` })),
     provideCwDatePickerLabels(() => ({
-      placeholder: $localize`:@@task.create.due:Due date`,
+      placeholder: dueLabel(),
       dialog: $localize`:@@task.create.due-dialog:Due date`,
       clear: $localize`:@@task.create.due-clear:Clear`,
       addTime: $localize`:@@task.create.due-add-time:Add a time`,
@@ -309,6 +321,21 @@ export class TaskCreateDialog {
    * @readonly
    */
   protected readonly retryLabel: string = $localize`:@@task.retry:Retry`;
+
+  /**
+   * Property dueName
+   *
+   * @description
+   * Name of the due date picker: « Échéance » before the picked date (« Échéance, 18 nov. »).
+   * Without a date the trigger shows the same word as its placeholder and takes its name from it,
+   * so it is not announced twice.
+   *
+   * @type {Signal<string>}
+   * @readonly
+   */
+  protected readonly dueName: Signal<string> = computed((): string =>
+    this.model().due === null ? '' : dueLabel(),
+  );
 
   /**
    * Property taskCreate

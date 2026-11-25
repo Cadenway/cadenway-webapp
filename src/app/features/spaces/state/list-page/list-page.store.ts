@@ -28,6 +28,7 @@ import {
 } from 'rxjs';
 
 import { type RealtimeChange, RealtimeConnection } from '@core/realtime';
+import { type CreatedTask, TaskCreate } from '@features/task';
 import { WORKSPACE_CONTEXT } from '@features/workspace/ports/workspace-context';
 
 import {
@@ -380,6 +381,7 @@ function createListPageStore(): Type<ListPageStoreInstance> {
         _workspace: inject(WORKSPACE_CONTEXT),
         _destroyRef: inject(DestroyRef),
         _realtime: inject(RealtimeConnection, { optional: true }),
+        _taskCreate: inject(TaskCreate),
         list,
         space: resource({
           params: () => (list.hasValue() ? { spaceId: list.value().spaceId } : undefined),
@@ -490,6 +492,14 @@ function createListPageStore(): Type<ListPageStoreInstance> {
               );
             }),
             debounceTime(300),
+            tap((): void => {
+              reloadCounts();
+            }),
+          ),
+        ),
+        _countCreations: rxMethod<CreatedTask>(
+          pipe(
+            filter((task: CreatedTask): boolean => task.listId === store.listId()),
             tap((): void => {
               reloadCounts();
             }),
@@ -654,6 +664,7 @@ function createListPageStore(): Type<ListPageStoreInstance> {
     withHooks({
       onInit(store): void {
         store._watch(store.listId);
+        store._countCreations(store._taskCreate.created);
         store._flushCounts(store.counts.status);
         store._flushMilestones(store.milestoneCount.status);
       },
@@ -670,7 +681,8 @@ function createListPageStore(): Type<ListPageStoreInstance> {
  * found for a malformed id, unavailable otherwise), which the page lets reach the boundary. The
  * space, counts, milestones, members, labels and saved views are secondary reads with their own
  * state. While the page lives it watches the list's realtime room; the gateway broadcasts every
- * change to every watch, so matching list or space notices are debounced before refreshing counts. Writes report whether the gateway
+ * change to every watch, so matching list or space notices are debounced before refreshing counts. A task
+ * created in the list from this tab refreshes them at once, without waiting for its notice. Writes report whether the gateway
  * recorded them; renaming and deleting a saved view are optimistic and restore on a refusal.
  *
  * @type {ReturnType<typeof createListPageStore>}

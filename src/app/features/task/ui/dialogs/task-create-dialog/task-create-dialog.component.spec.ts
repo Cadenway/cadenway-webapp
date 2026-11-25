@@ -228,6 +228,23 @@ describe('TaskCreateDialog', () => {
     );
   });
 
+  it('names the due date picker once, then with the picked date', async () => {
+    const service: TaskCreate = TestBed.inject(TaskCreate);
+    service.open({ listId: 'sprint-14' });
+    await fixture.whenStable();
+    const trigger: () => HTMLButtonElement | null = () =>
+      document.querySelector<HTMLButtonElement>('[role="dialog"] cw-date-picker button');
+
+    expect(trigger()?.getAttribute('aria-label')).toBeNull();
+    expect(trigger()?.textContent.trim()).toBe('Échéance');
+    service.close();
+    await fixture.whenStable();
+    service.open({ listId: 'sprint-14', due: '2026-11-18' });
+    await fixture.whenStable();
+
+    expect(trigger()?.getAttribute('aria-label')).toMatch(/^Échéance, .*18/u);
+  });
+
   it('ignores N in an editable field and while the dialog is open', async () => {
     const input: HTMLInputElement = document.createElement('input');
     document.body.append(input);

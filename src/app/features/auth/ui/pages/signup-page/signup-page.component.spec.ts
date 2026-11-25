@@ -100,6 +100,31 @@ describe('SignupPage', () => {
     expect(navigate).toHaveBeenCalledWith('/signup/verify');
   });
 
+  it('sends one sign-up when the form is submitted twice before the answer', async () => {
+    const { host, fixture, navigate, signUp }: Awaited<ReturnType<typeof render>> = await render({
+      ok: true,
+      value: undefined,
+    });
+    let answer: (value: unknown) => void = () => undefined;
+    signUp.mockReturnValueOnce(
+      new Promise((resolve) => {
+        answer = resolve;
+      }),
+    );
+    host.querySelector<HTMLButtonElement>('#su-terms')?.click();
+    await fixture.whenStable();
+    const form: HTMLFormElement | null = host.querySelector('form');
+
+    form?.dispatchEvent(new Event('submit', { cancelable: true }));
+    form?.dispatchEvent(new Event('submit', { cancelable: true }));
+    await expect.poll(() => signUp.mock.calls.length).toBe(1);
+    answer({ ok: true, value: undefined });
+    await fixture.whenStable();
+
+    expect(signUp).toHaveBeenCalledTimes(1);
+    expect(navigate).toHaveBeenCalledTimes(1);
+  });
+
   it('says the address is taken, with a link to sign in', async () => {
     const { host, fixture, navigate }: Awaited<ReturnType<typeof render>> = await render({
       ok: false,

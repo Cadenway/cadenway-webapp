@@ -11,6 +11,7 @@ import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 
 import { type RealtimeChange, RealtimeConnection } from '@core/realtime';
 import { AccessDeniedRouteError } from '@shared/route-errors';
+import { type CreatedTask, TaskCreate } from '@features/task';
 import { WORKSPACE_CONTEXT } from '@features/workspace/ports/workspace-context';
 
 import { ListsApi } from '../../data-access/services/lists-api/lists-api.service';
@@ -71,6 +72,7 @@ type ApiFake = Record<string, Mock>;
 describe('ListPageStore', () => {
   let api: ApiFake;
   let notices: Subject<RealtimeChange>;
+  let creations: Subject<CreatedTask>;
   let watch: Mock;
   let store: InstanceType<typeof ListPageStore>;
   let organization: WritableSignal<{ id: string }>;
@@ -78,6 +80,7 @@ describe('ListPageStore', () => {
   beforeEach(() => {
     organization = signal({ id: 'org-atelier-nord' });
     notices = new Subject<RealtimeChange>();
+    creations = new Subject<CreatedTask>();
     watch = vi.fn((): Observable<RealtimeChange> => notices.asObservable());
     api = {
       list: vi.fn(() => Promise.resolve(sprint14)),
@@ -113,6 +116,7 @@ describe('ListPageStore', () => {
           useValue: { space: vi.fn(() => Promise.resolve({ id: 'sp-produit' })) },
         },
         { provide: RealtimeConnection, useValue: { watch } },
+        { provide: TaskCreate, useValue: { created: creations.asObservable() } },
       ],
     });
     store = TestBed.inject(ListPageStore);
@@ -171,6 +175,26 @@ describe('ListPageStore', () => {
     expect(api['counts']).toHaveBeenCalledTimes(1);
     notices.next({ ...notice, data: { listId: 'l-sprint14' } });
     notices.next({ ...notice, data: { spaceId: 'sp-produit' } });
+    await expect.poll(() => api['counts'].mock.calls.length).toBe(2);
+    expect(api['milestoneCount']).toHaveBeenCalledTimes(2);
+  });
+
+  it('reads the counts again when a task is created in the list, not in another one', async () => {
+    await loaded();
+    const created: CreatedTask = {
+      key: 'CAD-483',
+      listId: 'l-sprint14',
+      status: 'todo',
+      subtasks: 0,
+    };
+
+    creations.next({ ...created, listId: 'l-other' });
+    await new Promise<void>((resolve) => {
+      setTimeout(resolve, 50);
+    });
+    expect(api['counts']).toHaveBeenCalledTimes(1);
+
+    creations.next(created);
     await expect.poll(() => api['counts'].mock.calls.length).toBe(2);
     expect(api['milestoneCount']).toHaveBeenCalledTimes(2);
   });

@@ -234,8 +234,7 @@
           (valueChange)="pickDue($event)"
           [presets]="presets()"
           clearable
-          ariaLabel="Due date"
-          i18n-ariaLabel="@@task.create.due"
+          [ariaLabel]="dueName()"
         />
         <cw-task-priority-picker
           [priority]="model().priority"
