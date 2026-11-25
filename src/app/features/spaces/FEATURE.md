@@ -122,8 +122,10 @@ breadcrumb, dialog, inline edit, toolbar).
     overview of the same space, shown at once even while the sidebar reads again, and follow it
     once it changes. The page reads on its own only when the sidebar has no value for the space,
     without waiting for the sidebar; it then ignores a sidebar value from a read begun before its
-    own (`SpacesNavigationStore.overviewOrder`), and a newer one received during its read applies
-    when that read ends, so both converge on the newest counts.
+    own (`SpacesNavigationStore.overviewOrder`), gives its result to the sidebar
+    (`offerOverview`, which a sidebar read begun earlier never replaces), and takes a newer
+    sidebar value received during its read when that read ends, even if its own failed, so both
+    converge on the newest counts.
 - Route errors: the gateway answers `404 space.not-found` or `list.not-found` for a deleted
   resource and for a private one the caller does not see alike, and the access request never
   reveals which; that answer renders « Accès refusé » with « Demander l’accès ». Any other `404` or

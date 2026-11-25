@@ -204,6 +204,19 @@ interface SpacesNavigationStoreInstance {
   follow(organizationId: Signal<string> | string): void;
 
   /**
+   * Method offerOverview
+   *
+   * @description
+   * Gives the sidebar a space overview read elsewhere, at its place in the read order. It
+   * replaces the sidebar's value of the space only when that value comes from an older read, at
+   * once or when the sidebar read in flight ends; a space of another organization is ignored.
+   *
+   * @param {SpaceOverview} overview - The overview read.
+   * @param {number} order - The read's place, from `overviewOrder.next()` when it began.
+   */
+  offerOverview(overview: SpaceOverview, order: number): void;
+
+  /**
    * Method setExpanded
    *
    * @description
@@ -282,6 +295,12 @@ function createSpacesNavigationStore(): Type<SpacesNavigationStoreInstance> {
           api.spaces(abortSignal),
       });
       const readOrders: WeakMap<SpaceOverview, number> = new WeakMap<SpaceOverview, number>();
+      // The newest read of each space offered by a reader of a space overview, which a sidebar
+      // read begun before it never replaces.
+      const offered: Map<string, { overview: SpaceOverview; order: number }> = new Map<
+        string,
+        { overview: SpaceOverview; order: number }
+      >();
       let lastOrder: number = 0;
       const overviewOrder: OverviewReadOrder = {
         next: (): number => ++lastOrder,
@@ -294,6 +313,7 @@ function createSpacesNavigationStore(): Type<SpacesNavigationStoreInstance> {
         _api: api,
         _workspace: inject(WORKSPACE_CONTEXT),
         _taskCreate: inject(TaskCreate),
+        _offered: offered,
         overviewOrder,
         spaces,
         overviews: resource({
@@ -326,6 +346,11 @@ function createSpacesNavigationStore(): Type<SpacesNavigationStoreInstance> {
                   overviewOrder.record(result.value, batchOrders[index]);
                 },
               );
+            }
+            for (const id of params.ids) {
+              const newer: { overview: SpaceOverview; order: number } | undefined = offered.get(id);
+              const read: number = id in byId ? (readOrders.get(byId[id]) ?? 0) : 0;
+              if (newer !== undefined && newer.order > read) byId[id] = newer.overview;
             }
             return byId;
           },
@@ -435,11 +460,33 @@ function createSpacesNavigationStore(): Type<SpacesNavigationStoreInstance> {
         }),
         follow: signalMethod<string>((organizationId: string): void => {
           if (organizationId === store._organizationId()) return;
+          store._offered.clear();
           patchState(store, {
             _organizationId: organizationId,
             expanded: {},
           });
         }),
+        offerOverview(overview: SpaceOverview, order: number): void {
+          store.overviewOrder.record(overview, order);
+          const known: { overview: SpaceOverview; order: number } | undefined = store._offered.get(
+            overview.spaceId,
+          );
+          if (known !== undefined && known.order >= order) return;
+          store._offered.set(overview.spaceId, { overview, order });
+          // A read in flight takes the offered value when it ends.
+          if (store.overviews.isLoading() || !store.overviews.hasValue()) return;
+          if (
+            !store.spaces.hasValue() ||
+            !store.spaces.value().some((space: Space): boolean => space.id === overview.spaceId)
+          ) {
+            return;
+          }
+          const current: Readonly<Record<string, SpaceOverview>> = store.overviews.value();
+          const held: SpaceOverview | undefined =
+            overview.spaceId in current ? current[overview.spaceId] : undefined;
+          if (held !== undefined && (store.overviewOrder.of(held) ?? 0) >= order) return;
+          store.overviews.set({ ...current, [overview.spaceId]: overview });
+        },
         setExpanded(spaceId: string, open: boolean): void {
           patchState(store, { expanded: { ...store.expanded(), [spaceId]: open } });
         },

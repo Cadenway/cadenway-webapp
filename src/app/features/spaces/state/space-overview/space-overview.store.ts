@@ -166,16 +166,32 @@ function createSpaceOverviewStore(): Type<SpaceOverviewStoreInstance> {
             abortSignal: AbortSignal;
           }): Promise<SpaceOverview> => {
             // The sidebar's value of the space, even while it reads again, is shown at once and
-            // followed; the page reads on its own only when the sidebar has none, and then
-            // ignores any sidebar value read before its own read began.
-            const current: SpaceOverview | undefined = navigation.overviews.hasValue()
-              ? navigation.overviews.value()[params.spaceId]
-              : undefined;
+            // followed. The page reads on its own only when the sidebar has none: it then ignores
+            // any sidebar value read before its own read began, gives its result to the sidebar,
+            // and recovers a failed read with a newer sidebar value.
+            const held: () => SpaceOverview | undefined = (): SpaceOverview | undefined =>
+              navigation.overviews.hasValue()
+                ? navigation.overviews.value()[params.spaceId]
+                : undefined;
+            const current: SpaceOverview | undefined = held();
             following.baseline = current;
-            following.own = current === undefined ? navigation.overviewOrder.next() : undefined;
-            return current !== undefined
-              ? Promise.resolve(current)
-              : api.overview(params.spaceId, todayIso(), abortSignal);
+            following.own = undefined;
+            if (current !== undefined) return Promise.resolve(current);
+            const own: number = navigation.overviewOrder.next();
+            following.own = own;
+            return api.overview(params.spaceId, todayIso(), abortSignal).then(
+              (overview: SpaceOverview): SpaceOverview => {
+                navigation.offerOverview(overview, own);
+                return overview;
+              },
+              (error: unknown): SpaceOverview => {
+                const newer: SpaceOverview | undefined = held();
+                if (newer !== undefined && (navigation.overviewOrder.of(newer) ?? 0) > own) {
+                  return newer;
+                }
+                throw error;
+              },
+            );
           },
         }),
         milestones: resource({
