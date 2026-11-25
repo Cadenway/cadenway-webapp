@@ -6590,63 +6590,63 @@
         <source>You cannot create tasks in this list.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/task/ui/dialogs/task-create-dialog/task-create-dialog.component.ts</context>
-          <context context-type="linenumber">964</context>
+          <context context-type="linenumber">971</context>
         </context-group>
       </trans-unit>
       <trans-unit id="task.create.status-hidden" datatype="html">
         <source>This status is no longer available. Choose another.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/task/ui/dialogs/task-create-dialog/task-create-dialog.component.ts</context>
-          <context context-type="linenumber">966</context>
+          <context context-type="linenumber">973</context>
         </context-group>
       </trans-unit>
       <trans-unit id="task.create.failed-text" datatype="html">
         <source>The server did not answer. Try again in a moment.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/task/ui/dialogs/task-create-dialog/task-create-dialog.component.ts</context>
-          <context context-type="linenumber">968</context>
+          <context context-type="linenumber">975</context>
         </context-group>
       </trans-unit>
       <trans-unit id="task.create.refused" datatype="html">
         <source>The task could not be created. Check its details and try again.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/task/ui/dialogs/task-create-dialog/task-create-dialog.component.ts</context>
-          <context context-type="linenumber">969</context>
+          <context context-type="linenumber">976</context>
         </context-group>
       </trans-unit>
       <trans-unit id="task.create.failed" datatype="html">
         <source>Could not create the task</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/task/ui/dialogs/task-create-dialog/task-create-dialog.component.ts</context>
-          <context context-type="linenumber">970</context>
+          <context context-type="linenumber">977</context>
         </context-group>
       </trans-unit>
       <trans-unit id="task.create.subtask-one" datatype="html">
         <source>1 subtask</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/task/ui/dialogs/task-create-dialog/task-create-dialog.component.ts</context>
-          <context context-type="linenumber">1021</context>
+          <context context-type="linenumber">1028</context>
         </context-group>
       </trans-unit>
       <trans-unit id="task.create.subtask-many" datatype="html">
         <source><x id="count" equiv-text="created.subtasks"/> subtasks</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/task/ui/dialogs/task-create-dialog/task-create-dialog.component.ts</context>
-          <context context-type="linenumber">1023</context>
+          <context context-type="linenumber">1030</context>
         </context-group>
       </trans-unit>
       <trans-unit id="task.create.created" datatype="html">
         <source>Task <x id="key" equiv-text="created.key"/> created</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/task/ui/dialogs/task-create-dialog/task-create-dialog.component.ts</context>
-          <context context-type="linenumber">1026</context>
+          <context context-type="linenumber">1033</context>
         </context-group>
       </trans-unit>
       <trans-unit id="task.create.open" datatype="html">
         <source>Open</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/task/ui/dialogs/task-create-dialog/task-create-dialog.component.ts</context>
-          <context context-type="linenumber">1030</context>
+          <context context-type="linenumber">1037</context>
         </context-group>
       </trans-unit>
       <trans-unit id="workspace.shortcuts.key-ctrl" datatype="html">

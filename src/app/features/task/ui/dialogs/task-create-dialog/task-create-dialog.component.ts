@@ -945,19 +945,26 @@ export class TaskCreateDialog {
             Array.isArray(issues) &&
             issues.length
           ) {
-            // Keyed to the fields as they are now: an edit made while the request ran must not
-            // hide the issue before it is ever shown.
+            // An issue belongs to the value that was sent: a field edited, or a destination
+            // changed, while the request ran is not marked with it. When nothing refused is left
+            // to point at, the toast says the creation was refused.
             const now: TaskCreateModel = this.model();
+            const sameDestination: boolean =
+              (this.store.destination()?.listId ?? null) === (destination?.listId ?? null);
             const refused: Partial<Record<ServerIssueField, unknown>> = {};
             for (const issue of issues as unknown[]) {
               const path: unknown =
                 typeof issue === 'object' && issue !== null && 'path' in issue ? issue.path : null;
               const root: string = typeof path === 'string' ? path.split('.')[0].split('[')[0] : '';
               const field: ServerIssueField = SERVER_ISSUE_FIELDS[root] ?? 'form';
-              refused[field] = field === 'form' ? now : now[field];
+              const sent: unknown = field === 'form' ? model : model[field];
+              const current: unknown = field === 'form' ? now : now[field];
+              if (sameDestination && sent === current) refused[field] = sent;
             }
-            this.serverIssues.set(refused);
-            return undefined;
+            if (Object.keys(refused).length > 0) {
+              this.serverIssues.set(refused);
+              return undefined;
+            }
           }
           const description: string =
             problem?.status === 403 && hasProblemCode(error, 'access.role-insufficient')
