@@ -133,6 +133,14 @@ constants belong to the lead):
   chip (status, key, name) and the time of day. The chip opens Task's detail
   (`TaskDetailOpener.open(key)`, no preview: the entry does not say whether the task is a
   milestone).
+- Task menu: the chip of a task the list holds opens the shared `cw-task-menu` (right click, Menu
+  key, Shift F10, long press), with its cancellation dialog and deletion confirmation, written
+  through the page-scoped `ViewTaskWritesStore` over `ListTasksStore` (`VIEW_TASK_WRITER`). The
+  route provides `ListTasksStore`, `ListTasksApi` and Task's `TaskStatusChangesStore`; the page
+  loads every task of the list, unfiltered (`level: all`, `sort: manual`), since the menu needs the
+  task summary (priority, assignees, version) that an entry does not carry. Such a chip shows the
+  task's status and name as the list shows them, a write applied at once. The chip of a task the
+  list does not hold (moved out, or past the reader's 2,000-task cap) only opens the task.
 - `ActivityViewStore`, route-scoped through `ACTIVITY_VIEW_PROVIDERS` with `ListActivityApi`
   (`ListsService.listListActivity`, 50 entries a page, the HTTP cache bypassed). The kinds and
   the person filter on the server (`kind`, `actorId`). The first page is the view's primary read
@@ -151,15 +159,14 @@ constants belong to the lead):
   `task.status-changed.v1` or `list.tasks-changed.v1` (naming this list) of a window, once per
   window; so do a task created in the list from this tab (`TaskCreate.created`) and a task detail
   that closes or whose `Undo` restored a task (`TaskDetailOpener.closed`, `changed`).
-- Bricks: `activity-feed`, `select`, `toggle-group`, `button`, `status-icon`, `priority-icon`;
-  the page provides the feed's and the select's texts.
+- Bricks: `activity-feed`, `select`, `toggle-group`, `button`, `status-icon`, `priority-icon`,
+  `context-menu`, `alert-dialog`; the page provides the feed's and the select's texts.
 - Known gaps:
   - `Public form` (G8): the contract records an intake submission as a `create` by a `system`
     actor, with no intake actor type, requester email or actor-type filter. The select does not
     offer `Public form`, and a `system` actor shows as `System` with the gear icon.
   - `· deleted` (G9): closed by the contract, which leaves out of `items` and `total` the entries
     of a task the caller no longer sees, archived or in the trash; the chip always links.
-  - The task chip has no context menu yet: it comes with F2's shared task menu.
   - Comments made in another tab appear on the next refresh only: `comment.created.v1` goes to
     task rooms, not to the list's room.
   - Times are times of day: the mockup's `Just now` and `N min ago` are not written.

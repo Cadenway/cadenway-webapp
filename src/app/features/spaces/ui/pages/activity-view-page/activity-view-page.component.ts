@@ -6,6 +6,7 @@ import {
   LOCALE_ID,
   linkedSignal,
   type Signal,
+  signal,
   type WritableSignal,
 } from '@angular/core';
 import type { PriorityKey, StatusKey } from '@cadenway/contracts';
@@ -19,7 +20,15 @@ import {
   CwActivitySummaryDef,
   provideCwActivityFeedLabels,
 } from '@cadenway/ui/components/activity-feed';
+import {
+  CwAlertDialog,
+  CwAlertDialogAction,
+  CwAlertDialogCancel,
+  CwAlertDialogDescription,
+  CwAlertDialogTitle,
+} from '@cadenway/ui/components/alert-dialog';
 import { CwButton } from '@cadenway/ui/components/button';
+import { CwContextMenuTriggerFor } from '@cadenway/ui/components/context-menu';
 import { CwPriorityIcon } from '@cadenway/ui/components/priority-icon';
 import { CwSelect, CwSelectOption, provideCwSelectLabels } from '@cadenway/ui/components/select';
 import { CwStatusIcon } from '@cadenway/ui/components/status-icon';
@@ -31,7 +40,9 @@ import {
   PRIORITY_LABELS,
   type StatusOption,
   statusLabel,
+  TaskCancelDialog,
   TaskDetailOpener,
+  type TaskSummary,
 } from '@features/task';
 
 import { SPACES_RETRY } from '../../../constants/data-table-texts/data-table-texts.constants';
@@ -44,9 +55,20 @@ import {
   type ListActivityTask,
 } from '../../../models/list-activity/list-activity.interface';
 import type { ListMember } from '../../../models/list-member/list-member.interface';
+import type { ListTaskItem, ListTasksRead } from '../../../models/list-tasks/list-tasks.interface';
 import type { Space, SpaceStatusOption } from '../../../models/space/space.interface';
 import { ActivityViewStore } from '../../../state/activity-view/activity-view.store';
 import { ListPageStore } from '../../../state/list-page/list-page.store';
+import {
+  ListTasksStore,
+  type ListTasksStoreInstance,
+} from '../../../state/list-tasks/list-tasks.store';
+import {
+  ViewTaskWritesStore,
+  type ViewTaskWritesStoreInstance,
+} from '../../../state/view-task-writes/view-task-writes.store';
+import { VIEW_TASK_WRITER } from '../../../state/view-task-writes/view-task-writer.token';
+import { TaskMenu } from '../../components/task-menu/task-menu.component';
 
 /**
  * Constant EVERYONE
@@ -262,7 +284,12 @@ interface ActivityDetail {
  * its count). An entry shows its actor (a member's avatar, or an icon for an automation, the Git
  * provider or a service), the verb and its details (the status from and to with their icons, the
  * priority with its icon, the due dates), the comment's excerpt, the task chip that opens Task's
- * detail (`TaskDetailOpener`, `?task=<KEY>`) and the time. The feed reads the next page as it
+ * detail (`TaskDetailOpener`, `?task=<KEY>`) and the time. The chip of a task of the list opens
+ * the shared task menu (`cw-task-menu`: right click, Menu key, Shift F10, long press), whose writes
+ * go through the page-scoped `ViewTaskWritesStore` over `ListTasksStore` (`VIEW_TASK_WRITER`),
+ * which reads every task of the list, unfiltered, for the menu; the chip then shows the task's
+ * status as the list shows it, a write included. A task no longer in the list has no menu: the
+ * entry names its key, name and status only, which the menu's writes cannot act on. The feed reads the next page as it
  * scrolls near its end, or with `Show more`. States: the skeleton while the filters are read, the
  * empty state (`No activity matches`, with `Clear filters` when filtered), the route's error
  * boundary when the first read of the list fails, and an inline error with `Retry` for a later
@@ -275,7 +302,13 @@ interface ActivityDetail {
     CwActivityFeed,
     CwActivityFeedEmpty,
     CwActivitySummaryDef,
+    CwAlertDialog,
+    CwAlertDialogAction,
+    CwAlertDialogCancel,
+    CwAlertDialogDescription,
+    CwAlertDialogTitle,
     CwButton,
+    CwContextMenuTriggerFor,
     CwPriorityIcon,
     CwSelect,
     CwSelectOption,
@@ -283,8 +316,12 @@ interface ActivityDetail {
     CwToggleGroup,
     CwToggleGroupItem,
     NgIcon,
+    TaskCancelDialog,
+    TaskMenu,
   ],
   providers: [
+    ViewTaskWritesStore,
+    { provide: VIEW_TASK_WRITER, useExisting: ListTasksStore },
     provideCwActivityFeedLabels(() => ({
       today: $localize`:@@spaces.activity.today:Today`,
       yesterday: $localize`:@@spaces.activity.yesterday:Yesterday`,
@@ -312,6 +349,84 @@ export class ActivityViewPage {
    * @readonly
    */
   protected readonly store: InstanceType<typeof ActivityViewStore> = inject(ActivityViewStore);
+
+  /**
+   * Property tasks
+   *
+   * @description
+   * Every task of the list, unfiltered, as the task menu acts on them.
+   *
+   * @type {ListTasksStoreInstance}
+   * @readonly
+   */
+  protected readonly tasks: ListTasksStoreInstance = inject(ListTasksStore);
+
+  /**
+   * Property writes
+   *
+   * @description
+   * The task menu's writes, with their toasts, `Undo`, cancellation reason and deletion
+   * confirmation, page-scoped over `ListTasksStore` (`VIEW_TASK_WRITER`).
+   *
+   * @type {ViewTaskWritesStoreInstance}
+   * @readonly
+   */
+  protected readonly writes: ViewTaskWritesStoreInstance = inject(ViewTaskWritesStore);
+
+  /**
+   * Property shownTasks
+   *
+   * @description
+   * The tasks of the list as shown (a write applied at once), by key.
+   *
+   * @type {Signal<ReadonlyMap<string, ListTaskItem>>}
+   * @readonly
+   */
+  protected readonly shownTasks: Signal<ReadonlyMap<string, ListTaskItem>> = computed(
+    (): ReadonlyMap<string, ListTaskItem> =>
+      new Map(this.tasks.items().map((item: ListTaskItem) => [item.task.key, item])),
+  );
+
+  /**
+   * Property menuKey
+   *
+   * @description
+   * Key of the task whose chip opened the task menu.
+   *
+   * @type {WritableSignal<string | null>}
+   * @readonly
+   */
+  protected readonly menuKey: WritableSignal<string | null> = signal<string | null>(null);
+
+  /**
+   * Property menuItem
+   *
+   * @description
+   * The task the menu acts on, as shown, or null.
+   *
+   * @type {Signal<ListTaskItem | null>}
+   * @readonly
+   */
+  protected readonly menuItem: Signal<ListTaskItem | null> = computed((): ListTaskItem | null => {
+    const key: string | null = this.menuKey();
+    return key === null ? null : (this.shownTasks().get(key) ?? null);
+  });
+
+  /**
+   * Property menuTasks
+   *
+   * @description
+   * What the task menu acts on: the chip's task.
+   *
+   * @type {Signal<readonly TaskSummary[]>}
+   * @readonly
+   */
+  protected readonly menuTasks: Signal<readonly TaskSummary[]> = computed(
+    (): readonly TaskSummary[] => {
+      const item: ListTaskItem | null = this.menuItem();
+      return item ? [item.task] : [];
+    },
+  );
 
   /**
    * Property retryLabel
@@ -527,12 +642,19 @@ export class ActivityViewPage {
    *
    * @description
    * Reads the first page again when the error boundary runs the route again after a failed first
-   * read.
+   * read, and reads every task of the list, unfiltered, for the task menu (its failure only leaves
+   * the chips without a menu).
    *
    * @constructor
    */
   public constructor() {
     if (this.store.primary.error()) this.store.reload();
+    this.tasks.load(
+      computed((): ListTasksRead => ({
+        listId: this.listPage.listId() ?? '',
+        query: { level: 'all', sort: 'manual' },
+      })),
+    );
   }
   // #endregion
 

@@ -99,16 +99,36 @@
           </ng-template>
           <ng-template cwActivityDetail [cwActivityDetailOf]="feed()" let-data="data">
             @if (data) {
-              <button
-                type="button"
-                class="inline-flex h-6 max-w-full min-w-0 items-center gap-1.5 rounded-md border border-border bg-card px-1.5 text-xs transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background focus-visible:outline-none"
-                data-testid="activity-task"
-                (click)="openTask(data.task)"
-              >
-                <cw-status-icon [status]="data.task.status" size="3" />
-                <span class="shrink-0 font-mono text-muted-foreground">{{ data.task.key }}</span>
-                <span class="min-w-0 truncate">{{ data.task.name }}</span>
-              </button>
+              @let shown = shownTasks().get(data.task.key);
+              @if (shown) {
+                <button
+                  type="button"
+                  class="inline-flex h-6 max-w-full min-w-0 items-center gap-1.5 rounded-md border border-border bg-card px-1.5 text-xs transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background focus-visible:outline-none"
+                  data-testid="activity-task"
+                  [cwContextMenuTriggerFor]="taskMenu.menu()"
+                  (opened)="menuKey.set(data.task.key)"
+                  (click)="openTask(data.task)"
+                >
+                  <cw-status-icon
+                    [status]="shown.status"
+                    [milestone]="shown.task.milestone"
+                    size="3"
+                  />
+                  <span class="shrink-0 font-mono text-muted-foreground">{{ data.task.key }}</span>
+                  <span class="min-w-0 truncate">{{ shown.task.name }}</span>
+                </button>
+              } @else {
+                <button
+                  type="button"
+                  class="inline-flex h-6 max-w-full min-w-0 items-center gap-1.5 rounded-md border border-border bg-card px-1.5 text-xs transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background focus-visible:outline-none"
+                  data-testid="activity-task"
+                  (click)="openTask(data.task)"
+                >
+                  <cw-status-icon [status]="data.task.status" size="3" />
+                  <span class="shrink-0 font-mono text-muted-foreground">{{ data.task.key }}</span>
+                  <span class="min-w-0 truncate">{{ data.task.name }}</span>
+                </button>
+              }
             }
           </ng-template>
           @if (store.filtered()) {
@@ -155,3 +175,46 @@
     </div>
   </div>
 </section>
+
+<cw-task-menu
+  #taskMenu
+  [tasks]="menuTasks()"
+  [status]="menuItem()?.status ?? null"
+  [statuses]="writes.statusOptions()"
+  [people]="writes.people()"
+  [userId]="writes.userId()"
+  [lists]="writes.targets()"
+  (openRequested)="openTask($event)"
+  (statusPicked)="writes.setStatus(menuTasks(), $event, menuItem()?.task?.milestone ?? false)"
+  (priorityPicked)="writes.setPriority(menuTasks(), $event)"
+  (assigneeToggled)="writes.toggleAssignee(menuTasks(), $event)"
+  (moved)="writes.moveTo(menuTasks(), $event)"
+  (remindRequested)="writes.remind(menuTasks())"
+  (duplicateRequested)="writes.duplicate(menuTasks())"
+  (copyLinkRequested)="writes.copyLinks(menuTasks())"
+  (copyKeyRequested)="writes.copyKeys(menuTasks())"
+  (deleteRequested)="writes.askDelete(menuTasks(), true)"
+/>
+
+<cw-task-cancel-dialog
+  [taskKeys]="writes.cancelKeys()"
+  (confirmed)="writes.confirmCancel($event)"
+  (kept)="writes.keepCancel()"
+/>
+
+<cw-alert-dialog
+  variant="destructive"
+  size="sm"
+  [open]="writes.deleteOpen()"
+  (openChange)="writes.setDeleteOpen($event)"
+  [items]="writes.deleteItems()"
+  [pending]="writes.deleting()"
+  (confirm)="writes.trash()"
+>
+  <h2 cwAlertDialogTitle>{{ writes.deleteTitle() }}</h2>
+  <p cwAlertDialogDescription>{{ writes.deleteText() }}</p>
+  <button cwButton cwAlertDialogCancel variant="outline" i18n="@@spaces.cancel">Cancel</button>
+  <button cwButton cwAlertDialogAction variant="destructive" [loading]="writes.deleting()">
+    {{ writes.deleteAction() }}
+  </button>
+</cw-alert-dialog>
