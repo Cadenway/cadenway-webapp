@@ -146,6 +146,7 @@ describe('ListRowsStore', () => {
   let bulk: Mock<TaskActionsApi['bulk']>;
   let notices: Subject<RealtimeChange>;
   let detailClosings: Subject<string>;
+  let detailChanges: Subject<string>;
   let organization: WritableSignal<{ id: string; slug: string }>;
 
   /**
@@ -173,7 +174,13 @@ describe('ListRowsStore', () => {
           useValue: { show: vi.fn(), error: vi.fn(), warning: vi.fn(), dismiss: vi.fn() },
         },
         { provide: RealtimeConnection, useValue: { watch: () => notices.asObservable() } },
-        { provide: TaskDetailOpener, useValue: { closed: detailClosings.asObservable() } },
+        {
+          provide: TaskDetailOpener,
+          useValue: {
+            closed: detailClosings.asObservable(),
+            changed: detailChanges.asObservable(),
+          },
+        },
         {
           provide: WORKSPACE_CONTEXT,
           useValue: { organization, user: () => ({ id: 'u-camille' }) },
@@ -218,6 +225,7 @@ describe('ListRowsStore', () => {
     vi.useFakeTimers();
     notices = new Subject<RealtimeChange>();
     detailClosings = new Subject<string>();
+    detailChanges = new Subject<string>();
     organization = signal({ id: 'org-atelier-nord', slug: 'atelier-nord' });
     groups = vi.fn<ListTasksApi['groups']>(() =>
       Promise.resolve<readonly TaskGroupCount[]>([
@@ -712,6 +720,17 @@ describe('ListRowsStore', () => {
     expect(page).toHaveBeenCalledTimes(1);
 
     detailClosings.next('CAD-482');
+    await vi.advanceTimersByTimeAsync(1000);
+    await settle();
+
+    expect(page).toHaveBeenCalledTimes(2);
+  });
+
+  it('reads the rows again once an Undo of the detail restored a task', async () => {
+    setup(flat);
+    await settle();
+
+    detailChanges.next('CAD-482');
     await vi.advanceTimersByTimeAsync(1000);
     await settle();
 

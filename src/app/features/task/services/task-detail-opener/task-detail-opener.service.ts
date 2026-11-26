@@ -41,7 +41,8 @@ const TASK_KEY_PATTERN: RegExp = /^[A-Z]{2,5}-[1-9][0-9]{0,8}$/u;
  * gives a preview, shown in the header while the detail is read, and may ask for a tab
  * (`{ tab: 'subtasks' }`), which the column takes once; neither goes into the address. It holds
  * no user or organization data: the preview and the tab are forgotten once another task opens.
- * `closed` names each task whose detail closed or gave way to another, for the view under it.
+ * `closed` names each task whose detail closed or gave way to another, and `changed` each task an
+ * `Undo` of the detail restored, for the view under it.
  */
 @Service()
 export class TaskDetailOpener {
@@ -112,6 +113,30 @@ export class TaskDetailOpener {
    * @readonly
    */
   public readonly closed: Observable<string> = this.departures.asObservable();
+
+  /**
+   * Property changes
+   *
+   * @description
+   * Keys of the tasks a confirmed change from the detail affects after its dialog closed.
+   *
+   * @type {Subject<string>}
+   * @readonly
+   */
+  private readonly changes: Subject<string> = new Subject<string>();
+
+  /**
+   * Property changed
+   *
+   * @description
+   * Emits the key of a task changed from the detail once its dialog may be gone (the `Undo` of an
+   * archive or a deletion restored it), so the view under it reads its rows again and the task
+   * shows there again.
+   *
+   * @type {Observable<string>}
+   * @readonly
+   */
+  public readonly changed: Observable<string> = this.changes.asObservable();
 
   /**
    * Property taskKey
@@ -206,6 +231,18 @@ export class TaskDetailOpener {
       queryParams: { [TASK_DETAIL_PARAM]: null },
       queryParamsHandling: 'merge',
     });
+  }
+
+  /**
+   * Method notifyChanged
+   *
+   * @description
+   * Reports a confirmed change of a task to the `changed` listeners; called by the detail.
+   *
+   * @param {string} taskKey - Key of the task changed.
+   */
+  public notifyChanged(taskKey: string): void {
+    this.changes.next(taskKey);
   }
 
   /**

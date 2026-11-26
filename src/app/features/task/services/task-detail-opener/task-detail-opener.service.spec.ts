@@ -80,4 +80,13 @@ describe('TaskDetailOpener', () => {
 
     expect(closed).toEqual(['CAD-482', 'CAD-470', 'CAD-482']);
   });
+
+  it('reports a task an Undo of the detail restored', () => {
+    const changed: string[] = [];
+    opener.changed.subscribe((key: string) => changed.push(key));
+
+    opener.notifyChanged('CAD-482');
+
+    expect(changed).toEqual(['CAD-482']);
+  });
 });
