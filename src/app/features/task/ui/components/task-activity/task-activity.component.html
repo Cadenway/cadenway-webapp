@@ -1,0 +1,86 @@
+@if (failed()) {
+  <div
+    role="alert"
+    class="flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm"
+  >
+    <ng-icon
+      name="phosphorWarningCircleBold"
+      class="shrink-0 text-destructive"
+      aria-hidden="true"
+    />
+    <span class="min-w-0 flex-1" i18n="@@task.activity.read-failed"
+      >The activity could not be loaded.</span
+    >
+    <button cwButton variant="outline" size="xs" type="button" (click)="retried.emit()">
+      <ng-container i18n="@@task.retry">Retry</ng-container>
+    </button>
+  </div>
+} @else if (loading() && entries().length === 0) {
+  <div role="status" aria-busy="true" class="flex flex-col gap-4">
+    <span class="sr-only" i18n="@@task.activity.loading">Loading the activity</span>
+    @for (line of [1, 2, 3, 4]; track line) {
+      <div class="flex gap-3" aria-hidden="true">
+        <div
+          class="mt-1 size-4 shrink-0 animate-pulse rounded-full bg-muted motion-reduce:animate-none"
+        ></div>
+        <div class="h-9 flex-1 animate-pulse rounded-md bg-muted motion-reduce:animate-none"></div>
+      </div>
+    }
+  </div>
+} @else {
+  <ol class="flex flex-col" data-testid="task-activity">
+    @for (row of rows(); track row.id) {
+      <li class="relative flex gap-3 pb-4 last:pb-0">
+        <span
+          class="relative z-10 mt-1 flex size-4 shrink-0 items-center justify-center rounded-full bg-popover"
+        >
+          <ng-icon
+            [name]="row.icon"
+            size="0.875rem"
+            class="text-muted-foreground"
+            aria-hidden="true"
+          />
+        </span>
+        <span class="flex min-w-0 flex-col gap-0.5">
+          <span class="text-sm"
+            ><span class="font-medium">{{ row.who }}</span> {{ row.text }}</span
+          >
+          @if (row.quote; as quote) {
+            <span
+              class="line-clamp-2 border-l-2 border-border pl-2 text-xs text-muted-foreground"
+              >{{ quote }}</span
+            >
+          }
+          <span class="text-xs text-muted-foreground">{{ row.time }}</span>
+        </span>
+      </li>
+    } @empty {
+      <li class="px-1 py-2 text-sm text-muted-foreground" i18n="@@task.activity.empty">
+        No activity yet.
+      </li>
+    }
+  </ol>
+  @if (hasMore() || moreFailed()) {
+    <div class="flex items-center justify-center gap-2 text-sm">
+      @if (moreFailed()) {
+        <span class="text-muted-foreground" role="alert" i18n="@@task.activity.more-failed"
+          >Older entries could not be loaded.</span
+        >
+      }
+      <button
+        cwButton
+        variant="ghost"
+        size="sm"
+        type="button"
+        [loading]="loadingMore()"
+        (click)="moreLoaded.emit()"
+      >
+        @if (moreFailed()) {
+          <ng-container i18n="@@task.retry">Retry</ng-container>
+        } @else {
+          <ng-container i18n="@@task.activity.show-more">Show more</ng-container>
+        }
+      </button>
+    </div>
+  }
+}

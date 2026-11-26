@@ -11,6 +11,8 @@ import { parseChange } from '@core/realtime/realtime-protocol.util';
 import {
   TaskActionsApi,
   type TaskBulkOutcome,
+  TaskDetailOpener,
+  type TaskStatusChangesInstance,
   TaskStatusChangesStore,
   type TaskSummary,
 } from '@features/task';
@@ -143,6 +145,8 @@ describe('ListRowsStore', () => {
   let changeStatus: Mock<TaskApi['changeStatus']>;
   let bulk: Mock<TaskActionsApi['bulk']>;
   let notices: Subject<RealtimeChange>;
+  let detailClosings: Subject<string>;
+  let detailChanges: Subject<string>;
   let organization: WritableSignal<{ id: string; slug: string }>;
 
   /**
@@ -170,6 +174,13 @@ describe('ListRowsStore', () => {
           useValue: { show: vi.fn(), error: vi.fn(), warning: vi.fn(), dismiss: vi.fn() },
         },
         { provide: RealtimeConnection, useValue: { watch: () => notices.asObservable() } },
+        {
+          provide: TaskDetailOpener,
+          useValue: {
+            closed: detailClosings.asObservable(),
+            changed: detailChanges.asObservable(),
+          },
+        },
         {
           provide: WORKSPACE_CONTEXT,
           useValue: { organization, user: () => ({ id: 'u-camille' }) },
@@ -213,6 +224,8 @@ describe('ListRowsStore', () => {
   beforeEach(() => {
     vi.useFakeTimers();
     notices = new Subject<RealtimeChange>();
+    detailClosings = new Subject<string>();
+    detailChanges = new Subject<string>();
     organization = signal({ id: 'org-atelier-nord', slug: 'atelier-nord' });
     groups = vi.fn<ListTasksApi['groups']>(() =>
       Promise.resolve<readonly TaskGroupCount[]>([
@@ -473,8 +486,7 @@ describe('ListRowsStore', () => {
   it('shows a status at once and files the row under it 460 ms after the click', async () => {
     const store: InstanceType<typeof ListRowsStore> = setup(byStatus);
     await settle();
-    const status: InstanceType<typeof TaskStatusChangesStore> =
-      TestBed.inject(TaskStatusChangesStore);
+    const status: TaskStatusChangesInstance = TestBed.inject(TaskStatusChangesStore);
 
     status.request(cad482, 'progress');
     TestBed.tick();
@@ -514,8 +526,7 @@ describe('ListRowsStore', () => {
     await settle();
     expect(store.rows().map((row) => row.task.key)).toEqual(['CAD-470']);
 
-    const status: InstanceType<typeof TaskStatusChangesStore> =
-      TestBed.inject(TaskStatusChangesStore);
+    const status: TaskStatusChangesInstance = TestBed.inject(TaskStatusChangesStore);
     status.request(first, 'todo');
     await vi.advanceTimersByTimeAsync(460);
     await settle();
@@ -589,8 +600,7 @@ describe('ListRowsStore', () => {
     changeStatus.mockReturnValue(throwError(() => new Error('503')));
     const store: InstanceType<typeof ListRowsStore> = setup(byStatus);
     await settle();
-    const status: InstanceType<typeof TaskStatusChangesStore> =
-      TestBed.inject(TaskStatusChangesStore);
+    const status: TaskStatusChangesInstance = TestBed.inject(TaskStatusChangesStore);
 
     status.request(cad482, 'progress');
     TestBed.tick();
@@ -607,8 +617,7 @@ describe('ListRowsStore', () => {
   it('reads again on a realtime notice without overwriting an unconfirmed status change', async () => {
     const store: InstanceType<typeof ListRowsStore> = setup(byStatus);
     await settle();
-    const status: InstanceType<typeof TaskStatusChangesStore> =
-      TestBed.inject(TaskStatusChangesStore);
+    const status: TaskStatusChangesInstance = TestBed.inject(TaskStatusChangesStore);
 
     status.request(cad482, 'review');
     const notice: RealtimeChange | null = parseChange({
@@ -703,6 +712,29 @@ describe('ListRowsStore', () => {
     }
 
     expect(page.mock.calls.length).toBeGreaterThan(2);
+  });
+
+  it('reads the rows again once a task detail closes over the view, without realtime', async () => {
+    setup(flat);
+    await settle();
+    expect(page).toHaveBeenCalledTimes(1);
+
+    detailClosings.next('CAD-482');
+    await vi.advanceTimersByTimeAsync(1000);
+    await settle();
+
+    expect(page).toHaveBeenCalledTimes(2);
+  });
+
+  it('reads the rows again once an Undo of the detail restored a task', async () => {
+    setup(flat);
+    await settle();
+
+    detailChanges.next('CAD-482');
+    await vi.advanceTimersByTimeAsync(1000);
+    await settle();
+
+    expect(page).toHaveBeenCalledTimes(2);
   });
 
   it('ignores a notice that names a different list', async () => {

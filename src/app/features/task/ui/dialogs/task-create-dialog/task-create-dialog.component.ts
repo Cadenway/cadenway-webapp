@@ -20,7 +20,6 @@ import {
   validate,
   type ValidationError,
 } from '@angular/forms/signals';
-import { Router } from '@angular/router';
 import type { CancelReason, PriorityKey, StatusKey } from '@cadenway/contracts';
 import { CwButton } from '@cadenway/ui/components/button';
 import {
@@ -60,6 +59,7 @@ import type {
 } from '../../../models/task-create/task-create.interface';
 import type { TaskCancellation } from '../../../models/task-status-change/task-status-change.interface';
 import { TaskCreate } from '../../../services/task-create/task-create.service';
+import { TaskDetailOpener } from '../../../services/task-detail-opener/task-detail-opener.service';
 import { TaskCreateStore } from '../../../state/task-create/task-create.store';
 import { statusLabel } from '../../../utils/task-status/task-status.util';
 import { TaskLabelPicker } from '../../components/task-label-picker/task-label-picker.component';
@@ -296,7 +296,7 @@ function addDays(date: Date, days: number): Date {
  * adds one). The properties are the status split button (`Cancelled` asks its reason first), the
  * assignees (the current user by default), the due date, the priority (`Medium`) and the
  * labels. `Create the task` or Ctrl Enter creates the task with an `Idempotency-Key`, then a
- * toast offers `Open` towards `/<slug>/t/<key>`; `Create more tasks` keeps the dialog
+ * toast offers `Open`, the task's detail over the page; `Create more tasks` keeps the dialog
  * open with an empty name. Escape closes an open menu first, then the dialog. An empty name only
  * disables `Create the task`, as in the mockup, and is said under the field once it was left. The
  * footer's error summary, an alert, holds the other fields' errors once a field was left or a
@@ -458,15 +458,15 @@ export class TaskCreateDialog {
   private readonly toasts: CwToastService = inject(CwToastService);
 
   /**
-   * Property router
+   * Property taskDetail
    *
    * @description
-   * Router opening a created task.
+   * Opens a created task's detail over the page; while a detail is open, `N` creates nothing.
    *
-   * @type {Router}
+   * @type {TaskDetailOpener}
    * @readonly
    */
-  private readonly router: Router = inject(Router);
+  private readonly taskDetail: TaskDetailOpener = inject(TaskDetailOpener);
 
   /**
    * Property shortcuts
@@ -689,7 +689,8 @@ export class TaskCreateDialog {
    * Constructor
    *
    * @description
-   * Binds `N` to the dialog outside fields until the shell is destroyed, and starts each opening
+   * Binds `N` to the dialog outside fields until the shell is destroyed (not while a task detail
+   * is open, as in the mockup), and starts each opening
    * from the presets: reads the data the first time, empties the fields and binds Ctrl Enter.
    *
    * @constructor
@@ -700,7 +701,7 @@ export class TaskCreateDialog {
       {
         keys: 'n',
         handler: (): void => {
-          this.taskCreate.open();
+          if (!this.taskDetail.isOpen()) this.taskCreate.open();
         },
       },
       this.destroyRef,
@@ -1090,14 +1091,13 @@ export class TaskCreateDialog {
     if (created.subtasks > 1) {
       parts.push($localize`:@@task.create.subtask-many:${created.subtasks}:count: subtasks`);
     }
-    const slug: string = this.workspace.organization().slug;
     this.toasts.show($localize`:@@task.create.created:Task ${created.key}:key: created`, {
       description: `${parts.filter(Boolean).join(' · ')}.`,
       duration: 6000,
       action: {
         label: $localize`:@@task.create.open:Open`,
         run: (): void => {
-          void this.router.navigate(['/', slug, 't', created.key]);
+          void this.taskDetail.open(created.key);
         },
       },
     });

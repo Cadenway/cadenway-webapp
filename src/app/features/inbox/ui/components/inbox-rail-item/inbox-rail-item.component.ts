@@ -31,6 +31,7 @@ import { NgIcon } from '@ng-icons/core';
 import { interval, map } from 'rxjs';
 
 import { PRESENCE, type PresencePort } from '@features/account/ports/presence';
+import { TaskDetailOpener } from '@features/task';
 import {
   WORKSPACE_CONTEXT,
   type WorkspaceContextPort,
@@ -70,8 +71,8 @@ const CLOCK_MS: number = 60_000;
  * `Notifications` and `Reminders` tabs with their counts, the do-not-disturb notice, the rows,
  * the empty states, skeletons while loading, an inline error with `Retry`, and `Show everything
  * on the home screen`, which opens `/<slug>`. Opening a notification marks it read and opens
- * `/<slug>/t/<key>`; a reminder offers `Postpone to tomorrow morning` and `Mark as done`, confirmed by a
- * toast. Writes are optimistic; a refusal restores the row and shows an error toast. It provides
+ * its task's detail over the current page (`?task=<key>`); a reminder offers `Postpone to
+ * tomorrow morning` and `Mark as done`, confirmed by a toast. Writes are optimistic; a refusal restores the row and shows an error toast. It provides
  * its own `InboxStore` and acts as a page of the shell. Its host is `display: contents`, so the
  * item joins the rail group's layout.
  */
@@ -191,6 +192,17 @@ export class InboxRailItem {
    * @readonly
    */
   private readonly router: Router = inject(Router);
+
+  /**
+   * Property taskDetail
+   *
+   * @description
+   * Task's detail, opened over the current page by a notification or a reminder.
+   *
+   * @type {TaskDetailOpener}
+   * @readonly
+   */
+  private readonly taskDetail: TaskDetailOpener = inject(TaskDetailOpener);
 
   /**
    * Property toasts
@@ -380,14 +392,14 @@ export class InboxRailItem {
    * Method openTask
    *
    * @description
-   * Closes the popover and opens `/<slug>/t/<key>`.
+   * Closes the popover and opens the task's detail over the current page (`?task=<key>`).
    *
    * @param {string} taskKey - Key of the task.
    */
   protected openTask(taskKey: string): void {
     this.open.set(false);
     this.store.close();
-    void this.router.navigate(['/', this.workspace.organization().slug, 't', taskKey]);
+    void this.taskDetail.open(taskKey);
   }
 
   /**

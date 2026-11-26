@@ -1,7 +1,6 @@
-import { signal } from '@angular/core';
+import { signal, type WritableSignal } from '@angular/core';
 import { HttpErrorResponse } from '@angular/common/http';
 import { type ComponentFixture, TestBed } from '@angular/core/testing';
-import { Router } from '@angular/router';
 import { CwToastService, type CwToastOptions } from '@cadenway/ui/components/toast';
 import { Observable, of, Subject, throwError } from 'rxjs';
 import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
@@ -19,6 +18,7 @@ import type {
   TaskDraft,
 } from '../../../models/task-create/task-create.interface';
 import { TaskCreate } from '../../../services/task-create/task-create.service';
+import { TaskDetailOpener } from '../../../services/task-detail-opener/task-detail-opener.service';
 import { defaultStatusOptions } from '../../../utils/task-status/task-status.util';
 import { TaskCreateDialog } from './task-create-dialog.component';
 
@@ -125,7 +125,8 @@ describe('TaskCreateDialog', () => {
   let createSubtask: Mock<(parentKey: string, draft: TaskDraft) => Observable<CreatedTask>>;
   let show: Mock<(title: string, options?: CwToastOptions) => string>;
   let error: Mock<(title: string, options?: CwToastOptions) => string>;
-  let navigate: Mock<(commands: readonly unknown[]) => Promise<boolean>>;
+  let openTask: Mock<(taskKey: string) => Promise<boolean>>;
+  let detailOpen: WritableSignal<boolean>;
   let fixture: ComponentFixture<TaskCreateDialog>;
 
   beforeEach(async () => {
@@ -135,7 +136,8 @@ describe('TaskCreateDialog', () => {
     );
     show = vi.fn(() => 't1');
     error = vi.fn(() => 't2');
-    navigate = vi.fn(() => Promise.resolve(true));
+    openTask = vi.fn(() => Promise.resolve(true));
+    detailOpen = signal<boolean>(false);
     TestBed.configureTestingModule({
       imports: [TaskCreateDialog],
       providers: [
@@ -157,7 +159,7 @@ describe('TaskCreateDialog', () => {
         },
         { provide: WORKSPACE_CONTEXT, useValue: workspace },
         { provide: CwToastService, useValue: { show, error } },
-        { provide: Router, useValue: { navigate } },
+        { provide: TaskDetailOpener, useValue: { open: openTask, isOpen: detailOpen } },
       ],
     });
     fixture = TestBed.createComponent(TaskCreateDialog);
@@ -224,6 +226,14 @@ describe('TaskCreateDialog', () => {
 
     expect(TestBed.inject(TaskCreate).isOpen()).toBe(true);
     expect(document.querySelector('[role="dialog"] h2')?.textContent.trim()).toBe('Create a task');
+  });
+
+  it('ignores N while a task detail is open', async () => {
+    detailOpen.set(true);
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'n', code: 'KeyN' }));
+    await fixture.whenStable();
+
+    expect(TestBed.inject(TaskCreate).isOpen()).toBe(false);
   });
 
   it('names the empty due date picker by its text, and a set one by label and date', async () => {
@@ -313,7 +323,7 @@ describe('TaskCreateDialog', () => {
     expect(options?.description).toBe('Sprint 14 · To do · 1 subtask.');
     expect(options?.action?.label).toBe('Open');
     options?.action?.run();
-    expect(navigate).toHaveBeenCalledWith(['/', 'atelier-nord', 't', 'CAD-495']);
+    expect(openTask).toHaveBeenCalledWith('CAD-495');
     expect(TestBed.inject(TaskCreate).isOpen()).toBe(false);
   });
 

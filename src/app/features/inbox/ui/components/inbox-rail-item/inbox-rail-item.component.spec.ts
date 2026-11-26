@@ -7,6 +7,7 @@ import { of } from 'rxjs';
 import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 
 import { PRESENCE, type PresenceStatus } from '@features/account/ports/presence';
+import { TaskDetailOpener } from '@features/task';
 import {
   WORKSPACE_CONTEXT,
   type WorkspaceContextPort,
@@ -108,6 +109,7 @@ describe('InboxRailItem', () => {
   let status: WritableSignal<PresenceStatus>;
   let notifications: Mock<() => Promise<InboxNotificationPage>>;
   let navigate: Mock<(commands: readonly unknown[]) => Promise<boolean>>;
+  let openTask: Mock<(taskKey: string) => Promise<boolean>>;
   let markRead: Mock<() => Promise<void>>;
   let complete: Mock<() => Promise<void>>;
   let error: Mock;
@@ -119,6 +121,7 @@ describe('InboxRailItem', () => {
     status = signal<PresenceStatus>('online');
     notifications = vi.fn(() => Promise.resolve(page()));
     navigate = vi.fn(() => Promise.resolve(true));
+    openTask = vi.fn(() => Promise.resolve(true));
     markRead = vi.fn(() => Promise.resolve());
     complete = vi.fn(() => Promise.resolve());
     error = vi.fn();
@@ -139,6 +142,7 @@ describe('InboxRailItem', () => {
         { provide: PRESENCE, useValue: { ownStatus: status, setPresence: vi.fn() } },
         { provide: WORKSPACE_CONTEXT, useValue: workspace },
         { provide: Router, useValue: { navigate } },
+        { provide: TaskDetailOpener, useValue: { open: openTask } },
         { provide: CwToastService, useValue: { error, success: vi.fn() } },
         provideCadenwayIcons(),
       ],
@@ -241,12 +245,13 @@ describe('InboxRailItem', () => {
     expect(trigger().textContent).toContain('0 unread, 1 overdue reminders');
   });
 
-  it('opens the task of a notification', async () => {
+  it('opens the detail of the task of a notification over the page', async () => {
     const content: HTMLElement = await openPopover();
 
     content.querySelector<HTMLButtonElement>('[data-testid="notification-row"]')?.click();
 
-    expect(navigate).toHaveBeenCalledWith(['/', 'atelier-nord', 't', 'CAD-482']);
+    expect(openTask).toHaveBeenCalledWith('CAD-482');
+    expect(navigate).not.toHaveBeenCalled();
   });
 
   it('reports a refused read of an opened notification', async () => {

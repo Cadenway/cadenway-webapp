@@ -1,0 +1,10 @@
+<cw-route-error-state
+  [kind]="kind()"
+  [task]="deletedTask()?.task ?? null"
+  [status]="status()"
+  [requestId]="requestId()"
+  [trashLink]="trashLink"
+  [restore]="store.restore()"
+  (retried)="retried.emit()"
+  (restoreRequested)="restore()"
+/>

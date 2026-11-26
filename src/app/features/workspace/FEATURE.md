@@ -32,7 +32,7 @@ belong to Auth.
   | `sidebarHeader`        | Workspace's organization row, Search's `Search…` button                                                 |
   | `sidebar`              | Spaces' favorites, spaces accordion and tips                                                            |
   | `sidebarFooter`        | Spaces' sprint progress, Organization's plan line, Spaces' `Trash` and `Archives`, `Keyboard shortcuts` |
-  | `overlays`             | Search's command palette, Workspace's shortcuts dialog, Task's create dialog                            |
+  | `overlays`             | Search's command palette, Workspace's shortcuts dialog, Task's create dialog and task detail            |
   - `''` mounts `HOME_ROUTES`, then `SPACES_ROUTES` (`spaces/:spaceId`, `l/:listId`), then
     `TASK_ROUTES` (`t/:taskKey`).
   - `**` mounts `ERRORS_ROUTES`, so an unknown address renders the 404 inside the shell.

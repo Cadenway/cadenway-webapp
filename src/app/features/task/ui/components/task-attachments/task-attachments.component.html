@@ -1,0 +1,124 @@
+<section
+  aria-label="Attachments"
+  i18n-aria-label="@@task.attachments.title"
+  class="flex flex-col gap-2"
+  data-testid="task-attachments"
+>
+  <div class="flex h-8 items-center gap-2">
+    <h3 class="text-base font-semibold" i18n="@@task.attachments.title">Attachments</h3>
+    @if (items().length > 0) {
+      <span
+        class="rounded-full bg-secondary px-1.5 text-xs leading-5 font-medium text-muted-foreground tabular-nums"
+        >{{ items().length }}</span
+      >
+    }
+    @if (canEdit()) {
+      <input
+        #picker
+        type="file"
+        multiple
+        class="sr-only"
+        tabindex="-1"
+        aria-hidden="true"
+        (change)="picked($event)"
+      />
+      <button
+        cwButton
+        variant="outline"
+        size="xs"
+        type="button"
+        class="ml-auto"
+        (click)="picker.click()"
+      >
+        <ng-icon name="phosphorPaperclipBold" aria-hidden="true" />
+        <ng-container i18n="@@task.attachments.add">Add</ng-container>
+      </button>
+    }
+  </div>
+
+  @if (failed()) {
+    <div
+      role="alert"
+      class="flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm"
+    >
+      <ng-icon
+        name="phosphorWarningCircleBold"
+        class="shrink-0 text-destructive"
+        aria-hidden="true"
+      />
+      <span class="min-w-0 flex-1" i18n="@@task.attachments.read-failed"
+        >The attachments could not be loaded.</span
+      >
+      <button cwButton variant="outline" size="xs" type="button" (click)="retried.emit()">
+        <ng-container i18n="@@task.retry">Retry</ng-container>
+      </button>
+    </div>
+  } @else if (loading() && items().length === 0) {
+    <div
+      role="status"
+      aria-busy="true"
+      class="h-20 animate-pulse rounded-lg bg-muted motion-reduce:animate-none"
+    >
+      <span class="sr-only" i18n="@@task.attachments.loading">Loading the attachments</span>
+    </div>
+  } @else if (items().length > 0 || uploads().length > 0) {
+    <ul class="grid grid-cols-1 gap-2 min-[420px]:grid-cols-2 lg:grid-cols-3">
+      @for (upload of uploads(); track upload.id) {
+        <li class="min-w-0">
+          <cw-attachment
+            orientation="vertical"
+            state="processing"
+            [name]="upload.name"
+            [fileSize]="upload.size"
+            [removable]="false"
+            [labels]="sendingLabels"
+          />
+        </li>
+      }
+      @for (attachment of items(); track attachment.id; let index = $index) {
+        <li class="min-w-0">
+          <cw-attachment
+            orientation="vertical"
+            [name]="attachment.name"
+            [mimeType]="attachment.contentType"
+            [fileSize]="attachment.size"
+            [removable]="canEdit()"
+            (open)="open($event, index)"
+            (remove)="ask(attachment)"
+          />
+        </li>
+      }
+    </ul>
+  }
+
+  @if (canEdit()) {
+    <cw-dropzone
+      multiple
+      hint="25 MB per file"
+      i18n-hint="@@task.attachments.hint"
+      (filesAdded)="filesAdded.emit($event)"
+    />
+  }
+</section>
+
+<cw-alert-dialog
+  variant="destructive"
+  size="sm"
+  [open]="confirming() !== null"
+  [pending]="removing() !== null"
+  (openChange)="confirmChanged($event)"
+  (confirm)="confirm()"
+>
+  @if (confirming(); as attachment) {
+    <h2 cwAlertDialogTitle>{{ removeTitle(attachment) }}</h2>
+  }
+  <p cwAlertDialogDescription i18n="@@task.attachments.confirm-text">
+    The file is no longer attached to the task. It stays in the comments where it was shared.
+  </p>
+  <button cwButton cwAlertDialogCancel variant="outline" i18n="@@task.attachments.confirm-cancel">
+    Cancel
+  </button>
+  <button cwButton cwAlertDialogAction variant="destructive" [loading]="removing() !== null">
+    <ng-container i18n="@@task.attachments.confirm-remove">Remove the file</ng-container>
+  </button>
+</cw-alert-dialog>

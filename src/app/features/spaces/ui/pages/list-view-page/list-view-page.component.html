@@ -35,7 +35,7 @@
     [(selection)]="tableSelection"
     (sortChange)="sortChanged($event)"
     (collapsedChange)="rows.setCollapsed($event)"
-    (rowOpen)="open($event.task.key)"
+    (rowOpen)="open($event.task.key, $event.task)"
     (rowAdd)="addInGroup($event)"
     (nearEnd)="rows.loadMore()"
   >
@@ -109,7 +109,7 @@
             [status]="row.status"
             [from]="statusFrom().get(row.task.key) ?? null"
             [showParent]="separate()"
-            (opened)="open(row.task.key)"
+            (opened)="open(row.task.key, row.task)"
           />
           @if (row.canAddSubtask) {
             <button
@@ -248,7 +248,7 @@
           [cwContextMenuTriggerFor]="rowMenu"
           (opened)="menuRow.set(row)"
           (pointerdown)="$event.stopPropagation()"
-          (click)="open(row.task.key)"
+          (click)="open(row.task.key, row.task)"
         >
           <ng-icon name="phosphorDotsThreeBold" aria-hidden="true" />
         </button>
@@ -317,7 +317,7 @@
 <cw-menu #rowMenu ariaLabel="Task actions" i18n-ariaLabel="@@spaces.rows.menu">
   <cw-menu-label>{{ menuTitle() }}</cw-menu-label>
   @if (menuTasks().length === 1) {
-    <button cwMenuItem type="button" (triggered)="open(menuTasks()[0].key)">
+    <button cwMenuItem type="button" (triggered)="open(menuTasks()[0].key, menuTasks()[0])">
       <ng-icon name="phosphorArrowSquareOutBold" aria-hidden="true" />
       <ng-container i18n="@@spaces.rows.open">Open</ng-container>
       <cw-menu-shortcut i18n="@@spaces.rows.open-key">Enter</cw-menu-shortcut>

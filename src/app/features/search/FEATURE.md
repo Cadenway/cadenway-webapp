@@ -22,7 +22,7 @@ None.
 ## Dependencies
 
 - `@cadenway/api-client`: `SearchService.search` through `data-access/`.
-- Auth's `.` entry (`SignOut`), Task's `.` entry (`TaskCreate`), Spaces' `ports/list-directory`
+- Auth's `.` entry (`SignOut`), Task's `.` entry (`TaskCreate`, `TaskDetailOpener`), Spaces' `ports/list-directory`
   (`LIST_DIRECTORY`, provided on `/:org` by `provideSpacesNavigation()`, injected as optional),
   Workspace's `ports/workspace-context`, `@core/shortcuts`, `@core/theme`.
 - `@cadenway/ui` (`app-rail`, `command`, `kbd`, `status-icon`, `toast`) and `@cadenway/icons`.
@@ -55,7 +55,8 @@ organization`) and `Actions` (one theme action that toggles, named after the the
 - `RecentTasks` keeps the last five tasks opened from the palette, per person and organization, in
   `localStorage` (`cadenway-recent-tasks:<userId>:<organizationId>`); Auth's `SignOut` removes them.
   The task page (step 5) will add to it.
-- A task opens `/<slug>/t/<key>`, Task's deep link, and a list `/<slug>/l/<listId>`. Search
+- A task opens its detail over the current page (Task's `TaskDetailOpener`, `?task=<key>`, the
+  result as the header's preview), and a list `/<slug>/l/<listId>`. Search
   requests carry the workspace organization pin (see Core).
 
 ## Copy not taken word for word from the mockup

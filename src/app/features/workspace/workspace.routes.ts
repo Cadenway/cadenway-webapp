@@ -22,7 +22,7 @@ import {
   withSpacesSidebar,
   withSprintProgress,
 } from '@features/spaces/providers';
-import { withTaskCreate } from '@features/task/providers';
+import { withTaskCreate, withTaskDetail } from '@features/task/providers';
 import type { AppShell } from '@layouts/app-shell';
 import { provideAppShellSlots } from '@layouts/app-shell/providers';
 
@@ -95,7 +95,7 @@ export const WORKSPACE_ROUTES: Routes = [
           withSidebarFooterLinks(),
           withShortcutsButton(),
         ],
-        overlays: [withCommandPalette(), withShortcutsDialog(), withTaskCreate()],
+        overlays: [withCommandPalette(), withShortcutsDialog(), withTaskCreate(), withTaskDetail()],
       }),
     ],
     loadComponent: async (): Promise<Type<AppShell>> =>

@@ -32,6 +32,7 @@ import {
   auditTime,
   EMPTY,
   filter,
+  merge,
   type Observable,
   pipe,
   Subject,
@@ -49,6 +50,7 @@ import {
   type TaskBulkOutcome,
   type TaskBulkSelection,
   TaskCreate,
+  TaskDetailOpener,
   type TaskStatusChange,
   TaskStatusChangesStore,
   type TaskSummary,
@@ -1246,6 +1248,7 @@ function createListRowsStore(): Type<ListRowsStoreInstance> {
         _status: inject(TaskStatusChangesStore),
         _reduceMotion: inject(MediaMatcher).matchMedia('(prefers-reduced-motion: reduce)').matches,
         _taskCreate: inject(TaskCreate),
+        _taskDetail: inject(TaskDetailOpener),
         _realtime: inject(RealtimeConnection, { optional: true }),
         primary,
       };
@@ -2133,9 +2136,16 @@ function createListRowsStore(): Type<ListRowsStoreInstance> {
             if (task.listId === store._params()?.listId) store.reload();
           },
         );
+        const detailClosings: { unsubscribe: () => void } = merge(
+          store._taskDetail.closed,
+          store._taskDetail.changed,
+        ).subscribe((): void => {
+          if (store._params()) store._reloadRequests.next();
+        });
         destroyRef.onDestroy((): void => {
           changes.unsubscribe();
           completions.unsubscribe();
+          detailClosings.unsubscribe();
           reloads.unsubscribe();
           store._reloadRequests.complete();
           created.unsubscribe();
@@ -2156,7 +2166,10 @@ function createListRowsStore(): Type<ListRowsStoreInstance> {
  * its first page only, so its header shows. A row is filed under its settled status, so it joins
  * its new group 460 ms after the last click while its icon and word change at once. Subtasks are
  * read under each opened parent (`listSubtasks`), two levels deep. A realtime notice of the list
- * reads the rows again in place, 1 s after the first notice of a window; the status store keeps pending
+ * reads the rows again in place, 1 s after the first notice of a window; so does a task detail
+ * that closes over the view or gives way to another, or whose `Undo` restored a task (Task's
+ * `TaskDetailOpener.closed` and `changed`), since
+ * its writes reach the rows only through realtime otherwise. The status store keeps pending
  * and in-flight changes over what it reads. The rows follow the committed organization: a switch
  * or another list empties them at once and drops late answers.
  *

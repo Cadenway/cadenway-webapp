@@ -1,0 +1,212 @@
+<div class="flex min-w-0 flex-1 flex-col gap-1">
+  <h2 cwDialogTitle class="sr-only">{{ header().key }} {{ header().name }}</h2>
+  <div class="flex min-w-0 items-center gap-2">
+    <span class="font-mono text-xs text-muted-foreground" data-testid="task-detail-key">{{
+      header().key
+    }}</span>
+    @if (parent(); as parent) {
+      <button
+        type="button"
+        class="inline-flex min-w-0 items-center gap-1 rounded-sm text-xs text-muted-foreground transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+        data-testid="task-detail-parent"
+        (click)="parentOpened.emit(parent)"
+      >
+        <ng-icon name="phosphorArrowBendLeftUpBold" class="size-3 shrink-0" aria-hidden="true" />
+        <span class="truncate" i18n="@@task.detail.subtask-of"
+          >Subtask of <span class="font-mono">{{ parent.key }}</span> · {{ parent.name }}</span
+        >
+      </button>
+    }
+    @if (header().status; as status) {
+      <span
+        class="inline-flex w-fit shrink-0 items-center justify-center gap-1 overflow-hidden rounded-md border border-border px-2 py-0.5 text-xs font-medium whitespace-nowrap"
+        data-testid="task-detail-status"
+      >
+        <cw-status-icon [status]="status" [milestone]="header().milestone" size="3" />
+        {{ statusLabel() }}
+      </span>
+    }
+  </div>
+  @if (cancelText(); as text) {
+    <p class="flex items-center gap-1.5 text-xs text-muted-foreground">
+      <ng-icon name="phosphorXCircleBold" class="size-3.5 shrink-0" aria-hidden="true" />
+      <ng-container i18n="@@task.detail.cancelled">Cancelled: {{ text }}</ng-container>
+    </p>
+  }
+  <label for="task-detail-title" class="sr-only" i18n="@@task.detail.title-label"
+    >Title of the task</label
+  >
+  <input
+    #title
+    id="task-detail-title"
+    type="text"
+    class="-mx-1.5 h-8 w-full min-w-0 rounded-md border border-transparent bg-transparent px-1.5 text-base font-semibold outline-none transition-[color,box-shadow] hover:bg-muted focus-visible:border-ring focus-visible:bg-transparent focus-visible:ring-3 focus-visible:ring-ring/20 read-only:hover:bg-transparent"
+    [value]="header().name"
+    [readOnly]="!ready() || !canEdit()"
+    (change)="rename(title)"
+  />
+  @if (watchersFailed()) {
+    <p role="alert" class="flex items-center gap-2 text-xs text-muted-foreground">
+      <ng-icon
+        name="phosphorWarningCircleBold"
+        class="size-3.5 shrink-0 text-destructive"
+        aria-hidden="true"
+      />
+      <span class="min-w-0 flex-1" i18n="@@task.detail.watchers-read-failed"
+        >The followers could not be loaded.</span
+      >
+      <button
+        cwButton
+        variant="outline"
+        size="xs"
+        type="button"
+        data-testid="task-detail-watchers-retry"
+        (click)="watchersRetried.emit()"
+      >
+        <ng-container i18n="@@task.retry">Retry</ng-container>
+      </button>
+    </p>
+  }
+  @if (reminderFailed()) {
+    <p role="alert" class="flex items-center gap-2 text-xs text-muted-foreground">
+      <ng-icon
+        name="phosphorWarningCircleBold"
+        class="size-3.5 shrink-0 text-destructive"
+        aria-hidden="true"
+      />
+      <span class="min-w-0 flex-1" i18n="@@task.detail.reminder-read-failed"
+        >The reminder could not be loaded.</span
+      >
+      <button
+        cwButton
+        variant="outline"
+        size="xs"
+        type="button"
+        data-testid="task-detail-reminder-retry"
+        (click)="reminderRetried.emit()"
+      >
+        <ng-container i18n="@@task.retry">Retry</ng-container>
+      </button>
+    </p>
+  }
+</div>
+
+<div class="flex shrink-0 items-center">
+  <button
+    cwButton
+    type="button"
+    variant="ghost"
+    size="sm"
+    class="h-7 gap-1 px-1.5 text-xs tabular-nums"
+    [class.text-primary]="watchers()?.following === true"
+    [class.text-muted-foreground]="watchers()?.following !== true"
+    [attr.aria-pressed]="watchers()?.following === true"
+    [attr.aria-label]="watchLabel()"
+    [attr.title]="watchLabel()"
+    [disabled]="!ready() || watchers() === null || watchPending()"
+    data-testid="task-detail-watch"
+    (click)="watchToggled.emit()"
+  >
+    <ng-icon
+      [name]="watchers()?.following ? 'phosphorBellRingingFill' : 'phosphorBellSimpleBold'"
+      class="size-4"
+      aria-hidden="true"
+    />
+    {{ watchers()?.total ?? '' }}
+  </button>
+  <cw-task-reminder-menu
+    [reminder]="reminder()"
+    [due]="due()"
+    [disabled]="!ready() || reminderPending()"
+    (scheduled)="reminderScheduled.emit($event)"
+    (noteChanged)="reminderNoteChanged.emit($event)"
+    (deleted)="reminderDeleted.emit()"
+  />
+  <button
+    cwButton
+    type="button"
+    variant="ghost"
+    size="icon-sm"
+    class="size-7 text-muted-foreground hover:text-foreground"
+    aria-label="Copy the link"
+    i18n-aria-label="@@task.detail.copy-link"
+    data-testid="task-detail-copy-link"
+    (click)="linkCopied.emit()"
+  >
+    <ng-icon name="phosphorLinkSimpleBold" aria-hidden="true" />
+  </button>
+  <button
+    cwButton
+    type="button"
+    variant="ghost"
+    size="icon-sm"
+    class="size-7 text-muted-foreground hover:text-foreground"
+    aria-label="More actions"
+    i18n-aria-label="@@task.detail.more"
+    data-testid="task-detail-more"
+    [disabled]="!ready()"
+    [cwMenuTriggerFor]="more"
+  >
+    <ng-icon name="phosphorDotsThreeBold" aria-hidden="true" />
+  </button>
+  <button
+    cwButton
+    type="button"
+    variant="ghost"
+    size="icon-sm"
+    class="size-7 text-muted-foreground hover:text-foreground"
+    aria-label="Close"
+    i18n-aria-label="@@task.detail.close"
+    data-testid="task-detail-close"
+    (click)="closed.emit()"
+  >
+    <ng-icon name="phosphorXBold" aria-hidden="true" />
+  </button>
+</div>
+
+<cw-menu #more align="end" ariaLabel="Actions on the task" i18n-ariaLabel="@@task.detail.menu">
+  <button cwMenuItem (triggered)="keyCopied.emit()">
+    <ng-icon name="phosphorHashBold" aria-hidden="true" />
+    <ng-container i18n="@@task.detail.copy-key">Copy the identifier</ng-container>
+  </button>
+  <button cwMenuItem [disabled]="!canEdit() || busy()" (triggered)="duplicated.emit()">
+    <ng-icon name="phosphorCopyBold" aria-hidden="true" />
+    <ng-container i18n="@@task.detail.duplicate">Duplicate</ng-container>
+  </button>
+  <button cwMenuItem [disabled]="!canEdit()" (triggered)="moveRequested.emit()">
+    <ng-icon name="phosphorFolderSimpleBold" aria-hidden="true" />
+    <ng-container i18n="@@task.detail.move">Move to…</ng-container>
+  </button>
+  <button cwMenuItem [disabled]="!canEdit() || busy()" (triggered)="archived.emit()">
+    <ng-icon name="phosphorArchiveBold" aria-hidden="true" />
+    <ng-container i18n="@@task.detail.archive">Archive</ng-container>
+  </button>
+  <button cwMenuItem [disabled]="!canEdit() || busy()" (triggered)="templateSaved.emit()">
+    <ng-icon name="phosphorStackSimpleBold" aria-hidden="true" />
+    <ng-container i18n="@@task.detail.save-template">Save as a template</ng-container>
+  </button>
+  <button cwMenuItem [disabled]="!canEdit()" (triggered)="parentPickRequested.emit()">
+    <ng-icon name="phosphorTreeStructureBold" aria-hidden="true" />
+    @if (parent()) {
+      <ng-container i18n="@@task.detail.move-parent">Move to another task…</ng-container>
+    } @else {
+      <ng-container i18n="@@task.detail.convert">Convert to a subtask of…</ng-container>
+    }
+  </button>
+  @if (parent(); as parent) {
+    <button cwMenuItem [disabled]="!canEdit()" (triggered)="detached.emit()">
+      <ng-icon name="phosphorArrowLineUpBold" aria-hidden="true" />
+      <ng-container i18n="@@task.detail.detach">Detach from {{ parent.key }}</ng-container>
+    </button>
+  }
+  <cw-menu-separator />
+  <button
+    cwMenuItem
+    variant="destructive"
+    [disabled]="!canEdit() || busy()"
+    (triggered)="deleteRequested.emit()"
+  >
+    <ng-icon name="phosphorTrashBold" aria-hidden="true" />
+    <ng-container i18n="@@task.detail.delete">Delete</ng-container>
+  </button>
+</cw-menu>

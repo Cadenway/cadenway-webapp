@@ -1,0 +1,232 @@
+<p class="px-2 pt-1 pb-1 text-xs font-medium text-muted-foreground" i18n="@@task.detail.properties">
+  Properties
+</p>
+@if (store.task(); as task) {
+  <dl class="grid grid-cols-[8.5rem_minmax(0,1fr)] items-start gap-x-1 gap-y-px">
+    <dt class="flex h-8 items-center gap-2 px-2 text-sm whitespace-nowrap text-muted-foreground">
+      <ng-icon name="phosphorCircleHalfBold" aria-hidden="true" />
+      <span i18n="@@task.properties.status">Status</span>
+    </dt>
+    <dd class="relative flex min-h-8 items-center" data-testid="task-property-status">
+      <cw-task-status-picker
+        [status]="status()"
+        [from]="statusFrom()"
+        [options]="store.statuses()"
+        [milestone]="task.milestone"
+        [disabled]="!store.canEdit()"
+        (statusChanged)="changeStatus($event)"
+        (statusPicked)="changeStatus($event, true)"
+      />
+    </dd>
+
+    <dt class="flex h-8 items-center gap-2 px-2 text-sm whitespace-nowrap text-muted-foreground">
+      <ng-icon name="phosphorUsersBold" aria-hidden="true" />
+      <span i18n="@@task.properties.assignees">Assignees</span>
+    </dt>
+    <dd class="relative">
+      <cw-task-property-assignees
+        [assigneeIds]="properties.assigneeIds()"
+        [people]="properties.people()"
+        [currentUserId]="userId()"
+        [failed]="properties.peopleFailed()"
+        [disabled]="!store.canEdit()"
+        (toggled)="properties.toggleAssignee($event)"
+        (retried)="properties.reloadPeople()"
+      />
+    </dd>
+
+    <dt class="flex h-8 items-center gap-2 px-2 text-sm whitespace-nowrap text-muted-foreground">
+      <ng-icon name="phosphorCalendarBlankBold" aria-hidden="true" />
+      <span i18n="@@task.properties.due">Due date</span>
+    </dt>
+    <dd class="relative">
+      <cw-task-property-due
+        [due]="task.due"
+        [status]="status()"
+        [sprintEnd]="properties.sprintEnd()"
+        [today]="today()"
+        [disabled]="!store.canEdit()"
+        (dueChanged)="store.update({ due: $event })"
+      />
+    </dd>
+
+    <dt class="flex h-8 items-center gap-2 px-2 text-sm whitespace-nowrap text-muted-foreground">
+      <ng-icon name="phosphorCellSignalHighBold" aria-hidden="true" />
+      <span i18n="@@task.properties.priority">Priority</span>
+    </dt>
+    <dd class="relative">
+      <cw-task-property-priority
+        [priority]="task.priority"
+        [disabled]="!store.canEdit()"
+        (priorityChanged)="store.update({ priority: $event })"
+      />
+    </dd>
+
+    @if (!task.milestone) {
+      <dt class="flex h-8 items-center gap-2 px-2 text-sm whitespace-nowrap text-muted-foreground">
+        <ng-icon name="phosphorTimerBold" aria-hidden="true" />
+        <span i18n="@@task.properties.estimate">Estimate</span>
+      </dt>
+      <dd class="relative">
+        <cw-task-property-estimate
+          [estimateMinutes]="task.estimateMinutes"
+          [disabled]="!store.canEdit()"
+          (estimated)="store.update({ estimateMinutes: $event })"
+          (rejected)="rejectEstimate($event)"
+        />
+      </dd>
+    }
+
+    <dt class="flex h-8 items-center gap-2 px-2 text-sm whitespace-nowrap text-muted-foreground">
+      <ng-icon name="phosphorClockCountdownBold" aria-hidden="true" />
+      <span i18n="@@task.properties.time">Time spent</span>
+    </dt>
+    <dd class="relative">
+      <cw-task-property-time
+        [totalMinutes]="time.totalMinutes()"
+        [estimateMinutes]="task.estimateMinutes"
+        [entries]="time.log()?.entries ?? null"
+        [failed]="time.failed()"
+        [people]="properties.people()"
+        [currentUserId]="userId()"
+        [timerStartedAt]="time.timerStartedAt()"
+        [now]="now()"
+        [pending]="time.pending()"
+        [disabled]="!store.canEdit()"
+        (added)="time.add($event)"
+        (removed)="time.remove($event)"
+        (timerToggled)="toggleTimer()"
+        (retried)="time.reload()"
+      />
+    </dd>
+
+    <dt class="flex h-8 items-center gap-2 px-2 text-sm whitespace-nowrap text-muted-foreground">
+      <ng-icon name="phosphorTagBold" aria-hidden="true" />
+      <span i18n="@@task.properties.labels">Labels</span>
+    </dt>
+    <dd class="relative">
+      <cw-task-property-labels
+        [labels]="properties.labels()"
+        [options]="properties.labelOptions()"
+        [failed]="properties.labelsFailed()"
+        [disabled]="!store.canEdit()"
+        (toggled)="properties.toggleLabel($event)"
+        (retried)="properties.reloadPeople()"
+      />
+    </dd>
+
+    <dt class="flex h-8 items-center gap-2 px-2 text-sm whitespace-nowrap text-muted-foreground">
+      <ng-icon name="phosphorListBulletsBold" aria-hidden="true" />
+      <span i18n="@@task.properties.list">List</span>
+    </dt>
+    <dd class="relative">
+      <cw-task-property-list
+        [listName]="store.list()?.name ?? ''"
+        [spaceName]="store.space()?.name ?? ''"
+        [currentListId]="task.listId"
+        [lists]="lists()"
+        [disabled]="!store.canEdit()"
+        (picked)="store.moveTo($event)"
+      />
+    </dd>
+
+    <dt class="flex h-8 items-center gap-2 px-2 text-sm whitespace-nowrap text-muted-foreground">
+      <ng-icon name="phosphorRepeatBold" aria-hidden="true" />
+      <span i18n="@@task.properties.recurrence">Repeat</span>
+    </dt>
+    <dd class="relative">
+      <cw-task-property-recurrence
+        [recurrence]="task.recurrence"
+        [due]="task.due"
+        [today]="today()"
+        [disabled]="!store.canEdit()"
+        (recurrenceChanged)="store.update({ recurrence: $event })"
+      />
+    </dd>
+
+    <dt class="flex h-8 items-center gap-2 px-2 text-sm whitespace-nowrap text-muted-foreground">
+      <ng-icon name="phosphorBellSimpleBold" aria-hidden="true" />
+      <span i18n="@@task.properties.watchers">Followers</span>
+    </dt>
+    <dd class="relative">
+      <cw-task-property-watchers
+        [watcherIds]="properties.watcherIds()"
+        [people]="properties.people()"
+        [currentUserId]="userId()"
+        [failed]="properties.watchersFailed() || properties.peopleFailed()"
+        [disabled]="!store.canEdit()"
+        (toggled)="properties.toggleWatcher($event)"
+        (retried)="reloadWatchers()"
+      />
+    </dd>
+
+    <dt class="flex h-8 items-center gap-2 px-2 text-sm whitespace-nowrap text-muted-foreground">
+      <ng-icon name="phosphorDiamondBold" aria-hidden="true" />
+      <span i18n="@@task.properties.milestone">Milestone</span>
+    </dt>
+    <dd>
+      <cw-task-property-milestone
+        [milestone]="task.milestone"
+        [status]="status()"
+        [due]="task.due"
+        [today]="today()"
+        [disabled]="!store.canEdit()"
+        (milestoneChanged)="changeMilestone($event)"
+      />
+    </dd>
+
+    @if (!task.milestone) {
+      <dt class="flex h-8 items-center gap-2 px-2 text-sm whitespace-nowrap text-muted-foreground">
+        <ng-icon name="phosphorSealCheckBold" aria-hidden="true" />
+        <span i18n="@@task.properties.approval">Approval</span>
+      </dt>
+      <dd class="relative">
+        <cw-task-property-approvers
+          [approval]="properties.approval()"
+          [people]="properties.people()"
+          [currentUserId]="userId()"
+          [failed]="properties.approvalFailed()"
+          [disabled]="!store.canEdit()"
+          (toggled)="properties.toggleApprover($event)"
+          (retried)="properties.reloadApproval()"
+        />
+      </dd>
+    }
+
+    <dt class="flex h-8 items-center gap-2 px-2 text-sm whitespace-nowrap text-muted-foreground">
+      <ng-icon name="phosphorFlowArrowBold" aria-hidden="true" />
+      <span i18n="@@task.properties.dependencies">Dependencies</span>
+    </dt>
+    <dd class="relative min-w-0">
+      <cw-task-property-dependencies
+        [dependencies]="properties.dependencies()"
+        [failed]="properties.dependenciesFailed()"
+        [anchor]="{ start: task.start, due: task.due }"
+        [candidates]="properties.candidates()"
+        [candidatesLoading]="properties.candidatesLoading()"
+        [candidatesFailed]="properties.candidatesFailed()"
+        [today]="today()"
+        [disabled]="!store.canEdit()"
+        (opened)="openTask($event)"
+        (removed)="properties.removeDependency($event)"
+        (added)="properties.addDependency($event.task, $event.direction)"
+        (searched)="properties.searchCandidates($event.direction, $event.text, $event.delay)"
+        (retried)="properties.reloadDependencies()"
+      />
+    </dd>
+  </dl>
+
+  @if (!task.milestone) {
+    <cw-task-property-status-times
+      [times]="properties.statusTimes()"
+      [statuses]="store.statuses()"
+    />
+  }
+  <cw-task-property-subtasks [progress]="task.subtasks" />
+}
+
+<cw-task-cancel-dialog
+  [taskKeys]="statusChanges.cancelRequest()?.taskKeys ?? null"
+  (confirmed)="statusChanges.confirmCancel($event)"
+  (kept)="statusChanges.keepTask()"
+/>

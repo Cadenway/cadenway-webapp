@@ -229,6 +229,7 @@
           [failed]="store.spaceFailed()"
           (retry)="store.retrySecondary('space')"
           (statusChanged)="pickStatus($event)"
+          (statusPicked)="pickStatus($event)"
         />
         <cw-task-people-picker
           class="w-full"

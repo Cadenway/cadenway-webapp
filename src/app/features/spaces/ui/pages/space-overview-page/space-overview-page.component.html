@@ -159,7 +159,9 @@
           @for (milestone of store.milestones.value().items; track milestone.key) {
             <li class="border-b border-border last:border-b-0">
               <a
-                [routerLink]="['/', slug(), 't', milestone.key]"
+                [routerLink]="[]"
+                [queryParams]="{ task: milestone.key }"
+                queryParamsHandling="merge"
                 class="flex w-full items-center gap-3 px-3 py-2.5 text-left text-sm transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none focus-visible:ring-inset"
               >
                 <cw-status-icon [status]="milestone.status" milestone size="4" />
