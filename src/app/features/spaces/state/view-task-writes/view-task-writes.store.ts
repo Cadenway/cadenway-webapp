@@ -860,6 +860,10 @@ function createViewTaskWritesStore(): Type<ViewTaskWritesStoreInstance> {
         if (live) {
           const message: WriteToast = toast(outcome.done, outcome);
           const copy: string | null = message.open ?? null;
+          // Tasks a read back settled are absent from `before`: nothing proves this write set
+          // their values, so their toast offers no `Undo`.
+          const undo: (() => void) | null =
+            confirmedOf(outcome).length > 0 ? (message.undo ?? null) : null;
           const id: string = toasts.show(message.title, {
             description: message.description,
             ...(copy
@@ -871,11 +875,11 @@ function createViewTaskWritesStore(): Type<ViewTaskWritesStoreInstance> {
                     },
                   },
                 }
-              : message.undo
-                ? { undo: message.undo }
+              : undo
+                ? { undo }
                 : {}),
           });
-          if (!copy && message.undo) keepUndoToast(id);
+          if (!copy && undo) keepUndoToast(id);
         }
         if (outcome.failed.length > 0) {
           toasts.error(

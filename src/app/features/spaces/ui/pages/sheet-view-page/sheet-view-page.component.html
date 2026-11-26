@@ -1,16 +1,435 @@
-<div
-  class="flex min-h-0 flex-1 items-center justify-center px-4 pb-6 sm:px-6"
+@let snapshot = tasks.hasCurrentSnapshot() ? undefined : tasks.primary.value();
+<section
+  class="flex min-h-0 flex-1 flex-col gap-2 px-4 pb-6 sm:px-6"
+  aria-label="Sheet"
+  i18n-aria-label="@@spaces.sheet.region"
   data-testid="sheet-view"
 >
-  <cw-empty role="status">
-    <cw-empty-header>
-      <cw-empty-media>
-        <ng-icon [name]="icon" aria-hidden="true" />
-      </cw-empty-media>
-      <cw-empty-title>{{ name }}</cw-empty-title>
-      <cw-empty-description i18n="@@spaces.view-stub.text"
-        >This view is not available yet.</cw-empty-description
+  <div class="flex flex-wrap items-center gap-2">
+    @if (tasks.hasCurrentSnapshot() || snapshot) {
+      <h2 class="text-base font-semibold whitespace-nowrap tabular-nums" data-testid="sheet-title">
+        {{ title() }}
+      </h2>
+    }
+    <p class="hidden text-xs text-muted-foreground xl:block" i18n="@@spaces.sheet.hint">
+      Double-click a cell or press Enter to edit it · arrows to move · Enter validates, Esc cancels.
+    </p>
+    <button
+      cwButton
+      type="button"
+      variant="outline"
+      size="sm"
+      class="ml-auto"
+      data-testid="sheet-columns"
+      [cwMenuTriggerFor]="columnsMenu"
+    >
+      <ng-icon name="phosphorColumnsBold" aria-hidden="true" />
+      {{ columnsLabel() }}
+    </button>
+  </div>
+
+  <cw-data-table
+    class="flex min-h-0 flex-1 flex-col"
+    [virtual]="virtualReady()"
+    manual
+    editable
+    selectable
+    phoneLayout="grid"
+    density="default"
+    [page]="null"
+    [data]="virtualReady() ? sheet.groups().rows : noRows"
+    [trackBy]="rowId"
+    [rowLabel]="rowLabel"
+    [groupBy]="sheet.groupBy() === null ? null : 'group'"
+    [groupLabel]="groupLabel"
+    [groupOrder]="sheet.groups().order"
+    [groups]="tableGroups()"
+    [collapsed]="sheet.collapsed()"
+    [(selection)]="tableSelection"
+    [phoneColumns]="['due', 'estimate']"
+    [filtered]="filtered()"
+    [sort]="tableSort()"
+    [columnVisibility]="visibility()"
+    [rowContextMenu]="taskMenu()?.menu() ?? null"
+    [loading]="!snapshot && !tasks.hasCurrentSnapshot() && tasks.primary.isLoading()"
+    [texts]="tableTexts"
+    [ariaLabel]="tableLabel()"
+    (sortChange)="sortChanged($event)"
+    (rowOpen)="open($event)"
+    (cellEdit)="edited($event)"
+    (collapsedChange)="sheet.setCollapsed($event)"
+  >
+    <ng-template cwDataTableGroup let-key>
+      @switch (sheet.groupBy()) {
+        @case ('status') {
+          <cw-status-icon [status]="statusOf(key)" size="4" />
+        }
+        @case ('priority') {
+          <cw-priority-icon [priority]="priorityOf(key)" size="4" />
+        }
+        @case ('assignee') {
+          <span
+            class="flex size-5 items-center justify-center rounded-full bg-secondary text-[9px] leading-none font-semibold text-secondary-foreground"
+            aria-hidden="true"
+            >{{ groupInitials(key) }}</span
+          >
+        }
+      }
+      <span class="truncate font-medium">{{ groupLabel(key) }}</span>
+    </ng-template>
+
+    <cw-data-table-column key="name" sortable [header]="labels.name" [width]="320">
+      <ng-template cwCell [cwCellOf]="sheet.rows()" let-row>
+        <span class="flex w-full min-w-0 items-center gap-1.5">
+          <cw-status-icon [status]="row.status" [milestone]="row.task.milestone" size="4" />
+          <span
+            class="min-w-0 truncate font-medium"
+            [class.text-muted-foreground]="row.status === 'done' || row.status === 'cancelled'"
+            [class.line-through]="row.status === 'cancelled'"
+            >{{ row.task.name }}</span
+          >
+          <span class="shrink-0 font-mono text-xs text-muted-foreground">{{ row.task.key }}</span>
+          <button
+            type="button"
+            tabindex="-1"
+            class="relative isolate ml-auto inline-flex size-6 shrink-0 items-center justify-center overflow-hidden rounded-md whitespace-nowrap text-muted-foreground opacity-0 transition-all group-hover/row:opacity-100 hover:bg-background hover:text-foreground focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none motion-reduce:transition-none"
+            [attr.aria-label]="openLabel(row)"
+            [title]="openLabel(row)"
+            (click)="open(row)"
+          >
+            <ng-icon name="phosphorArrowSquareOutBold" size="0.875rem" aria-hidden="true" />
+          </button>
+        </span>
+      </ng-template>
+      <ng-template
+        cwCellEditor
+        [cwCellEditorOf]="sheet.rows()"
+        let-row
+        let-commit="commit"
+        let-cancel="cancel"
       >
-    </cw-empty-header>
-  </cw-empty>
+        <cw-sheet-cell-editor
+          required
+          [value]="draftOf(row, 'name')"
+          [label]="editLabel(labels.name, row)"
+          (committed)="commit($event)"
+          (cancelled)="cancel()"
+        />
+      </ng-template>
+      <ng-template cwFooterCell>{{ countText() }}</ng-template>
+    </cw-data-table-column>
+
+    <cw-data-table-column key="status" sortable [header]="labels.status" [width]="148">
+      <ng-template cwCell [cwCellOf]="sheet.rows()" let-row>
+        <span class="flex min-w-0 items-center gap-1.5">
+          <cw-status-icon [status]="row.status" [milestone]="row.task.milestone" size="4" />
+          <span class="min-w-0 truncate">{{ statusText(row) }}</span>
+        </span>
+      </ng-template>
+      <ng-template cwFooterCell>{{ doneText() }}</ng-template>
+    </cw-data-table-column>
+
+    <cw-data-table-column key="priority" sortable [header]="labels.priority" [width]="128">
+      <ng-template cwCell [cwCellOf]="sheet.rows()" let-row>
+        <span
+          class="flex min-w-0 items-center gap-1.5"
+          [class.text-destructive]="row.task.priority === 'urgente'"
+          ><cw-priority-icon [priority]="row.task.priority" size="3.5" /><span
+            class="min-w-0 truncate"
+            >{{ priorityText(row.task.priority) }}</span
+          ></span
+        >
+      </ng-template>
+    </cw-data-table-column>
+
+    <cw-data-table-column key="people" sortable [header]="labels.people" [width]="116">
+      <ng-template cwCell [cwCellOf]="sheet.rows()" let-row>
+        <span class="flex -space-x-1">
+          @for (person of rowPeople(row); track person.id) {
+            <span
+              class="flex size-6 items-center justify-center rounded-full bg-secondary text-[10px] leading-none font-semibold text-secondary-foreground ring-2 ring-background"
+              [title]="person.name"
+              >{{ person.initials }}</span
+            >
+          }
+          @if (row.task.assigneeIds.length === 0) {
+            <span
+              class="flex size-6 items-center justify-center rounded-full border border-dashed border-input text-muted-foreground"
+              title="Unassigned"
+              i18n-title="@@spaces.rows.unassigned-cell"
+              ><ng-icon name="phosphorUserBold" size="0.75rem" aria-hidden="true"
+            /></span>
+          }
+        </span>
+      </ng-template>
+    </cw-data-table-column>
+
+    <cw-data-table-column key="due" sortable [header]="labels.due" [width]="136">
+      <ng-template cwCell [cwCellOf]="sheet.rows()" let-row>
+        <cw-task-due-date [due]="row.task.due" [status]="row.status" />
+      </ng-template>
+      <ng-template
+        cwCellEditor
+        [cwCellEditorOf]="sheet.rows()"
+        let-row
+        let-commit="commit"
+        let-cancel="cancel"
+      >
+        <cw-sheet-cell-editor
+          kind="date"
+          [value]="draftOf(row, 'due')"
+          [label]="editLabel(labels.due, row)"
+          (committed)="commit($event)"
+          (cancelled)="cancel()"
+        />
+      </ng-template>
+    </cw-data-table-column>
+
+    <cw-data-table-column
+      key="estimate"
+      sortable
+      align="end"
+      [header]="labels.estimate"
+      [width]="112"
+    >
+      <ng-template cwCell [cwCellOf]="sheet.rows()" let-row>
+        <span
+          class="min-w-0 truncate whitespace-nowrap tabular-nums"
+          [class.text-muted-foreground]="!row.estimateMinutes"
+          >{{ estimateText(row.estimateMinutes) }}</span
+        >
+      </ng-template>
+      <ng-template
+        cwCellEditor
+        [cwCellEditorOf]="sheet.rows()"
+        let-row
+        let-commit="commit"
+        let-cancel="cancel"
+      >
+        <cw-sheet-cell-editor
+          kind="duration"
+          alignEnd
+          [value]="draftOf(row, 'estimate')"
+          [label]="editLabel(labels.estimate, row)"
+          (committed)="commit($event)"
+          (cancelled)="cancel()"
+        />
+      </ng-template>
+      <ng-template cwFooterCell>{{ estimateSum() }}</ng-template>
+    </cw-data-table-column>
+
+    <cw-data-table-column key="spent" align="end" [header]="labels.spent" [width]="124">
+      <ng-template cwCell [cwCellOf]="sheet.rows()" let-row>
+        <cw-sheet-spent-cell
+          [minutes]="row.spentMinutes"
+          [estimate]="row.estimateMinutes"
+          [failed]="row.spentFailed"
+          [retryLabel]="retryLabel"
+          (shown)="sheet.requestSpent(row.task.key)"
+          (retried)="sheet.retrySpent(row.task.key)"
+        />
+      </ng-template>
+      <ng-template cwFooterCell>
+        @if (spentSum(); as sum) {
+          {{ sum }}
+        } @else {
+          <span class="sr-only" data-testid="sheet-spent-pending">{{ spentPendingText }}</span>
+        }
+      </ng-template>
+    </cw-data-table-column>
+
+    <cw-data-table-column key="labels" sortable [header]="labels.labels" [width]="180">
+      <ng-template cwCell [cwCellOf]="sheet.rows()" let-row>
+        @if (row.task.labels.length > 0) {
+          <cw-task-label-chips [labels]="row.task.labels" />
+        } @else {
+          <span class="text-muted-foreground">—</span>
+        }
+      </ng-template>
+    </cw-data-table-column>
+
+    <cw-data-table-column key="list" sortable [header]="labels.list" [width]="150">
+      <ng-template cwCell [cwCellOf]="sheet.rows()" let-row>
+        <span class="min-w-0 truncate">{{ listText(row) }}</span>
+      </ng-template>
+    </cw-data-table-column>
+
+    @for (field of sheet.customFields(); track field.id) {
+      <cw-data-table-column
+        sortable
+        [key]="fieldKey(field)"
+        [header]="field.name"
+        [align]="field.type === 'number' ? 'end' : 'start'"
+        [width]="field.type === 'number' ? 96 : 172"
+      >
+        <ng-template cwCell [cwCellOf]="sheet.rows()" let-row>
+          <span
+            class="min-w-0 truncate whitespace-nowrap"
+            [class.tabular-nums]="field.type === 'number'"
+            [class.text-muted-foreground]="fieldText(row, field) === '—'"
+            >{{ fieldText(row, field) }}</span
+          >
+        </ng-template>
+        <ng-template
+          cwCellEditor
+          [cwCellEditorOf]="sheet.rows()"
+          let-row
+          let-commit="commit"
+          let-cancel="cancel"
+        >
+          <cw-sheet-cell-editor
+            [kind]="field.type"
+            [nonNegative]="field.sprintPoints"
+            [alignEnd]="field.type === 'number'"
+            [value]="draftOf(row, fieldKey(field))"
+            [label]="editLabel(field.name, row)"
+            (committed)="commit($event)"
+            (cancelled)="cancel()"
+          />
+        </ng-template>
+        <ng-template cwFooterCell>{{ fieldSum(field) }}</ng-template>
+      </cw-data-table-column>
+    }
+
+    <cw-data-table-column
+      key="actions"
+      header="Actions"
+      i18n-header="@@spaces.rows.actions-header"
+      headerHidden
+      [width]="48"
+    >
+      <ng-template cwCell [cwCellOf]="sheet.rows()" let-row>
+        <button
+          #actions
+          type="button"
+          class="relative isolate inline-flex size-7 items-center justify-center overflow-hidden rounded-md whitespace-nowrap text-muted-foreground opacity-0 transition-all group-hover/row:opacity-100 hover:bg-accent hover:text-foreground focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background focus-visible:outline-none motion-reduce:transition-none"
+          aria-haspopup="menu"
+          [attr.aria-label]="actionsLabel(row)"
+          (click)="openMenu(actions, row)"
+        >
+          <ng-icon name="phosphorDotsThreeBold" aria-hidden="true" />
+        </button>
+      </ng-template>
+    </cw-data-table-column>
+
+    <div cwDataTableEmpty>
+      @if (tasks.empty()) {
+        <cw-empty size="sm" role="status">
+          <cw-empty-header>
+            <cw-empty-media>
+              <ng-icon name="phosphorTrayBold" aria-hidden="true" />
+            </cw-empty-media>
+            <cw-empty-title i18n="@@spaces.sheet.empty"
+              >No task matches the search or the filters.</cw-empty-title
+            >
+          </cw-empty-header>
+        </cw-empty>
+      }
+    </div>
+  </cw-data-table>
+
+  @if (tasks.hasCurrentSnapshot() && tasks.primary.error()) {
+    <div class="flex items-center gap-2 text-sm" role="alert">
+      <span i18n="@@spaces.rows.reload-failed">The tasks could not be refreshed.</span>
+      <button cwButton type="button" variant="outline" size="xs" (click)="tasks.reload()">
+        {{ retryLabel }}
+      </button>
+    </div>
+  }
+  @if (sheet.fieldsFailed()) {
+    <div class="flex items-center gap-2 text-sm" role="alert" data-testid="sheet-fields-failed">
+      <span i18n="@@spaces.sheet.fields-failed">The custom fields could not be loaded.</span>
+      <button cwButton type="button" variant="outline" size="xs" (click)="sheet.reloadFields()">
+        {{ retryLabel }}
+      </button>
+    </div>
+  }
+  @if (tasks.truncated()) {
+    <p class="text-xs text-muted-foreground" role="status">{{ truncatedText }}</p>
+  }
+</section>
+
+<cw-menu
+  #columnsMenu
+  ariaLabel="Columns shown"
+  i18n-ariaLabel="@@spaces.sheet.columns-menu"
+  align="end"
+>
+  <cw-menu-label i18n="@@spaces.sheet.columns-shown"
+    >Columns shown · the name stays visible</cw-menu-label
+  >
+  @for (option of columnOptions(); track option.key) {
+    <button
+      cwMenuItemCheckbox
+      type="button"
+      [checked]="option.shown"
+      (checkedChange)="toggleColumn(option)"
+    >
+      {{ option.label }}
+      @if (option.custom) {
+        <span class="text-xs text-muted-foreground" i18n="@@spaces.sheet.custom">Custom</span>
+      }
+    </button>
+  }
+  <cw-menu-separator />
+  <button cwMenuItem type="button" (triggered)="sheet.showAllColumns()">
+    <ng-icon name="phosphorEyeBold" aria-hidden="true" />
+    <ng-container i18n="@@spaces.sheet.show-all">Show all</ng-container>
+  </button>
+</cw-menu>
+
+<div class="pointer-events-none absolute inset-x-0 bottom-4 z-20 flex justify-center px-4">
+  <cw-bulk-bar
+    [count]="selectedTasks().length"
+    [people]="bulkPeople()"
+    [targets]="writes.targets()"
+    [pending]="writes.deleting()"
+    (doneMarked)="markDone()"
+    (assigned)="writes.toggleAssignee(selectedTasks(), $event, true)"
+    (moved)="moveSelection($event)"
+    (deleted)="writes.askDelete(selectedTasks(), false)"
+    (cleared)="clearSelection()"
+  />
 </div>
+
+<cw-task-menu
+  [tasks]="menuTasks()"
+  [status]="menuStatus()"
+  [statuses]="writes.statusOptions()"
+  [people]="writes.people()"
+  [userId]="writes.userId()"
+  [lists]="writes.targets()"
+  (openRequested)="writes.open($event.key, $event)"
+  (statusPicked)="writes.setStatus(menuTasks(), $event, menuMilestone())"
+  (priorityPicked)="writes.setPriority(menuTasks(), $event)"
+  (assigneeToggled)="writes.toggleAssignee(menuTasks(), $event)"
+  (moved)="writes.moveTo(menuTasks(), $event)"
+  (remindRequested)="writes.remind(menuTasks())"
+  (duplicateRequested)="writes.duplicate(menuTasks())"
+  (copyLinkRequested)="writes.copyLinks(menuTasks())"
+  (copyKeyRequested)="writes.copyKeys(menuTasks())"
+  (deleteRequested)="writes.askDelete(menuTasks(), true)"
+/>
+
+<cw-task-cancel-dialog
+  [taskKeys]="writes.cancelKeys()"
+  (confirmed)="writes.confirmCancel($event)"
+  (kept)="writes.keepCancel()"
+/>
+
+<cw-alert-dialog
+  variant="destructive"
+  size="sm"
+  [open]="writes.deleteOpen()"
+  (openChange)="writes.setDeleteOpen($event)"
+  [items]="writes.deleteItems()"
+  [pending]="writes.deleting()"
+  (confirm)="writes.trash()"
+>
+  <h2 cwAlertDialogTitle>{{ writes.deleteTitle() }}</h2>
+  <p cwAlertDialogDescription>{{ writes.deleteText() }}</p>
+  <button cwButton cwAlertDialogCancel variant="outline" i18n="@@spaces.cancel">Cancel</button>
+  <button cwButton cwAlertDialogAction variant="destructive" [loading]="writes.deleting()">
+    {{ writes.deleteAction() }}
+  </button>
+</cw-alert-dialog>

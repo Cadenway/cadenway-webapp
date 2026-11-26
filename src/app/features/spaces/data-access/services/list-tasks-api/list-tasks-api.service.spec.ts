@@ -17,7 +17,7 @@ import { UnavailableRouteError } from '@shared/route-errors';
 import type { ListTaskPage, TaskGroupCount } from '../../../models/list-rows/list-rows.interface';
 import type { ListTaskQuery } from '../../../models/list-view-config/list-view-config.interface';
 import { ListRowsStore } from '../../../state/list-rows/list-rows.store';
-import { ListTasksApi } from './list-tasks-api.service';
+import { ListTasksApi, type TaskReadBack } from './list-tasks-api.service';
 
 /**
  * Constant query
@@ -67,6 +67,7 @@ describe('ListTasksApi', () => {
   let queryListTasks: Mock;
   let listSubtasks: Mock;
   let updateTask: Mock;
+  let getTask: Mock;
   let api: ListTasksApi;
 
   beforeEach(() => {
@@ -74,10 +75,20 @@ describe('ListTasksApi', () => {
     queryListTasks = vi.fn();
     listSubtasks = vi.fn(() => of({ items: [], nextCursor: null, total: 0 }));
     updateTask = vi.fn(() => of({ ...task('CAD-482', []), version: 5 }));
+    getTask = vi.fn(() =>
+      of({
+        ...task('CAD-482', ['u-camille']),
+        name: 'Sign-in',
+        estimateMinutes: 90,
+        cancelNote: null,
+        customFieldValues: { 'cf-points': 3 },
+        version: 6,
+      }),
+    );
     TestBed.configureTestingModule({
       providers: [
         { provide: TaskQueriesService, useValue: { countTaskGroups, queryListTasks } },
-        { provide: TasksService, useValue: { listSubtasks, updateTask } },
+        { provide: TasksService, useValue: { listSubtasks, updateTask, getTask } },
         {
           provide: WORKSPACE_CONTEXT,
           useValue: { user: () => ({ id: 'a' }), organization: () => ({ id: 'org-a' }) },
@@ -208,6 +219,46 @@ describe('ListTasksApi', () => {
     await expect(api.update('CAD-482', 4, { estimateMinutes: 90 })).resolves.toEqual({
       kind: 'unknown',
     });
+  });
+
+  it('leaves a first write answered 408 without a certain outcome, so it is sent again', async () => {
+    updateTask.mockReturnValueOnce(
+      throwError(() => new HttpErrorResponse({ status: 408, statusText: 'Request Timeout' })),
+    );
+
+    await expect(api.update('CAD-482', 4, { name: 'Sign-in' })).resolves.toEqual({
+      kind: 'unknown',
+    });
+  });
+
+  it('reads one task back without the HTTP cache, says when it is in the trash, and null otherwise', async () => {
+    const read: TaskReadBack | null = (await api.readBack('CAD-482')) as TaskReadBack | null;
+    expect(read?.task).toMatchObject({
+      key: 'CAD-482',
+      name: 'Sign-in',
+      assigneeIds: ['u-camille'],
+      version: 6,
+    });
+    expect(read?.estimateMinutes).toBe(90);
+    expect(read?.cancelNote).toBeNull();
+    expect(read?.customFieldValues).toEqual({ 'cf-points': 3 });
+    expect(getTask).toHaveBeenCalledWith('CAD-482', { cache: 'no-store' });
+
+    getTask.mockReturnValueOnce(
+      throwError(
+        () => new HttpErrorResponse({ status: 404, error: { status: 404, code: 'task.trashed' } }),
+      ),
+    );
+    await expect(api.readBack('CAD-482')).resolves.toBe('trashed');
+    getTask.mockReturnValueOnce(
+      throwError(
+        () =>
+          new HttpErrorResponse({ status: 404, error: { status: 404, code: 'task.not-found' } }),
+      ),
+    );
+    await expect(api.readBack('CAD-482')).resolves.toBeNull();
+    getTask.mockReturnValueOnce(throwError(() => new HttpErrorResponse({ status: 0 })));
+    await expect(api.readBack('CAD-482')).resolves.toBeNull();
   });
 
   it('reads the subtasks of a task', async () => {

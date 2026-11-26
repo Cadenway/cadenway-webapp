@@ -4,6 +4,7 @@ import {
   inject,
   resource,
   type ResourceRef,
+  type ResourceStatus,
   type Signal,
   type Type,
   untracked,
@@ -779,98 +780,113 @@ function createActivityViewStore(): Type<ActivityViewStoreInstance> {
         ),
       };
     }),
-    withMethods((store) => ({
-      filterPerson(actorId: string | null): void {
-        patchState(store, { _filter: { ...store._filter(), actorId } });
-      },
-
-      filterKinds(kinds: readonly ListActivityKind[]): void {
-        patchState(store, { _filter: { ...store._filter(), kinds: normalizedKinds(kinds) } });
-      },
-
-      clearFilters(): void {
-        patchState(store, { _filter: { kinds: [], actorId: null } });
-      },
-
-      reload(): void {
-        store.primary.reload();
-      },
-
-      async loadMore(): Promise<void> {
-        const read: ActivityParams | undefined = store._params();
-        const cursor: string | null = store._nextCursor();
-        if (!read || !store.current() || cursor === null || store.loadingMore()) return;
-        const request: PageRequest = { id: store._requests() + 1, key: read.key };
-        patchState(store, { _requests: request.id, _more: request, _moreFailed: null });
-        const active: () => boolean = (): boolean => store._more()?.id === request.id;
-        const valid: () => boolean = (): boolean =>
-          store._key() === read.key && store._params()?.key === read.key;
-        try {
-          const page: ListActivityPage = await store._api.page(
-            read.listId,
-            read.filter,
-            cursor,
-            ACTIVITY_PAGE_SIZE,
-          );
-          if (!active()) return;
-          if (!valid()) {
-            patchState(store, { _more: null });
-            return;
-          }
-          patchState(store, {
-            _items: uniqueEntries([...store._items(), ...page.items]),
-            _nextCursor: page.nextCursor,
-            _total: page.total,
-            _more: null,
-          });
-        } catch {
-          if (!active()) return;
-          patchState(store, { _more: null, _moreFailed: valid() ? read.key : null });
-        }
-      },
-
-      _apply: signalMethod<ActivitySnapshot | undefined>(
-        (snapshot: ActivitySnapshot | undefined): void => {
-          if (!snapshot || snapshot.key !== untracked(store._params)?.key) return;
-          const merged: LoadedRange = untracked((): LoadedRange =>
-            store._key() === snapshot.key
-              ? withLoadedTail(snapshot.page, store._items(), store._nextCursor())
-              : { items: snapshot.page.items, nextCursor: snapshot.page.nextCursor },
-          );
-          patchState(store, {
-            _items: merged.items,
-            _key: snapshot.key,
-            _listKey: snapshot.listKey,
-            _nextCursor: merged.nextCursor,
-            _total: snapshot.page.total,
-            _more: null,
-            _moreFailed: null,
-          });
+    withMethods((store) => {
+      let queued: string | null = null;
+      return {
+        filterPerson(actorId: string | null): void {
+          patchState(store, { _filter: { ...store._filter(), actorId } });
         },
-      ),
 
-      _watch: rxMethod<string | null>(
-        pipe(
-          switchMap((listId: string | null): Observable<RealtimeChange> =>
-            listId === null || !store._realtime
-              ? EMPTY
-              : store._realtime.watch({ kind: 'list', listId }).pipe(catchError(() => EMPTY)),
-          ),
-          filter((notice: RealtimeChange): boolean => {
-            if (!ACTIVITY_NOTICES.has(notice.type)) return false;
-            const data: unknown = notice.data;
-            return (
-              typeof data === 'object' &&
-              data !== null &&
-              (!('listId' in data) || data.listId === store._params()?.listId)
+        filterKinds(kinds: readonly ListActivityKind[]): void {
+          patchState(store, { _filter: { ...store._filter(), kinds: normalizedKinds(kinds) } });
+        },
+
+        clearFilters(): void {
+          patchState(store, { _filter: { kinds: [], actorId: null } });
+        },
+
+        reload(): void {
+          store.primary.reload();
+        },
+
+        _refresh(): void {
+          const key: string | undefined = store._params()?.key;
+          if (key !== undefined && !store.primary.reload()) queued = key;
+        },
+
+        _flushRefresh: signalMethod<ResourceStatus>((status: ResourceStatus): void => {
+          if (status === 'loading' || queued === null) return;
+          const key: string = queued;
+          queued = null;
+          if (status !== 'error' && untracked(store._params)?.key === key) store.primary.reload();
+        }),
+
+        async loadMore(): Promise<void> {
+          const read: ActivityParams | undefined = store._params();
+          const cursor: string | null = store._nextCursor();
+          if (!read || !store.current() || cursor === null || store.loadingMore()) return;
+          const request: PageRequest = { id: store._requests() + 1, key: read.key };
+          patchState(store, { _requests: request.id, _more: request, _moreFailed: null });
+          const active: () => boolean = (): boolean => store._more()?.id === request.id;
+          const valid: () => boolean = (): boolean =>
+            store._key() === read.key && store._params()?.key === read.key;
+          try {
+            const page: ListActivityPage = await store._api.page(
+              read.listId,
+              read.filter,
+              cursor,
+              ACTIVITY_PAGE_SIZE,
             );
-          }),
-          tap((): void => {
-            store._reloadRequests.next();
-          }),
+            if (!active()) return;
+            if (!valid()) {
+              patchState(store, { _more: null });
+              return;
+            }
+            patchState(store, {
+              _items: uniqueEntries([...store._items(), ...page.items]),
+              _nextCursor: page.nextCursor,
+              _total: page.total,
+              _more: null,
+            });
+          } catch {
+            if (!active()) return;
+            patchState(store, { _more: null, _moreFailed: valid() ? read.key : null });
+          }
+        },
+
+        _apply: signalMethod<ActivitySnapshot | undefined>(
+          (snapshot: ActivitySnapshot | undefined): void => {
+            if (!snapshot || snapshot.key !== untracked(store._params)?.key) return;
+            const merged: LoadedRange = untracked((): LoadedRange =>
+              store._key() === snapshot.key
+                ? withLoadedTail(snapshot.page, store._items(), store._nextCursor())
+                : { items: snapshot.page.items, nextCursor: snapshot.page.nextCursor },
+            );
+            patchState(store, {
+              _items: merged.items,
+              _key: snapshot.key,
+              _listKey: snapshot.listKey,
+              _nextCursor: merged.nextCursor,
+              _total: snapshot.page.total,
+              _more: null,
+              _moreFailed: null,
+            });
+          },
         ),
-      ),
-    })),
+
+        _watch: rxMethod<string | null>(
+          pipe(
+            switchMap((listId: string | null): Observable<RealtimeChange> =>
+              listId === null || !store._realtime
+                ? EMPTY
+                : store._realtime.watch({ kind: 'list', listId }).pipe(catchError(() => EMPTY)),
+            ),
+            filter((notice: RealtimeChange): boolean => {
+              if (!ACTIVITY_NOTICES.has(notice.type)) return false;
+              const data: unknown = notice.data;
+              return (
+                typeof data === 'object' &&
+                data !== null &&
+                (!('listId' in data) || data.listId === store._params()?.listId)
+              );
+            }),
+            tap((): void => {
+              store._reloadRequests.next();
+            }),
+          ),
+        ),
+      };
+    }),
     withHooks({
       onInit(store): void {
         const destroyRef: DestroyRef = inject(DestroyRef);
@@ -880,10 +896,11 @@ function createActivityViewStore(): Type<ActivityViewStoreInstance> {
           ),
         );
         store._watch(computed((): string | null => store._params()?.listId ?? null));
+        store._flushRefresh(store.primary.status);
         const reloads: { unsubscribe: () => void } = store._reloadRequests
           .pipe(auditTime(NOTICE_REFRESH_MS))
           .subscribe((): void => {
-            if (store._params()) store.primary.reload();
+            store._refresh();
           });
         const created: { unsubscribe: () => void } = store._taskCreate.created.subscribe(
           (task: CreatedTask): void => {
@@ -924,7 +941,10 @@ function createActivityViewStore(): Type<ActivityViewStoreInstance> {
  * task read the shown range again, 1 s after the first of a window: as many entries as are shown,
  * in pages of 100, followed by any older entries loaded meanwhile, with the cursor of the oldest
  * page. The entries follow the committed organization and the list: another one hides them at
- * once and late answers are dropped.
+ * once and late answers are dropped. A refresh asked for while the first page is being read (the
+ * first read, another filter) cannot restart it: one refresh is queued and runs once that read
+ * answers, for the same list, organization and filters only (a failed read drops it: `Retry`
+ * reads again).
  *
  * @type {Type<ActivityViewStoreInstance>}
  */

@@ -14,7 +14,10 @@ import type { ViewLayout } from '../../models/saved-view/saved-view.interface';
  */
 export const RELEASED_LAYOUTS: readonly ViewLayout[] = [
   'list',
+  'calendar',
   'gantt',
+  'workload',
+  'table',
   'form',
   'activity',
   'timesheet',

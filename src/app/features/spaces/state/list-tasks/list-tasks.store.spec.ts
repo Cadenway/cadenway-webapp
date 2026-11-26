@@ -9,6 +9,7 @@ import { type RealtimeChange, RealtimeConnection } from '@core/realtime';
 import {
   type CreatedTask,
   TaskActionsApi,
+  type TaskBulkAction,
   type TaskBulkOutcome,
   TaskCreate,
   TaskDetailOpener,
@@ -18,7 +19,10 @@ import {
 import { TaskApi } from '@features/task/data-access/services/task-api/task-api.service';
 import { WORKSPACE_CONTEXT } from '@features/workspace/ports/workspace-context';
 
-import { ListTasksApi } from '../../data-access/services/list-tasks-api/list-tasks-api.service';
+import {
+  ListTasksApi,
+  type TaskReadBack,
+} from '../../data-access/services/list-tasks-api/list-tasks-api.service';
 import type { ListTaskPage } from '../../models/list-rows/list-rows.interface';
 import type { ListTaskItem, ListTasksRead } from '../../models/list-tasks/list-tasks.interface';
 import type { ListTaskQuery } from '../../models/list-view-config/list-view-config.interface';
@@ -26,6 +30,7 @@ import type {
   TaskFieldWriteResult,
   ViewTaskOutcome,
 } from '../../models/view-task-write/view-task-write.interface';
+import { RECONCILE_DELAY_MS, RESEND_DELAYS_MS } from '../view-task-writes/view-task-writes.feature';
 import {
   LIST_TASKS_CAP,
   LIST_TASKS_PAGE_SIZE,
@@ -140,9 +145,52 @@ function done(version: number): TaskBulkOutcome {
   };
 }
 
+/**
+ * Function readBackOf
+ *
+ * @description
+ * A task as a single read of it answers, without an estimate or custom fields.
+ *
+ * @param {TaskSummary} read - The task.
+ * @returns {TaskReadBack} The read.
+ */
+function readBackOf(read: TaskSummary): TaskReadBack {
+  return { task: read, estimateMinutes: null, cancelNote: null, customFieldValues: {} };
+}
+
+/**
+ * Function resendsWait
+ *
+ * @description
+ * Milliseconds until a given number of resends of a write without a certain outcome left.
+ *
+ * @param {number} count - Resends to wait for, all of them by default.
+ * @returns {number} The total wait.
+ */
+function resendsWait(count: number = RESEND_DELAYS_MS.length): number {
+  return RESEND_DELAYS_MS.slice(0, count).reduce((sum: number, ms: number) => sum + ms, 0);
+}
+
+/**
+ * Constant lost
+ *
+ * @description
+ * A bulk answer without a certain outcome for CAD-482 at version 3.
+ *
+ * @type {TaskBulkOutcome}
+ */
+const lost: TaskBulkOutcome = {
+  affected: 0,
+  done: [],
+  failed: [],
+  unknown: [{ taskKey: 'CAD-482', version: 3 }],
+  notSent: [],
+};
+
 describe('ListTasksStore', () => {
   let page: Mock<ListTasksApi['page']>;
   let update: Mock<ListTasksApi['update']>;
+  let readBack: Mock<ListTasksApi['readBack']>;
   let bulk: Mock<TaskActionsApi['bulk']>;
   let notices: Subject<RealtimeChange>;
   let detailClosings: Subject<string>;
@@ -165,7 +213,7 @@ describe('ListTasksStore', () => {
         ListTasksStore,
         {
           provide: ListTasksApi,
-          useValue: { page, update, groups: vi.fn(), subtasks: vi.fn() },
+          useValue: { page, update, readBack, groups: vi.fn(), subtasks: vi.fn() },
         },
         {
           provide: TaskApi,
@@ -239,6 +287,7 @@ describe('ListTasksStore', () => {
     update = vi.fn<ListTasksApi['update']>(() =>
       Promise.resolve<TaskFieldWriteResult>({ kind: 'done', version: 4 }),
     );
+    readBack = vi.fn<ListTasksApi['readBack']>(() => Promise.resolve(null));
     bulk = vi.fn<TaskActionsApi['bulk']>(() => Promise.resolve(done(4)));
   });
 
@@ -613,17 +662,440 @@ describe('ListTasksStore', () => {
     await pending;
   });
 
-  it('puts the fields back and reads again when a field write has no certain outcome', async () => {
-    update.mockResolvedValueOnce({ kind: 'unknown' });
+  it('sends a field write again at the same version after a lost answer, and applies its success', async () => {
+    update
+      .mockResolvedValueOnce({ kind: 'unknown' })
+      .mockResolvedValueOnce({ kind: 'done', version: 4 });
     const store: InstanceType<typeof ListTasksStore> = setup(sprint);
     await settle();
 
-    const outcome: ViewTaskOutcome = await store.update(cad482, { name: 'Sign-in' });
+    const pending: Promise<ViewTaskOutcome> = store.update(cad482, { name: 'Sign-in' });
+    await settle();
+    expect(update).toHaveBeenCalledTimes(1);
+    expect(page).toHaveBeenCalledTimes(1);
+    expect(itemOf(store, 'CAD-482')?.task.name).toBe('Sign-in');
 
-    expect(outcome.unknown).toEqual([{ taskKey: 'CAD-482', version: 3 }]);
-    expect(itemOf(store, 'CAD-482')?.task.name).toBe('Redesign the SSO sign-in screen');
+    await vi.advanceTimersByTimeAsync(resendsWait(1));
+    const outcome: ViewTaskOutcome = await pending;
+
+    expect(update).toHaveBeenNthCalledWith(2, 'CAD-482', 3, { name: 'Sign-in' });
+    expect(outcome.done).toEqual([
+      { taskKey: 'CAD-482', version: 4, newTaskKey: null, trashEntryId: null },
+    ]);
+    expect(outcome.unknown).toEqual([]);
+    expect(outcome.after).toEqual({ 'CAD-482': 4 });
+  });
+
+  it('keeps the written fields over a read that answers before the lost write commits', async () => {
+    update
+      .mockResolvedValueOnce({ kind: 'unknown' })
+      .mockResolvedValueOnce({ kind: 'done', version: 4 })
+      .mockResolvedValueOnce({ kind: 'done', version: 5 });
+    const store: InstanceType<typeof ListTasksStore> = setup(sprint);
+    await settle();
+    const pending: Promise<ViewTaskOutcome> = store.update(cad482, { name: 'Sign-in' });
+    await settle();
+
+    store.reload();
     await settle();
     expect(page).toHaveBeenCalledTimes(2);
+    expect(itemOf(store, 'CAD-482')?.task.name).toBe('Sign-in');
+
+    page.mockResolvedValue(pageOf([{ ...cad482, name: 'Sign-in', version: 4 }]));
+    await vi.advanceTimersByTimeAsync(resendsWait(1));
+    await pending;
+    await settle();
+    expect(page).toHaveBeenCalledTimes(3);
+    expect(itemOf(store, 'CAD-482')?.task).toMatchObject({ name: 'Sign-in', version: 4 });
+
+    await store.update(cad482, { dueDate: '2026-12-01' });
+    expect(update).toHaveBeenLastCalledWith('CAD-482', 4, { dueDate: '2026-12-01' });
+  });
+
+  it('counts a resend refused on a moved version as applied, without an Undo, when the task reads back written', async () => {
+    update
+      .mockResolvedValueOnce({ kind: 'unknown' })
+      .mockResolvedValueOnce({ kind: 'refused', stale: true });
+    readBack.mockResolvedValueOnce(readBackOf({ ...cad482, name: 'Sign-in', version: 4 }));
+    const store: InstanceType<typeof ListTasksStore> = setup(sprint);
+    await settle();
+
+    const pending: Promise<ViewTaskOutcome> = store.update(cad482, { name: 'Sign-in' });
+    await vi.advanceTimersByTimeAsync(resendsWait(1));
+    const outcome: ViewTaskOutcome = await pending;
+
+    expect(readBack).toHaveBeenCalledWith('CAD-482');
+    expect(outcome.done).toEqual([
+      { taskKey: 'CAD-482', version: 4, newTaskKey: null, trashEntryId: null },
+    ]);
+    expect(outcome.failed).toEqual([]);
+    expect(outcome.before).toEqual({});
+    expect(outcome.after).toEqual({});
+    expect(itemOf(store, 'CAD-482')?.task.name).toBe('Sign-in');
+  });
+
+  it('counts a resend refused on a moved version as refused when the task reads back otherwise', async () => {
+    update
+      .mockResolvedValueOnce({ kind: 'unknown' })
+      .mockResolvedValueOnce({ kind: 'refused', stale: true });
+    const renamed: TaskSummary = { ...cad482, name: 'Login screen', version: 4 };
+    readBack.mockResolvedValueOnce(readBackOf(renamed));
+    const store: InstanceType<typeof ListTasksStore> = setup(sprint);
+    await settle();
+
+    const pending: Promise<ViewTaskOutcome> = store.update(cad482, { name: 'Sign-in' });
+    page.mockResolvedValue(pageOf([renamed]));
+    await vi.advanceTimersByTimeAsync(resendsWait(1));
+    const outcome: ViewTaskOutcome = await pending;
+    await settle();
+
+    expect(outcome.failed).toEqual([{ taskKey: 'CAD-482', version: 3 }]);
+    expect(outcome.done).toEqual([]);
+    expect(page).toHaveBeenCalledTimes(2);
+    expect(itemOf(store, 'CAD-482')?.task.name).toBe('Login screen');
+  });
+
+  it('holds the next action of a task whose write stays uncertain until a read of it settles it', async () => {
+    update.mockResolvedValue({ kind: 'unknown' });
+    const store: InstanceType<typeof ListTasksStore> = setup(sprint);
+    await settle();
+
+    const first: Promise<ViewTaskOutcome> = store.update(cad482, { name: 'Sign-in' });
+    const second: Promise<ViewTaskOutcome> = store.act([cad482], {
+      type: 'priority',
+      priority: 'urgente',
+    });
+    await vi.advanceTimersByTimeAsync(resendsWait());
+    const outcome: ViewTaskOutcome = await first;
+
+    expect(update).toHaveBeenCalledTimes(1 + RESEND_DELAYS_MS.length);
+    expect(outcome.unknown).toEqual([{ taskKey: 'CAD-482', version: 3 }]);
+    expect(page).toHaveBeenCalledTimes(1);
+    expect(bulk).not.toHaveBeenCalled();
+    expect(itemOf(store, 'CAD-482')?.task).toMatchObject({
+      name: 'Sign-in',
+      priority: 'urgente',
+    });
+
+    readBack.mockResolvedValue(readBackOf({ ...cad482, name: 'Sign-in', version: 4 }));
+    await vi.advanceTimersByTimeAsync(RECONCILE_DELAY_MS);
+    await settle();
+    await second;
+
+    expect(readBack).toHaveBeenCalledWith('CAD-482');
+    expect(bulk).toHaveBeenCalledWith(
+      [{ taskKey: 'CAD-482', version: 4 }],
+      { type: 'priority', priority: 'urgente' },
+      expect.any(Function),
+    );
+  });
+
+  it('keeps resending after a refused retry while the task reads at the version sent', async () => {
+    update
+      .mockResolvedValueOnce({ kind: 'unknown' })
+      .mockResolvedValueOnce({ kind: 'refused', stale: false })
+      .mockResolvedValueOnce({ kind: 'done', version: 4 });
+    readBack.mockResolvedValueOnce(readBackOf(cad482));
+    const store: InstanceType<typeof ListTasksStore> = setup(sprint);
+    await settle();
+
+    let answered: boolean = false;
+    const pending: Promise<ViewTaskOutcome> = store
+      .update(cad482, { name: 'Sign-in' })
+      .then((outcome: ViewTaskOutcome): ViewTaskOutcome => {
+        answered = true;
+        return outcome;
+      });
+    await vi.advanceTimersByTimeAsync(resendsWait(1));
+    await settle();
+
+    expect(update).toHaveBeenCalledTimes(2);
+    expect(readBack).toHaveBeenCalledTimes(1);
+    expect(answered).toBe(false);
+    expect(itemOf(store, 'CAD-482')?.task.name).toBe('Sign-in');
+
+    await vi.advanceTimersByTimeAsync(resendsWait(2) - resendsWait(1));
+    const outcome: ViewTaskOutcome = await pending;
+    expect(update).toHaveBeenLastCalledWith('CAD-482', 3, { name: 'Sign-in' });
+    expect(outcome.done).toEqual([
+      { taskKey: 'CAD-482', version: 4, newTaskKey: null, trashEntryId: null },
+    ]);
+  });
+
+  it('releases a field write a read finds not applied, and refuses the next one once the original commits', async () => {
+    update.mockResolvedValue({ kind: 'unknown' });
+    const store: InstanceType<typeof ListTasksStore> = setup(sprint);
+    await settle();
+    const pending: Promise<ViewTaskOutcome> = store.update(cad482, { name: 'Sign-in' });
+    await vi.advanceTimersByTimeAsync(resendsWait());
+    await pending;
+
+    readBack.mockResolvedValueOnce(readBackOf(cad482));
+    await vi.advanceTimersByTimeAsync(RECONCILE_DELAY_MS);
+    await settle();
+    expect(itemOf(store, 'CAD-482')?.task.name).toBe('Redesign the SSO sign-in screen');
+    const reads: number = page.mock.calls.length;
+
+    update.mockResolvedValueOnce({ kind: 'refused', stale: true });
+    const next: ViewTaskOutcome = await store.update(cad482, { dueDate: '2026-12-01' });
+    await settle();
+
+    expect(update).toHaveBeenLastCalledWith('CAD-482', 3, { dueDate: '2026-12-01' });
+    expect(next.failed).toEqual([{ taskKey: 'CAD-482', version: 3 }]);
+    expect(page.mock.calls.length).toBeGreaterThan(reads);
+  });
+
+  it('does not release a subtask the reads of the view do not contain', async () => {
+    const subtask: TaskSummary = task('CAD-490', { parentKey: 'CAD-482', name: 'Draft' });
+    update.mockResolvedValue({ kind: 'unknown' });
+    const store: InstanceType<typeof ListTasksStore> = setup(sprint);
+    await settle();
+    const first: Promise<ViewTaskOutcome> = store.update(subtask, { name: 'Wireframe' });
+    const second: Promise<ViewTaskOutcome> = store.act([subtask], {
+      type: 'priority',
+      priority: 'urgente',
+    });
+    await vi.advanceTimersByTimeAsync(resendsWait() + RECONCILE_DELAY_MS);
+    await first;
+
+    store.reload();
+    await settle();
+    expect(page).toHaveBeenCalledTimes(2);
+    expect(readBack).toHaveBeenCalledWith('CAD-490');
+    expect(bulk).not.toHaveBeenCalled();
+
+    readBack.mockResolvedValue(readBackOf({ ...subtask, name: 'Wireframe', version: 4 }));
+    await vi.advanceTimersByTimeAsync(RECONCILE_DELAY_MS * 2);
+    await settle();
+    await second;
+    expect(bulk).toHaveBeenCalledWith(
+      [{ taskKey: 'CAD-490', version: 4 }],
+      { type: 'priority', priority: 'urgente' },
+      expect.any(Function),
+    );
+  });
+
+  it('counts a resent cancellation as applied only when the task reads back with its note', async () => {
+    const cancel: TaskBulkAction = {
+      type: 'status',
+      status: 'cancelled',
+      cancelReason: 'duplicate',
+      cancelNote: 'Same as CAD-470',
+    };
+    const cancelled: TaskSummary = {
+      ...cad482,
+      status: 'cancelled',
+      cancelReason: 'duplicate',
+      version: 4,
+    };
+    const refused: TaskBulkOutcome = {
+      affected: 0,
+      done: [],
+      failed: [{ taskKey: 'CAD-482', version: 3 }],
+      unknown: [],
+      notSent: [],
+    };
+    bulk.mockResolvedValueOnce(lost).mockResolvedValueOnce(refused);
+    readBack.mockResolvedValueOnce(readBackOf(cancelled));
+    const store: InstanceType<typeof ListTasksStore> = setup(sprint);
+    await settle();
+
+    const unsaved: Promise<ViewTaskOutcome> = store.act([cad482], cancel);
+    await vi.advanceTimersByTimeAsync(resendsWait(1));
+    const without: ViewTaskOutcome = await unsaved;
+    await settle();
+    expect(without.done).toEqual([]);
+    expect(without.failed).toEqual([{ taskKey: 'CAD-482', version: 3 }]);
+    expect(itemOf(store, 'CAD-482')?.task.status).toBe('cancelled');
+    const after: ViewTaskOutcome = await store.act([cad482], {
+      type: 'priority',
+      priority: 'basse',
+    });
+    expect(after.before['CAD-482']).toMatchObject({ status: 'cancelled', cancelNote: null });
+
+    bulk
+      .mockResolvedValueOnce({ ...lost, unknown: [{ taskKey: 'CAD-482', version: 4 }] })
+      .mockResolvedValueOnce({ ...refused, failed: [{ taskKey: 'CAD-482', version: 4 }] });
+    readBack.mockResolvedValueOnce({
+      ...readBackOf({ ...cancelled, version: 6 }),
+      cancelNote: 'Same as CAD-470',
+    });
+    const saved: Promise<ViewTaskOutcome> = store.act([cad482], cancel);
+    await vi.advanceTimersByTimeAsync(resendsWait(1));
+    const withNote: ViewTaskOutcome = await saved;
+    await settle();
+    expect(withNote.done.map((item) => item.taskKey)).toEqual(['CAD-482']);
+
+    const next: ViewTaskOutcome = await store.act([cad482], {
+      type: 'priority',
+      priority: 'urgente',
+    });
+    expect(next.before['CAD-482']).toMatchObject({
+      status: 'cancelled',
+      cancelNote: 'Same as CAD-470',
+    });
+  });
+
+  it('decides and snapshots the next write on a read back applied in full, never on its version alone', async () => {
+    update
+      .mockResolvedValueOnce({ kind: 'unknown' })
+      .mockResolvedValueOnce({ kind: 'refused', stale: true });
+    readBack.mockResolvedValueOnce(
+      readBackOf({
+        ...cad482,
+        name: 'Sign-in',
+        due: '2026-12-04',
+        start: '2026-11-30',
+        version: 5,
+      }),
+    );
+    const store: InstanceType<typeof ListTasksStore> = setup(sprint);
+    await settle();
+
+    const pending: Promise<ViewTaskOutcome> = store.update(cad482, { name: 'Sign-in' });
+    await vi.advanceTimersByTimeAsync(resendsWait(1));
+    await pending;
+    await settle();
+    expect(itemOf(store, 'CAD-482')?.task).toMatchObject({ name: 'Sign-in', due: '2026-12-04' });
+
+    update.mockResolvedValueOnce({ kind: 'done', version: 6 });
+    const next: ViewTaskOutcome = await store.update(cad482, { dueDate: '2026-12-10' });
+
+    expect(update).toHaveBeenLastCalledWith('CAD-482', 5, { dueDate: '2026-12-10' });
+    expect(next.before['CAD-482']).toMatchObject({ due: '2026-12-04', version: 5 });
+  });
+
+  it('records the note of a held cancellation a read back settles', async () => {
+    bulk.mockResolvedValue(lost);
+    readBack.mockResolvedValue({
+      ...readBackOf({ ...cad482, status: 'cancelled', cancelReason: 'duplicate', version: 4 }),
+      cancelNote: 'Same as CAD-470',
+    });
+    const store: InstanceType<typeof ListTasksStore> = setup(sprint);
+    await settle();
+
+    const pending: Promise<ViewTaskOutcome> = store.act([cad482], {
+      type: 'status',
+      status: 'cancelled',
+      cancelReason: 'duplicate',
+      cancelNote: 'Same as CAD-470',
+    });
+    await vi.advanceTimersByTimeAsync(resendsWait());
+    const held: ViewTaskOutcome = await pending;
+    expect(held.unknown).toEqual([{ taskKey: 'CAD-482', version: 3 }]);
+    await vi.advanceTimersByTimeAsync(RECONCILE_DELAY_MS);
+    await settle();
+
+    bulk.mockResolvedValue(done(5));
+    const reopened: ViewTaskOutcome = await store.act([cad482], { type: 'status', status: 'todo' });
+    expect(reopened.before['CAD-482']).toMatchObject({
+      status: 'cancelled',
+      cancelReason: 'duplicate',
+      cancelNote: 'Same as CAD-470',
+      version: 4,
+    });
+  });
+
+  it('releases a lost deletion still readable at the version sent once the reads reach their longest wait', async () => {
+    bulk.mockResolvedValueOnce(lost);
+    readBack.mockResolvedValue(readBackOf(cad482));
+    const store: InstanceType<typeof ListTasksStore> = setup(sprint);
+    await settle();
+
+    const trashed: ViewTaskOutcome = await store.act([cad482], { type: 'trash' });
+    const next: Promise<ViewTaskOutcome> = store.act([cad482], {
+      type: 'priority',
+      priority: 'urgente',
+    });
+    expect(trashed.unknown).toEqual([{ taskKey: 'CAD-482', version: 3 }]);
+    expect(itemOf(store, 'CAD-482')).toBeUndefined();
+
+    await vi.advanceTimersByTimeAsync(2_000 + 4_000 + 8_000 + 16_000);
+    await settle();
+    expect(bulk).toHaveBeenCalledTimes(1);
+
+    await vi.advanceTimersByTimeAsync(30_000);
+    await settle();
+    await next;
+    expect(bulk).toHaveBeenLastCalledWith(
+      [{ taskKey: 'CAD-482', version: 3 }],
+      { type: 'priority', priority: 'urgente' },
+      expect.any(Function),
+    );
+    expect(itemOf(store, 'CAD-482')?.task.priority).toBe('urgente');
+  });
+
+  it('sends a status change again after a lost answer', async () => {
+    bulk.mockResolvedValueOnce(lost).mockResolvedValueOnce(done(4));
+    const store: InstanceType<typeof ListTasksStore> = setup(sprint);
+    await settle();
+
+    const pending: Promise<ViewTaskOutcome> = store.act([cad482], {
+      type: 'status',
+      status: 'done',
+    });
+    await vi.advanceTimersByTimeAsync(resendsWait(1));
+    const changed: ViewTaskOutcome = await pending;
+
+    expect(bulk).toHaveBeenNthCalledWith(
+      2,
+      [{ taskKey: 'CAD-482', version: 3 }],
+      { type: 'status', status: 'done' },
+      expect.any(Function),
+    );
+    expect(changed.done.map((item) => item.taskKey)).toEqual(['CAD-482']);
+  });
+
+  it('releases the source of a lost copy at once and reads the view once a little later', async () => {
+    bulk.mockResolvedValueOnce(lost);
+    const store: InstanceType<typeof ListTasksStore> = setup(sprint);
+    await settle();
+
+    const copied: ViewTaskOutcome = await store.act([cad482], { type: 'duplicate' });
+    const next: ViewTaskOutcome = await store.act([cad482], {
+      type: 'priority',
+      priority: 'urgente',
+    });
+
+    expect(copied.unknown).toEqual([{ taskKey: 'CAD-482', version: 3 }]);
+    expect(bulk).toHaveBeenCalledTimes(2);
+    expect(next.done.map((item) => item.taskKey)).toEqual(['CAD-482']);
+    expect(readBack).not.toHaveBeenCalled();
+
+    await settle();
+    const reads: number = page.mock.calls.length;
+    await vi.advanceTimersByTimeAsync(RECONCILE_DELAY_MS);
+    await settle();
+    expect(page).toHaveBeenCalledTimes(reads + 1);
+    await vi.advanceTimersByTimeAsync(60_000);
+    await settle();
+    expect(page).toHaveBeenCalledTimes(reads + 1);
+    expect(bulk).toHaveBeenCalledTimes(2);
+  });
+
+  it('shows a write released at the version sent once a later read finds the original committed', async () => {
+    update.mockResolvedValue({ kind: 'unknown' });
+    const store: InstanceType<typeof ListTasksStore> = setup(sprint);
+    await settle();
+    const pending: Promise<ViewTaskOutcome> = store.update(cad482, { name: 'Sign-in' });
+    await vi.advanceTimersByTimeAsync(resendsWait());
+    await pending;
+
+    readBack.mockResolvedValueOnce(readBackOf(cad482));
+    await vi.advanceTimersByTimeAsync(RECONCILE_DELAY_MS);
+    await settle();
+    expect(itemOf(store, 'CAD-482')?.task.name).toBe('Redesign the SSO sign-in screen');
+    const reads: number = page.mock.calls.length;
+
+    readBack.mockResolvedValue(readBackOf({ ...cad482, name: 'Sign-in', version: 4 }));
+    await vi.advanceTimersByTimeAsync(10_000);
+    await settle();
+
+    expect(itemOf(store, 'CAD-482')?.task.name).toBe('Sign-in');
+    expect(page).toHaveBeenCalledTimes(reads + 1);
+    update.mockResolvedValueOnce({ kind: 'done', version: 5 });
+    await store.update(cad482, { dueDate: '2026-12-01' });
+    expect(update).toHaveBeenLastCalledWith('CAD-482', 4, { dueDate: '2026-12-01' });
   });
 
   it('sends a field write after an earlier action of the task, at the version it returned', async () => {

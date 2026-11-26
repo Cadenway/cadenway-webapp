@@ -63,8 +63,9 @@ the typed route error states belong to Errors.
   `confirmCancel(cancellation)` and `keepTask()`, the `changed` stream, and the `completed` stream
   after each write succeeds or fails; `STATUS_SETTLE_MS` (460).
 - `TaskActionsApi` (root): `bulk(selection, action, current)` (chunks of 50, idempotent, one retry
-  after an uncertain answer that only a success settles, any refusal of the retry leaving the chunk
-  unknown; per-task versions, copies and trash entries), `remind(taskKey, at)` and
+  after an uncertain answer (no answer, a `408` or a `5xx`) that only a success settles, any refusal
+  of the retry leaving the chunk unknown; per-task versions, copies and trash entries),
+  `remind(taskKey, at)` and
   `restore(entryId)`, for the stores of the screens that act on several tasks.
 - `TaskCreate` (root): `open(options?)`, `useDefaults(defaults, destroyRef)`, `close()`, `isOpen`,
   `options`, `created`.

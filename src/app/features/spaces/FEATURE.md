@@ -201,6 +201,184 @@ subtasks of CAD-482` for a parent (the chevron's toggle, so the keyboard reaches
 | `spaces.gantt.truncated`, `spaces.gantt.fit-title-truncated`, `spaces.gantt.nothing-to-fit-truncated`                                                                                                                                                                         | The mockup reads every task; it draws no capped read.          |
 | `spaces.gantt.undated`, `spaces.gantt.week`, `spaces.gantt.late*`, `spaces.gantt.conflict*`, `spaces.gantt.moved`, `spaces.gantt.scale-announce`, `spaces.gantt.zoom-announce`, `spaces.gantt.percent`, `spaces.gantt.move`, `spaces.gantt.fitted*`, `spaces.gantt.milestone` | The brick's own texts, which the mockup does not show as copy. |
 
+## Sheet view
+
+The `Sheet` view (`ui/pages/sheet-view-page`, `App.dc.html` lines 1031-1100, 3768-3786,
+7538-7680 and 7924-7933) edits the list's tasks in a grid. The title counts the tasks, sums
+their estimates in hours and, when the space has a sprint points field, its points
+(`12 tasks · 18 h · 34 points`); the `Columns` menu (`Columns · 2 hidden`) shows or hides every
+column but the name, the custom fields marked `Custom`, and `Show all`. A virtual
+`cw-data-table` shows one row per task: the name (the status icon before it, the key, an open
+button), status, priority, assignees, due date, estimate, time spent, labels, list, then the
+space's custom fields in their position order. The contract's `points` and `client` sheet
+columns name the mockup's seed fields: the sheet draws the space's real custom fields instead.
+
+- `SHEET_VIEW_PROVIDERS` (`state/sheet-view`) provides `TaskStatusChangesStore`,
+  `SheetTasksApi` (`data-access/services/sheet-tasks-api`), also in place of `ListTasksApi`, the
+  shared `ListTasksStore`, `SheetViewStore` and the task views' table texts. `SheetTasksApi` reads
+  each ungrouped page as `ListTasksApi.page` does and publishes the estimate and custom field
+  values of its tasks (`facts`), which `TaskSummary` does not carry (`sheet-task.adapter`); the
+  list is read once. It also reads `listListCustomFields` and `getTaskTimeSummary`.
+- `SheetViewStore` (route-scoped) keeps those facts by task (a read never replaces a newer
+  version), the custom fields (a secondary read: a failure keeps the built-in columns with an
+  inline Retry; once read, they go to `ListViewStore.followCustomFields`) and the time spent of
+  the rendered rows. It builds the rows in the presentation's order (`customFieldSort` while the
+  space has the field, else `sheetSort`; statuses in workflow order, priorities from urgent, empty
+  cells last; a header cycles ascending, descending, none; `Time spent` does not sort, and a saved
+  `sheetSort` on it shows the read order) and the footer's totals, and writes the sort and the
+  hidden columns to the presentation (`setPresentation`).
+- `Group by` files the sorted rows into the view's groups as the `List` view does
+  (`groupSheetRows`): statuses in workflow order, priorities from urgent, assignees with the most
+  tasks first and `Unassigned` last, a task with several assignees under each of them (row id
+  `<group>/<key>`). `Cancelled` is folded by default under the status grouping; the folded groups
+  of each grouping are kept while the view lives (`setCollapsed`). The `List` view's grouping
+  helpers live in `ListRowsStore` (server group reads), so the sheet has its own in
+  `utils/sheet-view`.
+- Selection: the rows are selectable (`Select CAD-482`); the shared `cw-bulk-bar` acts on the
+  ticked tasks (once each) through `ViewTaskWritesStore` (`Mark done`, `Assign`, `Move to…`,
+  `Delete`), a refused chunk stays ticked (`onRefused`), and the task menu of a ticked row acts on
+  the whole selection.
+- Inline edits: Enter or F2 (double click too) on the name, due date, estimate (a bare number is
+  hours, `parseDuration`) and custom fields (`Points` refuses a negative number and stays open
+  with `aria-invalid`); Enter validates, Escape cancels, Tab goes to the next editable cell. Each
+  goes through `ViewTaskWritesStore.updateFields` (`If-Match`) with a toast and `Undo`; the
+  reader shows the name and the due date at once, `SheetViewStore.editFacts` the estimate and the
+  custom fields until a read reaches the version the write returned (dropped at once when a read
+  answered before the write already reached it). Their `Undo` puts back the confirmed value the
+  write replaced, read once the earlier edits of the task settle (never a pending or refused
+  edit). An unchanged value writes nothing. A click or
+  Enter on the name opens the task.
+- A right click, Shift + F10 or the row's `…` button opens `cw-task-menu`
+  (`rowContextMenu`): status, priority, assignees, `Move to`, reminder, copies, deletion.
+- The footer counts the tasks and those done, and sums the estimates, the numeric custom fields
+  and the time spent once every row's is read; until then the time spent's footer stays blank and
+  tells assistive technologies `Total once every row is read`.
+- States: the table's loading state (`Loading the sheet`) until the first read answers; a failed
+  first read reaches the route's error boundary; a failed refresh shows inline with Retry; an
+  empty read shows the mockup's `No task matches the search or the filters.`; a read stopped at
+  2,000 tasks says so.
+- `cw-data-table` 0.10.0 reads a new column child's required `key` in its virtual window before
+  that column's first binding, which a custom field column (bound key) hits: the page opens the
+  virtual window and gives the rows one rendering after the custom field columns change
+  (`virtualReady`). The lasting fix is in `@cadenway/ui`.
+- Known gaps:
+  - G6: `TaskSummary` has no `spentMinutes`. The sheet reads `getTaskTimeSummary` for each row the
+    virtual table renders (`SheetSpentCell.shown`), four at a time, again when a task detail
+    closes or changes; a failed read shows a `Retry` button in its cell and keeps the footer
+    pending until it succeeds. Until a list-level aggregate exists, `Time spent` does not sort and its
+    footer sum shows only once every row's summary is read (rows never rendered are never read).
+    `spentMinutes` on `TaskSummary` (contracts, then task-service from time entries) is the fix.
+  - Status, priority, assignees, labels and list are not edited in their cells (the mockup's
+    popovers): the task menu changes the first four and `Move to` the list; labels change in the
+    task detail.
+  - The due date edits with the browser's date field, without the mockup's `Today` and `Clear`
+    popover; emptying it clears the due date.
+  - The headers have no `Sort by …` or `Custom field ·` title (the table's headers take no title),
+    and a custom field header has no type icon.
+  - Under 768 px the table shows its phone grid (name, due date, estimate) instead of the
+    mockup's horizontal scroll.
+  - No realtime notice covers custom field definitions or time entries (G13).
+
+| Unit                                                                                 | Reason                                                   |
+| ------------------------------------------------------------------------------------ | -------------------------------------------------------- |
+| `spaces.sheet.hint`                                                                  | The mockup's hint, with the table's double click and F2. |
+| `spaces.sheet.updated`, `spaces.sheet.updated-value`, `spaces.sheet.updated-cleared` | The mockup shows no toast for a sheet edit.              |
+| `spaces.sheet.fields-failed`, `spaces.sheet.truncated`                               | The mockup draws no failed read or capped list.          |
+| `spaces.sheet.spent-pending`                                                         | The mockup reads every time entry (G6).                  |
+| `spaces.sheet.title-no-points`                                                       | The mockup's space always has points.                    |
+
+## Workload view
+
+The `Workload` view (`ui/pages/workload-view-page`, `App.dc.html` lines 958-1029, skeleton
+572-582, day popover 3437-3453, logic 7435-7535 and 7903-7922) shows the load of each person over
+two weeks of weekdays (10 columns) against 6 h a day (`cw-heat-grid`, 360 min per weekday as the
+contract's `dailyCapacityMinutes`, 60 h per person). Rows: every member of the organization
+(`ListPageStore.organizationMembers`, the signed-in member first, as the task menu orders them),
+then any other assignee holding a task (`Former member`), then `Unassigned`. The heading names the
+weeks; `Today`, `Previous week` and `Next week` move them by a week. A cell shows its hours, bar
+and first two chips (status and key); the cell or `+n` opens the popover of the day's tasks with
+their hours. A chip or a popover line opens the task's detail (`ViewTaskWritesStore.open`); its
+context menu is `cw-task-menu`. The total column shows the hours, the note, the meter and
+`Spent: …` / `No time logged`.
+
+- Providers: `WORKLOAD_VIEW_PROVIDERS` holds Task's `TaskStatusChangesStore`, `ListTasksStore`
+  (the list's tasks with the view's `taskQuery`, no due window: the menu's tasks and writes, the
+  chips' shown status and milestone flag, and `followRows`) and `WorkloadViewStore`. The page
+  provides `ViewTaskWritesStore` with `VIEW_TASK_WRITER` set to `ListTasksStore`, and the
+  English texts of `cw-heat-grid`.
+- `WorkloadViewStore` (`state/workload-view`, route-scoped) reads `queryGetListWorkload` through
+  `WorkloadApi` (`data-access/services/workload-api`, mapped by `data-access/adapters/workload`)
+  with the view's filters and the Monday of the first week, every page joined (a repeated or
+  endless cursor fails the read), and `getListTimesheet` for both weeks (`spent`, a secondary
+  read with its inline error and `Retry`). A first read that fails, of the workload or of the
+  tasks, reaches the route's error boundary; a failed refresh keeps the grid and offers `Retry`.
+  Another week shows the skeleton; another query keeps the grid until it answers; another list or
+  organization empties it at once. Each time `ListTasksStore` reads the same query again in
+  place (realtime, a completed status write, a closed detail, a write of the view), the workload
+  and the time spent are read again.
+- `loads` (`utils/workload/workload.util.ts`) files each task under the people the view shows it
+  with: when they differ from the read ones (a write of the menu, a reassignment in flight, a
+  newer read of the task), the task's minutes of each day are split evenly between them until
+  the next read; a task shown cancelled, moved or deleted leaves the grid.
+- Reassignment: a chip is a CDK drag (`cdkDrag`, at once with a mouse, after 300 ms on a touch
+  screen). Dropped on another row (found under the pointer by the grid's `data-cw-row`), it
+  calls `WorkloadViewStore.reassign`, which records a targeted change of the task's assignees:
+  the target to assign (unless it is `Unassigned`) and the source to unassign, merged into the
+  change of the drags still running (a later drag overrides an earlier one for the same person),
+  and shows it at once. One worker per task then sends one write at a time through
+  `ListTasksStore.act`, each computed for the change's own people from the assignees as shown
+  when its turn comes: assignments first, then removals. Anyone the change does not name is never
+  touched, so a person assigned meanwhile (the menu, another user, a refresh) stays. A drag made
+  while the worker runs only adjusts the change, so a task dragged from A to B and back to A
+  before the first write answers is assigned to B, then B is removed: A is never unassigned.
+  Once settled:
+  - `CAD-482 reassigned` / `From X to Y.` (the latest drag's rows) offers `Undo`, a separate
+    operation: it waits for a reassignment of the task still running to settle, then reverses
+    the net effect on the people that reassignment wrote only (anyone else stays), sent with the
+    version it left. A task changed since (by a later drag or elsewhere) is left as it is with
+    `CAD-482 changed since`, and nothing is written. A reassignment whose writes cancel out shows
+    no toast;
+  - a refused or unanswered first write sends nothing more (`The task could not be reassigned`,
+    or the unknown outcome warning, and the tasks are read again);
+  - a refusal after an applied write (the removal, typically) warns
+    `CAD-482 was assigned to Y but stays assigned to X.` with an `Undo` of what was applied
+    (removing the target at the version it left).
+
+  Leaving the view dismisses the `Undo` toasts. From the keyboard, the chip's menu (`Assign`)
+  reassigns.
+
+- `N` creates a task in the list while the view lives. Without any task matching the view, the
+  mockup's filter text shows under the grid.
+- Dependencies added: `ListsService.queryGetListWorkload`, `TaskTimeService.getListTimesheet`,
+  `@cadenway/ui` `heat-grid` and `status-icon`, `@angular/cdk/drag-drop`.
+- Known gaps:
+  - `cw-heat-grid` has no drag hooks: the drop target is found with `document.elementFromPoint`
+    and the brick's `data-cw-row` attribute, and the hovered row is tinted by a page style on
+    `tbody tr:hover`. A drop target and a row highlight in the brick are the lasting fix.
+  - The drag is pointer only; the task menu's `Assign` toggles one person at a time, so the
+    keyboard reassignment takes two steps (add, then remove).
+  - The popover of a cell cannot be closed by the page: opening a task from it relies on the
+    popover closing as the detail takes the focus.
+  - Workload rows carry no milestone flag (G15) and no version: both come from `ListTasksStore`,
+    which stops at 2,000 tasks (`LIST_TASKS_CAP`). A task past it shows as an ordinary task, with
+    no menu and no drag; its chip's title says it cannot be reassigned from this view, and the
+    view shows `Tasks past the first 2,000 cannot be reassigned from this view.` while the
+    reader is truncated.
+  - `Spent` covers the two weeks shown (the timesheet's weeks); the mockup sums every entry of
+    the list. The popover's per-task `on <estimate>` hint is not shown: task summaries carry no
+    estimate. Time entries have no realtime notice (G13).
+  - The capacity is fixed (no per-person capacity in the contract).
+- Copy not taken word for word from the mockup:
+
+  | Unit                                                                                                       | Reason                                                  |
+  | ---------------------------------------------------------------------------------------------------------- | ------------------------------------------------------- |
+  | `spaces.workload.reassign-failed`, `spaces.workload.reassign-unknown`, `spaces.workload.reassigned-partly` | The mockup draws no refused or unanswered reassignment. |
+  | `spaces.workload.reload-failed`, `spaces.workload.spent-failed`                                            | The mockup draws no failed read.                        |
+  | `spaces.workload.former-member`                                                                            | An assignee no longer in the directory.                 |
+  | `spaces.workload.hours-minutes`, `spaces.workload.minutes`, `spaces.workload.hours`                        | The mockup's `fmtMin` and `fmtH` formats as units.      |
+  | `spaces.workload.cell*`, `spaces.workload.of-capacity`, `spaces.workload.tasks-*`                          | The mockup's cell label, split into composable units.   |
+  | `spaces.workload.truncated`, `spaces.workload.chip-title-unread`                                           | The mockup reads every task; the view reads 2,000.      |
+
 ## Activity view
 
 `ActivityViewPage` (`ui/pages/activity-view-page/`, `App.dc.html` lines 1299-1361, 7676-7720,
@@ -243,7 +421,10 @@ subtasks of CAD-482` for a parent (the chevron's toggle, so the keyboard reaches
   page; the feed tracks entries by id, so the scroll stays) 1 s after the first `task.updated.v1`,
   `task.status-changed.v1` or `list.tasks-changed.v1` (naming this list) of a window, once per
   window; so do a task created in the list from this tab (`TaskCreate.created`) and a task detail
-  that closes or whose `Undo` restored a task (`TaskDetailOpener.closed`, `changed`).
+  that closes or whose `Undo` restored a task (`TaskDetailOpener.closed`, `changed`). A refresh
+  asked for while the first page is being read (the first read, another filter), which the
+  resource cannot restart, is queued once and runs when that read answers, for the same list,
+  organization and filters only; a failed read drops it.
 - Bricks: `activity-feed`, `select`, `toggle-group`, `button`, `status-icon`, `priority-icon`,
   `context-menu`, `alert-dialog`; the page provides the feed's and the select's texts.
 - Known gaps:
@@ -438,6 +619,73 @@ settings could not be saved` (`This status or assignee cannot be used in this li
 | `spaces.form.preview-only*`                                                                                                                                                                       | The mockup's preview creates a task; this one never sends. |
 | `spaces.form.read-only`                                                                                                                                                                           | The mockup draws no list the caller cannot edit.           |
 | `spaces.form.save-failed`, `spaces.form.defaults-invalid`, `spaces.form.link-failed`                                                                                                              | The mockup draws no refused write.                         |
+
+## Calendar view
+
+The `Calendar` view (`ui/pages/calendar-view-page`, `App.dc.html` lines 775-828, logic lines
+6380-6415, day menu lines 7324-7330) shows the list's tasks on their due date in
+`cw-calendar-view`: a Monday-first month grid of six weeks (or the brick's week view), three tasks
+a day, then `+N others`, and the `No due date` panel beside it from 1280 px, below it under (the
+grid keeps 720 px and scrolls across).
+
+- `CalendarViewStore` (`state/calendar-view`, route-scoped through `CALENDAR_VIEW_PROVIDERS`, with
+  `ListTasksApi`, Task's `TaskStatusChangesStore` and two `ListTasksStore` instances) holds the
+  shown month or week (today's when the view opens) and merges two reads with the view's
+  `taskQuery`. The grid's read (`ListTasksStore`) keeps the due window of the grid shown
+  (`calendarWindow`, `utils/calendar-view`) and reads again when another month or week shows.
+  Since the gateway has no "no due date" filter (G4), a second instance read without a window
+  (`UNWINDOWED_TASKS`, `useClass: ListTasksStore`) feeds the panel, which keeps its undated tasks
+  on the client; the view publishes that read's summary (`followRows`), whose count is every task
+  of the query. Neither read fills in for the other: the grid draws the dated tasks of its read,
+  the panel the undated tasks of the unwindowed read, so a task the grid's read dropped (deleted,
+  moved out of the window) never comes back from the other read's older copy. The only exception
+  is a task this view scheduled from the panel: the grid shows it from the unwindowed read (its
+  optimistic due date, then the date read back) until the grid's read holds it.
+- The store is the page's `VIEW_TASK_WRITER`: `ViewTaskWritesStore` writes through the read that
+  shows the task (the grid's read once it holds it), so the menu's writes and the reschedules show
+  at once. Every answered or uncertain write then reads both again, keeping the pending patches
+  (and their `Undo`) until a read reaches their version. A failed first grid read fails to the route's error boundary; a
+  failed refresh shows `The tasks could not be refreshed.` with `Retry`. The panel is a secondary
+  read: skeleton, inline error with `Retry`, `All tasks have a due date.` when it has no task,
+  `No task` when the list has none. A grid read stopped at 2,000 tasks says so under the grid;
+  an unwindowed read stopped there says in the panel that undated tasks may be missing, instead of
+  `All tasks have a due date.`.
+- Rescheduling: a task of the grid dropped on another day (`itemMove`: pointer, or Space, the
+  arrows and Space) and a task of the panel dropped on a day (`itemSchedule`: its drop list
+  connects to the grid's days, and Space on it calls `scheduleWithKeyboard`) go through
+  `ViewTaskWritesStore.updateFields` with `rescheduleChanges`: the due date alone for a dated task
+  (the gateway moves the start by the same days), plus the start for an undated task whose start
+  would come after the new day. The task moves at once; the toast `<key> rescheduled` /
+  `Due: <long day>.` offers `Undo`; a refusal puts the task back with the failure toast.
+- A task's click or Enter opens its detail (`TaskDetailOpener`). A right click, the Menu key or
+  Shift F10 on a task opens `cw-task-menu`: on the panel through `[cwContextMenuTriggerFor]`, on
+  the grid and in the `+N others` popover (a CDK overlay, whose rows render the view's item
+  template) through a capture-phase handler on the page and the CDK overlay container that opens the menu on the frame the brick
+  draws, so the day menu does not open; from the popover, which the menu closes, the focus goes
+  back to the day's `+N others` button. A day's `+`, `N`, the popover's `Add a task on …` and the day menu's
+  `New task on that day` open Task's create dialog in the list, due that day; the day menu's
+  `Go to today` shows today's month. `N` elsewhere creates in the list (`useDefaults`).
+- Known gaps:
+  - Both reads hold every dated task of the grid: the unwindowed one already reads the whole list
+    (capped at 2,000), so the windowed read only guarantees the grid of a list over that cap. A
+    "no due date" filter (G4) would let the panel read the undated tasks alone.
+  - The panel comes from that capped read: in a list over 2,000 tasks it may miss undated tasks of
+    the pages left out, and shows a notice instead of claiming every task has a due date. Listing
+    every undated task needs a "no due date" filter on `queryListTasks` (G4: contracts, then
+    task-service, then the gateway).
+  - A write patches the read that shows the task; the other read shows it after the reads that
+    follow the write. An `Undo` that takes a due date away hides the task from the grid at once,
+    and the panel shows it once the unwindowed read answers.
+  - The toast's day leaves out the mockup's `Today, …` and `(late)` variants of `dueInfo().long`.
+  - The mockup's `Calendar navigation` group name has no place in the brick's header. The brick's
+    week view and its texts are not in the mockup.
+- Copy not taken word for word from the mockup:
+
+  | Unit                                                                                                                                                                                                                                    | Reason                                                                       |
+  | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
+  | `spaces.calendar.previous-week`, `next-week`, `views`, `month`, `week`, `unscheduled`, `all-day`, `hour`, `more-one`, `count-one`, `count-other`, `add-on`, `close`, `week-grid`, `range`, `grabbed`, `moved`, `cancelled`, `scheduled` | The brick's own texts (its French defaults), which the mockup does not show. |
+  | `spaces.calendar.undated-failed`                                                                                                                                                                                                        | The mockup draws no failed read.                                             |
+  | `spaces.calendar.truncated`, `spaces.calendar.undated-truncated`                                                                                                                                                                        | The mockup has no list over the read's cap.                                  |
 
 ### Sprint report
 
@@ -669,7 +917,7 @@ computed from the navigation's reads, for the command palette's `Lists` and the 
   - `BoardViewStore`, `CalendarViewStore`, `GanttViewStore`, `WorkloadViewStore`,
     `SheetViewStore`, `FormViewStore`, `ActivityViewStore` and `TimesheetViewStore`, each
     route-scoped on its view through its `<VIEW>_VIEW_PROVIDERS`; empty until its package fills
-    it.
+    it (`CalendarViewStore`: see the Calendar view).
   - `SpaceOverviewStore`, page-scoped on `SpaceOverviewPage`. Its lists come from the sidebar's
     overview of the same space, shown at once even while the sidebar reads again, and follow it
     once it changes. The page reads on its own only when the sidebar has no value for the space,
@@ -740,9 +988,11 @@ computed from the navigation's reads, for the command palette's `Lists` and the 
   rows change at once (`_patches`, one patch per action and task, merged in order; a confirmed
   patch applies until a read reaches the version the gateway returned): the icon, the word or the
   people at once, the group 460 ms after the task's last action, a moved or deleted row leaves at
-  once; `Mark done` and a move empty the selection at once. A refused, uncertain or unsent task
-  loses only that action's patch; a refused chunk stays selected and a second toast counts it; an
-  unresolved response warns and the rows are read again. Each applied action reads the list's
+  once; `Mark done` and a move empty the selection at once. A refused or unsent task loses only
+  that action's patch; a refused chunk stays selected and a second toast counts it; a task without
+  a certain outcome is settled as described below, and the warning
+  (`The outcome is unknown. The tasks are being refreshed.`) shows once it stays unknown. Each
+  applied action reads the list's
   counts again (`ListPageStore.refreshCounts`) and shows a toast whose `Undo` writes back the
   values confirmed before the action (statuses with their reasons and the cancellation notes
   recorded by the view, priorities, assignees, lists) or restores the trash entries of a deletion
@@ -761,6 +1011,55 @@ computed from the navigation's reads, for the command palette's `Lists` and the 
   has not read (a `412` of a single-field write, any refused chunk of a bulk action, whose answer
   gives no reason) reads the tasks again; a refused single-field write shows
   `The task could not be changed`.
+- Invariants of the write engine (`withViewTaskWrites`) for a task without a certain outcome (no
+  answer, a timeout, a `5xx`, or a refused idempotent retry of `TaskActionsApi.bulk`):
+  - Nothing reads the view while the request may still commit, and a read of the view never
+    settles it: the task keeps its patch, still pending, so a read that answers meanwhile (a
+    realtime notice, a reload) never shows the old values over it, and a read that does not
+    contain the task (a subtask, a task past the first page) cannot release it.
+  - The task holds its next writes: they stay queued behind it, with their patches shown, until
+    its outcome is settled. Elapsed time alone never releases it; leaving the view or changing
+    its scope does.
+  - A single-field write (`update`, `If-Match`) and a bulk `status`, `priority`, `assign`,
+    `unassign` or `move` are sent again unchanged, at the same version, after 1 s, 2 s and 4 s
+    (`RESEND_DELAYS_MS`); each sets a target state at a version, so a request that committed
+    meanwhile makes the resend refused instead of applying it twice. A success settles it as
+    applied. A refusal reads the task back (`ListTasksApi.readBack`, `getTask` without the cache).
+    Only a read at a version past the one sent is conclusive, since the original request, checked
+    against that version, can no longer commit: applied when the task holds what the write sets
+    (for a cancellation with a note, that note too), refused otherwise (the error toast, the patch
+    removed, no note recorded for `Undo`). A `408`, any other refusal, no answer or a read at the
+    version sent leave it uncertain, and the resends go on.
+  - A bulk `trash` and `duplicate` are never sent again from the view: the gateway's bulk action
+    takes an `Idempotency-Key` that replays a recorded answer for 24 hours, but
+    `TaskActionsApi.bulk` (owned by Task) draws a key per chunk and keeps it for its own single
+    retry, so a send from the view would carry a new key and could copy a task twice.
+  - A copy without a certain outcome never holds its source, which it does not change: the source
+    is released at once, the warning shows, and the view is read once 2 s later so a created copy
+    shows.
+  - What stays uncertain once the resends are spent is reported in `unknown` and warns. From 2 s
+    later (`RECONCILE_DELAY_MS`, doubling up to 30 s) each such task is read back on its own
+    until a read settles it, and only then do its patch and its hold go: a `versioned` write
+    (above) by any read of the task, applied when it is past the version sent and holds the
+    written values; a deletion once the task reads in the trash (`404 task.trashed`, applied) or
+    past the version sent (the deletion can no longer commit), or once a read after the 30 s
+    wait still finds it at the version sent (the deletion never reached the server, or the view's
+    next read shows it).
+  - A read back past the version the view knows is applied in full: its values show over the
+    view's older read until the view reaches that version, its cancellation note is recorded for
+    `Undo`, and the task's next write is decided on, snapshotted for `Undo` and sent at that
+    state, never at the read's version over the view's older values.
+  - A `versioned` task released by a read still at the version sent is read again 10 s and 30 s
+    after its release (`FOLLOW_UP_READS_MS`), without holding its writes, until the view or its
+    scope changes: a read past that version is applied in full, and the view is read again.
+  - A write that only a read back of its task settled is applied without an `Undo`: a matching
+    value at a later version does not prove this request wrote it, so the task is absent from
+    the outcome's `before` and `after`, and the toast offers no `Undo`. An `Undo` is offered only
+    for tasks whose version comes from the write's own successful answer.
+  - A released task's next write is sent at the version of the state it shows (the view's read, a
+    write's answer or a read back applied in full). Every write carries that version, so an
+    original request committing after the release makes the next write refused (`412`), which
+    reads the tasks again, instead of overwriting what the original wrote.
 - The table declares gateway groups in order, omitting hidden and empty groups except the five default empty status groups in an unfiltered view. Filtered empty results show the empty state. `nearEnd` requests further pages with a threshold accounting for unread group lines. Under 768 px the grid keeps selection, name and due date.
 
 ## Organization pin
@@ -779,6 +1078,9 @@ gateway checks them and `ORGANIZATION_PIN_OPERATIONS` lists them.
   otherwise it restores the reason without a note.
 - Row writes and the status icon's writes (`TaskStatusChangesStore`) are serialized separately;
   each reads the other's confirmed version only once it is read or settled.
+- A write released by a read at the version sent whose original request commits after the last
+  follow-up read (30 s) shows its old values until a realtime notice or the view's next read
+  reconciles it; the next write on the task is refused (`412`) and reads it again.
 
 - `cw-sidebar-space` has no slot next to the name: the private lock of a space shows on its
   overview, not in the sidebar, until the design system adds one.
