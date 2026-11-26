@@ -90,6 +90,58 @@ describe('TaskActionsApi', () => {
     await expect(outcome).resolves.toMatchObject({ done: [{ taskKey: 'CAD-482', version: 5 }] });
   });
 
+  it.each([
+    [401, 'auth.unauthenticated'],
+    [403, 'access.role-insufficient'],
+    [409, 'idempotency.request-in-progress'],
+    [412, 'request.version-mismatch'],
+    [422, 'idempotency.key-reused'],
+  ] as const)(
+    'keeps a chunk unknown when its retry after an uncertain answer is refused with %s',
+    async (status: number, code: string) => {
+      const selection: TaskBulkSelection[] = [
+        { taskKey: 'CAD-482', version: 3 },
+        ...Array.from({ length: 50 }, (_: unknown, index: number) => ({
+          taskKey: `CAD-${String(index)}`,
+        })),
+      ];
+      const outcome: Promise<TaskBulkOutcome> = api.bulk(selection, { type: 'trash' }, () => true);
+      http.expectOne(BULK_URL).flush(null, { status: 0, statusText: 'Unknown Error' });
+      await settle();
+      http.expectOne(BULK_URL).flush({ code }, { status, statusText: 'Refused' });
+      const result: TaskBulkOutcome = await outcome;
+
+      expect(result.unknown).toHaveLength(50);
+      expect(result.unknown[0]).toEqual({ taskKey: 'CAD-482', version: 3 });
+      expect(result.failed).toEqual([]);
+      expect(result.done).toEqual([]);
+      expect(result.notSent).toEqual([{ taskKey: 'CAD-49' }]);
+      http.expectNone(BULK_URL);
+    },
+  );
+
+  it('confirms a chunk whose retry after an uncertain answer replays its trash entry', async () => {
+    const outcome: Promise<TaskBulkOutcome> = api.bulk(
+      [{ taskKey: 'CAD-482', version: 3 }],
+      { type: 'trash' },
+      () => true,
+    );
+    http.expectOne(BULK_URL).flush(null, { status: 504, statusText: 'Gateway Timeout' });
+    await settle();
+    http.expectOne(BULK_URL).flush({
+      results: [{ taskKey: 'CAD-482', version: 4, trashEntryId: 'trash-1' }],
+      affectedCount: 1,
+    });
+
+    await expect(outcome).resolves.toEqual({
+      affected: 1,
+      done: [{ taskKey: 'CAD-482', version: 4, newTaskKey: null, trashEntryId: 'trash-1' }],
+      failed: [],
+      unknown: [],
+      notSent: [],
+    });
+  });
+
   it('sends 50 tasks per chunk and reports a refused chunk without stopping', async () => {
     const selection: TaskBulkSelection[] = Array.from({ length: 51 }, (_: unknown, index) => ({
       taskKey: `CAD-${String(index)}`,

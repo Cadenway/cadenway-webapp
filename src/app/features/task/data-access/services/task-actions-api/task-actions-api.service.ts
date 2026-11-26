@@ -162,9 +162,12 @@ export class TaskActionsApi {
    * @description
    * Applies an action to the selection in chunks of 50, one call after the other. Each chunk is
    * atomic and has its own `Idempotency-Key`, reused for one retry after an uncertain answer.
-   * Before each send and retry, `current` must still hold (same organization, live caller);
-   * otherwise the remaining tasks are reported as not sent. A chunk without a certain answer stops
-   * the rest. The promise never rejects.
+   * Only a success settles that retry: the gateway replays the recorded result of a committed
+   * first request, while any refusal of the retry (`401`, `403`, `409
+   * idempotency.request-in-progress`, `412`, `422`) leaves open whether the first request
+   * committed, so the chunk stays unknown. Before each send and retry, `current` must still hold
+   * (same organization, live caller); otherwise the remaining tasks are reported as not sent. A
+   * chunk without a certain answer stops the rest. The promise never rejects.
    *
    * @param {readonly TaskBulkSelection[]} selection - The selected tasks.
    * @param {TaskBulkAction} action - The action.
@@ -208,13 +211,10 @@ export class TaskActionsApi {
         }
         try {
           result = await this.send(chunk, action, key);
-        } catch (error: unknown) {
-          if (isUncertainFailure(error)) {
-            unknown.push(...chunk);
-            notSent.push(...rest);
-            break;
-          }
-          failed.push(...chunk);
+        } catch {
+          unknown.push(...chunk);
+          notSent.push(...rest);
+          break;
         }
       }
       if (result) {
