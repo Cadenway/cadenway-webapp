@@ -813,6 +813,7 @@
     "spaces.statuses.description": "Rename the statuses to match the team’s vocabulary, or hide the ones you do not use. The categories do not change: the counts stay accurate. {$used} statuses used out of {$total}.",
     "spaces.statuses.name-label": "Status name {$label}",
     "spaces.statuses.save-failed": "The statuses could not be saved",
+    "spaces.statuses.save-unknown": "The change could not be confirmed. Check the statuses once the connection is back.",
     "spaces.view-stub.text": "This view is not available yet.",
     "spaces.secondary.space-failed": "The space could not be loaded.",
     "spaces.secondary.counts-failed": "The counts could not be loaded.",

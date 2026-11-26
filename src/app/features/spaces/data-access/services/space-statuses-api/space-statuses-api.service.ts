@@ -12,7 +12,8 @@ import { toSpace } from '../../adapters/space/space.adapter';
  * @description
  * The `Space statuses` dialog's access to `updateSpace`: it sends only the `statuses` member of
  * the merge patch, from the version shown (`If-Match`, `412 request.version-mismatch` when the
- * space changed meanwhile), and maps the space as recorded.
+ * space changed meanwhile), and maps the space as recorded. `getSpace` reads the space again when
+ * a write's outcome is unknown.
  */
 @Service()
 export class SpaceStatusesApi {
@@ -30,6 +31,19 @@ export class SpaceStatusesApi {
   // #endregion
 
   // #region Methods
+  /**
+   * Method read
+   *
+   * @description
+   * Reads the space as recorded, to settle a write whose outcome is unknown.
+   *
+   * @param {string} spaceId - The space.
+   * @returns {Promise<SpaceDetails>} The space, with its statuses and version.
+   */
+  public async read(spaceId: string): Promise<SpaceDetails> {
+    return toSpace(await firstValueFrom(this.spacesService.getSpace(spaceId)));
+  }
+
   /**
    * Method update
    *

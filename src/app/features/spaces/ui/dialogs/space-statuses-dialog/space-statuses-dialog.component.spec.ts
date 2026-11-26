@@ -95,9 +95,9 @@ describe('SpaceStatusesDialog', () => {
       usedCount: signal(9),
       saving: signal(false),
       follow: vi.fn(),
-      rename: vi.fn(() => Promise.resolve(true)),
-      setUsed: vi.fn(() => Promise.resolve(true)),
-      reset: vi.fn(() => Promise.resolve(true)),
+      rename: vi.fn(() => Promise.resolve('saved')),
+      setUsed: vi.fn(() => Promise.resolve('saved')),
+      reset: vi.fn(() => Promise.resolve('saved')),
     };
     error = vi.fn(() => 'toast-1');
     dismiss = vi.fn();
@@ -224,18 +224,65 @@ describe('SpaceStatusesDialog', () => {
     expect(store['reset']).toHaveBeenCalledTimes(1);
   });
 
-  it('shows one failure toast at a time when writes are refused', async () => {
+  it('shows one failure toast at a time, telling a refusal from an unknown outcome', async () => {
     bind(product);
-    (store['setUsed'] as Mock).mockResolvedValue(false);
+    (store['setUsed'] as Mock).mockResolvedValueOnce('refused').mockResolvedValueOnce('unknown');
 
     byLabel('Stop using Blocked').click();
     await Promise.resolve();
     byLabel('Stop using Waiting').click();
     await Promise.resolve();
 
-    expect(error).toHaveBeenCalledTimes(2);
-    expect(error).toHaveBeenCalledWith('The statuses could not be saved');
+    expect(error).toHaveBeenNthCalledWith(1, 'The statuses could not be saved');
+    expect(error).toHaveBeenNthCalledWith(
+      2,
+      'The change could not be confirmed. Check the statuses once the connection is back.',
+    );
     expect(dismiss).toHaveBeenCalledWith('toast-1');
+  });
+
+  it('writes the recorded name back into the field when a rename is refused before a render', async () => {
+    bind(product);
+    const named: (key: StatusKey, name: string | null) => void = (
+      key: StatusKey,
+      name: string | null,
+    ): void => {
+      statuses.update((items: readonly SpaceStatusOption[]) =>
+        items.map((item: SpaceStatusOption) => (item.key === key ? { ...item, name } : item)),
+      );
+    };
+    (store['rename'] as Mock).mockImplementationOnce(
+      async (key: StatusKey, name: string): Promise<string> => {
+        named(key, name);
+        await Promise.resolve();
+        named(key, 'Code review');
+        return 'refused';
+      },
+    );
+    const field: HTMLInputElement = byLabel('Status name In review') as HTMLInputElement;
+
+    field.value = 'QA';
+    field.dispatchEvent(new Event('change'));
+    expect(field.value).toBe('QA');
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(field.value).toBe('Code review');
+    expect(error).toHaveBeenCalledWith('The statuses could not be saved');
+  });
+
+  it('sets the switch back when a change ends unsaved before a render', async () => {
+    bind(product);
+    (store['setUsed'] as Mock).mockResolvedValueOnce('unknown');
+    const control: HTMLElement = byLabel('Stop using Blocked');
+
+    control.click();
+    fixture.detectChanges();
+    expect(control.getAttribute('aria-checked')).toBe('false');
+    await Promise.resolve();
+    fixture.detectChanges();
+
+    expect(control.getAttribute('aria-checked')).toBe('true');
   });
 
   it('disables every control for a caller who may not edit the space', () => {

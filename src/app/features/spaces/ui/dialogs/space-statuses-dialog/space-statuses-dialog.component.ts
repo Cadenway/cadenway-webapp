@@ -38,6 +38,7 @@ import type { SpaceDetails, SpaceStatusOption } from '../../../models/space/spac
 import {
   REQUIRED_STATUSES,
   STATUS_NAME_MAX,
+  type SpaceStatusesOutcome,
   SpaceStatusesStore,
 } from '../../../state/space-statuses/space-statuses.store';
 
@@ -194,7 +195,8 @@ function switchLabel(label: string, used: boolean, required: boolean): string {
  * at most), its hint (from 640 px) and a switch to stop using it; `To do` and `Done` stay used.
  * A switch and `Reset to defaults` write at once; a name is written when the field changes (on
  * blur or Enter), so the mockup's per-keystroke write sends one request per edit. Each change shows
- * at once and its refusal puts back the recorded value with the failure toast (one at a time). The
+ * at once and, when it ends unsaved, the field or switch shows the recorded value again with the
+ * failure toast (one at a time). The
  * controls are disabled when the caller may not edit the space. Hosted deferred by the list page,
  * which binds `open` (two-way; `Done` and the close button set it to false) and `space`, the
  * sidebar's read with its version and rights, or null while it is read (skeleton rows). The dialog
@@ -394,29 +396,34 @@ export class SpaceStatusesDialog {
    *
    * @description
    * Records the name of a field once it changes, then shows the name as the store holds it (trimmed,
-   * or empty for the default label).
+   * or empty for the default label). A change that ends unsaved writes the recorded name back into
+   * the field, which its binding may not do when the refusal comes before the next render.
    *
    * @param {StatusKey} key - The status.
    * @param {HTMLInputElement} field - Its name field.
    */
   protected rename(key: StatusKey, field: HTMLInputElement): void {
-    this.report(this.store.rename(key, field.value));
-    field.value =
-      this.store.statuses().find((status: SpaceStatusOption): boolean => status.key === key)
-        ?.name ?? '';
+    this.report(this.store.rename(key, field.value), (): void => {
+      field.value = this.statusOf(key)?.name ?? '';
+    });
+    field.value = this.statusOf(key)?.name ?? '';
   }
 
   /**
    * Method setUsed
    *
    * @description
-   * Uses a status again or stops using it.
+   * Uses a status again or stops using it. A change that ends unsaved sets the switch back to the
+   * recorded state, which its binding may not do when the refusal comes before the next render.
    *
    * @param {StatusKey} key - The status.
    * @param {boolean} used - Whether the space uses it.
+   * @param {CwSwitch} control - Its switch.
    */
-  protected setUsed(key: StatusKey, used: boolean): void {
-    this.report(this.store.setUsed(key, used));
+  protected setUsed(key: StatusKey, used: boolean, control: CwSwitch): void {
+    this.report(this.store.setUsed(key, used), (): void => {
+      control.checked.set(!(this.statusOf(key)?.hidden ?? false));
+    });
   }
 
   /**
@@ -440,19 +447,38 @@ export class SpaceStatusesDialog {
   }
 
   /**
+   * Method statusOf
+   *
+   * @description
+   * A status as the store shows it.
+   *
+   * @param {StatusKey} key - The status.
+   * @returns {SpaceStatusOption | undefined} The status.
+   */
+  private statusOf(key: StatusKey): SpaceStatusOption | undefined {
+    return this.store.statuses().find((status: SpaceStatusOption): boolean => status.key === key);
+  }
+
+  /**
    * Method report
    *
    * @description
-   * Shows the failure toast when a write is refused, in place of the previous one.
+   * Shows the toast of a change that ends unsaved, in place of the previous one: refused, or not
+   * confirmed when the write and the read that follows got no answer. `restore` puts the control
+   * back to the recorded value first.
    *
-   * @param {Promise<boolean>} write - The write's outcome.
+   * @param {Promise<SpaceStatusesOutcome>} write - The change's outcome.
+   * @param {(() => void) | undefined} restore - Puts the control back to the recorded value.
    */
-  private report(write: Promise<boolean>): void {
-    void write.then((recorded: boolean): void => {
-      if (recorded) return;
+  private report(write: Promise<SpaceStatusesOutcome>, restore?: () => void): void {
+    void write.then((outcome: SpaceStatusesOutcome): void => {
+      if (outcome === 'saved') return;
+      restore?.();
       if (this.failureToast !== null) this.toasts.dismiss(this.failureToast);
       this.failureToast = this.toasts.error(
-        $localize`:@@spaces.statuses.save-failed:The statuses could not be saved`,
+        outcome === 'refused'
+          ? $localize`:@@spaces.statuses.save-failed:The statuses could not be saved`
+          : $localize`:@@spaces.statuses.save-unknown:The change could not be confirmed. Check the statuses once the connection is back.`,
       );
     });
   }

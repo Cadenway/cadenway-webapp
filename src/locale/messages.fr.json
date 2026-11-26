@@ -813,6 +813,7 @@
     "spaces.statuses.description": "Renommez les statuts selon le vocabulaire de l’équipe, ou masquez ceux qui ne servent pas. Les catégories ne changent pas : les compteurs restent justes. {$used} statuts utilisés sur {$total}.",
     "spaces.statuses.name-label": "Nom du statut {$label}",
     "spaces.statuses.save-failed": "Impossible d’enregistrer les statuts",
+    "spaces.statuses.save-unknown": "La modification n’a pas pu être confirmée. Vérifiez les statuts une fois la connexion rétablie.",
     "spaces.view-stub.text": "Cette vue n’est pas encore disponible.",
     "spaces.secondary.space-failed": "Impossible de charger l’espace.",
     "spaces.secondary.counts-failed": "Impossible de charger les comptes.",

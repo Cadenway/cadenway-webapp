@@ -11,6 +11,7 @@ import { SpaceStatusesApi } from './space-statuses-api.service';
 
 describe('SpaceStatusesApi', () => {
   let updateSpace: Mock;
+  let getSpace: Mock;
   let api: SpaceStatusesApi;
 
   beforeEach(() => {
@@ -27,8 +28,18 @@ describe('SpaceStatusesApi', () => {
         },
       }),
     );
+    getSpace = vi.fn(() =>
+      of({
+        id: 'sp-product',
+        name: 'Product',
+        prefix: 'CAD',
+        visibility: 'organization',
+        version: 9,
+        statuses: { blocked: { category: 'active', name: null, hidden: true } },
+      }),
+    );
     TestBed.configureTestingModule({
-      providers: [{ provide: SpacesService, useValue: { updateSpace } }],
+      providers: [{ provide: SpacesService, useValue: { updateSpace, getSpace } }],
     });
     api = TestBed.inject(SpaceStatusesApi);
   });
@@ -56,6 +67,14 @@ describe('SpaceStatusesApi', () => {
       name: null,
       hidden: false,
     });
+  });
+
+  it('reads the space again to settle a write without an answer', async () => {
+    const recorded: SpaceDetails = await api.read('sp-product');
+
+    expect(getSpace).toHaveBeenCalledWith('sp-product');
+    expect(recorded.version).toBe(9);
+    expect(recorded.statuses.find((status) => status.key === 'blocked')?.hidden).toBe(true);
   });
 
   it('puts back every default with a null statuses member', async () => {

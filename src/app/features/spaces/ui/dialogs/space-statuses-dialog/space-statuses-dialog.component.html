@@ -35,12 +35,13 @@
             row.hint
           }}</span>
           <cw-switch
+            #usedSwitch
             class="shrink-0"
             [ariaLabel]="row.switchLabel"
             [attr.title]="row.switchLabel"
             [checked]="row.used"
             [disabled]="row.required || !store.canEdit()"
-            (checkedChange)="setUsed(row.key, $event)"
+            (checkedChange)="setUsed(row.key, $event, usedSwitch)"
           />
         </div>
       }
