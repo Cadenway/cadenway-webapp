@@ -155,7 +155,10 @@ constants belong to the lead):
   page; the feed tracks entries by id, so the scroll stays) 1 s after the first `task.updated.v1`,
   `task.status-changed.v1` or `list.tasks-changed.v1` (naming this list) of a window, once per
   window; so do a task created in the list from this tab (`TaskCreate.created`) and a task detail
-  that closes or whose `Undo` restored a task (`TaskDetailOpener.closed`, `changed`).
+  that closes or whose `Undo` restored a task (`TaskDetailOpener.closed`, `changed`). A refresh
+  asked for while the first page is being read (the first read, another filter), which the
+  resource cannot restart, is queued once and runs when that read answers, for the same list,
+  organization and filters only; a failed read drops it.
 - Bricks: `activity-feed`, `select`, `toggle-group`, `button`, `status-icon`, `priority-icon`,
   `context-menu`, `alert-dialog`; the page provides the feed's and the select's texts.
 - Known gaps:
