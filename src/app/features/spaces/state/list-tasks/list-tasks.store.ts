@@ -22,7 +22,7 @@ import {
 import { removeAllEntities, setAllEntities, withEntities } from '@ngrx/signals/entities';
 import { rxMethod } from '@ngrx/signals/rxjs-interop';
 import {
-  auditTime,
+  audit,
   catchError,
   EMPTY,
   filter,
@@ -32,6 +32,7 @@ import {
   Subject,
   switchMap,
   tap,
+  timer,
 } from 'rxjs';
 
 import { type RealtimeChange, RealtimeConnection } from '@core/realtime';
@@ -90,11 +91,39 @@ export const LIST_TASKS_CAP: number = 2000;
  *
  * @description
  * Time between the first realtime notice (or completed status write, closed detail) of a window
- * and the read it gathers, in milliseconds: one read per window, as the `List` view does.
+ * and the read it gathers, in milliseconds, for a read of three pages at most: one read per
+ * window, as the `List` view does.
  *
  * @type {number}
  */
 const NOTICE_REFRESH_MS: number = 1000;
+
+/**
+ * Constant MAX_REFRESH_MS
+ *
+ * @description
+ * The widest refresh window, in milliseconds, for a read of fifteen pages or more or a truncated
+ * one, so a large list is read again at most every 5 s however many notices arrive.
+ *
+ * @type {number}
+ */
+const MAX_REFRESH_MS: number = 5000;
+
+/**
+ * Function refreshWindowOf
+ *
+ * @description
+ * The refresh window of a list read in a number of pages: 1 s up to three pages, then 1 s more
+ * per three pages, at most 5 s; 5 s for a truncated read.
+ *
+ * @param {number} pages - Pages the last read took.
+ * @param {boolean} truncated - Whether it stopped at the cap.
+ * @returns {number} The window, in milliseconds.
+ */
+export function refreshWindowOf(pages: number, truncated: boolean): number {
+  if (truncated) return MAX_REFRESH_MS;
+  return Math.min(MAX_REFRESH_MS, Math.max(1, Math.ceil(pages / 3)) * NOTICE_REFRESH_MS);
+}
 
 /**
  * Interface TasksParams
@@ -190,6 +219,17 @@ export interface TasksSnapshot {
    * @readonly
    */
   readonly truncated: boolean;
+
+  /**
+   * Property pages
+   *
+   * @description
+   * Pages the read took, which widens the refresh window of a large list.
+   *
+   * @type {number}
+   * @readonly
+   */
+  readonly pages: number;
   // #endregion
 }
 
@@ -255,6 +295,17 @@ interface ListTasksState {
    * @readonly
    */
   readonly truncated: boolean;
+
+  /**
+   * Property _pages
+   *
+   * @description
+   * Pages the last read took.
+   *
+   * @type {number}
+   * @readonly
+   */
+  readonly _pages: number;
   // #endregion
 }
 
@@ -272,6 +323,7 @@ const initialState: ListTasksState = {
   _key: null,
   _total: null,
   truncated: false,
+  _pages: 0,
 };
 
 /**
@@ -310,6 +362,7 @@ async function readAll(
   const due: DueWindow | null = params.due ?? null;
   let cursor: string | null = null;
   let total: number;
+  let pages: number = 0;
   do {
     const page: ListTaskPage = await api.page(
       params.listId,
@@ -327,8 +380,9 @@ async function readAll(
     }
     total = page.total;
     cursor = page.nextCursor;
+    pages++;
   } while (cursor !== null && tasks.length < LIST_TASKS_CAP);
-  return { key: params.key, generation, tasks, total, truncated: cursor !== null };
+  return { key: params.key, generation, tasks, total, truncated: cursor !== null, pages };
 }
 
 /**
@@ -412,7 +466,9 @@ export interface ListTasksStoreInstance {
    *
    * @description
    * The tasks the query matches (the gateway's total, unknown until the read answers) and
-   * whether the tasks read have subtasks or are ones, for `ListViewStore.followRows`.
+   * whether the tasks read have subtasks or are ones, for `ListViewStore.followRows`. With a due
+   * window the count stays unknown (null): the window, not the view's filters, narrows the read,
+   * and its total leaves out the undated tasks and those due outside it.
    *
    * @type {Signal<ListRowsSummary>}
    * @readonly
@@ -600,7 +656,7 @@ function createListTasksStore(): Type<ListTasksStoreInstance> {
       summary: (): ListRowsSummary =>
         store.hasCurrentSnapshot()
           ? {
-              visibleCount: store._total(),
+              visibleCount: store._params()?.due ? null : store._total(),
               hasSubtasks: store
                 .entities()
                 .some(
@@ -625,6 +681,7 @@ function createListTasksStore(): Type<ListTasksStoreInstance> {
             _key: null,
             _total: null,
             truncated: false,
+            _pages: 0,
           });
         }),
         _apply: signalMethod<TasksSnapshot | undefined>(
@@ -634,6 +691,7 @@ function createListTasksStore(): Type<ListTasksStoreInstance> {
               _key: snapshot.key,
               _total: snapshot.total,
               truncated: snapshot.truncated,
+              _pages: snapshot.pages,
             });
             store._settleWrites(snapshot.generation);
           },
@@ -700,7 +758,7 @@ function createListTasksStore(): Type<ListTasksStoreInstance> {
         );
         store._flushReload(store.primary.status);
         const reloads: { unsubscribe: () => void } = store._reloadRequests
-          .pipe(auditTime(NOTICE_REFRESH_MS))
+          .pipe(audit(() => timer(refreshWindowOf(store._pages(), store.truncated()))))
           .subscribe((): void => {
             store.reload();
           });
@@ -754,11 +812,13 @@ function createListTasksStore(): Type<ListTasksStoreInstance> {
  * another list or organization (`WORKSPACE_CONTEXT`) empties them at once and drops late
  * answers. A failed first read fails `primary` to the route's error boundary; a failed refresh
  * keeps the tasks. It watches the list's realtime room and reads again in place 1 s after the
- * first notice of a window, once per window; so do a completed status write, a task detail that
+ * first notice of a window, once per window (up to 5 s for a large or truncated read:
+ * `refreshWindowOf`); so do a completed status write, a task detail that
  * closes over the view or whose `Undo` restored a task (`TaskDetailOpener.closed`, `changed`),
  * and a task created in the list (at once). It composes the shared task writes
  * (`withViewTaskWrites`): `act` and `update` change `items` at once and a refusal puts them back.
- * `summary` is what the view publishes with `ListViewStore.followRows`.
+ * `summary` is what the view publishes with `ListViewStore.followRows` (its count unknown while a
+ * due window applies).
  *
  * @type {Type<ListTasksStoreInstance>}
  */

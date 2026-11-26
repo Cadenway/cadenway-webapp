@@ -166,12 +166,39 @@ describe('ListTasksApi', () => {
     );
   });
 
-  it('tells a refused field write from one without a certain outcome', async () => {
+  it('tells a stale refusal from another refusal and from an uncertain outcome', async () => {
     updateTask.mockReturnValueOnce(
       throwError(() => new HttpErrorResponse({ status: 412, error: { code: 'task.version' } })),
     );
     await expect(api.update('CAD-482', 4, { name: 'Sign-in' })).resolves.toEqual({
       kind: 'refused',
+      stale: true,
+    });
+    updateTask.mockReturnValueOnce(
+      throwError(
+        () =>
+          new HttpErrorResponse({
+            status: 412,
+            error: { status: 412, code: 'organization.context-changed' },
+          }),
+      ),
+    );
+    await expect(api.update('CAD-482', 4, { name: 'Sign-in' })).resolves.toEqual({
+      kind: 'refused',
+      stale: false,
+    });
+    updateTask.mockReturnValueOnce(
+      throwError(
+        () =>
+          new HttpErrorResponse({
+            status: 422,
+            error: { status: 422, code: 'task.start-date-invalid' },
+          }),
+      ),
+    );
+    await expect(api.update('CAD-482', 4, { dueDate: '2026-11-01' })).resolves.toEqual({
+      kind: 'refused',
+      stale: false,
     });
     updateTask.mockReturnValueOnce(throwError(() => new HttpErrorResponse({ status: 0 })));
     await expect(api.update('CAD-482', 4, { name: 'Sign-in' })).resolves.toEqual({

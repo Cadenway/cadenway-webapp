@@ -9,6 +9,7 @@ import {
 } from '@cadenway/api-client';
 import { firstValueFrom } from 'rxjs';
 
+import { hasProblemCode } from '@core/api';
 import type { TaskSummary } from '@features/task';
 import {
   WORKSPACE_CONTEXT,
@@ -247,8 +248,9 @@ export class ListTasksApi {
    * @description
    * Writes fields of one task as a JSON Merge Patch with `If-Match` set to the version it was
    * made against, and tells how it ended: applied at the version the gateway saved, refused (a
-   * `4xx`: `412` when the task changed since, `422` for an invalid date), or without a certain
-   * outcome (no answer or a `5xx`). It never rejects.
+   * `4xx`: `422` for an invalid date; `stale` for a `412` that is not
+   * `organization.context-changed`, the task having changed since that version), or without a
+   * certain outcome (no answer or a `5xx`). It never rejects.
    *
    * @param {string} taskKey - Key of the task.
    * @param {number} version - Version the change was made against.
@@ -268,9 +270,13 @@ export class ListTasksApi {
       );
       return { kind: 'done', version: typeof task.version === 'number' ? task.version : null };
     } catch (error: unknown) {
-      return error instanceof HttpErrorResponse && error.status >= 400 && error.status < 500
-        ? { kind: 'refused' }
-        : { kind: 'unknown' };
+      if (!(error instanceof HttpErrorResponse) || error.status < 400 || error.status >= 500) {
+        return { kind: 'unknown' };
+      }
+      return {
+        kind: 'refused',
+        stale: error.status === 412 && !hasProblemCode(error, 'organization.context-changed'),
+      };
     }
   }
   // #endregion

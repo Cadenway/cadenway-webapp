@@ -294,8 +294,10 @@ computed from the navigation's reads, for the command palette's `Lists` and the 
     page after page to the last one and stopping at 2,000 tasks (`truncated`). A superseded read
     is aborted; another list or organization empties the tasks at once and drops late answers; a
     failed first read fails to the route's error boundary. The same realtime window as the rows
-    (1 s), a completed status write, `TaskDetailOpener.closed` and `changed` read again; a task
-    created in the list reads at once. Its `summary` feeds `ListViewStore.followRows`.
+    (1 s; for a read of more than three pages 1 s more per three pages, and 5 s for a truncated
+    one or from fifteen pages), a completed status write, `TaskDetailOpener.closed` and `changed`
+    read again; a task created in the list reads at once. Its `summary` feeds
+    `ListViewStore.followRows`, with an unknown count while a due window applies.
   - `ViewTaskWritesStore`, page-scoped on each task view's page (`ListViewPage` today), over its
     reader store (`VIEW_TASK_WRITER`): what follows for the row menu and the selection bar.
   - `TaskStatusChangesStore` (Task), route-scoped on `list` and on the board, calendar, gantt,
@@ -389,8 +391,12 @@ computed from the navigation's reads, for the command palette's `Lists` and the 
   dismisses its `Undo` toasts, as `TaskStatusChangesStore` does for the status toasts. A copy's
   toast offers `Open`. A single-field write (`update`: dates, estimate, name, custom fields) is
   serialized with the actions and sent with `updateTask` and `If-Match`; the name and the dates
-  show at once (a new due date without a start moves the start by the same days, as the gateway
-  does), the estimate and custom fields once read, since task summaries do not carry them.
+  show at once (without a start in the write, a new due date moves the start by the same days and
+  a removed due date removes it, as the task service does), the estimate and custom fields once
+  read, since task summaries do not carry them. A refusal that may come from a version the view
+  has not read (a `412` of a single-field write, any refused chunk of a bulk action, whose answer
+  gives no reason) reads the tasks again; a refused single-field write shows
+  `The task could not be changed`.
 - The table declares gateway groups in order, omitting hidden and empty groups except the five default empty status groups in an unfiltered view. Filtered empty results show the empty state. `nearEnd` requests further pages with a threshold accounting for unread group lines. Under 768 px the grid keeps selection, name and due date.
 
 ## Organization pin
@@ -466,3 +472,4 @@ gateway checks them and `ORGANIZATION_PIN_OPERATIONS` lists them.
 | `spaces.list-dialog.date-*`, `spaces.list-dialog.pick-date`, `spaces.footer.*`                                                 | The date picker's texts and the footer rows' names.                        |
 | `spaces.look.*`                                                                                                                | `LOOK_COLORS` names and the default choices of `lookPicker`.               |
 | `spaces.view-stub.text`                                                                                                        | The stub of a view not built yet, which the mockup does not have.          |
+| `spaces.task-writes.field-failed`                                                                                              | The mockup draws no refused single-field write.                            |

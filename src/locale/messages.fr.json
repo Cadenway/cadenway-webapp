@@ -922,6 +922,7 @@
     "spaces.bulk.not-sent": "Certaines tâches sélectionnées n’ont pas été envoyées.",
     "spaces.bulk.unknown": "Le résultat est inconnu. Les tâches sont en cours d’actualisation.",
     "spaces.bulk.failed": "Impossible de modifier la sélection",
+    "spaces.task-writes.field-failed": "Impossible de modifier la tâche",
     "spaces.bulk.partial-text": "Elles restent sélectionnées.",
     "spaces.bulk.restore-failed": "Les tâches n’ont pas pu être restaurées",
     "spaces.rows.copy-failed": "Copie impossible",

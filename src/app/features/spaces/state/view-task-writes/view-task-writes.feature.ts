@@ -264,13 +264,17 @@ interface WritePlan {
    * Method send
    *
    * @description
-   * Sends the write for the selected tasks at their versions.
+   * Sends the write for the selected tasks at their versions, and tells whether a refusal may
+   * come from a version the view has not read (`stale`), which reads the tasks again.
    *
    * @param {readonly TaskBulkSelection[]} selection - The tasks and their versions.
    * @param {() => boolean} current - Whether the view, its list and its organization still hold.
-   * @returns {Promise<TaskBulkOutcome>} How it ended; never rejects.
+   * @returns {Promise<{ outcome: TaskBulkOutcome; stale: boolean }>} How it ended; never rejects.
    */
-  send(selection: readonly TaskBulkSelection[], current: () => boolean): Promise<TaskBulkOutcome>;
+  send(
+    selection: readonly TaskBulkSelection[],
+    current: () => boolean,
+  ): Promise<{ readonly outcome: TaskBulkOutcome; readonly stale: boolean }>;
   // #endregion
 }
 
@@ -579,9 +583,10 @@ function daysBetween(from: string, to: string): number {
  * Function fieldChangesOf
  *
  * @description
- * What a single-field write shows on a task: the name and the dates (a new due date without a
- * start date moves the start by the same days, as the gateway does); the estimate and custom
- * fields are not part of a task summary and show once read.
+ * What a single-field write shows on a task: the name and the dates. Without a start date in the
+ * write, a new due date moves the start by the same days and a removed due date removes the
+ * start, as the task service does; the estimate and custom fields are not part of a task summary
+ * and show once read.
  *
  * @param {TaskSummary} task - The task as shown.
  * @param {TaskFieldChanges} changes - The written fields.
@@ -597,6 +602,8 @@ function fieldChangesOf(
   if (changes.dueDate !== undefined) shown.due = changes.dueDate;
   if (changes.startDate !== undefined) {
     shown.start = changes.startDate;
+  } else if (changes.dueDate === null) {
+    shown.start = null;
   } else if (changes.dueDate && task.due && task.start) {
     shown.start = shiftDate(task.start, daysBetween(task.due, changes.dueDate));
   }
@@ -646,7 +653,9 @@ function fieldOutcomeOf(sent: TaskBulkSelection, result: TaskFieldWriteResult): 
  * alone is sent. Each write patches its tasks at once (`_appliedWrite`), files them 460 ms after
  * the task's last write (at once with reduced motion), and a refused, uncertain or unsent task
  * loses only that write's patch; a confirmed patch applies until a read reaches the version the
- * gateway returned. With expected versions (an `Undo`), a task known to have changed since is not
+ * gateway returned. The tasks are read again after an applied or uncertain write, and after a
+ * refusal that may come from a version the view has not read: a `412` of a single-field write,
+ * any refused chunk of a bulk action (whose answer gives no reason). With expected versions (an `Undo`), a task known to have changed since is not
  * sent and is reported in `changed`. Every send checks the view, its scope and its organization:
  * once one changed, the rest is reported as not sent.
  *
@@ -855,6 +864,9 @@ export function withViewTaskWrites(): SignalStoreFeature<
         expected?: Readonly<Partial<Record<string, number>>>,
       ): Promise<ViewTaskOutcome> => {
         const current: () => boolean = sameContext();
+        // A write answered after the scope changed records nothing: `_resetWrites` forgot its
+        // patches, and its versions belong to tasks the view no longer shows.
+        const scoped: number = generation;
         const seq: number = ++writes;
         const changedSince: (task: TaskSummary) => boolean = (task: TaskSummary): boolean => {
           if (!expected) return false;
@@ -943,7 +955,7 @@ export function withViewTaskWrites(): SignalStoreFeature<
           const skipped: readonly string[] = late.map((task: TaskSummary): string => task.key);
           const changed: readonly TaskBulkSelection[] = changedOf(late);
           if (live.length === 0) {
-            record(plan.action, seq, NO_OUTCOME, {}, skipped);
+            if (generation === scoped) record(plan.action, seq, NO_OUTCOME, {}, skipped);
             return { ...NO_OUTCOME, changed };
           }
           const before: Readonly<Partial<Record<string, ConfirmedTask>>> = Object.fromEntries(
@@ -955,7 +967,10 @@ export function withViewTaskWrites(): SignalStoreFeature<
               version: expected?.[task.key] ?? before[task.key]?.version ?? task.version,
             }),
           );
-          const outcome: TaskBulkOutcome = await plan.send(selection, current);
+          const { outcome, stale }: { outcome: TaskBulkOutcome; stale: boolean } = await plan.send(
+            selection,
+            current,
+          );
           const afterOf: () => Readonly<Partial<Record<string, number>>> = () =>
             Object.fromEntries(
               outcome.done.map((done: TaskBulkEntry): [string, number] => {
@@ -966,8 +981,8 @@ export function withViewTaskWrites(): SignalStoreFeature<
           if (store._writeDestroyRef.destroyed) {
             return { ...outcome, before, after: afterOf(), changed };
           }
-          record(plan.action, seq, outcome, before, skipped);
-          if (current() && (outcome.done.length > 0 || outcome.unknown.length > 0)) {
+          if (generation === scoped) record(plan.action, seq, outcome, before, skipped);
+          if (current() && (outcome.done.length > 0 || outcome.unknown.length > 0 || stale)) {
             source?.reload();
           }
           return { ...outcome, before, after: afterOf(), changed };
@@ -1039,8 +1054,19 @@ export function withViewTaskWrites(): SignalStoreFeature<
             {
               action,
               changesOf: (task: TaskSummary) => actionChangesOf(task, action),
-              send: (selection: readonly TaskBulkSelection[], current: () => boolean) =>
-                store._writeActions.bulk([...selection], action, current),
+              send: async (
+                selection: readonly TaskBulkSelection[],
+                current: () => boolean,
+              ): Promise<{ outcome: TaskBulkOutcome; stale: boolean }> => {
+                const outcome: TaskBulkOutcome = await store._writeActions.bulk(
+                  [...selection],
+                  action,
+                  current,
+                );
+                // `TaskActionsApi.bulk` does not say why a chunk was refused: any refusal may
+                // come from a version the view has not read yet, so it reads the tasks again.
+                return { outcome, stale: outcome.failed.length > 0 };
+              },
             },
             expected,
           );
@@ -1058,17 +1084,23 @@ export function withViewTaskWrites(): SignalStoreFeature<
               send: async (
                 selection: readonly TaskBulkSelection[],
                 current: () => boolean,
-              ): Promise<TaskBulkOutcome> => {
+              ): Promise<{ outcome: TaskBulkOutcome; stale: boolean }> => {
                 const sent: TaskBulkSelection = selection[0];
                 if (!current()) {
-                  return { affected: 0, done: [], failed: [], unknown: [], notSent: [sent] };
+                  return {
+                    outcome: { affected: 0, done: [], failed: [], unknown: [], notSent: [sent] },
+                    stale: false,
+                  };
                 }
                 const result: TaskFieldWriteResult = await store._writeFields.update(
                   sent.taskKey,
                   sent.version ?? task.version,
                   changes,
                 );
-                return fieldOutcomeOf(sent, result);
+                return {
+                  outcome: fieldOutcomeOf(sent, result),
+                  stale: result.kind === 'refused' && result.stale,
+                };
               },
             },
             expected,

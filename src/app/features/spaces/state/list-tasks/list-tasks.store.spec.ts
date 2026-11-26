@@ -1,4 +1,4 @@
-import { signal, type WritableSignal } from '@angular/core';
+import { type Signal, signal, type WritableSignal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import type { StatusKey } from '@cadenway/contracts';
 import { CwToastService } from '@cadenway/ui/components/toast';
@@ -26,7 +26,12 @@ import type {
   TaskFieldWriteResult,
   ViewTaskOutcome,
 } from '../../models/view-task-write/view-task-write.interface';
-import { LIST_TASKS_CAP, LIST_TASKS_PAGE_SIZE, ListTasksStore } from './list-tasks.store';
+import {
+  LIST_TASKS_CAP,
+  LIST_TASKS_PAGE_SIZE,
+  ListTasksStore,
+  refreshWindowOf,
+} from './list-tasks.store';
 
 /**
  * Function task
@@ -150,10 +155,10 @@ describe('ListTasksStore', () => {
    * @description
    * Provides the store with the task stores, the faked data access, toasts and realtime.
    *
-   * @param {ListTasksRead} read - What it reads.
+   * @param {ListTasksRead | Signal<ListTasksRead>} read - What it reads.
    * @returns {InstanceType<typeof ListTasksStore>} The store, loading.
    */
-  function setup(read: ListTasksRead): InstanceType<typeof ListTasksStore> {
+  function setup(read: ListTasksRead | Signal<ListTasksRead>): InstanceType<typeof ListTasksStore> {
     TestBed.configureTestingModule({
       providers: [
         TaskStatusChangesStore,
@@ -241,7 +246,7 @@ describe('ListTasksStore', () => {
     vi.useRealTimers();
   });
 
-  it('reads every page with the view query and the due window, and sums them up', async () => {
+  it('reads every page with the view query and the due window, its count left unknown', async () => {
     page
       .mockResolvedValueOnce(pageOf([cad482], 'p2', 2))
       .mockResolvedValueOnce(pageOf([task('CAD-483', { parentKey: 'CAD-482' })], null, 2));
@@ -260,8 +265,166 @@ describe('ListTasksStore', () => {
       'CAD-482',
       'CAD-483',
     ]);
-    expect(store.summary()).toEqual({ visibleCount: 2, hasSubtasks: true });
+    expect(store.summary()).toEqual({ visibleCount: null, hasSubtasks: true });
     expect(store.truncated()).toBe(false);
+  });
+
+  it("publishes the gateway's total without a due window", async () => {
+    page.mockResolvedValueOnce(pageOf([cad482], null, 1));
+    const store: InstanceType<typeof ListTasksStore> = setup(sprint);
+    await settle();
+
+    expect(store.summary()).toEqual({ visibleCount: 1, hasSubtasks: false });
+  });
+
+  it('aborts the read a new query or due window of the same list supersedes', async () => {
+    const signals: AbortSignal[] = [];
+    page.mockImplementation((_listId, _query, _group, _cursor, _limit, abort) => {
+      if (abort) signals.push(abort);
+      return new Promise<ListTaskPage>(() => undefined);
+    });
+    const read: WritableSignal<ListTasksRead> = signal<ListTasksRead>(sprint);
+    setup(read);
+    await settle();
+
+    read.set({ ...sprint, query: { ...query, search: 'SSO' } });
+    await settle();
+    read.set({
+      ...sprint,
+      query: { ...query, search: 'SSO' },
+      due: { from: '2026-11-01', to: '2026-11-30' },
+    });
+    await settle();
+
+    expect(signals.map((item: AbortSignal) => item.aborted)).toEqual([true, true, false]);
+  });
+
+  it('empties the tasks and forgets the writes when the list changes', async () => {
+    let answer: (outcome: TaskBulkOutcome) => void = () => undefined;
+    bulk.mockImplementationOnce(
+      () =>
+        new Promise<TaskBulkOutcome>((resolve: (outcome: TaskBulkOutcome) => void) => {
+          answer = resolve;
+        }),
+    );
+    const read: WritableSignal<ListTasksRead> = signal<ListTasksRead>(sprint);
+    const store: InstanceType<typeof ListTasksStore> = setup(read);
+    await settle();
+    const first: Promise<ViewTaskOutcome> = store.act([cad482], {
+      type: 'priority',
+      priority: 'urgente',
+    });
+    const queued: Promise<ViewTaskOutcome> = store.update(cad482, { name: 'Sign-in' });
+    let finish: (value: ListTaskPage) => void = () => undefined;
+    page.mockImplementationOnce(
+      () =>
+        new Promise<ListTaskPage>((resolve: (value: ListTaskPage) => void) => {
+          finish = resolve;
+        }),
+    );
+
+    read.set({ listId: 'backlog', query });
+    await settle();
+    expect(store.items()).toEqual([]);
+
+    answer(done(4));
+    await first;
+    const outcome: ViewTaskOutcome = await queued;
+    expect(update).not.toHaveBeenCalled();
+    expect(outcome.notSent).toEqual([{ taskKey: 'CAD-482', version: 3 }]);
+
+    finish(pageOf([cad482]));
+    await settle();
+    expect(itemOf(store, 'CAD-482')?.task).toMatchObject({
+      priority: 'haute',
+      name: 'Redesign the SSO sign-in screen',
+    });
+  });
+
+  it('queues a reload asked while a read runs and reads once it ends', async () => {
+    const store: InstanceType<typeof ListTasksStore> = setup(sprint);
+    await settle();
+    let finish: (value: ListTaskPage) => void = () => undefined;
+    page.mockImplementationOnce(
+      () =>
+        new Promise<ListTaskPage>((resolve: (value: ListTaskPage) => void) => {
+          finish = resolve;
+        }),
+    );
+    store.reload();
+    await settle();
+    expect(page).toHaveBeenCalledTimes(2);
+
+    store.reload();
+    await settle();
+    expect(page).toHaveBeenCalledTimes(2);
+
+    finish(pageOf([cad482]));
+    await settle();
+    expect(page).toHaveBeenCalledTimes(3);
+  });
+
+  it('widens the refresh window of a large read', async () => {
+    expect(refreshWindowOf(1, false)).toBe(1000);
+    expect(refreshWindowOf(3, false)).toBe(1000);
+    expect(refreshWindowOf(6, false)).toBe(2000);
+    expect(refreshWindowOf(40, false)).toBe(5000);
+    expect(refreshWindowOf(2, true)).toBe(5000);
+
+    let read: number = 0;
+    page.mockImplementation(() => {
+      read++;
+      return Promise.resolve(
+        pageOf([task(`CAD-${read.toString()}`)], read % 6 === 0 ? null : 'more', 6),
+      );
+    });
+    setup(sprint);
+    await settle();
+    expect(page).toHaveBeenCalledTimes(6);
+
+    notices.next({
+      id: 'n1',
+      type: 'list.tasks-changed.v1',
+      at: '',
+      data: { listId: 'sprint-14' },
+    });
+    await vi.advanceTimersByTimeAsync(1000);
+    await settle();
+    expect(page).toHaveBeenCalledTimes(6);
+    await vi.advanceTimersByTimeAsync(1000);
+    await settle();
+    expect(page).toHaveBeenCalledTimes(12);
+  });
+
+  it('keeps a pending change over a realtime read, then until a read reaches its version', async () => {
+    let answer: (outcome: TaskBulkOutcome) => void = () => undefined;
+    bulk.mockImplementationOnce(
+      () =>
+        new Promise<TaskBulkOutcome>((resolve: (outcome: TaskBulkOutcome) => void) => {
+          answer = resolve;
+        }),
+    );
+    const store: InstanceType<typeof ListTasksStore> = setup(sprint);
+    await settle();
+    const pending: Promise<ViewTaskOutcome> = store.act([cad482], {
+      type: 'priority',
+      priority: 'urgente',
+    });
+
+    notices.next({ id: 'n1', type: 'task.updated.v1', at: '', data: { taskId: 't-1' } });
+    await vi.advanceTimersByTimeAsync(1000);
+    await settle();
+    expect(itemOf(store, 'CAD-482')?.task.priority).toBe('urgente');
+
+    answer(done(4));
+    await pending;
+    await settle();
+    expect(itemOf(store, 'CAD-482')?.task.priority).toBe('urgente');
+
+    page.mockResolvedValueOnce(pageOf([{ ...cad482, priority: 'basse', version: 4 }]));
+    store.reload();
+    await settle();
+    expect(itemOf(store, 'CAD-482')?.task.priority).toBe('basse');
   });
 
   it('stops at the cap and says tasks were left out', async () => {
@@ -386,6 +549,7 @@ describe('ListTasksStore', () => {
     await settle();
 
     expect(itemOf(store, 'CAD-482')?.status).toBe('todo');
+    expect(page).toHaveBeenCalledTimes(2);
   });
 
   it('reschedules at once, moving the start with the due date, and puts the dates back on refusal', async () => {
@@ -407,13 +571,59 @@ describe('ListTasksStore', () => {
     });
     expect(update).toHaveBeenCalledWith('CAD-482', 3, { dueDate: '2026-12-01' });
 
-    answer({ kind: 'refused' });
+    answer({ kind: 'refused', stale: false });
     const outcome: ViewTaskOutcome = await pending;
+    await settle();
     expect(outcome.failed).toEqual([{ taskKey: 'CAD-482', version: 3 }]);
     expect(itemOf(store, 'CAD-482')?.task).toMatchObject({
       due: '2026-11-27',
       start: '2026-11-23',
     });
+    expect(page).toHaveBeenCalledTimes(1);
+  });
+
+  it('reads the tasks again after a field write refused on a version it had not read', async () => {
+    update.mockResolvedValueOnce({ kind: 'refused', stale: true });
+    const store: InstanceType<typeof ListTasksStore> = setup(sprint);
+    await settle();
+
+    const outcome: ViewTaskOutcome = await store.update(cad482, { name: 'Sign-in' });
+    await settle();
+
+    expect(outcome.failed).toHaveLength(1);
+    expect(page).toHaveBeenCalledTimes(2);
+  });
+
+  it('removes the start with the due date when the write gives no start', async () => {
+    let answer: (result: TaskFieldWriteResult) => void = () => undefined;
+    update.mockImplementationOnce(
+      () =>
+        new Promise<TaskFieldWriteResult>((resolve: (result: TaskFieldWriteResult) => void) => {
+          answer = resolve;
+        }),
+    );
+    const store: InstanceType<typeof ListTasksStore> = setup(sprint);
+    await settle();
+
+    const pending: Promise<ViewTaskOutcome> = store.update(cad482, { dueDate: null });
+    await settle();
+    expect(itemOf(store, 'CAD-482')?.task).toMatchObject({ due: null, start: null });
+
+    answer({ kind: 'done', version: 4 });
+    await pending;
+  });
+
+  it('puts the fields back and reads again when a field write has no certain outcome', async () => {
+    update.mockResolvedValueOnce({ kind: 'unknown' });
+    const store: InstanceType<typeof ListTasksStore> = setup(sprint);
+    await settle();
+
+    const outcome: ViewTaskOutcome = await store.update(cad482, { name: 'Sign-in' });
+
+    expect(outcome.unknown).toEqual([{ taskKey: 'CAD-482', version: 3 }]);
+    expect(itemOf(store, 'CAD-482')?.task.name).toBe('Redesign the SSO sign-in screen');
+    await settle();
+    expect(page).toHaveBeenCalledTimes(2);
   });
 
   it('sends a field write after an earlier action of the task, at the version it returned', async () => {

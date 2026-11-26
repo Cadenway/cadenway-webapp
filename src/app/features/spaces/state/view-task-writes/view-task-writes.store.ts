@@ -151,6 +151,19 @@ export interface FieldWriteToast {
    * @readonly
    */
   readonly description: string;
+
+  /**
+   * Property failed
+   *
+   * @description
+   * Title of the error toast when the gateway refuses the write (an invalid date, a task that
+   * changed meanwhile, which the view then reads again); `The task could not be changed` by
+   * default.
+   *
+   * @type {string | undefined}
+   * @readonly
+   */
+  readonly failed?: string;
   // #endregion
 }
 
@@ -660,6 +673,8 @@ export interface ViewTaskWritesStoreInstance {
    * A single-field write of one task (reschedule, estimate, name, custom field) with its toast;
    * `Undo` writes back the values confirmed before it (dates and name from the task, the
    * estimate and custom fields from `previous`), bound to the version the write left the task at.
+   * A refusal shows `toast.failed` (`The task could not be changed` by default) instead of the
+   * selection's wording; a refusal on a version the view has not read reads the tasks again.
    *
    * @param {TaskSummary} task - The task, as shown.
    * @param {TaskFieldChanges} changes - The fields.
@@ -788,8 +803,9 @@ function createViewTaskWritesStore(): Type<ViewTaskWritesStoreInstance> {
         );
       };
 
-      const reportProblems: (outcome: TaskBulkOutcome) => boolean = (
+      const reportProblems: (outcome: TaskBulkOutcome, failure?: string) => boolean = (
         outcome: TaskBulkOutcome,
+        failure: string = $localize`:@@spaces.bulk.failed:The selection could not be changed`,
       ): boolean => {
         if (outcome.notSent.length > 0) {
           toasts.warning($localize`:@@spaces.bulk.not-sent:Some selected tasks were not sent.`);
@@ -805,7 +821,7 @@ function createViewTaskWritesStore(): Type<ViewTaskWritesStoreInstance> {
           outcome.unknown.length === 0 &&
           outcome.notSent.length === 0
         ) {
-          toasts.error($localize`:@@spaces.bulk.failed:The selection could not be changed`);
+          toasts.error(failure);
         }
         return false;
       };
@@ -823,18 +839,20 @@ function createViewTaskWritesStore(): Type<ViewTaskWritesStoreInstance> {
         outcome: ViewTaskOutcome,
         toast: (done: readonly TaskBulkEntry[], outcome: ViewTaskOutcome) => WriteToast,
         organizationId: string,
+        failure?: string,
       ) => void = (
         tasks: readonly TaskSummary[],
         outcome: ViewTaskOutcome,
         toast: (done: readonly TaskBulkEntry[], outcome: ViewTaskOutcome) => WriteToast,
         organizationId: string,
+        failure?: string,
       ): void => {
         if (store._workspace.organization().id !== organizationId) return;
         const live: boolean = !store._destroyRef.destroyed;
         if (live && (outcome.done.length > 0 || outcome.unknown.length > 0)) {
           store._page.refreshCounts();
         }
-        if (!reportProblems(outcome)) return;
+        if (!reportProblems(outcome, failure)) return;
         const failedKeys: readonly string[] = outcome.failed.map(
           (item: TaskBulkSelection): string => item.taskKey,
         );
@@ -882,10 +900,11 @@ function createViewTaskWritesStore(): Type<ViewTaskWritesStoreInstance> {
         report(tasks, outcome, toast, organizationId);
       };
 
-      const settleUndo: (outcomes: readonly ViewTaskOutcome[], total: number) => void = (
+      const settleUndo: (
         outcomes: readonly ViewTaskOutcome[],
         total: number,
-      ): void => {
+        failure?: string,
+      ) => void = (outcomes: readonly ViewTaskOutcome[], total: number, failure?: string): void => {
         const changed: readonly string[] = outcomes.flatMap((item: ViewTaskOutcome) =>
           item.changed.map((selection: TaskBulkSelection): string => selection.taskKey),
         );
@@ -901,11 +920,13 @@ function createViewTaskWritesStore(): Type<ViewTaskWritesStoreInstance> {
           unknown: outcomes.flatMap((item: ViewTaskOutcome) => item.unknown),
           notSent: outcomes.flatMap((item: ViewTaskOutcome) => item.notSent),
         };
-        if (!store._destroyRef.destroyed) {
-          if (outcome.done.length > 0 || outcome.unknown.length > 0) store._page.refreshCounts();
-          if (outcome.failed.length > 0) writer.reload();
+        if (
+          !store._destroyRef.destroyed &&
+          (outcome.done.length > 0 || outcome.unknown.length > 0)
+        ) {
+          store._page.refreshCounts();
         }
-        if (reportProblems(outcome) && outcome.failed.length > 0) {
+        if (reportProblems(outcome, failure) && outcome.failed.length > 0) {
           toasts.error(bulkPartialText(outcome.failed.length, total - changed.length));
         }
       };
@@ -1280,6 +1301,9 @@ function createViewTaskWritesStore(): Type<ViewTaskWritesStoreInstance> {
           previous?: TaskFieldChanges,
         ): Promise<ViewTaskOutcome> {
           const organizationId: string = store._workspace.organization().id;
+          const failure: string =
+            toast.failed ??
+            $localize`:@@spaces.task-writes.field-failed:The task could not be changed`;
           const outcome: ViewTaskOutcome = await writer.update(task, changes);
           report(
             [task],
@@ -1294,13 +1318,14 @@ function createViewTaskWritesStore(): Type<ViewTaskWritesStoreInstance> {
                       void writer
                         .update(before, previousFields(before, changes, previous), applied.after)
                         .then((undone: ViewTaskOutcome): void => {
-                          settleUndo([undone], 1);
+                          settleUndo([undone], 1, failure);
                         });
                     }
                   : null,
               };
             },
             organizationId,
+            failure,
           );
           return outcome;
         },

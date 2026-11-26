@@ -2,11 +2,12 @@ import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import type { StatusKey } from '@cadenway/contracts';
 import { CwToastService } from '@cadenway/ui/components/toast';
-import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 
 import { TaskDetailOpener, type TaskSummary } from '@features/task';
 import { WORKSPACE_CONTEXT } from '@features/workspace/ports/workspace-context';
 
+import { bulkDoneText } from '../../constants/bulk-copy/bulk-copy.constants';
 import type {
   ConfirmedTask,
   ViewTaskOutcome,
@@ -106,6 +107,8 @@ describe('ViewTaskWritesStore', () => {
   let act: Mock<ViewTaskWriter['act']>;
   let update: Mock<ViewTaskWriter['update']>;
   let restore: Mock<ViewTaskWriter['restore']>;
+  let remind: Mock<ViewTaskWriter['remind']>;
+  let openTask: Mock<(key: string) => void>;
   let reload: Mock<() => void>;
   let refreshCounts: Mock<() => void>;
   let toasts: Record<string, Mock>;
@@ -146,6 +149,8 @@ describe('ViewTaskWritesStore', () => {
       Promise.resolve(outcomeOf([item])),
     );
     restore = vi.fn<ViewTaskWriter['restore']>(() => Promise.resolve(true));
+    remind = vi.fn<ViewTaskWriter['remind']>((keys: readonly string[]) => Promise.resolve(keys));
+    openTask = vi.fn();
     reload = vi.fn();
     refreshCounts = vi.fn();
     toasts = {
@@ -165,7 +170,7 @@ describe('ViewTaskWritesStore', () => {
             update,
             restore,
             reload,
-            remind: vi.fn(),
+            remind,
             shownStatus: (item: TaskSummary): StatusKey => item.status,
           },
         },
@@ -200,7 +205,7 @@ describe('ViewTaskWritesStore', () => {
           },
         },
         { provide: CwToastService, useValue: toasts },
-        { provide: TaskDetailOpener, useValue: { open: vi.fn() } },
+        { provide: TaskDetailOpener, useValue: { open: openTask } },
         {
           provide: WORKSPACE_CONTEXT,
           useValue: {
@@ -211,6 +216,10 @@ describe('ViewTaskWritesStore', () => {
       ],
     });
     store = TestBed.inject(ViewTaskWritesStore);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
   it("offers the space's status names, the members with the signed-in one first and the other lists", () => {
@@ -342,6 +351,149 @@ describe('ViewTaskWritesStore', () => {
     undoOf()();
     await flush();
     expect(restore).toHaveBeenCalledWith(['trash-1']);
+  });
+
+  it("shows the field write's own wording when the gateway refuses it", async () => {
+    update.mockResolvedValueOnce({
+      ...outcomeOf([]),
+      failed: [{ taskKey: 'CAD-482', version: 3 }],
+    });
+    const refused: ViewTaskOutcome = await store.updateFields(
+      task('CAD-482'),
+      { dueDate: '2026-12-01' },
+      { title: 'CAD-482 rescheduled', description: 'Due: December 1.' },
+    );
+
+    expect(refused.failed).toHaveLength(1);
+    expect(toasts['show']).not.toHaveBeenCalled();
+    expect(toasts['error']).toHaveBeenCalledWith('The task could not be changed');
+    expect(toasts['error']).not.toHaveBeenCalledWith('The selection could not be changed');
+
+    update.mockResolvedValueOnce({
+      ...outcomeOf([]),
+      failed: [{ taskKey: 'CAD-482', version: 3 }],
+    });
+    await store.updateFields(
+      task('CAD-482'),
+      { estimateMinutes: 90 },
+      { title: 't', description: 'd', failed: 'The estimate could not be changed' },
+    );
+    expect(toasts['error']).toHaveBeenLastCalledWith('The estimate could not be changed');
+  });
+
+  it('moves a task and moves it back to its list from the toast', async () => {
+    store.moveTo([task('CAD-482')], 'backlog');
+    await flush();
+
+    expect(act).toHaveBeenCalledWith([expect.objectContaining({ key: 'CAD-482' })], {
+      type: 'move',
+      listId: 'backlog',
+    });
+    expect(toasts['show']).toHaveBeenCalledWith(
+      'CAD-482 moved',
+      expect.objectContaining({ description: 'To Backlog.' }),
+    );
+
+    undoOf()();
+    await flush();
+    expect(act).toHaveBeenLastCalledWith(
+      [expect.objectContaining({ key: 'CAD-482', listId: 'sprint-14' })],
+      { type: 'move', listId: 'sprint-14' },
+      { 'CAD-482': 4 },
+    );
+  });
+
+  it('moves nothing when every task already sits in the list', async () => {
+    store.moveTo([task('CAD-482')], 'sprint-14');
+    await flush();
+
+    expect(act).not.toHaveBeenCalled();
+  });
+
+  it('duplicates a task and opens its copy from the toast', async () => {
+    act.mockResolvedValueOnce({
+      ...outcomeOf([task('CAD-482')]),
+      done: [{ taskKey: 'CAD-482', version: 4, newTaskKey: 'CAD-499', trashEntryId: null }],
+    });
+    store.duplicate([task('CAD-482')]);
+    await flush();
+
+    const options: { description?: string; action?: { label: string; run: () => void } } = toasts[
+      'show'
+    ].mock.calls[0]?.[1] as {
+      description?: string;
+      action?: { label: string; run: () => void };
+    };
+    expect(toasts['show'].mock.calls[0]?.[0]).toBe('Task duplicated');
+    expect(options.description).toBe('CAD-499');
+    expect(options.action?.label).toBe('Open');
+    options.action?.run();
+    expect(openTask).toHaveBeenCalledWith('CAD-499', undefined);
+  });
+
+  it('says so when no reminder could be set', async () => {
+    remind.mockResolvedValueOnce([]);
+
+    await store.remind([task('CAD-482')]);
+
+    expect(remind).toHaveBeenCalledWith(['CAD-482'], expect.any(Date));
+    expect(toasts['error']).toHaveBeenCalledWith('The reminder could not be set');
+    expect(toasts['show']).not.toHaveBeenCalled();
+  });
+
+  it('sets a reminder tomorrow at 9', async () => {
+    await store.remind([task('CAD-482')]);
+
+    const at: Date = remind.mock.calls[0]?.[1] ?? new Date(0);
+    expect(at.getHours()).toBe(9);
+    expect(toasts['show']).toHaveBeenCalledWith('Reminder set', expect.any(Object));
+  });
+
+  it('says so when the clipboard refuses a copy', async () => {
+    const writeText: Mock<(text: string) => Promise<void>> = vi.fn(() =>
+      Promise.reject(new Error('denied')),
+    );
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+    try {
+      store.copyKeys([task('CAD-482'), task('CAD-483')]);
+      await flush();
+    } finally {
+      Reflect.deleteProperty(navigator, 'clipboard');
+    }
+
+    expect(writeText).toHaveBeenCalledWith('CAD-482, CAD-483');
+    expect(toasts['error']).toHaveBeenCalledWith('Could not copy', {
+      description: 'CAD-482, CAD-483',
+    });
+  });
+
+  it('marks the tasks not done yet as done and undoes it', async () => {
+    store.markDone([task('CAD-482'), task('CAD-483', { status: 'done' })]);
+    await flush();
+
+    expect(act).toHaveBeenCalledWith([expect.objectContaining({ key: 'CAD-482' })], {
+      type: 'status',
+      status: 'done',
+    });
+    expect(toasts['show']).toHaveBeenCalledWith(
+      bulkDoneText(1),
+      expect.objectContaining({ description: 'Status: Done.' }),
+    );
+
+    undoOf()();
+    await flush();
+    expect(act).toHaveBeenLastCalledWith(
+      [expect.objectContaining({ key: 'CAD-482' })],
+      { type: 'status', status: 'todo' },
+      { 'CAD-482': 4 },
+    );
+  });
+
+  it('sends nothing when every selected task is done already', async () => {
+    store.markDone([task('CAD-483', { status: 'done' })]);
+    await flush();
+
+    expect(act).not.toHaveBeenCalled();
   });
 
   it('dismisses the toasts whose Undo writes through the view once the view is gone', async () => {
