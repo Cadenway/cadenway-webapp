@@ -127,7 +127,7 @@ describe('ListViewStore', () => {
 
     store.showLayout('timesheet');
     TestBed.tick();
-    expect(store.tools()).toEqual(LAYOUT_TOOLS.list);
+    expect(store.tools()).toEqual(LAYOUT_TOOLS.timesheet);
     store.showLayout('form');
     TestBed.tick();
     expect(store.tools()).toEqual([]);

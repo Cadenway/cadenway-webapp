@@ -67,8 +67,10 @@ const ALL_TOOLS: readonly ViewTool[] = [
  * @description
  * The view tools each layout shows. The board's columns are statuses, so `Columns` (its hidden
  * columns) replaces `Group by` (`App.dc.html` line 9217); `Form` and `Activity` hide the tools
- * (line 7811); every other layout, `Timesheet` included, shows them all, as the mockup does. An
- * empty list hides the toolbar and the `Active filters` row.
+ * (line 7811); `Timesheet` keeps only the tools its rows can follow (`Filter`, `Search`, `Create
+ * a task`, `Save the view`): its time entries have no milestone, order, group or subtask level;
+ * every other layout shows them all, as the mockup does. An empty list hides the toolbar and the
+ * `Active filters` row.
  *
  * @type {Readonly<Record<ViewLayout, readonly ViewTool[]>>}
  */
@@ -81,5 +83,5 @@ export const LAYOUT_TOOLS: Readonly<Record<ViewLayout, readonly ViewTool[]>> = {
   table: ALL_TOOLS,
   form: [],
   activity: [],
-  timesheet: ALL_TOOLS,
+  timesheet: ['filter', 'search', 'create', 'save'],
 };
