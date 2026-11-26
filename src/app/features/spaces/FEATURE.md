@@ -140,14 +140,17 @@ constants belong to the lead):
   boundary, whose `Retry` runs the route again; a later failure (another filter, a refresh) shows
   `The activity could not be loaded.` with `Retry` in place, keeping the entries when they answer
   the current filters. Older pages are read when the feed scrolls within 200 px of its end or
-  with `Show more`, appended once each by id; a failed one offers `Retry`. Another filter shows
-  the skeleton until its answer; another organization or list hides the entries at once and late
-  answers are dropped.
-- Refresh: the store watches the list's room and reads the first page again (as many entries as
-  shown, 100 at most) 1 s after the first `task.updated.v1`, `task.status-changed.v1` or
-  `list.tasks-changed.v1` (naming this list) of a window, once per window; so do a task created in
-  the list from this tab (`TaskCreate.created`) and a task detail that closes or whose `Undo`
-  restored a task (`TaskDetailOpener.closed`, `changed`).
+  with `Show more`, appended once each by id; a failed one offers `Retry`. Each page request has
+  an identity: only the active one changes the entries, the cursor, `loadingMore` or the error
+  when it settles, and a refresh or another read supersedes it. Another filter shows the skeleton
+  until its answer; another organization or list hides the entries at once and late answers are
+  dropped.
+- Refresh: the store watches the list's room and reads the shown range again (as many entries as
+  shown, in pages of 100, then any older entries loaded meanwhile, with the cursor of the oldest
+  page; the feed tracks entries by id, so the scroll stays) 1 s after the first `task.updated.v1`,
+  `task.status-changed.v1` or `list.tasks-changed.v1` (naming this list) of a window, once per
+  window; so do a task created in the list from this tab (`TaskCreate.created`) and a task detail
+  that closes or whose `Undo` restored a task (`TaskDetailOpener.closed`, `changed`).
 - Bricks: `activity-feed`, `select`, `toggle-group`, `button`, `status-icon`, `priority-icon`;
   the page provides the feed's and the select's texts.
 - Known gaps:

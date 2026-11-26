@@ -63,8 +63,8 @@ export const ACTIVITY_PAGE_SIZE: number = 50;
  * Constant ACTIVITY_REFRESH_LIMIT
  *
  * @description
- * Largest page the gateway serves: a refresh reads again as many entries as are shown, up to
- * this many, so a refresh after scrolling keeps the entries read.
+ * Largest page the gateway serves: a refresh reads again as many entries as are shown, in
+ * pages of this many, so a refresh after scrolling keeps the range read.
  *
  * @type {number}
  */
@@ -280,37 +280,71 @@ interface ActivityViewState {
   readonly _total: number;
 
   /**
-   * Property _generation
+   * Property _requests
    *
    * @description
-   * Counts the first pages applied, so that a later page read before one is dropped.
+   * Counts the page requests begun, giving each its identity.
    *
    * @type {number}
    * @readonly
    */
-  readonly _generation: number;
+  readonly _requests: number;
 
   /**
-   * Property loadingMore
+   * Property _more
    *
    * @description
-   * Whether a later page is being read.
+   * The active request of a later page, with the read it continues, or null. Only it may change
+   * the entries, the cursor or the paging state when it settles; a refresh, or a request begun
+   * after it, supersedes it.
    *
-   * @type {boolean}
+   * @type {PageRequest | null}
    * @readonly
    */
-  readonly loadingMore: boolean;
+  readonly _more: PageRequest | null;
 
   /**
-   * Property moreFailed
+   * Property _moreFailed
    *
    * @description
-   * Whether the last read of a later page failed.
+   * The read whose last later page failed, or null.
    *
-   * @type {boolean}
+   * @type {string | null}
    * @readonly
    */
-  readonly moreFailed: boolean;
+  readonly _moreFailed: string | null;
+  // #endregion
+}
+
+/**
+ * Interface PageRequest
+ *
+ * @description
+ * A request of a later page.
+ */
+interface PageRequest {
+  // #region Properties
+  /**
+   * Property id
+   *
+   * @description
+   * Identity of the request.
+   *
+   * @type {number}
+   * @readonly
+   */
+  readonly id: number;
+
+  /**
+   * Property key
+   *
+   * @description
+   * Identity of the read it continues.
+   *
+   * @type {string}
+   * @readonly
+   */
+  readonly key: string;
   // #endregion
 }
 
@@ -329,9 +363,9 @@ const initialState: ActivityViewState = {
   _listKey: null,
   _nextCursor: null,
   _total: 0,
-  _generation: 0,
-  loadingMore: false,
-  moreFailed: false,
+  _requests: 0,
+  _more: null,
+  _moreFailed: null,
 };
 
 /**
@@ -551,6 +585,85 @@ function normalizedKinds(kinds: readonly ListActivityKind[]): readonly ListActiv
 }
 
 /**
+ * Interface LoadedRange
+ *
+ * @description
+ * The entries loaded for a read and the cursor after them.
+ */
+interface LoadedRange {
+  // #region Properties
+  /**
+   * Property items
+   *
+   * @description
+   * The entries, the most recent first.
+   *
+   * @type {readonly ListActivityEntry[]}
+   * @readonly
+   */
+  readonly items: readonly ListActivityEntry[];
+
+  /**
+   * Property nextCursor
+   *
+   * @description
+   * Cursor of the page after them, null after the last one.
+   *
+   * @type {string | null}
+   * @readonly
+   */
+  readonly nextCursor: string | null;
+  // #endregion
+}
+
+/**
+ * Function uniqueEntries
+ *
+ * @description
+ * The entries once each by id, in their order: a page boundary that moved between two reads may
+ * repeat an entry.
+ *
+ * @param {readonly ListActivityEntry[]} entries - The entries.
+ * @returns {readonly ListActivityEntry[]} The entries without repeats.
+ */
+function uniqueEntries(entries: readonly ListActivityEntry[]): readonly ListActivityEntry[] {
+  const seen: Set<string> = new Set<string>();
+  return entries.filter((entry: ListActivityEntry): boolean => {
+    if (seen.has(entry.id)) return false;
+    seen.add(entry.id);
+    return true;
+  });
+}
+
+/**
+ * Function withLoadedTail
+ *
+ * @description
+ * A refresh of the read shown: its pages, then the older entries loaded meanwhile beyond the
+ * refresh's oldest entry (a later page appended while it ran), with the cursor of the oldest page
+ * loaded. Without such entries, or when the refresh's oldest entry is no longer loaded, the
+ * refresh stands alone with its own cursor.
+ *
+ * @param {ListActivityPage} refresh - The pages read again.
+ * @param {readonly ListActivityEntry[]} loaded - The entries loaded now.
+ * @param {string | null} loadedCursor - Cursor after the loaded entries.
+ * @returns {LoadedRange} The merged range.
+ */
+function withLoadedTail(
+  refresh: ListActivityPage,
+  loaded: readonly ListActivityEntry[],
+  loadedCursor: string | null,
+): LoadedRange {
+  const oldest: ListActivityEntry | undefined = refresh.items.at(-1);
+  const at: number = oldest
+    ? loaded.findIndex((entry: ListActivityEntry): boolean => entry.id === oldest.id)
+    : -1;
+  const tail: readonly ListActivityEntry[] = at === -1 ? [] : loaded.slice(at + 1);
+  if (tail.length === 0) return { items: refresh.items, nextCursor: refresh.nextCursor };
+  return { items: uniqueEntries([...refresh.items, ...tail]), nextCursor: loadedCursor };
+}
+
+/**
  * Function createActivityViewStore
  *
  * @description
@@ -597,18 +710,27 @@ function createActivityViewStore(): Type<ActivityViewStoreInstance> {
           const shown: number = untracked(() =>
             store._key() === read.key ? store._items().length : 0,
           );
-          const limit: number = Math.min(
-            ACTIVITY_REFRESH_LIMIT,
-            Math.max(ACTIVITY_PAGE_SIZE, shown),
-          );
-          const page: ListActivityPage = await api.page(
-            read.listId,
-            read.filter,
-            null,
-            limit,
-            abortSignal,
-          );
-          return { key: read.key, listKey: read.listKey, page };
+          const items: ListActivityEntry[] = [];
+          let cursor: string | null = null;
+          let total: number;
+          do {
+            const want: number = Math.max(ACTIVITY_PAGE_SIZE, shown - items.length);
+            const page: ListActivityPage = await api.page(
+              read.listId,
+              read.filter,
+              cursor,
+              Math.min(ACTIVITY_REFRESH_LIMIT, want),
+              abortSignal,
+            );
+            items.push(...page.items);
+            cursor = page.nextCursor;
+            total = page.total;
+          } while (cursor !== null && items.length < shown);
+          return {
+            key: read.key,
+            listKey: read.listKey,
+            page: { items: uniqueEntries(items), nextCursor: cursor, total },
+          };
         },
       });
       return {
@@ -648,6 +770,13 @@ function createActivityViewStore(): Type<ActivityViewStoreInstance> {
         ),
         empty: computed((): boolean => current() && store._items().length === 0),
         hasMore: computed((): boolean => current() && store._nextCursor() !== null),
+        loadingMore: computed(
+          (): boolean => store._more() !== null && store._more()?.key === store._params()?.key,
+        ),
+        moreFailed: computed(
+          (): boolean =>
+            store._moreFailed() !== null && store._moreFailed() === store._params()?.key,
+        ),
       };
     }),
     withMethods((store) => ({
@@ -671,10 +800,11 @@ function createActivityViewStore(): Type<ActivityViewStoreInstance> {
         const read: ActivityParams | undefined = store._params();
         const cursor: string | null = store._nextCursor();
         if (!read || !store.current() || cursor === null || store.loadingMore()) return;
-        const generation: number = store._generation();
-        const stale: () => boolean = (): boolean =>
-          store._generation() !== generation || store._params()?.key !== read.key;
-        patchState(store, { loadingMore: true, moreFailed: false });
+        const request: PageRequest = { id: store._requests() + 1, key: read.key };
+        patchState(store, { _requests: request.id, _more: request, _moreFailed: null });
+        const active: () => boolean = (): boolean => store._more()?.id === request.id;
+        const valid: () => boolean = (): boolean =>
+          store._key() === read.key && store._params()?.key === read.key;
         try {
           const page: ListActivityPage = await store._api.page(
             read.listId,
@@ -682,39 +812,39 @@ function createActivityViewStore(): Type<ActivityViewStoreInstance> {
             cursor,
             ACTIVITY_PAGE_SIZE,
           );
-          if (stale()) {
-            patchState(store, { loadingMore: false });
+          if (!active()) return;
+          if (!valid()) {
+            patchState(store, { _more: null });
             return;
           }
-          const known: ReadonlySet<string> = new Set<string>(
-            store._items().map((entry: ListActivityEntry): string => entry.id),
-          );
           patchState(store, {
-            _items: [
-              ...store._items(),
-              ...page.items.filter((entry: ListActivityEntry): boolean => !known.has(entry.id)),
-            ],
+            _items: uniqueEntries([...store._items(), ...page.items]),
             _nextCursor: page.nextCursor,
             _total: page.total,
-            loadingMore: false,
+            _more: null,
           });
         } catch {
-          patchState(store, { loadingMore: false, moreFailed: !stale() });
+          if (!active()) return;
+          patchState(store, { _more: null, _moreFailed: valid() ? read.key : null });
         }
       },
 
       _apply: signalMethod<ActivitySnapshot | undefined>(
         (snapshot: ActivitySnapshot | undefined): void => {
           if (!snapshot || snapshot.key !== untracked(store._params)?.key) return;
+          const merged: LoadedRange = untracked((): LoadedRange =>
+            store._key() === snapshot.key
+              ? withLoadedTail(snapshot.page, store._items(), store._nextCursor())
+              : { items: snapshot.page.items, nextCursor: snapshot.page.nextCursor },
+          );
           patchState(store, {
-            _items: snapshot.page.items,
+            _items: merged.items,
             _key: snapshot.key,
             _listKey: snapshot.listKey,
-            _nextCursor: snapshot.page.nextCursor,
+            _nextCursor: merged.nextCursor,
             _total: snapshot.page.total,
-            _generation: untracked(store._generation) + 1,
-            loadingMore: false,
-            moreFailed: false,
+            _more: null,
+            _moreFailed: null,
           });
         },
       ),
@@ -786,12 +916,15 @@ function createActivityViewStore(): Type<ActivityViewStoreInstance> {
  * (`listListActivity`), the most recent entries first, filtered by kind (the type chips) and by
  * person (the select), on the server. The first page is the view's primary read; a failure before
  * anything was shown for the list reaches the route's error boundary, a later one (another filter,
- * a refresh) offers `Retry` in place. Older pages are read by cursor and appended once each. A
- * notice of the list's room that records activity (a task update or status change,
- * `list.tasks-changed.v1`), a task created in the list from this tab and a task detail that closes
- * or whose `Undo` restored a task read the first page again, 1 s after the first of a window, as
- * many entries as are shown (100 at most). The entries follow the committed organization and the
- * list: another one hides them at once and late answers are dropped.
+ * a refresh) offers `Retry` in place. Older pages are read by cursor and appended once each by
+ * id; each request has an identity, and only the active one changes the entries, the cursor or
+ * the paging state when it settles (a refresh or another read supersedes it). A notice of the
+ * list's room that records activity (a task update or status change, `list.tasks-changed.v1`), a
+ * task created in the list from this tab and a task detail that closes or whose `Undo` restored a
+ * task read the shown range again, 1 s after the first of a window: as many entries as are shown,
+ * in pages of 100, followed by any older entries loaded meanwhile, with the cursor of the oldest
+ * page. The entries follow the committed organization and the list: another one hides them at
+ * once and late answers are dropped.
  *
  * @type {Type<ActivityViewStoreInstance>}
  */

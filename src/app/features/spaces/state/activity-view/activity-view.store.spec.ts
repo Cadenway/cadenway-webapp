@@ -78,6 +78,23 @@ function ids(store: ActivityViewStoreInstance): readonly string[] {
   return store.entries().map((item: ListActivityEntry): string => item.id);
 }
 
+/**
+ * Function range
+ *
+ * @description
+ * The identifiers `e<from>` to `e<to - 1>`, newest first as the gateway answers them.
+ *
+ * @param {number} from - First index.
+ * @param {number} to - Index after the last one.
+ * @returns {readonly string[]} The identifiers.
+ */
+function range(from: number, to: number): readonly string[] {
+  return Array.from(
+    { length: to - from },
+    (_value: unknown, index: number) => `e${String(from + index)}`,
+  );
+}
+
 describe('ActivityViewStore', () => {
   let page: Mock<PageRead>;
   let notices: Subject<RealtimeChange>;
@@ -125,6 +142,34 @@ describe('ActivityViewStore', () => {
       TestBed.tick();
       await vi.advanceTimersByTimeAsync(0);
     }
+  }
+
+  /**
+   * Function deferPage
+   *
+   * @description
+   * Makes the next page read wait for the test's answer.
+   *
+   * @returns {Deferred} The answer's handles.
+   */
+  function deferPage(): Deferred {
+    let handles: Deferred = { resolve: () => undefined, reject: () => undefined };
+    page.mockImplementationOnce(
+      () =>
+        new Promise<ListActivityPage>(
+          (resolve: (value: ListActivityPage) => void, reject: (error: Error) => void) => {
+            handles = { resolve, reject };
+          },
+        ),
+    );
+    return {
+      resolve: (value: ListActivityPage): void => {
+        handles.resolve(value);
+      },
+      reject: (error: Error): void => {
+        handles.reject(error);
+      },
+    };
   }
 
   beforeEach(() => {
@@ -259,6 +304,7 @@ describe('ActivityViewStore', () => {
     page.mockResolvedValueOnce(pageOf(['e2', 'e3'], null, 3));
     await store.loadMore();
     page.mockClear();
+    page.mockResolvedValueOnce(pageOf(['e1', 'e2', 'e3'], null, 3));
 
     notices.next({
       id: 'n1',
@@ -350,4 +396,120 @@ describe('ActivityViewStore', () => {
     await settle();
     expect(ids(store)).toEqual(['x1']);
   });
+
+  it('keeps the range loaded past 100 entries when it reads it again', async () => {
+    page.mockResolvedValueOnce(pageOf(range(0, 50), 'p2', 151));
+    const store: ActivityViewStoreInstance = setup();
+    await settle();
+    page.mockResolvedValueOnce(pageOf(range(50, 100), 'p3', 151));
+    await store.loadMore();
+    page.mockResolvedValueOnce(pageOf(range(100, 150), 'p4', 151));
+    await store.loadMore();
+    expect(ids(store)).toHaveLength(150);
+    page.mockClear();
+
+    page.mockResolvedValueOnce(pageOf(['n0', ...range(0, 99)], 'r2', 152));
+    page.mockResolvedValueOnce(pageOf(range(99, 149), 'r3', 152));
+    store.reload();
+    await settle();
+
+    expect(page.mock.calls.map((call) => [call[2], call[3]])).toEqual([
+      [null, 100],
+      ['r2', 50],
+    ]);
+    expect(ids(store)).toEqual(['n0', ...range(0, 150)]);
+    expect(store.total()).toBe(152);
+
+    page.mockResolvedValueOnce(pageOf(['e150'], null, 152));
+    await store.loadMore();
+    expect(page).toHaveBeenLastCalledWith('sprint-14', { kinds: [], actorId: null }, 'p4', 50);
+  });
+
+  it('lets a page request superseded by a refresh change nothing when it settles', async () => {
+    const store: ActivityViewStoreInstance = setup();
+    await settle();
+    const stale: Deferred = deferPage();
+    const first: Promise<void> = store.loadMore();
+    expect(store.loadingMore()).toBe(true);
+
+    page.mockResolvedValueOnce(pageOf(['e0', 'e1', 'e2'], 'q2', 4));
+    store.reload();
+    await settle();
+    expect(store.loadingMore()).toBe(false);
+
+    const active: Deferred = deferPage();
+    const second: Promise<void> = store.loadMore();
+    stale.reject(new Error('offline'));
+    await first;
+    expect(store.loadingMore()).toBe(true);
+    expect(store.moreFailed()).toBe(false);
+    expect(ids(store)).toEqual(['e0', 'e1', 'e2']);
+
+    active.resolve(pageOf(['e3'], null, 4));
+    await second;
+    expect(store.loadingMore()).toBe(false);
+    expect(ids(store)).toEqual(['e0', 'e1', 'e2', 'e3']);
+    expect(page.mock.calls.at(-1)?.[2]).toBe('q2');
+  });
+
+  it('lets a page request of another filter change nothing when it settles', async () => {
+    const store: ActivityViewStoreInstance = setup();
+    await settle();
+    const stale: Deferred = deferPage();
+    const first: Promise<void> = store.loadMore();
+
+    page.mockResolvedValueOnce(pageOf(['c1'], 'c2', 2));
+    store.filterKinds(['comment']);
+    await settle();
+    expect(store.loadingMore()).toBe(false);
+
+    const active: Deferred = deferPage();
+    const second: Promise<void> = store.loadMore();
+    stale.resolve(pageOf(['e3'], 'p3', 3));
+    await first;
+    expect(store.loadingMore()).toBe(true);
+    expect(ids(store)).toEqual(['c1']);
+
+    active.reject(new Error('offline'));
+    await second;
+    expect(store.loadingMore()).toBe(false);
+    expect(store.moreFailed()).toBe(true);
+    expect(ids(store)).toEqual(['c1']);
+
+    store.clearFilters();
+    await settle();
+    expect(store.moreFailed()).toBe(false);
+  });
 });
+
+/**
+ * Interface Deferred
+ *
+ * @description
+ * A page read whose answer the test gives.
+ */
+interface Deferred {
+  // #region Properties
+  /**
+   * Property resolve
+   *
+   * @description
+   * Answers the read with a page.
+   *
+   * @type {(page: ListActivityPage) => void}
+   * @readonly
+   */
+  readonly resolve: (page: ListActivityPage) => void;
+
+  /**
+   * Property reject
+   *
+   * @description
+   * Fails the read.
+   *
+   * @type {(error: Error) => void}
+   * @readonly
+   */
+  readonly reject: (error: Error) => void;
+  // #endregion
+}
