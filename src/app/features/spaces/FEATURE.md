@@ -95,6 +95,68 @@ constants belong to the lead):
   sprint's goal line, `Space statuses` (enabled when the space is editable) and `Automations`
   (enabled for organization admins and owners) in the list menu after `Edit the space`.
 
+## Timesheet view
+
+`TimesheetViewPage` (`ui/pages/timesheet-view-page/`) and `TimesheetViewStore`
+(`state/timesheet-view/`, route-scoped on `timesheet` with `TimesheetApi` through
+`TIMESHEET_VIEW_PROVIDERS`) show the time recorded on the list's tasks over one week, Monday to
+Sunday (`App.dc.html` lines 1363-1449, 7813-7880; skeleton lines 613-624).
+
+- Data: `TaskTimeService.getListTimesheet` (`weekStart`, pages of 100, read to the end, no HTTP
+  cache), mapped by `data-access/adapters/timesheet` to `models/timesheet`. The view's filters,
+  search and grouping do not apply: the toolbar shows as in the mockup and the view publishes no
+  rows summary (`followRows`). Per-person sums, the figures and the chart series are computed in
+  the client; people are named from `ListPageStore.organizationMembers` (a former member reads
+  `Unknown user`), sorted by name.
+- Week: it opens on the caller's current week; `Previous week` and `Next week` move it, the title
+  (`Week of Nov 2 to Nov 8`) is announced politely, `This week` or `Back to this week` follow.
+  Another list starts over on the current week; another organization reads again.
+- Figures (`cw-stat`): `Week total` (its tasks), `Average per working day` (Monday to Friday
+  divided by the working days with time), `Longest task` (across people) and
+  `Estimated on these tasks` (`p% consumed`, or `No estimate`). The estimates are a secondary read,
+  `getTaskTimeSummary` per task with time, four at a time, read again only when the set of tasks
+  changes or on a refresh; a failure stops the reads and shows `Retry` under the figures.
+- Table (`table[cwTable]`, 760 px wide at least, scrolling below): `Person and task` × the seven
+  days × `Total`; a person row (avatar, name, daily sums tinted by amount), then the person's
+  tasks, whose row-wide button (`Open CAD-482 · …`) opens Task's detail over the view with the row
+  as preview; a `Total` footer. Weekend days are shaded, today ringed.
+- Charts: `Time per day` (`cw-chart` stacked bars, one series per person, largest first, the fifth
+  and later summed into `Others`) and `Breakdown by person` (a dot in the person's chart color and a
+  `cw-meter` per person); they stack under `lg`.
+- States: the skeleton while a week is read (the header stays); a week without time shows
+  `No time recorded this week`. Until a week of the list was read once (`hasRead`), a failed read
+  reaches the route's error boundary, whose `Retry` renders the page again, which reads again. Later,
+  a failed read of another week shows `The timesheet could not be loaded` with `Retry` in place of
+  the week; a failed refresh keeps the week shown (`sheet`, the last answer for the list and week)
+  with a `Retry` line.
+- Refresh: time entries have no realtime notice (G13). The week (and its estimates) is read again
+  1 s after the first of: a notice of the list's room naming this list or a task update or status
+  change, the task detail closing or giving way (`TaskDetailOpener.closed`, `changed`: time is
+  recorded from the detail), the tab becoming visible again; once per window.
+- Writes: none. The mockup's timesheet only reads; time is recorded from the task detail (Task).
+
+Known gaps:
+
+- G7: `ListTimesheetRow` has no `estimateMinutes`; the estimate figure costs one
+  `getTaskTimeSummary` per task with time. A contract addition of the estimate to the rows removes
+  those reads.
+- `ListTimesheetPage` sums entries per person, task and day and carries no entry count: the
+  `Week total` hint counts tasks (`3 tasks`) instead of the mockup's entries (`n saisies`).
+- G13: no realtime notice for time entries; another tab's or person's entries show on the next
+  refresh cause above.
+- `cw-stat` takes no icon: the figures show without the mockup's label icons.
+- `cw-meter` has one fill color: the person's color is the dot beside the gauge, not the gauge.
+
+Copy not taken word for word from the mockup:
+
+| Unit                                                                                              | Reason                                           |
+| ------------------------------------------------------------------------------------------------- | ------------------------------------------------ |
+| `spaces.timesheet.kpi-tasks`, `spaces.timesheet.kpi-tasks-one`                                    | The gateway gives no entry count (see the gaps). |
+| `spaces.timesheet.kpi-days-one`                                                                   | Singular form the mockup writes in the plural.   |
+| `spaces.timesheet.failed`, `spaces.timesheet.refresh-failed`, `spaces.timesheet.estimates-failed` | The mockup draws no failed read.                 |
+| `spaces.timesheet.chart-*`, `spaces.timesheet.stat-*`, `spaces.timesheet.meter-*`                 | The bricks' own default texts.                   |
+| `spaces.timesheet.share-percent`                                                                  | The mockup's `38%`, as a unit for its placement. |
+
 ## Public entry points
 
 | Entry point            | Consumers    |
