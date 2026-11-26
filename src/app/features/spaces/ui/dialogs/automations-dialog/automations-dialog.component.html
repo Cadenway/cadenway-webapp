@@ -1,0 +1,373 @@
+<cw-dialog [(open)]="open" scrollable data-testid="automations-dialog">
+  <cw-dialog-header>
+    <h2 cwDialogTitle i18n="@@spaces.automations.title">Automations</h2>
+    <p cwDialogDescription>{{ description() }}</p>
+  </cw-dialog-header>
+
+  <div class="flex flex-col gap-4">
+    @if (store.rules.error()) {
+      <div
+        role="alert"
+        class="flex items-center justify-between gap-3 rounded-lg border border-border px-3 py-2.5 text-sm"
+      >
+        <span i18n="@@spaces.automations.load-failed">The automations could not be loaded.</span>
+        <button cwButton variant="outline" size="xs" (click)="store.rules.reload()">
+          {{ retryLabel }}
+        </button>
+      </div>
+    } @else if (!store.rules.hasValue()) {
+      <div
+        class="flex flex-col gap-2"
+        aria-busy="true"
+        aria-label="Loading the automations"
+        i18n-aria-label="@@spaces.automations.loading"
+        role="status"
+        data-testid="automations-loading"
+      >
+        @for (row of [1, 2, 3]; track row) {
+          <div cwSkeleton class="h-14 w-full rounded-lg"></div>
+        }
+      </div>
+    } @else {
+      @if (ruleRows().length === 0) {
+        <p
+          class="rounded-lg border border-dashed border-input px-4 py-6 text-center text-sm text-muted-foreground"
+          i18n="@@spaces.automations.empty"
+        >
+          No automation yet.
+        </p>
+      } @else {
+        <ul class="flex flex-col gap-2" data-testid="automations-rules">
+          @for (row of ruleRows(); track row.rule.id) {
+            <li
+              class="flex items-center gap-3 rounded-lg border border-border px-3 py-2.5 transition-opacity"
+              [class.opacity-60]="!row.rule.enabled"
+              data-testid="automation-rule"
+            >
+              <span
+                class="flex size-8 shrink-0 items-center justify-center rounded-md border border-border bg-background"
+                aria-hidden="true"
+              >
+                <ng-icon [name]="row.icon" class="size-4 text-muted-foreground" />
+              </span>
+              <span class="flex min-w-0 flex-1 flex-col leading-tight">
+                <span class="truncate text-sm font-medium">{{ row.when }}</span>
+                <span
+                  class="truncate text-sm text-muted-foreground"
+                  i18n="@@spaces.automations.then"
+                  >then {{ row.then }}</span
+                >
+              </span>
+              <cw-switch
+                [checked]="row.rule.enabled"
+                [ariaLabel]="row.toggleLabel"
+                (checkedChange)="toggle(row.rule)"
+              />
+              <button
+                cwButton
+                type="button"
+                variant="ghost"
+                size="icon-xs"
+                class="text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                [attr.aria-label]="row.removeLabel"
+                (click)="askRemove(row)"
+              >
+                <ng-icon name="phosphorTrashBold" aria-hidden="true" />
+              </button>
+            </li>
+          }
+        </ul>
+      }
+
+      @if (adding()) {
+        <div
+          class="flex flex-col gap-3 rounded-lg border border-border bg-muted/40 p-3"
+          data-testid="automation-builder"
+        >
+          <div class="flex flex-col gap-1.5">
+            <p class="text-xs font-medium text-muted-foreground" i18n="@@spaces.automations.when">
+              When
+            </p>
+            <cw-toggle-group
+              type="single"
+              variant="outline"
+              size="sm"
+              spacing="1"
+              class="flex-wrap"
+              ariaLabel="Trigger"
+              i18n-ariaLabel="@@spaces.automations.trigger"
+              [value]="trigger()"
+              (valueChange)="pickTrigger($event)"
+            >
+              <button cwToggleGroupItem value="created" i18n="@@spaces.automations.trigger-created">
+                Task created
+              </button>
+              <button cwToggleGroupItem value="status" i18n="@@spaces.automations.trigger-status">
+                Status becomes…
+              </button>
+            </cw-toggle-group>
+          </div>
+          @if (trigger() === 'status') {
+            <cw-toggle-group
+              type="single"
+              variant="outline"
+              size="sm"
+              spacing="1"
+              class="flex-wrap"
+              ariaLabel="Status"
+              i18n-ariaLabel="@@spaces.automations.status"
+              [value]="status()"
+              (valueChange)="pickStatus($event)"
+            >
+              <button cwToggleGroupItem value="triage">
+                <cw-status-icon status="triage" size="3" aria-hidden="true" />
+                {{ statusWords.triage }}
+              </button>
+              <button cwToggleGroupItem value="backlog">
+                <cw-status-icon status="backlog" size="3" aria-hidden="true" />
+                {{ statusWords.backlog }}
+              </button>
+              <button cwToggleGroupItem value="todo">
+                <cw-status-icon status="todo" size="3" aria-hidden="true" />
+                {{ statusWords.todo }}
+              </button>
+              <button cwToggleGroupItem value="progress">
+                <cw-status-icon status="progress" size="3" aria-hidden="true" />
+                {{ statusWords.progress }}
+              </button>
+              <button cwToggleGroupItem value="review">
+                <cw-status-icon status="review" size="3" aria-hidden="true" />
+                {{ statusWords.review }}
+              </button>
+              <button cwToggleGroupItem value="testing">
+                <cw-status-icon status="testing" size="3" aria-hidden="true" />
+                {{ statusWords.testing }}
+              </button>
+              <button cwToggleGroupItem value="waiting">
+                <cw-status-icon status="waiting" size="3" aria-hidden="true" />
+                {{ statusWords.waiting }}
+              </button>
+              <button cwToggleGroupItem value="blocked">
+                <cw-status-icon status="blocked" size="3" aria-hidden="true" />
+                {{ statusWords.blocked }}
+              </button>
+              <button cwToggleGroupItem value="done">
+                <cw-status-icon status="done" size="3" aria-hidden="true" />
+                {{ statusWords.done }}
+              </button>
+              <button cwToggleGroupItem value="cancelled">
+                <cw-status-icon status="cancelled" size="3" aria-hidden="true" />
+                {{ statusWords.cancelled }}
+              </button>
+            </cw-toggle-group>
+          }
+          <div class="flex flex-col gap-1.5">
+            <p
+              class="text-xs font-medium text-muted-foreground"
+              i18n="@@spaces.automations.then-title"
+            >
+              Then
+            </p>
+            <cw-toggle-group
+              type="single"
+              variant="outline"
+              size="sm"
+              spacing="1"
+              class="flex-wrap"
+              ariaLabel="Action"
+              i18n-ariaLabel="@@spaces.automations.action"
+              [value]="action()"
+              (valueChange)="pickAction($event)"
+            >
+              <button cwToggleGroupItem value="assign">
+                <ng-icon [name]="actionIcons.assign" class="size-3.5" aria-hidden="true" />
+                {{ actionWords.assign }}
+              </button>
+              <button cwToggleGroupItem value="priority">
+                <ng-icon [name]="actionIcons.priority" class="size-3.5" aria-hidden="true" />
+                {{ actionWords.priority }}
+              </button>
+              <button cwToggleGroupItem value="notify">
+                <ng-icon [name]="actionIcons.notify" class="size-3.5" aria-hidden="true" />
+                {{ actionWords.notify }}
+              </button>
+              <button cwToggleGroupItem value="comment">
+                <ng-icon [name]="actionIcons.comment" class="size-3.5" aria-hidden="true" />
+                {{ actionWords.comment }}
+              </button>
+            </cw-toggle-group>
+          </div>
+          @if (needsPerson()) {
+            @if (store.members.error()) {
+              <div role="alert" class="flex items-center justify-between gap-3 text-sm">
+                <span i18n="@@spaces.automations.members-failed"
+                  >The members could not be loaded.</span
+                >
+                <button cwButton variant="outline" size="xs" (click)="store.members.reload()">
+                  {{ retryLabel }}
+                </button>
+              </div>
+            } @else if (!store.members.hasValue()) {
+              <div cwSkeleton class="h-7 w-64"></div>
+            } @else {
+              <cw-toggle-group
+                type="single"
+                variant="outline"
+                size="sm"
+                spacing="1"
+                class="flex-wrap"
+                ariaLabel="Person"
+                i18n-ariaLabel="@@spaces.automations.person"
+                [value]="personValue()"
+                (valueChange)="pickPerson($event)"
+              >
+                @for (member of members(); track member.userId) {
+                  <button cwToggleGroupItem [value]="member.userId">
+                    {{ memberLabel(member) }}
+                  </button>
+                }
+              </cw-toggle-group>
+            }
+          }
+          @if (action() === 'priority') {
+            <cw-toggle-group
+              type="single"
+              variant="outline"
+              size="sm"
+              spacing="1"
+              class="flex-wrap"
+              ariaLabel="Priority"
+              i18n-ariaLabel="@@spaces.automations.priority"
+              [value]="priority()"
+              (valueChange)="pickPriority($event)"
+            >
+              <button cwToggleGroupItem value="urgente">
+                <cw-priority-icon priority="urgente" size="3" />
+                {{ priorityWords.urgente }}
+              </button>
+              <button cwToggleGroupItem value="haute">
+                <cw-priority-icon priority="haute" size="3" />
+                {{ priorityWords.haute }}
+              </button>
+              <button cwToggleGroupItem value="moyenne">
+                <cw-priority-icon priority="moyenne" size="3" />
+                {{ priorityWords.moyenne }}
+              </button>
+              <button cwToggleGroupItem value="basse">
+                <cw-priority-icon priority="basse" size="3" />
+                {{ priorityWords.basse }}
+              </button>
+            </cw-toggle-group>
+          }
+          @if (action() === 'comment') {
+            <label for="automation-comment" class="sr-only" i18n="@@spaces.automations.comment"
+              >Comment</label
+            >
+            <input
+              id="automation-comment"
+              cwInput
+              type="text"
+              autocomplete="off"
+              placeholder="Comment text"
+              i18n-placeholder="@@spaces.automations.comment-placeholder"
+              [formField]="commentForm.body"
+              data-testid="automation-comment"
+            />
+          }
+          <p class="text-sm" data-testid="automation-preview">
+            <ng-icon
+              name="phosphorLightningBold"
+              class="mr-1 size-3.5 align-[-2px] text-primary"
+              aria-hidden="true"
+            />{{ preview() }}
+          </p>
+          <div class="flex justify-end gap-2">
+            <button cwButton type="button" variant="outline" (click)="cancelAdding()">
+              <ng-container i18n="@@spaces.cancel">Cancel</ng-container>
+            </button>
+            <button
+              cwButton
+              type="button"
+              [disabled]="!draft()"
+              [loading]="store.creating()"
+              data-testid="automation-create"
+              (click)="save()"
+            >
+              <ng-container i18n="@@spaces.automations.create">Create the rule</ng-container>
+            </button>
+          </div>
+        </div>
+      } @else {
+        <button
+          type="button"
+          class="flex h-9 w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-input text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+          data-testid="automation-new"
+          (click)="startAdding()"
+        >
+          <ng-icon name="phosphorPlusBold" aria-hidden="true" />
+          <ng-container i18n="@@spaces.automations.new">New automation</ng-container>
+        </button>
+      }
+    }
+
+    @if (store.runs.error()) {
+      <div
+        role="alert"
+        class="flex items-center justify-between gap-3 border-t border-border pt-3 text-sm"
+      >
+        <span i18n="@@spaces.automations.runs-failed">The last runs could not be loaded.</span>
+        <button cwButton variant="outline" size="xs" (click)="store.runs.reload()">
+          {{ retryLabel }}
+        </button>
+      </div>
+    } @else if (runRows().length > 0) {
+      <div class="flex flex-col gap-1 border-t border-border pt-3" data-testid="automation-runs">
+        <p class="text-xs font-medium text-muted-foreground" i18n="@@spaces.automations.runs">
+          Last runs
+        </p>
+        <ul class="flex flex-col">
+          @for (run of runRows(); track run.id) {
+            <li class="flex items-center gap-2 py-1 text-sm">
+              <ng-icon
+                name="phosphorLightningFill"
+                class="size-3.5 shrink-0 text-primary"
+                aria-hidden="true"
+              />
+              <span class="min-w-0 flex-1 truncate">{{ run.text }}</span>
+              <span class="shrink-0 text-xs text-muted-foreground">{{ run.at }}</span>
+            </li>
+          }
+        </ul>
+      </div>
+    }
+  </div>
+
+  <cw-dialog-footer>
+    <button cwButton type="button" variant="outline" (click)="open.set(false)">
+      <ng-container i18n="@@spaces.automations.close">Close</ng-container>
+    </button>
+  </cw-dialog-footer>
+</cw-dialog>
+
+<cw-alert-dialog
+  variant="destructive"
+  size="sm"
+  [(open)]="removeOpen"
+  data-testid="automation-delete-dialog"
+  (confirm)="confirmRemove()"
+>
+  <cw-alert-dialog-media>
+    <ng-icon name="phosphorTrashBold" aria-hidden="true" />
+  </cw-alert-dialog-media>
+  <h2 cwAlertDialogTitle i18n="@@spaces.automations.delete-title">Delete this automation?</h2>
+  <p cwAlertDialogDescription>{{ removalText() }}</p>
+  <button cwButton cwAlertDialogCancel variant="outline" i18n="@@spaces.cancel">Cancel</button>
+  <button
+    cwButton
+    cwAlertDialogAction
+    variant="destructive"
+    data-testid="automation-delete-confirm"
+  >
+    <ng-container i18n="@@spaces.automations.delete">Delete</ng-container>
+  </button>
+</cw-alert-dialog>
