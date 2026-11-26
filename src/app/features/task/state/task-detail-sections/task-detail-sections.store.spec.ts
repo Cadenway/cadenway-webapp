@@ -384,6 +384,36 @@ describe('TaskDetailSectionsStore', () => {
     expect(localStorage.getItem(`${DESCRIPTION_DRAFT_PREFIX}.o1.u1.CAD-482`)).toBeNull();
   });
 
+  it('saves nothing for an edited conflicted draft until Keep my version is chosen', async () => {
+    vi.useFakeTimers();
+    localStorage.setItem(
+      `${DESCRIPTION_DRAFT_PREFIX}.o1.u1.CAD-482`,
+      JSON.stringify({ markdown: 'Mine', base: 'Old' }),
+    );
+    task.set({ ...TASK, version: 6, description: 'Theirs' });
+    TestBed.resetTestingModule();
+    const reopened: TaskDetailSectionsStoreInstance = create();
+    TestBed.tick();
+
+    reopened.editDescription('Mine, edited');
+    reopened.flushDescription();
+    await vi.advanceTimersByTimeAsync(DESCRIPTION_SAVE_MS * 2);
+
+    expect(detail['update']).not.toHaveBeenCalled();
+    expect(reopened.restoredChanged()).toBe(true);
+    expect(reopened.restoredDraft()).toBe('Mine, edited');
+    expect(
+      JSON.parse(localStorage.getItem(`${DESCRIPTION_DRAFT_PREFIX}.o1.u1.CAD-482`) ?? '{}'),
+    ).toEqual({ markdown: 'Mine, edited', base: 'Old' });
+
+    reopened.keepDraft();
+
+    expect(detail['update']).toHaveBeenCalledExactlyOnceWith(
+      { description: 'Mine, edited', descriptionMentions: [] },
+      { key: 'CAD-482', draftKept: true },
+    );
+  });
+
   it('discards a draft typed over a description changed since', async () => {
     vi.useFakeTimers();
     localStorage.setItem(

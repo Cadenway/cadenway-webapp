@@ -314,7 +314,9 @@ export interface TaskDetailSectionsStoreInstance {
    * is confirmed: a failed or conflicting save keeps it (the toast says so), and the next opening
    * of that task restores it in the editor with a `Discard` notice. It is saved after the pause
    * only when the description is still the one it was typed over; when the description changed
-   * since, nothing is saved by itself and the notice offers `Keep my version` (`keepDraft`).
+   * since, nothing is saved by itself and the notice offers `Keep my version` (`keepDraft`):
+   * editing that draft keeps it conflicted (the device keeps the edited text) and saves nothing
+   * until `Keep my version` or `Discard`.
    * The draft is stored per organization, user and task. A draft is compared with the last description sent for its task while
    * that write is queued or in flight (not only the confirmed one), so a text reverted during a
    * save is sent after it rather than dropped.
@@ -531,6 +533,12 @@ function createTaskDetailSectionsStore(): Type<TaskDetailSectionsStoreInstance> 
           const key: string | null = store._detail.taskKey();
           if (key === null) return;
           if (draft !== null && draft.key !== key) flush();
+          if (store.restoredChanged()) {
+            const stored: StoredDescriptionDraft | null = readDraft(key);
+            writeDraft(key, { markdown, base: stored?.base ?? '' });
+            patchState(store, { restoredDraft: markdown });
+            return;
+          }
           if (store.restoredDraft() !== null) {
             patchState(store, { restoredDraft: null, restoredChanged: false });
           }
