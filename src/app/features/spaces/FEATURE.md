@@ -111,6 +111,40 @@ constants belong to the lead):
   sprint's goal line, `Space statuses` (enabled when the space is editable) and `Automations`
   (enabled for organization admins and owners) in the list menu after `Edit the space`.
 
+### Sprint report
+
+`SprintReportDialog` (`ui/dialogs/sprint-report-dialog/`, `App.dc.html` lines 2729-2776 and
+5512-5561) shows the report of the sprint it is given:
+
+- Store: `SprintReportStore` (`state/sprint-report/`), component-scoped on the dialog. Each
+  opening reads `ListsService.getSprintReport` again through `SprintReportApi`
+  (`data-access/services/sprint-report-api/`), with the caller's `today` and browser time zone,
+  every burndown page joined (100 days a page, 10 pages at most), bypassing the HTTP cache.
+  Closing keeps the shown report for the closing animation; the next opening starts from
+  skeletons. A failed read shows an inline error whose `Retry` reads again; a sprint without
+  tasks shows `No task in this sprint`.
+- Header: `<sprint> report` and `<start> – <end> · day n of m`, from the list until the report
+  answers; the day is held within the sprint.
+- Figures (`cw-stat`): `Points committed` (the opening commitment, with the tasks of the current
+  scope), `Points delivered` (with their share of the delivered and remaining points),
+  `Points remaining` (with the open tasks) and `Projected end`: `On track` when at most 0.5
+  point would remain, else `≈ n pts` and `would remain on <end>`, from the gateway's forecast,
+  or, once the sprint has closed (after its last day), what remains; without a forecast it is
+  unknown until then, the last day included. A figure the gateway cannot establish shows a dash.
+- `Burndown` (`cw-chart` lines): `Actual`, dashed `Ideal` and `Projection`, one category per day,
+  and a `Today` marker while the caller's day is in the sprint.
+- `Velocity` (`cw-chart` grouped bars): the earlier sprints the gateway returns (four at most),
+  then this one, named `S13` (the mockup's `Sprint ` to `S`, made unique), gray committed and
+  jade delivered, with the average delivered by the earlier sprints that have history.
+- `Delivered` and `To carry over`: the counts, the first six tasks with their points and
+  `+ n others`; a task closes the report and opens its detail (`TaskDetailOpener`).
+- `cw-dialog` `lg`, scrollable, filling the screen under 768 px.
+- Known gaps: `cw-dialog` has no width between `lg` (`max-w-2xl`) and full screen, so the report
+  is narrower than the mockup's `max-w-4xl` and stacks `Velocity` above the summary. `cw-chart`
+  colors a series, not a bar: the current sprint's bar is jade like the others (violet in the
+  mockup), and the `done / committed` line under each bar is in the tooltip and the chart's data
+  table only. The backdrop has no accessible name (`Fermer le rapport` in the mockup).
+
 ## Space statuses dialog
 
 `SpaceStatusesDialog` (`ui/dialogs/space-statuses-dialog/`, `App.dc.html` lines 3302-3317 and
@@ -473,3 +507,87 @@ gateway checks them and `ORGANIZATION_PIN_OPERATIONS` lists them.
 | `spaces.look.*`                                                                                                                | `LOOK_COLORS` names and the default choices of `lookPicker`.               |
 | `spaces.view-stub.text`                                                                                                        | The stub of a view not built yet, which the mockup does not have.          |
 | `spaces.task-writes.field-failed`                                                                                              | The mockup draws no refused single-field write.                            |
+
+| `spaces.sprint-report.failed`, `spaces.sprint-report.empty`, `spaces.sprint-report.chart-empty` | The mockup draws no failed read or empty sprint. |
+| `spaces.sprint-report.projected-unknown` | The mockup always has a projection. |
+| `spaces.sprint-report.chart-*` (except `chart-empty`), `spaces.sprint-report.stat-*` | The bricks' own texts, which the mockup does not show as copy. |
+| `spaces.sprint-report.today` | The today marker's label; the mockup's line has none. |
+| `spaces.sprint-report.tasks-one`, `spaces.sprint-report.open-tasks-one` | Singular forms the mockup writes in the plural. |
+
+## Automations dialog
+
+`AutomationsDialog` (`ui/dialogs/automations-dialog/`, `App.dc.html` lines 3246-3301, logic lines
+8532-8585) shows the organization's "when… then…" rules, which apply to every task of the workspace.
+
+- `AutomationsStore` (`state/automations/`), component-scoped on the dialog, reads nothing until
+  the dialog opens. Each opening reads the rules (every page) and the last runs again; it reads the
+  members once, through `ListsApi.organizationMembers`. Another organization reads all of them
+  again. A failed rules read shows an inline error with Retry (`No automation yet.` is kept for a
+  successful empty read). A failed runs or members read shows its own inline error with Retry.
+- Writes go through `AutomationsApi` (`data-access/services/automations-api/`,
+  `AutomationsService`: `listAutomationRules`, `createAutomationRule`, `updateAutomationRule`,
+  `deleteAutomationRule`, `listRecentAutomationRuns`), mapped by
+  `data-access/adapters/automation-rule/` to `models/automation-rule/`.
+  - The confirmed rules (`confirmedRules`) are kept apart from the read in flight. They are the
+    newest read, with the results of this dialog's writes that settled after that read started
+    applied over it: a newer version, a created rule, a deleted rule. They keep their value while
+    an opening reads again, so a write always uses the newest known version and is always sent.
+  - A switch changes at once. The writes of a rule are serialized, each sent with the version the
+    previous one left (`If-Match`). Only the last state asked is sent, and coming back to the
+    recorded state sends nothing. A definite refusal (`4xx`) restores the recorded state and shows
+    an error toast. A `412 request.version-mismatch` or `404 automation.rule-not-found` also reads
+    the rules again.
+  - A lost answer (no response, `408`, `5xx`) may still be applied, so it is not a refusal: the
+    original write may still be running when a read happens. The store resends the same write
+    with the same `If-Match` version, after the waits of `AUTOMATION_RETRY_DELAYS` (three
+    resends over about 6.5 s by default). A resent switch that succeeds applies. One refused on
+    its version (`412`) means the version moved, so a read of the rules tells whether the wanted
+    state holds (`applied`), or not (`not-applied`, `The automation was not changed`).
+  - When the resends do not settle it, the outcome is `unknown` and the dialog warns. The wanted
+    state stays shown (a deleted rule stays hidden), and the rule's controls are disabled
+    (`unresolvedRuleIds`): the rule takes no other write. The store reads the rules again; the
+    first read started after the resends gave up settles the rule.
+  - A deletion is confirmed by `cw-alert-dialog` (`Delete this automation?`), then hides the rule
+    at once. It succeeds only once the gateway deletes the rule or reports it absent. A refusal
+    brings it back with an error toast. A lost answer is resent with the same version: a `404`
+    (already gone) means it applied, a `412` that the rule is still there.
+  - A creation sends one `Idempotency-Key` per draft and organization. A definite refusal
+    (`4xx`), a recorded rule, another draft or a closed builder renews it. The created rule is
+    added last and shows `Automation created`. A refusal keeps the builder and its values.
+  - A lost creation answer (no response, `408`, `5xx`, `409 idempotency.request-in-progress`) is
+    resent with the same key, which the gateway replays, after the same waits. When the resends
+    do not settle it, the store reads the rules again and keeps the draft and its key, even when
+    the builder closes (`creationUnknown`). The builder then warns that the rule may already
+    exist. Submitting again sends the same key, so the rule is never created twice. Submitting
+    another draft first resends the kept one with its key.
+    A comment over 5,000 characters (the contract's limit) blocks `Create the rule` and shows
+    `spaces.automations.comment-too-long`. The field also carries the native `maxlength` that
+    Signal Forms derives from the rule.
+- Statuses use their default words: a rule is not tied to a space, so the `space` input does not
+  rename them.
+- Extension point for gap B6: the mockup's `Git automations` section (lines 3274-3296) is not
+  rendered. Its place is between the builder and `Last runs`. It needs a contract first (e.g.
+  `getSpaceGitAutomations` / `updateSpaceGitAutomations` with `If-Match`), then its producer and
+  gateway route, then new `AutomationsApi` methods and store state, and a product decision on
+  its scope: per space as planned, or global as in the mockup.
+- Known gaps:
+  - `automation.executed.v1` is not relayed by the realtime gateway, so `Last runs` refreshes
+    only when the dialog opens.
+  - `cw-toggle-group` (`@cadenway/ui` 0.8.0) reads its items' required `value` before every
+    `@for` item has received it. The fixed chips are written out statically. The person chips
+    show the first member until they have rendered once (`personValue`). The lasting fix belongs
+    in the design system.
+  - The mockup shows no member's view: the opener is disabled for members (list header).
+- Copy not taken word for word from the mockup:
+
+  | Unit                                                                                              | Reason                                                   |
+  | ------------------------------------------------------------------------------------------------- | -------------------------------------------------------- |
+  | `spaces.automations.load-failed`, `runs-failed`, `members-failed`                                 | The mockup draws no failed read.                         |
+  | `spaces.automations.create-failed`, `toggle-failed`, `delete-failed`                              | The mockup draws no refused write.                       |
+  | `spaces.automations.toggle-not-applied`, `toggle-unknown`, `delete-not-applied`, `delete-unknown` | The mockup draws no lost answer.                         |
+  | `spaces.automations.create-unknown`, `create-unknown-toast`                                       | The mockup draws no lost answer.                         |
+  | `spaces.automations.comment-too-long`                                                             | The mockup has no wording for a comment over the limit.  |
+  | `spaces.automations.former-member`                                                                | A rule or run naming someone no longer in the directory. |
+  | `spaces.automations.loading`                                                                      | Accessible name of the skeleton rows.                    |
+  | `spaces.automations.text-one`                                                                     | Singular form the mockup writes in the plural.           |
+  | `spaces.automations.run-minutes`, `run-hours`                                                     | The mockup only shows `just now`.                        |
