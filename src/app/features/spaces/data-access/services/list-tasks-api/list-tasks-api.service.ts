@@ -1,3 +1,4 @@
+import { HttpErrorResponse } from '@angular/common/http';
 import { inject, Service } from '@angular/core';
 import {
   type TaskGroup,
@@ -6,6 +7,7 @@ import {
   type TaskSummaryPage,
   TasksService,
 } from '@cadenway/api-client';
+import { firstValueFrom } from 'rxjs';
 
 import type { TaskSummary } from '@features/task';
 import {
@@ -22,11 +24,17 @@ import type {
   ListGroupQuery,
   ListTaskQuery,
 } from '../../../models/list-view-config/list-view-config.interface';
+import type { DueWindow } from '../../../models/list-tasks/list-tasks.interface';
+import type {
+  TaskFieldChanges,
+  TaskFieldWriteResult,
+} from '../../../models/view-task-write/view-task-write.interface';
 import {
   toGroupCountParams,
   toListTask,
   toListTaskPage,
   toListTasksQuery,
+  toTaskFieldPatch,
   toTaskGroupCount,
 } from '../../adapters/list-task/list-task.adapter';
 import { toRouteError } from '../../adapters/route-error/route-error.adapter';
@@ -69,11 +77,12 @@ function groupAllowed(query: ListTaskQuery, group: GroupFilter, userId: string):
  * Service ListTasksApi
  *
  * @description
- * The reads of the rows of the `List` view: the group counts (`countTaskGroups`), the cursor
- * pages of the tasks of a list or of one of its groups (`queryListTasks`) and the subtasks of a
- * task (`listSubtasks`), mapped to task summaries. Every read bypasses the HTTP cache, so a
- * reload after a realtime notice reads the gateway again. A failed read rejects with the typed
- * route error of the list.
+ * The reads of the task views: the group counts (`countTaskGroups`), the cursor pages of the
+ * tasks of a list or of one of its groups, optionally within a due window (`queryListTasks`), and
+ * the subtasks of a task (`listSubtasks`), mapped to task summaries; and the single-field writes
+ * of a task (`updateTask` with `If-Match`). Every read bypasses the HTTP cache, so a reload after
+ * a realtime notice reads the gateway again. A failed read rejects with the typed route error of
+ * the list.
  */
 @Service()
 export class ListTasksApi {
@@ -166,7 +175,8 @@ export class ListTasksApi {
    *
    * @description
    * Reads one server-filtered page in the view's order. A group outside the view's filter is
-   * empty and does not cause a request.
+   * empty and does not cause a request. A due window keeps the tasks due within it (`dueFrom`,
+   * `dueTo`) and leaves the undated ones out.
    *
    * @param {string} listId - The list.
    * @param {ListTaskQuery} query - The view's query.
@@ -174,6 +184,7 @@ export class ListTasksApi {
    * @param {string | null} cursor - Cursor of the page, null for the first one.
    * @param {number} limit - Page size, 100 at most.
    * @param {AbortSignal | undefined} signal - Cancels a superseded read.
+   * @param {DueWindow | null} [due] - The due dates kept, or null for every task.
    * @returns {Promise<ListTaskPage>} The page.
    * @throws {Error} The typed route error of the failure.
    */
@@ -184,13 +195,14 @@ export class ListTasksApi {
     cursor: string | null,
     limit: number,
     signal?: AbortSignal,
+    due: DueWindow | null = null,
   ): Promise<ListTaskPage> {
     try {
       if (group && !groupAllowed(query, group, this.workspace.user().id)) {
         return { items: [], nextCursor: null, total: 0 };
       }
       const page: TaskSummaryPage = await abortableRead(
-        this.queries.queryListTasks(listId, toListTasksQuery(query, group, cursor, limit), {
+        this.queries.queryListTasks(listId, toListTasksQuery(query, group, cursor, limit, due), {
           cache: 'no-store',
         }),
         signal,
@@ -227,6 +239,39 @@ export class ListTasksApi {
       cursor = page.nextCursor;
     } while (cursor !== null);
     return items;
+  }
+
+  /**
+   * Method update
+   *
+   * @description
+   * Writes fields of one task as a JSON Merge Patch with `If-Match` set to the version it was
+   * made against, and tells how it ended: applied at the version the gateway saved, refused (a
+   * `4xx`: `412` when the task changed since, `422` for an invalid date), or without a certain
+   * outcome (no answer or a `5xx`). It never rejects.
+   *
+   * @param {string} taskKey - Key of the task.
+   * @param {number} version - Version the change was made against.
+   * @param {TaskFieldChanges} changes - The changed fields.
+   * @returns {Promise<TaskFieldWriteResult>} How the write ended.
+   */
+  public async update(
+    taskKey: string,
+    version: number,
+    changes: TaskFieldChanges,
+  ): Promise<TaskFieldWriteResult> {
+    try {
+      const task: { readonly version?: number } = await firstValueFrom(
+        this.tasks.updateTask(taskKey, toTaskFieldPatch(changes), {
+          headers: { 'If-Match': `"${version.toString()}"` },
+        }),
+      );
+      return { kind: 'done', version: typeof task.version === 'number' ? task.version : null };
+    } catch (error: unknown) {
+      return error instanceof HttpErrorResponse && error.status >= 400 && error.status < 500
+        ? { kind: 'refused' }
+        : { kind: 'unknown' };
+    }
   }
   // #endregion
 }

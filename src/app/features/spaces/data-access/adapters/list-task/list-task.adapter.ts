@@ -4,6 +4,7 @@ import type {
   TaskGroup,
   TaskSummary as TaskSummaryDto,
   TaskSummaryPage,
+  TasksService,
 } from '@cadenway/api-client';
 
 import type { TaskSummary } from '@features/task';
@@ -13,6 +14,8 @@ import type {
   ListTaskPage,
   TaskGroupCount,
 } from '../../../models/list-rows/list-rows.interface';
+import type { DueWindow } from '../../../models/list-tasks/list-tasks.interface';
+import type { TaskFieldChanges } from '../../../models/view-task-write/view-task-write.interface';
 import type {
   ListGroupQuery,
   ListTaskQuery,
@@ -108,12 +111,13 @@ export function withGroup(query: ListTaskQuery, group: GroupFilter | null): List
  * Function toListTasksQuery
  *
  * @description
- * The `queryListTasks` body of one page of the view, a group's value added.
+ * The `queryListTasks` body of one page of the view, a group's value and a due window added.
  *
  * @param {ListTaskQuery} query - The view's query.
  * @param {GroupFilter | null} group - The group to read, or null for every task.
  * @param {string | null} cursor - Cursor of the page, null for the first one.
  * @param {number} limit - Page size, 100 at most.
+ * @param {DueWindow | null} [due] - The due dates kept (`dueFrom`, `dueTo`), or null for all.
  * @returns {ListTasksQuery} The request body.
  */
 export function toListTasksQuery(
@@ -121,6 +125,7 @@ export function toListTasksQuery(
   group: GroupFilter | null,
   cursor: string | null,
   limit: number,
+  due: DueWindow | null = null,
 ): ListTasksQuery {
   const scoped: ListTaskQuery = withGroup(query, group);
   return {
@@ -130,6 +135,7 @@ export function toListTasksQuery(
     ...(scoped.label ? { label: [...scoped.label] } : {}),
     ...(scoped.search ? { search: scoped.search } : {}),
     ...(scoped.milestone ? { milestone: true } : {}),
+    ...(due ? { dueFrom: due.from, dueTo: due.to } : {}),
     level: scoped.level,
     sort: scoped.sort as NonNullable<ListTasksQuery['sort']>,
     ...(cursor === null ? {} : { cursor }),
@@ -163,5 +169,37 @@ export function toGroupCountParams(
     level: query.level,
     ...(cursor === null ? {} : { cursor }),
     limit: 100,
+  };
+}
+
+/**
+ * Type TaskFieldPatchDto
+ *
+ * @description
+ * The JSON Merge Patch `updateTask` takes.
+ *
+ * @type {Parameters<TasksService['updateTask']>[1]}
+ */
+export type TaskFieldPatchDto = Parameters<TasksService['updateTask']>[1];
+
+/**
+ * Function toTaskFieldPatch
+ *
+ * @description
+ * The `updateTask` patch of a single-field write of a task view: only the fields given, null
+ * kept as a removal.
+ *
+ * @param {TaskFieldChanges} changes - The changed fields.
+ * @returns {TaskFieldPatchDto} The request body.
+ */
+export function toTaskFieldPatch(changes: TaskFieldChanges): TaskFieldPatchDto {
+  return {
+    ...(changes.dueDate === undefined ? {} : { dueDate: changes.dueDate }),
+    ...(changes.startDate === undefined ? {} : { startDate: changes.startDate }),
+    ...(changes.estimateMinutes === undefined ? {} : { estimateMinutes: changes.estimateMinutes }),
+    ...(changes.name === undefined ? {} : { name: changes.name }),
+    ...(changes.customFieldValues === undefined
+      ? {}
+      : { customFieldValues: { ...changes.customFieldValues } }),
   };
 }

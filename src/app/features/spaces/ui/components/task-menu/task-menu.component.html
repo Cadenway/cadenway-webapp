@@ -1,0 +1,125 @@
+<cw-menu #menu ariaLabel="Task actions" i18n-ariaLabel="@@spaces.rows.menu">
+  <cw-menu-label>{{ title() }}</cw-menu-label>
+  @if (tasks().length === 1) {
+    <button cwMenuItem type="button" (triggered)="openRequested.emit(tasks()[0])">
+      <ng-icon name="phosphorArrowSquareOutBold" aria-hidden="true" />
+      <ng-container i18n="@@spaces.rows.open">Open</ng-container>
+      <cw-menu-shortcut i18n="@@spaces.rows.open-key">Enter</cw-menu-shortcut>
+    </button>
+    <cw-menu-separator />
+  }
+  <button cwMenuItem type="button" [cwMenuTriggerFor]="statusMenu">
+    <ng-icon name="phosphorCircleHalfBold" aria-hidden="true" />
+    <ng-container i18n="@@spaces.rows.status">Status</ng-container>
+  </button>
+  <button cwMenuItem type="button" [cwMenuTriggerFor]="priorityMenu">
+    <ng-icon name="phosphorCellSignalHighBold" aria-hidden="true" />
+    <ng-container i18n="@@spaces.rows.priority">Priority</ng-container>
+  </button>
+  <button
+    cwMenuItem
+    type="button"
+    [disabled]="people().length === 0"
+    [cwMenuTriggerFor]="peopleMenu"
+  >
+    <ng-icon name="phosphorUserPlusBold" aria-hidden="true" />
+    <ng-container i18n="@@spaces.bulk.assign">Assign</ng-container>
+  </button>
+  <button
+    cwMenuItem
+    type="button"
+    [disabled]="targets().length === 0"
+    [cwMenuTriggerFor]="moveMenu"
+  >
+    <ng-icon name="phosphorArrowBendUpRightBold" aria-hidden="true" />
+    <ng-container i18n="@@spaces.rows.move">Move to</ng-container>
+  </button>
+  <cw-menu-separator />
+  <button cwMenuItem type="button" (triggered)="remindRequested.emit()">
+    <ng-icon name="phosphorAlarmBold" aria-hidden="true" />
+    {{ remindLabel() }}
+  </button>
+  <button cwMenuItem type="button" (triggered)="duplicateRequested.emit()">
+    <ng-icon name="phosphorCopyBold" aria-hidden="true" />
+    <ng-container i18n="@@spaces.rows.duplicate">Duplicate</ng-container>
+  </button>
+  <button cwMenuItem type="button" (triggered)="copyLinkRequested.emit()">
+    <ng-icon name="phosphorLinkSimpleBold" aria-hidden="true" />
+    <ng-container i18n="@@spaces.rows.copy-link">Copy the link</ng-container>
+  </button>
+  <button cwMenuItem type="button" (triggered)="copyKeyRequested.emit()">
+    <ng-icon name="phosphorHashBold" aria-hidden="true" />
+    <ng-container i18n="@@spaces.rows.copy-key">Copy the identifier</ng-container>
+  </button>
+  <cw-menu-separator />
+  <button cwMenuItem type="button" variant="destructive" (triggered)="deleteRequested.emit()">
+    <ng-icon name="phosphorTrashBold" aria-hidden="true" />
+    {{ deleteLabel() }}
+  </button>
+</cw-menu>
+
+<cw-menu #statusMenu ariaLabel="Status" i18n-ariaLabel="@@spaces.rows.status">
+  @for (group of statusGroups(); track group.category) {
+    <cw-menu-group>
+      @if (group.heading) {
+        <cw-menu-label>{{ group.heading }}</cw-menu-label>
+      }
+      @for (entry of group.entries; track entry.option.key) {
+        <button
+          cwMenuItem
+          type="button"
+          [selected]="entry.option.key === status()"
+          (triggered)="statusPicked.emit(entry.option.key)"
+        >
+          <cw-status-icon [status]="entry.option.key" [milestone]="milestone()" size="4" />
+          <span class="flex min-w-0 flex-col leading-tight">
+            <span>{{ entry.option.label }}</span>
+            <span class="text-xs text-muted-foreground">{{ entry.hint }}</span>
+          </span>
+        </button>
+      }
+    </cw-menu-group>
+  }
+</cw-menu>
+
+<cw-menu #priorityMenu ariaLabel="Priority" i18n-ariaLabel="@@spaces.rows.priority">
+  @for (option of priorities; track option) {
+    <button
+      cwMenuItem
+      type="button"
+      [selected]="option === priority()"
+      (triggered)="priorityPicked.emit(option)"
+    >
+      <cw-priority-icon [priority]="option" size="4" />
+      <span [class.text-destructive]="option === 'urgente'">{{ priorityLabel(option) }}</span>
+    </button>
+  }
+</cw-menu>
+
+<cw-menu #peopleMenu ariaLabel="Assign" i18n-ariaLabel="@@spaces.bulk.assign">
+  @for (person of people(); track person.id) {
+    <button
+      cwMenuItemCheckbox
+      type="button"
+      [checked]="assignedToAll(person.id)"
+      (checkedChange)="assigneeToggled.emit(person.id)"
+    >
+      <span
+        class="flex size-5 shrink-0 items-center justify-center rounded-full bg-secondary text-[9px] leading-none font-semibold text-secondary-foreground"
+        aria-hidden="true"
+        >{{ person.initials }}</span
+      >
+      <span class="truncate">{{ personLabel(person) }}</span>
+    </button>
+  }
+</cw-menu>
+
+<cw-menu #moveMenu ariaLabel="Move to" i18n-ariaLabel="@@spaces.rows.move">
+  @for (target of targets(); track target.listId) {
+    <button cwMenuItem type="button" (triggered)="moved.emit(target.listId)">
+      <ng-icon [name]="target.icon" [class]="target.tone" aria-hidden="true" />
+      <span class="truncate">{{ target.name }}</span>
+      <cw-menu-shortcut>{{ target.spaceName }}</cw-menu-shortcut>
+    </button>
+  }
+</cw-menu>
