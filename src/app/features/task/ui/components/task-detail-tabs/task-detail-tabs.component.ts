@@ -860,8 +860,8 @@ export class TaskDetailTabs {
    * Method attachToComment
    *
    * @description
-   * Uploads the composer's files to the task's attachments and shows their progress on the
-   * composer's chips; a refused or failed file shows its error there.
+   * Uploads the composer's files to the task's attachments, each chip spinning while it is sent
+   * (the transfer reports no percentage); a refused or failed file shows its error there.
    *
    * @param {File[]} files - The files.
    */
@@ -888,20 +888,16 @@ export class TaskDetailTabs {
           ),
         );
       };
-      void this.attachments
-        .attach(file, (progress: number): void => {
-          patch({ progress });
-        })
-        .then((attachment: TaskAttachment | null): void => {
-          patch(
-            attachment
-              ? { state: 'done', name: attachment.name }
-              : {
-                  state: 'error',
-                  error: $localize`:@@task.attachments.upload-failed:Could not attach ${file.name}:name:`,
-                },
-          );
-        });
+      void this.attachments.attach(file).then((attachment: TaskAttachment | null): void => {
+        patch(
+          attachment
+            ? { state: 'done', name: attachment.name }
+            : {
+                state: 'error',
+                error: $localize`:@@task.attachments.upload-failed:Could not attach ${file.name}:name:`,
+              },
+        );
+      });
     }
   }
 

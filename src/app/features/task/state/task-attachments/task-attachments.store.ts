@@ -57,17 +57,6 @@ export interface TaskAttachmentUpload {
    * @readonly
    */
   readonly size: number;
-
-  /**
-   * Property progress
-   *
-   * @description
-   * Sent percentage.
-   *
-   * @type {number}
-   * @readonly
-   */
-  readonly progress: number;
   // #endregion
 }
 
@@ -216,7 +205,7 @@ export interface TaskAttachmentsStoreInstance {
    *
    * @description
    * Attaches files from the section (`Add`, a drop): a file over 25 MB is refused with
-   * `File too large`, a name already attached is skipped, the others are uploaded together;
+   * `File too large` and an empty file with `Empty file` (the gateway takes 1 byte at least), a name already attached is skipped, the others are uploaded together;
    * then one toast names what was added (`File added`, `<n> files added`, or `Already attached to
    * the task`), and one failure toast names a file that could not be sent.
    *
@@ -230,13 +219,13 @@ export interface TaskAttachmentsStoreInstance {
    *
    * @description
    * Attaches one file without a toast (the comment composer's files): an attachment of the same
-   * name is reused, a file over 25 MB refused with `File too large`.
+   * name is reused, a file over 25 MB refused with `File too large`, an empty one with
+   * `Empty file`. The upload reports no percentage.
    *
    * @param {File} file - The file.
-   * @param {(percent: number) => void} progress - Receives the sent percentage.
    * @returns {Promise<TaskAttachment | null>} The attachment, or null when refused or failed.
    */
-  attach(file: File, progress: (percent: number) => void): Promise<TaskAttachment | null>;
+  attach(file: File): Promise<TaskAttachment | null>;
 
   /**
    * Method remove
@@ -292,18 +281,25 @@ function createTaskAttachmentsStore(): Type<TaskAttachmentsStoreInstance> {
           description: $localize`:@@task.attachments.too-large-text:${file.name}:name: exceeds 25 MB, the per-file limit.`,
         });
       };
-      const send: (
+      const empty: (file: File) => void = (file: File): void => {
+        store._toasts.error($localize`:@@task.attachments.empty:Empty file`, {
+          description: $localize`:@@task.attachments.empty-text:${file.name}:name: is empty, there is nothing to attach.`,
+        });
+      };
+      const refuse: (file: File) => boolean = (file: File): boolean => {
+        if (file.size > ATTACHMENT_MAX_BYTES) tooLarge(file);
+        else if (file.size === 0) empty(file);
+        else return false;
+        return true;
+      };
+      const send: (file: File) => Promise<TaskAttachment> = async (
         file: File,
-        progress?: (percent: number) => void,
-      ) => Promise<TaskAttachment> = async (
-        file: File,
-        progress?: (percent: number) => void,
       ): Promise<TaskAttachment> => {
         const key: string | null = store._detail.taskKey();
         if (key === null) throw new Error('No task is open.');
         const id: string = crypto.randomUUID();
         patchState(store, {
-          uploads: [...store.uploads(), { id, name: file.name, size: file.size, progress: 0 }],
+          uploads: [...store.uploads(), { id, name: file.name, size: file.size }],
         });
         const drop: () => void = (): void => {
           patchState(store, {
@@ -311,20 +307,7 @@ function createTaskAttachmentsStore(): Type<TaskAttachmentsStoreInstance> {
           });
         };
         try {
-          const attachment: TaskAttachment = await store._api.upload(
-            key,
-            file,
-            (percent: number) => {
-              progress?.(percent);
-              patchState(store, {
-                uploads: store
-                  .uploads()
-                  .map((upload: TaskAttachmentUpload) =>
-                    upload.id === id ? { ...upload, progress: percent } : upload,
-                  ),
-              });
-            },
-          );
+          const attachment: TaskAttachment = await store._api.upload(key, file);
           drop();
           if (store._detail.taskKey() === key) {
             patchState(store, {
@@ -359,12 +342,13 @@ function createTaskAttachmentsStore(): Type<TaskAttachmentsStoreInstance> {
         },
 
         async add(files: readonly File[]): Promise<void> {
-          const big: readonly File[] = files.filter(
-            (file: File): boolean => file.size > ATTACHMENT_MAX_BYTES,
+          const rejected: File | undefined = files.find(
+            (file: File): boolean => file.size > ATTACHMENT_MAX_BYTES || file.size === 0,
           );
-          if (big.length > 0) tooLarge(big[0]);
+          if (rejected) refuse(rejected);
           const accepted: readonly File[] = files.filter(
-            (file: File): boolean => file.size <= ATTACHMENT_MAX_BYTES && file.name !== '',
+            (file: File): boolean =>
+              file.size > 0 && file.size <= ATTACHMENT_MAX_BYTES && file.name !== '',
           );
           if (accepted.length === 0) return;
           const fresh: readonly File[] = accepted.filter(
@@ -405,18 +389,12 @@ function createTaskAttachmentsStore(): Type<TaskAttachmentsStoreInstance> {
           }
         },
 
-        async attach(
-          file: File,
-          progress: (percent: number) => void,
-        ): Promise<TaskAttachment | null> {
-          if (file.size > ATTACHMENT_MAX_BYTES) {
-            tooLarge(file);
-            return null;
-          }
+        async attach(file: File): Promise<TaskAttachment | null> {
+          if (refuse(file)) return null;
           const existing: TaskAttachment | undefined = named(file.name);
           if (existing) return existing;
           try {
-            return await send(file, progress);
+            return await send(file);
           } catch {
             return null;
           }

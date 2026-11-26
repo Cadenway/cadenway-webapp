@@ -14,7 +14,7 @@ import {
   CwAlertDialogDescription,
   CwAlertDialogTitle,
 } from '@cadenway/ui/components/alert-dialog';
-import { CwAttachment } from '@cadenway/ui/components/attachment';
+import { CwAttachment, type CwAttachmentLabels } from '@cadenway/ui/components/attachment';
 import { CwButton } from '@cadenway/ui/components/button';
 import { CwDropzone } from '@cadenway/ui/components/dropzone';
 import { NgIcon } from '@ng-icons/core';
@@ -28,7 +28,8 @@ import type { TaskAttachmentUpload } from '../../../state/task-attachments/task-
  * @description
  * The `Attachments` of `Details` (`App.dc.html` lines 2169-2191): the title, the count and `Add`
  * (several files), the attachments as `cw-attachment` tiles (the name opens the preview,
- * `Remove <name>` asks `Remove “<name>”?` first), the files being sent with their progress, and
+ * `Remove <name>` asks `Remove “<name>”?` first), the files being sent with an indeterminate
+ * spinner and `Sending…` (the transfer reports no percentage), and
  * the drop zone (`Drop files here`, `or click to browse · 25 MB per file`). The list's loading
  * skeleton, inline error with `Retry`, and nothing more when it is empty (the drop zone is the
  * empty state, as in the mockup). Without edit rights it lists and previews only. It only emits:
@@ -98,6 +99,21 @@ export class TaskAttachments {
    * @readonly
    */
   public readonly failed: InputSignal<boolean> = input<boolean>(false);
+
+  /**
+   * Property sendingLabels
+   *
+   * @description
+   * The tile copy of a file being sent: the brick's spinner state with `Sending…` and
+   * `Sending in progress` in place of the preview generation copy.
+   *
+   * @type {Partial<CwAttachmentLabels>}
+   * @readonly
+   */
+  protected readonly sendingLabels: Partial<CwAttachmentLabels> = {
+    processing: $localize`:@@task.attachments.uploading:Sending…`,
+    working: $localize`:@@task.attachments.sending:Sending in progress`,
+  };
 
   /**
    * Property canEdit

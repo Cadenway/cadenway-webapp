@@ -101,6 +101,24 @@ describe('TaskAttachmentsStore', () => {
     });
   });
 
+  it('refuses an empty file client-side, from the section and from the composer', async () => {
+    await vi.waitFor(() => {
+      expect(store.items()).toHaveLength(1);
+    });
+
+    await store.add([file('empty.txt', 0)]);
+    await expect(store.attach(file('blank.txt', 0))).resolves.toBeNull();
+
+    expect(toasts.error).toHaveBeenCalledWith('Empty file', {
+      description: 'empty.txt is empty, there is nothing to attach.',
+    });
+    expect(toasts.error).toHaveBeenCalledWith('Empty file', {
+      description: 'blank.txt is empty, there is nothing to attach.',
+    });
+    expect(api['upload']).not.toHaveBeenCalled();
+    expect(toasts.success).not.toHaveBeenCalled();
+  });
+
   it('uploads new files and lists them first', async () => {
     await vi.waitFor(() => {
       expect(store.items()).toHaveLength(1);
@@ -108,6 +126,7 @@ describe('TaskAttachmentsStore', () => {
 
     await store.add([file('export.csv')]);
 
+    expect(api['upload']).toHaveBeenCalledExactlyOnceWith('CAD-482', expect.any(File));
     expect(store.items().map((item: TaskAttachment) => item.name)).toEqual([
       'export.csv',
       'brief.pdf',
@@ -144,7 +163,7 @@ describe('TaskAttachmentsStore', () => {
       expect(store.items()).toHaveLength(1);
     });
 
-    await expect(store.attach(file('brief.pdf'), vi.fn())).resolves.toMatchObject({ id: 'a1' });
+    await expect(store.attach(file('brief.pdf'))).resolves.toMatchObject({ id: 'a1' });
     expect(api['upload']).not.toHaveBeenCalled();
   });
 });

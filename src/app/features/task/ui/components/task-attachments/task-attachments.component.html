@@ -67,10 +67,11 @@
         <li class="min-w-0">
           <cw-attachment
             orientation="vertical"
-            state="uploading"
+            state="processing"
             [name]="upload.name"
             [fileSize]="upload.size"
-            [progress]="upload.progress"
+            [removable]="false"
+            [labels]="sendingLabels"
           />
         </li>
       }

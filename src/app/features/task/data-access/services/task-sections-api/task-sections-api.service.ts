@@ -416,20 +416,17 @@ export class TaskSectionsApi {
    *
    * @description
    * Attaches a file: reserves a signed upload (`Idempotency-Key`), posts the signed form fields
-   * then the file as its last part `file`, and completes the reservation. After a transfer whose
-   * outcome is unknown (no answer), completion is still tried before failing, as the contract
-   * asks. `progress` receives the sent percentage.
+   * then the file as its last part `file`, and completes the reservation. The transfer reports no
+   * percentage: the application's `FetchBackend` cannot observe upload progress (NG02824), so the
+   * caller shows an indeterminate state. After a transfer that left the browser but got no answer
+   * (status `0` once the request was sent), completion is still tried before failing, as the
+   * contract asks; a request refused before it was sent fails without completing.
    *
    * @param {string} taskKey - Key of the task.
-   * @param {File} file - The file, 25 MiB at most.
-   * @param {(percent: number) => void} progress - Receives the upload percentage.
+   * @param {File} file - The file, from 1 byte to 25 MiB.
    * @returns {Promise<TaskAttachment>} The ready attachment.
    */
-  public async upload(
-    taskKey: string,
-    file: File,
-    progress: (percent: number) => void,
-  ): Promise<TaskAttachment> {
+  public async upload(taskKey: string, file: File): Promise<TaskAttachment> {
     const upload: StartTaskAttachmentUploadClientResult = await firstValueFrom(
       this.attachments.startTaskAttachmentUpload(
         taskKey,
@@ -444,24 +441,17 @@ export class TaskSectionsApi {
     const body: FormData = new FormData();
     for (const [name, value] of Object.entries(upload.fields)) body.append(name, value);
     body.append('file', file);
+    let sent: boolean = false;
     try {
       await lastValueFrom(
-        this.http
-          .post(upload.url, body, {
-            observe: 'events',
-            reportUploadProgress: true,
-            responseType: 'text',
-          })
-          .pipe(
-            tap((event: HttpEvent<string>): void => {
-              if (event.type === HttpEventType.UploadProgress && event.total) {
-                progress(Math.round((event.loaded / event.total) * 100));
-              }
-            }),
-          ),
+        this.http.post(upload.url, body, { observe: 'events', responseType: 'text' }).pipe(
+          tap((event: HttpEvent<string>): void => {
+            if (event.type === HttpEventType.Sent) sent = true;
+          }),
+        ),
       );
     } catch (error: unknown) {
-      if (!(error instanceof HttpErrorResponse) || error.status !== 0) throw error;
+      if (!sent || !(error instanceof HttpErrorResponse) || error.status !== 0) throw error;
     }
     const ready: CompleteTaskAttachmentUploadClientResult = await firstValueFrom(
       this.attachments.completeTaskAttachmentUpload(taskKey, upload.id),
