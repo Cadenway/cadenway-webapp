@@ -81,8 +81,8 @@ constants belong to the lead):
   export (`sheetExportSort`) follow the presentation of the shown layout on their own.
 - `LAYOUT_TOOLS` gives the tools of each layout: all of them with `Columns` instead of `Group by`
   on the board (which shows `Columns shown`, writing `hiddenBoardStatusKeys`); none on `form` and
-  `activity`, which hides the toolbar; `Create a task` only on `timesheet`, whose time entries the
-  filters, sort, grouping and search do not change.
+  `activity`, which hides the toolbar (`App.dc.html` line 7811); all of them elsewhere,
+  `timesheet` included, as in the mockup, although its time entries ignore the filters.
 - A dialog package owns `ui/dialogs/<dialog>/*` (`share-dialog`, `sprint-report-dialog`,
   `space-statuses-dialog`, `automations-dialog`) and its `state/` and `data-access/` files. The list
   page hosts it in a `@defer` block loaded on first opening and binds `open` (a two-way model the

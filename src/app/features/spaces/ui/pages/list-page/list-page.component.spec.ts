@@ -637,7 +637,11 @@ describe('ListPage', () => {
       ['sheet', 'sheet-view', ['view-group', 'view-filter']],
       ['form', 'form-view', []],
       ['activity', 'activity-view', []],
-      ['timesheet', 'timesheet-view', ['view-create-task']],
+      [
+        'timesheet',
+        'timesheet-view',
+        ['view-group', 'view-filter', 'view-search', 'view-create-task'],
+      ],
     ];
     for (const [segment, page, tools] of views) {
       await harness.navigateByUrl(`/atelier-nord/l/l-bugs/${segment}`);
@@ -652,8 +656,7 @@ describe('ListPage', () => {
       for (const tool of tools) expect(find(tool), `${segment}: ${tool}`).not.toBeNull();
     }
     expect(find('view-tools')).not.toBeNull();
-    expect(find('view-filter')).toBeNull();
-    expect(find('view-search')).toBeNull();
+    expect(find('view-columns')).toBeNull();
 
     await harness.navigateByUrl('/atelier-nord/l/l-bugs/form');
     harness.detectChanges();

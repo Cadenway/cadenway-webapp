@@ -2,6 +2,7 @@ import { TestBed } from '@angular/core/testing';
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import type { SavedView } from '../../models/saved-view/saved-view.interface';
+import { LAYOUT_TOOLS } from '../../constants/view-layouts/view-layouts.constants';
 import { DEFAULT_PRESENTATION } from '../../utils/list-view-query/list-view-query.util';
 import { ListViewStore } from './list-view.store';
 
@@ -126,7 +127,7 @@ describe('ListViewStore', () => {
 
     store.showLayout('timesheet');
     TestBed.tick();
-    expect(store.tools()).toEqual(['create']);
+    expect(store.tools()).toEqual(LAYOUT_TOOLS.list);
     store.showLayout('form');
     TestBed.tick();
     expect(store.tools()).toEqual([]);
