@@ -2,8 +2,10 @@ import { computed, inject, type ResourceRef, type Signal, type Type } from '@ang
 import type { StatusKey } from '@cadenway/contracts';
 import {
   patchState,
+  signalMethod,
   signalStore,
   withComputed,
+  withHooks,
   withMethods,
   withProps,
   withState,
@@ -64,7 +66,34 @@ interface CalendarViewState {
    * @readonly
    */
   readonly shown: string;
+
+  /**
+   * Property _scheduled
+   *
+   * @description
+   * Keys of the tasks this view scheduled from the panel that the grid's read does not hold yet:
+   * the grid shows each from the unwindowed read (its optimistic due date, then the date that
+   * read reads back) until the grid's read holds it, then forgets it.
+   *
+   * @type {Readonly<Record<string, true>>}
+   * @readonly
+   */
+  readonly _scheduled: Readonly<Record<string, true>>;
   // #endregion
+}
+
+/**
+ * Function wrote
+ *
+ * @description
+ * Whether a write reached the gateway with an answer or without a certain one: applied,
+ * refused or uncertain, which both reads then read again. A write not sent at all is not.
+ *
+ * @param {ViewTaskOutcome} outcome - What the write ended with.
+ * @returns {boolean} Whether it was answered or uncertain.
+ */
+function wrote(outcome: ViewTaskOutcome): boolean {
+  return outcome.done.length + outcome.failed.length + outcome.unknown.length > 0;
 }
 
 /**
@@ -138,9 +167,10 @@ export interface CalendarViewStoreInstance extends ViewTaskWriter {
    * Property gridItems
    *
    * @description
-   * The dated tasks, as shown: those of the grid's read, then those of the unwindowed read that
-   * the grid's read does not hold (a task scheduled from the panel, or any task before the
-   * grid's read answers). A task both reads hold shows as the grid's read has it.
+   * The dated tasks, as shown: those of the grid's read only, then the tasks this view scheduled
+   * from the panel that the grid's read does not hold yet, as the unwindowed read shows them (its
+   * optimistic patch, then what it reads back). The unwindowed read never fills in for a task the
+   * grid's read dropped (deleted, moved out of the window), so no stale copy comes back.
    *
    * @type {Signal<readonly ListTaskItem[]>}
    * @readonly
@@ -152,8 +182,7 @@ export interface CalendarViewStoreInstance extends ViewTaskWriter {
    *
    * @description
    * The tasks without a due date, as shown, in the view's order: those of the unwindowed read
-   * the grid's read does not hold, then those of the grid's read whose due date a write removed
-   * (an `Undo`).
+   * only, its writes applied.
    *
    * @type {Signal<readonly ListTaskItem[]>}
    * @readonly
@@ -317,7 +346,7 @@ export interface CalendarViewStoreInstance extends ViewTaskWriter {
  */
 function createCalendarViewStore(): Type<CalendarViewStoreInstance> {
   return signalStore(
-    withState((): CalendarViewState => ({ mode: 'month', shown: todayIso() })),
+    withState((): CalendarViewState => ({ mode: 'month', shown: todayIso(), _scheduled: {} })),
     withProps(() => {
       const windowed: ListTasksStoreInstance = inject(ListTasksStore);
       return {
@@ -335,26 +364,33 @@ function createCalendarViewStore(): Type<CalendarViewStoreInstance> {
           equal: (a: DueWindow, b: DueWindow): boolean => a.from === b.from && a.to === b.to,
         }),
         hasCurrentSnapshot: (): boolean => store._windowed.hasCurrentSnapshot(),
-        gridItems: (): readonly ListTaskItem[] => [
-          ...store._windowed
-            .items()
-            .filter((item: ListTaskItem): boolean => item.task.due !== null),
-          ...store._unwindowed
-            .items()
-            .filter(
-              (item: ListTaskItem): boolean => item.task.due !== null && !held(item.task.key),
-            ),
-        ],
-        undatedItems: (): readonly ListTaskItem[] => [
-          ...store._unwindowed
-            .items()
-            .filter(
-              (item: ListTaskItem): boolean => item.task.due === null && !held(item.task.key),
-            ),
-          ...store._windowed
-            .items()
-            .filter((item: ListTaskItem): boolean => item.task.due === null),
-        ],
+        gridItems: (): readonly ListTaskItem[] => {
+          const scheduled: Readonly<Record<string, true>> = store._scheduled();
+          return [
+            ...store._windowed
+              .items()
+              .filter((item: ListTaskItem): boolean => item.task.due !== null),
+            ...store._unwindowed
+              .items()
+              .filter(
+                (item: ListTaskItem): boolean =>
+                  item.task.due !== null && item.task.key in scheduled && !held(item.task.key),
+              ),
+          ];
+        },
+        undatedItems: (): readonly ListTaskItem[] =>
+          store._unwindowed.items().filter((item: ListTaskItem): boolean => item.task.due === null),
+        _settledSchedules: (): readonly string[] => {
+          const dated: ReadonlySet<string> = new Set<string>(
+            store._unwindowed
+              .items()
+              .filter((item: ListTaskItem): boolean => item.task.due !== null)
+              .map((item: ListTaskItem): string => item.task.key),
+          );
+          return Object.keys(store._scheduled()).filter(
+            (key: string): boolean => held(key) || !dated.has(key),
+          );
+        },
         gridLoading: (): boolean =>
           store._windowed.initialLoading() && store._windowed.primary.error() === undefined,
         refreshFailed: (): boolean =>
@@ -376,7 +412,27 @@ function createCalendarViewStore(): Type<CalendarViewStoreInstance> {
         key !== undefined && store._windowed.taskOf(key) !== undefined
           ? store._windowed
           : store._unwindowed;
+      const reloadBoth: () => void = (): void => {
+        store._windowed.reload();
+        store._unwindowed.reload();
+      };
+      const settle: (outcome: ViewTaskOutcome) => ViewTaskOutcome = (
+        outcome: ViewTaskOutcome,
+      ): ViewTaskOutcome => {
+        if (wrote(outcome)) reloadBoth();
+        return outcome;
+      };
       return {
+        _forget: signalMethod<readonly string[]>((keys: readonly string[]): void => {
+          if (keys.length === 0) return;
+          patchState(store, (state: CalendarViewState): Partial<CalendarViewState> => ({
+            _scheduled: Object.fromEntries(
+              Object.keys(state._scheduled)
+                .filter((key: string): boolean => !keys.includes(key))
+                .map((key: string): [string, true] => [key, true]),
+            ),
+          }));
+        }),
         load(read: Signal<CalendarRead>): void {
           store._windowed.load(computed((): ListTasksRead => ({ ...read(), due: store.window() })));
           store._unwindowed.load(computed((): ListTasksRead => ({ ...read(), due: null })));
@@ -395,19 +451,26 @@ function createCalendarViewStore(): Type<CalendarViewStoreInstance> {
             item.task.key === key;
           return store.gridItems().find(matches) ?? store.undatedItems().find(matches);
         },
-        act(
+        async act(
           tasks: readonly TaskSummary[],
           action: TaskBulkAction,
           expected?: Readonly<Partial<Record<string, number>>>,
         ): Promise<ViewTaskOutcome> {
-          return sourceOf(tasks[0]?.key).act(tasks, action, expected);
+          return settle(await sourceOf(tasks[0]?.key).act(tasks, action, expected));
         },
-        update(
+        async update(
           task: TaskSummary,
           changes: TaskFieldChanges,
           expected?: Readonly<Partial<Record<string, number>>>,
         ): Promise<ViewTaskOutcome> {
-          return sourceOf(task.key).update(task, changes, expected);
+          const source: ListTasksStoreInstance = sourceOf(task.key);
+          const written: Promise<ViewTaskOutcome> = source.update(task, changes, expected);
+          if (source === store._unwindowed && typeof changes.dueDate === 'string') {
+            patchState(store, (state: CalendarViewState): Partial<CalendarViewState> => ({
+              _scheduled: { ...state._scheduled, [task.key]: true },
+            }));
+          }
+          return settle(await written);
         },
         remind(taskKeys: readonly string[], at: Date): Promise<readonly string[]> {
           return store._windowed.remind(taskKeys, at);
@@ -417,14 +480,16 @@ function createCalendarViewStore(): Type<CalendarViewStoreInstance> {
           store._unwindowed.reload();
           return restored;
         },
-        reload(): void {
-          store._windowed.reload();
-          store._unwindowed.reload();
-        },
+        reload: reloadBoth,
         shownStatus(task: TaskSummary): StatusKey {
           return sourceOf(task.key).shownStatus(task);
         },
       };
+    }),
+    withHooks({
+      onInit(store): void {
+        store._forget(store._settledSchedules);
+      },
     }),
   );
 }
@@ -438,11 +503,13 @@ function createCalendarViewStore(): Type<CalendarViewStoreInstance> {
  * `ListTasksStore` reads with the view's query. The grid's read (`ListTasksStore`) keeps the
  * due dates of the six weeks or the week shown, and reads again when another one shows; the
  * unwindowed read (`UNWINDOWED_TASKS`) feeds the `No due date` panel, since the gateway has no
- * "no due date" filter (gap G4). Each read keeps its own realtime window, retries and writes;
- * the store merges them by key, the grid's read winning for a task both hold. It is the view's
+ * "no due date" filter (gap G4). Neither read fills in for the other: the grid draws the dated
+ * tasks of its read, the panel the undated tasks of the unwindowed read. It is the view's
  * `VIEW_TASK_WRITER`: a write goes through the read that shows the task (the grid's read once it
- * holds it, else the unwindowed one), so a task scheduled from the panel leaves the panel and
- * shows on its day at once, and comes back when the gateway refuses it or its `Undo` runs.
+ * holds it, else the unwindowed one), and every answered or uncertain write reads both again
+ * (the patches stay until a read reaches their version). A task scheduled from the panel shows
+ * on its day from the unwindowed read until the grid's read holds it, and comes back to the panel
+ * when the gateway refuses it or its `Undo` runs.
  *
  * @type {Type<CalendarViewStoreInstance>}
  */

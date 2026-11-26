@@ -370,12 +370,15 @@ grid keeps 720 px and scrolls across).
   Since the gateway has no "no due date" filter (G4), a second instance read without a window
   (`UNWINDOWED_TASKS`, `useClass: ListTasksStore`) feeds the panel, which keeps its undated tasks
   on the client; the view publishes that read's summary (`followRows`), whose count is every task
-  of the query. A task both reads hold shows as the grid's read has it; a dated task the grid's
-  read does not hold yet (one just scheduled, or any task before the grid's read answers) shows
-  from the unwindowed read.
+  of the query. Neither read fills in for the other: the grid draws the dated tasks of its read,
+  the panel the undated tasks of the unwindowed read, so a task the grid's read dropped (deleted,
+  moved out of the window) never comes back from the other read's older copy. The only exception
+  is a task this view scheduled from the panel: the grid shows it from the unwindowed read (its
+  optimistic due date, then the date read back) until the grid's read holds it.
 - The store is the page's `VIEW_TASK_WRITER`: `ViewTaskWritesStore` writes through the read that
   shows the task (the grid's read once it holds it), so the menu's writes and the reschedules show
-  at once wherever the task is. A failed first grid read fails to the route's error boundary; a
+  at once. Every answered or uncertain write then reads both again, keeping the pending patches
+  (and their `Undo`) until a read reaches their version. A failed first grid read fails to the route's error boundary; a
   failed refresh shows `The tasks could not be refreshed.` with `Retry`. The panel is a secondary
   read: skeleton, inline error with `Retry`, `All tasks have a due date.` when it has no task,
   `No task` when the list has none. A read stopped at 2,000 tasks says so under the grid.
@@ -396,8 +399,9 @@ grid keeps 720 px and scrolls across).
   - Both reads hold every dated task of the grid: the unwindowed one already reads the whole list
     (capped at 2,000), so the windowed read only guarantees the grid of a list over that cap. A
     "no due date" filter (G4) would let the panel read the undated tasks alone.
-  - A write counts against one read: the other shows the change once it reads again (realtime,
-    1 s), which matters only while both hold the task.
+  - A write patches the read that shows the task; the other read shows it after the reads that
+    follow the write. An `Undo` that takes a due date away hides the task from the grid at once,
+    and the panel shows it once the unwindowed read answers.
   - The toast's day leaves out the mockup's `Today, …` and `(late)` variants of `dueInfo().long`.
   - The mockup's `Calendar navigation` group name has no place in the brick's header. The brick's
     week view and its texts are not in the mockup.
