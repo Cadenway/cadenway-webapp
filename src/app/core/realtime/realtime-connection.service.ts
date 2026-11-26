@@ -8,7 +8,7 @@ import {
 } from '@angular/core';
 import { toObservable } from '@angular/core/rxjs-interop';
 import { EMPTY, Observable, Subject, type Subscription } from 'rxjs';
-import { io, type Socket } from 'socket.io-client';
+import { type Socket } from 'socket.io-client';
 
 import { type ApiProblem, OrganizationPin, readProblem } from '@core/api';
 import { RuntimeConfigStore } from '@core/config';
@@ -22,8 +22,10 @@ import {
 } from './realtime-protocol.util';
 import {
   REALTIME_ORGANIZATION,
+  REALTIME_SOCKET_FACTORY,
   REALTIME_TERMINAL_FAILURE,
   REALTIME_TICKET_SOURCE,
+  type RealtimeSocketFactory,
 } from './realtime.token';
 import {
   type MemberPresenceChange,
@@ -113,6 +115,17 @@ export class RealtimeConnection {
    * @readonly
    */
   private readonly ticket: () => Promise<string> = inject(REALTIME_TICKET_SOURCE);
+
+  /**
+   * Property socketFactory
+   *
+   * @description
+   * Opens the transport of each attempt.
+   *
+   * @type {RealtimeSocketFactory}
+   * @readonly
+   */
+  private readonly socketFactory: RealtimeSocketFactory = inject(REALTIME_SOCKET_FACTORY);
 
   /**
    * Property organization
@@ -728,7 +741,7 @@ export class RealtimeConnection {
       ]);
       if (this.destroyed || generation !== this.generation || !this.url) return;
       clearTimeout(this.ticketTimer);
-      const socket: Socket = io(new URL(this.url).origin, {
+      const socket: Socket = this.socketFactory(new URL(this.url).origin, {
         auth: { token },
         autoConnect: false,
         forceNew: true,

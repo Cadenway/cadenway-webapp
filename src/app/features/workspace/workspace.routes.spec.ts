@@ -32,7 +32,7 @@ import {
   TasksService,
 } from '@cadenway/api-client';
 import { filter, firstValueFrom, Observable, of, Subject, throwError } from 'rxjs';
-import { io, type Socket } from 'socket.io-client';
+import { type Socket } from 'socket.io-client';
 import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 
 import {
@@ -42,7 +42,11 @@ import {
   PASSIVE_REQUEST,
 } from '@core/api';
 import { RuntimeConfigStore } from '@core/config';
-import { REALTIME_TERMINAL_FAILURE, RealtimeConnection } from '@core/realtime';
+import {
+  REALTIME_SOCKET_FACTORY,
+  REALTIME_TERMINAL_FAILURE,
+  RealtimeConnection,
+} from '@core/realtime';
 import { RouteErrorBoundary } from '@features/errors';
 
 import { WorkspaceSession } from './data-access/services/workspace-session/workspace-session.service';
@@ -54,8 +58,6 @@ import type {
 } from './models/workspace-context/workspace-context.interface';
 import { WORKSPACE_ROUTES } from './workspace.routes';
 import { provideWorkspaceRuntime } from './providers/workspace-runtime/workspace-runtime.provider';
-
-vi.mock('socket.io-client', () => ({ io: vi.fn() }));
 
 /**
  * Component AuthStub
@@ -1282,35 +1284,37 @@ describe('WORKSPACE_ROUTES', () => {
       useValue: { config: () => ({ realtimeUrl: 'https://realtime.example.test' }) },
     });
     TestBed.overrideProvider(RealtimeService, { useValue: { issueRealtimeTicket: tickets } });
-    vi.mocked(io).mockImplementation(() => {
-      const events: Map<string, (data: unknown) => void> = new Map<
-        string,
-        (data: unknown) => void
-      >();
-      handlers.push(events);
-      const disconnect: Mock<() => void> = vi.fn();
-      disconnects.push(disconnect);
-      return {
-        once: (name: string, callback: (data: unknown) => void) => events.set(name, callback),
-        on: (name: string, callback: (data: unknown) => void) => events.set(name, callback),
-        connect: () => undefined,
-        disconnect,
-        removeAllListeners: () => {
-          events.clear();
-        },
-        volatile: { emit: () => undefined },
-        timeout: () => ({
-          emit: (
-            event: string,
-            body: unknown,
-            callback: (error: null, response: unknown) => void,
-          ) => {
-            if (event === 'room:join') joins.push(body);
-            callback(null, { ok: true });
+    TestBed.overrideProvider(REALTIME_SOCKET_FACTORY, {
+      useValue: (): Socket => {
+        const events: Map<string, (data: unknown) => void> = new Map<
+          string,
+          (data: unknown) => void
+        >();
+        handlers.push(events);
+        const disconnect: Mock<() => void> = vi.fn();
+        disconnects.push(disconnect);
+        return {
+          once: (name: string, callback: (data: unknown) => void) => events.set(name, callback),
+          on: (name: string, callback: (data: unknown) => void) => events.set(name, callback),
+          connect: () => undefined,
+          disconnect,
+          removeAllListeners: () => {
+            events.clear();
           },
-        }),
-        emit: () => undefined,
-      } as unknown as Socket;
+          volatile: { emit: () => undefined },
+          timeout: () => ({
+            emit: (
+              event: string,
+              body: unknown,
+              callback: (error: null, response: unknown) => void,
+            ) => {
+              if (event === 'room:join') joins.push(body);
+              callback(null, { ok: true });
+            },
+          }),
+          emit: () => undefined,
+        } as unknown as Socket;
+      },
     });
     const harness: RouterTestingHarness = await open('/atelier-nord');
     const realtime: RealtimeConnection | undefined =
