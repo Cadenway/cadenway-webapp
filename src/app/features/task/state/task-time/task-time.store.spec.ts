@@ -200,6 +200,80 @@ describe('TaskTimeStore', () => {
     expect(localStorage.getItem(storageKey)).toBeNull();
   });
 
+  it('keeps the timer and its key when the stop cannot be recorded, then retries', async () => {
+    create();
+    await settle();
+    store.startTimer();
+    const startedAt: number = store.timerStartedAt() ?? 0;
+    api.record.mockRejectedValueOnce(new Error('offline'));
+
+    expect(await store.stopTimer(startedAt + 25 * 60_000)).toBe(false);
+
+    expect(store.timerStartedAt()).toBe(startedAt);
+    expect(localStorage.getItem(storageKey)).toBe(String(startedAt));
+    expect(toasts.error).toHaveBeenCalledWith('Could not change the time spent', expect.anything());
+
+    expect(await store.stopTimer(startedAt + 27 * 60_000)).toBe(true);
+
+    const calls: unknown[][] = api.record.mock.calls;
+    expect(calls).toHaveLength(2);
+    expect(calls[1][1]).toEqual({ minutes: 25, note: 'Timer' });
+    expect(calls[1][3]).toBe(calls[0][3]);
+    expect(store.timerStartedAt()).toBeNull();
+    expect(localStorage.getItem(storageKey)).toBeNull();
+  });
+
+  it('sends the same entry again under the same idempotency key after a failure', async () => {
+    create();
+    await settle();
+    api.record.mockRejectedValueOnce(new Error('offline'));
+
+    expect(await store.add({ minutes: 90, note: 'OAuth buttons' })).toBe(false);
+    expect(await store.add({ minutes: 90, note: 'OAuth buttons' })).toBe(true);
+    expect(await store.add({ minutes: 90, note: 'OAuth buttons' })).toBe(true);
+
+    const keys: unknown[] = api.record.mock.calls.map((call: unknown[]) => call[3]);
+    expect(keys[1]).toBe(keys[0]);
+    expect(keys[2]).not.toBe(keys[1]);
+  });
+
+  it('runs the Undo of an added entry against its task once another task is open', async () => {
+    create();
+    await settle();
+    await store.add({ minutes: 90, note: 'OAuth buttons' });
+    const options: CwToastOptions = toasts.show.mock.calls[0][1] as CwToastOptions;
+    taskKey.set('CAD-490');
+    await settle();
+    const shown: TaskTimeLog | null = store.log();
+
+    options.undo?.();
+    await settle();
+
+    expect(api.remove).toHaveBeenCalledWith('CAD-482', 'e2');
+    expect(store.log()).toEqual(shown);
+  });
+
+  it('runs the Undo of a deleted entry against its task once another task is open', async () => {
+    create();
+    await settle();
+    await store.remove(entry);
+    const options: CwToastOptions = toasts.show.mock.calls[0][1] as CwToastOptions;
+    taskKey.set('CAD-490');
+    await settle();
+    const shown: TaskTimeLog | null = store.log();
+
+    options.undo?.();
+    await settle();
+
+    expect(api.record).toHaveBeenCalledWith(
+      'CAD-482',
+      { minutes: 45, note: 'Domain detection' },
+      '2026-11-08',
+      expect.any(String),
+    );
+    expect(store.log()).toEqual(shown);
+  });
+
   it('finds a running timer when the task opens again', async () => {
     localStorage.setItem(storageKey, '1762592400000');
     create();

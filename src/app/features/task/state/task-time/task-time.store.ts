@@ -46,6 +46,72 @@ export const MAX_ENTRY_MINUTES: number = 1440;
 export const TIMER_STORAGE_PREFIX: string = 'cadenway-task-timer';
 
 /**
+ * Interface TaskTimeAttempt
+ *
+ * @description
+ * An entry sent to a task and not confirmed yet: sending the same entry again reuses its
+ * `Idempotency-Key`, so a write the gateway applied without answering is not recorded twice.
+ */
+interface TaskTimeAttempt {
+  // #region Properties
+  /**
+   * Property taskKey
+   *
+   * @description
+   * The task the entry is recorded on.
+   *
+   * @type {string}
+   * @readonly
+   */
+  readonly taskKey: string;
+
+  /**
+   * Property minutes
+   *
+   * @description
+   * Minutes of the entry, between 1 and 1,440.
+   *
+   * @type {number}
+   * @readonly
+   */
+  readonly minutes: number;
+
+  /**
+   * Property note
+   *
+   * @description
+   * Note of the entry.
+   *
+   * @type {string}
+   * @readonly
+   */
+  readonly note: string;
+
+  /**
+   * Property workDate
+   *
+   * @description
+   * Local day of the work (`YYYY-MM-DD`).
+   *
+   * @type {string}
+   * @readonly
+   */
+  readonly workDate: string;
+
+  /**
+   * Property idempotencyKey
+   *
+   * @description
+   * The key the entry is sent under.
+   *
+   * @type {string}
+   * @readonly
+   */
+  readonly idempotencyKey: string;
+  // #endregion
+}
+
+/**
  * Interface TaskTimeState
  *
  * @description
@@ -107,6 +173,18 @@ interface TaskTimeState {
    * @readonly
    */
   readonly timerStartedAt: number | null;
+
+  /**
+   * Property timerStop
+   *
+   * @description
+   * The entry of a timer stop the gateway has not confirmed (its minutes and day, frozen at the
+   * first stop so that stopping again sends the same entry under the same key), or null.
+   *
+   * @type {{ readonly minutes: number; readonly workDate: string } | null}
+   * @readonly
+   */
+  readonly timerStop: { readonly minutes: number; readonly workDate: string } | null;
   // #endregion
 }
 
@@ -190,7 +268,8 @@ export interface TaskTimeStoreInstance {
    *
    * @description
    * Records time for today; the toast `{d} added to {key}` gives the new total (against the
-   * estimate) and offers `Undo`, which deletes the entry.
+   * estimate) and offers `Undo`, which deletes the entry from that task even once another task
+   * is open. After a failure, recording the same entry again reuses its `Idempotency-Key`.
    *
    * @param {TaskTimeDraft} draft - Minutes and note; minutes are kept between 1 and 1,440.
    * @returns {Promise<boolean>} Whether it was recorded.
@@ -202,7 +281,8 @@ export interface TaskTimeStoreInstance {
    *
    * @description
    * Deletes an entry at once (the caller confirmed it); a refusal puts it back. The toast
-   * `Entry deleted` offers `Undo`, which records the same time, day and note again.
+   * `Entry deleted` offers `Undo`, which records the same time, day and note again on that task,
+   * even once another task is open (the shown entries change only while it is still open).
    *
    * @param {TaskTimeEntry} entry - The entry.
    * @returns {Promise<boolean>} Whether it was deleted.
@@ -221,8 +301,9 @@ export interface TaskTimeStoreInstance {
    * Method stopTimer
    *
    * @description
-   * Stops the timer and records the elapsed time rounded to the minute, one minute at least,
-   * with the note `Timer`.
+   * Records the elapsed time rounded to the minute, one minute at least, with the note `Timer`,
+   * and stops the timer once the gateway confirms the entry. A refused write keeps the timer
+   * running; stopping again sends the entry of the first stop under the same `Idempotency-Key`.
    *
    * @param {number} now - The current instant (epoch milliseconds).
    * @returns {Promise<boolean>} Whether the time was recorded.
@@ -245,6 +326,7 @@ const initialState: TaskTimeState = {
   failed: false,
   pending: false,
   timerStartedAt: null,
+  timerStop: null,
 };
 
 /**
@@ -322,6 +404,30 @@ function createTaskTimeStore(): Type<TaskTimeStoreInstance> {
         );
       };
 
+      let attempt: TaskTimeAttempt | null = null;
+
+      const attemptKey: (
+        key: string,
+        minutes: number,
+        note: string,
+        workDate: string,
+      ) => TaskTimeAttempt = (
+        key: string,
+        minutes: number,
+        note: string,
+        workDate: string,
+      ): TaskTimeAttempt => {
+        const same: boolean =
+          attempt?.taskKey === key &&
+          attempt.minutes === minutes &&
+          attempt.note === note &&
+          attempt.workDate === workDate;
+        if (!same || attempt === null) {
+          attempt = { taskKey: key, minutes, note, workDate, idempotencyKey: crypto.randomUUID() };
+        }
+        return attempt;
+      };
+
       const record: (
         key: string,
         draft: TaskTimeDraft,
@@ -332,15 +438,17 @@ function createTaskTimeStore(): Type<TaskTimeStoreInstance> {
         workDate: string,
       ): Promise<TaskTimeEntry | null> => {
         const minutes: number = Math.min(MAX_ENTRY_MINUTES, Math.max(1, Math.round(draft.minutes)));
-        patchState(store, { pending: true });
+        const sent: TaskTimeAttempt = attemptKey(key, minutes, draft.note, workDate);
+        if (current(key)) patchState(store, { pending: true });
         try {
           const entry: TaskTimeEntry = await store._api.record(
             key,
             { minutes, note: draft.note },
             workDate,
-            crypto.randomUUID(),
+            sent.idempotencyKey,
           );
-          if (!current(key)) return null;
+          if (attempt === sent) attempt = null;
+          if (!current(key)) return entry;
           const log: TaskTimeLog = store.log() ?? { entries: [], totalMinutes: 0 };
           patchState(store, {
             pending: false,
@@ -354,8 +462,7 @@ function createTaskTimeStore(): Type<TaskTimeStoreInstance> {
           });
           return entry;
         } catch {
-          if (!current(key)) return null;
-          patchState(store, { pending: false });
+          if (current(key)) patchState(store, { pending: false });
           failedToast();
           return null;
         }
@@ -365,7 +472,8 @@ function createTaskTimeStore(): Type<TaskTimeStoreInstance> {
         key: string,
         entry: TaskTimeEntry,
       ): Promise<boolean> => {
-        const before: TaskTimeLog | null = store.log();
+        const shown: boolean = current(key);
+        const before: TaskTimeLog | null = shown ? store.log() : null;
         if (before) {
           patchState(store, {
             log: {
@@ -378,20 +486,23 @@ function createTaskTimeStore(): Type<TaskTimeStoreInstance> {
           await store._api.remove(key, entry.id);
           return true;
         } catch {
-          if (!current(key)) return false;
-          patchState(store, { log: before });
+          if (before && current(key)) patchState(store, { log: before });
           failedToast();
           return false;
         }
       };
 
-      const add: (draft: TaskTimeDraft) => Promise<boolean> = async (
+      const add: (
+        key: string,
         draft: TaskTimeDraft,
-      ): Promise<boolean> => {
-        const key: string | null = store.key();
-        if (key === null) return false;
-        const entry: TaskTimeEntry | null = await record(key, draft, localDay(new Date()));
-        if (!entry) return false;
+        workDate: string,
+      ) => Promise<TaskTimeEntry | null> = async (
+        key: string,
+        draft: TaskTimeDraft,
+        workDate: string,
+      ): Promise<TaskTimeEntry | null> => {
+        const entry: TaskTimeEntry | null = await record(key, draft, workDate);
+        if (!entry || !current(key)) return entry;
         const task: TaskDetailTask | null = store._detail.task();
         const total: string = formatMinutes(store.totalMinutes());
         const estimate: number | null = task?.estimateMinutes ?? null;
@@ -402,11 +513,11 @@ function createTaskTimeStore(): Type<TaskTimeStoreInstance> {
               ? $localize`:@@task.properties.time-total-estimate:Total: ${total}:total: of ${formatMinutes(estimate)}:estimate: estimated`
               : $localize`:@@task.properties.time-total:Total: ${total}:total:`,
             undo: (): void => {
-              if (current(key)) void erase(key, entry);
+              void erase(key, entry);
             },
           },
         );
-        return true;
+        return entry;
       };
 
       return {
@@ -421,7 +532,11 @@ function createTaskTimeStore(): Type<TaskTimeStoreInstance> {
           if (key !== null) await readLog(key);
         },
 
-        add,
+        async add(draft: TaskTimeDraft): Promise<boolean> {
+          const key: string | null = store.key();
+          if (key === null) return false;
+          return (await add(key, draft, localDay(new Date()))) !== null;
+        },
 
         async remove(entry: TaskTimeEntry): Promise<boolean> {
           const key: string | null = store.key();
@@ -431,9 +546,7 @@ function createTaskTimeStore(): Type<TaskTimeStoreInstance> {
           store._toasts.show($localize`:@@task.properties.entry-deleted:Entry deleted`, {
             description: $localize`:@@task.properties.entry-deleted-text:${formatMinutes(entry.minutes)}:duration: removed from ${key}:key:`,
             undo: (): void => {
-              if (current(key)) {
-                void record(key, { minutes: entry.minutes, note: entry.note }, entry.workDate);
-              }
+              void record(key, { minutes: entry.minutes, note: entry.note }, entry.workDate);
             },
           });
           return true;
@@ -444,20 +557,33 @@ function createTaskTimeStore(): Type<TaskTimeStoreInstance> {
           if (key === null || store.timerStartedAt() !== null) return;
           const startedAt: number = Date.now();
           writeTimer(key, startedAt);
-          patchState(store, { timerStartedAt: startedAt });
+          patchState(store, { timerStartedAt: startedAt, timerStop: null });
         },
 
         async stopTimer(now: number): Promise<boolean> {
           const key: string | null = store.key();
           const startedAt: number | null = store.timerStartedAt();
-          if (key === null || startedAt === null) return false;
-          writeTimer(key, null);
-          patchState(store, { timerStartedAt: null });
-          const minutes: number = Math.max(1, Math.round((now - startedAt) / 60_000));
-          return add({
-            minutes,
-            note: $localize`:@@task.properties.timer-note:Timer`,
-          });
+          if (key === null || startedAt === null || store.pending()) return false;
+          const stop: { readonly minutes: number; readonly workDate: string } =
+            store.timerStop() ?? {
+              minutes: Math.min(
+                MAX_ENTRY_MINUTES,
+                Math.max(1, Math.round((now - startedAt) / 60_000)),
+              ),
+              workDate: localDay(new Date(now)),
+            };
+          patchState(store, { timerStop: stop });
+          const entry: TaskTimeEntry | null = await add(
+            key,
+            { minutes: stop.minutes, note: $localize`:@@task.properties.timer-note:Timer` },
+            stop.workDate,
+          );
+          if (entry === null) return false;
+          if (readTimer(key) === startedAt) writeTimer(key, null);
+          if (current(key) && store.timerStartedAt() === startedAt) {
+            patchState(store, { timerStartedAt: null, timerStop: null });
+          }
+          return true;
         },
       };
     }),
@@ -486,7 +612,9 @@ function createTaskTimeStore(): Type<TaskTimeStoreInstance> {
  * has no restore), and the timer. The API keeps no running timer, so the start instant lives in
  * the device storage per organization and task (`TIMER_STORAGE_PREFIX`), read when the task
  * opens; a storage the browser refuses leaves the timer in memory only. Stopping records the
- * elapsed minutes, one at least, with the note `Timer`. It follows the open task of
+ * elapsed minutes, one at least, with the note `Timer`, and clears the timer only once the entry
+ * is confirmed; a write sent again after a failure reuses its `Idempotency-Key`. `Undo` acts on
+ * the task its toast names, whichever task is open by then. It follows the open task of
  * `TaskDetailStore`. Recording time does not change the task version.
  *
  * @type {Type<TaskTimeStoreInstance>}
