@@ -44,6 +44,7 @@ import type {
   TaskTrashEntry,
   TaskWatchers,
 } from '../../models/task-detail/task-detail.interface';
+import type { TaskGitLinkPage } from '../../models/task-git-link/task-git-link.interface';
 import type { TaskSummary } from '../../models/task-summary/task-summary.interface';
 import { TaskVersionConflict } from '../../models/task-write-error/task-write-error.model';
 import { TaskDetailOpener } from '../../services/task-detail-opener/task-detail-opener.service';
@@ -668,6 +669,18 @@ export interface TaskDetailStoreInstance {
   readonly commentsLoading: Signal<boolean>;
 
   /**
+   * Property development
+   *
+   * @description
+   * The first page of Git links the last detail read carried, or null while that part is missing
+   * (`partial: ['development']`); the development panel seeds its list from it.
+   *
+   * @type {Signal<TaskGitLinkPage | null>}
+   * @readonly
+   */
+  readonly development: Signal<TaskGitLinkPage | null>;
+
+  /**
    * Property partial
    *
    * @description
@@ -1143,6 +1156,7 @@ function createTaskDetailStore(): Type<TaskDetailStoreInstance> {
         parent: computed((): TaskReference | null => store.detail()?.parent ?? null),
         subtasks: computed((): readonly TaskSummary[] => store.detail()?.subtasks ?? []),
         comments: computed((): TaskCommentPage | null => store.detail()?.comments ?? null),
+        development: computed((): TaskGitLinkPage | null => store.detail()?.development ?? null),
         partial: computed((): readonly string[] => store.detail()?.partial ?? []),
         pendingFields: computed(
           (): readonly TaskDetailField[] => Object.keys(store._pending()) as TaskDetailField[],

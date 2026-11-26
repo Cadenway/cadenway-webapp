@@ -12,6 +12,7 @@ import {
   type WorkspaceContextPort,
 } from '@features/workspace/ports/workspace-context';
 
+import { TaskGitLinksApi } from '../../../data-access/services/task-git-links-api/task-git-links-api.service';
 import { TaskSectionsApi } from '../../../data-access/services/task-sections-api/task-sections-api.service';
 import type {
   TaskCommentPage,
@@ -181,6 +182,10 @@ describe('TaskDetailTabs', () => {
       commentsFailed,
       commentsLoading: signal(false),
       commentsRevision: signal(0),
+      ready: signal(true),
+      development: signal({ items: [], nextCursor: null }),
+      partial: signal([]),
+      gitRevision: signal(0),
       update: vi.fn(() => Promise.resolve(true)),
       accept: vi.fn(),
       acceptVersion: vi.fn(),
@@ -230,6 +235,7 @@ describe('TaskDetailTabs', () => {
           useValue: { displayedStatus: (task: TaskSummary) => task.status, request },
         },
         { provide: TaskSectionsApi, useValue: api },
+        { provide: TaskGitLinksApi, useValue: { page: vi.fn() } },
         { provide: TaskDetailOpener, useValue: { open, takeTab } },
         { provide: WORKSPACE_CONTEXT, useValue: workspace },
         {

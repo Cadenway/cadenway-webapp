@@ -70,7 +70,19 @@
             (retried)="attachments.load()"
           />
           @if (store.task(); as task) {
-            <cw-task-development [taskKey]="task.key" (keyCopied)="copyKey()" />
+            <cw-task-development
+              [taskKey]="task.key"
+              [links]="gitLinks.items()"
+              [ready]="gitLinks.ready()"
+              [loading]="gitLinks.loading()"
+              [failed]="gitLinks.failed()"
+              [hasMore]="gitLinks.hasMore()"
+              [loadingMore]="gitLinks.loadingMore()"
+              [moreFailed]="gitLinks.moreFailed()"
+              (keyCopied)="copyKey()"
+              (retried)="gitLinks.load()"
+              (moreLoaded)="gitLinks.loadMore()"
+            />
           }
         </div>
       }

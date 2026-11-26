@@ -103,6 +103,7 @@ const detail: TaskDetail = {
   parent: { key: 'CAD-470', name: 'Sign-in', status: 'todo' },
   subtasks: [],
   comments: { items: [], total: 0, nextCursor: null },
+  development: { items: [], nextCursor: null },
   partial: [],
 };
 

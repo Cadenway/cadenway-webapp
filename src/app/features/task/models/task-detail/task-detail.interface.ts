@@ -2,6 +2,7 @@ import type { CancelReason, PriorityKey, Recurrence, StatusKey } from '@cadenway
 
 import type { StatusOption } from '../status-option/status-option.interface';
 import type { TaskMentionSpan } from '../task-detail-sections/task-detail-sections.interface';
+import type { TaskGitLinkPage } from '../task-git-link/task-git-link.interface';
 import type { TaskSummary } from '../task-summary/task-summary.interface';
 
 /**
@@ -539,10 +540,21 @@ export interface TaskDetail {
   readonly comments: TaskCommentPage | null;
 
   /**
+   * Property development
+   *
+   * @description
+   * First page of the task's Git links, or null when that part could not be read.
+   *
+   * @type {TaskGitLinkPage | null}
+   * @readonly
+   */
+  readonly development: TaskGitLinkPage | null;
+
+  /**
    * Property partial
    *
    * @description
-   * Parts the gateway could not read (`comments`, later `attachments` or `development`).
+   * Parts the gateway could not read (`comments`, `development`, later `attachments`).
    *
    * @type {readonly string[]}
    * @readonly

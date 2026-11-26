@@ -1,0 +1,223 @@
+<section
+  aria-label="Development"
+  i18n-aria-label="@@task.development.title"
+  class="flex flex-col gap-2"
+  data-testid="task-development"
+>
+  <div class="flex h-8 items-center gap-2">
+    <h3 class="text-base font-semibold" i18n="@@task.development.title">Development</h3>
+    @if (links().length > 0) {
+      <span
+        class="rounded-full bg-secondary px-1.5 text-xs leading-5 font-medium text-muted-foreground tabular-nums"
+        >{{ count() }}</span
+      >
+    }
+  </div>
+  @if (failed()) {
+    <div
+      role="alert"
+      class="flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm"
+    >
+      <ng-icon
+        name="phosphorWarningCircleBold"
+        class="shrink-0 text-destructive"
+        aria-hidden="true"
+      />
+      <span class="min-w-0 flex-1" i18n="@@task.development.read-failed"
+        >The Git links could not be loaded.</span
+      >
+      <button
+        cwButton
+        variant="outline"
+        size="xs"
+        type="button"
+        [loading]="loading()"
+        (click)="retried.emit()"
+      >
+        <ng-container i18n="@@task.retry">Retry</ng-container>
+      </button>
+    </div>
+  }
+  @if (rows().length > 0) {
+    <ul
+      class="flex flex-col divide-y divide-border rounded-lg border border-border"
+      aria-label="Branches and pull requests"
+      i18n-aria-label="@@task.development.list"
+    >
+      @for (row of rows(); track row.id) {
+        <li class="flex items-start gap-2.5 px-3 py-2.5">
+          <span class="flex h-5 shrink-0 items-center">
+            <ng-icon [name]="row.icon" size="1rem" [class]="row.tone" aria-hidden="true" />
+          </span>
+          <div class="flex min-w-0 flex-1 flex-col gap-1">
+            <div class="flex min-h-5 min-w-0 items-center gap-1.5">
+              @if (row.url; as url) {
+                <a
+                  [href]="url"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="truncate rounded-sm text-sm hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                  [class]="row.titleClass"
+                  [title]="row.title"
+                  >{{ row.title }}</a
+                >
+              } @else {
+                <span class="truncate text-sm" [class]="row.titleClass" [title]="row.title">{{
+                  row.title
+                }}</span>
+              }
+              @if (row.number; as number) {
+                <span class="shrink-0 text-sm text-muted-foreground tabular-nums">{{
+                  number
+                }}</span>
+              }
+            </div>
+            <div
+              class="flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-1 text-xs text-muted-foreground"
+            >
+              <span
+                class="inline-flex h-5 shrink-0 items-center gap-1 rounded-md border border-border bg-background px-1.5 font-medium whitespace-nowrap text-foreground"
+              >
+                <ng-icon [name]="row.icon" size="0.75rem" [class]="row.tone" aria-hidden="true" />
+                <span>{{ row.state }}</span>
+              </span>
+              @if (row.checks; as checks) {
+                <span
+                  class="inline-flex h-5 shrink-0 items-center gap-1 whitespace-nowrap"
+                  [title]="checks.title"
+                >
+                  <ng-icon
+                    [name]="checks.icon"
+                    size="0.875rem"
+                    [class]="checks.tone"
+                    aria-hidden="true"
+                  />
+                  <span class="sr-only">{{ checks.label }}</span>
+                  @if (checks.short; as short) {
+                    <span aria-hidden="true">{{ short }}</span>
+                  }
+                </span>
+              }
+              @if (row.review) {
+                <span
+                  class="inline-flex h-5 shrink-0 items-center whitespace-nowrap"
+                  i18n="@@task.development.review-requested"
+                  >Review requested</span
+                >
+              }
+              @if (row.repository; as repository) {
+                <span class="inline-flex h-5 min-w-0 items-center gap-1">
+                  <ng-icon [name]="row.logo" size="0.75rem" class="shrink-0" aria-hidden="true" />
+                  <span class="truncate">{{ repository }}</span>
+                </span>
+              }
+              @if (row.additions; as additions) {
+                <span
+                  class="inline-flex h-5 shrink-0 items-center gap-1 font-mono whitespace-nowrap tabular-nums"
+                >
+                  <span class="text-jade-text">{{ additions }}</span>
+                  <span class="text-grenat-text">{{ row.deletions }}</span>
+                </span>
+              }
+            </div>
+            <div class="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
+              @if (row.initials; as initials) {
+                <span
+                  class="flex size-4 shrink-0 items-center justify-center rounded-full bg-secondary text-[8px] leading-none font-semibold text-secondary-foreground"
+                  aria-hidden="true"
+                  >{{ initials }}</span
+                >
+              }
+              <span class="shrink-0 whitespace-nowrap">
+                @if (row.author; as author) {
+                  {{ author }} ·
+                }
+                {{ row.when }}</span
+              >
+              @if (row.source; as source) {
+                <span class="shrink-0" aria-hidden="true">·</span>
+                <ng-icon
+                  name="phosphorMagicWandBold"
+                  size="0.75rem"
+                  class="shrink-0"
+                  aria-hidden="true"
+                />
+                <span class="truncate">{{ source }}</span>
+              }
+            </div>
+          </div>
+        </li>
+      }
+    </ul>
+    @if (hasMore() || moreFailed()) {
+      <div class="flex items-center justify-center gap-2 text-sm">
+        @if (moreFailed()) {
+          <span class="text-muted-foreground" role="alert" i18n="@@task.development.more-failed"
+            >Older links could not be loaded.</span
+          >
+        }
+        <button
+          cwButton
+          variant="ghost"
+          size="sm"
+          type="button"
+          [loading]="loadingMore()"
+          (click)="moreLoaded.emit()"
+        >
+          @if (moreFailed()) {
+            <ng-container i18n="@@task.retry">Retry</ng-container>
+          } @else {
+            <ng-container i18n="@@task.development.show-more">Show more</ng-container>
+          }
+        </button>
+      </div>
+    }
+  } @else if (ready() && !failed()) {
+    <div class="flex items-center gap-3 rounded-lg border border-dashed border-border px-3 py-2.5">
+      <span
+        class="flex size-8 shrink-0 items-center justify-center rounded-md bg-muted"
+        aria-hidden="true"
+      >
+        <ng-icon name="phosphorGitPullRequestBold" class="text-muted-foreground" />
+      </span>
+      <span class="flex min-w-0 flex-col leading-tight">
+        <span class="text-sm font-medium" i18n="@@task.development.empty"
+          >No branch or pull request</span
+        >
+        <span class="text-xs text-muted-foreground" i18n="@@task.development.empty-text"
+          >Create the branch from here, or link an existing PR.</span
+        >
+      </span>
+    </div>
+  } @else if (!failed()) {
+    <div role="status" aria-busy="true" class="flex flex-col gap-2">
+      <span class="sr-only" i18n="@@task.development.loading">Loading the Git links</span>
+      @for (line of [1, 2]; track line) {
+        <div
+          class="h-16 animate-pulse rounded-lg bg-muted motion-reduce:animate-none"
+          aria-hidden="true"
+        ></div>
+      }
+    </div>
+  }
+  <p class="flex items-start gap-1.5 text-xs/5 text-muted-foreground">
+    <span class="flex h-5 shrink-0 items-center">
+      <ng-icon name="phosphorInfoBold" size="0.875rem" aria-hidden="true" />
+    </span>
+    <span class="min-w-0" i18n="@@task.development.hint"
+      >Mention
+      <button
+        type="button"
+        title="Copy the identifier"
+        i18n-title="@@task.detail.copy-key"
+        class="rounded bg-muted px-1 font-mono text-foreground transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background focus-visible:outline-none"
+        (click)="keyCopied.emit()"
+      >
+        {{ taskKey() }}
+      </button>
+      in the name of a branch, a commit or the title of a PR: it links itself.
+      <span class="font-mono whitespace-nowrap">fixes {{ taskKey() }}</span> moves it to Done on
+      merge.</span
+    >
+  </p>
+</section>

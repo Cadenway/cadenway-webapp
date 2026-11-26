@@ -158,6 +158,7 @@ function detailAt(version: number, changes: Partial<TaskDetail> = {}): TaskDetai
     parent: null,
     subtasks: [],
     comments,
+    development: { items: [], nextCursor: null },
     partial: [],
     ...changes,
   };
