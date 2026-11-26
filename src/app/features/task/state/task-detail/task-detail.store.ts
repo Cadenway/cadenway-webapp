@@ -1213,6 +1213,11 @@ function createTaskDetailStore(): Type<TaskDetailStoreInstance> {
       let writeCount: number = 0;
       let waiting: { readonly key: string; readonly parts: Set<TaskDetailPart> } | null = null;
       let detailRead: Promise<void> | null = null;
+      // Both the detail and the comments read carry a first comments page. Each read takes the
+      // next number when it starts; a page is shown only when it began after the shown one, so
+      // a slower, older read never replaces a newer page whatever order they answer in.
+      let commentsStarted: number = 0;
+      let commentsShown: number = 0;
       let duplication: { key: string; version: number; idempotencyKey: string } | null = null;
       const noteWrites: {
         queue: Promise<void>;
@@ -1284,6 +1289,7 @@ function createTaskDetailStore(): Type<TaskDetailStoreInstance> {
       ): Promise<void> => {
         const token: number = ++readToken;
         const revision: number = store.gitRevision();
+        const commentsRead: number = ++commentsStarted;
         if (initial) patchState(store, { loading: true, error: null });
         try {
           const detail: TaskDetail = await store._api.read(key);
@@ -1294,11 +1300,29 @@ function createTaskDetailStore(): Type<TaskDetailStoreInstance> {
             shown?.task.key === detail.task.key && shown.task.version > detail.task.version
               ? shown.task
               : detail.task;
+          // A detail whose comments part failed carries no page: it neither replaces the shown
+          // page nor makes a comments read still under way look stale.
+          const usable: boolean = detail.comments !== null;
+          const kept: TaskDetail | null =
+            shown?.task.key === detail.task.key &&
+            (commentsRead < commentsShown || (!usable && shown.comments !== null))
+              ? shown
+              : null;
+          if (!kept && usable) commentsShown = commentsRead;
           patchState(store, {
-            detail: { ...detail, task },
+            detail: kept
+              ? {
+                  ...detail,
+                  task,
+                  comments: kept.comments,
+                  partial: detail.partial.filter(
+                    (part: string): boolean => part !== 'comments' || kept.partial.includes(part),
+                  ),
+                }
+              : { ...detail, task },
             loading: false,
             error: null,
-            commentsFailed: false,
+            ...(kept ? {} : { commentsFailed: false }),
             developmentRevision: revision,
           });
           replayNotices(key);
@@ -1412,10 +1436,16 @@ function createTaskDetailStore(): Type<TaskDetailStoreInstance> {
 
       const readComments: (key: string) => Promise<void> = async (key: string): Promise<void> => {
         patchState(store, { commentsLoading: true });
+        const commentsRead: number = ++commentsStarted;
         try {
           const page: TaskCommentPage = await store._api.readComments(key);
           const detail: TaskDetail | null = store.detail();
           if (!current(key) || !detail) return;
+          if (commentsRead < commentsShown) {
+            patchState(store, { commentsLoading: false });
+            return;
+          }
+          commentsShown = commentsRead;
           patchState(store, {
             detail: {
               ...detail,
@@ -1426,7 +1456,13 @@ function createTaskDetailStore(): Type<TaskDetailStoreInstance> {
             commentsFailed: false,
           });
         } catch {
-          if (current(key)) patchState(store, { commentsLoading: false, commentsFailed: true });
+          if (!current(key)) return;
+          patchState(
+            store,
+            commentsRead < commentsShown
+              ? { commentsLoading: false }
+              : { commentsLoading: false, commentsFailed: true },
+          );
         }
       };
 

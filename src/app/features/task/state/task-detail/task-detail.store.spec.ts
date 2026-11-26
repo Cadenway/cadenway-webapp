@@ -622,6 +622,106 @@ describe('TaskDetailStore', () => {
     expect(store.gitRevision()).toBe(1);
   });
 
+  it('keeps the newer comments page when an older detail read answers after it', async () => {
+    vi.useFakeTimers();
+    const store: TaskDetailStoreInstance = await setup();
+    let answerDetail: (detail: TaskDetail) => void = () => undefined;
+    read.mockImplementationOnce(
+      () =>
+        new Promise<TaskDetail>((resolve: (detail: TaskDetail) => void): void => {
+          answerDetail = resolve;
+        }),
+    );
+    readComments.mockResolvedValueOnce({ ...comments, total: 2 });
+
+    reconnected.next();
+    await vi.advanceTimersByTimeAsync(NOTICE_WINDOW_MS);
+    expect(store.comments()?.total).toBe(2);
+
+    answerDetail(detailAt(5));
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(store.task()?.version).toBe(5);
+    expect(store.comments()?.total).toBe(2);
+  });
+
+  it('keeps the detail comments page when an older comments read answers after it', async () => {
+    vi.useFakeTimers();
+    const store: TaskDetailStoreInstance = await setup();
+    let answerComments: (page: TaskCommentPage) => void = () => undefined;
+    readComments.mockImplementationOnce(
+      () =>
+        new Promise<TaskCommentPage>((resolve: (page: TaskCommentPage) => void): void => {
+          answerComments = resolve;
+        }),
+    );
+    read.mockResolvedValueOnce(detailAt(5, { comments: { ...comments, total: 3 } }));
+
+    notices.next({
+      id: 'n1',
+      type: 'comment.created.v1',
+      at: '2026-11-06T11:00:00Z',
+      data: {
+        taskId: '0190d2c4-0000-7000-8000-000000000001',
+        commentId: '0190d2c4-0000-7000-8000-000000000002',
+      },
+    });
+    await vi.advanceTimersByTimeAsync(NOTICE_WINDOW_MS);
+    notices.next({
+      id: 'n2',
+      type: 'task.updated.v1',
+      at: '2026-11-06T11:00:01Z',
+      data: { taskId: '0190d2c4-0000-7000-8000-000000000001', changed: ['name'] },
+    });
+    await vi.advanceTimersByTimeAsync(NOTICE_WINDOW_MS);
+    expect(store.comments()?.total).toBe(3);
+
+    answerComments({ ...comments, total: 2 });
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(store.comments()?.total).toBe(3);
+    expect(store.commentsFailed()).toBe(false);
+  });
+
+  it('shows an older comments read when a newer detail read has no comments part', async () => {
+    vi.useFakeTimers();
+    const store: TaskDetailStoreInstance = await setup();
+    let answerComments: (page: TaskCommentPage) => void = () => undefined;
+    readComments.mockImplementationOnce(
+      () =>
+        new Promise<TaskCommentPage>((resolve: (page: TaskCommentPage) => void): void => {
+          answerComments = resolve;
+        }),
+    );
+    read.mockResolvedValueOnce(detailAt(5, { comments: null, partial: ['comments'] }));
+
+    notices.next({
+      id: 'n1',
+      type: 'comment.created.v1',
+      at: '2026-11-06T11:00:00Z',
+      data: {
+        taskId: '0190d2c4-0000-7000-8000-000000000001',
+        commentId: '0190d2c4-0000-7000-8000-000000000002',
+      },
+    });
+    await vi.advanceTimersByTimeAsync(NOTICE_WINDOW_MS);
+    notices.next({
+      id: 'n2',
+      type: 'task.updated.v1',
+      at: '2026-11-06T11:00:01Z',
+      data: { taskId: '0190d2c4-0000-7000-8000-000000000001', changed: ['name'] },
+    });
+    await vi.advanceTimersByTimeAsync(NOTICE_WINDOW_MS);
+    expect(store.task()?.version).toBe(5);
+    expect(store.comments()?.total).toBe(1);
+
+    answerComments({ ...comments, total: 2 });
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(store.comments()?.total).toBe(2);
+    expect(store.commentsFailed()).toBe(false);
+  });
+
   it('follows the task at once, takes the new version and says so', async () => {
     const store: TaskDetailStoreInstance = await setup();
     await vi.waitFor(() => {
