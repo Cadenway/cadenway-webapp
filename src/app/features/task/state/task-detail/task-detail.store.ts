@@ -422,6 +422,40 @@ export interface TaskDetailHeader {
 }
 
 /**
+ * Interface TaskDetailUpdateOptions
+ *
+ * @description
+ * How `update` targets and reports a change.
+ */
+export interface TaskDetailUpdateOptions {
+  // #region Properties
+  /**
+   * Property key
+   *
+   * @description
+   * The task written, the open one by default (a description draft typed in a task no longer
+   * shown is still written to it).
+   *
+   * @type {string | undefined}
+   * @readonly
+   */
+  readonly key?: string;
+
+  /**
+   * Property draftKept
+   *
+   * @description
+   * Whether the caller keeps the text as a draft when the write fails: the failure and conflict
+   * toasts then say so.
+   *
+   * @type {boolean | undefined}
+   * @readonly
+   */
+  readonly draftKept?: boolean;
+  // #endregion
+}
+
+/**
  * Interface TaskDetailStoreInstance
  *
  * @description
@@ -849,12 +883,15 @@ export interface TaskDetailStoreInstance {
    * detail again before the next write and warns; any other failure drops them (the confirmed
    * values come back) and shows the failure toast. A later write of the same field keeps its own
    * value shown. A write still queued when another task opens is sent with its own task's key
-   * and version.
+   * and version. `options.key` writes another task than the open one (against its recorded
+   * version, nothing written without one); `options.draftKept` makes the toasts say the text is
+   * kept as a draft.
    *
    * @param {TaskDetailPatch} patch - The changed fields.
+   * @param {TaskDetailUpdateOptions} [options] - The task written and the toasts' wording.
    * @returns {Promise<boolean>} Whether the gateway saved the change.
    */
-  update(patch: TaskDetailPatch): Promise<boolean>;
+  update(patch: TaskDetailPatch, options?: TaskDetailUpdateOptions): Promise<boolean>;
 
   /**
    * Method write
@@ -1355,9 +1392,14 @@ function createTaskDetailStore(): Type<TaskDetailStoreInstance> {
         });
       };
 
-      const send: (key: string, patch: TaskDetailPatch) => Promise<boolean> = async (
+      const send: (
         key: string,
         patch: TaskDetailPatch,
+        draftKept?: boolean,
+      ) => Promise<boolean> = async (
+        key: string,
+        patch: TaskDetailPatch,
+        draftKept: boolean = false,
       ): Promise<boolean> => {
         const fields: TaskDetailField[] = (Object.keys(patch) as TaskDetailField[]).filter(
           (field: TaskDetailField): boolean => patch[field] !== undefined,
@@ -1382,8 +1424,25 @@ function createTaskDetailStore(): Type<TaskDetailStoreInstance> {
           return true;
         } catch (error: unknown) {
           clearPending(fields, id);
-          if (error instanceof TaskVersionConflict) conflicted(key);
-          else failed(undefined, refusalText(error));
+          if (error instanceof TaskVersionConflict) {
+            if (draftKept) {
+              store._toasts.warning(
+                $localize`:@@task.detail.conflict:${key}:key: changed elsewhere`,
+                {
+                  description: $localize`:@@task.description.kept-conflict:Its latest version is shown; your description is kept as a draft.`,
+                },
+              );
+            } else {
+              conflicted(key);
+            }
+          } else {
+            failed(
+              undefined,
+              draftKept
+                ? $localize`:@@task.description.kept-failed:Your description is kept as a draft on this device.`
+                : refusalText(error),
+            );
+          }
           return false;
         }
       };
@@ -1431,9 +1490,9 @@ function createTaskDetailStore(): Type<TaskDetailStoreInstance> {
           return store._pending()[field] !== undefined;
         },
 
-        update(patch: TaskDetailPatch): Promise<boolean> {
-          const key: string | null = keyOf();
-          return key === null ? Promise.resolve(false) : send(key, patch);
+        update(patch: TaskDetailPatch, options?: TaskDetailUpdateOptions): Promise<boolean> {
+          const key: string | null = options?.key ?? keyOf();
+          return key === null ? Promise.resolve(false) : send(key, patch, options?.draftKept);
         },
 
         write,

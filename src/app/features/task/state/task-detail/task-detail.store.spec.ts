@@ -430,6 +430,37 @@ describe('TaskDetailStore', () => {
     });
   });
 
+  it('says a description draft is kept when its write conflicts or fails', async () => {
+    update
+      .mockRejectedValueOnce(new TaskVersionConflict('CAD-482'))
+      .mockRejectedValueOnce(new HttpErrorResponse({ status: 0 }));
+    const store: TaskDetailStoreInstance = await setup();
+
+    await expect(
+      store.update({ description: 'Draft' }, { key: 'CAD-482', draftKept: true }),
+    ).resolves.toBe(false);
+    expect(warning).toHaveBeenCalledWith('CAD-482 changed elsewhere', {
+      description: 'Its latest version is shown; your description is kept as a draft.',
+    });
+
+    await expect(
+      store.update({ description: 'Draft' }, { key: 'CAD-482', draftKept: true }),
+    ).resolves.toBe(false);
+    expect(error).toHaveBeenCalledWith('Could not save the change', {
+      description: 'Your description is kept as a draft on this device.',
+    });
+  });
+
+  it('writes another task than the open one when the update names it', async () => {
+    const store: TaskDetailStoreInstance = await setup();
+    store.accept(taskAt(3, { id: 'CAD-777', key: 'CAD-777' }));
+
+    await expect(store.update({ description: 'Draft' }, { key: 'CAD-777' })).resolves.toBe(true);
+
+    expect(update).toHaveBeenCalledExactlyOnceWith('CAD-777', 3, { description: 'Draft' });
+    expect(store.task()?.key).toBe('CAD-482');
+  });
+
   it('reads the task again and warns when its version changed elsewhere (412)', async () => {
     update.mockRejectedValueOnce(new TaskVersionConflict('CAD-482'));
     read

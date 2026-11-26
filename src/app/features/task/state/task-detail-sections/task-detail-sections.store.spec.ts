@@ -4,11 +4,13 @@ import { CwToastService } from '@cadenway/ui/components/toast';
 import { HttpErrorResponse } from '@angular/common/http';
 import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 
-import { TaskDetailApi } from '../../data-access/services/task-detail-api/task-detail-api.service';
+import { WORKSPACE_CONTEXT } from '@features/workspace/ports/workspace-context';
+
 import { TaskSectionsApi } from '../../data-access/services/task-sections-api/task-sections-api.service';
 import type { TaskDetailTask } from '../../models/task-detail/task-detail.interface';
 import { TaskDetailStore } from '../task-detail/task-detail.store';
 import {
+  DESCRIPTION_DRAFT_PREFIX,
   DESCRIPTION_SAVE_MS,
   TaskDetailSectionsStore,
   type TaskDetailSectionsStoreInstance,
@@ -59,11 +61,35 @@ describe('TaskDetailSectionsStore', () => {
   let task: WritableSignal<TaskDetailTask>;
   let detail: Record<string, unknown>;
   let api: Record<string, Mock>;
-  let taskApi: { update: Mock };
   let toasts: { success: Mock; error: Mock };
   let store: TaskDetailSectionsStoreInstance;
 
+  /**
+   * Function create
+   *
+   * @description
+   * Provides and starts the store over the current fakes.
+   *
+   * @returns {TaskDetailSectionsStoreInstance} The store.
+   */
+  function create(): TaskDetailSectionsStoreInstance {
+    TestBed.configureTestingModule({
+      providers: [
+        TaskDetailSectionsStore,
+        { provide: TaskDetailStore, useValue: detail },
+        { provide: TaskSectionsApi, useValue: api },
+        {
+          provide: WORKSPACE_CONTEXT,
+          useValue: { organization: signal({ id: 'o1', slug: 'atelier-nord' }) },
+        },
+        { provide: CwToastService, useValue: toasts },
+      ],
+    });
+    return TestBed.inject(TaskDetailSectionsStore);
+  }
+
   beforeEach(() => {
+    localStorage.clear();
     task = signal(TASK);
     detail = {
       taskKey: signal('CAD-482'),
@@ -89,17 +115,15 @@ describe('TaskDetailSectionsStore', () => {
       createSubtask: vi.fn(),
     };
     toasts = { success: vi.fn(), error: vi.fn() };
-    taskApi = {
-      update: vi.fn((key: string, version: number) =>
-        Promise.resolve({ ...TASK, key, id: key, version: version + 1, description: 'New' }),
-      ),
-    };
     TestBed.configureTestingModule({
       providers: [
         TaskDetailSectionsStore,
         { provide: TaskDetailStore, useValue: detail },
         { provide: TaskSectionsApi, useValue: api },
-        { provide: TaskDetailApi, useValue: taskApi },
+        {
+          provide: WORKSPACE_CONTEXT,
+          useValue: { organization: signal({ id: 'o1', slug: 'atelier-nord' }) },
+        },
         { provide: CwToastService, useValue: toasts },
       ],
     });
@@ -108,6 +132,7 @@ describe('TaskDetailSectionsStore', () => {
 
   afterEach(() => {
     vi.useRealTimers();
+    localStorage.clear();
   });
 
   it('names people from the member directory and reads the depth from the parent', async () => {
@@ -192,20 +217,23 @@ describe('TaskDetailSectionsStore', () => {
     await vi.advanceTimersByTimeAsync(DESCRIPTION_SAVE_MS);
 
     expect(detail['update']).toHaveBeenCalledTimes(1);
-    expect(detail['update']).toHaveBeenCalledWith({
-      description: 'Newer',
-      descriptionMentions: [],
-    });
+    expect(detail['update']).toHaveBeenCalledWith(
+      { description: 'Newer', descriptionMentions: [] },
+      { key: 'CAD-482', draftKept: true },
+    );
   });
 
   it('sends the mention spans of the description with it', () => {
     store.editDescription('Ask @[Hugo Dubois](u2) to review');
     store.flushDescription();
 
-    expect(detail['update']).toHaveBeenCalledWith({
-      description: 'Ask @[Hugo Dubois](u2) to review',
-      descriptionMentions: [{ userId: 'u2', start: 4, end: 22 }],
-    });
+    expect(detail['update']).toHaveBeenCalledWith(
+      {
+        description: 'Ask @[Hugo Dubois](u2) to review',
+        descriptionMentions: [{ userId: 'u2', start: 4, end: 22 }],
+      },
+      { key: 'CAD-482', draftKept: true },
+    );
   });
 
   it('saves a description typed before the task switched to its own task, not the new one', async () => {
@@ -216,13 +244,10 @@ describe('TaskDetailSectionsStore', () => {
 
     await vi.advanceTimersByTimeAsync(DESCRIPTION_SAVE_MS);
 
-    expect(detail['update']).not.toHaveBeenCalled();
-    expect(detail['write']).toHaveBeenCalledWith('CAD-482', expect.any(Function));
-    expect(taskApi.update).toHaveBeenCalledWith('CAD-482', 4, {
-      description: 'Typed in CAD-482',
-      descriptionMentions: [],
-    });
-    expect(detail['accept']).toHaveBeenCalledWith(expect.objectContaining({ key: 'CAD-482' }));
+    expect(detail['update']).toHaveBeenCalledExactlyOnceWith(
+      { description: 'Typed in CAD-482', descriptionMentions: [] },
+      { key: 'CAD-482', draftKept: true },
+    );
   });
 
   it('saves the waiting draft of the previous task on destroy after a switch', () => {
@@ -232,11 +257,10 @@ describe('TaskDetailSectionsStore', () => {
 
     TestBed.resetTestingModule();
 
-    expect(detail['update']).not.toHaveBeenCalled();
-    expect(taskApi.update).toHaveBeenCalledWith('CAD-482', 4, {
-      description: 'Typed in CAD-482',
-      descriptionMentions: [],
-    });
+    expect(detail['update']).toHaveBeenCalledExactlyOnceWith(
+      { description: 'Typed in CAD-482', descriptionMentions: [] },
+      { key: 'CAD-482', draftKept: true },
+    );
   });
 
   it('sends a text reverted while a save is in flight after that save', async () => {
@@ -252,14 +276,16 @@ describe('TaskDetailSectionsStore', () => {
     store.editDescription('Old');
     store.flushDescription();
 
-    expect(detail['update']).toHaveBeenNthCalledWith(1, {
-      description: 'Changed',
-      descriptionMentions: [],
-    });
-    expect(detail['update']).toHaveBeenNthCalledWith(2, {
-      description: 'Old',
-      descriptionMentions: [],
-    });
+    expect(detail['update']).toHaveBeenNthCalledWith(
+      1,
+      { description: 'Changed', descriptionMentions: [] },
+      { key: 'CAD-482', draftKept: true },
+    );
+    expect(detail['update']).toHaveBeenNthCalledWith(
+      2,
+      { description: 'Old', descriptionMentions: [] },
+      { key: 'CAD-482', draftKept: true },
+    );
     answer(true);
     await Promise.resolve();
 
@@ -272,7 +298,79 @@ describe('TaskDetailSectionsStore', () => {
     store.editDescription('   ');
     store.flushDescription();
 
-    expect(detail['update']).toHaveBeenCalledWith({ description: null });
+    expect(detail['update']).toHaveBeenCalledWith(
+      { description: null },
+      { key: 'CAD-482', draftKept: true },
+    );
+  });
+
+  it('keeps a draft whose save failed on the device and restores it when the task opens again', async () => {
+    vi.useFakeTimers();
+    (detail['update'] as Mock).mockResolvedValueOnce(false);
+    store.editDescription('Typed in CAD-482');
+    (detail['taskKey'] as WritableSignal<string>).set('CAD-490');
+    task.set({ ...TASK, id: 'CAD-490', key: 'CAD-490', version: 9, description: 'Other' });
+    await vi.advanceTimersByTimeAsync(DESCRIPTION_SAVE_MS);
+    expect(localStorage.getItem(`${DESCRIPTION_DRAFT_PREFIX}.o1.CAD-482`)).not.toBeNull();
+
+    TestBed.resetTestingModule();
+    (detail['taskKey'] as WritableSignal<string>).set('CAD-482');
+    task.set(TASK);
+    (detail['update'] as Mock).mockClear();
+    const reopened: TaskDetailSectionsStoreInstance = create();
+    TestBed.tick();
+
+    expect(reopened.restoredDraft()).toBe('Typed in CAD-482');
+    await vi.advanceTimersByTimeAsync(DESCRIPTION_SAVE_MS);
+    expect(detail['update']).toHaveBeenCalledExactlyOnceWith(
+      { description: 'Typed in CAD-482', descriptionMentions: [] },
+      { key: 'CAD-482', draftKept: true },
+    );
+    expect(reopened.restoredDraft()).toBeNull();
+    expect(localStorage.getItem(`${DESCRIPTION_DRAFT_PREFIX}.o1.CAD-482`)).toBeNull();
+  });
+
+  it('discards a restored draft without saving it', async () => {
+    vi.useFakeTimers();
+    localStorage.setItem(
+      `${DESCRIPTION_DRAFT_PREFIX}.o1.CAD-482`,
+      JSON.stringify({ markdown: 'Kept text', base: 'Old' }),
+    );
+    TestBed.resetTestingModule();
+    const reopened: TaskDetailSectionsStoreInstance = create();
+    TestBed.tick();
+    expect(reopened.restoredDraft()).toBe('Kept text');
+
+    reopened.discardDraft();
+    await vi.advanceTimersByTimeAsync(DESCRIPTION_SAVE_MS);
+
+    expect(reopened.restoredDraft()).toBeNull();
+    expect(detail['update']).not.toHaveBeenCalled();
+    expect(localStorage.getItem(`${DESCRIPTION_DRAFT_PREFIX}.o1.CAD-482`)).toBeNull();
+  });
+
+  it('forgets a stored draft the confirmed description already carries', () => {
+    localStorage.setItem(
+      `${DESCRIPTION_DRAFT_PREFIX}.o1.CAD-482`,
+      JSON.stringify({ markdown: 'Old', base: '' }),
+    );
+    TestBed.resetTestingModule();
+    const reopened: TaskDetailSectionsStoreInstance = create();
+    TestBed.tick();
+
+    expect(reopened.restoredDraft()).toBeNull();
+    expect(localStorage.getItem(`${DESCRIPTION_DRAFT_PREFIX}.o1.CAD-482`)).toBeNull();
+  });
+
+  it('shows a draft whose save failed again in the open task', async () => {
+    (detail['update'] as Mock).mockResolvedValueOnce(false);
+    store.editDescription('Typed again');
+    store.flushDescription();
+
+    await vi.waitFor(() => {
+      expect(store.restoredDraft()).toBe('Typed again');
+    });
+    expect(localStorage.getItem(`${DESCRIPTION_DRAFT_PREFIX}.o1.CAD-482`)).not.toBeNull();
   });
 
   it('shows the limit a refused creation names', async () => {

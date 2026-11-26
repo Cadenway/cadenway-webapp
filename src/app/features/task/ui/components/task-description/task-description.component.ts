@@ -8,6 +8,7 @@ import {
   type WritableSignal,
 } from '@angular/core';
 import { CwBlockEditor, type CwMentionSearch } from '@cadenway/ui/components/block-editor';
+import { CwButton } from '@cadenway/ui/components/button';
 
 /**
  * Component TaskDescription
@@ -21,11 +22,12 @@ import { CwBlockEditor, type CwMentionSearch } from '@cadenway/ui/components/blo
  * text shows again. A normalization the editor makes without the focus is never emitted. Typing
  * `@` opens the people menu of `mentionSearch` (the task's participants), which writes
  * `@[Name](id)` tokens the owner sends as mention spans. Without edit rights the editor is
- * disabled.
+ * disabled. With `restored` (a draft of this task kept on the device after a failed save), a
+ * notice says so above the editor and its `Discard` emits `discarded`.
  */
 @Component({
   selector: 'cw-task-description',
-  imports: [CwBlockEditor],
+  imports: [CwBlockEditor, CwButton],
   host: {
     class: 'flex flex-col gap-2 px-2',
     '(focusin)': 'editing = true',
@@ -33,6 +35,18 @@ import { CwBlockEditor, type CwMentionSearch } from '@cadenway/ui/components/blo
   },
   template: `
     <h3 class="text-base font-semibold" i18n="@@task.description.title">Description</h3>
+    @if (restored()) {
+      <div
+        role="status"
+        class="flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground"
+        data-testid="task-description-restored"
+      >
+        <span i18n="@@task.description.restored">Unsaved changes restored from this device.</span>
+        <button cwButton type="button" variant="link" size="xs" (click)="discarded.emit()">
+          <ng-container i18n="@@task.description.discard">Discard</ng-container>
+        </button>
+      </div>
+    }
     <cw-block-editor
       variant="document"
       toolbar
@@ -80,6 +94,28 @@ export class TaskDescription {
    */
   public readonly mentionSearch: InputSignal<CwMentionSearch | null> =
     input<CwMentionSearch | null>(null);
+
+  /**
+   * Property restored
+   *
+   * @description
+   * Whether the editor shows a draft restored from the device rather than the confirmed text.
+   *
+   * @type {InputSignal<boolean>}
+   * @readonly
+   */
+  public readonly restored: InputSignal<boolean> = input<boolean>(false);
+
+  /**
+   * Property discarded
+   *
+   * @description
+   * Emits when the caller discards the restored draft.
+   *
+   * @type {OutputEmitterRef<void>}
+   * @readonly
+   */
+  public readonly discarded: OutputEmitterRef<void> = output();
 
   /**
    * Property edited

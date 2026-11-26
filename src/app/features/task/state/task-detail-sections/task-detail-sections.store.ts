@@ -1,3 +1,4 @@
+import { DOCUMENT } from '@angular/common';
 import { computed, inject, type Signal, type Type } from '@angular/core';
 import {
   patchState,
@@ -12,8 +13,8 @@ import {
 import { CwToastService } from '@cadenway/ui/components/toast';
 
 import { hasProblemCode } from '@core/api';
+import { WORKSPACE_CONTEXT } from '@features/workspace/ports/workspace-context';
 
-import { TaskDetailApi } from '../../data-access/services/task-detail-api/task-detail-api.service';
 import { TaskSectionsApi } from '../../data-access/services/task-sections-api/task-sections-api.service';
 import type { Person } from '../../models/person/person.interface';
 import type {
@@ -34,6 +35,50 @@ import { TaskDetailStore } from '../task-detail/task-detail.store';
  * @type {number}
  */
 const UNVERSIONED_WRITE: number = 0;
+
+/**
+ * Constant DESCRIPTION_DRAFT_PREFIX
+ *
+ * @description
+ * Prefix of the device storage key of a description draft not confirmed yet, followed by the
+ * organization and the task key: the draft outlives the detail, so a save that failed or
+ * conflicted after the caller closed the detail or opened another task is offered again.
+ *
+ * @type {string}
+ */
+export const DESCRIPTION_DRAFT_PREFIX: string = 'cadenway-task-description-draft';
+
+/**
+ * Interface StoredDescriptionDraft
+ *
+ * @description
+ * A description draft kept on the device until its write is confirmed.
+ */
+interface StoredDescriptionDraft {
+  // #region Properties
+  /**
+   * Property markdown
+   *
+   * @description
+   * The text typed.
+   *
+   * @type {string}
+   * @readonly
+   */
+  readonly markdown: string;
+
+  /**
+   * Property base
+   *
+   * @description
+   * The description the text was typed over.
+   *
+   * @type {string}
+   * @readonly
+   */
+  readonly base: string;
+  // #endregion
+}
 
 /**
  * Constant DESCRIPTION_SAVE_MS
@@ -130,6 +175,18 @@ interface TaskDetailSectionsState {
   readonly refusedLimit: SubtaskLimit | null;
 
   /**
+   * Property restoredDraft
+   *
+   * @description
+   * A description draft of the open task restored from the device (its save failed or
+   * conflicted earlier), shown in the editor until it is saved or discarded, or null.
+   *
+   * @type {string | null}
+   * @readonly
+   */
+  readonly restoredDraft: string | null;
+
+  /**
    * Property creating
    *
    * @description
@@ -204,6 +261,18 @@ export interface TaskDetailSectionsStoreInstance {
    * @readonly
    */
   readonly creating: Signal<boolean>;
+
+  /**
+   * Property restoredDraft
+   *
+   * @description
+   * The description draft restored from the device for the open task (shown in the editor with
+   * the `Discard` notice until it is saved or discarded), or null.
+   *
+   * @type {Signal<string | null>}
+   * @readonly
+   */
+  readonly restoredDraft: Signal<string | null>;
   // #endregion
 
   // #region Methods
@@ -216,8 +285,10 @@ export interface TaskDetailSectionsStoreInstance {
    * the spans of its `@` mentions (`descriptionMentions`); an empty text clears it. The draft
    * belongs to the task it was typed in: when another task is open by the time it is saved (the
    * address switched before the pause, or the detail closes on another task), it is written to
-   * its own task through `TaskDetailStore.write`, against that task's recorded version, and never
-   * to the task now shown. A draft is compared with the last description sent for its task while
+   * its own task (`update` with that key, against its recorded version), never to the task now
+   * shown. Each draft sent waits in the device storage (`DESCRIPTION_DRAFT_PREFIX`) until its write
+   * is confirmed: a failed or conflicting save keeps it (the toast says so), and the next opening
+   * of that task restores it in the editor with a `Discard` notice and saves it after the pause. A draft is compared with the last description sent for its task while
    * that write is queued or in flight (not only the confirmed one), so a text reverted during a
    * save is sent after it rather than dropped.
    *
@@ -232,6 +303,15 @@ export interface TaskDetailSectionsStoreInstance {
    * Saves a waiting description at once (the editor lost the focus, or the detail closes).
    */
   flushDescription(): void;
+
+  /**
+   * Method discardDraft
+   *
+   * @description
+   * Drops the restored description draft of the open task: the device forgets it and the editor
+   * shows the confirmed description again.
+   */
+  discardDraft(): void;
 
   /**
    * Method toggleItem
@@ -284,13 +364,21 @@ function createTaskDetailSectionsStore(): Type<TaskDetailSectionsStoreInstance> 
     checklistPending: {},
     depth: null,
     refusedLimit: null,
+    restoredDraft: null,
     creating: false,
   };
   return signalStore(
     withState(initialState),
     withProps(() => ({
       _api: inject(TaskSectionsApi),
-      _taskApi: inject(TaskDetailApi),
+      _workspace: inject(WORKSPACE_CONTEXT),
+      _storage: ((): Storage | null => {
+        try {
+          return inject(DOCUMENT).defaultView?.localStorage ?? null;
+        } catch {
+          return null;
+        }
+      })(),
       _detail: inject(TaskDetailStore),
       _toasts: inject(CwToastService),
     })),
@@ -334,16 +422,31 @@ function createTaskDetailSectionsStore(): Type<TaskDetailSectionsStoreInstance> 
         string,
         { readonly markdown: string }
       >();
-      const saveElsewhere: (key: string, patch: TaskDetailPatch) => Promise<void> = async (
+      const draftKey: (key: string) => string = (key: string): string =>
+        `${DESCRIPTION_DRAFT_PREFIX}.${store._workspace.organization().id}.${key}`;
+      const readDraft: (key: string) => StoredDescriptionDraft | null = (
         key: string,
-        patch: TaskDetailPatch,
-      ): Promise<void> => {
+      ): StoredDescriptionDraft | null => {
         try {
-          await store._detail.write(key, async (version: number): Promise<void> => {
-            store._detail.accept(await store._taskApi.update(key, version, patch));
-          });
+          const value: string | null = store._storage?.getItem(draftKey(key)) ?? null;
+          const stored: Partial<StoredDescriptionDraft> | null =
+            value === null ? null : (JSON.parse(value) as Partial<StoredDescriptionDraft>);
+          return typeof stored?.markdown === 'string' && typeof stored.base === 'string'
+            ? { markdown: stored.markdown, base: stored.base }
+            : null;
         } catch {
-          failed();
+          return null;
+        }
+      };
+      const writeDraft: (key: string, stored: StoredDescriptionDraft | null) => void = (
+        key: string,
+        stored: StoredDescriptionDraft | null,
+      ): void => {
+        try {
+          if (stored === null) store._storage?.removeItem(draftKey(key));
+          else store._storage?.setItem(draftKey(key), JSON.stringify(stored));
+        } catch {
+          return;
         }
       };
       const flush: () => void = (): void => {
@@ -365,12 +468,25 @@ function createTaskDetailSectionsStore(): Type<TaskDetailSectionsStoreInstance> 
             : { description: markdown, descriptionMentions: mentionSpans(markdown) };
         const sent: { readonly markdown: string } = { markdown };
         sentDescriptions.set(key, sent);
-        const settled: () => void = (): void => {
-          if (sentDescriptions.get(key) === sent) sentDescriptions.delete(key);
-        };
-        const saving: Promise<unknown> =
-          store._detail.taskKey() === key ? store._detail.update(patch) : saveElsewhere(key, patch);
-        void saving.finally(settled);
+        writeDraft(key, { markdown, base: pending.base });
+        void store._detail
+          .update(patch, { key, draftKept: true })
+          .then((saved: boolean): void => {
+            if (!saved) {
+              const latest: boolean = sentDescriptions.get(key) === sent && draft === null;
+              if (latest && store._detail.taskKey() === key) {
+                patchState(store, { restoredDraft: markdown });
+              }
+              return;
+            }
+            if (readDraft(key)?.markdown === markdown) writeDraft(key, null);
+            if (store._detail.taskKey() === key && store.restoredDraft() === markdown) {
+              patchState(store, { restoredDraft: null });
+            }
+          })
+          .finally((): void => {
+            if (sentDescriptions.get(key) === sent) sentDescriptions.delete(key);
+          });
       };
       return {
         editDescription(markdown: string): void {
@@ -378,6 +494,7 @@ function createTaskDetailSectionsStore(): Type<TaskDetailSectionsStoreInstance> 
           const key: string | null = store._detail.taskKey();
           if (key === null) return;
           if (draft !== null && draft.key !== key) flush();
+          if (store.restoredDraft() !== null) patchState(store, { restoredDraft: null });
           draft = {
             key,
             markdown,
@@ -389,6 +506,34 @@ function createTaskDetailSectionsStore(): Type<TaskDetailSectionsStoreInstance> 
 
         flushDescription(): void {
           flush();
+        },
+
+        discardDraft(): void {
+          const key: string | null = store._detail.taskKey();
+          if (key === null) return;
+          if (draft?.key === key) {
+            if (timer !== null) clearTimeout(timer);
+            timer = null;
+            draft = null;
+          }
+          writeDraft(key, null);
+          patchState(store, { restoredDraft: null });
+        },
+
+        _restoreDraft(key: string | null): void {
+          patchState(store, { restoredDraft: null });
+          const confirmed: TaskDetailTask | null = store._detail.confirmedTask();
+          if (key === null || confirmed?.key !== key) return;
+          const stored: StoredDescriptionDraft | null = readDraft(key);
+          if (stored === null) return;
+          if (stored.markdown.trim() === (confirmed.description ?? '').trim()) {
+            writeDraft(key, null);
+            return;
+          }
+          patchState(store, { restoredDraft: stored.markdown });
+          draft = { key, markdown: stored.markdown, base: stored.base };
+          if (timer !== null) clearTimeout(timer);
+          timer = setTimeout(flush, DESCRIPTION_SAVE_MS);
         },
 
         async toggleItem(item: TaskChecklistItem): Promise<void> {
@@ -518,6 +663,9 @@ function createTaskDetailSectionsStore(): Type<TaskDetailSectionsStoreInstance> 
       let readParent: string | null | undefined;
       let seenCount: number | undefined;
       return {
+        _followTask: signalMethod<string | null>((key: string | null): void => {
+          store._restoreDraft(key);
+        }),
         _followParent: signalMethod<string | null>((parentKey: string | null): void => {
           if (parentKey === readParent) return;
           const moved: boolean = readParent !== undefined;
@@ -535,6 +683,9 @@ function createTaskDetailSectionsStore(): Type<TaskDetailSectionsStoreInstance> 
     withHooks({
       onInit(store): void {
         void store._readPeople();
+        store._followTask(
+          computed((): string | null => store._detail.confirmedTask()?.key ?? null),
+        );
         store._followParent(
           computed((): string | null => store._detail.confirmedTask()?.parentKey ?? null),
         );

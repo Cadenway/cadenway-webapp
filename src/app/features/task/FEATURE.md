@@ -255,7 +255,12 @@ the task` with `Retry`; otherwise Errors' `RouteErrorPanel` renders the typed ro
     text clears it; a confirmed text never replaces what is being typed; a draft still waiting
     when another task opens is saved to its own task through `write`, against that task's
     recorded version, never to the task now shown; a draft is compared with the text still being
-    saved, so one reverted during a save is sent after it), the checklist
+    saved, so one reverted during a save is sent after it; each draft sent waits in the device
+    storage (`cadenway-task-description-draft.<organizationId>.<taskKey>`) until its write is
+    confirmed: a failed or conflicting save keeps it and its toast says so, and the task's next
+    opening, or the failure itself while it is open, shows it in the editor with `Unsaved changes
+restored from this device.` and `Discard`, saved after the pause unless discarded), the
+    checklist
     (`<done> / <n>`, ticks shown at once and rolled back with the failure toast, `Add an item` with Enter and Escape; no deletion, as in the mockup), the
     attachments (`cw-attachment` tiles, `Add` and the drop zone, 25 MB refused with `File too
 large` and an empty file with `Empty file`, a name already attached skipped, files being sent
@@ -344,7 +349,8 @@ people`), and the due trigger shows the short date without `Tomorrow ·` or the
   the device storage next to the start (`<timer key>.stop`) until confirmed, so a stop whose
   answer was lost is not recorded twice after a reopen or a reload. A read of the entries that
   began before a confirmed write is dropped and made again, and the total is summed from the
-  entries, so an entry a read already carries is not counted again when its write answers. A deleted time
+  entries, so an entry a read already carries is not counted again when its write answers; a
+  read applied while a deletion is pending leaves that entry out. A deleted time
   entry's `Undo` records a new entry (the API has no restore); both `Undo`s run against their task
   after navigating away. Changing approvers starts a new round
   (`requestTaskApproval`), which clears every vote, not only the removed reviewer's; a round keeps
@@ -408,4 +414,5 @@ people`), and the due trigger shows the short date without `Tomorrow ·` or the
 | `task.properties.due-yesterday`, `task.properties.due-*-month`                              | Taken from the spec and the calendar brick.                        |
 | `task.properties.time-entries`                                                              | The mockup writes `Saisies · 3 saisies`; the count is kept once.   |
 | `task.activity.automation`                                                                  | The mockup names no automation actor.                              |
+| `task.description.restored`, `task.description.discard`, `task.description.kept-*`          | The mockup draws no failed description save nor a kept draft.      |
 | `task.attachments.empty`, `task.attachments.empty-text`                                     | The mockup draws no refused empty file.                            |

@@ -39,11 +39,13 @@
             (retried)="approval.load()"
           />
           <cw-task-description
-            [markdown]="description()"
+            [markdown]="sections.restoredDraft() ?? description()"
+            [restored]="sections.restoredDraft() !== null"
             [canEdit]="store.canEdit()"
             [mentionSearch]="mentionSearch"
             (edited)="sections.editDescription($event)"
             (committed)="sections.flushDescription()"
+            (discarded)="sections.discardDraft()"
           />
           <div class="mx-2 h-px bg-border" role="separator"></div>
           <cw-task-checklist
