@@ -1,4 +1,4 @@
-import type { Signal, Type } from '@angular/core';
+import { computed, type Signal, type Type } from '@angular/core';
 import {
   patchState,
   signalMethod,
@@ -32,6 +32,7 @@ import {
   filterCount,
   presentationFor,
   samePresentation,
+  sameQuery,
   sameSavedSettings,
   sheetExportSort,
   toGroupQuery,
@@ -554,11 +555,16 @@ function createListViewStore(): Type<ListViewStoreInstance> {
             presentationFor(store.layout(), store.config().presentation),
             DEFAULT_PRESENTATION,
           )),
-      taskQuery: (): ListTaskQuery =>
-        toTaskQuery(store.config(), store.search(), store.milestonesOnly()),
+      taskQuery: computed(
+        (): ListTaskQuery => toTaskQuery(store.config(), store.search(), store.milestonesOnly()),
+        { equal: sameQuery },
+      ),
     })),
     withComputed((store) => ({
-      groupQuery: (): ListGroupQuery | null => toGroupQuery(store.config(), store.taskQuery()),
+      groupQuery: computed(
+        (): ListGroupQuery | null => toGroupQuery(store.config(), store.taskQuery()),
+        { equal: sameQuery },
+      ),
     })),
     withMethods((store) => {
       const setFilters: (filters: ListViewFilters) => void = (filters: ListViewFilters): void => {

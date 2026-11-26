@@ -295,6 +295,25 @@ export function sheetExportSort(
 }
 
 /**
+ * Function sameQuery
+ *
+ * @description
+ * Whether two task or group queries ask the same thing. Both are plain data that `toTaskQuery`
+ * and `toGroupQuery` build in a fixed member order, so their JSON forms compare them; used as the
+ * `equal` of the store's queries, so a presentation change does not hand the views a new query.
+ *
+ * @param {ListTaskQuery | ListGroupQuery | null} first - A query.
+ * @param {ListTaskQuery | ListGroupQuery | null} second - Another query.
+ * @returns {boolean} Whether they match.
+ */
+export function sameQuery(
+  first: ListTaskQuery | ListGroupQuery | null,
+  second: ListTaskQuery | ListGroupQuery | null,
+): boolean {
+  return JSON.stringify(first) === JSON.stringify(second);
+}
+
+/**
  * Function sameSavedSettings
  *
  * @description

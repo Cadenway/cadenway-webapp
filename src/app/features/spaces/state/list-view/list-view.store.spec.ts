@@ -170,6 +170,21 @@ describe('ListViewStore', () => {
     expect(store.sheetExportSort()).toEqual({ column: 'cf-points', direction: 'asc' });
   });
 
+  it('keeps the same queries when only the presentation changes', () => {
+    const taskQuery: ReturnType<typeof store.taskQuery> = store.taskQuery();
+    const groupQuery: ReturnType<typeof store.groupQuery> = store.groupQuery();
+
+    store.setPresentation({ hiddenBoardStatusKeys: ['backlog'] });
+    store.setPresentation({ sheetSort: { column: 'due', direction: 'asc' } });
+    expect(store.taskQuery()).toBe(taskQuery);
+    expect(store.groupQuery()).toBe(groupQuery);
+
+    store.toggleFilter('priority', 'haute');
+    expect(store.taskQuery()).not.toBe(taskQuery);
+    expect(store.taskQuery().priority).toEqual(['haute']);
+    expect(store.groupQuery()).not.toBe(groupQuery);
+  });
+
   it('exports by the built-in column once the sorted custom field is known to be retired', () => {
     store.showLayout('table');
     store.setPresentation({
