@@ -256,10 +256,14 @@ the task` with `Retry`; otherwise Errors' `RouteErrorPanel` renders the typed ro
     when another task opens is saved to its own task through `write`, against that task's
     recorded version, never to the task now shown; a draft is compared with the text still being
     saved, so one reverted during a save is sent after it; each draft sent waits in the device
-    storage (`cadenway-task-description-draft.<organizationId>.<taskKey>`) until its write is
-    confirmed: a failed or conflicting save keeps it and its toast says so, and the task's next
-    opening, or the failure itself while it is open, shows it in the editor with `Unsaved changes
-restored from this device.` and `Discard`, saved after the pause unless discarded), the
+    storage (`cadenway-task-description-draft.<organizationId>.<userId>.<taskKey>`, so another
+    account on the device never reads it) until its write is confirmed: a failed or conflicting
+    save keeps it and its toast says so, and the task's next opening, or the failure itself while
+    it is open, shows it in the editor with `Unsaved changes restored from this device.` and
+    `Discard`. It is saved after the pause only when the description is still the one it was
+    typed over; when the description changed since, the notice says so (`The task changed since;
+your unsaved changes are restored from this device.`) and offers `Keep my version`, which
+    saves it against the current version, and nothing is saved by itself), the
     checklist
     (`<done> / <n>`, ticks shown at once and rolled back with the failure toast, `Add an item` with Enter and Escape; no deletion, as in the mockup), the
     attachments (`cw-attachment` tiles, `Add` and the drop zone, 25 MB refused with `File too
@@ -342,7 +346,8 @@ people`), and the due trigger shows the short date without `Tomorrow ·` or the
   the watcher count only; the people are in the panel's `Followers` row. Realtime presence (who
   is viewing) has no contract yet.
 - Properties gaps: the API keeps no running timer, so its start lives in the device storage per
-  organization and task (`cadenway-task-timer.<organizationId>.<taskKey>`) and is lost with it;
+  organization, user and task (`cadenway-task-timer.<organizationId>.<userId>.<taskKey>`, so
+  another account on the device never sees it) and is lost with it;
   stopping records the elapsed minutes (1 to 1,440) for today and clears the timer only once the
   entry is confirmed: a refused stop keeps it, and stopping again sends the first stop's entry
   under the same `Idempotency-Key`, as any entry sent again after a failure. That stop waits in
@@ -414,5 +419,5 @@ people`), and the due trigger shows the short date without `Tomorrow ·` or the
 | `task.properties.due-yesterday`, `task.properties.due-*-month`                              | Taken from the spec and the calendar brick.                        |
 | `task.properties.time-entries`                                                              | The mockup writes `Saisies · 3 saisies`; the count is kept once.   |
 | `task.activity.automation`                                                                  | The mockup names no automation actor.                              |
-| `task.description.restored`, `task.description.discard`, `task.description.kept-*`          | The mockup draws no failed description save nor a kept draft.      |
+| `task.description.restored*`, `discard`, `keep`, `kept-*`                                   | The mockup draws no failed description save nor a kept draft.      |
 | `task.attachments.empty`, `task.attachments.empty-text`                                     | The mockup draws no refused empty file.                            |

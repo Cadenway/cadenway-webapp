@@ -1231,6 +1231,8 @@
     "task.comments.load-more": "Show more comments",
     "task.comments.menu": "Comment from {$name}",
     "task.description.title": "Description",
+    "task.description.restored-changed": "The task changed since; your unsaved changes are restored from this device.",
+    "task.description.keep": "Keep my version",
     "task.description.restored": "Unsaved changes restored from this device.",
     "task.description.discard": "Discard",
     "task.detail.subtask-of": "Subtask of {$START_TAG_SPAN}{$INTERPOLATION}{$CLOSE_TAG_SPAN} · {$INTERPOLATION_1}",

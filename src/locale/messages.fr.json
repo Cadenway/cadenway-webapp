@@ -1346,6 +1346,8 @@
     "task.description.title": "Description",
     "task.description.restored": "Modifications non enregistrées restaurées depuis cet appareil.",
     "task.description.discard": "Abandonner",
+    "task.description.restored-changed": "La tâche a changé depuis ; vos modifications non enregistrées sont restaurées depuis cet appareil.",
+    "task.description.keep": "Garder ma version",
     "task.description.kept-conflict": "Sa dernière version est affichée ; votre description est conservée comme brouillon.",
     "task.description.kept-failed": "Votre description est conservée comme brouillon sur cet appareil.",
     "task.checklist.title": "Checklist",
