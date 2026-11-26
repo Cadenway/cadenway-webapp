@@ -90,6 +90,23 @@ export function isUncertainAutomationWrite(error: unknown): boolean {
 }
 
 /**
+ * Function isUncertainAutomationCreate
+ *
+ * @description
+ * Whether a failed creation may still record the rule: a lost answer
+ * (`isUncertainAutomationWrite`) or `409 idempotency.request-in-progress`, the same key still
+ * being processed. A retry with the same key replays the first answer.
+ *
+ * @param {unknown} error - The failed creation.
+ * @returns {boolean} Whether the outcome is unknown.
+ */
+export function isUncertainAutomationCreate(error: unknown): boolean {
+  return (
+    isUncertainAutomationWrite(error) || hasProblemCode(error, 'idempotency.request-in-progress')
+  );
+}
+
+/**
  * Service AutomationsApi
  *
  * @description

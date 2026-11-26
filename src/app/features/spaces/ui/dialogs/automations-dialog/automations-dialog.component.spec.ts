@@ -213,6 +213,8 @@ describe('AutomationsDialog', () => {
       shownRules,
       activeCount: signal(2),
       creating: signal(false),
+      creationUnknown: signal(false),
+      unresolvedRuleIds: signal<readonly string[]>([]),
       load: vi.fn(),
       toggle: vi.fn(() => Promise.resolve('applied')),
       remove: vi.fn(() => Promise.resolve('applied')),
@@ -350,11 +352,14 @@ describe('AutomationsDialog', () => {
     );
 
     store.create.mockResolvedValueOnce({
-      id: 'a4',
-      trigger: { type: 'created' },
-      action: { type: 'comment', body: 'Welcome aboard' },
-      enabled: true,
-      version: 1,
+      status: 'created',
+      rule: {
+        id: 'a4',
+        trigger: { type: 'created' },
+        action: { type: 'comment', body: 'Welcome aboard' },
+        enabled: true,
+        version: 1,
+      },
     });
     create?.click();
     await fixture.whenStable();
@@ -410,7 +415,7 @@ describe('AutomationsDialog', () => {
   });
 
   it('keeps the builder open with its values when the creation is refused', async () => {
-    store.create.mockResolvedValueOnce(null);
+    store.create.mockResolvedValueOnce({ status: 'refused' });
     byTestId('automation-new')?.click();
     fixture.detectChanges();
     await fixture.whenStable();
@@ -438,6 +443,67 @@ describe('AutomationsDialog', () => {
       'When the status becomes “In review”, then notify Hugo Dubois.',
     );
     expect(buttonNamed('Hugo Dubois')?.getAttribute('aria-checked')).toBe('true');
+  });
+
+  it('warns about an unsettled creation and submits the same draft again after reopening', async () => {
+    store.create.mockResolvedValueOnce({ status: 'unknown' });
+    byTestId('automation-new')?.click();
+    fixture.detectChanges();
+    await fixture.whenStable();
+    (byTestId('automation-create') as HTMLButtonElement | null)?.click();
+    await fixture.whenStable();
+
+    expect(toasts.warning).toHaveBeenCalledWith(
+      'The creation of the automation could not be confirmed',
+    );
+    expect(toasts.error).not.toHaveBeenCalled();
+    (store['creationUnknown'] as WritableSignal<boolean>).set(true);
+    fixture.detectChanges();
+    expect(byTestId('automation-create-unknown')?.textContent).toContain(
+      'This automation may already have been created.',
+    );
+
+    buttonNamed('Cancel')?.click();
+    fixture.detectChanges();
+    byTestId('automation-new')?.click();
+    fixture.detectChanges();
+    await fixture.whenStable();
+    store.create.mockResolvedValueOnce({ status: 'created', rule: RULES[0] });
+    (byTestId('automation-create') as HTMLButtonElement | null)?.click();
+    await fixture.whenStable();
+
+    expect(store.create.mock.calls).toEqual([
+      [
+        {
+          trigger: { type: 'status', status: 'review' },
+          action: { type: 'notify', userId: 'u-camille' },
+        },
+      ],
+      [
+        {
+          trigger: { type: 'status', status: 'review' },
+          action: { type: 'notify', userId: 'u-camille' },
+        },
+      ],
+    ]);
+    expect(toasts.show).toHaveBeenCalledWith('Automation created', expect.anything());
+  });
+
+  it('disables the controls of a rule whose change did not settle', async () => {
+    (store['unresolvedRuleIds'] as WritableSignal<readonly string[]>).set(['a1']);
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(
+      buttonNamed('Disable: When the status becomes “Done”, notify Hugo Dubois')?.disabled,
+    ).toBe(true);
+    expect(
+      buttonNamed('Delete: When the status becomes “Done”, notify Hugo Dubois')?.disabled,
+    ).toBe(true);
+    expect(
+      buttonNamed('Delete: When the status becomes “Blocked”, set the priority to urgent')
+        ?.disabled,
+    ).toBe(false);
   });
 
   it('says when a run happened', () => {

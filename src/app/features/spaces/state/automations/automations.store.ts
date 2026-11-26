@@ -23,16 +23,19 @@ import {
 import {
   AutomationsApi,
   isStaleAutomationRule,
+  isUncertainAutomationCreate,
   isUncertainAutomationWrite,
 } from '../../data-access/services/automations-api/automations-api.service';
 import { ListsApi } from '../../data-access/services/lists-api/lists-api.service';
 import type {
+  AutomationCreateOutcome,
   AutomationDraft,
   AutomationRule,
   AutomationRun,
   AutomationWriteOutcome,
 } from '../../models/automation-rule/automation-rule.interface';
 import type { ListMember } from '../../models/list-member/list-member.interface';
+import { AUTOMATION_RETRY_DELAYS } from './automation-retry-delays.token';
 
 /**
  * Interface AutomationDraftKey
@@ -74,7 +77,67 @@ interface AutomationDraftKey {
    * @readonly
    */
   readonly organizationId: string;
+
+  /**
+   * Property uncertain
+   *
+   * @description
+   * Whether the gateway may have recorded the draft: its answers were lost. The draft and its
+   * key are then kept until a resend settles it, whatever the builder does.
+   *
+   * @type {boolean}
+   * @readonly
+   */
+  readonly uncertain: boolean;
   // #endregion
+}
+
+/**
+ * Interface AutomationUnresolved
+ *
+ * @description
+ * A switch or a deletion whose resends did not settle: it stays pending and the rule takes no
+ * other write until a read started after it settles it.
+ */
+interface AutomationUnresolved {
+  // #region Properties
+  /**
+   * Property organizationId
+   *
+   * @description
+   * The organization of the rule.
+   *
+   * @type {string}
+   * @readonly
+   */
+  readonly organizationId: string;
+
+  /**
+   * Property since
+   *
+   * @description
+   * Write count when the resends gave up: a read started from it on settles the rule.
+   *
+   * @type {number}
+   * @readonly
+   */
+  readonly since: number;
+  // #endregion
+}
+
+/**
+ * Function wait
+ *
+ * @description
+ * Resolves after a delay.
+ *
+ * @param {number} ms - The delay, in milliseconds.
+ * @returns {Promise<void>} Resolves once it has elapsed.
+ */
+function wait(ms: number): Promise<void> {
+  return new Promise<void>((resolve: () => void): void => {
+    setTimeout(resolve, ms);
+  });
 }
 
 /**
@@ -306,6 +369,17 @@ interface AutomationsState {
   readonly _draft: AutomationDraftKey | null;
 
   /**
+   * Property _unresolved
+   *
+   * @description
+   * The rules whose switch or deletion did not settle, by rule id.
+   *
+   * @type {Readonly<Partial<Record<string, AutomationUnresolved>>>}
+   * @readonly
+   */
+  readonly _unresolved: Readonly<Partial<Record<string, AutomationUnresolved>>>;
+
+  /**
    * Property creating
    *
    * @description
@@ -335,6 +409,7 @@ const initialState: AutomationsState = {
   _desired: {},
   _removed: [],
   _draft: null,
+  _unresolved: {},
   creating: false,
 };
 
@@ -427,6 +502,30 @@ export interface AutomationsStoreInstance {
    * @readonly
    */
   readonly creating: Signal<boolean>;
+
+  /**
+   * Property creationUnknown
+   *
+   * @description
+   * Whether the last creation may have been recorded: its answers were lost and its draft and
+   * key are kept for the next submission.
+   *
+   * @type {Signal<boolean>}
+   * @readonly
+   */
+  readonly creationUnknown: Signal<boolean>;
+
+  /**
+   * Property unresolvedRuleIds
+   *
+   * @description
+   * The rules whose switch or deletion did not settle: they take no other write until a read of
+   * the rules settles them.
+   *
+   * @type {Signal<readonly string[]>}
+   * @readonly
+   */
+  readonly unresolvedRuleIds: Signal<readonly string[]>;
   // #endregion
 
   // #region Methods
@@ -448,8 +547,12 @@ export interface AutomationsStoreInstance {
    * coming back to the recorded state sends nothing. Each write uses the newest version known,
    * from the reads and from the earlier writes. A definite refusal (`4xx`) shows the recorded
    * state again and reads the rules again when they were out of date. A lost answer (network,
-   * timeout, `5xx`) may have been applied: the rules are read again and show the state the
-   * gateway confirms.
+   * timeout, `5xx`) may still be applied, so the same write is resent with the same `If-Match`
+   * version, after growing waits (`AUTOMATION_RETRY_DELAYS`): success applies it, and a `412`
+   * means the version moved, so a read of the rules tells whether the wanted state holds. When
+   * the resends do not settle it, the outcome is `unknown`, the wanted state stays shown and the
+   * rule takes no other write until a read started afterwards settles it. A rule in that state
+   * answers `unknown` without sending anything.
    *
    * @param {AutomationRule} rule - The rule, as shown.
    * @returns {Promise<AutomationWriteOutcome>} What became of the change.
@@ -462,8 +565,9 @@ export interface AutomationsStoreInstance {
    * @description
    * Hides a rule at once and deletes it, after the pending writes of the same rule, from the
    * newest version known. It is always sent, even while the rules are read again. A definite
-   * refusal shows it again; after a lost answer, the rules are read again to learn whether it
-   * is gone.
+   * refusal shows it again. A lost answer is resent with the same version, like a switch: a
+   * `404` (already gone) means it applied, a `412` that the rule is still there. Unsettled, it
+   * stays hidden and takes no other write until a read started afterwards settles it.
    *
    * @param {AutomationRule} rule - The rule.
    * @returns {Promise<AutomationWriteOutcome>} `applied` once the gateway deleted the rule or
@@ -476,19 +580,23 @@ export interface AutomationsStoreInstance {
    *
    * @description
    * Creates an enabled rule and adds it last. A retry of the same draft reuses its idempotency
-   * key, so it never creates the rule twice; another draft or organization takes a new key.
+   * key, so it never creates the rule twice; another draft or organization takes a new key. A
+   * lost answer (network, timeout, `5xx`, `409 idempotency.request-in-progress`) is resent with
+   * the same key, which the gateway replays; when the resends do not settle it, the rules are
+   * read again and the draft and its key are kept, even past `discardDraft`. A later creation
+   * first resends that draft with its key, so it is never recorded twice.
    *
    * @param {AutomationDraft} draft - The rule to create.
-   * @returns {Promise<AutomationRule | null>} The created rule, or null when it was refused or
-   * a creation is already in flight.
+   * @returns {Promise<AutomationCreateOutcome>} What became of the creation.
    */
-  create(draft: AutomationDraft): Promise<AutomationRule | null>;
+  create(draft: AutomationDraft): Promise<AutomationCreateOutcome>;
 
   /**
    * Method discardDraft
    *
    * @description
-   * Forgets the key of the submitted draft once the builder closes.
+   * Forgets the key of the submitted draft once the builder closes, unless the gateway may have
+   * recorded it.
    */
   discardDraft(): void;
   // #endregion
@@ -580,13 +688,43 @@ function createAutomationsStore(): Type<AutomationsStoreInstance> {
         if (read.organizationId !== organizationId()) return;
         const current: AutomationRulesRead | null = store._read();
         if (current?.organizationId === read.organizationId && current.epoch > read.epoch) return;
-        patchState(store, { _read: read });
+        const unresolved: Readonly<Partial<Record<string, AutomationUnresolved>>> =
+          store._unresolved();
+        const settled: ReadonlySet<string> = new Set(
+          Object.entries(unresolved)
+            .filter(
+              ([, entry]: [string, AutomationUnresolved | undefined]): boolean =>
+                entry?.organizationId === read.organizationId && entry.since <= read.epoch,
+            )
+            .map(([id]: [string, AutomationUnresolved | undefined]): string => id),
+        );
+        const keep: <T>(
+          record: Readonly<Partial<Record<string, T>>>,
+        ) => Partial<Record<string, T>> = <T>(
+          record: Readonly<Partial<Record<string, T>>>,
+        ): Partial<Record<string, T>> =>
+          Object.fromEntries(
+            Object.entries(record).filter(
+              ([id]: [string, T | undefined]): boolean => !settled.has(id),
+            ),
+          );
+        patchState(store, {
+          _read: read,
+          ...(settled.size > 0
+            ? {
+                _unresolved: keep(unresolved),
+                _desired: keep(store._desired()),
+                _removed: store._removed().filter((id: string): boolean => !settled.has(id)),
+              }
+            : {}),
+        });
       };
       return {
         _api: api,
         _organizationId: organizationId,
         _chains: new Map<string, Promise<unknown>>(),
         _record: record,
+        _retryDelays: inject(AUTOMATION_RETRY_DELAYS),
         rules: resource({
           params: byOpening,
           loader: async ({
@@ -640,6 +778,16 @@ function createAutomationsStore(): Type<AutomationsStoreInstance> {
       return {
         confirmedRules,
         shownRules,
+        creationUnknown: computed((): boolean => store._draft()?.uncertain === true),
+        unresolvedRuleIds: computed((): readonly string[] => {
+          const organizationId: string = store._organizationId();
+          return Object.entries(store._unresolved())
+            .filter(
+              ([, entry]: [string, AutomationUnresolved | undefined]): boolean =>
+                entry?.organizationId === organizationId,
+            )
+            .map(([id]: [string, AutomationUnresolved | undefined]): string => id);
+        }),
         activeCount: computed(
           (): number => shownRules().filter((rule: AutomationRule): boolean => rule.enabled).length,
         ),
@@ -718,28 +866,111 @@ function createAutomationsStore(): Type<AutomationsStoreInstance> {
         const items: readonly AutomationRule[] = await store._api.rules();
         store._record({ organizationId, items, epoch });
       };
-      const uncertain: (
+      const unresolve: (id: string, organizationId: string) => void = (
+        id: string,
         organizationId: string,
-        applied: () => boolean,
+      ): void => {
+        const since: number = tick();
+        patchState(store, {
+          _unresolved: { ...store._unresolved(), [id]: { organizationId, since } },
+        });
+        store.rules.reload();
+      };
+      const resendToggle: (
+        known: AutomationRule,
+        enabled: boolean,
+        organizationId: string,
       ) => Promise<AutomationWriteOutcome> = async (
+        known: AutomationRule,
+        enabled: boolean,
         organizationId: string,
-        applied: () => boolean,
       ): Promise<AutomationWriteOutcome> => {
-        tick();
+        let conflicted: boolean = false;
+        for (const delay of store._retryDelays) {
+          await wait(delay);
+          if (store._organizationId() !== organizationId) return 'unknown';
+          if (!conflicted) {
+            try {
+              const updated: AutomationRule = await store._api.setEnabled(known, enabled);
+              confirm(updated, organizationId, false);
+              return 'applied';
+            } catch (error: unknown) {
+              if (isUncertainAutomationWrite(error)) continue;
+              if (!isStaleAutomationRule(error)) return 'refused';
+              conflicted = true;
+            }
+          }
+          try {
+            await readAgain(organizationId);
+            return confirmedRule(known.id)?.enabled === enabled ? 'applied' : 'not-applied';
+          } catch {
+            continue;
+          }
+        }
+        return 'unknown';
+      };
+      const resendDelete: (
+        known: AutomationRule,
+        organizationId: string,
+      ) => Promise<AutomationWriteOutcome> = async (
+        known: AutomationRule,
+        organizationId: string,
+      ): Promise<AutomationWriteOutcome> => {
+        for (const delay of store._retryDelays) {
+          await wait(delay);
+          if (store._organizationId() !== organizationId) return 'unknown';
+          try {
+            await store._api.delete(known);
+            markDeleted(known.id, organizationId);
+            return 'applied';
+          } catch (error: unknown) {
+            if (isUncertainAutomationWrite(error)) continue;
+            return isStaleAutomationRule(error) ? 'not-applied' : 'refused';
+          }
+        }
+        return 'unknown';
+      };
+      const sendDraft: (
+        draft: AutomationDraft,
+        key: string,
+        organizationId: string,
+      ) => Promise<AutomationCreateOutcome> = async (
+        draft: AutomationDraft,
+        key: string,
+        organizationId: string,
+      ): Promise<AutomationCreateOutcome> => {
+        const body: string = JSON.stringify(draft);
+        patchState(store, {
+          _draft: { key, body, organizationId, uncertain: store._draft()?.uncertain === true },
+        });
+        for (const delay of [null, ...store._retryDelays]) {
+          if (delay !== null) await wait(delay);
+          if (store._organizationId() !== organizationId) return { status: 'unknown' };
+          try {
+            const created: AutomationRule = await store._api.create(draft, key);
+            confirm(created, organizationId, true);
+            patchState(store, { _draft: null });
+            return { status: 'created', rule: created };
+          } catch (error: unknown) {
+            if (isUncertainAutomationCreate(error)) continue;
+            patchState(store, { _draft: null });
+            return { status: 'refused' };
+          }
+        }
+        patchState(store, { _draft: { key, body, organizationId, uncertain: true } });
         try {
           await readAgain(organizationId);
-          if (store._organizationId() !== organizationId) return 'unknown';
-          return applied() ? 'applied' : 'not-applied';
         } catch {
           store.rules.reload();
-          return 'unknown';
         }
+        return { status: 'unknown' };
       };
       return {
         load(): void {
           patchState(store, { _opening: store._opening() + 1 });
         },
         toggle(rule: AutomationRule): Promise<AutomationWriteOutcome> {
+          if (store._unresolved()[rule.id]) return Promise.resolve('unknown');
           const organizationId: string = store._organizationId();
           const shown: AutomationRule | undefined = store
             .shownRules()
@@ -766,11 +997,16 @@ function createAutomationsStore(): Type<AutomationsStoreInstance> {
               return 'applied';
             } catch (error: unknown) {
               if (isUncertainAutomationWrite(error)) {
-                const outcome: AutomationWriteOutcome = await uncertain(
+                const outcome: AutomationWriteOutcome = await resendToggle(
+                  known,
+                  enabled,
                   organizationId,
-                  (): boolean => confirmedRule(rule.id)?.enabled === enabled,
                 );
-                settle(rule.id, enabled);
+                if (outcome === 'unknown') {
+                  unresolve(rule.id, organizationId);
+                } else {
+                  settle(rule.id, enabled);
+                }
                 return outcome;
               }
               settle(rule.id, enabled);
@@ -780,6 +1016,7 @@ function createAutomationsStore(): Type<AutomationsStoreInstance> {
           });
         },
         remove(rule: AutomationRule): Promise<AutomationWriteOutcome> {
+          if (store._unresolved()[rule.id]) return Promise.resolve('unknown');
           const organizationId: string = store._organizationId();
           patchState(store, { _removed: [...store._removed(), rule.id] });
           return serialize(rule.id, async (): Promise<AutomationWriteOutcome> => {
@@ -795,11 +1032,12 @@ function createAutomationsStore(): Type<AutomationsStoreInstance> {
               return 'applied';
             } catch (error: unknown) {
               if (isUncertainAutomationWrite(error)) {
-                const outcome: AutomationWriteOutcome = await uncertain(
-                  organizationId,
-                  (): boolean => confirmedRule(rule.id) === undefined,
-                );
-                unhide(rule.id);
+                const outcome: AutomationWriteOutcome = await resendDelete(known, organizationId);
+                if (outcome === 'unknown') {
+                  unresolve(rule.id, organizationId);
+                } else {
+                  unhide(rule.id);
+                }
                 return outcome;
               }
               unhide(rule.id);
@@ -808,28 +1046,34 @@ function createAutomationsStore(): Type<AutomationsStoreInstance> {
             }
           });
         },
-        async create(draft: AutomationDraft): Promise<AutomationRule | null> {
-          if (store.creating()) return null;
+        async create(draft: AutomationDraft): Promise<AutomationCreateOutcome> {
+          if (store.creating()) return { status: 'busy' };
           const organizationId: string = store._organizationId();
           const body: string = JSON.stringify(draft);
-          const previous: AutomationDraftKey | null = store._draft();
-          const key: string =
-            previous?.body === body && previous.organizationId === organizationId
-              ? previous.key
-              : crypto.randomUUID();
-          patchState(store, { creating: true, _draft: { key, body, organizationId } });
+          patchState(store, { creating: true });
           try {
-            const created: AutomationRule = await store._api.create(draft, key);
-            if (store._organizationId() === organizationId) confirm(created, organizationId, true);
-            patchState(store, { _draft: null });
-            return created;
-          } catch {
-            return null;
+            const previous: AutomationDraftKey | null = store._draft();
+            const reusable: boolean = previous?.organizationId === organizationId;
+            if (previous && reusable && previous.uncertain && previous.body !== body) {
+              const earlier: AutomationCreateOutcome = await sendDraft(
+                JSON.parse(previous.body) as AutomationDraft,
+                previous.key,
+                organizationId,
+              );
+              if (earlier.status === 'unknown') return earlier;
+            }
+            const current: AutomationDraftKey | null = store._draft();
+            const key: string =
+              current?.body === body && current.organizationId === organizationId
+                ? current.key
+                : crypto.randomUUID();
+            return await sendDraft(draft, key, organizationId);
           } finally {
             patchState(store, { creating: false });
           }
         },
         discardDraft(): void {
+          if (store._draft()?.uncertain === true) return;
           patchState(store, { _draft: null });
         },
       };
@@ -845,8 +1089,9 @@ function createAutomationsStore(): Type<AutomationsStoreInstance> {
  * so its state dies with it. Nothing is read until the dialog opens (`load`); each opening reads
  * the rules and the last runs again, the members once, and another organization reads them
  * all again. Switches and deletions are optimistic and restore the recorded state when refused.
- * A lost answer (network, timeout, `5xx`) is not a refusal: the rules are read again and show
- * what the gateway confirms. The rules confirmed by the gateway live apart from the read in flight: the writes keep using
+ * A lost answer (network, timeout, `5xx`) is not a refusal: the same write is resent, with the
+ * same version or idempotency key, a bounded number of times; until that settles it, the change
+ * stays pending and the rule takes no other write. The rules confirmed by the gateway live apart from the read in flight: the writes keep using
  * the newest version while the dialog reads again, and a read started before a write settled
  * gets that write's result applied over it.
  *

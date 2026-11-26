@@ -12,6 +12,7 @@ import type {
   AutomationRule,
   AutomationWriteOutcome,
 } from '../../models/automation-rule/automation-rule.interface';
+import { AUTOMATION_RETRY_DELAYS } from './automation-retry-delays.token';
 import { AutomationsStore } from './automations.store';
 
 /**
@@ -128,6 +129,7 @@ describe('AutomationsStore', () => {
         { provide: WORKSPACE_CONTEXT, useValue: { organization } },
         { provide: AutomationsApi, useValue: api },
         { provide: ListsApi, useValue: { organizationMembers: members } },
+        { provide: AUTOMATION_RETRY_DELAYS, useValue: [0, 0, 0] },
       ],
     });
     store = TestBed.inject(AutomationsStore);
@@ -221,39 +223,64 @@ describe('AutomationsStore', () => {
     expect(api['rules']).toHaveBeenCalledTimes(1);
   });
 
-  it('reads the rules again after a lost switch answer and shows what applied', async () => {
+  it('resends a switch with a lost answer from the same version until it applies', async () => {
     await loaded();
-    api['setEnabled'].mockRejectedValueOnce(refusal(503, 'upstream.unavailable'));
+    api['setEnabled']
+      .mockRejectedValueOnce(refusal(503, 'upstream.unavailable'))
+      .mockRejectedValueOnce(new HttpErrorResponse({ status: 0 }))
+      .mockResolvedValueOnce({ ...NOTIFY_ON_DONE, enabled: false, version: 2 });
+
+    expect(await store.toggle(NOTIFY_ON_DONE)).toBe('applied');
+    expect(api['setEnabled'].mock.calls).toEqual([
+      [NOTIFY_ON_DONE, false],
+      [NOTIFY_ON_DONE, false],
+      [NOTIFY_ON_DONE, false],
+    ]);
+    expect(store.confirmedRules()?.[0]).toMatchObject({ enabled: false, version: 2 });
+    expect(api['rules']).toHaveBeenCalledTimes(1);
+  });
+
+  it('settles a resent switch refused on its version by reading the rules', async () => {
+    await loaded();
+    api['setEnabled']
+      .mockRejectedValueOnce(refusal(504, 'upstream.timeout'))
+      .mockRejectedValueOnce(refusal(412, 'request.version-mismatch'))
+      .mockRejectedValueOnce(refusal(504, 'upstream.timeout'))
+      .mockRejectedValueOnce(refusal(412, 'request.version-mismatch'));
+    api['rules']
+      .mockResolvedValueOnce([{ ...NOTIFY_ON_DONE, enabled: false, version: 2 }, URGENT_ON_BLOCKED])
+      .mockResolvedValueOnce([NOTIFY_ON_DONE, { ...URGENT_ON_BLOCKED, version: 7 }]);
+
+    expect(await store.toggle(NOTIFY_ON_DONE)).toBe('applied');
+    expect(shownEnabled('a1')).toBe(false);
+
+    expect(await store.toggle(URGENT_ON_BLOCKED)).toBe('not-applied');
+    expect(shownEnabled('a2')).toBe(true);
+    expect(store.confirmedRules()?.[1]?.version).toBe(7);
+  });
+
+  it('keeps an unsettled switch pending and blocks the rule until a later read', async () => {
+    await loaded();
+    api['setEnabled'].mockRejectedValue(refusal(503, 'upstream.unavailable'));
     const reread: ReturnType<typeof deferred<readonly AutomationRule[]>> =
       deferred<readonly AutomationRule[]>();
     api['rules'].mockReturnValueOnce(reread.promise);
 
-    const recorded: Promise<AutomationWriteOutcome> = store.toggle(NOTIFY_ON_DONE);
-    await expect.poll(() => api['rules'].mock.calls.length).toBe(2);
+    expect(await store.toggle(NOTIFY_ON_DONE)).toBe('unknown');
+    expect(api['setEnabled']).toHaveBeenCalledTimes(4);
     expect(shownEnabled('a1')).toBe(false);
-
-    reread.resolve([{ ...NOTIFY_ON_DONE, enabled: false, version: 2 }, URGENT_ON_BLOCKED]);
-    expect(await recorded).toBe('applied');
-    expect(shownEnabled('a1')).toBe(false);
-    expect(store.confirmedRules()?.[0]?.version).toBe(2);
-  });
-
-  it('shows the rule still enabled when the rules read again after a timeout say so', async () => {
-    await loaded();
-    api['setEnabled'].mockRejectedValueOnce(new HttpErrorResponse({ status: 0 }));
-
-    expect(await store.toggle(NOTIFY_ON_DONE)).toBe('not-applied');
-    expect(shownEnabled('a1')).toBe(true);
-    expect(store.activeCount()).toBe(2);
-  });
-
-  it('reports an unknown outcome when the rules cannot be read again either', async () => {
-    await loaded();
-    api['setEnabled'].mockRejectedValueOnce(refusal(504, 'upstream.timeout'));
-    api['rules'].mockRejectedValueOnce(refusal(503, 'upstream.unavailable'));
+    expect(store.unresolvedRuleIds()).toEqual(['a1']);
 
     expect(await store.toggle(NOTIFY_ON_DONE)).toBe('unknown');
-    await expect.poll(() => api['rules'].mock.calls.length).toBe(3);
+    expect(await store.remove(NOTIFY_ON_DONE)).toBe('unknown');
+    expect(api['setEnabled']).toHaveBeenCalledTimes(4);
+    expect(api['delete']).not.toHaveBeenCalled();
+    expect(shownEnabled('a1')).toBe(false);
+
+    await expect.poll(() => api['rules'].mock.calls.length).toBe(2);
+    reread.resolve([{ ...NOTIFY_ON_DONE, version: 1 }, URGENT_ON_BLOCKED]);
+    await expect.poll(() => store.unresolvedRuleIds()).toEqual([]);
+    expect(shownEnabled('a1')).toBe(true);
   });
 
   it('reads the rules again when a switch was refused on an older version', async () => {
@@ -311,49 +338,115 @@ describe('AutomationsStore', () => {
     expect(store.confirmedRules()?.map((rule: AutomationRule): string => rule.id)).toEqual(['a1']);
   });
 
-  it('learns from the rules read again whether a deletion with a lost answer applied', async () => {
+  it('resends a deletion with a lost answer from the same version', async () => {
     await loaded();
     api['delete']
       .mockRejectedValueOnce(refusal(502, 'upstream.failed'))
-      .mockRejectedValueOnce(refusal(502, 'upstream.failed'));
-    api['rules']
-      .mockResolvedValueOnce([NOTIFY_ON_DONE, URGENT_ON_BLOCKED])
-      .mockResolvedValueOnce([NOTIFY_ON_DONE]);
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(refusal(502, 'upstream.failed'))
+      .mockRejectedValueOnce(refusal(412, 'request.version-mismatch'));
 
-    expect(await store.remove(URGENT_ON_BLOCKED)).toBe('not-applied');
-    expect(shownEnabled('a2')).toBe(true);
     expect(await store.remove(URGENT_ON_BLOCKED)).toBe('applied');
+    expect(api['delete'].mock.calls).toEqual([[URGENT_ON_BLOCKED], [URGENT_ON_BLOCKED]]);
     expect(shownEnabled('a2')).toBeUndefined();
+
+    expect(await store.remove(NOTIFY_ON_DONE)).toBe('not-applied');
+    expect(shownEnabled('a1')).toBe(true);
   });
 
-  it('adds a created rule last and reuses the key for a retry of the same draft', async () => {
+  it('keeps an unsettled deletion hidden and blocks the rule until a later read', async () => {
     await loaded();
+    api['delete'].mockRejectedValue(refusal(503, 'upstream.unavailable'));
+
+    expect(await store.remove(URGENT_ON_BLOCKED)).toBe('unknown');
+    expect(api['delete']).toHaveBeenCalledTimes(4);
+    expect(shownEnabled('a2')).toBeUndefined();
+    expect(await store.toggle(URGENT_ON_BLOCKED)).toBe('unknown');
+    expect(api['setEnabled']).not.toHaveBeenCalled();
+
+    await expect.poll(() => store.unresolvedRuleIds()).toEqual([]);
+    expect(shownEnabled('a2')).toBe(true);
+  });
+
+  it('adds a created rule last, and takes a new key after a definite refusal', async () => {
+    await loaded();
+    const created: AutomationRule = {
+      id: 'a3',
+      trigger: COMMENT_DRAFT.trigger,
+      action: COMMENT_DRAFT.action,
+      enabled: true,
+      version: 1,
+    };
+    api['create']
+      .mockRejectedValueOnce(refusal(422, 'automation.recipient-ineligible'))
+      .mockResolvedValueOnce(created);
+
+    expect(await store.create(COMMENT_DRAFT)).toEqual({ status: 'refused' });
+    expect(store.creating()).toBe(false);
+    expect(await store.create(COMMENT_DRAFT)).toEqual({ status: 'created', rule: created });
+    const keys: unknown[] = api['create'].mock.calls.map((call: unknown[]): unknown => call[1]);
+    expect(keys[1]).not.toBe(keys[0]);
+    expect(store.shownRules().at(-1)?.id).toBe('a3');
+  });
+
+  it('resends a creation with a lost answer with the same key, which the gateway replays', async () => {
+    await loaded();
+    const created: AutomationRule = { ...NOTIFY_ON_DONE, id: 'a3' };
     api['create']
       .mockRejectedValueOnce(new HttpErrorResponse({ status: 0 }))
-      .mockResolvedValueOnce({
-        id: 'a3',
-        trigger: COMMENT_DRAFT.trigger,
-        action: COMMENT_DRAFT.action,
-        enabled: true,
-        version: 1,
-      })
-      .mockResolvedValueOnce({ ...NOTIFY_ON_DONE, id: 'a4' });
+      .mockRejectedValueOnce(refusal(409, 'idempotency.request-in-progress'))
+      .mockResolvedValueOnce(created);
 
-    expect(await store.create(COMMENT_DRAFT)).toBeNull();
-    expect(store.creating()).toBe(false);
-    expect((await store.create(COMMENT_DRAFT))?.id).toBe('a3');
+    expect(await store.create(COMMENT_DRAFT)).toEqual({ status: 'created', rule: created });
     const keys: unknown[] = api['create'].mock.calls.map((call: unknown[]): unknown => call[1]);
-    const firstKey: unknown = keys[0];
-    expect(keys[1]).toBe(firstKey);
-    expect(store.shownRules().at(-1)?.id).toBe('a3');
+    expect(keys).toHaveLength(3);
+    expect(new Set(keys).size).toBe(1);
+    expect(store.creationUnknown()).toBe(false);
+  });
 
+  it('keeps an unsettled creation and its key past a closed builder, so it is never doubled', async () => {
+    await loaded();
+    const created: AutomationRule = { ...NOTIFY_ON_DONE, id: 'a3' };
+    api['create'].mockRejectedValue(refusal(503, 'upstream.unavailable'));
+
+    expect(await store.create(COMMENT_DRAFT)).toEqual({ status: 'unknown' });
+    expect(api['create']).toHaveBeenCalledTimes(4);
+    expect(store.creationUnknown()).toBe(true);
+    expect(api['rules']).toHaveBeenCalledTimes(2);
+
+    store.discardDraft();
+    api['create'].mockResolvedValueOnce(created);
+    expect(await store.create(COMMENT_DRAFT)).toEqual({ status: 'created', rule: created });
+
+    const keys: unknown[] = api['create'].mock.calls.map((call: unknown[]): unknown => call[1]);
+    expect(new Set(keys).size).toBe(1);
+    expect(store.creationUnknown()).toBe(false);
+    expect(
+      store.confirmedRules()?.filter((rule: AutomationRule): boolean => rule.id === 'a3'),
+    ).toHaveLength(1);
+  });
+
+  it('resends an unsettled creation with its key before creating another draft', async () => {
+    await loaded();
+    const hello: AutomationDraft = { ...COMMENT_DRAFT, action: { type: 'comment', body: 'Hello' } };
+    api['create'].mockRejectedValue(refusal(503, 'upstream.unavailable'));
     await store.create(COMMENT_DRAFT);
-    expect(api['create'].mock.calls[2]?.[1]).not.toBe(firstKey);
+    const firstKey: unknown = api['create'].mock.calls[0]?.[1];
+
+    api['create']
+      .mockResolvedValueOnce({ ...NOTIFY_ON_DONE, id: 'a3' })
+      .mockResolvedValueOnce({ ...NOTIFY_ON_DONE, id: 'a4' });
+    expect(await store.create(hello)).toMatchObject({ status: 'created', rule: { id: 'a4' } });
+
+    const calls: unknown[][] = api['create'].mock.calls.slice(4);
+    expect(calls[0]).toEqual([COMMENT_DRAFT, firstKey]);
+    expect(calls[1]?.[0]).toEqual(hello);
+    expect(calls[1]?.[1]).not.toBe(firstKey);
   });
 
   it('takes a new key for another draft or once the builder is closed', async () => {
     await loaded();
-    api['create'].mockRejectedValue(new HttpErrorResponse({ status: 0 }));
+    api['create'].mockRejectedValue(refusal(422, 'automation.recipient-ineligible'));
 
     await store.create(COMMENT_DRAFT);
     await store.create({ ...COMMENT_DRAFT, action: { type: 'comment', body: 'Hello' } });

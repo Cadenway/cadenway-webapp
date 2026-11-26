@@ -262,12 +262,78 @@ export interface AutomationRule extends AutomationDraft {
  * What became of a switch or a deletion:
  * - `applied`: the gateway confirmed it, or nothing had to be sent;
  * - `refused`: the gateway refused it (a definite 4xx), so the recorded state is shown again;
- * - `not-applied`: the answer was lost, and the rules read again show it did not apply;
- * - `unknown`: the answer was lost and the rules could not be read again.
+ * - `not-applied`: the answer was lost, and resending it showed it did not apply;
+ * - `unknown`: the answer was lost and the bounded resends did not settle it; the change stays
+ *   pending and the rule takes no other write until a later read of the rules settles it.
  *
  * @type {'applied' | 'refused' | 'not-applied' | 'unknown'}
  */
 export type AutomationWriteOutcome = 'applied' | 'refused' | 'not-applied' | 'unknown';
+
+/**
+ * Interface AutomationCreated
+ *
+ * @description
+ * A creation the gateway recorded.
+ */
+export interface AutomationCreated {
+  // #region Properties
+  /**
+   * Property status
+   *
+   * @description
+   * The outcome.
+   *
+   * @type {'created'}
+   * @readonly
+   */
+  readonly status: 'created';
+
+  /**
+   * Property rule
+   *
+   * @description
+   * The created rule.
+   *
+   * @type {AutomationRule}
+   * @readonly
+   */
+  readonly rule: AutomationRule;
+  // #endregion
+}
+
+/**
+ * Interface AutomationNotCreated
+ *
+ * @description
+ * A creation that did not record a rule (`refused`, a definite refusal), whose outcome is not
+ * known yet (`unknown`, the answers were lost) or that was not sent because another creation is
+ * in flight (`busy`).
+ */
+export interface AutomationNotCreated {
+  // #region Properties
+  /**
+   * Property status
+   *
+   * @description
+   * The outcome.
+   *
+   * @type {'refused' | 'unknown' | 'busy'}
+   * @readonly
+   */
+  readonly status: 'refused' | 'unknown' | 'busy';
+  // #endregion
+}
+
+/**
+ * Type AutomationCreateOutcome
+ *
+ * @description
+ * What became of a creation.
+ *
+ * @type {AutomationCreated | AutomationNotCreated}
+ */
+export type AutomationCreateOutcome = AutomationCreated | AutomationNotCreated;
 
 /**
  * Interface AutomationCommentRunAction

@@ -8,6 +8,7 @@ import type { AutomationRule } from '../../../models/automation-rule/automation-
 import {
   AutomationsApi,
   isStaleAutomationRule,
+  isUncertainAutomationCreate,
   isUncertainAutomationWrite,
 } from './automations-api.service';
 
@@ -167,5 +168,14 @@ describe('AutomationsApi', () => {
     expect(isUncertainAutomationWrite(new Error('aborted'))).toBe(true);
     expect(isUncertainAutomationWrite(problem(403, 'organization.role-forbidden'))).toBe(false);
     expect(isUncertainAutomationWrite(problem(412, 'request.version-mismatch'))).toBe(false);
+  });
+
+  it('counts a creation still in progress under its key as a lost answer', () => {
+    expect(isUncertainAutomationCreate(problem(409, 'idempotency.request-in-progress'))).toBe(true);
+    expect(isUncertainAutomationCreate(problem(503, 'upstream.unavailable'))).toBe(true);
+    expect(isUncertainAutomationCreate(problem(422, 'idempotency.key-reused'))).toBe(false);
+    expect(isUncertainAutomationCreate(problem(422, 'automation.recipient-ineligible'))).toBe(
+      false,
+    );
   });
 });

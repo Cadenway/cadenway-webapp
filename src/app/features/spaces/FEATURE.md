@@ -459,17 +459,29 @@ gateway checks them and `ORGANIZATION_PIN_OPERATIONS` lists them.
     recorded state sends nothing. A definite refusal (`4xx`) restores the recorded state and shows
     an error toast. A `412 request.version-mismatch` or `404 automation.rule-not-found` also reads
     the rules again.
-  - A lost answer (no response, `408`, `5xx`) may have been applied, so it is not a refusal. The
-    store reads the rules again and shows the state the gateway confirms. It warns when the
-    change did not apply (`The automation was not changed`). When that read fails too, it warns
-    that the change could not be confirmed and reads the rules again through the resource.
+  - A lost answer (no response, `408`, `5xx`) may still be applied, so it is not a refusal: the
+    original write may still be running when a read happens. The store resends the same write
+    with the same `If-Match` version, after the waits of `AUTOMATION_RETRY_DELAYS` (three
+    resends over about 6.5 s by default). A resent switch that succeeds applies. One refused on
+    its version (`412`) means the version moved, so a read of the rules tells whether the wanted
+    state holds (`applied`), or not (`not-applied`, `The automation was not changed`).
+  - When the resends do not settle it, the outcome is `unknown` and the dialog warns. The wanted
+    state stays shown (a deleted rule stays hidden), and the rule's controls are disabled
+    (`unresolvedRuleIds`): the rule takes no other write. The store reads the rules again; the
+    first read started after the resends gave up settles the rule.
   - A deletion is confirmed by `cw-alert-dialog` (`Delete this automation?`), then hides the rule
     at once. It succeeds only once the gateway deletes the rule or reports it absent. A refusal
-    brings it back with an error toast. A lost answer is settled by reading the rules again, the
-    same way as a switch.
-  - A creation sends one `Idempotency-Key` per draft and organization. A retry of the same draft
-    reuses it; another draft, a closed builder or a recorded rule renews it. The created rule
-    is added last and shows `Automation created`. A refusal keeps the builder and its values.
+    brings it back with an error toast. A lost answer is resent with the same version: a `404`
+    (already gone) means it applied, a `412` that the rule is still there.
+  - A creation sends one `Idempotency-Key` per draft and organization. A definite refusal
+    (`4xx`), a recorded rule, another draft or a closed builder renews it. The created rule is
+    added last and shows `Automation created`. A refusal keeps the builder and its values.
+  - A lost creation answer (no response, `408`, `5xx`, `409 idempotency.request-in-progress`) is
+    resent with the same key, which the gateway replays, after the same waits. When the resends
+    do not settle it, the store reads the rules again and keeps the draft and its key, even when
+    the builder closes (`creationUnknown`). The builder then warns that the rule may already
+    exist. Submitting again sends the same key, so the rule is never created twice. Submitting
+    another draft first resends the kept one with its key.
     A comment over 5,000 characters (the contract's limit) blocks `Create the rule` and shows
     `spaces.automations.comment-too-long`. The field also carries the native `maxlength` that
     Signal Forms derives from the rule.
@@ -495,6 +507,7 @@ gateway checks them and `ORGANIZATION_PIN_OPERATIONS` lists them.
   | `spaces.automations.load-failed`, `runs-failed`, `members-failed`                                 | The mockup draws no failed read.                         |
   | `spaces.automations.create-failed`, `toggle-failed`, `delete-failed`                              | The mockup draws no refused write.                       |
   | `spaces.automations.toggle-not-applied`, `toggle-unknown`, `delete-not-applied`, `delete-unknown` | The mockup draws no lost answer.                         |
+  | `spaces.automations.create-unknown`, `create-unknown-toast`                                       | The mockup draws no lost answer.                         |
   | `spaces.automations.comment-too-long`                                                             | The mockup has no wording for a comment over the limit.  |
   | `spaces.automations.former-member`                                                                | A rule or run naming someone no longer in the directory. |
   | `spaces.automations.loading`                                                                      | Accessible name of the skeleton rows.                    |

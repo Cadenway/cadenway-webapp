@@ -44,6 +44,7 @@ import { SPACES_RETRY } from '../../../constants/data-table-texts/data-table-tex
 import { priorityLabels, statusLabels } from '../../../constants/view-labels/view-labels.constants';
 import type {
   AutomationAction,
+  AutomationCreateOutcome,
   AutomationActionType,
   AutomationDraft,
   AutomationRule,
@@ -139,6 +140,18 @@ interface AutomationRuleRow {
    * @readonly
    */
   readonly removeLabel: string;
+
+  /**
+   * Property pending
+   *
+   * @description
+   * Whether a switch or a deletion of the rule did not settle: its controls are disabled until a
+   * read of the rules settles it.
+   *
+   * @type {boolean}
+   * @readonly
+   */
+  readonly pending: boolean;
   // #endregion
 }
 
@@ -390,6 +403,7 @@ export class AutomationsDialog {
   protected readonly ruleRows: Signal<readonly AutomationRuleRow[]> = computed(
     (): readonly AutomationRuleRow[] => {
       const nameOf: MemberName = this.nameOf();
+      const unresolved: readonly string[] = this.store.unresolvedRuleIds();
       return this.store.shownRules().map((rule: AutomationRule): AutomationRuleRow => {
         const when: string = describeTrigger(rule.trigger);
         const then: string = describeAction(rule.action, nameOf);
@@ -402,6 +416,7 @@ export class AutomationsDialog {
             ? $localize`:@@spaces.automations.disable:Disable: ${when}:when:, ${then}:then:`
             : $localize`:@@spaces.automations.enable:Enable: ${when}:when:, ${then}:then:`,
           removeLabel: $localize`:@@spaces.automations.delete-label:Delete: ${when}:when:, ${then}:then:`,
+          pending: unresolved.includes(rule.id),
         };
       });
     },
@@ -904,18 +919,28 @@ export class AutomationsDialog {
    *
    * @description
    * Creates the rule; once recorded, closes the builder, empties the comment and shows
-   * `Automation created`. A refusal keeps the builder and its values for a retry.
+   * `Automation created`. A refusal keeps the builder and its values for a retry with an error
+   * toast. An unknown outcome keeps them too, with a warning: the store keeps the draft and its
+   * idempotency key, so submitting again replays it instead of creating a second rule.
    */
   protected async save(): Promise<void> {
     const draft: AutomationDraft | null = this.draft();
     if (!draft || this.store.creating()) return;
-    const created: AutomationRule | null = await this.store.create(draft);
-    if (!created) {
+    const outcome: AutomationCreateOutcome = await this.store.create(draft);
+    if (outcome.status === 'refused') {
       this.toasts.error(
         $localize`:@@spaces.automations.create-failed:The automation could not be created`,
       );
       return;
     }
+    if (outcome.status === 'unknown') {
+      this.toasts.warning(
+        $localize`:@@spaces.automations.create-unknown-toast:The creation of the automation could not be confirmed`,
+      );
+      return;
+    }
+    if (outcome.status !== 'created') return;
+    const created: AutomationRule = outcome.rule;
     this.adding.set(false);
     this.commentModel.set({ body: '' });
     this.toasts.show($localize`:@@spaces.automations.created:Automation created`, {

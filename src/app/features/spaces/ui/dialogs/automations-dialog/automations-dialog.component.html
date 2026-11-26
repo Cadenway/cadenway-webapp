@@ -60,6 +60,7 @@
               </span>
               <cw-switch
                 [checked]="row.rule.enabled"
+                [disabled]="row.pending"
                 [ariaLabel]="row.toggleLabel"
                 (checkedChange)="toggle(row.rule)"
               />
@@ -69,6 +70,7 @@
                 variant="ghost"
                 size="icon-xs"
                 class="text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                [disabled]="row.pending"
                 [attr.aria-label]="row.removeLabel"
                 (click)="askRemove(row)"
               >
@@ -287,6 +289,17 @@
                 }
               </p>
             }
+          }
+          @if (store.creationUnknown()) {
+            <p
+              role="status"
+              class="text-xs text-muted-foreground"
+              data-testid="automation-create-unknown"
+              i18n="@@spaces.automations.create-unknown"
+            >
+              This automation may already have been created. Create the rule again to check: it will
+              not be created twice.
+            </p>
           }
           <p class="text-sm" data-testid="automation-preview">
             <ng-icon
