@@ -35,6 +35,50 @@ import { TaskDetailStore } from '../task-detail/task-detail.store';
 export type TaskParticipantsState = 'idle' | 'loading' | 'ready' | 'failed';
 
 /**
+ * Interface TaskCommentCountChange
+ *
+ * @description
+ * A comment posted (`+1`) or deleted (`-1`) here, counted over the first page it was written
+ * against: once the detail reads the first page again, its total already carries the write.
+ */
+interface TaskCommentCountChange {
+  // #region Properties
+  /**
+   * Property id
+   *
+   * @description
+   * The comment.
+   *
+   * @type {string}
+   * @readonly
+   */
+  readonly id: string;
+
+  /**
+   * Property delta
+   *
+   * @description
+   * `1` for a comment posted, `-1` for one deleted.
+   *
+   * @type {1 | -1}
+   * @readonly
+   */
+  readonly delta: 1 | -1;
+
+  /**
+   * Property base
+   *
+   * @description
+   * The first page shown when the write was made.
+   *
+   * @type {TaskCommentPage | null}
+   * @readonly
+   */
+  readonly base: TaskCommentPage | null;
+  // #endregion
+}
+
+/**
  * Interface TaskCommentsState
  *
  * @description
@@ -121,6 +165,18 @@ interface TaskCommentsState {
   readonly hidden: readonly string[];
 
   /**
+   * Property countChanges
+   *
+   * @description
+   * The posts and deletions made here, applied to the count while the first page they were made
+   * against is still the one shown.
+   *
+   * @type {readonly TaskCommentCountChange[]}
+   * @readonly
+   */
+  readonly countChanges: readonly TaskCommentCountChange[];
+
+  /**
    * Property sending
    *
    * @description
@@ -168,12 +224,17 @@ interface TaskCommentsState {
    * Property sendKey
    *
    * @description
-   * The `Idempotency-Key` of the body being sent, reused while the same body is sent again.
+   * The `Idempotency-Key` of the comment being sent, reused while the same body is sent again as
+   * an answer to the same comment (another body or another reply target is another request).
    *
-   * @type {{ readonly body: string; readonly key: string } | null}
+   * @type {{ readonly body: string; readonly replyTo: string | null; readonly key: string } | null}
    * @readonly
    */
-  readonly sendKey: { readonly body: string; readonly key: string } | null;
+  readonly sendKey: {
+    readonly body: string;
+    readonly replyTo: string | null;
+    readonly key: string;
+  } | null;
   // #endregion
 }
 
@@ -201,7 +262,8 @@ export interface TaskCommentsStoreInstance {
    * Property total
    *
    * @description
-   * Live comments of the task (the tab's count), or null while the first page is missing.
+   * Live comments of the task (the tab's count), or null while the first page is missing: the
+   * first page's total, corrected by the posts and deletions made since that page was read.
    *
    * @type {Signal<number | null>}
    * @readonly
@@ -304,7 +366,7 @@ export interface TaskCommentsStoreInstance {
    *
    * @description
    * Posts a comment with its mention spans (the `@[Name](id)` tokens) under an
-   * `Idempotency-Key` kept while the same body is sent again, then reads the detail again for the
+   * `Idempotency-Key` kept while the same body is sent again to the same reply target, then reads the detail again for the
    * task's new version and the first page. A body over 5,000 code points is not sent.
    *
    * @param {string} body - The Markdown.
@@ -319,7 +381,8 @@ export interface TaskCommentsStoreInstance {
    * @description
    * Deletes one of the caller's comments at once; a refusal shows it again with the failure
    * toast. The success toast's `Undo` posts it again (the contract has no restore), as a new
-   * comment at the end with its mentions and reply.
+   * comment at the end with its mentions and reply, to the task it was deleted from even when
+   * another task is open by then; the visible comments change only while that task is still open.
    *
    * @param {TaskComment} comment - The comment.
    * @returns {Promise<boolean>} Whether it was deleted.
@@ -367,6 +430,7 @@ function createTaskCommentsStore(): Type<TaskCommentsStoreInstance> {
     moreFailed: false,
     added: [],
     hidden: [],
+    countChanges: [],
     sending: false,
     sendFailed: false,
     participants: [],
@@ -392,19 +456,11 @@ function createTaskCommentsStore(): Type<TaskCommentsStoreInstance> {
       total: computed((): number | null => {
         const first: TaskCommentPage | null = store._detail.comments();
         if (first === null) return null;
-        const paged: ReadonlySet<string> = new Set<string>(
-          [...first.items, ...store.later()].map((comment: TaskComment): string => comment.id),
-        );
-        const extra: number = store
-          .added()
-          .filter((comment: TaskComment): boolean => !paged.has(comment.id)).length;
-        const gone: number = store
-          .hidden()
-          .filter(
-            (id: string): boolean =>
-              paged.has(id) || store.added().some((comment: TaskComment) => comment.id === id),
-          ).length;
-        return Math.max(0, first.total + extra - gone);
+        const pending: number = store
+          .countChanges()
+          .filter((change: TaskCommentCountChange): boolean => change.base === first)
+          .reduce((sum: number, change: TaskCommentCountChange): number => sum + change.delta, 0);
+        return Math.max(0, first.total + pending);
       }),
       _cursor: computed((): string | null => {
         const cursor: string | null | undefined = store.laterCursor();
@@ -427,17 +483,26 @@ function createTaskCommentsStore(): Type<TaskCommentsStoreInstance> {
           patchState(store, { participantsState: 'failed' });
         }
       };
-      const post: (draft: TaskCommentDraft) => Promise<TaskComment> = async (
+      const post: (
+        taskKey: string,
         draft: TaskCommentDraft,
+        idempotencyKey: string,
+      ) => Promise<TaskComment> = async (
+        taskKey: string,
+        draft: TaskCommentDraft,
+        idempotencyKey: string,
       ): Promise<TaskComment> => {
-        const key: string | null = store._detail.taskKey();
-        if (key === null) throw new Error('No task is open.');
-        const held: { readonly body: string; readonly key: string } | null = store.sendKey();
-        const sendKey: string = held?.body === draft.body ? held.key : crypto.randomUUID();
-        patchState(store, { sendKey: { body: draft.body, key: sendKey } });
-        const comment: TaskComment = await store._api.comment(key, draft, sendKey);
-        patchState(store, { added: [...store.added(), comment], sendKey: null });
-        void store._detail.reload();
+        const comment: TaskComment = await store._api.comment(taskKey, draft, idempotencyKey);
+        if (store._detail.taskKey() === taskKey) {
+          patchState(store, {
+            added: [...store.added(), comment],
+            countChanges: [
+              ...store.countChanges(),
+              { id: comment.id, delta: 1, base: store._detail.comments() },
+            ],
+          });
+          void store._detail.reload();
+        }
         return comment;
       };
       const refreshLater: () => Promise<void> = async (): Promise<void> => {
@@ -490,10 +555,19 @@ function createTaskCommentsStore(): Type<TaskCommentsStoreInstance> {
           if (text === '' || codePointLength(text) > COMMENT_MAX_LENGTH || store.sending()) {
             return false;
           }
-          patchState(store, { sending: true, sendFailed: false });
+          const key: string | null = store._detail.taskKey();
+          if (key === null) return false;
+          const held: TaskCommentsState['sendKey'] = store.sendKey();
+          const idempotencyKey: string =
+            held?.body === text && held.replyTo === replyTo ? held.key : crypto.randomUUID();
+          patchState(store, {
+            sending: true,
+            sendFailed: false,
+            sendKey: { body: text, replyTo, key: idempotencyKey },
+          });
           try {
-            await post({ body: text, mentions: mentionSpans(text), replyTo });
-            patchState(store, { sending: false });
+            await post(key, { body: text, mentions: mentionSpans(text), replyTo }, idempotencyKey);
+            patchState(store, { sending: false, sendKey: null });
             return true;
           } catch {
             patchState(store, { sending: false, sendFailed: true });
@@ -504,17 +578,27 @@ function createTaskCommentsStore(): Type<TaskCommentsStoreInstance> {
         async remove(comment: TaskComment): Promise<boolean> {
           const key: string | null = store._detail.taskKey();
           if (key === null) return false;
-          patchState(store, { hidden: [...store.hidden(), comment.id] });
+          patchState(store, {
+            hidden: [...store.hidden(), comment.id],
+            countChanges: [
+              ...store.countChanges(),
+              { id: comment.id, delta: -1, base: store._detail.comments() },
+            ],
+          });
           try {
             await store._api.deleteComment(key, comment);
             void store._detail.reload();
             store._toasts.success($localize`:@@task.comments.deleted:Comment deleted`, {
               undo: (): void => {
-                post({
-                  body: comment.body,
-                  mentions: mentionSpans(comment.body),
-                  replyTo: comment.replyToCommentId,
-                }).catch((): void => {
+                post(
+                  key,
+                  {
+                    body: comment.body,
+                    mentions: mentionSpans(comment.body),
+                    replyTo: comment.replyToCommentId,
+                  },
+                  crypto.randomUUID(),
+                ).catch((): void => {
                   store._toasts.error(
                     $localize`:@@task.comments.restore-failed:Could not restore the comment`,
                   );
@@ -525,6 +609,12 @@ function createTaskCommentsStore(): Type<TaskCommentsStoreInstance> {
           } catch {
             patchState(store, {
               hidden: store.hidden().filter((id: string): boolean => id !== comment.id),
+              countChanges: store
+                .countChanges()
+                .filter(
+                  (change: TaskCommentCountChange): boolean =>
+                    change.id !== comment.id || change.delta !== -1,
+                ),
             });
             store._toasts.error(
               $localize`:@@task.comments.delete-failed:Could not delete the comment`,

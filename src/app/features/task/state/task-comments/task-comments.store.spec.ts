@@ -167,6 +167,78 @@ describe('TaskCommentsStore', () => {
     );
   });
 
+  it('posts the Undo to the task it was deleted from once another task is open', async () => {
+    const mine: TaskComment = comment('c1', 'u2', 'Export ready for review.');
+    api['comment'].mockResolvedValue(comment('c9', 'u2', mine.body));
+    await store.remove(mine);
+    (detail['reload'] as Mock).mockClear();
+    (detail['taskKey'] as WritableSignal<string>).set('CAD-490');
+
+    const options: CwToastOptions = toasts.success.mock.calls[0][1] as CwToastOptions;
+    options.undo?.();
+
+    await vi.waitFor(() => {
+      expect(api['comment']).toHaveBeenCalledWith(
+        'CAD-482',
+        { body: mine.body, mentions: [], replyTo: null },
+        expect.any(String),
+      );
+    });
+    expect(store.items()).toEqual([]);
+    expect(detail['reload']).not.toHaveBeenCalled();
+  });
+
+  it('uses a new idempotency key when the same body answers another comment', async () => {
+    api['comment'].mockRejectedValueOnce(new Error('offline'));
+    await store.send('Hello', 'c1');
+    api['comment'].mockResolvedValue(comment('c3', 'u1', 'Hello'));
+
+    await store.send('Hello', null);
+
+    const keys: unknown[] = api['comment'].mock.calls.map((call: unknown[]) => call[2]);
+    expect(keys[0]).not.toBe(keys[1]);
+  });
+
+  it('counts a post beyond the first page once the first page is read again', async () => {
+    first.set({
+      items: [comment('c1', 'u2', 'Export ready for review.')],
+      total: 30,
+      nextCursor: 'p2',
+    });
+    api['comment'].mockResolvedValue(comment('c31', 'u1', 'Merged.'));
+    await store.send('Merged.', null);
+    expect(store.total()).toBe(31);
+
+    first.set({
+      items: [comment('c1', 'u2', 'Export ready for review.')],
+      total: 31,
+      nextCursor: 'p2',
+    });
+
+    expect(store.total()).toBe(31);
+    expect(store.items().map((item: TaskComment) => item.id)).toEqual(['c1', 'c31']);
+  });
+
+  it('counts a deletion from a later page once the first page is read again', async () => {
+    first.set({
+      items: [comment('c1', 'u2', 'Export ready for review.')],
+      total: 30,
+      nextCursor: 'p2',
+    });
+    await store.loadMore();
+    await store.remove(comment('c2', 'u1', 'Merged.'));
+    expect(store.total()).toBe(29);
+
+    first.set({
+      items: [comment('c1', 'u2', 'Export ready for review.')],
+      total: 29,
+      nextCursor: 'p2',
+    });
+
+    expect(store.total()).toBe(29);
+    expect(store.items().map((item: TaskComment) => item.id)).toEqual(['c1']);
+  });
+
   it('reads the participants once, however many menus ask', async () => {
     await Promise.all([store.start(), store.start()]);
     await store.start();
