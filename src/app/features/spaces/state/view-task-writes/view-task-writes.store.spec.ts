@@ -353,6 +353,24 @@ describe('ViewTaskWritesStore', () => {
     expect(restore).toHaveBeenCalledWith(['trash-1']);
   });
 
+  it('offers no Undo for a write only a read back of the task settled', async () => {
+    update.mockResolvedValueOnce({ ...outcomeOf([task('CAD-482')]), before: {}, after: {} });
+
+    await store.updateFields(
+      task('CAD-482'),
+      { dueDate: '2026-12-01' },
+      { title: 'CAD-482 rescheduled', description: 'Due: December 1.' },
+    );
+    act.mockResolvedValueOnce({ ...outcomeOf([task('CAD-483')]), before: {}, after: {} });
+    store.setPriority([task('CAD-483')], 'urgente');
+    await flush();
+
+    expect(toasts['show']).toHaveBeenCalledTimes(2);
+    for (const call of toasts['show'].mock.calls) {
+      expect((call[1] as { undo?: () => void }).undo).toBeUndefined();
+    }
+  });
+
   it("shows the field write's own wording when the gateway refuses it", async () => {
     update.mockResolvedValueOnce({
       ...outcomeOf([]),

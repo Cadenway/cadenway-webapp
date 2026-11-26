@@ -1,6 +1,7 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { inject, Service } from '@angular/core';
 import {
+  type GetTaskClientResult,
   type TaskGroup,
   type TaskGroupPage,
   TaskQueriesService,
@@ -53,6 +54,61 @@ import { abortableRead } from '../../utils/abortable-read/abortable-read.util';
 const SUBTASK_PAGE_LIMIT: number = 100;
 
 /**
+ * Interface TaskReadBack
+ *
+ * @description
+ * A task as a single read of it answers, to settle a write whose outcome was uncertain: its
+ * summary and the written fields a summary does not carry.
+ */
+export interface TaskReadBack {
+  // #region Properties
+  /**
+   * Property task
+   *
+   * @description
+   * The task, at the version the gateway has it now.
+   *
+   * @type {TaskSummary}
+   * @readonly
+   */
+  readonly task: TaskSummary;
+
+  /**
+   * Property estimateMinutes
+   *
+   * @description
+   * Its estimate in minutes, null when it has none.
+   *
+   * @type {number | null}
+   * @readonly
+   */
+  readonly estimateMinutes: number | null;
+
+  /**
+   * Property cancelNote
+   *
+   * @description
+   * The note of its cancellation, null when it has none (task summaries do not carry it).
+   *
+   * @type {string | null}
+   * @readonly
+   */
+  readonly cancelNote: string | null;
+
+  /**
+   * Property customFieldValues
+   *
+   * @description
+   * Its custom field values by field id; a cleared field is absent.
+   *
+   * @type {Readonly<Record<string, number | string>>}
+   * @readonly
+   */
+  readonly customFieldValues: Readonly<Record<string, number | string>>;
+  // #endregion
+}
+
+/**
  * Function groupAllowed
  *
  * @description
@@ -80,10 +136,10 @@ function groupAllowed(query: ListTaskQuery, group: GroupFilter, userId: string):
  * @description
  * The reads of the task views: the group counts (`countTaskGroups`), the cursor pages of the
  * tasks of a list or of one of its groups, optionally within a due window (`queryListTasks`), and
- * the subtasks of a task (`listSubtasks`), mapped to task summaries; and the single-field writes
- * of a task (`updateTask` with `If-Match`). Every read bypasses the HTTP cache, so a reload after
- * a realtime notice reads the gateway again. A failed read rejects with the typed route error of
- * the list.
+ * the subtasks of a task (`listSubtasks`), mapped to task summaries; one task read back after an
+ * uncertain write (`getTask`); and the single-field writes of a task (`updateTask` with
+ * `If-Match`). Every read bypasses the HTTP cache, so a reload after a realtime notice reads the
+ * gateway again. A failed read of the list rejects with the typed route error of the list.
  */
 @Service()
 export class ListTasksApi {
@@ -243,6 +299,38 @@ export class ListTasksApi {
   }
 
   /**
+   * Method readBack
+   *
+   * @description
+   * Reads one task without the HTTP cache (`getTask`), to tell whether a write whose answer was
+   * lost or refused on a resend left the task with the written values. It never rejects:
+   * `trashed` when the task is in the trash (`404 task.trashed`), null when it could not be read
+   * otherwise (no answer, another error, a task the caller no longer sees).
+   *
+   * @param {string} taskKey - Key of the task.
+   * @returns {Promise<TaskReadBack | 'trashed' | null>} The task, `trashed`, or null.
+   */
+  public async readBack(taskKey: string): Promise<TaskReadBack | 'trashed' | null> {
+    try {
+      const task: GetTaskClientResult = await firstValueFrom(
+        this.tasks.getTask(taskKey, { cache: 'no-store' }),
+      );
+      return {
+        task: toListTask(task),
+        estimateMinutes: task.estimateMinutes,
+        cancelNote: task.cancelNote,
+        customFieldValues: { ...task.customFieldValues },
+      };
+    } catch (error: unknown) {
+      return error instanceof HttpErrorResponse &&
+        error.status === 404 &&
+        hasProblemCode(error, 'task.trashed')
+        ? 'trashed'
+        : null;
+    }
+  }
+
+  /**
    * Method update
    *
    * @description
@@ -250,7 +338,7 @@ export class ListTasksApi {
    * made against, and tells how it ended: applied at the version the gateway saved, refused (a
    * `4xx`: `422` for an invalid date; `stale` for a `412` that is not
    * `organization.context-changed`, the task having changed since that version), or without a
-   * certain outcome (no answer or a `5xx`). It never rejects.
+   * certain outcome (no answer, a `408 Request Timeout` or a `5xx`). It never rejects.
    *
    * @param {string} taskKey - Key of the task.
    * @param {number} version - Version the change was made against.
@@ -270,7 +358,12 @@ export class ListTasksApi {
       );
       return { kind: 'done', version: typeof task.version === 'number' ? task.version : null };
     } catch (error: unknown) {
-      if (!(error instanceof HttpErrorResponse) || error.status < 400 || error.status >= 500) {
+      if (
+        !(error instanceof HttpErrorResponse) ||
+        error.status < 400 ||
+        error.status === 408 ||
+        error.status >= 500
+      ) {
         return { kind: 'unknown' };
       }
       return {

@@ -44,7 +44,9 @@ export interface ViewTaskOutcome extends TaskBulkOutcome {
    * Property before
    *
    * @description
-   * The sent tasks as confirmed before the write, by key.
+   * The sent tasks as confirmed before the write, by key: what an `Undo` puts back. An applied
+   * task that only a read back of it settled (its value matched at a later version, which does
+   * not prove this write set it) is absent, as from `after`: it offers no `Undo`.
    *
    * @type {Readonly<Partial<Record<string, ConfirmedTask>>>}
    * @readonly
@@ -151,9 +153,9 @@ export interface TaskFieldChanges {
  *
  * @description
  * The answer of one single-field write: applied at a version (null when the gateway returned
- * none), refused (a `4xx`; `stale` for a `412` other than an organization change: the task
+ * none), refused (a `4xx` other than `408`; `stale` for a `412` other than an organization change: the task
  * changed since the version sent, so the view reads it again), or without a certain outcome (no
- * answer, or a `5xx`).
+ * answer, a `408` or a `5xx`).
  *
  * @type {{ kind: 'done'; version: number | null } | { kind: 'refused'; stale: boolean } | { kind: 'unknown' }}
  */

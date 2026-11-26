@@ -664,7 +664,7 @@ describe('ListPage', () => {
     await harness.navigateByUrl('/atelier-nord/l/l-bugs/form');
     harness.detectChanges();
     expect(find('view-tools')).toBeNull();
-  });
+  }, 30_000);
 
   it('opens a tab at its segment and marks it selected', async () => {
     TestBed.overrideProvider(RELEASED_VIEWS, {

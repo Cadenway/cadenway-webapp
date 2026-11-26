@@ -1,0 +1,15 @@
+<input
+  #field
+  class="h-full w-full min-w-0 bg-transparent text-sm outline-none aria-invalid:text-destructive"
+  [class.text-right]="alignEnd()"
+  [class.tabular-nums]="alignEnd()"
+  [type]="kind() === 'date' ? 'date' : 'text'"
+  [attr.inputmode]="kind() === 'number' ? 'decimal' : null"
+  [value]="value()"
+  [attr.aria-label]="label()"
+  [attr.aria-invalid]="invalid() ? 'true' : null"
+  (input)="invalid.set(false)"
+  (focus)="select($event)"
+  (keydown.enter)="submit($event, field.value)"
+  (blur)="leave(field.value)"
+/>
