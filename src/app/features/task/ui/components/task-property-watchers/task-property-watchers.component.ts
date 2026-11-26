@@ -68,8 +68,8 @@ import { peopleOf } from '../task-property-assignees/task-property-assignees.com
         <span role="alert" class="block px-2 py-1.5 text-sm" i18n="@@task.create.read-failed"
           >Could not load this information.</span
         >
-        <button cwMenuItem type="button" (triggered)="retried.emit()" i18n="@@task.retry">
-          Retry
+        <button cwMenuItem type="button" (triggered)="retried.emit()">
+          <ng-container i18n="@@task.retry">Retry</ng-container>
         </button>
       } @else {
         @for (person of people() ?? []; track person.id) {

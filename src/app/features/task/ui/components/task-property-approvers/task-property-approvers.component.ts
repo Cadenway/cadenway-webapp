@@ -165,8 +165,8 @@ const DECISION_ICONS: Readonly<Record<'approved' | 'changes-requested' | 'waitin
         >Must approve before delivery</cw-menu-label
       >
       @if (failed()) {
-        <button cwMenuItem type="button" (triggered)="retried.emit()" i18n="@@task.retry">
-          Retry
+        <button cwMenuItem type="button" (triggered)="retried.emit()">
+          <ng-container i18n="@@task.retry">Retry</ng-container>
         </button>
       } @else {
         @for (person of people() ?? []; track person.id) {
