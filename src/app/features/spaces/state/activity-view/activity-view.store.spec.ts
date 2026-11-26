@@ -333,6 +333,79 @@ describe('ActivityViewStore', () => {
     );
   });
 
+  it('queues one refresh for a notice that arrives while a read runs', async () => {
+    const store: ActivityViewStoreInstance = setup();
+    await settle();
+    const stale: Deferred = deferPage();
+    store.filterKinds(['status']);
+    await settle();
+    expect(page).toHaveBeenCalledTimes(2);
+
+    notices.next({
+      id: 'n1',
+      type: 'task.updated.v1',
+      at: '2026-11-08T09:00:00Z',
+      data: { taskId: 't1', changed: ['status'] },
+    });
+    notices.next({
+      id: 'n2',
+      type: 'task.status-changed.v1',
+      at: '2026-11-08T09:00:00Z',
+      data: { taskId: 't1', changed: ['status'] },
+    });
+    await vi.advanceTimersByTimeAsync(1000);
+    await settle();
+    expect(page).toHaveBeenCalledTimes(2);
+
+    page.mockResolvedValueOnce(pageOf(['e5'], null, 1));
+    stale.resolve(pageOf(['e4'], null, 1));
+    await settle();
+    await vi.advanceTimersByTimeAsync(1000);
+    await settle();
+
+    expect(page).toHaveBeenCalledTimes(3);
+    expect(page).toHaveBeenLastCalledWith(
+      'sprint-14',
+      { kinds: ['status'], actorId: null },
+      null,
+      50,
+      expect.any(AbortSignal),
+    );
+    expect(ids(store)).toEqual(['e5']);
+  });
+
+  it('drops a queued refresh once the list changed or the read failed', async () => {
+    const store: ActivityViewStoreInstance = setup();
+    await settle();
+    const first: Deferred = deferPage();
+    store.filterKinds(['comment']);
+    await settle();
+    detailClosings.next('CAD-479');
+    await vi.advanceTimersByTimeAsync(1000);
+    await settle();
+
+    const backlog: Deferred = deferPage();
+    listId.set('backlog');
+    await settle();
+    first.resolve(pageOf(['e4'], null, 1));
+    backlog.resolve(pageOf(['b1'], null, 1));
+    await settle();
+    expect(page).toHaveBeenCalledTimes(3);
+    expect(ids(store)).toEqual(['b1']);
+
+    const failing: Deferred = deferPage();
+    store.filterKinds(['due']);
+    await settle();
+    detailClosings.next('CAD-479');
+    await vi.advanceTimersByTimeAsync(1000);
+    await settle();
+    failing.reject(new Error('offline'));
+    await settle();
+
+    expect(page).toHaveBeenCalledTimes(4);
+    expect(store.failed()).toBe(true);
+  });
+
   it('ignores a comment notice and a notice naming another list', async () => {
     setup();
     await settle();
