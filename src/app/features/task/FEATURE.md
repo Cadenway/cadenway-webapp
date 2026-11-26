@@ -87,6 +87,14 @@ options?)`, `requestCancel(tasks, options?)`, `pendingStatus(taskId)`, `displaye
   `SearchService.search` (the parent picker);
   `ListsService.listLists`; `MembersService.listMembers` (owners, admins and members). Every
   collection is read to its last cursor page.
+- For the properties panel (`TaskPropertyApi`, `TaskTimeApi`): `TasksService.assignTask`,
+  `unassignTask` (the new version from the `ETag`), `addTaskLabel`, `removeTaskLabel`,
+  `listTaskWatchers` (to its last page), `getTaskApproval`, `requestTaskApproval` (`If-Match`),
+  `listTaskDependencies`, `createTaskDependency` (`Idempotency-Key`), `deleteTaskDependency`,
+  `listDependencyCandidates`; `TaskTimeService.listTaskTimeEntries`, `createTaskTimeEntry`
+  (`Idempotency-Key`), `deleteTaskTimeEntry`, `getTaskStatusDurations`; `ListsService.getList`
+  (the sprint end); the people and labels of `TaskCreateApi`. `parseDuration` and
+  `formatDuration` of `@cadenway/ui/components/time-tracker`.
 - `@cadenway/contracts` enums: `STATUS_KEYS`, `STATUS_CATEGORIES`, `STATUS_CATEGORY_BY_KEY`,
   `MILESTONE_STATUS_KEYS`, `PRIORITY_KEYS`, `CANCEL_REASONS`, `RECURRENCES`.
 - `@core/api` (`hasProblemCode`, `readProblem`, `OrganizationPin`), `@shared/route-errors`, `@core/shortcuts` (`N`, Ctrl Enter), `@shared/layout-slot`
@@ -192,6 +200,29 @@ the task` with `Retry`; otherwise Errors' `RouteErrorPanel` renders the typed ro
     `cw-task-properties-panel` and `cw-task-detail-tabs`, containers of the dialog that inject the
     store. The dialog also provides `TaskStatusChangesStore` for the panel's status; a completed
     status write reads the detail again.
+  - Properties panel (`cw-task-properties-panel`, `App.dc.html` lines 2368-2610): `Status`
+    (`cw-task-status-picker` through the dialog's `TaskStatusChangesStore`: the split button
+    advances, the menu groups by category with hints, fast clicks settle once, the icon morphs
+    from the previous status; `Cancelled` opens `cw-task-cancel-dialog`, rendered by the panel),
+    `Assignees` (five initials and `+N`, checkbox menu, `(me)`), `Due date` (`Today`,
+    `Tomorrow`, `Yesterday` or the short date, late warning; dialog with `Today`, `Tomorrow`,
+    `Friday`, `End of the sprint` for a sprint list, `No due date` and the calendar), `Priority`,
+    `Estimate` (not for a milestone: steppers, suggestions, `parseDuration` with a bare number in
+    hours, `Remove`, an unreadable text toasts), `Time spent` (against the estimate; add time
+    with shortcuts, a duration in minutes and a note; entries newest first, the caller's own
+    deletable after a confirmation, `Undo` records them again; the timer), `Labels`, `List`
+    (`moveTo`, `Moved` toast), `Repeat` (`Next: {date}` or `Add a due date to repeat`),
+    `Followers`, `Milestone` (switch and hint, toast; the gateway maps the status), `Approval`
+    (not for a milestone), `Dependencies` (chips that open the other task, remove with `Undo`,
+    the date warning, the add dialog with `Direction`, a debounced search and ten candidates),
+    then `Time in status` (not for a milestone) and the subtask progress. Task fields go through
+    `TaskDetailStore.update` or `moveTo`; `TaskPropertiesStore` (provided by the panel) holds the
+    people, labels, watchers, approval, dependencies, time per status and sprint end, writes the
+    collections at once one after the other and confirms them with `accept` or `acceptVersion`,
+    restoring them with a toast on a refusal; `TaskTimeStore` (provided by the panel) holds the
+    entries and the timer. Both follow the open task's key; the time per status is read again
+    after a confirmed status or milestone change, the watchers after a confirmed assignee change.
+    Without the list's `edit` role every row is read-only (no timer, no dependency buttons).
 - Known gaps: the comment count of a row is null (task summaries carry none); the Git chip is left
   out (B4, no API yet); the dialog's file drop is not built (attachments need the task first); the
   mockup's built-in templates (`Bug`, `Feature`, `Release`) appear only when the space
@@ -210,6 +241,22 @@ people`), and the due trigger shows the short date without `Tomorrow ·` or the
   check the depth and size of a search hit from another list. Watchers show the count only (the
   list of people and the `Followers` row belong to the panel). Realtime presence (who is viewing)
   has no contract yet.
+- Properties gaps: the API keeps no running timer, so its start lives in the device storage per
+  organization and task (`cadenway-task-timer.<organizationId>.<taskKey>`) and is lost with it;
+  stopping records the elapsed minutes (1 to 1,440) for today. A deleted time entry's `Undo`
+  records a new entry (the API has no restore). Changing approvers starts a new round
+  (`requestTaskApproval`), which clears every vote, not only the removed reviewer's; a round keeps
+  one reviewer, so the last one cannot be removed and a round cannot be withdrawn. Another
+  person than the caller can be followed or unfollowed only with `edit` (the panel is read-only
+  without it, the header's follow stays). Picking a status in the menu shows the status change
+  toast too (the mockup toasts the advance only), since `TaskStatusChangesStore` always toasts.
+  The estimate field opens from a trigger in a `cw-popover` rather than being the mockup's inline
+  combobox (`cw-combobox` has no free duration with steppers: a design-system need). Durations
+  use `formatDuration` (`1 h 30`) in both languages. Dependencies, approval and the time per
+  status are not read again on another person's change (realtime notices read the detail only).
+  `Since creation` shows only when the history is complete. The subtask count reads
+  `{d} / {n} done` without the singular. Members outside the people list (guests, former
+  members) read `Unknown member`.
 
 ## Copy not taken word for word from the mockup
 
@@ -231,3 +278,10 @@ people`), and the due trigger shows the short date without `Tomorrow ·` or the
 | `task.detail.trashed-with-one`, `task.detail.reminder.hour`, `task.detail.reminder.*-at`    | Singular form and time formats the mockup writes inline.           |
 | `task.detail.confirm-*`, `task.detail.dialog-close`, `task.detail.copy-failed`              | Texts of the bricks and of a refused clipboard.                    |
 | `task.detail.reminder.note-placeholder`                                                     | The English source names no person; the French keeps the mockup's. |
+| `task.properties.*-failed`, `task.properties.failed-text`                                   | The mockup draws no refused write.                                 |
+| `task.properties.conflict-text`                                                             | The mockup draws no conflicting write.                             |
+| `task.properties.approvers-invalid`, `task.properties.dependency-cycle`                     | Refusals the mockup does not draw.                                 |
+| `task.properties.people-loading`, `task.properties.labels-none`                             | Loading and empty menus the mockup does not draw.                  |
+| `task.properties.unknown-member`                                                            | A former member the mockup does not draw.                          |
+| `task.properties.due-yesterday`, `task.properties.due-*-month`                              | Taken from the spec and the calendar brick.                        |
+| `task.properties.time-entries`                                                              | The mockup writes `Saisies · 3 saisies`; the count is kept once.   |
