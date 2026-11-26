@@ -11,6 +11,7 @@ import { parseChange } from '@core/realtime/realtime-protocol.util';
 import {
   TaskActionsApi,
   type TaskBulkOutcome,
+  TaskDetailOpener,
   type TaskStatusChangesInstance,
   TaskStatusChangesStore,
   type TaskSummary,
@@ -144,6 +145,7 @@ describe('ListRowsStore', () => {
   let changeStatus: Mock<TaskApi['changeStatus']>;
   let bulk: Mock<TaskActionsApi['bulk']>;
   let notices: Subject<RealtimeChange>;
+  let detailClosings: Subject<string>;
   let organization: WritableSignal<{ id: string; slug: string }>;
 
   /**
@@ -171,6 +173,7 @@ describe('ListRowsStore', () => {
           useValue: { show: vi.fn(), error: vi.fn(), warning: vi.fn(), dismiss: vi.fn() },
         },
         { provide: RealtimeConnection, useValue: { watch: () => notices.asObservable() } },
+        { provide: TaskDetailOpener, useValue: { closed: detailClosings.asObservable() } },
         {
           provide: WORKSPACE_CONTEXT,
           useValue: { organization, user: () => ({ id: 'u-camille' }) },
@@ -214,6 +217,7 @@ describe('ListRowsStore', () => {
   beforeEach(() => {
     vi.useFakeTimers();
     notices = new Subject<RealtimeChange>();
+    detailClosings = new Subject<string>();
     organization = signal({ id: 'org-atelier-nord', slug: 'atelier-nord' });
     groups = vi.fn<ListTasksApi['groups']>(() =>
       Promise.resolve<readonly TaskGroupCount[]>([
@@ -700,6 +704,18 @@ describe('ListRowsStore', () => {
     }
 
     expect(page.mock.calls.length).toBeGreaterThan(2);
+  });
+
+  it('reads the rows again once a task detail closes over the view, without realtime', async () => {
+    setup(flat);
+    await settle();
+    expect(page).toHaveBeenCalledTimes(1);
+
+    detailClosings.next('CAD-482');
+    await vi.advanceTimersByTimeAsync(1000);
+    await settle();
+
+    expect(page).toHaveBeenCalledTimes(2);
   });
 
   it('ignores a notice that names a different list', async () => {

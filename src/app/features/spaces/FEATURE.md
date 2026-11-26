@@ -72,7 +72,7 @@ computed from the navigation's reads, for the command palette's `Lists` and the 
   `countTaskGroups` for the groups). Every rows read bypasses the HTTP cache.
 - Task (`@features/task`): `TaskSummary`, `TaskStatusChangesStore`, `TaskActionsApi` and the
   `TaskBulk*` models (the rows' writes), the status words, hints and categories,
-  `TaskCreate`, `cw-task-title-cell`,
+  `TaskCreate`, `TaskDetailOpener` (`open`, `closed`), `cw-task-title-cell`,
   `cw-task-due-date`, `cw-task-label-chips`, `cw-task-cancel-dialog`, `personOf` and the status
   rules.
 - `@core/api` (problem readers), `@core/realtime` (`watch({ kind: 'list' })`), `@shared/layout-slot`
@@ -152,8 +152,10 @@ computed from the navigation's reads, for the command palette's `Lists` and the 
     window, once per window (`list.tasks-changed.v1` included: a task created, archived,
     unarchived, trashed, restored or moved out); the status store keeps pending and in-flight
     changes over what it reads. A
-    task created in the list (`TaskCreate.created`), a completed local status write and a bulk action
-    read the rows again.
+    task created in the list (`TaskCreate.created`), a completed local status write, a bulk action
+    and a task detail that closes over the view or gives way to another (`TaskDetailOpener.closed`:
+    the detail's writes would otherwise reach the rows only through realtime) read the rows again,
+    through the same 1 s refresh window.
   - `TaskStatusChangesStore` (Task), route-scoped on `list`, so pending
     changes die with the view.
   - `SpaceOverviewStore`, page-scoped on `SpaceOverviewPage`. Its lists come from the sidebar's

@@ -67,4 +67,17 @@ describe('TaskDetailOpener', () => {
     await router.navigateByUrl('/atelier-nord/l/sprint-14/list?task=OPS-12');
     expect(opener.taskKey()).toBe('OPS-12');
   });
+
+  it('names the task whose detail closed or gave way to another', async () => {
+    const closed: string[] = [];
+    opener.closed.subscribe((key: string) => closed.push(key));
+
+    await opener.open('CAD-482');
+    await opener.open('CAD-470');
+    await opener.close();
+    await router.navigateByUrl('/atelier-nord/l/sprint-14/list?group=status&task=CAD-482');
+    await router.navigateByUrl('/atelier-nord/l/sprint-14/list?group=status');
+
+    expect(closed).toEqual(['CAD-482', 'CAD-470', 'CAD-482']);
+  });
 });

@@ -1,7 +1,7 @@
 import { computed, inject, Service, signal, type Signal, type WritableSignal } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { type Event, NavigationEnd, Router } from '@angular/router';
-import { filter, map } from 'rxjs';
+import { filter, map, type Observable, Subject, tap } from 'rxjs';
 
 import type {
   TaskDetailOpenOptions,
@@ -41,6 +41,7 @@ const TASK_KEY_PATTERN: RegExp = /^[A-Z]{2,5}-[1-9][0-9]{0,8}$/u;
  * gives a preview, shown in the header while the detail is read, and may ask for a tab
  * (`{ tab: 'subtasks' }`), which the column takes once; neither goes into the address. It holds
  * no user or organization data: the preview and the tab are forgotten once another task opens.
+ * `closed` names each task whose detail closed or gave way to another, for the view under it.
  */
 @Service()
 export class TaskDetailOpener {
@@ -79,6 +80,40 @@ export class TaskDetailOpener {
   private tabRequest: { readonly key: string; readonly tab: TaskDetailTab } | null = null;
 
   /**
+   * Property shownKey
+   *
+   * @description
+   * The task the address opened after the last navigation, to tell when its detail goes away.
+   *
+   * @type {string | null}
+   */
+  private shownKey: string | null = this.readKey();
+
+  /**
+   * Property departures
+   *
+   * @description
+   * Keys of the tasks whose detail closed or gave way to another task.
+   *
+   * @type {Subject<string>}
+   * @readonly
+   */
+  private readonly departures: Subject<string> = new Subject<string>();
+
+  /**
+   * Property closed
+   *
+   * @description
+   * Emits the key of a task whose detail closed (`close`, Back, an archive or a deletion) or gave
+   * way to another task, so the view under it reads its rows again: the detail's writes (status,
+   * fields, moves, archive, trash) reach the view without realtime this way.
+   *
+   * @type {Observable<string>}
+   * @readonly
+   */
+  public readonly closed: Observable<string> = this.departures.asObservable();
+
+  /**
    * Property taskKey
    *
    * @description
@@ -91,6 +126,11 @@ export class TaskDetailOpener {
     this.router.events.pipe(
       filter((event: Event): event is NavigationEnd => event instanceof NavigationEnd),
       map((): string | null => this.readKey()),
+      tap((key: string | null): void => {
+        const left: string | null = this.shownKey;
+        this.shownKey = key;
+        if (left !== null && left !== key) this.departures.next(left);
+      }),
     ),
     { initialValue: this.readKey() },
   );
