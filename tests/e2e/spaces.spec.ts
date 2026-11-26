@@ -227,7 +227,7 @@ test('a list page shows its header, its filters and its group menu', async ({ pa
   await expect(page).toHaveURL(new RegExp(`/l/${sprint14.id}/list$`));
   await expect(page.getByTestId('list-description')).toContainText(/Sprint of .*3 – .*17/u);
   await expect(page.getByTestId('list-description')).toContainText('12 tasks');
-  await expect(page.getByTestId('list-description')).toContainText('25 % done');
+  await expect(page.getByTestId('list-description')).toContainText('25% done');
   await expect(page.getByTestId('list-goal')).toContainText('Ship the SSO sign-in');
 
   await page.getByRole('button', { name: 'Filter' }).click();

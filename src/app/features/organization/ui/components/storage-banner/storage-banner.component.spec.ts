@@ -140,7 +140,7 @@ describe('StorageBanner', () => {
     expect(host.querySelector('a')?.getAttribute('href')).toBe('/atelier-nord/organization/quotas');
   });
 
-  it('stays hidden below 90 %', async () => {
+  it('stays hidden below 90%', async () => {
     const fixture: ComponentFixture<StorageBanner> = await render(
       StorageBanner,
       'owner',

@@ -223,7 +223,7 @@ describe('ListPage', () => {
 
     await expect.poll(() => find('list-breadcrumb-space')?.textContent ?? '').toContain('Product');
     expect(find('list-description')?.textContent).toContain('3 tasks');
-    expect(find('list-description')?.textContent).toContain('0 % done');
+    expect(find('list-description')?.textContent).toContain('0% done');
     expect(find('list-rows')).not.toBeNull();
     expect(find('view-tabs')?.textContent).toContain('List');
     expect(find('view-group')?.textContent).toContain('Group: status');

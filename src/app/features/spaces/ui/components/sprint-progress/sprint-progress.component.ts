@@ -63,7 +63,7 @@ interface SprintProgressView {
  *
  * @description
  * The progress of the current sprint at the top of the sidebar footer (`App.dc.html` lines
- * 262-263): its name, `done / live · pct %` and a jade bar named `Sprint progress`. The
+ * 262-263): its name, `done / live · pct%` and a jade bar named `Sprint progress`. The
  * current sprint is the first one, in sidebar order, whose dates hold the caller's today; without
  * one, or before the counts are read, nothing renders. A container reading the workspace's
  * `SpacesNavigationStore`.
@@ -80,7 +80,7 @@ interface SprintProgressView {
           <span
             class="whitespace-nowrap text-muted-foreground tabular-nums"
             i18n="@@spaces.sprint-progress.count"
-            >{{ sprint.done }} / {{ sprint.live }} · {{ sprint.percent }} %</span
+            >{{ sprint.done }} / {{ sprint.live }} · {{ sprint.percent }}%</span
           >
         </div>
         <cw-progress

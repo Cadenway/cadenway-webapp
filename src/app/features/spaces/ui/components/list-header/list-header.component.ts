@@ -36,7 +36,7 @@ import { listIconName, lookIconName, lookTone } from '../../../utils/look/look.u
  * The header of a list page (`App.dc.html` lines 277-334): the breadcrumb row (the sidebar's
  * expand toggle while the sidebar is collapsed, the space's badge in its color, the list), the
  * list's icon in its color, a button that opens the list dialog, its title, the favorite toggle,
- * the description line (`Sprint of Nov 3 – 17 · 98 tasks · 25 % done`), the sprint goal,
+ * the description line (`Sprint of Nov 3 – 17 · 98 tasks · 25% done`), the sprint goal,
  * the members' avatars from 768 px and the `…` menu: edit the list or sprint, edit the space,
  * duplicate with tasks, export CSV, copy link, archive and delete. `Share`, `Sprint report`,
  * `Space statuses` and `Automations` come in step 4b.
