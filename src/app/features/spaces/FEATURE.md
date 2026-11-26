@@ -111,6 +111,56 @@ constants belong to the lead):
   sprint's goal line, `Space statuses` (enabled when the space is editable) and `Automations`
   (enabled for organization admins and owners) in the list menu after `Edit the space`.
 
+## Gantt view
+
+The `Gantt` view (`ui/pages/gantt-view-page`, `App.dc.html` lines 830-956, 6417-6600 and
+9223-9280) draws every task of the list with the view's `taskQuery` on `cw-timeline`.
+
+- Providers: `GANTT_VIEW_PROVIDERS` adds `ListTasksApi`, `ListTasksStore` (no due window, so the
+  undated tasks are read too) and `GanttViewStore` to Task's `TaskStatusChangesStore`. The page
+  provides `ViewTaskWritesStore` over `ListTasksStore` and the English texts of `cw-timeline`
+  (`GANTT_TIMELINE_LABELS`, `constants/gantt-labels`). It publishes `ListTasksStore.summary` with
+  `followRows`, and `N` creates in the list.
+- `GanttViewStore` (`state/gantt-view`, route-scoped) keeps the scale, the zoom on the mockup's
+  ladder (`GANTT_ZOOM_LADDER`), the period (null for the scale's period around today) and the
+  folded groups of each grouping (`Cancelled` by status). Nothing is saved, as in the mockup.
+- Rows: `ganttTimelineOf` (`utils/gantt-timeline`) groups the tasks by the view's `groupBy` (one
+  `All tasks` group without it; a task shows under each assignee). A row shows the status, name,
+  key and duration. Its bar runs from the start date (when it is not after the due date) to the
+  due date; a milestone holds its due date. A task without a due date offers `Schedule`. The bar
+  fill is `taskProgress`: done 100 %, cancelled 0, then the closed share of the subtasks, then of
+  the checklist, else 80 % in review and 40 % in progress. The dated milestones are also drawn as
+  full-height lines (`milestoneDisplay="lines"`). The off-window chips reveal a bar outside the
+  period.
+- Toolbar: the period, the hint (from 1280 px), the scale radios, zoom out and in with
+  `<scale> · <n>%`, `Fit` (`cw-timeline`'s `fit()`; `Nothing to fit` without a dated task),
+  `Today` and the previous and next periods. Ctrl + wheel, Ctrl +/−, T, J/S/M and Page Up/Down
+  come from the brick.
+- Writes: moving or resizing a bar, the arrow keys (Shift for the end) and `Schedule` (three days
+  from the day under the pointer or today) write `startDate` and `dueDate` through
+  `ViewTaskWritesStore.updateFields`, with `<key> rescheduled` / `From 3 to 7 November.` and
+  `Undo`. A milestone keeps one day (the edge that moved), and keeps no start date when it had
+  none.
+- Menus: a right click, the Menu key or Shift F10 on a task row or its bar opens the shared
+  `cw-task-menu` (handed to the row's name in the capture phase). Elsewhere, the chart menu opens
+  with `Go to today`, `Scale` and `New task`.
+- States: the first read shows the timeline's skeleton. A failed one reaches the route's error
+  boundary, whose `Retry` reads again. A read without a task shows `No task matches the search or
+the filters.`
+- Known gaps:
+  - Dependencies are not drawn (G5). They can only be read task by task (`listTaskDependencies`,
+    up to 2,000 calls a read), and their facts are not relayed. The `Dependencies` toggle, the
+    menu's `Hide dependencies`, the conflict labels and the toast warnings wait for a list-level
+    read.
+  - The assignees' avatars beside a bar are not drawn: `cw-timeline` has no label template.
+  - The duration column shows `1 d` for a milestone (`Jalon` in the mockup). An undated task
+    shows nothing (`—` in the mockup).
+  - The bars' accessible names come from the brick, not the mockup's wording.
+
+| Unit                                                                                                                                                                                                                                                                          | Reason                                                         |
+| ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- |
+| `spaces.gantt.undated`, `spaces.gantt.week`, `spaces.gantt.late*`, `spaces.gantt.conflict*`, `spaces.gantt.moved`, `spaces.gantt.scale-announce`, `spaces.gantt.zoom-announce`, `spaces.gantt.percent`, `spaces.gantt.move`, `spaces.gantt.fitted*`, `spaces.gantt.milestone` | The brick's own texts, which the mockup does not show as copy. |
+
 ## Form view
 
 The `Form` view (`ui/pages/form-view-page`, `App.dc.html` lines 1102-1297) designs the list's
