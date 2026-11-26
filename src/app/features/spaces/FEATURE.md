@@ -88,9 +88,6 @@ constants belong to the lead):
   `Create a task` and `Save the view` on `timesheet`, whose rows have no milestone, order, group or
   subtask level (see `Timesheet view`); all of them elsewhere.
 
-  `activity`, which hides the toolbar (`App.dc.html` line 7811); all of them elsewhere,
-  `timesheet` included, as in the mockup, although its time entries ignore the filters.
-
 - The task views (board, calendar, Gantt, workload, sheet) share the task plumbing of the `List`
   view, which they compose and do not edit:
   - `cw-task-menu` (`ui/components/task-menu`): the task menu, presentational (`tasks`, `status`,
