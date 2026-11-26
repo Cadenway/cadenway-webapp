@@ -23,6 +23,17 @@ import { mentionSpans } from '../../utils/task-detail-sections/task-detail-secti
 import { TaskDetailStore } from '../task-detail/task-detail.store';
 
 /**
+ * Constant UNVERSIONED_WRITE
+ *
+ * @description
+ * The `write` fallback of the checklist writes, which send no `If-Match`: they still queue behind
+ * the task's other writes, but need no confirmed version to be sent.
+ *
+ * @type {number}
+ */
+const UNVERSIONED_WRITE: number = 0;
+
+/**
  * Constant DESCRIPTION_SAVE_MS
  *
  * @description
@@ -347,8 +358,14 @@ function createTaskDetailSectionsStore(): Type<TaskDetailSectionsStoreInstance> 
             });
           };
           try {
-            const task: TaskDetailTask = await store._api.setChecklistItem(key, item.id, done);
-            store._detail.accept(task);
+            await store._detail.write(
+              key,
+              async (): Promise<void> => {
+                const task: TaskDetailTask = await store._api.setChecklistItem(key, item.id, done);
+                store._detail.accept(task);
+              },
+              UNVERSIONED_WRITE,
+            );
             settle();
           } catch {
             settle();
@@ -360,8 +377,14 @@ function createTaskDetailSectionsStore(): Type<TaskDetailSectionsStoreInstance> 
           const key: string | null = store._detail.taskKey();
           if (key === null || text.trim() === '') return false;
           try {
-            const task: TaskDetailTask = await store._api.addChecklistItem(key, text.trim());
-            store._detail.accept(task);
+            await store._detail.write(
+              key,
+              async (): Promise<void> => {
+                const task: TaskDetailTask = await store._api.addChecklistItem(key, text.trim());
+                store._detail.accept(task);
+              },
+              UNVERSIONED_WRITE,
+            );
             return true;
           } catch {
             failed();
@@ -487,8 +510,9 @@ function createTaskDetailSectionsStore(): Type<TaskDetailSectionsStoreInstance> 
  * then or until the subtask count changes; a creation sent again after a failure reuses its
  * `Idempotency-Key`), and the organization's member directory that names
  * reviewers, authors, actors and assignees (a failed read leaves the initials of unknown people
- * out rather than blocking the tabs). Writes that answer the task hand it to
- * `TaskDetailStore.accept`; a creation reads the detail again.
+ * out rather than blocking the tabs). The checklist writes go through `TaskDetailStore.write`
+ * after the task's other writes and hand the task they answer to `TaskDetailStore.accept` before
+ * the next one is sent; a creation reads the detail again.
  *
  * @type {Type<TaskDetailSectionsStoreInstance>}
  */

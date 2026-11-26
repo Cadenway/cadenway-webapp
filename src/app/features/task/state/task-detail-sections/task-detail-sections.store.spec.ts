@@ -73,6 +73,9 @@ describe('TaskDetailSectionsStore', () => {
         task.set(saved);
       }),
       reload: vi.fn(() => Promise.resolve()),
+      write: vi.fn((_key: string, send: (version: number) => Promise<unknown>, fallback?: number) =>
+        send(fallback ?? 4),
+      ),
     };
     api = {
       people: vi.fn(() =>
@@ -139,6 +142,38 @@ describe('TaskDetailSectionsStore', () => {
     expect(api['setChecklistItem']).toHaveBeenCalledWith('CAD-482', 'i2', true);
     expect(detail['accept']).toHaveBeenCalledWith(saved);
     expect(store.checklist()[1].done).toBe(true);
+  });
+
+  it('sends the checklist writes through the task write path and adopts their answer there', async () => {
+    const order: string[] = [];
+    (detail['write'] as Mock).mockImplementation(
+      async (key: string, send: (version: number) => Promise<unknown>, fallback?: number) => {
+        order.push(`write ${key} ${String(fallback)}`);
+        const result: unknown = await send(fallback ?? 4);
+        order.push('settled');
+        return result;
+      },
+    );
+    (detail['accept'] as Mock).mockImplementation((saved: TaskDetailTask) => {
+      order.push(`accept ${String(saved.version)}`);
+      task.set(saved);
+    });
+    api['setChecklistItem'].mockResolvedValue({ ...TASK, version: 5 });
+    api['addChecklistItem'].mockResolvedValue({ ...TASK, version: 6 });
+
+    await store.toggleItem(TASK.checklistItems[1]);
+    await expect(store.addItem(' Check Firefox ')).resolves.toBe(true);
+
+    expect(api['setChecklistItem']).toHaveBeenCalledWith('CAD-482', 'i2', true);
+    expect(api['addChecklistItem']).toHaveBeenCalledWith('CAD-482', 'Check Firefox');
+    expect(order).toEqual([
+      'write CAD-482 0',
+      'accept 5',
+      'settled',
+      'write CAD-482 0',
+      'accept 6',
+      'settled',
+    ]);
   });
 
   it('saves the description once after the pause, with its last text', async () => {
