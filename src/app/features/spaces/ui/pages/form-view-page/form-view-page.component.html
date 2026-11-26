@@ -1,16 +1,322 @@
-<div
-  class="flex min-h-0 flex-1 items-center justify-center px-4 pb-6 sm:px-6"
-  data-testid="form-view"
->
-  <cw-empty role="status">
-    <cw-empty-header>
-      <cw-empty-media>
-        <ng-icon [name]="icon" aria-hidden="true" />
-      </cw-empty-media>
-      <cw-empty-title>{{ name }}</cw-empty-title>
-      <cw-empty-description i18n="@@spaces.view-stub.text"
-        >This view is not available yet.</cw-empty-description
+@let current = list();
+@if (current && !current.canEdit) {
+  <div class="flex min-h-0 flex-1 items-center justify-center px-4 pb-6 sm:px-6">
+    <cw-empty role="status" data-testid="form-view-read-only">
+      <cw-empty-header>
+        <cw-empty-media>
+          <ng-icon name="phosphorLockSimpleBold" aria-hidden="true" />
+        </cw-empty-media>
+        <cw-empty-title i18n="@@spaces.form.title">Request form</cw-empty-title>
+        <cw-empty-description i18n="@@spaces.form.read-only"
+          >Only the list’s editors can set up its request form.</cw-empty-description
+        >
+      </cw-empty-header>
+    </cw-empty>
+  </div>
+} @else {
+  @let configuration = store.configuration.value();
+  @let settings = store.settings();
+  @if (configuration && settings) {
+    <section
+      class="flex min-h-0 flex-1 gap-4 px-4 pt-1 pb-6 sm:px-6"
+      aria-label="Request form"
+      i18n-aria-label="@@spaces.form.title"
+    >
+      <div
+        class="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-border bg-canvas"
       >
-    </cw-empty-header>
-  </cw-empty>
-</div>
+        <div
+          class="flex h-10 shrink-0 items-center gap-2 border-b border-border bg-background px-3"
+        >
+          <span class="flex items-center gap-1" aria-hidden="true">
+            <span class="size-2 rounded-full bg-track"></span>
+            <span class="size-2 rounded-full bg-track"></span>
+            <span class="size-2 rounded-full bg-track"></span>
+          </span>
+          <span
+            class="ml-1 flex min-w-0 items-center gap-1.5 rounded-md bg-muted px-2 py-0.5 font-mono text-xs text-muted-foreground"
+            data-testid="form-view-address"
+          >
+            <ng-icon
+              name="phosphorLockSimpleBold"
+              class="shrink-0"
+              size="0.75rem"
+              aria-hidden="true"
+            />
+            <span class="truncate">{{ address() }}</span>
+          </span>
+          <span
+            class="ml-auto hidden text-xs whitespace-nowrap text-muted-foreground sm:inline"
+            i18n="@@spaces.form.preview-label"
+            >Preview of the public page</span
+          >
+          @if (preview()) {
+            <button cwButton variant="outline" size="xs" type="button" (click)="preview.set(false)">
+              <ng-icon name="phosphorXBold" aria-hidden="true" />
+              <ng-container i18n="@@spaces.form.close-preview">Close the preview</ng-container>
+            </button>
+          }
+        </div>
+        <div class="min-h-0 flex-1 overflow-y-auto px-4 py-8">
+          <div
+            class="mx-auto flex w-full max-w-xl flex-col gap-6 rounded-xl border border-border bg-card p-6"
+          >
+            <cw-intake-form
+              [form]="settings"
+              [organization]="organization()"
+              (submitted)="previewSubmitted()"
+            />
+          </div>
+        </div>
+      </div>
+      @if (!preview()) {
+        <aside
+          class="hidden w-80 shrink-0 flex-col gap-5 overflow-y-auto py-4 pr-3 [scrollbar-gutter:stable] lg:flex"
+          aria-label="Form settings"
+          i18n-aria-label="@@spaces.form.settings"
+        >
+          <div class="flex flex-col gap-3">
+            <h3 class="text-sm font-semibold" i18n="@@spaces.form.section-form">Form</h3>
+            <div class="flex flex-col gap-2">
+              <label
+                for="form-view-title"
+                class="text-sm leading-none font-medium"
+                i18n="@@spaces.form.name"
+                >Form name</label
+              >
+              <input
+                id="form-view-title"
+                cwInput
+                type="text"
+                autocomplete="off"
+                maxlength="300"
+                [value]="settings.title"
+                (input)="editTitle($event)"
+              />
+            </div>
+            <div class="flex flex-col gap-2">
+              <label
+                for="form-view-description"
+                class="text-sm leading-none font-medium"
+                i18n="@@spaces.form.description"
+                >Description</label
+              >
+              <textarea
+                id="form-view-description"
+                cwTextarea
+                rows="3"
+                maxlength="500"
+                [value]="settings.description ?? ''"
+                (input)="editDescription($event)"
+              ></textarea>
+            </div>
+          </div>
+          <div class="h-px shrink-0 bg-border"></div>
+          <div class="flex flex-col gap-1">
+            <h3 class="text-sm font-semibold" i18n="@@spaces.form.section-fields">Fields</h3>
+            <p class="pb-1 text-xs text-muted-foreground" i18n="@@spaces.form.fields-note">
+              The title is always asked. Hidden fields do not appear on the public page.
+            </p>
+            <ul class="flex flex-col" data-testid="form-view-fields">
+              @for (row of fieldRows(); track row.key) {
+                <li
+                  class="flex h-10 items-center gap-2 rounded-md px-1"
+                  [class.text-muted-foreground]="!row.shown"
+                >
+                  <ng-icon
+                    [name]="row.icon"
+                    class="shrink-0 text-muted-foreground"
+                    aria-hidden="true"
+                  />
+                  <span class="min-w-0 flex-1 truncate text-sm">{{ row.label }}</span>
+                  <span
+                    class="flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground"
+                    [class.opacity-50]="row.locked || !row.shown"
+                  >
+                    <cw-checkbox
+                      [checked]="row.required"
+                      [disabled]="row.locked || !row.shown"
+                      [ariaLabel]="row.requiredLabel"
+                      (checkedChange)="toggleRequired(row, $event)"
+                    />
+                    <span aria-hidden="true" i18n="@@spaces.form.required">Required</span>
+                  </span>
+                  <cw-switch
+                    size="sm"
+                    [checked]="row.shown"
+                    [disabled]="row.locked"
+                    [ariaLabel]="row.switchLabel"
+                    (checkedChange)="toggleShown(row, $event)"
+                  />
+                </li>
+              }
+            </ul>
+          </div>
+          <div class="h-px shrink-0 bg-border"></div>
+          <div class="flex flex-col gap-3">
+            <h3 class="text-sm font-semibold" i18n="@@spaces.form.section-task">Created task</h3>
+            <div class="flex flex-col gap-2">
+              <label
+                for="form-view-status"
+                class="text-sm leading-none font-medium"
+                i18n="@@spaces.form.default-status"
+                >Default status</label
+              >
+              <cw-select
+                id="form-view-status"
+                ariaLabel="Default status"
+                i18n-ariaLabel="@@spaces.form.default-status"
+                [value]="settings.defaultStatus"
+                (valueChange)="pickStatus($event)"
+              >
+                @for (status of statuses(); track status.value) {
+                  <cw-select-option [value]="status.value">
+                    <cw-status-icon [status]="status.value" size="4" aria-hidden="true" />
+                    {{ status.label }}
+                  </cw-select-option>
+                }
+              </cw-select>
+            </div>
+            <div class="flex flex-col gap-2">
+              <label
+                for="form-view-assignee"
+                class="text-sm leading-none font-medium"
+                i18n="@@spaces.form.default-assignee"
+                >Default assignee</label
+              >
+              <cw-select
+                id="form-view-assignee"
+                ariaLabel="Default assignee"
+                i18n-ariaLabel="@@spaces.form.default-assignee"
+                [value]="settings.defaultAssigneeId ?? unassigned"
+                (valueChange)="pickAssignee($event)"
+              >
+                <cw-select-option [value]="unassigned" i18n="@@spaces.form.unassigned"
+                  >Unassigned</cw-select-option
+                >
+                @for (member of assignees(); track member.value) {
+                  <cw-select-option [value]="member.value">{{ member.label }}</cw-select-option>
+                }
+              </cw-select>
+            </div>
+            <p class="text-xs text-muted-foreground" data-testid="form-view-destination">
+              {{ destinationNote() }}
+            </p>
+          </div>
+          <div class="h-px shrink-0 bg-border"></div>
+          <div class="flex flex-col gap-2">
+            <h3 class="text-sm font-semibold" i18n="@@spaces.form.section-sharing">Sharing</h3>
+            @if (store.publicKey()) {
+              <p class="text-xs text-muted-foreground" i18n="@@spaces.form.published">
+                The form is published: anyone with the link can send a request.
+              </p>
+            } @else {
+              <p class="text-xs text-muted-foreground" i18n="@@spaces.form.unpublished">
+                The form is not published: its public link does not work yet.
+              </p>
+            }
+            <button
+              cwButton
+              variant="outline"
+              type="button"
+              class="justify-start"
+              [disabled]="!publicLink()"
+              (click)="copyLink()"
+            >
+              <ng-icon name="phosphorLinkSimpleBold" aria-hidden="true" />
+              <ng-container i18n="@@spaces.form.copy-link">Copy the public link</ng-container>
+            </button>
+            <button
+              cwButton
+              variant="outline"
+              type="button"
+              class="justify-start"
+              (click)="preview.set(true)"
+            >
+              <ng-icon name="phosphorEyeBold" aria-hidden="true" />
+              <ng-container i18n="@@spaces.form.open-preview">Open the preview</ng-container>
+            </button>
+            @if (store.publicKey()) {
+              <button
+                cwButton
+                variant="ghost"
+                type="button"
+                class="justify-start"
+                [loading]="store.publishing()"
+                [disabled]="store.publishing()"
+                (click)="store.disable()"
+              >
+                <ng-icon name="phosphorProhibitBold" aria-hidden="true" />
+                <ng-container i18n="@@spaces.form.unpublish">Unpublish the form</ng-container>
+              </button>
+            } @else {
+              <button
+                cwButton
+                type="button"
+                class="justify-start"
+                [loading]="store.publishing()"
+                [disabled]="store.publishing()"
+                (click)="store.publish()"
+              >
+                <ng-icon name="phosphorGlobeSimpleBold" aria-hidden="true" />
+                <ng-container i18n="@@spaces.form.publish">Publish the form</ng-container>
+              </button>
+            }
+          </div>
+        </aside>
+      }
+    </section>
+  } @else {
+    <section
+      class="flex min-h-0 flex-1 gap-4 overflow-hidden px-4 pt-1 pb-6 sm:px-6"
+      role="status"
+      aria-busy="true"
+      aria-label="Loading the form"
+      i18n-aria-label="@@spaces.form.loading"
+    >
+      <div
+        class="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-border bg-canvas"
+        aria-hidden="true"
+      >
+        <div
+          class="flex h-10 shrink-0 items-center gap-2 border-b border-border bg-background px-3"
+        >
+          <span class="flex items-center gap-1">
+            <span class="size-2 rounded-full bg-track"></span>
+            <span class="size-2 rounded-full bg-track"></span>
+            <span class="size-2 rounded-full bg-track"></span>
+          </span>
+          <div cwSkeleton class="mx-auto h-5 w-64 rounded-md"></div>
+        </div>
+        <div class="mx-auto flex w-full max-w-xl flex-col p-6">
+          <div class="flex flex-col gap-5 rounded-xl border border-border bg-card p-6">
+            <div class="flex flex-col gap-2">
+              <div cwSkeleton class="h-6 w-1/2"></div>
+              <div cwSkeleton class="h-3 w-3/4"></div>
+            </div>
+            @for (field of skeletonFields; track $index) {
+              <div class="flex flex-col gap-2">
+                <div cwSkeleton class="h-3" [class]="field.label"></div>
+                <div cwSkeleton class="w-full rounded-lg" [class]="field.field"></div>
+              </div>
+            }
+            <div cwSkeleton class="h-9 w-32 rounded-lg"></div>
+          </div>
+        </div>
+      </div>
+      <aside
+        class="hidden w-80 shrink-0 flex-col gap-3 rounded-xl border border-border bg-card p-4 lg:flex"
+        aria-hidden="true"
+      >
+        <div cwSkeleton class="h-4 w-24"></div>
+        @for (field of skeletonFields; track $index) {
+          <div class="flex items-center gap-2 rounded-lg border border-border p-2.5">
+            <div cwSkeleton class="size-4"></div>
+            <div cwSkeleton class="h-3" [class]="field.label"></div>
+            <div cwSkeleton class="ml-auto h-5 w-9 rounded-full"></div>
+          </div>
+        }
+      </aside>
+    </section>
+  }
+}
