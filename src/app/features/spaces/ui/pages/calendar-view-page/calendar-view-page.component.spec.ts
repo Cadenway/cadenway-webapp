@@ -565,6 +565,56 @@ describe('CalendarViewPage', () => {
     expect(panelOf(harness).textContent).toContain('Write the onboarding checklist');
   });
 
+  it('drops the panel tasks of the previous filters while the new ones read and fail', async () => {
+    const harness: RouterTestingHarness = await open();
+    expect(panelOf(harness).textContent).toContain('Write the onboarding checklist');
+
+    let fail: (reason: unknown) => void = (): void => undefined;
+    page.mockImplementation(
+      (_listId, query, _group, _cursor, _limit, _signal, due): Promise<ListTaskPage> => {
+        if (due || query.search !== 'quota')
+          return answer(sprintTasks)(_listId, query, _group, _cursor, _limit, _signal, due);
+        return new Promise<ListTaskPage>((_resolve, reject) => {
+          fail = reject;
+        });
+      },
+    );
+    const view: InstanceType<typeof ListViewStore> = required(
+      harness.routeDebugElement,
+    ).injector.get(ListViewStore);
+    view.setSearch('quota');
+    await expect
+      .poll(() => {
+        harness.detectChanges();
+        return panelOf(harness).querySelector('[aria-busy="true"]');
+      })
+      .not.toBeNull();
+    expect(panelOf(harness).textContent).not.toContain('Write the onboarding checklist');
+
+    fail(new Error('unavailable'));
+    await settle(harness);
+    const panel: HTMLElement = panelOf(harness);
+    expect(panel.querySelector('[role="alert"]')?.textContent).toContain(
+      'The tasks without a due date could not be loaded.',
+    );
+    expect(panel.textContent).not.toContain('Write the onboarding checklist');
+    expect(panel.textContent).not.toContain('All tasks have a due date.');
+    expect(panel.querySelector('h2 span')).toBeNull();
+
+    page.mockImplementation(answer(sprintTasks));
+    const calls: number = page.mock.calls.length;
+    required(
+      [...panel.querySelectorAll<HTMLButtonElement>('button')].find(
+        (button: HTMLButtonElement): boolean => button.textContent.trim() === 'Retry',
+      ),
+    ).click();
+    await settle(harness);
+
+    expect(page.mock.calls.length).toBeGreaterThan(calls);
+    expect(panelOf(harness).querySelector('[role="alert"]')).toBeNull();
+    expect(panelOf(harness).textContent).toContain('Write the onboarding checklist');
+  });
+
   it('says the list has no task when the read answers empty', async () => {
     page.mockImplementation(answer([]));
     const harness: RouterTestingHarness = await open();

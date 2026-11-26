@@ -182,7 +182,9 @@ export interface CalendarViewStoreInstance extends ViewTaskWriter {
    *
    * @description
    * The tasks without a due date, as shown, in the view's order: those of the unwindowed read
-   * only, its writes applied.
+   * only, its writes applied, once that read answered the current list and query. While another
+   * query reads, or after it failed, the panel holds no task: the previous query's tasks may not
+   * match the filters, so they are neither shown nor acted on.
    *
    * @type {Signal<readonly ListTaskItem[]>}
    * @readonly
@@ -216,7 +218,8 @@ export interface CalendarViewStoreInstance extends ViewTaskWriter {
    * Property undatedLoading
    *
    * @description
-   * Whether the unwindowed first read runs: the panel shows its skeleton.
+   * Whether the unwindowed read of the current list and query runs without an answer yet (the
+   * first read, or a read after the filters changed): the panel shows its skeleton.
    *
    * @type {Signal<boolean>}
    * @readonly
@@ -227,8 +230,9 @@ export interface CalendarViewStoreInstance extends ViewTaskWriter {
    * Property undatedReady
    *
    * @description
-   * Whether the unwindowed read has answered for this list: the panel shows its tasks, its count
-   * or its empty text.
+   * Whether the unwindowed read has answered the current list and query: the panel shows its
+   * tasks, its count or its empty text. A reload of the same query (realtime, after a write)
+   * keeps it ready.
    *
    * @type {Signal<boolean>}
    * @readonly
@@ -239,7 +243,9 @@ export interface CalendarViewStoreInstance extends ViewTaskWriter {
    * Property undatedFailed
    *
    * @description
-   * Whether the unwindowed read failed: a secondary read, whose inline error offers `Retry`.
+   * Whether the unwindowed read failed: a secondary read, whose inline error offers `Retry`. A
+   * failed read of another query shows the error alone; a failed reload of the same query keeps
+   * the tasks it answered before.
    *
    * @type {Signal<boolean>}
    * @readonly
@@ -392,7 +398,11 @@ function createCalendarViewStore(): Type<CalendarViewStoreInstance> {
           ];
         },
         undatedItems: (): readonly ListTaskItem[] =>
-          store._unwindowed.items().filter((item: ListTaskItem): boolean => item.task.due === null),
+          store._unwindowed.hasCurrentSnapshot()
+            ? store._unwindowed
+                .items()
+                .filter((item: ListTaskItem): boolean => item.task.due === null)
+            : [],
         _settledSchedules: (): readonly string[] => {
           const dated: ReadonlySet<string> = new Set<string>(
             store._unwindowed
@@ -409,10 +419,11 @@ function createCalendarViewStore(): Type<CalendarViewStoreInstance> {
         refreshFailed: (): boolean =>
           store._windowed.hasCurrentSnapshot() && store._windowed.primary.error() !== undefined,
         undatedFailed: (): boolean => store._unwindowed.primary.error() !== undefined,
-        undatedReady: (): boolean => !store._unwindowed.initialLoading(),
+        undatedReady: (): boolean => store._unwindowed.hasCurrentSnapshot(),
         empty: (): boolean => store._unwindowed.empty(),
         truncated: (): boolean => store._windowed.truncated(),
-        undatedTruncated: (): boolean => store._unwindowed.truncated(),
+        undatedTruncated: (): boolean =>
+          store._unwindowed.hasCurrentSnapshot() && store._unwindowed.truncated(),
         summary: (): ListRowsSummary => store._unwindowed.summary(),
       };
     }),
