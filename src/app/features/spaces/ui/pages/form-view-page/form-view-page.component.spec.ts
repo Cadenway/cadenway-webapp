@@ -157,7 +157,9 @@ describe('FormViewPage', () => {
     writeText = vi.fn(() => Promise.resolve());
     vi.stubGlobal(
       'navigator',
-      Object.assign(Object.create(navigator) as Navigator, { clipboard: { writeText } }),
+      Object.create(navigator, {
+        clipboard: { value: { writeText }, configurable: true },
+      }) as Navigator,
     );
     TestBed.configureTestingModule({
       providers: [
