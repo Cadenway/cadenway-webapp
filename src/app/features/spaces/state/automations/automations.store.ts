@@ -76,6 +76,137 @@ interface AutomationDraftKey {
 }
 
 /**
+ * Interface AutomationRulesRead
+ *
+ * @description
+ * The last complete read of the rules, kept apart from the resource so the writes keep a
+ * confirmed version while the rules are read again.
+ */
+interface AutomationRulesRead {
+  // #region Properties
+  /**
+   * Property organizationId
+   *
+   * @description
+   * The organization the rules were read from.
+   *
+   * @type {string}
+   * @readonly
+   */
+  readonly organizationId: string;
+
+  /**
+   * Property items
+   *
+   * @description
+   * The rules the gateway returned.
+   *
+   * @type {readonly AutomationRule[]}
+   * @readonly
+   */
+  readonly items: readonly AutomationRule[];
+
+  /**
+   * Property epoch
+   *
+   * @description
+   * How many writes had settled when the read started: a write settled later may be missing
+   * from it.
+   *
+   * @type {number}
+   * @readonly
+   */
+  readonly epoch: number;
+  // #endregion
+}
+
+/**
+ * Interface AutomationWritten
+ *
+ * @description
+ * A rule as a write of this dialog left it, applied over reads started before the write settled.
+ */
+interface AutomationWritten {
+  // #region Properties
+  /**
+   * Property organizationId
+   *
+   * @description
+   * The organization the write went to.
+   *
+   * @type {string}
+   * @readonly
+   */
+  readonly organizationId: string;
+
+  /**
+   * Property rule
+   *
+   * @description
+   * The rule the gateway returned.
+   *
+   * @type {AutomationRule}
+   * @readonly
+   */
+  readonly rule: AutomationRule;
+
+  /**
+   * Property settledAt
+   *
+   * @description
+   * Write count once this write settled.
+   *
+   * @type {number}
+   * @readonly
+   */
+  readonly settledAt: number;
+
+  /**
+   * Property created
+   *
+   * @description
+   * Whether the write created the rule, which an older read does not hold.
+   *
+   * @type {boolean}
+   * @readonly
+   */
+  readonly created: boolean;
+  // #endregion
+}
+
+/**
+ * Interface AutomationDeleted
+ *
+ * @description
+ * A rule the gateway confirmed gone (deleted, or already absent).
+ */
+interface AutomationDeleted {
+  // #region Properties
+  /**
+   * Property organizationId
+   *
+   * @description
+   * The organization of the rule.
+   *
+   * @type {string}
+   * @readonly
+   */
+  readonly organizationId: string;
+
+  /**
+   * Property settledAt
+   *
+   * @description
+   * Write count once the deletion settled.
+   *
+   * @type {number}
+   * @readonly
+   */
+  readonly settledAt: number;
+  // #endregion
+}
+
+/**
  * Interface AutomationsState
  *
  * @description
@@ -94,6 +225,50 @@ interface AutomationsState {
    * @readonly
    */
   readonly _opening: number;
+
+  /**
+   * Property _read
+   *
+   * @description
+   * The newest complete read of the rules, or null before the first one.
+   *
+   * @type {AutomationRulesRead | null}
+   * @readonly
+   */
+  readonly _read: AutomationRulesRead | null;
+
+  /**
+   * Property _writes
+   *
+   * @description
+   * How many writes have settled, the clock that orders reads and writes.
+   *
+   * @type {number}
+   * @readonly
+   */
+  readonly _writes: number;
+
+  /**
+   * Property _written
+   *
+   * @description
+   * The last rule each write of this dialog returned, by rule id.
+   *
+   * @type {Readonly<Partial<Record<string, AutomationWritten>>>}
+   * @readonly
+   */
+  readonly _written: Readonly<Partial<Record<string, AutomationWritten>>>;
+
+  /**
+   * Property _deleted
+   *
+   * @description
+   * The rules this dialog confirmed gone, by rule id.
+   *
+   * @type {Readonly<Partial<Record<string, AutomationDeleted>>>}
+   * @readonly
+   */
+  readonly _deleted: Readonly<Partial<Record<string, AutomationDeleted>>>;
 
   /**
    * Property _desired
@@ -151,6 +326,10 @@ interface AutomationsState {
  */
 const initialState: AutomationsState = {
   _opening: 0,
+  _read: null,
+  _writes: 0,
+  _written: {},
+  _deleted: {},
   _desired: {},
   _removed: [],
   _draft: null,
@@ -169,13 +348,27 @@ export interface AutomationsStoreInstance {
    * Property rules
    *
    * @description
-   * The organization's rules as the gateway confirmed them. Its failure is the dialog's inline
-   * error, whose Retry calls `reload()`.
+   * The read of the organization's rules: its failure is the dialog's inline error, whose Retry
+   * calls `reload()`. Its value is the raw read; `confirmedRules` is what the gateway confirmed.
    *
    * @type {ResourceRef<readonly AutomationRule[] | undefined>}
    * @readonly
    */
   readonly rules: ResourceRef<readonly AutomationRule[] | undefined>;
+
+  /**
+   * Property confirmedRules
+   *
+   * @description
+   * The rules as the gateway last confirmed them, undefined before the first read of the
+   * organization: the newest read, with the results of this dialog's writes that settled after
+   * it started applied over it (a newer version, a created rule, a deleted one). It keeps its
+   * value while the rules are read again.
+   *
+   * @type {Signal<readonly AutomationRule[] | undefined>}
+   * @readonly
+   */
+  readonly confirmedRules: Signal<readonly AutomationRule[] | undefined>;
 
   /**
    * Property shownRules
@@ -250,7 +443,8 @@ export interface AutomationsStoreInstance {
    * @description
    * Turns a rule on or off at once and records it. The writes of a rule are sent one after the
    * other, each from the version the previous one left; only the last state asked is sent, and
-   * coming back to the recorded state sends nothing. A refusal shows the recorded state again and
+   * coming back to the recorded state sends nothing. Each write uses the newest version known,
+   * from the reads and from the earlier writes. A refusal shows the recorded state again and
    * reads the rules again when they were out of date.
    *
    * @param {AutomationRule} rule - The rule, as shown.
@@ -262,11 +456,12 @@ export interface AutomationsStoreInstance {
    * Method remove
    *
    * @description
-   * Hides a rule at once and deletes it, after the pending writes of the same rule. A refusal
+   * Hides a rule at once and deletes it, after the pending writes of the same rule, from the
+   * newest version known. It is always sent, even while the rules are read again. A refusal
    * shows it again.
    *
    * @param {AutomationRule} rule - The rule.
-   * @returns {Promise<boolean>} Whether the rule is gone.
+   * @returns {Promise<boolean>} Whether the gateway deleted the rule or reported it absent.
    */
   remove(rule: AutomationRule): Promise<boolean>;
 
@@ -294,6 +489,67 @@ export interface AutomationsStoreInstance {
 }
 
 /**
+ * Function latest
+ *
+ * @description
+ * The newer of two known states of a rule.
+ *
+ * @param {AutomationRule} rule - A known state.
+ * @param {AutomationRule | undefined} other - Another one, if any.
+ * @returns {AutomationRule} The one with the higher version.
+ */
+function latest(rule: AutomationRule, other: AutomationRule | undefined): AutomationRule {
+  return other && other.version > rule.version ? other : rule;
+}
+
+/**
+ * Function reconcile
+ *
+ * @description
+ * Applies the writes that settled after a read started over that read: a newer version replaces
+ * the one read, a deleted rule leaves and a created rule is added last. A write that settled
+ * before the read started is already in it, so the read wins.
+ *
+ * @param {AutomationRulesRead} read - The read.
+ * @param {Readonly<Partial<Record<string, AutomationWritten>>>} written - The writes' results.
+ * @param {Readonly<Partial<Record<string, AutomationDeleted>>>} deleted - The deletions.
+ * @returns {readonly AutomationRule[]} The confirmed rules.
+ */
+function reconcile(
+  read: AutomationRulesRead,
+  written: Readonly<Partial<Record<string, AutomationWritten>>>,
+  deleted: Readonly<Partial<Record<string, AutomationDeleted>>>,
+): readonly AutomationRule[] {
+  const ours: (entry: { organizationId: string } | undefined) => boolean = (
+    entry: { organizationId: string } | undefined,
+  ): boolean => entry?.organizationId === read.organizationId;
+  const gone: (id: string) => boolean = (id: string): boolean => {
+    const deletion: AutomationDeleted | undefined = deleted[id];
+    return ours(deletion) && deletion !== undefined && deletion.settledAt > read.epoch;
+  };
+  const items: AutomationRule[] = read.items
+    .filter((rule: AutomationRule): boolean => !gone(rule.id))
+    .map((rule: AutomationRule): AutomationRule => {
+      const write: AutomationWritten | undefined = written[rule.id];
+      return ours(write) && write ? latest(rule, write.rule) : rule;
+    });
+  const known: ReadonlySet<string> = new Set(read.items.map((rule: AutomationRule) => rule.id));
+  const created: AutomationRule[] = Object.values(written)
+    .filter(
+      (write: AutomationWritten | undefined): write is AutomationWritten =>
+        ours(write) &&
+        write !== undefined &&
+        write.created &&
+        write.settledAt > read.epoch &&
+        !known.has(write.rule.id) &&
+        deleted[write.rule.id] === undefined,
+    )
+    .sort((a: AutomationWritten, b: AutomationWritten): number => a.settledAt - b.settledAt)
+    .map((write: AutomationWritten): AutomationRule => write.rule);
+  return [...items, ...created];
+}
+
+/**
  * Function createAutomationsStore
  *
  * @description
@@ -314,17 +570,30 @@ function createAutomationsStore(): Type<AutomationsStoreInstance> {
         return opening === 0 ? undefined : { organizationId: organizationId(), opening };
       };
       const started: Signal<boolean> = computed((): boolean => store._opening() > 0);
+      const record: (read: AutomationRulesRead) => void = (read: AutomationRulesRead): void => {
+        if (read.organizationId !== organizationId()) return;
+        const current: AutomationRulesRead | null = store._read();
+        if (current?.organizationId === read.organizationId && current.epoch > read.epoch) return;
+        patchState(store, { _read: read });
+      };
       return {
         _api: api,
         _organizationId: organizationId,
         _chains: new Map<string, Promise<unknown>>(),
         rules: resource({
           params: byOpening,
-          loader: ({
+          loader: async ({
+            params,
             abortSignal,
           }: {
+            params: { organizationId: string };
             abortSignal: AbortSignal;
-          }): Promise<readonly AutomationRule[]> => api.rules(abortSignal),
+          }): Promise<readonly AutomationRule[]> => {
+            const epoch: number = store._writes();
+            const items: readonly AutomationRule[] = await api.rules(abortSignal);
+            record({ organizationId: params.organizationId, items, epoch });
+            return items;
+          },
         }),
         runs: resource({
           params: byOpening,
@@ -342,14 +611,18 @@ function createAutomationsStore(): Type<AutomationsStoreInstance> {
       };
     }),
     withComputed((store) => {
+      const confirmedRules: Signal<readonly AutomationRule[] | undefined> = computed(
+        (): readonly AutomationRule[] | undefined => {
+          const read: AutomationRulesRead | null = store._read();
+          if (read?.organizationId !== store._organizationId()) return undefined;
+          return reconcile(read, store._written(), store._deleted());
+        },
+      );
       const shownRules: Signal<readonly AutomationRule[]> = computed(
         (): readonly AutomationRule[] => {
-          const confirmed: readonly AutomationRule[] = store.rules.hasValue()
-            ? store.rules.value()
-            : [];
           const desired: Readonly<Partial<Record<string, boolean>>> = store._desired();
           const removed: readonly string[] = store._removed();
-          return confirmed
+          return (confirmedRules() ?? [])
             .filter((rule: AutomationRule): boolean => !removed.includes(rule.id))
             .map((rule: AutomationRule): AutomationRule => {
               const wanted: boolean | undefined = desired[rule.id];
@@ -358,6 +631,7 @@ function createAutomationsStore(): Type<AutomationsStoreInstance> {
         },
       );
       return {
+        confirmedRules,
         shownRules,
         activeCount: computed(
           (): number => shownRules().filter((rule: AutomationRule): boolean => rule.enabled).length,
@@ -368,22 +642,39 @@ function createAutomationsStore(): Type<AutomationsStoreInstance> {
       const confirmedRule: (id: string) => AutomationRule | undefined = (
         id: string,
       ): AutomationRule | undefined =>
-        store.rules.hasValue()
-          ? store.rules.value().find((rule: AutomationRule): boolean => rule.id === id)
-          : undefined;
-      const replaceRule: (rule: AutomationRule) => void = (rule: AutomationRule): void => {
-        if (!store.rules.hasValue()) return;
-        store.rules.set(
-          store.rules
-            .value()
-            .map((item: AutomationRule): AutomationRule => (item.id === rule.id ? rule : item)),
-        );
+        store.confirmedRules()?.find((rule: AutomationRule): boolean => rule.id === id);
+      const tick: () => number = (): number => {
+        const settledAt: number = store._writes() + 1;
+        patchState(store, { _writes: settledAt });
+        return settledAt;
       };
-      const dropRule: (id: string) => void = (id: string): void => {
-        if (!store.rules.hasValue()) return;
-        store.rules.set(
-          store.rules.value().filter((item: AutomationRule): boolean => item.id !== id),
-        );
+      const confirm: (rule: AutomationRule, organizationId: string, created: boolean) => void = (
+        rule: AutomationRule,
+        organizationId: string,
+        created: boolean,
+      ): void => {
+        const settledAt: number = tick();
+        const previous: AutomationWritten | undefined = store._written()[rule.id];
+        patchState(store, {
+          _written: {
+            ...store._written(),
+            [rule.id]: {
+              organizationId,
+              rule: previous ? latest(rule, previous.rule) : rule,
+              settledAt,
+              created: created || previous?.created === true,
+            },
+          },
+        });
+      };
+      const markDeleted: (id: string, organizationId: string) => void = (
+        id: string,
+        organizationId: string,
+      ): void => {
+        const settledAt: number = tick();
+        patchState(store, {
+          _deleted: { ...store._deleted(), [id]: { organizationId, settledAt } },
+        });
       };
       const settle: (id: string, enabled: boolean) => void = (
         id: string,
@@ -426,18 +717,20 @@ function createAutomationsStore(): Type<AutomationsStoreInstance> {
           patchState(store, { _desired: { ...store._desired(), [rule.id]: enabled } });
           return serialize(rule.id, async (): Promise<boolean> => {
             if (store._desired()[rule.id] !== enabled) return true;
-            const confirmed: AutomationRule | undefined = confirmedRule(rule.id);
-            if (!confirmed || store._organizationId() !== organizationId) {
+            if (store._organizationId() !== organizationId) {
               settle(rule.id, enabled);
               return false;
             }
-            if (confirmed.enabled === enabled) {
+            const known: AutomationRule = latest(rule, confirmedRule(rule.id));
+            if (known.enabled === enabled) {
               settle(rule.id, enabled);
               return true;
             }
             try {
-              const updated: AutomationRule = await store._api.setEnabled(confirmed, enabled);
-              if (store._organizationId() === organizationId) replaceRule(updated);
+              const updated: AutomationRule = await store._api.setEnabled(known, enabled);
+              if (store._organizationId() === organizationId) {
+                confirm(updated, organizationId, false);
+              }
               settle(rule.id, enabled);
               return true;
             } catch (error: unknown) {
@@ -451,18 +744,14 @@ function createAutomationsStore(): Type<AutomationsStoreInstance> {
           const organizationId: string = store._organizationId();
           patchState(store, { _removed: [...store._removed(), rule.id] });
           return serialize(rule.id, async (): Promise<boolean> => {
-            const confirmed: AutomationRule | undefined = confirmedRule(rule.id);
             if (store._organizationId() !== organizationId) {
               unhide(rule.id);
               return false;
             }
-            if (!confirmed) {
-              unhide(rule.id);
-              return true;
-            }
+            const known: AutomationRule = latest(rule, confirmedRule(rule.id));
             try {
-              await store._api.delete(confirmed);
-              dropRule(rule.id);
+              await store._api.delete(known);
+              markDeleted(rule.id, organizationId);
               unhide(rule.id);
               return true;
             } catch (error: unknown) {
@@ -484,16 +773,7 @@ function createAutomationsStore(): Type<AutomationsStoreInstance> {
           patchState(store, { creating: true, _draft: { key, body, organizationId } });
           try {
             const created: AutomationRule = await store._api.create(draft, key);
-            if (store._organizationId() === organizationId) {
-              if (store.rules.hasValue()) {
-                const current: readonly AutomationRule[] = store.rules.value();
-                if (!current.some((item: AutomationRule): boolean => item.id === created.id)) {
-                  store.rules.set([...current, created]);
-                }
-              } else {
-                store.rules.reload();
-              }
-            }
+            if (store._organizationId() === organizationId) confirm(created, organizationId, true);
             patchState(store, { _draft: null });
             return created;
           } catch {
@@ -518,6 +798,9 @@ function createAutomationsStore(): Type<AutomationsStoreInstance> {
  * so its state dies with it. Nothing is read until the dialog opens (`load`); each opening reads
  * the rules and the last runs again, the members once, and another organization reads them
  * all again. Switches and deletions are optimistic and restore the recorded state when refused.
+ * The rules confirmed by the gateway live apart from the read in flight: the writes keep using
+ * the newest version while the dialog reads again, and a read started before a write settled
+ * gets that write's result applied over it.
  *
  * @type {ReturnType<typeof createAutomationsStore>}
  */

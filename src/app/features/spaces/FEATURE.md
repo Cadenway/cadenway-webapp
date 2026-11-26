@@ -415,12 +415,17 @@ gateway checks them and `ORGANIZATION_PIN_OPERATIONS` lists them.
   `AutomationsService`: `listAutomationRules`, `createAutomationRule`, `updateAutomationRule`,
   `deleteAutomationRule`, `listRecentAutomationRuns`), mapped by
   `data-access/adapters/automation-rule/` to `models/automation-rule/`.
+  - The confirmed rules (`confirmedRules`) are kept apart from the read in flight. They are the
+    newest read, with the results of this dialog's writes that settled after that read started
+    applied over it: a newer version, a created rule, a deleted rule. They keep their value while
+    an opening reads again, so a write always uses the newest known version and is always sent.
   - A switch changes at once. The writes of a rule are serialized, each sent with the version the
     previous one left (`If-Match`). Only the last state asked is sent, and coming back to the
     recorded state sends nothing. A refusal restores the recorded state and shows a toast. A
     `412 request.version-mismatch` or `404 automation.rule-not-found` also reads the rules again.
   - A deletion is confirmed by `cw-alert-dialog` (`Delete this automation?`), then hides the rule
-    at once. A refusal brings it back with a toast. A rule already gone counts as deleted.
+    at once. It succeeds only once the gateway deletes the rule or reports it absent. A refusal
+    brings it back with a toast.
   - A creation sends one `Idempotency-Key` per draft and organization. A retry of the same draft
     reuses it; another draft, a closed builder or a recorded rule renews it. The created rule
     is added last and shows `Automation created`. A refusal keeps the builder and its values.

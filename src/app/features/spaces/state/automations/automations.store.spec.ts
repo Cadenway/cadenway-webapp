@@ -189,7 +189,7 @@ describe('AutomationsStore', () => {
     api['rules'].mockResolvedValueOnce([]);
     store.rules.reload();
     await expect.poll(() => store.rules.status()).toBe('resolved');
-    expect(store.rules.value()).toEqual([]);
+    expect(store.confirmedRules()).toEqual([]);
   });
 
   it('disables a rule at once and keeps the version the gateway recorded', async () => {
@@ -204,7 +204,7 @@ describe('AutomationsStore', () => {
     write.resolve({ ...NOTIFY_ON_DONE, enabled: false, version: 2 });
     expect(await recorded).toBe(true);
     expect(api['setEnabled']).toHaveBeenCalledWith(NOTIFY_ON_DONE, false);
-    expect(store.rules.value()?.[0]).toMatchObject({ enabled: false, version: 2 });
+    expect(store.confirmedRules()?.[0]).toMatchObject({ enabled: false, version: 2 });
     expect(shownEnabled('a1')).toBe(false);
   });
 
@@ -272,7 +272,7 @@ describe('AutomationsStore', () => {
     expect(shownEnabled('a2')).toBe(true);
 
     expect(await store.remove(URGENT_ON_BLOCKED)).toBe(true);
-    expect(store.rules.value()?.map((rule: AutomationRule): string => rule.id)).toEqual(['a1']);
+    expect(store.confirmedRules()?.map((rule: AutomationRule): string => rule.id)).toEqual(['a1']);
   });
 
   it('adds a created rule last and reuses the key for a retry of the same draft', async () => {
@@ -318,7 +318,89 @@ describe('AutomationsStore', () => {
     await expect.poll(() => store.members.hasValue()).toBe(true);
 
     organization.set({ id: 'org-other' });
+    expect(store.confirmedRules()).toBeUndefined();
     await expect.poll(() => api['rules'].mock.calls.length).toBe(2);
     await expect.poll(() => members.mock.calls.length).toBe(2);
+  });
+
+  it('sends a deletion while the rules are read again, and reports it once confirmed', async () => {
+    await loaded();
+    const reread: ReturnType<typeof deferred<readonly AutomationRule[]>> =
+      deferred<readonly AutomationRule[]>();
+    api['rules'].mockReturnValueOnce(reread.promise);
+    store.load();
+    await expect.poll(() => api['rules'].mock.calls.length).toBe(2);
+    expect(store.rules.hasValue()).toBe(false);
+    expect(store.confirmedRules()?.length).toBe(2);
+    const removal: ReturnType<typeof deferred<undefined>> = deferred<undefined>();
+    api['delete'].mockReturnValueOnce(removal.promise);
+
+    let settled: boolean | undefined;
+    void store.remove(URGENT_ON_BLOCKED).then((gone: boolean): void => {
+      settled = gone;
+    });
+    await expect.poll(() => api['delete'].mock.calls.length).toBe(1);
+    expect(api['delete']).toHaveBeenCalledWith(URGENT_ON_BLOCKED);
+    expect(settled).toBeUndefined();
+
+    removal.resolve(undefined);
+    await expect.poll(() => settled).toBe(true);
+    reread.resolve([NOTIFY_ON_DONE]);
+    await expect.poll(() => store.rules.hasValue()).toBe(true);
+    expect(store.confirmedRules()?.map((rule: AutomationRule): string => rule.id)).toEqual(['a1']);
+  });
+
+  it('applies the writes settled during a read over that older read', async () => {
+    await loaded();
+    const reread: ReturnType<typeof deferred<readonly AutomationRule[]>> =
+      deferred<readonly AutomationRule[]>();
+    api['rules'].mockReturnValueOnce(reread.promise);
+    store.load();
+    await expect.poll(() => api['rules'].mock.calls.length).toBe(2);
+    const created: AutomationRule = {
+      id: 'a3',
+      trigger: COMMENT_DRAFT.trigger,
+      action: COMMENT_DRAFT.action,
+      enabled: true,
+      version: 1,
+    };
+    api['setEnabled'].mockResolvedValueOnce({ ...NOTIFY_ON_DONE, enabled: false, version: 2 });
+    api['create'].mockResolvedValueOnce(created);
+
+    expect(await store.toggle(NOTIFY_ON_DONE)).toBe(true);
+    expect(await store.remove(URGENT_ON_BLOCKED)).toBe(true);
+    await store.create(COMMENT_DRAFT);
+    reread.resolve([NOTIFY_ON_DONE, URGENT_ON_BLOCKED]);
+    await expect.poll(() => store.rules.hasValue()).toBe(true);
+
+    expect(store.confirmedRules()).toEqual([
+      { ...NOTIFY_ON_DONE, enabled: false, version: 2 },
+      created,
+    ]);
+    api['setEnabled'].mockResolvedValueOnce({ ...NOTIFY_ON_DONE, enabled: true, version: 3 });
+    await store.toggle(NOTIFY_ON_DONE);
+    expect(api['setEnabled']).toHaveBeenLastCalledWith(
+      { ...NOTIFY_ON_DONE, enabled: false, version: 2 },
+      true,
+    );
+  });
+
+  it('trusts a read started after a creation, which no longer holds the rule', async () => {
+    await loaded();
+    api['create'].mockResolvedValueOnce({ ...NOTIFY_ON_DONE, id: 'a3' });
+    await store.create(COMMENT_DRAFT);
+    expect(store.confirmedRules()?.map((rule: AutomationRule): string => rule.id)).toEqual([
+      'a1',
+      'a2',
+      'a3',
+    ]);
+
+    store.load();
+    await expect.poll(() => api['rules'].mock.calls.length).toBe(2);
+    await expect.poll(() => store.rules.hasValue()).toBe(true);
+    expect(store.confirmedRules()?.map((rule: AutomationRule): string => rule.id)).toEqual([
+      'a1',
+      'a2',
+    ]);
   });
 });

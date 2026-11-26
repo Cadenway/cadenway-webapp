@@ -209,6 +209,7 @@ describe('AutomationsDialog', () => {
       rules,
       runs,
       members,
+      confirmedRules: rules.value,
       shownRules,
       activeCount: signal(2),
       creating: signal(false),
