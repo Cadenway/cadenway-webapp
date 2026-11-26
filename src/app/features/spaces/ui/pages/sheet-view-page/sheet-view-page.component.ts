@@ -70,6 +70,7 @@ import type { SheetColumn } from '../../../models/list-view-config/list-view-con
 import type {
   SheetColumnKey,
   SheetCustomField,
+  SheetFactChanges,
   SheetFieldValue,
   SheetOrder,
   SheetRow,
@@ -206,7 +207,8 @@ function isSheetRow(data: unknown): data is SheetRow {
  * fields (`Points` refuses a negative number and stays open); Enter validates, Escape cancels,
  * Tab goes to the next editable cell. Each edit goes through the shared writes
  * (`ViewTaskWritesStore.updateFields`, `If-Match`) with a toast and `Undo`; the estimate and custom
- * fields show at once through `SheetViewStore.showEdit`. A right click, Shift + F10 or the row's
+ * fields show at once through `SheetViewStore.editFacts`, whose `Undo` puts back the confirmed
+ * value the write replaced. A right click, Shift + F10 or the row's
  * `…` button opens the shared task menu. The sticky footer counts the tasks and those done and sums
  * the estimates, the time spent (once every row's is read) and the numeric fields. A failed first
  * read reaches the route's error boundary; a failed refresh and failed custom fields show inline
@@ -1225,14 +1227,12 @@ export class SheetViewPage {
       const customFieldValues: Readonly<Record<string, SheetFieldValue | null>> = {
         [fieldId]: value,
       };
-      this.sheet.showEdit(
-        row.task.key,
-        { customFieldValues },
+      this.sheet.editFacts(row.task.key, { customFieldValues }, (previous: SheetFactChanges) =>
         this.writes.updateFields(
           row.task,
           { customFieldValues },
           this.toast(row, field.name, value === null ? null : this.fieldValueText(field, value)),
-          { customFieldValues: { [fieldId]: before } },
+          previous,
         ),
       );
       return;
@@ -1253,14 +1253,12 @@ export class SheetViewPage {
       case 'estimate': {
         if (typeof value === 'string' || value === row.estimateMinutes) return;
         const changes: TaskFieldChanges = { estimateMinutes: value };
-        this.sheet.showEdit(
-          row.task.key,
-          changes,
+        this.sheet.editFacts(row.task.key, changes, (previous: SheetFactChanges) =>
           this.writes.updateFields(
             row.task,
             changes,
             this.toast(row, this.labels.estimate, value === null ? null : this.estimateText(value)),
-            { estimateMinutes: row.estimateMinutes },
+            previous,
           ),
         );
         return;

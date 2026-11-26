@@ -267,6 +267,17 @@ export interface SheetRow {
    * @readonly
    */
   readonly spentMinutes: number | null;
+
+  /**
+   * Property spentFailed
+   *
+   * @description
+   * Whether the last read of the time spent failed: the cell offers `Retry`.
+   *
+   * @type {boolean}
+   * @readonly
+   */
+  readonly spentFailed: boolean;
   // #endregion
 }
 

@@ -188,6 +188,17 @@ interface SheetViewState {
    * @readonly
    */
   readonly _collapsed: Readonly<Partial<Record<string, readonly string[]>>>;
+
+  /**
+   * Property _spentFailed
+   *
+   * @description
+   * Tasks whose last time summary read failed, by key; read again only on `retrySpent`.
+   *
+   * @type {Readonly<Partial<Record<string, true>>>}
+   * @readonly
+   */
+  readonly _spentFailed: Readonly<Partial<Record<string, true>>>;
   // #endregion
 }
 
@@ -205,6 +216,7 @@ const initialState: SheetViewState = {
   _edits: {},
   _spent: {},
   _collapsed: {},
+  _spentFailed: {},
 };
 
 /**
@@ -395,28 +407,47 @@ export interface SheetViewStoreInstance {
   reloadFields(): void;
 
   /**
-   * Method showEdit
+   * Method editFacts
    *
    * @description
-   * Shows an estimate or custom field edit at once while its write runs; a confirmed edit stays
-   * until a read reaches the version the gateway returned, a refused or uncertain one goes away.
+   * An estimate or custom field edit: starts its write at once (`write`, given the values its
+   * `Undo` puts back) and shows the edit while the write runs; a confirmed edit stays until a read
+   * reaches the version the gateway returned, a refused or uncertain one goes away. The values
+   * given to `write` are the confirmed ones the write replaces: they are read once the earlier
+   * edits of the task settle (the shared writes send them first), from what the gateway confirmed
+   * (reads and confirmed edits), never from an edit still pending or refused.
    *
    * @param {string} taskKey - The task.
    * @param {SheetFactChanges} changes - The edited values.
-   * @param {Promise<ViewTaskOutcome>} result - The write (`ViewTaskWritesStore.updateFields`).
+   * @param {(previous: SheetFactChanges) => Promise<ViewTaskOutcome>} write - Starts the write
+   * (`ViewTaskWritesStore.updateFields`); `previous` is read when its `Undo` runs.
    */
-  showEdit(taskKey: string, changes: SheetFactChanges, result: Promise<ViewTaskOutcome>): void;
+  editFacts(
+    taskKey: string,
+    changes: SheetFactChanges,
+    write: (previous: SheetFactChanges) => Promise<ViewTaskOutcome>,
+  ): void;
 
   /**
    * Method requestSpent
    *
    * @description
    * Asks for the time spent of a shown row once (its cell rendered); reads run four at a time
-   * after the current rendering. A failed read is asked again the next time the row shows.
+   * after the current rendering. A failed read is not asked again until `retrySpent`.
    *
    * @param {string} taskKey - The task.
    */
   requestSpent(taskKey: string): void;
+
+  /**
+   * Method retrySpent
+   *
+   * @description
+   * Reads the time spent of a row whose read failed again (the cell's `Retry`).
+   *
+   * @param {string} taskKey - The task.
+   */
+  retrySpent(taskKey: string): void;
 
   /**
    * Method setOrder
@@ -502,6 +533,7 @@ function createSheetViewStore(): Type<SheetViewStoreInstance> {
         _spentAsked: new Set<string>(),
         _spentRunning: { count: 0, aborts: new AbortController() },
         _editSeq: { value: 0 },
+        _editChains: new Map<string, Promise<void>>(),
         fields,
       };
     }),
@@ -542,6 +574,7 @@ function createSheetViewStore(): Type<SheetViewStoreInstance> {
         const facts: SheetViewState['_facts'] = store._facts();
         const edits: SheetViewState['_edits'] = store._edits();
         const spent: SheetViewState['_spent'] = store._spent();
+        const spentFailed: SheetViewState['_spentFailed'] = store._spentFailed();
         const read: readonly SheetRow[] = store._tasks.items().map((item: ListTaskItem) => {
           const known: SheetTaskFacts | undefined = facts[item.task.key];
           const shown: Pick<SheetRow, 'estimateMinutes' | 'customFieldValues'> = withChanges(
@@ -558,6 +591,7 @@ function createSheetViewStore(): Type<SheetViewStoreInstance> {
             status: item.status,
             ...shown,
             spentMinutes: spent[item.task.key] ?? null,
+            spentFailed: spentFailed[item.task.key] === true,
           };
         });
         const list: { id: string; name: string } | null = store._page.list.hasValue()
@@ -596,10 +630,14 @@ function createSheetViewStore(): Type<SheetViewStoreInstance> {
                 if (aborts.signal.aborted || store._listId() !== listId) return;
                 patchState(store, (state: SheetViewState) => ({
                   _spent: { ...state._spent, [key]: minutes },
+                  _spentFailed: withoutKey(state._spentFailed, key),
                 }));
               },
               (): void => {
-                store._spentAsked.delete(key);
+                if (aborts.signal.aborted || store._listId() !== listId) return;
+                patchState(store, (state: SheetViewState) => ({
+                  _spentFailed: { ...state._spentFailed, [key]: true as const },
+                }));
               },
             )
             .finally((): void => {
@@ -620,6 +658,37 @@ function createSheetViewStore(): Type<SheetViewStoreInstance> {
         store._spentRunning.count = 0;
         store._spentQueue.length = 0;
         store._spentAsked.clear();
+        store._editChains.clear();
+      };
+      const confirmedOf: (
+        taskKey: string,
+        seq: number,
+        changes: SheetFactChanges,
+      ) => SheetFactChanges = (
+        taskKey: string,
+        seq: number,
+        changes: SheetFactChanges,
+      ): SheetFactChanges => {
+        const known: SheetTaskFacts | undefined = store._facts()[taskKey];
+        const confirmed: Pick<SheetRow, 'estimateMinutes' | 'customFieldValues'> = withChanges(
+          {
+            estimateMinutes: known?.estimateMinutes ?? null,
+            customFieldValues: known?.customFieldValues ?? {},
+          },
+          (store._edits()[taskKey] ?? []).filter(
+            (edit: FactEdit): boolean => edit.seq < seq && !edit.pending,
+          ),
+        );
+        const values: Record<string, SheetFieldValue | null> = {};
+        for (const id of Object.keys(changes.customFieldValues ?? {})) {
+          values[id] = confirmed.customFieldValues[id] ?? null;
+        }
+        return {
+          ...(changes.estimateMinutes === undefined
+            ? {}
+            : { estimateMinutes: confirmed.estimateMinutes }),
+          ...(changes.customFieldValues === undefined ? {} : { customFieldValues: values }),
+        };
       };
       const dropEdit: (taskKey: string, seq: number) => void = (
         taskKey: string,
@@ -676,18 +745,34 @@ function createSheetViewStore(): Type<SheetViewStoreInstance> {
         load: signalMethod<string>((listId: string): void => {
           if (listId === store._listId()) return;
           resetSpent();
-          patchState(store, { _listId: listId, _facts: {}, _edits: {}, _spent: {} });
+          patchState(store, {
+            _listId: listId,
+            _facts: {},
+            _edits: {},
+            _spent: {},
+            _spentFailed: {},
+          });
         }),
         reloadFields(): void {
           store.fields.reload();
         },
-        showEdit(
+        editFacts(
           taskKey: string,
           changes: SheetFactChanges,
-          result: Promise<ViewTaskOutcome>,
+          write: (previous: SheetFactChanges) => Promise<ViewTaskOutcome>,
         ): void {
           const seq: number = ++store._editSeq.value;
           const listId: string | null = store._listId();
+          const earlier: Promise<void> = store._editChains.get(taskKey) ?? Promise.resolve();
+          let confirmed: SheetFactChanges = {};
+          const previous: SheetFactChanges = {};
+          for (const name of ['estimateMinutes', 'customFieldValues'] as const) {
+            if (changes[name] === undefined) continue;
+            Object.defineProperty(previous, name, {
+              enumerable: true,
+              get: (): SheetFactChanges[typeof name] => confirmed[name],
+            });
+          }
           patchState(store, (state: SheetViewState) => ({
             _edits: {
               ...state._edits,
@@ -697,7 +782,11 @@ function createSheetViewStore(): Type<SheetViewStoreInstance> {
               ],
             },
           }));
-          void result.then(
+          const result: Promise<ViewTaskOutcome> = write(previous);
+          const captured: Promise<void> = earlier.then((): void => {
+            confirmed = confirmedOf(taskKey, seq, changes);
+          });
+          const settled: Promise<void> = result.then(
             (outcome: ViewTaskOutcome): void => {
               if (store._destroyRef.destroyed || store._listId() !== listId) return;
               const done: TaskBulkEntry | undefined = outcome.done.find(
@@ -725,9 +814,21 @@ function createSheetViewStore(): Type<SheetViewStoreInstance> {
               if (!store._destroyRef.destroyed) dropEdit(taskKey, seq);
             },
           );
+          const tail: Promise<void> = Promise.all([captured, settled]).then((): void => undefined);
+          store._editChains.set(taskKey, tail);
+          void tail.then((): void => {
+            if (store._editChains.get(taskKey) === tail) store._editChains.delete(taskKey);
+          });
         },
         requestSpent(taskKey: string): void {
           if (store._spentAsked.has(taskKey)) return;
+          store._spentAsked.add(taskKey);
+          queueSpent([taskKey]);
+        },
+        retrySpent(taskKey: string): void {
+          patchState(store, (state: SheetViewState) => ({
+            _spentFailed: withoutKey(state._spentFailed, taskKey),
+          }));
           store._spentAsked.add(taskKey);
           queueSpent([taskKey]);
         },
@@ -803,7 +904,7 @@ function createSheetViewStore(): Type<SheetViewStoreInstance> {
  * each page, an older version never replacing a newer one), the list's custom fields (a
  * secondary read, published to the frame with `ListViewStore.followCustomFields` once read), and
  * the time spent of the rows shown (gap G6: one time summary per row, four at a time, read again
- * when a task detail closes or changes). It builds the rows in the presentation's order
+ * when a task detail closes or changes; a failed read waits for `retrySpent`). It builds the rows in the presentation's order
  * (`sheetSort`, or `customFieldSort` while the list has the field; empty cells last) and the
  * totals of the footer, files the rows into the view's groups (`Group by`, `Cancelled` folded by
  * default), shows the sheet's estimate and custom field edits at once until a read reaches

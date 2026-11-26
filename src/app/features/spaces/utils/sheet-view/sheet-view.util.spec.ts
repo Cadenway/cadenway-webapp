@@ -59,6 +59,7 @@ function row(
     estimateMinutes: null,
     customFieldValues: {},
     spentMinutes: null,
+    spentFailed: false,
     ...changes,
   };
 }

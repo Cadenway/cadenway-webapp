@@ -223,7 +223,10 @@
         <cw-sheet-spent-cell
           [minutes]="row.spentMinutes"
           [estimate]="row.estimateMinutes"
+          [failed]="row.spentFailed"
+          [retryLabel]="retryLabel"
           (shown)="sheet.requestSpent(row.task.key)"
+          (retried)="sheet.retrySpent(row.task.key)"
         />
       </ng-template>
       <ng-template cwFooterCell>

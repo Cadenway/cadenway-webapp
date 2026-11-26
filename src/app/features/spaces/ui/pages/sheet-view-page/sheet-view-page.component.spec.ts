@@ -487,4 +487,126 @@ describe('SheetViewPage', () => {
     expect(JSON.stringify(bulk.mock.calls[0])).not.toContain('CAD-479');
     expect(table(fixture).selection()).toEqual([]);
   });
+
+  /**
+   * Function rowOf
+   *
+   * @description
+   * The table row of a task, failing the test when it is missing.
+   *
+   * @param {ComponentFixture<SheetViewPage>} fixture - The page.
+   * @param {string} key - Task key.
+   * @returns {SheetRow} The row.
+   */
+  function rowOf(fixture: ComponentFixture<SheetViewPage>, key: string): SheetRow {
+    const found: SheetRow | undefined = table(fixture)
+      .data()
+      .find((item: SheetRow) => item.task.key === key);
+    if (!found) throw new Error(`No row for ${key}.`);
+    return found;
+  }
+
+  /**
+   * Function undoOf
+   *
+   * @description
+   * The `Undo` of the last toast titled `CAD-482 updated`.
+   *
+   * @returns {() => void} The `Undo`.
+   */
+  function undoOf(): () => void {
+    const calls: unknown[][] = toasts['show'].mock.calls.filter(
+      (call: unknown[]) => call[0] === 'CAD-482 updated',
+    );
+    const options: { undo?: () => void } | undefined = calls.at(-1)?.[1] as
+      { undo?: () => void } | undefined;
+    expect(options?.undo).toBeTypeOf('function');
+    return options?.undo ?? ((): void => undefined);
+  }
+
+  /**
+   * Function refuseFirstWrite
+   *
+   * @description
+   * Holds the first single-field write until the returned function refuses it; later writes
+   * apply at versions 5, 6 and on.
+   *
+   * @returns {() => void} Refuses the first write.
+   */
+  function refuseFirstWrite(): () => void {
+    let refuse: (result: TaskFieldWriteResult) => void = (): void => undefined;
+    let version: number = 4;
+    update.mockImplementation((): Promise<TaskFieldWriteResult> => {
+      if (version === 4) {
+        version++;
+        return new Promise<TaskFieldWriteResult>(
+          (resolve: (result: TaskFieldWriteResult) => void) => {
+            refuse = resolve;
+          },
+        );
+      }
+      return Promise.resolve({ kind: 'done', version: version++ });
+    });
+    return (): void => {
+      refuse({ kind: 'refused', stale: false });
+    };
+  }
+
+  it('undoes a queued estimate edit to the original value when the first edit was refused', async () => {
+    const fixture: ComponentFixture<SheetViewPage> = await render();
+    const refuse: () => void = refuseFirstWrite();
+    const row: () => SheetRow = (): SheetRow => rowOf(fixture, 'CAD-482');
+    table(fixture).cellEdit.emit({ row: row(), key: 'estimate', value: 180, previous: 240 });
+    fixture.detectChanges();
+    table(fixture).cellEdit.emit({ row: row(), key: 'estimate', value: 120, previous: 180 });
+    fixture.detectChanges();
+    refuse();
+    await settle(fixture);
+    expect(update).toHaveBeenNthCalledWith(2, 'CAD-482', 4, { estimateMinutes: 120 });
+
+    undoOf()();
+    await settle(fixture);
+    expect(update).toHaveBeenLastCalledWith('CAD-482', 5, { estimateMinutes: 240 });
+  });
+
+  it('undoes a queued custom field edit to the original value when the first edit was refused', async () => {
+    const fixture: ComponentFixture<SheetViewPage> = await render();
+    const refuse: () => void = refuseFirstWrite();
+    const row: () => SheetRow = (): SheetRow => rowOf(fixture, 'CAD-482');
+    table(fixture).cellEdit.emit({ row: row(), key: 'field:f-points', value: 3, previous: 5 });
+    fixture.detectChanges();
+    table(fixture).cellEdit.emit({ row: row(), key: 'field:f-points', value: 8, previous: 3 });
+    fixture.detectChanges();
+    refuse();
+    await settle(fixture);
+    expect(update).toHaveBeenNthCalledWith(2, 'CAD-482', 4, {
+      customFieldValues: { 'f-points': 8 },
+    });
+
+    undoOf()();
+    await settle(fixture);
+    expect(update).toHaveBeenLastCalledWith('CAD-482', 5, {
+      customFieldValues: { 'f-points': 5 },
+    });
+  });
+
+  it('offers a retry in the time spent cell after a failed read', async () => {
+    spentMinutes.mockImplementation((taskKey: string): Promise<number> =>
+      taskKey === 'CAD-479' ? Promise.reject(new Error('unavailable')) : Promise.resolve(90),
+    );
+    const fixture: ComponentFixture<SheetViewPage> = await render();
+    const host: HTMLElement = fixture.nativeElement as HTMLElement;
+    expect(host.querySelector('[data-testid="sheet-spent-pending"]')).not.toBeNull();
+    const retry: HTMLButtonElement | undefined = [
+      ...host.querySelectorAll<HTMLButtonElement>('button[aria-label="Retry"]'),
+    ].at(0);
+    expect(retry).toBeDefined();
+
+    spentMinutes.mockImplementation((): Promise<number> => Promise.resolve(90));
+    retry?.click();
+    await settle(fixture);
+    expect(spentMinutes.mock.calls.filter((call) => call[0] === 'CAD-479')).toHaveLength(2);
+    expect(host.querySelector('button[aria-label="Retry"]')).toBeNull();
+    expect(textOf(fixture)).toContain('Σ 3 h');
+  });
 });

@@ -14,6 +14,7 @@ import type {
 } from '../../models/list-view-config/list-view-config.interface';
 import type {
   SheetCustomField,
+  SheetFactChanges,
   SheetRow,
   SheetTaskFacts,
 } from '../../models/sheet-view/sheet-view.interface';
@@ -224,7 +225,7 @@ describe('SheetViewStore', () => {
   it('keeps a confirmed edit until a read reaches its version', async () => {
     const store: SheetViewStoreInstance = setup();
     factsRead.next([facts(4, 60)]);
-    store.showEdit('CAD-482', { estimateMinutes: 180 }, Promise.resolve(outcome(5)));
+    store.editFacts('CAD-482', { estimateMinutes: 180 }, () => Promise.resolve(outcome(5)));
     expect(store.rows()[0].estimateMinutes).toBe(180);
     await flush();
     factsRead.next([facts(4, 60)]);
@@ -239,12 +240,13 @@ describe('SheetViewStore', () => {
     const store: SheetViewStoreInstance = setup();
     factsRead.next([facts(4, 60)]);
     let answer: (outcome: ViewTaskOutcome) => void = (): void => undefined;
-    store.showEdit(
+    store.editFacts(
       'CAD-482',
       { estimateMinutes: 180 },
-      new Promise<ViewTaskOutcome>((resolve: (outcome: ViewTaskOutcome) => void) => {
-        answer = resolve;
-      }),
+      () =>
+        new Promise<ViewTaskOutcome>((resolve: (outcome: ViewTaskOutcome) => void) => {
+          answer = resolve;
+        }),
     );
     factsRead.next([facts(6, 120)]);
     expect(store.rows()[0].estimateMinutes).toBe(180);
@@ -271,15 +273,81 @@ describe('SheetViewStore', () => {
   it('puts the read value back when the write is refused', async () => {
     const store: SheetViewStoreInstance = setup();
     factsRead.next([facts(4, 60)]);
-    store.showEdit(
-      'CAD-482',
-      { customFieldValues: { 'f-points': null } },
+    store.editFacts('CAD-482', { customFieldValues: { 'f-points': null } }, () =>
       Promise.resolve(outcome(null)),
     );
     expect(store.rows()[0].customFieldValues).toEqual({});
     await flush();
     expect(store.rows()[0].customFieldValues).toEqual({ 'f-points': 5 });
     expect(store.rows()[0].estimateMinutes).toBe(60);
+  });
+
+  it('gives a queued edit the confirmed value as its Undo, not a refused earlier edit', async () => {
+    const store: SheetViewStoreInstance = setup();
+    factsRead.next([facts(4, 60)]);
+    let refuse: (outcome: ViewTaskOutcome) => void = (): void => undefined;
+    const previous: SheetFactChanges[] = [];
+    store.editFacts('CAD-482', { estimateMinutes: 180 }, (values: SheetFactChanges) => {
+      previous.push(values);
+      return new Promise<ViewTaskOutcome>((resolve: (outcome: ViewTaskOutcome) => void) => {
+        refuse = resolve;
+      });
+    });
+    store.editFacts(
+      'CAD-482',
+      { estimateMinutes: 120, customFieldValues: { 'f-points': 8 } },
+      (values: SheetFactChanges) => {
+        previous.push(values);
+        return Promise.resolve(outcome(5));
+      },
+    );
+    expect(store.rows()[0].estimateMinutes).toBe(120);
+    refuse(outcome(null));
+    await flush();
+    expect({ ...previous[0] }).toEqual({ estimateMinutes: 60 });
+    expect({ ...previous[1] }).toEqual({
+      estimateMinutes: 60,
+      customFieldValues: { 'f-points': 5 },
+    });
+  });
+
+  it('gives a queued edit the value an earlier confirmed edit wrote as its Undo', async () => {
+    const store: SheetViewStoreInstance = setup();
+    factsRead.next([facts(4, 60)]);
+    let confirm: (outcome: ViewTaskOutcome) => void = (): void => undefined;
+    let undo: SheetFactChanges = {};
+    store.editFacts(
+      'CAD-482',
+      { estimateMinutes: 180 },
+      () =>
+        new Promise<ViewTaskOutcome>((resolve: (outcome: ViewTaskOutcome) => void) => {
+          confirm = resolve;
+        }),
+    );
+    store.editFacts('CAD-482', { estimateMinutes: 120 }, (values: SheetFactChanges) => {
+      undo = values;
+      return Promise.resolve(outcome(6));
+    });
+    confirm(outcome(5));
+    await flush();
+    expect({ ...undo }).toEqual({ estimateMinutes: 180 });
+  });
+
+  it('offers a retry after a failed time summary read and keeps the total pending', async () => {
+    spentMinutes.mockRejectedValueOnce(new Error('unavailable'));
+    const store: SheetViewStoreInstance = setup();
+    store.requestSpent('CAD-482');
+    await flush();
+    expect(store.rows()[0].spentFailed).toBe(true);
+    expect(store.totals().spentMinutes).toBeNull();
+    store.requestSpent('CAD-482');
+    await flush();
+    expect(spentMinutes).toHaveBeenCalledTimes(1);
+    store.retrySpent('CAD-482');
+    await flush();
+    expect(spentMinutes).toHaveBeenCalledTimes(2);
+    expect(store.rows()[0].spentFailed).toBe(false);
+    expect(store.totals().spentMinutes).toBe(30);
   });
 
   it('reads the time spent of the shown rows four at a time, once each', async () => {

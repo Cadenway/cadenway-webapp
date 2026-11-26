@@ -321,7 +321,9 @@ export function sheetTotals(
     if (row.status === 'done') done++;
     estimateMinutes += row.estimateMinutes ?? 0;
     spentMinutes =
-      spentMinutes === null || row.spentMinutes === null ? null : spentMinutes + row.spentMinutes;
+      spentMinutes === null || row.spentMinutes === null || row.spentFailed
+        ? null
+        : spentMinutes + row.spentMinutes;
     for (const field of numeric) {
       const value: SheetFieldValue | undefined = row.customFieldValues[field.id];
       if (typeof value === 'number') fieldSums[field.id] += value;

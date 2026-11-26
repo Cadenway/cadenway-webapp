@@ -154,9 +154,11 @@ columns name the mockup's seed fields: the sheet draws the space's real custom f
   hours, `parseDuration`) and custom fields (`Points` refuses a negative number and stays open
   with `aria-invalid`); Enter validates, Escape cancels, Tab goes to the next editable cell. Each
   goes through `ViewTaskWritesStore.updateFields` (`If-Match`) with a toast and `Undo`; the
-  reader shows the name and the due date at once, `SheetViewStore.showEdit` the estimate and the
+  reader shows the name and the due date at once, `SheetViewStore.editFacts` the estimate and the
   custom fields until a read reaches the version the write returned (dropped at once when a read
-  answered before the write already reached it). An unchanged value writes nothing. A click or
+  answered before the write already reached it). Their `Undo` puts back the confirmed value the
+  write replaced, read once the earlier edits of the task settle (never a pending or refused
+  edit). An unchanged value writes nothing. A click or
   Enter on the name opens the task.
 - A right click, Shift + F10 or the row's `…` button opens `cw-task-menu`
   (`rowContextMenu`): status, priority, assignees, `Move to`, reminder, copies, deletion.
@@ -174,7 +176,8 @@ columns name the mockup's seed fields: the sheet draws the space's real custom f
 - Known gaps:
   - G6: `TaskSummary` has no `spentMinutes`. The sheet reads `getTaskTimeSummary` for each row the
     virtual table renders (`SheetSpentCell.shown`), four at a time, again when a task detail
-    closes or changes. Until a list-level aggregate exists, `Time spent` does not sort and its
+    closes or changes; a failed read shows a `Retry` button in its cell and keeps the footer
+    pending until it succeeds. Until a list-level aggregate exists, `Time spent` does not sort and its
     footer sum shows only once every row's summary is read (rows never rendered are never read).
     `spentMinutes` on `TaskSummary` (contracts, then task-service from time entries) is the fix.
   - Status, priority, assignees, labels and list are not edited in their cells (the mockup's
