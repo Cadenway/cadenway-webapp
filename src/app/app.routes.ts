@@ -23,6 +23,13 @@ export const APP_ROUTES: Routes = [
       ),
   },
   {
+    path: 'f',
+    loadChildren: () =>
+      import('@features/intake/intake.routes').then(
+        (entry: { INTAKE_ROUTES: Routes }) => entry.INTAKE_ROUTES,
+      ),
+  },
+  {
     path: '',
     loadChildren: () =>
       import('@features/workspace/workspace.routes').then(

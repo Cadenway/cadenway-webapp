@@ -1,0 +1,37 @@
+@let form = store.form.value();
+<main class="flex-1 px-4 py-8 sm:py-12">
+  @if (form) {
+    <div
+      class="mx-auto flex w-full max-w-xl flex-col gap-6 rounded-xl border border-border bg-card p-6"
+    >
+      <cw-intake-form
+        [form]="form"
+        [pending]="store.pending()"
+        [sent]="store.sent()"
+        [failure]="store.failure()"
+        (submitted)="send($event)"
+        (restarted)="store.restart()"
+      />
+    </div>
+  } @else {
+    <div
+      role="status"
+      aria-busy="true"
+      aria-label="Loading the form"
+      i18n-aria-label="@@intake.page.loading"
+      class="mx-auto flex w-full max-w-xl flex-col gap-5 rounded-xl border border-border bg-card p-6"
+    >
+      <div class="flex flex-col gap-2" aria-hidden="true">
+        <div cwSkeleton class="h-6 w-1/2"></div>
+        <div cwSkeleton class="h-3 w-3/4"></div>
+      </div>
+      @for (field of skeletonFields; track $index) {
+        <div class="flex flex-col gap-2" aria-hidden="true">
+          <div cwSkeleton class="h-3" [class]="field.label"></div>
+          <div cwSkeleton class="w-full rounded-lg" [class]="field.field"></div>
+        </div>
+      }
+      <div cwSkeleton class="h-9 w-32 rounded-lg" aria-hidden="true"></div>
+    </div>
+  }
+</main>
