@@ -1,16 +1,362 @@
-<div
-  class="flex min-h-0 flex-1 items-center justify-center px-4 pb-6 sm:px-6"
+@let primary = store.hasRead() || store.timesheet.value();
+@let sheet = store.week();
+<section
+  class="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-4 pt-1 pb-6 sm:px-6"
+  aria-label="Timesheet"
+  i18n-aria-label="@@spaces.timesheet.region"
   data-testid="timesheet-view"
+  [attr.data-primary]="primary ? 'read' : null"
 >
-  <cw-empty role="status">
-    <cw-empty-header>
-      <cw-empty-media>
-        <ng-icon [name]="icon" aria-hidden="true" />
-      </cw-empty-media>
-      <cw-empty-title>{{ name }}</cw-empty-title>
-      <cw-empty-description i18n="@@spaces.view-stub.text"
-        >This view is not available yet.</cw-empty-description
+  <div class="flex flex-wrap items-center gap-2">
+    <button
+      cwButton
+      type="button"
+      variant="outline"
+      size="icon-sm"
+      [attr.aria-label]="previousLabel"
+      (click)="store.previousWeek()"
+    >
+      <ng-icon name="phosphorCaretLeftBold" aria-hidden="true" />
+    </button>
+    <button
+      cwButton
+      type="button"
+      variant="outline"
+      size="icon-sm"
+      [attr.aria-label]="nextLabel"
+      (click)="store.nextWeek()"
+    >
+      <ng-icon name="phosphorCaretRightBold" aria-hidden="true" />
+    </button>
+    <h2
+      class="text-base font-semibold whitespace-nowrap tabular-nums"
+      aria-live="polite"
+      data-testid="timesheet-range"
+    >
+      {{ rangeLabel() }}
+    </h2>
+    @if (store.isThisWeek()) {
+      <span cwBadge variant="secondary" size="sm" i18n="@@spaces.timesheet.this-week"
+        >This week</span
       >
-    </cw-empty-header>
-  </cw-empty>
-</div>
+    } @else {
+      <button
+        cwButton
+        type="button"
+        variant="outline"
+        size="sm"
+        (click)="store.showThisWeek()"
+        i18n="@@spaces.timesheet.back-to-this-week"
+      >
+        Back to this week
+      </button>
+    }
+    @if (sheet) {
+      <p
+        class="ml-auto text-sm whitespace-nowrap text-muted-foreground"
+        data-testid="timesheet-total"
+      >
+        <ng-container i18n="@@spaces.timesheet.week-total">Week total: </ng-container>
+        <span class="font-semibold text-foreground tabular-nums">{{ weekTotal() }}</span>
+      </p>
+    }
+  </div>
+
+  @if (sheet && ready()) {
+    @if (store.timesheet.error()) {
+      <div
+        class="flex items-center gap-2 text-sm"
+        role="alert"
+        data-testid="timesheet-refresh-failed"
+      >
+        <span i18n="@@spaces.timesheet.refresh-failed">The timesheet could not be refreshed.</span>
+        <button cwButton type="button" variant="outline" size="xs" (click)="store.reload()">
+          {{ retryLabel }}
+        </button>
+      </div>
+    }
+    @if (store.unappliedFilters()) {
+      <p class="text-sm text-muted-foreground" role="note" data-testid="timesheet-unapplied">
+        <ng-container i18n="@@spaces.timesheet.filters-unapplied"
+          >Priority and label filters do not apply to recorded time.</ng-container
+        >
+      </p>
+    }
+    @if (membersFailed()) {
+      <div
+        class="flex items-center gap-2 text-sm"
+        role="alert"
+        data-testid="timesheet-members-failed"
+      >
+        <span i18n="@@spaces.timesheet.members-failed"
+          >The names of the people could not be loaded.</span
+        >
+        <button cwButton type="button" variant="outline" size="xs" (click)="retryMembers()">
+          {{ retryLabel }}
+        </button>
+      </div>
+    }
+    @if (noMatch()) {
+      <cw-empty variant="outline" role="status" class="py-14" data-testid="timesheet-no-match">
+        <cw-empty-header>
+          <cw-empty-media>
+            <ng-icon name="phosphorMagnifyingGlassBold" aria-hidden="true" />
+          </cw-empty-media>
+          <cw-empty-title i18n="@@spaces.rows.no-match">No task matches</cw-empty-title>
+        </cw-empty-header>
+      </cw-empty>
+    } @else if (store.empty()) {
+      <cw-empty variant="outline" role="status" class="py-14" data-testid="timesheet-empty">
+        <cw-empty-header>
+          <cw-empty-media>
+            <ng-icon name="phosphorClockCountdownBold" aria-hidden="true" />
+          </cw-empty-media>
+          <cw-empty-title i18n="@@spaces.timesheet.empty-title"
+            >No time recorded this week</cw-empty-title
+          >
+          <cw-empty-description i18n="@@spaces.timesheet.empty-text"
+            >Add time from a task’s detail, or start the timer.</cw-empty-description
+          >
+        </cw-empty-header>
+      </cw-empty>
+    } @else {
+      <div class="grid shrink-0 grid-cols-2 gap-3 lg:grid-cols-4" data-testid="timesheet-kpis">
+        @for (kpi of kpis(); track kpi.key) {
+          <cw-stat
+            [label]="kpi.label"
+            [value]="kpi.value"
+            [comparison]="kpi.hint"
+            [loading]="kpi.loading"
+          />
+        }
+      </div>
+      @if (store.estimates.error()) {
+        <div
+          class="flex items-center gap-2 text-sm"
+          role="alert"
+          data-testid="timesheet-estimates-failed"
+        >
+          <span i18n="@@spaces.timesheet.estimates-failed">The estimates could not be loaded.</span>
+          <button
+            cwButton
+            type="button"
+            variant="outline"
+            size="xs"
+            (click)="store.estimates.reload()"
+          >
+            {{ retryLabel }}
+          </button>
+        </div>
+      }
+
+      <cw-table-container
+        class="shrink-0 rounded-xl border border-border bg-card"
+        [class]="bounded() ? 'max-h-[36rem]' : ''"
+        [attr.data-bounded]="bounded() ? 'true' : null"
+        data-testid="timesheet-frame"
+      >
+        <table
+          cwTable
+          size="sm"
+          class="min-w-[760px] table-fixed"
+          aria-label="Time spent per person and per day"
+          i18n-aria-label="@@spaces.timesheet.table"
+          data-testid="timesheet-table"
+        >
+          <thead cwTableHeader class="sticky top-0 z-10 bg-surface-muted">
+            <tr cwTableRow>
+              <th cwTableHead class="w-auto min-w-60" i18n="@@spaces.timesheet.person-and-task">
+                Person and task
+              </th>
+              @for (column of columns(); track column.date) {
+                <th cwTableHead align="end" class="w-19" [class]="column.classes">
+                  {{ column.label }}
+                </th>
+              }
+              <th cwTableHead align="end" class="w-22" i18n="@@spaces.timesheet.total">Total</th>
+            </tr>
+          </thead>
+          @for (person of people(); track person.userId) {
+            <tbody cwTableBody data-testid="timesheet-person">
+              <tr cwTableRow>
+                <th scope="row" class="px-3 py-2 text-left font-medium">
+                  <span class="flex min-w-0 items-center gap-2">
+                    <cw-avatar [name]="person.name" size="xs" aria-hidden="true" />
+                    <span class="truncate" data-testid="timesheet-person-name">{{
+                      person.name
+                    }}</span>
+                  </span>
+                </th>
+                @for (cell of person.cells; track cell.date) {
+                  <td cwTableCell align="end">
+                    <span
+                      class="inline-block rounded-md px-1.5 py-1 font-medium tabular-nums"
+                      [class]="cell.classes"
+                      >{{ cell.text }}</span
+                    >
+                  </td>
+                }
+                <td cwTableCell align="end" class="font-semibold">{{ person.total }}</td>
+              </tr>
+              @for (task of person.tasks; track task.taskKey) {
+                <tr cwTableRow class="relative" data-testid="timesheet-task">
+                  <th scope="row" class="py-1.5 pr-3 pl-11 text-left font-normal">
+                    <button
+                      type="button"
+                      class="flex w-full min-w-0 items-center gap-2 text-left after:absolute after:inset-0 after:content-[''] focus-visible:outline-none focus-visible:after:ring-2 focus-visible:after:ring-ring focus-visible:after:ring-inset"
+                      [attr.aria-label]="task.openLabel"
+                      (click)="open(task)"
+                    >
+                      <cw-status-icon [status]="task.status" size="3.5" />
+                      <span class="min-w-0 truncate">{{ task.name }}</span>
+                      <span class="shrink-0 font-mono text-xs text-muted-foreground">{{
+                        task.taskKey
+                      }}</span>
+                    </button>
+                  </th>
+                  @for (cell of task.cells; track cell.date) {
+                    <td cwTableCell align="end">
+                      <span
+                        class="inline-block rounded-md px-1.5 py-0.5 text-xs text-muted-foreground tabular-nums"
+                        [class]="cell.classes"
+                        >{{ cell.text }}</span
+                      >
+                    </td>
+                  }
+                  <td cwTableCell align="end">{{ task.total }}</td>
+                </tr>
+              }
+            </tbody>
+          }
+          <tfoot cwTableFooter class="sticky bottom-0 z-10 bg-surface-muted">
+            <tr cwTableRow class="font-semibold" data-testid="timesheet-footer">
+              <th scope="row" class="px-3 py-2 text-left" i18n="@@spaces.timesheet.total">Total</th>
+              @for (cell of footer(); track cell.date) {
+                <td cwTableCell align="end">{{ cell.text }}</td>
+              }
+              <td cwTableCell align="end">{{ weekTotal() }}</td>
+            </tr>
+          </tfoot>
+        </table>
+      </cw-table-container>
+
+      <div class="grid shrink-0 grid-cols-1 gap-3 lg:grid-cols-[2fr_1fr]">
+        <section
+          class="flex min-w-0 flex-col gap-3 rounded-xl border border-border bg-card p-4"
+          [attr.aria-label]="perDayLabel"
+        >
+          <h3 class="text-sm font-semibold">{{ perDayLabel }}</h3>
+          <cw-chart
+            type="bar"
+            stacked
+            legend
+            x="day"
+            [data]="chartData()"
+            [series]="chartSeries()"
+            [maxSeries]="5"
+            [valueFormat]="formatMinutes"
+            [categoryFormat]="dayName"
+            [ariaLabel]="perDayLabel"
+          />
+        </section>
+        <section
+          class="flex min-w-0 flex-col gap-3 rounded-xl border border-border bg-card p-4"
+          [attr.aria-label]="breakdownLabel"
+          data-testid="timesheet-breakdown"
+        >
+          <h3 class="text-sm font-semibold">{{ breakdownLabel }}</h3>
+          <ul class="flex flex-col gap-3">
+            @for (share of shares(); track share.userId) {
+              <li class="flex flex-col gap-1.5">
+                <div class="flex items-center gap-2 text-sm">
+                  <span
+                    class="size-2.5 shrink-0 rounded-full"
+                    [class]="share.dot"
+                    aria-hidden="true"
+                  ></span>
+                  <span class="min-w-0 flex-1 truncate">{{ share.name }}</span>
+                  <span class="font-medium tabular-nums">{{ share.total }}</span>
+                  <span class="w-10 text-right text-xs text-muted-foreground tabular-nums">{{
+                    share.percent
+                  }}</span>
+                </div>
+                <cw-meter
+                  size="sm"
+                  zone="normal"
+                  [value]="share.minutes"
+                  [max]="shareTotal()"
+                  [ariaLabel]="share.name"
+                  [format]="shareFormat"
+                />
+              </li>
+            }
+          </ul>
+        </section>
+      </div>
+    }
+  } @else if (store.timesheet.error()) {
+    <cw-empty variant="outline" role="alert" class="py-14" data-testid="timesheet-failed">
+      <cw-empty-header>
+        <cw-empty-media tone="destructive">
+          <ng-icon name="phosphorWarningCircleBold" aria-hidden="true" />
+        </cw-empty-media>
+        <cw-empty-title i18n="@@spaces.timesheet.failed"
+          >The timesheet could not be loaded</cw-empty-title
+        >
+      </cw-empty-header>
+      <button cwButton type="button" variant="outline" size="sm" (click)="store.reload()">
+        {{ retryLabel }}
+      </button>
+    </cw-empty>
+  } @else {
+    <div
+      class="flex min-h-0 flex-col gap-4 overflow-hidden"
+      role="status"
+      aria-busy="true"
+      aria-label="Loading the timesheet"
+      i18n-aria-label="@@spaces.timesheet.loading"
+      data-testid="timesheet-loading"
+    >
+      <div class="grid grid-cols-2 gap-3 lg:grid-cols-4" aria-hidden="true">
+        @for (item of skeletonKpis; track item) {
+          <div class="flex flex-col gap-2 rounded-xl border border-border bg-card p-4">
+            <div cwSkeleton class="h-3 w-28"></div>
+            <div cwSkeleton class="h-7 w-20"></div>
+            <div cwSkeleton class="h-2.5 w-24"></div>
+          </div>
+        }
+      </div>
+      <div class="overflow-hidden rounded-xl border border-border bg-card" aria-hidden="true">
+        <div
+          class="grid h-9 grid-cols-[minmax(15rem,1fr)_repeat(7,4.75rem)_5.5rem] items-center border-b border-border bg-surface-muted px-3"
+        >
+          <div cwSkeleton class="h-2.5 w-20"></div>
+          @for (day of skeletonDays; track day) {
+            <div cwSkeleton class="h-2.5 w-10 justify-self-end"></div>
+          }
+          <div cwSkeleton class="h-2.5 w-10 justify-self-end"></div>
+        </div>
+        @for (row of skeletonRows; track row.index) {
+          <div
+            class="grid h-10 grid-cols-[minmax(15rem,1fr)_repeat(7,4.75rem)_5.5rem] items-center border-b border-border px-3 last:border-b-0"
+          >
+            <span class="flex items-center gap-2">
+              @if (row.lead) {
+                <div cwSkeleton class="size-6 rounded-full"></div>
+              }
+              <div cwSkeleton class="h-3" [class]="row.width"></div>
+            </span>
+            @for (on of row.cells; track $index) {
+              <span class="flex justify-end">
+                @if (on) {
+                  <div cwSkeleton class="h-3 w-9"></div>
+                }
+              </span>
+            }
+            <div cwSkeleton class="h-3 w-12 justify-self-end"></div>
+          </div>
+        }
+      </div>
+    </div>
+  }
+</section>
