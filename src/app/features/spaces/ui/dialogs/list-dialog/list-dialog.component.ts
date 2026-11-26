@@ -11,9 +11,17 @@ import {
   type Signal,
   signal,
   untracked,
+  viewChild,
   type WritableSignal,
 } from '@angular/core';
-import { type FieldTree, form, FormField, maxLength, required } from '@angular/forms/signals';
+import {
+  type FieldContext,
+  type FieldTree,
+  form,
+  FormField,
+  maxLength,
+  validate,
+} from '@angular/forms/signals';
 import { CwButton } from '@cadenway/ui/components/button';
 import {
   CwDatePicker,
@@ -103,7 +111,9 @@ export function addDays(iso: string, days: number): string {
  * (`App.dc.html`, `dlgList`): the name, the `Sprint` switch with its start and end dates (the
  * end on or after the start, with the length in days and weeks) and its goal, then the icon and
  * the color. Turning the switch on proposes today and 14 days, and the lightning when no icon was
- * chosen. The submit button stays disabled while the name is empty or the dates are invalid.
+ * chosen. The submit button stays enabled, as in the mockup: an invalid submit (a name of spaces
+ * only, a missing date, an end before the start) shows the error and focuses the first invalid
+ * field.
  * Presentational: it emits the trimmed draft; the host records it and closes.
  */
 @Component({
@@ -214,18 +224,49 @@ export class ListDialog {
    * Property listForm
    *
    * @description
-   * The validated fields: a name of 100 characters at most and a goal of 300.
+   * The validated fields: a name that is not empty once trimmed, of 100 characters at most, and a
+   * goal of 300.
    *
    * @type {FieldTree<ListFormModel>}
    * @readonly
    */
   protected readonly listForm: FieldTree<ListFormModel> = form(this.model, (path) => {
-    required(path.name, {
-      message: $localize`:@@spaces.list-dialog.name-required:Enter a name.`,
-    });
+    validate(path.name, (context: FieldContext<string>) =>
+      context.value().trim()
+        ? undefined
+        : {
+            kind: 'required',
+            message: $localize`:@@spaces.list-dialog.name-required:Enter a name.`,
+          },
+    );
     maxLength(path.name, 100);
     maxLength(path.goal, 300);
   });
+
+  /**
+   * Property startPicker
+   *
+   * @description
+   * The `Start` picker, focused by an invalid submit without a start.
+   *
+   * @type {Signal<CwDatePicker | undefined>}
+   * @readonly
+   */
+  private readonly startPicker: Signal<CwDatePicker | undefined> =
+    viewChild<CwDatePicker>('startPicker');
+
+  /**
+   * Property endPicker
+   *
+   * @description
+   * The `End` picker, focused by an invalid submit without an end or with an end before the
+   * start.
+   *
+   * @type {Signal<CwDatePicker | undefined>}
+   * @readonly
+   */
+  private readonly endPicker: Signal<CwDatePicker | undefined> =
+    viewChild<CwDatePicker>('endPicker');
 
   /**
    * Property sprint
@@ -489,15 +530,20 @@ export class ListDialog {
    * Method submit
    *
    * @description
-   * Emits the trimmed draft, or focuses the name when it is missing.
+   * Emits the trimmed draft. An invalid draft shows its errors and focuses the first invalid
+   * field: the name, then the start, then the end.
    *
    * @param {HTMLInputElement} nameField - The name field.
    */
   protected submit(nameField: HTMLInputElement): void {
-    if (this.pending() || this.datesInvalid()) return;
-    if (this.listForm.name().invalid() || !this.model().name.trim()) {
-      this.listForm.name().markAsTouched();
+    if (this.pending()) return;
+    this.listForm.name().markAsTouched();
+    if (this.listForm.name().invalid()) {
       nameField.focus();
+      return;
+    }
+    if (this.datesInvalid()) {
+      (this.start() ? this.endPicker() : this.startPicker())?.focus();
       return;
     }
     const start: string | null = this.start();

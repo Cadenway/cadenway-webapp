@@ -69,9 +69,11 @@
               >Start</span
             >
             <cw-date-picker
+              #startPicker
               size="sm"
               ariaLabel="Start date"
               i18n-ariaLabel="@@spaces.list-dialog.start-date"
+              [invalid]="!start()"
               [value]="startDate()"
               (valueChange)="pickStart($event)"
             />
@@ -81,6 +83,7 @@
               >End</span
             >
             <cw-date-picker
+              #endPicker
               size="sm"
               ariaLabel="End date"
               i18n-ariaLabel="@@spaces.list-dialog.end-date"
@@ -127,13 +130,7 @@
       <button cwButton cwDialogClose type="button" variant="outline">
         <ng-container i18n="@@spaces.cancel">Cancel</ng-container>
       </button>
-      <button
-        cwButton
-        type="submit"
-        [loading]="pending()"
-        [disabled]="!model().name.trim() || datesInvalid()"
-        data-testid="list-dialog-submit"
-      >
+      <button cwButton type="submit" [loading]="pending()" data-testid="list-dialog-submit">
         {{ submitLabel() }}
       </button>
     </cw-dialog-footer>

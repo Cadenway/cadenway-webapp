@@ -112,7 +112,7 @@ describe('ListDialog', () => {
     fixture.detectChanges();
     expect(document.body.textContent).toContain('Create a list');
     const submit: HTMLButtonElement = element('list-dialog-submit') as HTMLButtonElement;
-    expect(submit.disabled).toBe(true);
+    expect(submit.disabled).toBe(false);
 
     const name: HTMLInputElement = element('list-dialog-name') as HTMLInputElement;
     name.value = '  Roadmap ';
@@ -165,6 +165,31 @@ describe('ListDialog', () => {
 
     expect(document.body.textContent).toContain('Edit the sprint');
     expect(element('list-dialog-dates').textContent).toContain('The end must follow the start.');
-    expect((element('list-dialog-submit') as HTMLButtonElement).disabled).toBe(true);
+    expect((element('list-dialog-submit') as HTMLButtonElement).disabled).toBe(false);
+
+    element('list-dialog-submit').click();
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.drafts).toEqual([]);
+    const pickers: readonly Element[] = [
+      ...element('list-dialog').ownerDocument.querySelectorAll('cw-date-picker'),
+    ];
+    expect(document.activeElement?.closest('cw-date-picker')).toBe(pickers[1]);
+  });
+
+  it('shows the name error and focuses the name for a name of spaces only', () => {
+    fixture.componentInstance.open.set(true);
+    fixture.detectChanges();
+    const name: HTMLInputElement = element('list-dialog-name') as HTMLInputElement;
+    name.value = '   ';
+    name.dispatchEvent(new Event('input'));
+    fixture.detectChanges();
+
+    element('list-dialog-submit').click();
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.drafts).toEqual([]);
+    expect(document.body.textContent).toContain('Enter a name.');
+    expect(document.activeElement).toBe(name);
   });
 });
