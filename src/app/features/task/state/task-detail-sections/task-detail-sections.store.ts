@@ -13,10 +13,12 @@ import { CwToastService } from '@cadenway/ui/components/toast';
 
 import { hasProblemCode } from '@core/api';
 
+import { TaskDetailApi } from '../../data-access/services/task-detail-api/task-detail-api.service';
 import { TaskSectionsApi } from '../../data-access/services/task-sections-api/task-sections-api.service';
 import type { Person } from '../../models/person/person.interface';
 import type {
   TaskChecklistItem,
+  TaskDetailPatch,
   TaskDetailTask,
 } from '../../models/task-detail/task-detail.interface';
 import { mentionSpans } from '../../utils/task-detail-sections/task-detail-sections.util';
@@ -211,7 +213,11 @@ export interface TaskDetailSectionsStoreInstance {
    * @description
    * Saves the description `DESCRIPTION_SAVE_MS` after the last change, through
    * `TaskDetailStore.update` (pending value at once, `If-Match`, rolled back on refusal) with
-   * the spans of its `@` mentions (`descriptionMentions`); an empty text clears it.
+   * the spans of its `@` mentions (`descriptionMentions`); an empty text clears it. The draft
+   * belongs to the task it was typed in: when another task is open by the time it is saved (the
+   * address switched before the pause, or the detail closes on another task), it is written to
+   * its own task through `TaskDetailStore.write`, against that task's recorded version, and never
+   * to the task now shown.
    *
    * @param {string} markdown - The edited description.
    */
@@ -282,6 +288,7 @@ function createTaskDetailSectionsStore(): Type<TaskDetailSectionsStoreInstance> 
     withState(initialState),
     withProps(() => ({
       _api: inject(TaskSectionsApi),
+      _taskApi: inject(TaskDetailApi),
       _detail: inject(TaskDetailStore),
       _toasts: inject(CwToastService),
     })),
@@ -310,30 +317,58 @@ function createTaskDetailSectionsStore(): Type<TaskDetailSectionsStoreInstance> 
           description: $localize`:@@task.detail.failed-text:The server did not answer. Try again in a moment.`,
         });
       };
-      let draft: string | null = null;
+      let draft: {
+        readonly key: string;
+        readonly markdown: string;
+        readonly base: string;
+      } | null = null;
       let timer: ReturnType<typeof setTimeout> | null = null;
       let subtaskAttempt: {
         readonly parentKey: string;
         readonly name: string;
         readonly idempotencyKey: string;
       } | null = null;
+      const saveElsewhere: (key: string, patch: TaskDetailPatch) => Promise<void> = async (
+        key: string,
+        patch: TaskDetailPatch,
+      ): Promise<void> => {
+        try {
+          await store._detail.write(key, async (version: number): Promise<void> => {
+            store._detail.accept(await store._taskApi.update(key, version, patch));
+          });
+        } catch {
+          failed();
+        }
+      };
       const flush: () => void = (): void => {
         if (timer !== null) clearTimeout(timer);
         timer = null;
-        const markdown: string | null = draft;
+        const pending: typeof draft = draft;
         draft = null;
-        if (markdown === null) return;
-        const current: string = store._detail.confirmedTask()?.description ?? '';
-        if (markdown.trim() === current.trim()) return;
-        void store._detail.update(
+        if (pending === null) return;
+        const key: string = pending.key;
+        const markdown: string = pending.markdown;
+        const confirmed: TaskDetailTask | null = store._detail.confirmedTask();
+        const base: string = confirmed?.key === key ? (confirmed.description ?? '') : pending.base;
+        if (markdown.trim() === base.trim()) return;
+        const patch: TaskDetailPatch =
           markdown.trim() === ''
             ? { description: null }
-            : { description: markdown, descriptionMentions: mentionSpans(markdown) },
-        );
+            : { description: markdown, descriptionMentions: mentionSpans(markdown) };
+        if (store._detail.taskKey() === key) void store._detail.update(patch);
+        else void saveElsewhere(key, patch);
       };
       return {
         editDescription(markdown: string): void {
-          draft = markdown;
+          const confirmed: TaskDetailTask | null = store._detail.confirmedTask();
+          const key: string | null = store._detail.taskKey();
+          if (key === null) return;
+          if (draft !== null && draft.key !== key) flush();
+          draft = {
+            key,
+            markdown,
+            base: draft?.base ?? (confirmed?.key === key ? (confirmed.description ?? '') : ''),
+          };
           if (timer !== null) clearTimeout(timer);
           timer = setTimeout(flush, DESCRIPTION_SAVE_MS);
         },

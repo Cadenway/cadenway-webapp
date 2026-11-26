@@ -4,6 +4,7 @@ import { CwToastService } from '@cadenway/ui/components/toast';
 import { HttpErrorResponse } from '@angular/common/http';
 import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 
+import { TaskDetailApi } from '../../data-access/services/task-detail-api/task-detail-api.service';
 import { TaskSectionsApi } from '../../data-access/services/task-sections-api/task-sections-api.service';
 import type { TaskDetailTask } from '../../models/task-detail/task-detail.interface';
 import { TaskDetailStore } from '../task-detail/task-detail.store';
@@ -58,6 +59,7 @@ describe('TaskDetailSectionsStore', () => {
   let task: WritableSignal<TaskDetailTask>;
   let detail: Record<string, unknown>;
   let api: Record<string, Mock>;
+  let taskApi: { update: Mock };
   let toasts: { success: Mock; error: Mock };
   let store: TaskDetailSectionsStoreInstance;
 
@@ -87,11 +89,17 @@ describe('TaskDetailSectionsStore', () => {
       createSubtask: vi.fn(),
     };
     toasts = { success: vi.fn(), error: vi.fn() };
+    taskApi = {
+      update: vi.fn((key: string, version: number) =>
+        Promise.resolve({ ...TASK, key, id: key, version: version + 1, description: 'New' }),
+      ),
+    };
     TestBed.configureTestingModule({
       providers: [
         TaskDetailSectionsStore,
         { provide: TaskDetailStore, useValue: detail },
         { provide: TaskSectionsApi, useValue: api },
+        { provide: TaskDetailApi, useValue: taskApi },
         { provide: CwToastService, useValue: toasts },
       ],
     });
@@ -197,6 +205,37 @@ describe('TaskDetailSectionsStore', () => {
     expect(detail['update']).toHaveBeenCalledWith({
       description: 'Ask @[Hugo Dubois](u2) to review',
       descriptionMentions: [{ userId: 'u2', start: 4, end: 22 }],
+    });
+  });
+
+  it('saves a description typed before the task switched to its own task, not the new one', async () => {
+    vi.useFakeTimers();
+    store.editDescription('Typed in CAD-482');
+    (detail['taskKey'] as WritableSignal<string>).set('CAD-490');
+    task.set({ ...TASK, id: 'CAD-490', key: 'CAD-490', version: 9, description: 'Other' });
+
+    await vi.advanceTimersByTimeAsync(DESCRIPTION_SAVE_MS);
+
+    expect(detail['update']).not.toHaveBeenCalled();
+    expect(detail['write']).toHaveBeenCalledWith('CAD-482', expect.any(Function));
+    expect(taskApi.update).toHaveBeenCalledWith('CAD-482', 4, {
+      description: 'Typed in CAD-482',
+      descriptionMentions: [],
+    });
+    expect(detail['accept']).toHaveBeenCalledWith(expect.objectContaining({ key: 'CAD-482' }));
+  });
+
+  it('saves the waiting draft of the previous task on destroy after a switch', () => {
+    store.editDescription('Typed in CAD-482');
+    (detail['taskKey'] as WritableSignal<string>).set('CAD-490');
+    task.set({ ...TASK, id: 'CAD-490', key: 'CAD-490', version: 9, description: 'Other' });
+
+    TestBed.resetTestingModule();
+
+    expect(detail['update']).not.toHaveBeenCalled();
+    expect(taskApi.update).toHaveBeenCalledWith('CAD-482', 4, {
+      description: 'Typed in CAD-482',
+      descriptionMentions: [],
     });
   });
 
