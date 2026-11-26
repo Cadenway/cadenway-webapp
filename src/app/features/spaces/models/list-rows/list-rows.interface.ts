@@ -1,8 +1,9 @@
 import type { StatusKey } from '@cadenway/contracts';
 
-import type { TaskBulkOutcome, TaskBulkSelection, TaskSummary } from '@features/task';
+import type { TaskSummary } from '@features/task';
 
 import type { ListGroupQuery, ListTaskQuery } from '../list-view-config/list-view-config.interface';
+import type { ViewTaskOutcome } from '../view-task-write/view-task-write.interface';
 
 /**
  * Interface TaskGroupCount
@@ -377,72 +378,15 @@ export interface ListRowsSummary {
   // #endregion
 }
 
-/**
- * Interface ConfirmedTask
- *
- * @description
- * A task as the gateway last confirmed it when an action of the view was sent: the values its
- * `Undo` puts back and the version that action was sent with.
- */
-export interface ConfirmedTask extends TaskSummary {
-  // #region Properties
-  /**
-   * Property cancelNote
-   *
-   * @description
-   * The note of the task's cancellation when this view recorded it, null when there is none or
-   * it is not known (task summaries carry no note).
-   *
-   * @type {string | null}
-   * @readonly
-   */
-  readonly cancelNote: string | null;
-  // #endregion
-}
+export type { ConfirmedTask } from '../view-task-write/view-task-write.interface';
 
 /**
- * Interface ListActOutcome
+ * Type ListActOutcome
  *
  * @description
- * What an action of the view ended with, and each sent task as confirmed just before it was
- * sent. A task whose queued status change a newer one replaced is in no list: the newer change
- * reports it.
+ * What an action of the `List` view ended with (`ListRowsStore.act`): a write outcome of the
+ * shared task writes.
+ *
+ * @type {ViewTaskOutcome}
  */
-export interface ListActOutcome extends TaskBulkOutcome {
-  // #region Properties
-  /**
-   * Property before
-   *
-   * @description
-   * The sent tasks as confirmed before the action, by key.
-   *
-   * @type {Readonly<Partial<Record<string, ConfirmedTask>>>}
-   * @readonly
-   */
-  readonly before: Readonly<Partial<Record<string, ConfirmedTask>>>;
-
-  /**
-   * Property after
-   *
-   * @description
-   * The version each applied task stood at once the action was answered, by key: the version an
-   * `Undo` of this action expects the task to still be at.
-   *
-   * @type {Readonly<Partial<Record<string, number>>>}
-   * @readonly
-   */
-  readonly after: Readonly<Partial<Record<string, number>>>;
-
-  /**
-   * Property changed
-   *
-   * @description
-   * Tasks not sent because they changed since the version the action expected, each at its
-   * newest known version; empty for an action sent without expected versions.
-   *
-   * @type {readonly TaskBulkSelection[]}
-   * @readonly
-   */
-  readonly changed: readonly TaskBulkSelection[];
-  // #endregion
-}
+export type ListActOutcome = ViewTaskOutcome;

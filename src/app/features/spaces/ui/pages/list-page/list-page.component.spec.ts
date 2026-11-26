@@ -135,6 +135,7 @@ describe('ListPage', () => {
     can = vi.fn(() => false);
     TestBed.configureTestingModule({
       providers: [
+        { provide: RELEASED_VIEWS, useValue: { layouts: ['list'], dialogs: [] } },
         provideCadenwayIcons(),
         provideRouter(
           [{ path: ':org', children: SPACES_ROUTES }],
@@ -642,7 +643,6 @@ describe('ListPage', () => {
       ['gantt', 'gantt-view', ['view-group', 'view-filter']],
       ['workload', 'workload-view', ['view-group', 'view-filter']],
       ['sheet', 'sheet-view', ['view-group', 'view-filter']],
-      ['form', 'form-view', []],
       ['activity', 'activity-view', []],
       ['timesheet', 'timesheet-view', ['view-filter', 'view-search', 'view-create-task']],
     ];

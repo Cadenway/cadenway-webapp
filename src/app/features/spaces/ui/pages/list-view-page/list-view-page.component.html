@@ -79,7 +79,7 @@
           [class.pl-12]="row.depth === 2"
           [attr.data-task-row]="row.task.key"
           data-row-menu
-          [cwContextMenuTriggerFor]="rowMenu"
+          [cwContextMenuTriggerFor]="taskMenu.menu()"
           (opened)="menuRow.set(row)"
           (pointerdown)="$event.stopPropagation()"
         >
@@ -152,7 +152,7 @@
         <span
           class="flex -space-x-1"
           data-row-menu
-          [cwContextMenuTriggerFor]="rowMenu"
+          [cwContextMenuTriggerFor]="taskMenu.menu()"
           (opened)="menuRow.set(row)"
           (pointerdown)="$event.stopPropagation()"
         >
@@ -186,7 +186,7 @@
           [due]="row.task.due"
           [status]="row.status"
           data-row-menu
-          [cwContextMenuTriggerFor]="rowMenu"
+          [cwContextMenuTriggerFor]="taskMenu.menu()"
           (opened)="menuRow.set(row)"
           (pointerdown)="$event.stopPropagation()"
         />
@@ -204,7 +204,7 @@
           class="flex items-center gap-1.5 text-xs"
           [class.text-destructive]="row.task.priority === 'urgente'"
           data-row-menu
-          [cwContextMenuTriggerFor]="rowMenu"
+          [cwContextMenuTriggerFor]="taskMenu.menu()"
           (opened)="menuRow.set(row)"
           (pointerdown)="$event.stopPropagation()"
           ><cw-priority-icon [priority]="row.task.priority" size="3.5" />{{
@@ -224,7 +224,7 @@
         <cw-task-label-chips
           [labels]="row.task.labels"
           data-row-menu
-          [cwContextMenuTriggerFor]="rowMenu"
+          [cwContextMenuTriggerFor]="taskMenu.menu()"
           (opened)="menuRow.set(row)"
           (pointerdown)="$event.stopPropagation()"
         />
@@ -245,7 +245,7 @@
           data-row-actions
           [attr.aria-label]="actionsLabel(row)"
           data-row-menu
-          [cwContextMenuTriggerFor]="rowMenu"
+          [cwContextMenuTriggerFor]="taskMenu.menu()"
           (opened)="menuRow.set(row)"
           (pointerdown)="$event.stopPropagation()"
           (click)="open(row.task.key, row.task)"
@@ -314,131 +314,25 @@
   }
 </section>
 
-<cw-menu #rowMenu ariaLabel="Task actions" i18n-ariaLabel="@@spaces.rows.menu">
-  <cw-menu-label>{{ menuTitle() }}</cw-menu-label>
-  @if (menuTasks().length === 1) {
-    <button cwMenuItem type="button" (triggered)="open(menuTasks()[0].key, menuTasks()[0])">
-      <ng-icon name="phosphorArrowSquareOutBold" aria-hidden="true" />
-      <ng-container i18n="@@spaces.rows.open">Open</ng-container>
-      <cw-menu-shortcut i18n="@@spaces.rows.open-key">Enter</cw-menu-shortcut>
-    </button>
-    <cw-menu-separator />
-  }
-  <button cwMenuItem type="button" [cwMenuTriggerFor]="statusMenu">
-    <ng-icon name="phosphorCircleHalfBold" aria-hidden="true" />
-    <ng-container i18n="@@spaces.rows.status">Status</ng-container>
-  </button>
-  <button cwMenuItem type="button" [cwMenuTriggerFor]="priorityMenu">
-    <ng-icon name="phosphorCellSignalHighBold" aria-hidden="true" />
-    <ng-container i18n="@@spaces.rows.priority">Priority</ng-container>
-  </button>
-  <button
-    cwMenuItem
-    type="button"
-    [disabled]="people().length === 0"
-    [cwMenuTriggerFor]="peopleMenu"
-  >
-    <ng-icon name="phosphorUserPlusBold" aria-hidden="true" />
-    <ng-container i18n="@@spaces.bulk.assign">Assign</ng-container>
-  </button>
-  <button
-    cwMenuItem
-    type="button"
-    [disabled]="menuTargets().length === 0"
-    [cwMenuTriggerFor]="moveMenu"
-  >
-    <ng-icon name="phosphorArrowBendUpRightBold" aria-hidden="true" />
-    <ng-container i18n="@@spaces.rows.move">Move to</ng-container>
-  </button>
-  <cw-menu-separator />
-  <button cwMenuItem type="button" (triggered)="remind(menuTasks())">
-    <ng-icon name="phosphorAlarmBold" aria-hidden="true" />
-    {{ remindLabel() }}
-  </button>
-  <button cwMenuItem type="button" (triggered)="duplicate(menuTasks())">
-    <ng-icon name="phosphorCopyBold" aria-hidden="true" />
-    <ng-container i18n="@@spaces.rows.duplicate">Duplicate</ng-container>
-  </button>
-  <button cwMenuItem type="button" (triggered)="copyLinks(menuTasks())">
-    <ng-icon name="phosphorLinkSimpleBold" aria-hidden="true" />
-    <ng-container i18n="@@spaces.rows.copy-link">Copy the link</ng-container>
-  </button>
-  <button cwMenuItem type="button" (triggered)="copyKeys(menuTasks())">
-    <ng-icon name="phosphorHashBold" aria-hidden="true" />
-    <ng-container i18n="@@spaces.rows.copy-key">Copy the identifier</ng-container>
-  </button>
-  <cw-menu-separator />
-  <button cwMenuItem type="button" variant="destructive" (triggered)="askDelete(menuTasks(), true)">
-    <ng-icon name="phosphorTrashBold" aria-hidden="true" />
-    {{ deleteMenuLabel() }}
-  </button>
-</cw-menu>
-
-<cw-menu #statusMenu ariaLabel="Status" i18n-ariaLabel="@@spaces.rows.status">
-  @for (group of menuStatusGroups(); track group.category) {
-    <cw-menu-group>
-      @if (group.heading) {
-        <cw-menu-label>{{ group.heading }}</cw-menu-label>
-      }
-      @for (entry of group.entries; track entry.option.key) {
-        <button
-          cwMenuItem
-          type="button"
-          [selected]="entry.option.key === menuStatus()"
-          (triggered)="setStatus(menuTasks(), entry.option.key)"
-        >
-          <cw-status-icon [status]="entry.option.key" [milestone]="menuMilestone()" size="4" />
-          <span class="flex min-w-0 flex-col leading-tight">
-            <span>{{ entry.option.label }}</span>
-            <span class="text-xs text-muted-foreground">{{ entry.hint }}</span>
-          </span>
-        </button>
-      }
-    </cw-menu-group>
-  }
-</cw-menu>
-
-<cw-menu #priorityMenu ariaLabel="Priority" i18n-ariaLabel="@@spaces.rows.priority">
-  @for (priority of priorities; track priority) {
-    <button
-      cwMenuItem
-      type="button"
-      [selected]="priority === menuPriority()"
-      (triggered)="setPriority(menuTasks(), priority)"
-    >
-      <cw-priority-icon [priority]="priority" size="4" />
-      <span [class.text-destructive]="priority === 'urgente'">{{ priorityLabel(priority) }}</span>
-    </button>
-  }
-</cw-menu>
-
-<cw-menu #peopleMenu ariaLabel="Assign" i18n-ariaLabel="@@spaces.bulk.assign">
-  @for (person of people(); track person.id) {
-    <button
-      cwMenuItemCheckbox
-      type="button"
-      [checked]="assignedToAll(person.id)"
-      (checkedChange)="toggleAssignee(menuTasks(), person.id)"
-    >
-      <span
-        class="flex size-5 shrink-0 items-center justify-center rounded-full bg-secondary text-[9px] leading-none font-semibold text-secondary-foreground"
-        aria-hidden="true"
-        >{{ person.initials }}</span
-      >
-      <span class="truncate">{{ personLabel(person) }}</span>
-    </button>
-  }
-</cw-menu>
-
-<cw-menu #moveMenu ariaLabel="Move to" i18n-ariaLabel="@@spaces.rows.move">
-  @for (target of menuTargets(); track target.listId) {
-    <button cwMenuItem type="button" (triggered)="moveTo(menuTasks(), target.listId)">
-      <ng-icon [name]="target.icon" [class]="target.tone" aria-hidden="true" />
-      <span class="truncate">{{ target.name }}</span>
-      <cw-menu-shortcut>{{ target.spaceName }}</cw-menu-shortcut>
-    </button>
-  }
-</cw-menu>
+<cw-task-menu
+  #taskMenu
+  [tasks]="menuTasks()"
+  [status]="menuStatus()"
+  [statuses]="writes.statusOptions()"
+  [people]="writes.people()"
+  [userId]="writes.userId()"
+  [lists]="writes.targets()"
+  (openRequested)="open($event.key, $event)"
+  (statusPicked)="writes.setStatus(menuTasks(), $event, menuMilestone())"
+  (priorityPicked)="writes.setPriority(menuTasks(), $event)"
+  (assigneeToggled)="writes.toggleAssignee(menuTasks(), $event)"
+  (moved)="writes.moveTo(menuTasks(), $event)"
+  (remindRequested)="writes.remind(menuTasks())"
+  (duplicateRequested)="writes.duplicate(menuTasks())"
+  (copyLinkRequested)="writes.copyLinks(menuTasks())"
+  (copyKeyRequested)="writes.copyKeys(menuTasks())"
+  (deleteRequested)="writes.askDelete(menuTasks(), true)"
+/>
 
 <cw-menu #listMenu [ariaLabel]="list()?.name ?? ''">
   <cw-menu-label>{{ list()?.name }}</cw-menu-label>
@@ -516,21 +410,21 @@
 />
 
 <cw-task-cancel-dialog
-  [taskKeys]="bulkCancelKeys()"
-  (confirmed)="confirmBulkCancel($event)"
-  (kept)="bulkCancelTasks.set(null)"
+  [taskKeys]="writes.cancelKeys()"
+  (confirmed)="writes.confirmCancel($event)"
+  (kept)="writes.keepCancel()"
 />
 
 <div class="pointer-events-none absolute inset-x-0 bottom-4 z-20 flex justify-center px-4">
   <cw-bulk-bar
     [count]="selectedTasks().length"
     [people]="bulkPeople()"
-    [targets]="targets()"
-    [pending]="pending()"
+    [targets]="writes.targets()"
+    [pending]="writes.deleting()"
     (doneMarked)="markDone()"
-    (assigned)="assignSelection($event)"
+    (assigned)="writes.toggleAssignee(selectedTasks(), $event, true)"
     (moved)="moveSelection($event)"
-    (deleted)="askDelete(selectedTasks(), false)"
+    (deleted)="writes.askDelete(selectedTasks(), false)"
     (cleared)="clearSelection()"
   />
 </div>
@@ -538,15 +432,16 @@
 <cw-alert-dialog
   variant="destructive"
   size="sm"
-  [(open)]="confirmDelete"
-  [items]="deleteItems()"
-  [pending]="pending()"
-  (confirm)="trash()"
+  [open]="writes.deleteOpen()"
+  (openChange)="writes.setDeleteOpen($event)"
+  [items]="writes.deleteItems()"
+  [pending]="writes.deleting()"
+  (confirm)="writes.trash()"
 >
-  <h2 cwAlertDialogTitle>{{ deleteTitle() }}</h2>
-  <p cwAlertDialogDescription>{{ deleteText() }}</p>
+  <h2 cwAlertDialogTitle>{{ writes.deleteTitle() }}</h2>
+  <p cwAlertDialogDescription>{{ writes.deleteText() }}</p>
   <button cwButton cwAlertDialogCancel variant="outline" i18n="@@spaces.cancel">Cancel</button>
-  <button cwButton cwAlertDialogAction variant="destructive" [loading]="pending()">
-    {{ deleteAction() }}
+  <button cwButton cwAlertDialogAction variant="destructive" [loading]="writes.deleting()">
+    {{ writes.deleteAction() }}
   </button>
 </cw-alert-dialog>
