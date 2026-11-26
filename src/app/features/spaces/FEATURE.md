@@ -148,13 +148,27 @@ context menu is `cw-task-menu`. The total column shows the hours, the note, the 
   the next read; a task shown cancelled, moved or deleted leaves the grid.
 - Reassignment: a chip is a CDK drag (`cdkDrag`, at once with a mouse, after 300 ms on a touch
   screen). Dropped on another row (found under the pointer by the grid's `data-cw-row`), it
-  calls `WorkloadViewStore.reassign`: `assign` the target (when not assigned already), then
-  `unassign` the source, through `ListTasksStore.act`, one after the other; the task moves at
-  once. A refused or unanswered assignment sends nothing more; a refused removal leaves both
-  people, as the grid then shows. The toast `CAD-482 reassigned` / `From X to Y.` offers `Undo`
-  (assign the source back, then remove the target, from the version the reassignment left);
-  `Unassigned` as the target only removes the source. Leaving the view dismisses the `Undo`
-  toasts. From the keyboard, the chip's menu (`Assign`) reassigns.
+  calls `WorkloadViewStore.reassign`, which records the assignees the task is meant to have (the
+  target joins unless it is `Unassigned`, the source leaves), over those of the drags still
+  running, and shows them at once. One worker per task then sends one write at a time through
+  `ListTasksStore.act`, each computed from the assignees as shown when its turn comes:
+  assignments first, then removals, until the shown assignees are the meant ones. A drag made
+  while the worker runs only changes what is meant, so a task dragged from A to B and back to A
+  before the first write answers is assigned to B, then B is removed: A is never unassigned.
+  Once settled:
+  - `CAD-482 reassigned` / `From X to Y.` (the latest drag's rows) offers `Undo`, which brings
+    back the assignees of before through the same worker, from the version the reassignment
+    left (a task changed since is skipped with `CAD-482 changed since`); a task that ends where
+    it started shows no toast;
+  - a refused or unanswered first write sends nothing more (`The task could not be reassigned`,
+    or the unknown outcome warning, and the tasks are read again);
+  - a refusal after an applied write (the removal, typically) warns
+    `CAD-482 was assigned to Y but stays assigned to X.` with an `Undo` of what was applied
+    (removing the target at the version it left).
+
+  Leaving the view dismisses the `Undo` toasts. From the keyboard, the chip's menu (`Assign`)
+  reassigns.
+
 - `N` creates a task in the list while the view lives. Without any task matching the view, the
   mockup's filter text shows under the grid.
 - Dependencies added: `ListsService.queryGetListWorkload`, `TaskTimeService.getListTimesheet`,
@@ -175,13 +189,13 @@ context menu is `cw-task-menu`. The total column shows the hours, the note, the 
   - The capacity is fixed (no per-person capacity in the contract).
 - Copy not taken word for word from the mockup:
 
-  | Unit                                                                                | Reason                                                  |
-  | ----------------------------------------------------------------------------------- | ------------------------------------------------------- |
-  | `spaces.workload.reassign-failed`, `spaces.workload.reassign-unknown`               | The mockup draws no refused or unanswered reassignment. |
-  | `spaces.workload.reload-failed`, `spaces.workload.spent-failed`                     | The mockup draws no failed read.                        |
-  | `spaces.workload.former-member`                                                     | An assignee no longer in the directory.                 |
-  | `spaces.workload.hours-minutes`, `spaces.workload.minutes`, `spaces.workload.hours` | The mockup's `fmtMin` and `fmtH` formats as units.      |
-  | `spaces.workload.cell*`, `spaces.workload.of-capacity`, `spaces.workload.tasks-*`   | The mockup's cell label, split into composable units.   |
+  | Unit                                                                                                       | Reason                                                  |
+  | ---------------------------------------------------------------------------------------------------------- | ------------------------------------------------------- |
+  | `spaces.workload.reassign-failed`, `spaces.workload.reassign-unknown`, `spaces.workload.reassigned-partly` | The mockup draws no refused or unanswered reassignment. |
+  | `spaces.workload.reload-failed`, `spaces.workload.spent-failed`                                            | The mockup draws no failed read.                        |
+  | `spaces.workload.former-member`                                                                            | An assignee no longer in the directory.                 |
+  | `spaces.workload.hours-minutes`, `spaces.workload.minutes`, `spaces.workload.hours`                        | The mockup's `fmtMin` and `fmtH` formats as units.      |
+  | `spaces.workload.cell*`, `spaces.workload.of-capacity`, `spaces.workload.tasks-*`                          | The mockup's cell label, split into composable units.   |
 
 ## Activity view
 

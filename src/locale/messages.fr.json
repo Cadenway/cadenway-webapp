@@ -1322,6 +1322,7 @@
     "spaces.workload.reassign-failed": "La tâche n’a pas pu être réassignée",
     "spaces.workload.reassign-unknown": "Le résultat de la réassignation est inconnu. La charge de travail est actualisée.",
     "spaces.workload.reassigned": "{$key} réassignée",
+    "spaces.workload.reassigned-partly": "{$key} a été assignée à {$to} mais reste assignée à {$from}.",
     "spaces.workload.reassigned-text": "De {$from} à {$to}.",
     "spaces.workload.region": "Charge de travail",
     "spaces.workload.reload-failed": "La charge de travail n’a pas pu être actualisée.",

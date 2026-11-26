@@ -704,6 +704,7 @@
     "spaces.task-writes.field-failed": "The task could not be changed",
     "spaces.workload.reassign-unknown": "The outcome of the reassignment is unknown. The workload is being refreshed.",
     "spaces.workload.reassign-failed": "The task could not be reassigned",
+    "spaces.workload.reassigned-partly": "{$key} was assigned to {$to} but stays assigned to {$from}.",
     "spaces.workload.reassigned": "{$key} reassigned",
     "spaces.workload.reassigned-text": "From {$from} to {$to}.",
     "spaces.bulk.count": "{VAR_PLURAL, plural, =1 {1 selected} other {{INTERPOLATION} selected}}",

@@ -133,35 +133,34 @@ interface SpentParams {
 }
 
 /**
- * Interface WorkloadMove
+ * Interface WorkloadDrag
  *
  * @description
- * A reassignment of the view in flight: the person a task leaves and the one it joins (null for
- * the unassigned bucket), shown at once while its writes run one after the other.
+ * What the toasts of a task's reassignment name: the rows of its latest drag.
  */
-interface WorkloadMove {
+interface WorkloadDrag {
   // #region Properties
   /**
-   * Property from
+   * Property fromName
    *
    * @description
-   * The person the task leaves.
+   * Name of the row the task left.
    *
-   * @type {string | null}
+   * @type {string}
    * @readonly
    */
-  readonly from: string | null;
+  readonly fromName: string;
 
   /**
-   * Property to
+   * Property toName
    *
    * @description
-   * The person the task joins.
+   * Name of the row the task joined.
    *
-   * @type {string | null}
+   * @type {string}
    * @readonly
    */
-  readonly to: string | null;
+  readonly toName: string;
   // #endregion
 }
 
@@ -229,15 +228,16 @@ interface WorkloadViewState {
   readonly _snapshot: WorkloadSnapshot | null;
 
   /**
-   * Property _moves
+   * Property _intents
    *
    * @description
-   * Reassignments in flight, by task key.
+   * The assignees each task is being reassigned to, by task key (empty for nobody), while its
+   * writes run: the grid files the task under them at once.
    *
-   * @type {Readonly<Record<string, WorkloadMove>>}
+   * @type {Readonly<Partial<Record<string, readonly string[]>>>}
    * @readonly
    */
-  readonly _moves: Readonly<Record<string, WorkloadMove>>;
+  readonly _intents: Readonly<Partial<Record<string, readonly string[]>>>;
   // #endregion
 }
 
@@ -257,28 +257,63 @@ function initialStateOf(today: string): WorkloadViewState {
     weekStart: mondayOf(today),
     _scope: null,
     _snapshot: null,
-    _moves: {},
+    _intents: {},
   };
 }
 
 /**
- * Function movedAssignees
+ * Function draggedAssignees
  *
  * @description
- * The assignees of a task once a reassignment in flight applies: `to` joins, `from` leaves.
+ * The assignees a task is meant to have once a chip is dropped: `to` joins (unless null, the
+ * unassigned row), `from` leaves.
  *
- * @param {readonly string[]} assignees - The assignees as shown.
- * @param {WorkloadMove | undefined} move - The reassignment, if any.
- * @returns {readonly string[]} The assignees the grid files the task under.
+ * @param {readonly string[]} assignees - The assignees meant so far.
+ * @param {string | null} from - The person the task leaves.
+ * @param {string | null} to - The person the task joins.
+ * @returns {readonly string[]} The assignees meant now.
  */
-function movedAssignees(
+function draggedAssignees(
   assignees: readonly string[],
-  move: WorkloadMove | undefined,
+  from: string | null,
+  to: string | null,
 ): readonly string[] {
-  if (!move) return assignees;
-  const joined: readonly string[] =
-    move.to === null ? assignees : [...new Set([...assignees, move.to])];
-  return joined.filter((id: string): boolean => id !== move.from);
+  const joined: readonly string[] = to === null ? assignees : [...new Set([...assignees, to])];
+  return joined.filter((id: string): boolean => id !== from);
+}
+
+/**
+ * Function sameAssignees
+ *
+ * @description
+ * Whether two lists of assignees hold the same people, in any order.
+ *
+ * @param {readonly string[]} a - The first.
+ * @param {readonly string[]} b - The second.
+ * @returns {boolean} Whether they match.
+ */
+function sameAssignees(a: readonly string[], b: readonly string[]): boolean {
+  const second: ReadonlySet<string> = new Set<string>(b);
+  return new Set<string>(a).size === second.size && a.every((id: string) => second.has(id));
+}
+
+/**
+ * Function nextStep
+ *
+ * @description
+ * The next write that brings a task's assignees towards the meant ones: an assignment first, so
+ * a refusal never leaves the task with fewer people than meant, then a removal; null once they
+ * match.
+ *
+ * @param {readonly string[]} current - The assignees as shown.
+ * @param {readonly string[]} meant - The assignees meant.
+ * @returns {TaskBulkAction | null} The write.
+ */
+function nextStep(current: readonly string[], meant: readonly string[]): TaskBulkAction | null {
+  const missing: string | undefined = meant.find((id: string) => !current.includes(id));
+  if (missing !== undefined) return { type: 'assign', userId: missing };
+  const extra: string | undefined = current.find((id: string) => !meant.includes(id));
+  return extra === undefined ? null : { type: 'unassign', userId: extra };
 }
 
 /**
@@ -429,15 +464,21 @@ export interface WorkloadViewStoreInstance {
    * Method reassign
    *
    * @description
-   * A chip dropped on another row: assigns `to` (when it is not assigned already), then removes
-   * `from`, through the task reader's writes (`ListTasksStore.act`), shown at once. The toast
-   * `CAD-482 reassigned` / `From X to Y.` offers `Undo`, which assigns `from` back then removes
-   * `to`, bound to the version the reassignment left the task at. A refused or unanswered
-   * assignment sends nothing more; a refused removal leaves the task with both people, as the
-   * grid then shows. The promise never rejects.
+   * A chip dropped on another row: the task is meant to have `to` (unless the unassigned row)
+   * and no longer `from`, applied to the assignees meant by the drags still running, and shown at
+   * once. One worker per task brings the assignees to the meant ones through the task reader's
+   * writes (`ListTasksStore.act`), one write at a time, each computed from the assignees as
+   * shown when its turn comes: assignments first, then removals. A drag made meanwhile changes
+   * what is meant, so a task dragged back before the first write answers is never left without
+   * the person it came back to. Once settled, the toast `CAD-482 reassigned` / `From X to Y.`
+   * (the latest drag's rows) offers `Undo`, which brings back the assignees of before, from the
+   * version the reassignment left; a task brought back to where it started shows no toast. A
+   * refused or unanswered first write sends nothing more; a refusal after an applied write
+   * warns `CAD-482 was assigned to Y but stays assigned to X.` with an `Undo` of what was
+   * applied. The promise never rejects.
    *
    * @param {WorkloadReassignment} reassignment - The task and the two rows.
-   * @returns {Promise<void>} Resolves once reported.
+   * @returns {Promise<void>} Resolves once the task's worker has settled and reported.
    */
   reassign(reassignment: WorkloadReassignment): Promise<void>;
   // #endregion
@@ -542,7 +583,7 @@ function createWorkloadViewStore(): Type<WorkloadViewStoreInstance> {
           const snapshot: WorkloadSnapshot | null = store._snapshot();
           if (!snapshot) return [];
           const items: ReadonlyMap<string, ListTaskItem> = itemsByKey();
-          const moves: Readonly<Record<string, WorkloadMove>> = store._moves();
+          const intents: Readonly<Partial<Record<string, readonly string[]>>> = store._intents();
           return workloadLoads(
             snapshot,
             (taskKey: string): ShownWorkloadTask | null | undefined => {
@@ -552,7 +593,7 @@ function createWorkloadViewStore(): Type<WorkloadViewStoreInstance> {
                 return {
                   task: item.task,
                   status: item.status,
-                  assigneeIds: movedAssignees(item.task.assigneeIds, moves[taskKey]),
+                  assigneeIds: intents[taskKey] ?? item.task.assigneeIds,
                 };
               }
               return store._tasks.taskOf(taskKey) ? null : undefined;
@@ -576,97 +617,121 @@ function createWorkloadViewStore(): Type<WorkloadViewStoreInstance> {
         store._tasks.items().find((item: ListTaskItem): boolean => item.task.key === key)?.task ??
         store._tasks.taskOf(key);
 
-      const setMove: (key: string, move: WorkloadMove | null) => void = (
+      const drags: Map<string, WorkloadDrag> = new Map<string, WorkloadDrag>();
+      const workers: Map<string, Promise<void>> = new Map<string, Promise<void>>();
+
+      const setIntent: (key: string, meant: readonly string[] | null) => void = (
         key: string,
-        move: WorkloadMove | null,
+        meant: readonly string[] | null,
       ): void => {
         if (store._destroyRef.destroyed) return;
-        const others: Record<string, WorkloadMove> = Object.fromEntries(
-          Object.entries(store._moves()).filter(
-            ([taskKey]: [string, WorkloadMove]) => taskKey !== key,
+        const others: Partial<Record<string, readonly string[]>> = Object.fromEntries(
+          Object.entries(store._intents()).filter(
+            ([taskKey]: [string, readonly string[] | undefined]) => taskKey !== key,
           ),
         );
-        patchState(store, { _moves: move ? { ...others, [key]: move } : others });
+        patchState(store, { _intents: meant ? { ...others, [key]: meant } : others });
       };
 
-      const reportFailure: (outcome: ViewTaskOutcome) => void = (
-        outcome: ViewTaskOutcome,
-      ): void => {
-        if (outcome.unknown.length > 0 || outcome.notSent.length > 0) {
+      const keepToast: (id: string) => void = (id: string): void => {
+        store._undoToasts.add(id);
+      };
+
+      const work: (
+        key: string,
+        expected: Readonly<Partial<Record<string, number>>> | null,
+      ) => Promise<void> = async (
+        key: string,
+        expected: Readonly<Partial<Record<string, number>>> | null,
+      ): Promise<void> => {
+        const organizationId: string = store._workspace.organization().id;
+        const current: () => boolean = (): boolean =>
+          !store._destroyRef.destroyed && store._workspace.organization().id === organizationId;
+        const start: readonly string[] = [...(shownTask(key)?.assigneeIds ?? [])];
+        let versions: Readonly<Partial<Record<string, number>>> | undefined = expected ?? undefined;
+        let last: ViewTaskOutcome | null = null;
+        let stopped: 'refused' | 'unknown' | 'changed' | null = null;
+        while (current()) {
+          const meant: readonly string[] | undefined = store._intents()[key];
+          const task: TaskSummary | undefined = shownTask(key);
+          const step: TaskBulkAction | null =
+            meant && task ? nextStep(task.assigneeIds, meant) : null;
+          if (!task || !step) break;
+          const outcome: ViewTaskOutcome = await store._tasks.act([task], step, versions);
+          if (outcome.changed.length > 0) {
+            stopped = 'changed';
+            break;
+          }
+          if (outcome.done.length === 0) {
+            stopped =
+              outcome.unknown.length > 0 || outcome.notSent.length > 0 ? 'unknown' : 'refused';
+            break;
+          }
+          last = outcome;
+          if (versions) versions = outcome.after;
+        }
+        setIntent(key, null);
+        if (!current()) return;
+        if (last || stopped === 'unknown') store._page.refreshCounts();
+        const { fromName, toName }: WorkloadDrag = drags.get(key) ?? { fromName: '', toName: '' };
+        if (stopped === 'changed') {
+          store._toasts.warning(undoConflictTitle([key]), { description: undoConflictText(1) });
+          return;
+        }
+        if (stopped === 'unknown') {
           store._toasts.warning(
             $localize`:@@spaces.workload.reassign-unknown:The outcome of the reassignment is unknown. The workload is being refreshed.`,
           );
           return;
         }
-        store._toasts.error(
-          $localize`:@@spaces.workload.reassign-failed:The task could not be reassigned`,
-        );
-      };
-
-      const runSteps: (
-        key: string,
-        steps: readonly TaskBulkAction[],
-        expected?: Readonly<Partial<Record<string, number>>>,
-      ) => Promise<{ applied: readonly TaskBulkAction[]; last: ViewTaskOutcome | null }> = async (
-        key: string,
-        steps: readonly TaskBulkAction[],
-        expected?: Readonly<Partial<Record<string, number>>>,
-      ): Promise<{ applied: readonly TaskBulkAction[]; last: ViewTaskOutcome | null }> => {
-        const applied: TaskBulkAction[] = [];
-        let last: ViewTaskOutcome | null = null;
-        let versions: Readonly<Partial<Record<string, number>>> | undefined = expected;
-        for (const action of steps) {
-          const task: TaskSummary | undefined = shownTask(key);
-          if (!task) break;
-          const outcome: ViewTaskOutcome = await store._tasks.act([task], action, versions);
-          if (outcome.changed.length > 0) {
-            store._toasts.warning(undoConflictTitle([key]), {
-              description: undoConflictText(1),
-            });
-            break;
+        if (!last) {
+          if (stopped === 'refused') {
+            store._toasts.error(
+              $localize`:@@spaces.workload.reassign-failed:The task could not be reassigned`,
+            );
           }
-          if (outcome.done.length === 0) {
-            reportFailure(outcome);
-            break;
-          }
-          applied.push(action);
-          last = outcome;
-          if (versions) versions = outcome.after;
+          return;
         }
-        return { applied, last };
-      };
-
-      const undo: (
-        key: string,
-        move: WorkloadMove,
-        applied: readonly TaskBulkAction[],
-        after: Readonly<Partial<Record<string, number>>>,
-      ) => Promise<void> = async (
-        key: string,
-        move: WorkloadMove,
-        applied: readonly TaskBulkAction[],
-        after: Readonly<Partial<Record<string, number>>>,
-      ): Promise<void> => {
-        const reverse: readonly TaskBulkAction[] = [...applied]
-          .reverse()
-          .flatMap((action: TaskBulkAction): TaskBulkAction[] =>
-            action.type === 'assign'
-              ? [{ type: 'unassign', userId: action.userId }]
-              : action.type === 'unassign'
-                ? [{ type: 'assign', userId: action.userId }]
-                : [],
+        if (sameAssignees(shownTask(key)?.assigneeIds ?? [], start)) return;
+        const after: Readonly<Partial<Record<string, number>>> = last.after;
+        const restore: () => void = (): void => {
+          void drive(key, start, after);
+        };
+        if (stopped === 'refused') {
+          keepToast(
+            store._toasts.warning(
+              $localize`:@@spaces.workload.reassigned-partly:${key}:key: was assigned to ${toName}:to: but stays assigned to ${fromName}:from:.`,
+              { undo: restore },
+            ),
           );
-        const organizationId: string = store._workspace.organization().id;
-        setMove(key, { from: move.to, to: move.from });
-        const { applied: undone }: { applied: readonly TaskBulkAction[] } = await runSteps(
-          key,
-          reverse,
-          after,
-        );
-        setMove(key, null);
-        if (undone.length > 0 && store._workspace.organization().id === organizationId) {
-          if (!store._destroyRef.destroyed) store._page.refreshCounts();
+          return;
         }
+        if (expected) return;
+        keepToast(
+          store._toasts.show($localize`:@@spaces.workload.reassigned:${key}:key: reassigned`, {
+            description: $localize`:@@spaces.workload.reassigned-text:From ${fromName}:from: to ${toName}:to:.`,
+            undo: restore,
+          }),
+        );
+      };
+
+      const drive: (
+        key: string,
+        meant: readonly string[],
+        expected: Readonly<Partial<Record<string, number>>> | null,
+      ) => Promise<void> = (
+        key: string,
+        meant: readonly string[],
+        expected: Readonly<Partial<Record<string, number>>> | null,
+      ): Promise<void> => {
+        setIntent(key, meant);
+        const running: Promise<void> | undefined = workers.get(key);
+        if (running) return running;
+        const worker: Promise<void> = work(key, expected).finally((): void => {
+          workers.delete(key);
+        });
+        workers.set(key, worker);
+        return worker;
       };
 
       return {
@@ -683,51 +748,16 @@ function createWorkloadViewStore(): Type<WorkloadViewStoreInstance> {
           patchState(store, { weekStart: mondayOf(store.today()) });
         },
         reload,
-        async reassign(reassignment: WorkloadReassignment): Promise<void> {
+        reassign(reassignment: WorkloadReassignment): Promise<void> {
           const { from, to, fromName, toName }: WorkloadReassignment = reassignment;
           const key: string = reassignment.task.key;
-          if (from === to) return;
-          const shown: TaskSummary = shownTask(key) ?? reassignment.task;
-          const steps: TaskBulkAction[] = [];
-          if (to !== null && !shown.assigneeIds.includes(to)) {
-            steps.push({ type: 'assign', userId: to });
-          }
-          if (from !== null && shown.assigneeIds.includes(from)) {
-            steps.push({ type: 'unassign', userId: from });
-          }
-          if (steps.length === 0) return;
-          const organizationId: string = store._workspace.organization().id;
-          const move: WorkloadMove = { from, to };
-          setMove(key, move);
-          const {
-            applied,
-            last,
-          }: { applied: readonly TaskBulkAction[]; last: ViewTaskOutcome | null } = await runSteps(
-            key,
-            steps,
-          );
-          setMove(key, null);
-          if (
-            applied.length === 0 ||
-            !last ||
-            store._destroyRef.destroyed ||
-            store._workspace.organization().id !== organizationId
-          ) {
-            return;
-          }
-          store._page.refreshCounts();
-          if (applied.length < steps.length) return;
-          const after: Readonly<Partial<Record<string, number>>> = last.after;
-          const id: string = store._toasts.show(
-            $localize`:@@spaces.workload.reassigned:${key}:key: reassigned`,
-            {
-              description: $localize`:@@spaces.workload.reassigned-text:From ${fromName}:from: to ${toName}:to:.`,
-              undo: (): void => {
-                void undo(key, move, applied, after);
-              },
-            },
-          );
-          store._undoToasts.add(id);
+          if (from === to) return Promise.resolve();
+          const meant: readonly string[] =
+            store._intents()[key] ?? (shownTask(key) ?? reassignment.task).assigneeIds;
+          const next: readonly string[] = draggedAssignees(meant, from, to);
+          if (sameAssignees(next, meant)) return Promise.resolve();
+          drags.set(key, { fromName, toName });
+          return drive(key, next, null);
         },
         _follow: signalMethod<WorkloadParams | undefined>(
           (params: WorkloadParams | undefined): void => {
@@ -735,7 +765,7 @@ function createWorkloadViewStore(): Type<WorkloadViewStoreInstance> {
               ? `${params.organizationId}\u0000${params.listId}`
               : null;
             if (scope === null || scope === store._scope()) return;
-            patchState(store, { _scope: scope, _snapshot: null, _moves: {} });
+            patchState(store, { _scope: scope, _snapshot: null, _intents: {} });
           },
         ),
         _apply: signalMethod<WorkloadSnapshot | undefined>(

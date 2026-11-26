@@ -12,6 +12,7 @@ import type { ViewTaskOutcome } from '../../models/view-task-write/view-task-wri
 import type {
   WorkloadEntry,
   WorkloadLoad,
+  WorkloadReassignment,
   WorkloadSnapshot,
 } from '../../models/workload/workload.interface';
 import { addDays } from '../../utils/workload/workload.util';
@@ -307,36 +308,87 @@ describe('WorkloadViewStore', () => {
     expect(rowOf(store, 'u-camille')).toEqual([]);
   });
 
+  /**
+   * Function writer
+   *
+   * @description
+   * Makes the faked task reader's `act` behave as `ListTasksStore`: the shown assignees of
+   * CAD-482 change at once, a refusal puts them back, and each applied write bumps the version.
+   * Each answer is taken in order: `done`, `refused`, or `held` (applied once `release` runs).
+   *
+   * @param {readonly ('done' | 'refused' | 'held')[]} answers - The answers, in order.
+   * @returns {{ release: () => void }} Releases the held write.
+   */
+  function writer(answers: readonly ('done' | 'refused' | 'held')[]): { release: () => void } {
+    const queue: ('done' | 'refused' | 'held')[] = [...answers];
+    const control: { release: () => void } = { release: () => undefined };
+    let version: number = 3;
+    act.mockImplementation(
+      async (_tasks: readonly TaskSummary[], action: TaskBulkAction): Promise<ViewTaskOutcome> => {
+        const before: readonly ListTaskItem[] = items();
+        const shown: readonly string[] = before[0]?.task.assigneeIds ?? [];
+        if (action.type === 'assign') show([...new Set([...shown, action.userId])]);
+        if (action.type === 'unassign') show(shown.filter((id: string) => id !== action.userId));
+        const answer: 'done' | 'refused' | 'held' = queue.shift() ?? 'done';
+        if (answer === 'held') {
+          await new Promise<void>((resolve: () => void) => {
+            control.release = resolve;
+          });
+        }
+        if (answer === 'refused') {
+          items.set(before);
+          return outcome(null);
+        }
+        version += 1;
+        return outcome(version);
+      },
+    );
+    return control;
+  }
+
+  /**
+   * Function actions
+   *
+   * @description
+   * The writes sent, with the versions they expected.
+   *
+   * @returns {readonly unknown[][]} Each action and its expected versions.
+   */
+  function actions(): readonly unknown[][] {
+    return act.mock.calls.map((call: unknown[]) => [call[1], call[2]]);
+  }
+
+  /**
+   * Constant camilleToInes
+   *
+   * @description
+   * CAD-482 dragged from Camille's row to Inès's.
+   *
+   * @type {WorkloadReassignment}
+   */
+  const camilleToInes: WorkloadReassignment = {
+    task: task('CAD-482', { assigneeIds: ['u-camille'] }),
+    from: 'u-camille',
+    to: 'u-ines',
+    fromName: 'Camille Martin',
+    toName: 'Inès Robert',
+  };
+
   it('reassigns at once, assigns then removes, and offers an Undo bound to the new version', async () => {
     const store: WorkloadViewStoreInstance = await setup();
     show(['u-camille']);
-    let assigned: (value: ViewTaskOutcome) => void = () => undefined;
-    act.mockImplementationOnce(
-      () =>
-        new Promise((resolve: (value: ViewTaskOutcome) => void) => {
-          assigned = resolve;
-        }),
-    );
-    act.mockResolvedValueOnce(outcome(5));
+    const control: { release: () => void } = writer(['held', 'done']);
 
-    const done: Promise<void> = store.reassign({
-      task: task('CAD-482', { assigneeIds: ['u-camille'] }),
-      from: 'u-camille',
-      to: 'u-ines',
-      fromName: 'Camille Martin',
-      toName: 'Inès Robert',
-    });
+    const done: Promise<void> = store.reassign(camilleToInes);
 
     expect(rowOf(store, 'u-camille')).toEqual([]);
     expect(rowOf(store, 'u-ines')).toEqual(['CAD-482']);
-    show(['u-camille', 'u-ines']);
-    assigned(outcome(4));
-    show(['u-ines']);
+    control.release();
     await done;
 
-    expect(act.mock.calls.map((call: unknown[]) => call[1] as TaskBulkAction)).toEqual([
-      { type: 'assign', userId: 'u-ines' },
-      { type: 'unassign', userId: 'u-camille' },
+    expect(actions()).toEqual([
+      [{ type: 'assign', userId: 'u-ines' }, undefined],
+      [{ type: 'unassign', userId: 'u-camille' }, undefined],
     ]);
     expect(rowOf(store, 'u-ines')).toEqual(['CAD-482']);
     expect(refreshCounts).toHaveBeenCalled();
@@ -345,29 +397,58 @@ describe('WorkloadViewStore', () => {
       undo: expect.any(Function) as unknown,
     });
 
-    act.mockResolvedValueOnce(outcome(6)).mockResolvedValueOnce(outcome(7));
     const undo: () => void = (toasts.show.mock.calls[0][1] as { undo: () => void }).undo;
     undo();
     await settle();
 
-    expect(act.mock.calls.slice(2).map((call: unknown[]) => [call[1], call[2]])).toEqual([
+    expect(actions().slice(2)).toEqual([
       [{ type: 'assign', userId: 'u-camille' }, { 'CAD-482': 5 }],
       [{ type: 'unassign', userId: 'u-ines' }, { 'CAD-482': 6 }],
     ]);
+    expect(items()[0]?.task.assigneeIds).toEqual(['u-camille']);
+    expect(toasts.show).toHaveBeenCalledTimes(1);
+  });
+
+  it('never unassigns the person a task is dragged back to while its first write runs', async () => {
+    const store: WorkloadViewStoreInstance = await setup();
+    show(['u-camille']);
+    const control: { release: () => void } = writer(['held', 'done']);
+
+    const first: Promise<void> = store.reassign(camilleToInes);
+    const back: Promise<void> = store.reassign({
+      task: task('CAD-482', { assigneeIds: ['u-camille', 'u-ines'] }),
+      from: 'u-ines',
+      to: 'u-camille',
+      fromName: 'Inès Robert',
+      toName: 'Camille Martin',
+    });
+
+    expect(rowOf(store, 'u-camille')).toEqual(['CAD-482']);
+    expect(rowOf(store, 'u-ines')).toEqual([]);
+    control.release();
+    await Promise.all([first, back]);
+
+    expect(actions()).toEqual([
+      [{ type: 'assign', userId: 'u-ines' }, undefined],
+      [{ type: 'unassign', userId: 'u-ines' }, undefined],
+    ]);
+    expect(
+      act.mock.calls.some(
+        (call: unknown[]) =>
+          (call[1] as TaskBulkAction).type === 'unassign' &&
+          (call[1] as { userId: string }).userId === 'u-camille',
+      ),
+    ).toBe(false);
+    expect(items()[0]?.task.assigneeIds).toEqual(['u-camille']);
+    expect(toasts.show).not.toHaveBeenCalled();
   });
 
   it('sends nothing more when the assignment is refused and puts the task back', async () => {
     const store: WorkloadViewStoreInstance = await setup();
     show(['u-camille']);
-    act.mockResolvedValueOnce(outcome(null));
+    writer(['refused']);
 
-    await store.reassign({
-      task: task('CAD-482', { assigneeIds: ['u-camille'] }),
-      from: 'u-camille',
-      to: 'u-ines',
-      fromName: 'Camille Martin',
-      toName: 'Inès Robert',
-    });
+    await store.reassign(camilleToInes);
 
     expect(act).toHaveBeenCalledTimes(1);
     expect(toasts.error).toHaveBeenCalledWith('The task could not be reassigned');
@@ -376,21 +457,38 @@ describe('WorkloadViewStore', () => {
     expect(rowOf(store, 'u-ines')).toEqual([]);
   });
 
+  it('says a reassignment was only partly done and offers to undo the applied assignment', async () => {
+    const store: WorkloadViewStoreInstance = await setup();
+    show(['u-camille']);
+    writer(['done', 'refused', 'done']);
+
+    await store.reassign(camilleToInes);
+
+    expect(items()[0]?.task.assigneeIds).toEqual(['u-camille', 'u-ines']);
+    expect(toasts.show).not.toHaveBeenCalled();
+    expect(toasts.warning).toHaveBeenCalledWith(
+      'CAD-482 was assigned to Inès Robert but stays assigned to Camille Martin.',
+      { undo: expect.any(Function) as unknown },
+    );
+
+    const undo: () => void = (toasts.warning.mock.calls[0][1] as { undo: () => void }).undo;
+    undo();
+    await settle();
+
+    expect(actions().slice(2)).toEqual([
+      [{ type: 'unassign', userId: 'u-ines' }, { 'CAD-482': 4 }],
+    ]);
+    expect(items()[0]?.task.assigneeIds).toEqual(['u-camille']);
+  });
+
   it('only removes the person when the task goes to the unassigned row', async () => {
     const store: WorkloadViewStoreInstance = await setup();
     show(['u-camille']);
-    act.mockResolvedValueOnce(outcome(4));
+    writer(['done']);
 
-    await store.reassign({
-      task: task('CAD-482', { assigneeIds: ['u-camille'] }),
-      from: 'u-camille',
-      to: null,
-      fromName: 'Camille Martin',
-      toName: 'Unassigned',
-    });
+    await store.reassign({ ...camilleToInes, to: null, toName: 'Unassigned' });
 
-    expect(act).toHaveBeenCalledTimes(1);
-    expect(act.mock.calls[0][1]).toEqual({ type: 'unassign', userId: 'u-camille' });
+    expect(actions()).toEqual([[{ type: 'unassign', userId: 'u-camille' }, undefined]]);
     expect(toasts.show).toHaveBeenCalledWith('CAD-482 reassigned', {
       description: 'From Camille Martin to Unassigned.',
       undo: expect.any(Function) as unknown,
