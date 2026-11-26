@@ -5,7 +5,7 @@ import { of, throwError } from 'rxjs';
 import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 
 import type { SprintReport } from '../../../models/sprint-report/sprint-report.interface';
-import { SprintReportApi } from './sprint-report-api.service';
+import { SprintReportApi, SprintReportIncompleteError } from './sprint-report-api.service';
 
 /**
  * Function page
@@ -87,5 +87,29 @@ describe('SprintReportApi', () => {
     await expect(api.report('l-sprint14', '2026-11-08', 'Europe/Paris')).rejects.toBeInstanceOf(
       HttpErrorResponse,
     );
+  });
+
+  it('fails rather than return a burndown cut short by a repeated cursor', async () => {
+    getSprintReport
+      .mockReturnValueOnce(of(page(['2026-11-03'], 'c-2')))
+      .mockReturnValueOnce(of(page(['2026-11-04'], 'c-2')));
+
+    await expect(api.report('l-sprint14', '2026-11-08', 'Europe/Paris')).rejects.toBeInstanceOf(
+      SprintReportIncompleteError,
+    );
+    expect(getSprintReport).toHaveBeenCalledTimes(2);
+  });
+
+  it('fails rather than return a burndown cut short at the page limit', async () => {
+    let read: number = 0;
+    getSprintReport.mockImplementation(() => {
+      read += 1;
+      return of(page([`day-${String(read)}`], `c-${String(read + 1)}`));
+    });
+
+    await expect(api.report('l-sprint14', '2026-11-08', 'Europe/Paris')).rejects.toBeInstanceOf(
+      SprintReportIncompleteError,
+    );
+    expect(getSprintReport).toHaveBeenCalledTimes(10);
   });
 });
