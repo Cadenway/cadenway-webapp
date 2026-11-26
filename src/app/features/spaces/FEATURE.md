@@ -100,29 +100,41 @@ constants belong to the lead):
 `ui/dialogs/share-dialog` (`ShareDialog`, `App.dc.html` lines 2980-3016, 5448, 6871, 8830-8855)
 provides its own `ListShareStore` (`state/list-share/`, component-scoped), which reaches the
 gateway through `ListAccessApi` (`data-access/services/list-access-api/`, adapter
-`data-access/adapters/list-access/`, models `models/list-share/`).
+`data-access/adapters/list-access/`, models `models/list-share/`). The list page keeps the dialog
+once it was opened, so the store lives with the list page, across closings and reopenings.
 
 - Each opening on a list reads, at once, `ListsService.getList` (the `Organization access` switch,
   `organizationAccess`, and `callerRole`), `SpacesService.getSpace` (the owner and the
-  visibility), every page of `AccessService.listListGrants` and every page of
-  `MembersService.listMembers` (names, addresses, guests). A refused directory leaves the names
-  unknown and hides `Invite by email`; any other failure is the dialog's inline error with
-  `Retry`, distinct from its skeleton. Closing forgets the read and the changes; answers for a
-  list the dialog left are dropped.
+  visibility) and every page of `AccessService.listListGrants`; a failure is the dialog's inline
+  error with `Retry`, distinct from its skeleton. Every page of `MembersService.listMembers`
+  (names, addresses, guests) is read apart: a `403` leaves the names unknown and hides
+  `Invite by email`; any other failure (network, 5xx) is its own inline error with `Retry`
+  (`spaces.secondary.members-failed`) above the people, who stay listed without names.
 - `People with access`: the space's owner first (`Owner`, no select: `Grant` has no owner, who
   is `Space.owner`), then the grants in the order access was given, then the people invited from
   the dialog. Grants of the space, which also open the list, are not listed. Guests carry
   `Guest`, and the guest sum follows. Without `edit` on the list, the roles read as words, the
   switch is disabled and the invitation hidden.
-- Writes are optimistic, one after the other per person (and for the switch): a role
-  (`setListGrant`), a removal (`removeListGrant`, after `Remove X's access?` in a
-  `cw-alert-dialog`), the switch (`updateList` with `organizationAccess` only). A refusal puts
-  back the last confirmed value, unless a newer change of the same person is still on its way,
-  with a failure toast. None sends `If-Match`, which the contract makes optional on all three:
-  each write sets one absolute value, so two people sharing at once never overwrite each other.
-  Every grant change raises the list's version: a recorded write hands the version the gateway
-  answered (`ETag`, or the patched list) to `ListPageStore.followListEdits`, so the header's
-  later writes send the current `If-Match`, and reads the header's members again.
+- Writes are optimistic: a role (`setListGrant`), a removal (`removeListGrant`), the switch
+  (`updateList` with `organizationAccess` only). The writes of one list and subject (a person, or
+  the switch) are sent one after the other, whether the dialog is open, closed, reopened or shows
+  another list: a reopened dialog shows the changes still on their way over its read, and its new
+  changes wait behind them. No accepted change is dropped. A refusal puts back the last confirmed
+  value, unless a newer change of the same subject is still on its way, and always shows its
+  failure toast. Once the last change of a list ends, its access is read again if the dialog shows
+  it (once more after a read already in flight), and that read replaces the changes it covers.
+- None sends `If-Match`, which the contract makes optional on all three: each write sets one
+  absolute value, so two people sharing at once never overwrite each other. Every change raises
+  the list's version: each recorded write, even after the dialog closed, hands the version the
+  gateway answered (`ETag`, or the patched list) to `ListPageStore.followListEdits` while the list
+  page shows that list, so the header's later writes send the current `If-Match`; a grant change
+  also reads the header's members again.
+- Removing a grant asks `Remove X's access?` in a `cw-alert-dialog`, with the mockup's text. When
+  the `Organization access` switch is on outside a private space, the confirmation of a member
+  (never a guest) adds `They can still see it through the organization access.`: removing the
+  grant leaves them what the rule of the organization gives. A grant of the space, which also
+  keeps the list visible, is not checked, so the text can promise more than the removal does for
+  such a person.
 - `Invite by email` (G10): the contract has no invitation by email carrying a list role, and no
   feature publishes an organization invitation entry. The address therefore resolves, without
   regard to case, against the member directory: a member or guest gets the chosen role
@@ -481,6 +493,7 @@ gateway checks them and `ORGANIZATION_PIN_OPERATIONS` lists them.
 | `spaces.share.*-failed`, `spaces.share.read-failed`                                                                            | The mockup draws no failed read or refused write.                          |
 | `spaces.share.not-member`                                                                                                      | The contract's `access.grantee-invalid` title (G10).                       |
 | `spaces.share.already-owner`                                                                                                   | The mockup does not draw the owner's address.                              |
+| `spaces.share.remove-inherited`                                                                                                | The mockup has no wording for access kept through the organization.        |
 | `spaces.share.email-placeholder`                                                                                               | The mockup's address names its own organization.                           |
 | `spaces.share.guests-one`                                                                                                      | Singular form the mockup builds in its script.                             |
 | `spaces.share.access-of`, `spaces.share.remove-label`                                                                          | Accessible names, from the mockup's `aria-label`s.                         |

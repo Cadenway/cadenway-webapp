@@ -176,8 +176,11 @@ interface RoleOption {
  *   once touched or submitted. The block shows only to a caller with `edit` who reads the
  *   member directory.
  * - `People with access`: the space's owner (`Owner`), then each grant with its role select and
- *   its remove button, which asks `Remove X's access?` in a `cw-alert-dialog` first; guests carry
- *   `Guest` and the guest sum follows the list. A caller without `edit` reads the roles as words.
+ *   its remove button, which asks `Remove X's access?` in a `cw-alert-dialog` first (adding that
+ *   a member still sees the list through the organization access when the switch gives it);
+ *   guests carry `Guest` and the guest sum follows the list. A caller without `edit` reads the
+ *   roles as words. A failed read of the member directory is its own inline error with `Retry`;
+ *   a refused one (`403`) leaves the names unknown and hides `Invite by email`.
  * - `Organization access` switches whether every member of the organization sees the list; it is
  *   hidden in a private space, where it changes nothing.
  * - `Copy the link` copies `/<slug>/l/<listId>` with the toast `List link copied`.
@@ -550,6 +553,21 @@ export class ShareDialog {
   protected removeText(person: SharePerson): string {
     const name: string = this.nameOf(person);
     return $localize`:@@spaces.share.remove-text:${name}:name: will no longer see this list or its tasks. You can invite them again.`;
+  }
+
+  /**
+   * Method keepsAccess
+   *
+   * @description
+   * Whether a member keeps seeing the list after their grant is removed, through the
+   * `Organization access` switch (on, outside a private space; never for a guest). A grant of the
+   * space, which also opens the list, is not checked.
+   *
+   * @param {SharePerson} person - The person.
+   * @returns {boolean} True when the confirmation adds `They can still see it…`.
+   */
+  protected keepsAccess(person: SharePerson): boolean {
+    return this.store.organizationAccess() && !this.store.privateSpace() && !person.guest;
   }
 
   /**

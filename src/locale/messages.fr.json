@@ -687,6 +687,7 @@
     "spaces.share.remove-text": "{$name} ne verra plus cette liste ni ses tâches. Vous pourrez l’inviter à nouveau.",
     "spaces.share.remove": "Retirer l’accès",
     "spaces.share.remove-failed": "L’accès n’a pas pu être retiré",
+    "spaces.share.remove-inherited": "Cette personne peut toujours la voir grâce à l’accès de l’organisation.",
     "spaces.share.guests-one": "{$count} invité externe : ils ne voient que cette liste et ne comptent pas comme sièges.",
     "spaces.share.guests": "{$count} invités externes : ils ne voient que cette liste et ne comptent pas comme sièges.",
     "spaces.share.organization": "Accès de l’organisation",

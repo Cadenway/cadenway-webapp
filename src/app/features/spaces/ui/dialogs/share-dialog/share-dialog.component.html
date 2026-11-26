@@ -96,6 +96,25 @@
         </form>
       }
 
+      @if (store.directory.error()) {
+        <div
+          class="flex items-center gap-2 text-sm text-muted-foreground"
+          data-testid="share-directory-failed"
+        >
+          <span i18n="@@spaces.secondary.members-failed">The members could not be loaded.</span>
+          <button
+            cwButton
+            type="button"
+            variant="outline"
+            size="xs"
+            data-testid="share-directory-retry"
+            (click)="store.directory.reload()"
+          >
+            <ng-container i18n="@@spaces.retry">Retry</ng-container>
+          </button>
+        </div>
+      }
+
       <div class="flex flex-col gap-1">
         <p
           id="share-people"
@@ -212,8 +231,17 @@
       <ng-icon name="phosphorUserMinusBold" aria-hidden="true" />
     </cw-alert-dialog-media>
     <h2 cwAlertDialogTitle>{{ removeTitle(person) }}</h2>
-    <p cwAlertDialogDescription>{{ removeText(person) }}</p>
-    <button cwButton cwAlertDialogCancel variant="outline" i18n="@@spaces.cancel">Cancel</button>
+    <p cwAlertDialogDescription>
+      {{ removeText(person) }}
+      @if (keepsAccess(person)) {
+        <span i18n="@@spaces.share.remove-inherited"
+          >They can still see it through the organization access.</span
+        >
+      }
+    </p>
+    <button cwButton cwAlertDialogCancel variant="outline" data-testid="share-remove-cancel">
+      <ng-container i18n="@@spaces.cancel">Cancel</ng-container>
+    </button>
     <button cwButton cwAlertDialogAction variant="destructive" data-testid="share-remove-confirm">
       <ng-container i18n="@@spaces.share.remove">Remove access</ng-container>
     </button>

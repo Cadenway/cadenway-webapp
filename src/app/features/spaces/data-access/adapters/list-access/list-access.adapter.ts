@@ -61,14 +61,12 @@ export function toShareDirectoryEntry(dto: Member): ShareDirectoryEntry {
  * @param {TaskListDto} list - The list.
  * @param {SpaceDto} space - Its space, for the owner and the visibility.
  * @param {readonly Grant[]} grants - Every grant of the list.
- * @param {readonly Member[] | null} members - Every member, or null when unreadable.
  * @returns {ListAccess} Who has access.
  */
 export function toListAccess(
   list: TaskListDto,
   space: SpaceDto,
   grants: readonly Grant[],
-  members: readonly Member[] | null,
 ): ListAccess {
   return {
     listId: list.id,
@@ -79,7 +77,6 @@ export function toListAccess(
     grants: grants
       .filter((grant: Grant): boolean => grant.userId !== space.owner.userId)
       .map(toShareGrant),
-    directory: members ? members.map(toShareDirectoryEntry) : null,
   };
 }
 

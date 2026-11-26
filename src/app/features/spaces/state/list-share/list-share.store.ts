@@ -1,8 +1,10 @@
 import {
   computed,
+  DestroyRef,
   inject,
   resource,
   type ResourceRef,
+  type ResourceStatus,
   type Signal,
   type Type,
 } from '@angular/core';
@@ -12,11 +14,12 @@ import {
   signalMethod,
   signalStore,
   withComputed,
+  withHooks,
   withMethods,
   withProps,
   withState,
 } from '@ngrx/signals';
-import { of } from 'rxjs';
+import { Subject } from 'rxjs';
 
 import { ListAccessApi } from '../../data-access/services/list-access-api/list-access-api.service';
 import type {
@@ -43,14 +46,14 @@ import { ListPageStore } from '../list-page/list-page.store';
 export const SHARE_EMAIL_PATTERN: RegExp = /.+@.+\..+/u;
 
 /**
- * Constant ORGANIZATION_KEY
+ * Constant ORGANIZATION_SUBJECT
  *
  * @description
- * Key of the switch's write queue, apart from the people's (account ids are UUIDs).
+ * Subject of the switch's write queue, apart from the people's (account ids are UUIDs).
  *
  * @type {string}
  */
-const ORGANIZATION_KEY: string = 'organization-access';
+const ORGANIZATION_SUBJECT: string = '#organization';
 
 /**
  * Interface ShareTarget
@@ -88,7 +91,8 @@ export interface ShareTarget {
  * Interface ListShareState
  *
  * @description
- * The open list and the changes made since its access was read.
+ * The open list and the changes not yet covered by a read, keyed by list and subject
+ * (`<listId>/<userId>`), so that they survive the dialog closing and another list opening.
  */
 interface ListShareState {
   // #region Properties
@@ -104,37 +108,38 @@ interface ListShareState {
   readonly target: ShareTarget | null;
 
   /**
-   * Property roles
+   * Property _roles
    *
    * @description
-   * The role shown for each person changed since the read (null: removed), sent or confirmed.
+   * The role shown for each person changed since the last read (null: removed), sent, queued or
+   * confirmed, by `<listId>/<userId>`.
    *
    * @type {Readonly<Record<string, ShareRole | null>>}
    * @readonly
    */
-  readonly roles: Readonly<Record<string, ShareRole | null>>;
+  readonly _roles: Readonly<Record<string, ShareRole | null>>;
 
   /**
-   * Property added
+   * Property _added
    *
    * @description
-   * People given access since the read, in the order they were invited.
+   * The `<listId>/<userId>` of the people given access since the last read, in invitation order.
    *
    * @type {readonly string[]}
    * @readonly
    */
-  readonly added: readonly string[];
+  readonly _added: readonly string[];
 
   /**
    * Property _organizationAccess
    *
    * @description
-   * The switch as shown since it was turned, or null while it shows the read value.
+   * The switch as shown since it was turned, by list.
    *
-   * @type {boolean | null}
+   * @type {Readonly<Record<string, boolean>>}
    * @readonly
    */
-  readonly _organizationAccess: boolean | null;
+  readonly _organizationAccess: Readonly<Record<string, boolean>>;
   // #endregion
 }
 
@@ -156,6 +161,18 @@ export interface ListShareStoreInstance {
    * @readonly
    */
   readonly access: ResourceRef<ListAccess | undefined>;
+
+  /**
+   * Property directory
+   *
+   * @description
+   * The member directory, read with the access: null when the caller may not read it (no names,
+   * no invitation); a failed read is its own inline error with `Retry`.
+   *
+   * @type {ResourceRef<readonly ShareDirectoryEntry[] | null | undefined>}
+   * @readonly
+   */
+  readonly directory: ResourceRef<readonly ShareDirectoryEntry[] | null | undefined>;
 
   /**
    * Property people
@@ -206,7 +223,7 @@ export interface ListShareStoreInstance {
    * Property canInvite
    *
    * @description
-   * Whether `Invite by email` shows: the caller may share and reads the member directory.
+   * Whether `Invite by email` shows: the caller may share and has read the member directory.
    *
    * @type {Signal<boolean>}
    * @readonly
@@ -230,8 +247,9 @@ export interface ListShareStoreInstance {
    * Method follow
    *
    * @description
-   * Follows the list the dialog is open on: another list reads its access again, null (closed)
-   * forgets it, the same list (a new version of it) changes nothing.
+   * Follows the list the dialog is open on: another list (or an opening) reads its access and
+   * the directory again, null (closed) leaves them; the same list (a new version of it) changes
+   * nothing. Changes still on their way keep showing over the new read.
    *
    * @param {Signal<ShareTarget | null> | ShareTarget | null} target - The open list.
    */
@@ -241,7 +259,8 @@ export interface ListShareStoreInstance {
    * Method changeRole
    *
    * @description
-   * Changes a person's role at once and sends it; a refusal puts back the confirmed role.
+   * Changes a person's role at once and sends it after the earlier changes of that person; a
+   * refusal puts back the confirmed role.
    *
    * @param {string} userId - The person, not the owner.
    * @param {ShareRole} role - The role.
@@ -253,8 +272,8 @@ export interface ListShareStoreInstance {
    * Method remove
    *
    * @description
-   * Removes a person's access at once (once `Remove access` is confirmed) and sends it; a
-   * refusal shows the person again.
+   * Removes a person's grant at once (once `Remove access` is confirmed) and sends it; a refusal
+   * shows the person again.
    *
    * @param {string} userId - The person, not the owner.
    * @returns {Promise<boolean>} Whether the gateway recorded it.
@@ -278,7 +297,8 @@ export interface ListShareStoreInstance {
    * Method setOrganizationAccess
    *
    * @description
-   * Turns the `Organization access` switch at once and sends it; a refusal turns it back.
+   * Turns the `Organization access` switch at once and sends it after its earlier turns; a
+   * refusal turns it back.
    *
    * @param {boolean} on - The switch.
    * @returns {Promise<boolean>} Whether the gateway recorded it.
@@ -299,6 +319,38 @@ export interface ListShareStoreInstance {
  */
 function sameTarget(a: ShareTarget | null, b: ShareTarget | null): boolean {
   return a === null || b === null ? a === b : a.listId === b.listId;
+}
+
+/**
+ * Function keyOf
+ *
+ * @description
+ * The key of a subject (a person, or the switch) of a list.
+ *
+ * @param {string} listId - The list.
+ * @param {string} subject - The person's account, or `ORGANIZATION_SUBJECT`.
+ * @returns {string} `<listId>/<subject>`.
+ */
+function keyOf(listId: string, subject: string): string {
+  return `${listId}/${subject}`;
+}
+
+/**
+ * Function withoutList
+ *
+ * @description
+ * A record without the entries of a list.
+ *
+ * @param {Readonly<Record<string, T>>} record - Entries by `<listId>/<subject>` or by list.
+ * @param {string} listId - The list.
+ * @returns {Record<string, T>} The other entries.
+ */
+function withoutList<T>(record: Readonly<Record<string, T>>, listId: string): Record<string, T> {
+  return Object.fromEntries(
+    Object.entries(record).filter(
+      ([key]: [string, T]): boolean => key !== listId && !key.startsWith(`${listId}/`),
+    ),
+  );
 }
 
 /**
@@ -338,9 +390,9 @@ function personOf(
 function createListShareStore(): Type<ListShareStoreInstance> {
   const initialState: ListShareState = {
     target: null,
-    roles: {},
-    added: [],
-    _organizationAccess: null,
+    _roles: {},
+    _added: [],
+    _organizationAccess: {},
   };
   return signalStore(
     withState(initialState),
@@ -350,6 +402,8 @@ function createListShareStore(): Type<ListShareStoreInstance> {
         _api: api,
         _toasts: inject(CwToastService),
         _listPage: inject(ListPageStore),
+        _destroyRef: inject(DestroyRef),
+        _versions: new Subject<TaskList>(),
         access: resource({
           params: () => store.target() ?? undefined,
           loader: ({
@@ -360,31 +414,46 @@ function createListShareStore(): Type<ListShareStoreInstance> {
             abortSignal: AbortSignal;
           }): Promise<ListAccess> => api.read(params.listId, params.spaceId, abortSignal),
         }),
+        directory: resource({
+          params: () => {
+            const target: ShareTarget | null = store.target();
+            return target ? { listId: target.listId } : undefined;
+          },
+          loader: ({
+            abortSignal,
+          }: {
+            abortSignal: AbortSignal;
+          }): Promise<readonly ShareDirectoryEntry[] | null> => api.directory(abortSignal),
+        }),
       };
     }),
     withComputed((store) => {
       const read: () => ListAccess | null = () =>
         store.access.hasValue() ? store.access.value() : null;
+      const entries: () => readonly ShareDirectoryEntry[] | null = () =>
+        store.directory.hasValue() ? store.directory.value() : null;
       const people: Signal<readonly SharePerson[]> = computed((): readonly SharePerson[] => {
         const access: ListAccess | null = read();
         if (access === null) return [];
-        const roles: Readonly<Record<string, ShareRole | null>> = store.roles();
+        const roles: Readonly<Record<string, ShareRole | null>> = store._roles();
         const directory: ReadonlyMap<string, ShareDirectoryEntry> = new Map<
           string,
           ShareDirectoryEntry
-        >((access.directory ?? []).map((entry: ShareDirectoryEntry) => [entry.userId, entry]));
+        >((entries() ?? []).map((entry: ShareDirectoryEntry) => [entry.userId, entry]));
         const granted: Set<string> = new Set<string>(
           access.grants.map((grant: ShareGrant): string => grant.userId),
         );
         const rows: SharePerson[] = [personOf(access.ownerId, 'owner', directory)];
         for (const grant of access.grants) {
-          const role: ShareRole | null =
-            grant.userId in roles ? (roles[grant.userId] ?? null) : grant.role;
+          const key: string = keyOf(access.listId, grant.userId);
+          const role: ShareRole | null = key in roles ? (roles[key] ?? null) : grant.role;
           if (role !== null) rows.push(personOf(grant.userId, role, directory));
         }
-        for (const userId of store.added()) {
-          const role: ShareRole | null = roles[userId] ?? null;
-          if (!granted.has(userId) && role !== null) {
+        const prefix: string = keyOf(access.listId, '');
+        for (const key of store._added()) {
+          const userId: string = key.slice(prefix.length);
+          const role: ShareRole | null = roles[key] ?? null;
+          if (key.startsWith(prefix) && !granted.has(userId) && role !== null) {
             rows.push(personOf(userId, role, directory));
           }
         }
@@ -395,37 +464,56 @@ function createListShareStore(): Type<ListShareStoreInstance> {
         guestCount: computed(
           (): number => people().filter((person: SharePerson): boolean => person.guest).length,
         ),
-        organizationAccess: computed(
-          (): boolean => store._organizationAccess() ?? read()?.organizationAccess ?? true,
-        ),
-        canEdit: computed((): boolean => read()?.canEdit ?? false),
-        canInvite: computed((): boolean => {
+        organizationAccess: computed((): boolean => {
           const access: ListAccess | null = read();
-          return access !== null && access.canEdit && access.directory !== null;
+          if (access === null) return true;
+          return store._organizationAccess()[access.listId] ?? access.organizationAccess;
         }),
+        canEdit: computed((): boolean => read()?.canEdit ?? false),
+        canInvite: computed((): boolean => (read()?.canEdit ?? false) && entries() !== null),
         privateSpace: computed((): boolean => read()?.privateSpace ?? false),
         _read: computed(read),
+        _entries: computed(entries),
       };
     }),
     withMethods((store) => {
-      const confirmed: Map<string, ShareRole | null> = new Map<string, ShareRole | null>();
-      let confirmedOrganization: boolean | null = null;
-      let session: number = 0;
+      // Every accepted change is sent, one after the other per list and subject, even once the
+      // dialog is closed or shows another list: the store lives with the list page, which keeps
+      // the dialog once it was opened. Only the shown state waits for a read.
       const queues: Map<string, Promise<unknown>> = new Map<string, Promise<unknown>>();
+      // The last value the gateway confirmed (or the read gave) of each changed subject.
+      const confirmed: Map<string, ShareRole | boolean | null> = new Map<
+        string,
+        ShareRole | boolean | null
+      >();
+      // The newest change of each subject: an older refusal does not undo a newer change.
       const sequences: Map<string, number> = new Map<string, number>();
-      const forget: () => void = (): void => {
-        session += 1;
-        confirmed.clear();
-        confirmedOrganization = null;
-        queues.clear();
-        sequences.clear();
+      // Changes accepted and not ended, by list.
+      const running: Map<string, number> = new Map<string, number>();
+      // Lists whose access was being read when their last change ended: read once more after.
+      const reloadQueued: Set<string> = new Set<string>();
+      const shows: (listId: string) => boolean = (listId: string): boolean =>
+        !store._destroyRef.destroyed && store.target()?.listId === listId;
+      // The changes of a list are covered by a read begun after they all ended: the read shows.
+      const drop: (listId: string) => void = (listId: string): void => {
+        for (const key of [...confirmed.keys()]) {
+          if (key.startsWith(keyOf(listId, ''))) confirmed.delete(key);
+        }
+        patchState(store, {
+          _roles: withoutList(store._roles(), listId),
+          _added: store._added().filter((key: string): boolean => !key.startsWith(`${listId}/`)),
+          _organizationAccess: withoutList(store._organizationAccess(), listId),
+        });
       };
-      const readRole: (userId: string) => ShareRole | null = (userId: string): ShareRole | null => {
-        if (confirmed.has(userId)) return confirmed.get(userId) ?? null;
-        return (
-          store._read()?.grants.find((grant: ShareGrant): boolean => grant.userId === userId)
-            ?.role ?? null
-        );
+      const settle: (listId: string) => void = (listId: string): void => {
+        const left: number = (running.get(listId) ?? 1) - 1;
+        if (left > 0) {
+          running.set(listId, left);
+          return;
+        }
+        running.delete(listId);
+        if (!shows(listId)) return;
+        if (!store.access.reload() && store.access.isLoading()) reloadQueued.add(listId);
       };
       const acceptVersion: (listId: string, write: ShareWrite) => void = (
         listId: string,
@@ -435,21 +523,42 @@ function createListShareStore(): Type<ListShareStoreInstance> {
           ? store._listPage.list.value()
           : undefined;
         if (write.version !== null && list?.id === listId && write.version > list.version) {
-          store._listPage.followListEdits(of({ ...list, version: write.version }));
+          store._versions.next({ ...list, version: write.version });
         }
       };
-      const enqueue: <T>(key: string, run: () => Promise<T>) => Promise<T> = <T>(
-        key: string,
-        run: () => Promise<T>,
-      ): Promise<T> => {
-        const next: Promise<T> = (queues.get(key) ?? Promise.resolve()).then(run, run);
-        queues.set(key, next);
-        return next;
-      };
-      const nextSequence: (key: string) => number = (key: string): number => {
+      const enqueue: (
+        listId: string,
+        subject: string,
+        send: () => Promise<ShareWrite>,
+        failure: string,
+        rollback: () => void,
+      ) => Promise<boolean> = (
+        listId: string,
+        subject: string,
+        send: () => Promise<ShareWrite>,
+        failure: string,
+        rollback: () => void,
+      ): Promise<boolean> => {
+        const key: string = keyOf(listId, subject);
         const sequence: number = (sequences.get(key) ?? 0) + 1;
         sequences.set(key, sequence);
-        return sequence;
+        running.set(listId, (running.get(listId) ?? 0) + 1);
+        const run: () => Promise<boolean> = async (): Promise<boolean> => {
+          try {
+            const write: ShareWrite = await send();
+            acceptVersion(listId, write);
+            return true;
+          } catch {
+            if (sequences.get(key) === sequence) rollback();
+            store._toasts.error(failure);
+            return false;
+          } finally {
+            settle(listId);
+          }
+        };
+        const next: Promise<boolean> = (queues.get(key) ?? Promise.resolve()).then(run, run);
+        queues.set(key, next);
+        return next;
       };
       const writeRole: (
         userId: string,
@@ -460,48 +569,61 @@ function createListShareStore(): Type<ListShareStoreInstance> {
         role: ShareRole | null,
         failure: string,
       ): Promise<boolean> => {
-        const target: ShareTarget | null = store.target();
         const access: ListAccess | null = store._read();
-        if (target === null || access === null || !access.canEdit || userId === access.ownerId) {
+        if (access === null || !access.canEdit || userId === access.ownerId) {
           return Promise.resolve(false);
         }
-        const sequence: number = nextSequence(userId);
-        const opened: number = session;
+        const listId: string = access.listId;
+        const key: string = keyOf(listId, userId);
         const inRead: boolean = access.grants.some(
           (grant: ShareGrant): boolean => grant.userId === userId,
         );
+        if (!confirmed.has(key)) {
+          confirmed.set(
+            key,
+            access.grants.find((grant: ShareGrant): boolean => grant.userId === userId)?.role ??
+              null,
+          );
+        }
         patchState(store, {
-          roles: { ...store.roles(), [userId]: role },
-          added:
-            inRead || store.added().includes(userId) ? store.added() : [...store.added(), userId],
+          _roles: { ...store._roles(), [key]: role },
+          _added:
+            inRead || store._added().includes(key) ? store._added() : [...store._added(), key],
         });
-        return enqueue(userId, async (): Promise<boolean> => {
-          if (opened !== session) return false;
-          try {
+        return enqueue(
+          listId,
+          userId,
+          async (): Promise<ShareWrite> => {
             const write: ShareWrite =
               role === null
-                ? await store._api.removeRole(target.listId, userId)
-                : await store._api.setRole(target.listId, userId, role);
-            if (opened !== session) return true;
-            confirmed.set(userId, role);
-            acceptVersion(target.listId, write);
+                ? await store._api.removeRole(listId, userId)
+                : await store._api.setRole(listId, userId, role);
+            confirmed.set(key, role);
             store._listPage.members.reload();
-            return true;
-          } catch {
-            if (opened !== session) return false;
-            if (sequences.get(userId) === sequence) {
-              patchState(store, { roles: { ...store.roles(), [userId]: readRole(userId) } });
-            }
-            store._toasts.error(failure);
-            return false;
-          }
-        });
+            return write;
+          },
+          failure,
+          (): void => {
+            const before: ShareRole | boolean | null = confirmed.get(key) ?? null;
+            patchState(store, {
+              _roles: { ...store._roles(), [key]: typeof before === 'string' ? before : null },
+            });
+          },
+        );
       };
       return {
+        _onRead: signalMethod<ResourceStatus>((status: ResourceStatus): void => {
+          const access: ListAccess | null = status === 'resolved' ? store._read() : null;
+          if (access === null || running.has(access.listId)) return;
+          if (reloadQueued.delete(access.listId)) {
+            store.access.reload();
+            return;
+          }
+          drop(access.listId);
+        }),
+
         follow: signalMethod<ShareTarget | null>((target: ShareTarget | null): void => {
-          if (sameTarget(store.target(), target)) return;
-          forget();
-          patchState(store, { ...initialState, target });
+          if (!sameTarget(store.target(), target)) patchState(store, { target });
         }),
 
         changeRole(userId: string, role: ShareRole): Promise<boolean> {
@@ -526,9 +648,9 @@ function createListShareStore(): Type<ListShareStoreInstance> {
           if (address === '' || !access?.canEdit) return 'ignored';
           if (!SHARE_EMAIL_PATTERN.test(address)) return 'invalid';
           const lower: string = address.toLowerCase();
-          const entry: ShareDirectoryEntry | undefined = access.directory?.find(
-            (item: ShareDirectoryEntry): boolean => item.email.toLowerCase() === lower,
-          );
+          const entry: ShareDirectoryEntry | undefined = store
+            ._entries()
+            ?.find((item: ShareDirectoryEntry): boolean => item.email.toLowerCase() === lower);
           if (entry === undefined) return 'unknown';
           if (entry.userId === access.ownerId) return 'owner';
           void writeRole(
@@ -550,33 +672,41 @@ function createListShareStore(): Type<ListShareStoreInstance> {
         },
 
         setOrganizationAccess(on: boolean): Promise<boolean> {
-          const target: ShareTarget | null = store.target();
           const access: ListAccess | null = store._read();
-          if (target === null || !access?.canEdit) return Promise.resolve(false);
-          const sequence: number = nextSequence(ORGANIZATION_KEY);
-          const opened: number = session;
-          patchState(store, { _organizationAccess: on });
-          return enqueue(ORGANIZATION_KEY, async (): Promise<boolean> => {
-            if (opened !== session) return false;
-            try {
-              const write: ShareWrite = await store._api.setOrganizationAccess(target.listId, on);
-              if (opened !== session) return true;
-              confirmedOrganization = on;
-              acceptVersion(target.listId, write);
-              return true;
-            } catch {
-              if (opened !== session) return false;
-              if (sequences.get(ORGANIZATION_KEY) === sequence) {
-                patchState(store, { _organizationAccess: confirmedOrganization });
-              }
-              store._toasts.error(
-                $localize`:@@spaces.share.organization-failed:The organization access could not be changed`,
-              );
-              return false;
-            }
+          if (!access?.canEdit) return Promise.resolve(false);
+          const listId: string = access.listId;
+          const key: string = keyOf(listId, ORGANIZATION_SUBJECT);
+          if (!confirmed.has(key)) confirmed.set(key, access.organizationAccess);
+          patchState(store, {
+            _organizationAccess: { ...store._organizationAccess(), [listId]: on },
           });
+          return enqueue(
+            listId,
+            ORGANIZATION_SUBJECT,
+            async (): Promise<ShareWrite> => {
+              const write: ShareWrite = await store._api.setOrganizationAccess(listId, on);
+              confirmed.set(key, on);
+              return write;
+            },
+            $localize`:@@spaces.share.organization-failed:The organization access could not be changed`,
+            (): void => {
+              const before: ShareRole | boolean | null = confirmed.get(key) ?? null;
+              patchState(store, {
+                _organizationAccess: {
+                  ...store._organizationAccess(),
+                  [listId]: before === true,
+                },
+              });
+            },
+          );
         },
       };
+    }),
+    withHooks({
+      onInit(store): void {
+        store._listPage.followListEdits(store._versions);
+        store._onRead(store.access.status);
+      },
     }),
   );
 }
@@ -586,14 +716,20 @@ function createListShareStore(): Type<ListShareStoreInstance> {
  *
  * @description
  * The `Share` dialog's people and switch (`App.dc.html` lines 2980-3016, 8830-8855), provided by
- * `cw-share-dialog`. It reads the list, its space (the owner and the visibility), every grant and
- * the member directory when the dialog opens on a list, and forgets them when it closes. Every
- * change shows at once: a role, a removal, a person invited, the switch. Writes of one person
- * (and of the switch) go one after the other; a refusal puts back the last confirmed value unless
- * a newer change of the same person is still on its way, with the failure toast. A recorded
- * change hands the list version the gateway answered to `ListPageStore` (`followListEdits`), so
- * the header's later writes send the current `If-Match`, and reads the header's members again.
- * Answers for a list the dialog left are dropped.
+ * `cw-share-dialog`, which the list page keeps once opened: the store lives with the list page.
+ * It reads the list, its space (the owner and the visibility) and every grant, and the member
+ * directory apart, each time the dialog opens on a list.
+ *
+ * Every change shows at once: a role, a removal, a person invited, the switch. The changes of one
+ * list and subject (a person, or the switch) are sent one after the other, whether the dialog is
+ * open, closed or reopened: a reopened dialog shows the changes still on their way over its read,
+ * and its new changes wait behind them. A refusal puts back the last confirmed value, unless a
+ * newer change of the same subject is still on its way, and always shows its failure toast. Every
+ * recorded change hands the list version the gateway answered to `ListPageStore`
+ * (`followListEdits`, while the list page shows that list), so that the header's later writes
+ * send the current `If-Match`; a grant change also reads the header's members again. Once the
+ * last change of a list ends, its access is read again if the dialog shows it, and the read
+ * replaces the changes it covers.
  *
  * @type {Type<ListShareStoreInstance>}
  */

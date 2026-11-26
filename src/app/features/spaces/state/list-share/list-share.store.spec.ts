@@ -1,17 +1,18 @@
 import { TestBed } from '@angular/core/testing';
 import { CwToastService } from '@cadenway/ui/components/toast';
-import { firstValueFrom, type Observable } from 'rxjs';
+import type { Observable } from 'rxjs';
 import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 
 import { ListAccessApi } from '../../data-access/services/list-access-api/list-access-api.service';
 import type {
   ListAccess,
+  ShareDirectoryEntry,
   SharePerson,
   ShareWrite,
 } from '../../models/list-share/list-share.interface';
 import type { TaskList } from '../../models/task-list/task-list.interface';
 import { ListPageStore } from '../list-page/list-page.store';
-import { ListShareStore, type ListShareStoreInstance } from './list-share.store';
+import { ListShareStore, type ListShareStoreInstance, type ShareTarget } from './list-share.store';
 
 /**
  * Constant sprint14
@@ -34,11 +35,21 @@ const sprint14: TaskList = {
 };
 
 /**
+ * Constant target
+ *
+ * @description
+ * The dialog open on `Sprint 14`.
+ *
+ * @type {ShareTarget}
+ */
+const target: ShareTarget = { listId: 'l-sprint14', spaceId: 'sp-product' };
+
+/**
  * Constant sprint14Access
  *
  * @description
- * Who has access to `Sprint 14`: Camille Martin owns the space, Léa Petit comments, the guest
- * Nadia Benali comments; Hugo Dubois is a member without a grant.
+ * Who has access to `Sprint 14`: Camille Martin owns the space, Léa Petit and the guest Nadia
+ * Benali comment.
  *
  * @type {ListAccess}
  */
@@ -52,13 +63,65 @@ const sprint14Access: ListAccess = {
     { userId: 'u-lea', role: 'comment' },
     { userId: 'u-nadia', role: 'comment' },
   ],
-  directory: [
-    { userId: 'u-camille', name: 'Camille Martin', email: 'camille@ateliernord.fr', guest: false },
-    { userId: 'u-lea', name: 'Léa Petit', email: 'lea@ateliernord.fr', guest: false },
-    { userId: 'u-hugo', name: 'Hugo Dubois', email: 'hugo.dubois@ateliernord.fr', guest: false },
-    { userId: 'u-nadia', name: 'Nadia Benali', email: 'nadia@studio-pixel.fr', guest: true },
-  ],
 };
+
+/**
+ * Constant directory
+ *
+ * @description
+ * The members of Atelier Nord; Hugo Dubois is a member without a grant.
+ *
+ * @type {readonly ShareDirectoryEntry[]}
+ */
+const directory: readonly ShareDirectoryEntry[] = [
+  { userId: 'u-camille', name: 'Camille Martin', email: 'camille@ateliernord.fr', guest: false },
+  { userId: 'u-lea', name: 'Léa Petit', email: 'lea@ateliernord.fr', guest: false },
+  { userId: 'u-hugo', name: 'Hugo Dubois', email: 'hugo.dubois@ateliernord.fr', guest: false },
+  { userId: 'u-nadia', name: 'Nadia Benali', email: 'nadia@studio-pixel.fr', guest: true },
+];
+
+/**
+ * Interface Deferred
+ *
+ * @description
+ * A write answer the test settles.
+ */
+interface Deferred {
+  // #region Properties
+  /**
+   * Property promise
+   *
+   * @description
+   * The answer.
+   *
+   * @type {Promise<ShareWrite>}
+   * @readonly
+   */
+  readonly promise: Promise<ShareWrite>;
+
+  /**
+   * Property resolve
+   *
+   * @description
+   * Records the write.
+   *
+   * @type {(value: ShareWrite) => void}
+   * @readonly
+   */
+  readonly resolve: (value: ShareWrite) => void;
+
+  /**
+   * Property reject
+   *
+   * @description
+   * Refuses the write.
+   *
+   * @type {(error: unknown) => void}
+   * @readonly
+   */
+  readonly reject: (error: unknown) => void;
+  // #endregion
+}
 
 /**
  * Function deferred
@@ -66,15 +129,11 @@ const sprint14Access: ListAccess = {
  * @description
  * A promise settled by the test.
  *
- * @returns {{ promise: Promise<ShareWrite>; resolve: (value: ShareWrite) => void; reject: (error: unknown) => void }} The promise and its settlers.
+ * @returns {Deferred} The promise and its settlers.
  */
-function deferred(): {
-  promise: Promise<ShareWrite>;
-  resolve: (value: ShareWrite) => void;
-  reject: (error: unknown) => void;
-} {
-  let resolve!: (value: ShareWrite) => void;
-  let reject!: (error: unknown) => void;
+function deferred(): Deferred {
+  let resolve: (value: ShareWrite) => void = (): void => undefined;
+  let reject: (error: unknown) => void = (): void => undefined;
   const promise: Promise<ShareWrite> = new Promise<ShareWrite>((ok, ko) => {
     resolve = ok;
     reject = ko;
@@ -98,6 +157,7 @@ function rolesOf(store: ListShareStoreInstance): string[] {
 describe('ListShareStore', () => {
   let api: Record<string, Mock>;
   let toasts: { show: Mock; error: Mock };
+  let edits: TaskList[];
   let listPage: {
     list: { hasValue: () => boolean; value: () => TaskList };
     followListEdits: Mock;
@@ -109,26 +169,32 @@ describe('ListShareStore', () => {
    * Function open
    *
    * @description
-   * Opens the store on `Sprint 14` and waits for the read.
+   * Opens the store on `Sprint 14` and waits for the reads.
    *
    * @returns {Promise<void>} Resolves once read.
    */
   async function open(): Promise<void> {
-    store.follow({ listId: 'l-sprint14', spaceId: 'sp-product' });
-    await expect.poll(() => store.access.hasValue()).toBe(true);
+    store.follow(target);
+    await expect.poll(() => store.access.hasValue() && store.directory.hasValue()).toBe(true);
   }
 
   beforeEach(() => {
     api = {
       read: vi.fn(() => Promise.resolve(sprint14Access)),
+      directory: vi.fn(() => Promise.resolve(directory)),
       setRole: vi.fn(() => Promise.resolve({ version: 5 })),
       removeRole: vi.fn(() => Promise.resolve({ version: 6 })),
       setOrganizationAccess: vi.fn(() => Promise.resolve({ version: 7 })),
     };
     toasts = { show: vi.fn(), error: vi.fn() };
+    edits = [];
     listPage = {
       list: { hasValue: () => true, value: () => sprint14 },
-      followListEdits: vi.fn(),
+      followListEdits: vi.fn((source: Observable<TaskList>): void => {
+        source.subscribe((list: TaskList): void => {
+          edits.push(list);
+        });
+      }),
       members: { reload: vi.fn() },
     };
     TestBed.configureTestingModule({
@@ -155,13 +221,35 @@ describe('ListShareStore', () => {
 
   it('keeps a failed read apart from an empty one and reads again on retry', async () => {
     api['read'].mockRejectedValueOnce(new Error('offline'));
-    store.follow({ listId: 'l-sprint14', spaceId: 'sp-product' });
+    store.follow(target);
     await expect.poll(() => store.access.error()).toBeTruthy();
     expect(store.people()).toEqual([]);
 
     store.access.reload();
     await expect.poll(() => store.access.hasValue()).toBe(true);
     expect(api['read']).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps the people when the directory fails, without invitation, until Retry', async () => {
+    api['directory'].mockRejectedValueOnce(new Error('offline'));
+    store.follow(target);
+    await expect.poll(() => store.directory.error()).toBeTruthy();
+
+    expect(rolesOf(store)).toEqual(['u-camille:owner', 'u-lea:comment', 'u-nadia:comment']);
+    expect(store.people()[1]?.name).toBeNull();
+    expect(store.canInvite()).toBe(false);
+
+    store.directory.reload();
+    await expect.poll(() => store.canInvite()).toBe(true);
+  });
+
+  it('hides the invitation without names when the directory is refused', async () => {
+    api['directory'].mockResolvedValueOnce(null);
+    await open();
+
+    expect(store.directory.error()).toBeUndefined();
+    expect(store.canInvite()).toBe(false);
+    expect(store.people()[1]?.name).toBeNull();
   });
 
   it('changes a role at once and hands the new list version to the list page', async () => {
@@ -172,10 +260,25 @@ describe('ListShareStore', () => {
     await expect(sent).resolves.toBe(true);
 
     expect(api['setRole']).toHaveBeenCalledWith('l-sprint14', 'u-lea', 'view');
-    const edits: Observable<TaskList> = listPage.followListEdits.mock
-      .calls[0]?.[0] as Observable<TaskList>;
-    await expect(firstValueFrom(edits)).resolves.toEqual({ ...sprint14, version: 5 });
+    expect(edits).toEqual([{ ...sprint14, version: 5 }]);
     expect(listPage.members.reload).toHaveBeenCalled();
+  });
+
+  it('reads the access again once the last change ends, and shows that read', async () => {
+    await open();
+    api['read'].mockResolvedValueOnce({
+      ...sprint14Access,
+      grants: [
+        { userId: 'u-lea', role: 'view' },
+        { userId: 'u-nadia', role: 'edit' },
+      ],
+    });
+
+    await store.changeRole('u-lea', 'view');
+
+    await expect.poll(() => api['read'].mock.calls.length).toBe(2);
+    await expect.poll(() => rolesOf(store)).toContain('u-nadia:edit');
+    expect(rolesOf(store)).toContain('u-lea:view');
   });
 
   it('puts back the confirmed role and shows the failure toast when the gateway refuses', async () => {
@@ -186,12 +289,12 @@ describe('ListShareStore', () => {
 
     expect(rolesOf(store)).toContain('u-lea:comment');
     expect(toasts.error).toHaveBeenCalledWith('The access could not be changed');
-    expect(listPage.followListEdits).not.toHaveBeenCalled();
+    expect(edits).toEqual([]);
   });
 
   it('sends the changes of one person in order and keeps the newer one when an older fails', async () => {
     await open();
-    const first: ReturnType<typeof deferred> = deferred();
+    const first: Deferred = deferred();
     api['setRole'].mockReturnValueOnce(first.promise);
 
     const older: Promise<boolean> = store.changeRole('u-lea', 'edit');
@@ -204,7 +307,51 @@ describe('ListShareStore', () => {
     expect(rolesOf(store)).toContain('u-lea:view');
     await expect(newer).resolves.toBe(true);
     expect(api['setRole']).toHaveBeenLastCalledWith('l-sprint14', 'u-lea', 'view');
-    expect(rolesOf(store)).toContain('u-lea:view');
+  });
+
+  it('keeps the order of the writes when the dialog closes and reopens meanwhile', async () => {
+    await open();
+    const first: Deferred = deferred();
+    const order: string[] = [];
+    api['setRole'].mockImplementation((_listId: string, userId: string, role: string) => {
+      order.push(`${userId}:${role}`);
+      return order.length === 1 ? first.promise : Promise.resolve({ version: 6 });
+    });
+
+    const older: Promise<boolean> = store.changeRole('u-lea', 'edit');
+    await expect.poll(() => order.length).toBe(1);
+    store.follow(null);
+    await open();
+
+    expect(rolesOf(store)).toContain('u-lea:edit');
+    const newer: Promise<boolean> = store.changeRole('u-lea', 'view');
+    await Promise.resolve();
+    expect(order).toEqual(['u-lea:edit']);
+
+    first.resolve({ version: 5 });
+    await expect(older).resolves.toBe(true);
+    await expect(newer).resolves.toBe(true);
+    expect(order).toEqual(['u-lea:edit', 'u-lea:view']);
+    expect(edits.map((list: TaskList): number => list.version)).toEqual([5, 6]);
+  });
+
+  it('reports a write that ends after the dialog closed', async () => {
+    await open();
+    const recorded: Deferred = deferred();
+    const refused: Deferred = deferred();
+    api['setRole'].mockReturnValueOnce(recorded.promise);
+    api['removeRole'].mockReturnValueOnce(refused.promise);
+    const sent: Promise<boolean> = store.changeRole('u-lea', 'view');
+    const removed: Promise<boolean> = store.remove('u-nadia');
+
+    store.follow(null);
+    recorded.resolve({ version: 9 });
+    refused.reject(new Error('refused'));
+
+    await expect(sent).resolves.toBe(true);
+    await expect(removed).resolves.toBe(false);
+    expect(edits).toEqual([{ ...sprint14, version: 9 }]);
+    expect(toasts.error).toHaveBeenCalledWith('The access could not be removed');
   });
 
   it('removes a person at once and shows them again when refused', async () => {
@@ -266,9 +413,11 @@ describe('ListShareStore', () => {
 
   it('turns the organization access at once and back when refused', async () => {
     await open();
+    api['read'].mockResolvedValue({ ...sprint14Access, organizationAccess: false });
 
     await expect(store.setOrganizationAccess(false)).resolves.toBe(true);
     expect(store.organizationAccess()).toBe(false);
+    expect(edits).toEqual([{ ...sprint14, version: 7 }]);
 
     api['setOrganizationAccess'].mockRejectedValueOnce(new Error('refused'));
     await expect(store.setOrganizationAccess(true)).resolves.toBe(false);
@@ -284,21 +433,5 @@ describe('ListShareStore', () => {
     expect(store.invite('hugo.dubois@ateliernord.fr', 'edit')).toBe('ignored');
     await expect(store.setOrganizationAccess(false)).resolves.toBe(false);
     expect(api['setOrganizationAccess']).not.toHaveBeenCalled();
-  });
-
-  it('forgets the changes when the dialog closes and drops answers for a list it left', async () => {
-    await open();
-    const pending: ReturnType<typeof deferred> = deferred();
-    api['setRole'].mockReturnValueOnce(pending.promise);
-    const sent: Promise<boolean> = store.changeRole('u-lea', 'view');
-
-    store.follow(null);
-    pending.resolve({ version: 9 });
-    await sent;
-
-    expect(store.people()).toEqual([]);
-    expect(listPage.followListEdits).not.toHaveBeenCalled();
-    await open();
-    expect(rolesOf(store)).toContain('u-lea:comment');
   });
 });

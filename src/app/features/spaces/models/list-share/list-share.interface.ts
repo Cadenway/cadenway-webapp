@@ -167,18 +167,6 @@ export interface ListAccess {
    * @readonly
    */
   readonly grants: readonly ShareGrant[];
-
-  /**
-   * Property directory
-   *
-   * @description
-   * Every member and guest of the organization, or null when the caller may not read the
-   * directory (names unknown, no invitation by email).
-   *
-   * @type {readonly ShareDirectoryEntry[] | null}
-   * @readonly
-   */
-  readonly directory: readonly ShareDirectoryEntry[] | null;
   // #endregion
 }
 

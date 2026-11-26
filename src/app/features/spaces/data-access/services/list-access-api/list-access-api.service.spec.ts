@@ -130,7 +130,7 @@ describe('ListAccessApi', () => {
     api = TestBed.inject(ListAccessApi);
   });
 
-  it('reads the list, its owner, its grants and every page of the directory', async () => {
+  it('reads the list, its owner and its grants', async () => {
     const read: ListAccess = await api.read('l-sprint14', 'sp-product');
 
     expect(read).toEqual({
@@ -143,31 +143,43 @@ describe('ListAccessApi', () => {
         { userId: 'u-lea', role: 'comment' },
         { userId: 'u-nadia', role: 'view' },
       ],
-      directory: [
-        {
-          userId: 'u-camille',
-          name: 'Camille Martin',
-          email: 'camille@ateliernord.fr',
-          guest: false,
-        },
-        { userId: 'u-lea', name: 'Léa Petit', email: 'lea@ateliernord.fr', guest: false },
-        { userId: 'u-nadia', name: 'Nadia Benali', email: 'nadia@studio-pixel.fr', guest: true },
-      ],
     });
-    expect(members['listMembers']).toHaveBeenLastCalledWith({ limit: 100, cursor: 'next' });
   });
 
-  it('keeps the read when the directory is refused, without names', async () => {
-    members['listMembers'] = vi.fn(() => throwError(() => new HttpErrorResponse({ status: 403 })));
+  it('reads a caller without edit and an absent switch as on', async () => {
     lists['getList'].mockReturnValueOnce(
       of({ ...sprint14, callerRole: 'view', organizationAccess: undefined }),
     );
 
     const read: ListAccess = await api.read('l-sprint14', 'sp-product');
 
-    expect(read.directory).toBeNull();
     expect(read.canEdit).toBe(false);
     expect(read.organizationAccess).toBe(true);
+  });
+
+  it('reads every page of the directory', async () => {
+    await expect(api.directory()).resolves.toEqual([
+      {
+        userId: 'u-camille',
+        name: 'Camille Martin',
+        email: 'camille@ateliernord.fr',
+        guest: false,
+      },
+      { userId: 'u-lea', name: 'Léa Petit', email: 'lea@ateliernord.fr', guest: false },
+      { userId: 'u-nadia', name: 'Nadia Benali', email: 'nadia@studio-pixel.fr', guest: true },
+    ]);
+    expect(members['listMembers']).toHaveBeenLastCalledWith({ limit: 100, cursor: 'next' });
+  });
+
+  it('answers null for a refused directory and rejects any other failure', async () => {
+    members['listMembers'] = vi.fn(() => throwError(() => new HttpErrorResponse({ status: 403 })));
+    await expect(api.directory()).resolves.toBeNull();
+
+    members['listMembers'] = vi.fn(() => throwError(() => new HttpErrorResponse({ status: 503 })));
+    await expect(api.directory()).rejects.toBeInstanceOf(HttpErrorResponse);
+
+    members['listMembers'] = vi.fn(() => throwError(() => new HttpErrorResponse({ status: 0 })));
+    await expect(api.directory()).rejects.toBeInstanceOf(HttpErrorResponse);
   });
 
   it('gives, removes and switches access, returning the version of the list', async () => {

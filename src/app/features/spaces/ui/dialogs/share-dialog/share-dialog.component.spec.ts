@@ -1,4 +1,4 @@
-import { signal, type WritableSignal } from '@angular/core';
+import { signal } from '@angular/core';
 import { type ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideCadenwayIcons } from '@cadenway/icons';
 import { CwToastService } from '@cadenway/ui/components/toast';
@@ -6,9 +6,13 @@ import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 
 import { WORKSPACE_CONTEXT } from '@features/workspace/ports/workspace-context';
 
-import type { SharePerson } from '../../../models/list-share/list-share.interface';
+import { ListAccessApi } from '../../../data-access/services/list-access-api/list-access-api.service';
+import type {
+  ListAccess,
+  ShareDirectoryEntry,
+} from '../../../models/list-share/list-share.interface';
 import type { TaskList } from '../../../models/task-list/task-list.interface';
-import { ListShareStore } from '../../../state/list-share/list-share.store';
+import { ListPageStore } from '../../../state/list-page/list-page.store';
 import { ShareDialog } from './share-dialog.component';
 
 /**
@@ -32,182 +36,45 @@ const sprint14: TaskList = {
 };
 
 /**
- * Constant people
+ * Constant sprint14Access
  *
  * @description
- * `People with access` of `Sprint 14`.
+ * Who has access to `Sprint 14`: Camille Martin owns the space, Léa Petit and the guest Nadia
+ * Benali comment.
  *
- * @type {readonly SharePerson[]}
+ * @type {ListAccess}
  */
-const people: readonly SharePerson[] = [
+const sprint14Access: ListAccess = {
+  listId: 'l-sprint14',
+  canEdit: true,
+  organizationAccess: true,
+  privateSpace: false,
+  ownerId: 'u-camille',
+  grants: [
+    { userId: 'u-lea', role: 'comment' },
+    { userId: 'u-nadia', role: 'comment' },
+  ],
+};
+
+/**
+ * Constant directory
+ *
+ * @description
+ * The members of Atelier Nord; Hugo Dubois has no grant.
+ *
+ * @type {readonly ShareDirectoryEntry[]}
+ */
+const directory: readonly ShareDirectoryEntry[] = [
   {
     userId: 'u-camille',
     name: 'Camille Martin',
     email: 'camille.martin@ateliernord.fr',
     guest: false,
-    role: 'owner',
   },
-  {
-    userId: 'u-lea',
-    name: 'Léa Petit',
-    email: 'lea.petit@ateliernord.fr',
-    guest: false,
-    role: 'comment',
-  },
-  {
-    userId: 'u-nadia',
-    name: 'Nadia Benali',
-    email: 'nadia@studio-pixel.fr',
-    guest: true,
-    role: 'comment',
-  },
+  { userId: 'u-lea', name: 'Léa Petit', email: 'lea.petit@ateliernord.fr', guest: false },
+  { userId: 'u-hugo', name: 'Hugo Dubois', email: 'hugo.dubois@ateliernord.fr', guest: false },
+  { userId: 'u-nadia', name: 'Nadia Benali', email: 'nadia@studio-pixel.fr', guest: true },
 ];
-
-/**
- * Interface StoreFake
- *
- * @description
- * The signals and methods of `ListShareStore` the dialog reads.
- */
-interface StoreFake {
-  // #region Properties
-  /**
-   * Property access
-   *
-   * @description
-   * The read: its error, value and reload.
-   *
-   * @type {{ error: WritableSignal<unknown>; hasValue: WritableSignal<boolean>; reload: Mock }}
-   * @readonly
-   */
-  readonly access: {
-    error: WritableSignal<unknown>;
-    hasValue: WritableSignal<boolean>;
-    reload: Mock;
-  };
-
-  /**
-   * Property people
-   *
-   * @description
-   * The rows.
-   *
-   * @type {WritableSignal<readonly SharePerson[]>}
-   * @readonly
-   */
-  readonly people: WritableSignal<readonly SharePerson[]>;
-
-  /**
-   * Property guestCount
-   *
-   * @description
-   * Guests among the rows.
-   *
-   * @type {WritableSignal<number>}
-   * @readonly
-   */
-  readonly guestCount: WritableSignal<number>;
-
-  /**
-   * Property organizationAccess
-   *
-   * @description
-   * The switch.
-   *
-   * @type {WritableSignal<boolean>}
-   * @readonly
-   */
-  readonly organizationAccess: WritableSignal<boolean>;
-
-  /**
-   * Property canEdit
-   *
-   * @description
-   * Whether the caller may share.
-   *
-   * @type {WritableSignal<boolean>}
-   * @readonly
-   */
-  readonly canEdit: WritableSignal<boolean>;
-
-  /**
-   * Property canInvite
-   *
-   * @description
-   * Whether `Invite by email` shows.
-   *
-   * @type {WritableSignal<boolean>}
-   * @readonly
-   */
-  readonly canInvite: WritableSignal<boolean>;
-
-  /**
-   * Property privateSpace
-   *
-   * @description
-   * Whether the space is private.
-   *
-   * @type {WritableSignal<boolean>}
-   * @readonly
-   */
-  readonly privateSpace: WritableSignal<boolean>;
-
-  /**
-   * Property follow
-   *
-   * @description
-   * `follow` spy.
-   *
-   * @type {Mock}
-   * @readonly
-   */
-  readonly follow: Mock;
-
-  /**
-   * Property changeRole
-   *
-   * @description
-   * `changeRole` spy.
-   *
-   * @type {Mock}
-   * @readonly
-   */
-  readonly changeRole: Mock;
-
-  /**
-   * Property remove
-   *
-   * @description
-   * `remove` spy.
-   *
-   * @type {Mock}
-   * @readonly
-   */
-  readonly remove: Mock;
-
-  /**
-   * Property invite
-   *
-   * @description
-   * `invite` spy.
-   *
-   * @type {Mock}
-   * @readonly
-   */
-  readonly invite: Mock;
-
-  /**
-   * Property setOrganizationAccess
-   *
-   * @description
-   * `setOrganizationAccess` spy.
-   *
-   * @type {Mock}
-   * @readonly
-   */
-  readonly setOrganizationAccess: Mock;
-  // #endregion
-}
 
 /**
  * Function byTestId
@@ -250,10 +117,36 @@ function buttonNamed(name: string): HTMLButtonElement | undefined {
   );
 }
 
+/**
+ * Function text
+ *
+ * @description
+ * The text of the document, the overlays included.
+ *
+ * @returns {string} The text.
+ */
+function text(): string {
+  return document.body.textContent;
+}
+
 describe('ShareDialog', () => {
-  let store: StoreFake;
+  let api: Record<string, Mock>;
   let toasts: { show: Mock; error: Mock };
   let fixture: ComponentFixture<ShareDialog>;
+
+  /**
+   * Function settle
+   *
+   * @description
+   * Renders the dialog once its reads and writes are done.
+   *
+   * @returns {Promise<void>} Resolves once rendered.
+   */
+  async function settle(): Promise<void> {
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+  }
 
   /**
    * Function render
@@ -267,8 +160,7 @@ describe('ShareDialog', () => {
     fixture = TestBed.createComponent(ShareDialog);
     fixture.componentRef.setInput('list', sprint14);
     fixture.componentRef.setInput('open', true);
-    fixture.detectChanges();
-    await fixture.whenStable();
+    await settle();
   }
 
   /**
@@ -287,74 +179,146 @@ describe('ShareDialog', () => {
       field.dispatchEvent(new Event('input'));
     }
     byTestId('share-invite')?.click();
-    fixture.detectChanges();
-    await fixture.whenStable();
+    await settle();
+  }
+
+  /**
+   * Function askRemoval
+   *
+   * @description
+   * Opens the removal confirmation of a person.
+   *
+   * @param {string} name - The person's name.
+   * @returns {Promise<void>} Resolves once rendered.
+   */
+  async function askRemoval(name: string): Promise<void> {
+    buttonNamed(`Remove ${name}'s access`)?.click();
+    await settle();
+  }
+
+  /**
+   * Function pickRole
+   *
+   * @description
+   * Picks a role in a person's select.
+   *
+   * @param {string} name - The person's name.
+   * @param {string} role - The role's word.
+   * @returns {Promise<void>} Resolves once rendered.
+   */
+  async function pickRole(name: string, role: string): Promise<void> {
+    document
+      .querySelector<HTMLElement>(`[role="combobox"][aria-label="Access for ${name}"]`)
+      ?.click();
+    await settle();
+    [...document.querySelectorAll<HTMLElement>('[role="option"]')]
+      .find((option: HTMLElement): boolean => option.textContent.trim() === role)
+      ?.click();
+    await settle();
   }
 
   beforeEach(() => {
-    store = {
-      access: { error: signal<unknown>(undefined), hasValue: signal(true), reload: vi.fn() },
-      people: signal(people),
-      guestCount: signal(1),
-      organizationAccess: signal(true),
-      canEdit: signal(true),
-      canInvite: signal(true),
-      privateSpace: signal(false),
-      follow: vi.fn(),
-      changeRole: vi.fn(() => Promise.resolve(true)),
-      remove: vi.fn(() => Promise.resolve(true)),
-      invite: vi.fn(() => 'sent'),
-      setOrganizationAccess: vi.fn(() => Promise.resolve(true)),
+    api = {
+      read: vi.fn(() => Promise.resolve(sprint14Access)),
+      directory: vi.fn(() => Promise.resolve(directory)),
+      setRole: vi.fn(() => Promise.resolve({ version: 5 })),
+      removeRole: vi.fn(() => Promise.resolve({ version: 6 })),
+      setOrganizationAccess: vi.fn(() => Promise.resolve({ version: 7 })),
     };
     toasts = { show: vi.fn(), error: vi.fn() };
     TestBed.configureTestingModule({
       providers: [
         provideCadenwayIcons(),
+        { provide: ListAccessApi, useValue: api },
         { provide: CwToastService, useValue: toasts },
+        {
+          provide: ListPageStore,
+          useValue: {
+            list: { hasValue: () => true, value: () => sprint14 },
+            followListEdits: vi.fn(),
+            members: { reload: vi.fn() },
+          },
+        },
         {
           provide: WORKSPACE_CONTEXT,
           useValue: { organization: signal({ name: 'Atelier Nord', slug: 'atelier-nord' }) },
         },
       ],
     });
-    TestBed.overrideComponent(ShareDialog, {
-      set: { providers: [{ provide: ListShareStore, useValue: store }] },
-    });
   });
 
   it('shows the people with access, the owner, the guests and the organization switch', async () => {
     await render();
 
-    const text: string = document.body.textContent;
-    expect(text).toContain('Share “Sprint 14”');
-    expect(text).toContain('Invite people from the organization or external guests.');
+    expect(api['read']).toHaveBeenCalledWith('l-sprint14', 'sp-product', expect.any(AbortSignal));
+    expect(text()).toContain('Share “Sprint 14”');
+    expect(text()).toContain('Invite people from the organization or external guests.');
     expect(document.querySelectorAll('[data-testid="share-person"]')).toHaveLength(3);
-    expect(text).toContain('Owner');
-    expect(text).toContain('Guest');
+    expect(text()).toContain('Owner');
+    expect(text()).toContain('Guest');
+    expect(text()).toContain('lea.petit@ateliernord.fr');
     expect(byTestId('share-guests')?.textContent).toContain(
       '1 external guest: they only see this list and do not count as seats.',
     );
-    expect(text).toContain('All members of Atelier Nord can see this list');
+    expect(text()).toContain('All members of Atelier Nord can see this list');
     expect(buttonNamed("Remove Léa Petit's access")).toBeDefined();
     expect(buttonNamed("Remove Camille Martin's access")).toBeUndefined();
-
-    const follow: unknown = store.follow.mock.calls[0]?.[0];
-    expect(typeof follow).toBe('function');
-    expect((follow as () => unknown)()).toEqual({ listId: 'l-sprint14', spaceId: 'sp-product' });
   });
 
-  it('shows a failed read with Retry, apart from the loading state', async () => {
-    store.access.hasValue.set(false);
+  it('counts several guests in the plural', async () => {
+    api['read'].mockResolvedValueOnce({
+      ...sprint14Access,
+      grants: [...sprint14Access.grants, { userId: 'u-hugo', role: 'view' }],
+    });
+    api['directory'].mockResolvedValueOnce(
+      directory.map((entry: ShareDirectoryEntry) => ({
+        ...entry,
+        guest: entry.userId !== 'u-camille',
+      })),
+    );
     await render();
-    expect(byTestId('share-loading')).not.toBeNull();
 
-    store.access.error.set(new Error('offline'));
+    expect(byTestId('share-guests')?.textContent).toContain(
+      '3 external guests: they only see this list and do not count as seats.',
+    );
+  });
+
+  it('shows the skeleton while reading, then a failed read with Retry', async () => {
+    api['read'].mockReturnValueOnce(new Promise<ListAccess>((): void => undefined));
+    fixture = TestBed.createComponent(ShareDialog);
+    fixture.componentRef.setInput('list', sprint14);
+    fixture.componentRef.setInput('open', true);
     fixture.detectChanges();
+    await expect.poll(() => byTestId('share-loading')).not.toBeNull();
+    fixture.componentRef.setInput('open', false);
+    await settle();
+
+    api['read'].mockRejectedValueOnce(new Error('offline'));
+    fixture.componentRef.setInput('open', true);
+    await settle();
     expect(byTestId('share-failed')?.textContent).toContain(
       'The people with access could not be loaded.',
     );
+
     buttonNamed('Retry')?.click();
-    expect(store.access.reload).toHaveBeenCalled();
+    await settle();
+    expect(document.querySelectorAll('[data-testid="share-person"]')).toHaveLength(3);
+  });
+
+  it('shows a failed directory read with its own Retry, the people still listed', async () => {
+    api['directory'].mockRejectedValueOnce(new Error('offline'));
+    await render();
+
+    expect(byTestId('share-directory-failed')?.textContent).toContain(
+      'The members could not be loaded.',
+    );
+    expect(document.querySelectorAll('[data-testid="share-person"]')).toHaveLength(3);
+    expect(emailField()).toBeNull();
+
+    byTestId('share-directory-retry')?.click();
+    await settle();
+    expect(byTestId('share-directory-failed')).toBeNull();
+    expect(emailField()).not.toBeNull();
   });
 
   it('marks an incomplete address and sends nothing', async () => {
@@ -362,48 +326,73 @@ describe('ShareDialog', () => {
 
     await typeEmail('lea.petit@ateliernord');
 
-    expect(document.body.textContent).toContain('Incomplete address: add the domain.');
-    expect(store.invite).not.toHaveBeenCalled();
+    expect(text()).toContain('Incomplete address: add the domain.');
+    expect(api['setRole']).not.toHaveBeenCalled();
   });
 
-  it('notes an address outside the organization, then empties the field once sent', async () => {
-    store.invite.mockReturnValueOnce('unknown');
+  it('notes an address outside the organization or the owner, then invites a member', async () => {
     await render();
 
     await typeEmail('someone@elsewhere.com');
-    expect(store.invite).toHaveBeenCalledWith('someone@elsewhere.com', 'edit');
-    expect(document.body.textContent).toContain(
-      'This person is not in the organization: invite them first.',
-    );
+    expect(text()).toContain('This person is not in the organization: invite them first.');
+    await typeEmail('camille.martin@ateliernord.fr');
+    expect(text()).toContain('This person owns the space and already has access to the list.');
+    expect(api['setRole']).not.toHaveBeenCalled();
 
     await typeEmail('hugo.dubois@ateliernord.fr');
+    expect(api['setRole']).toHaveBeenCalledWith('l-sprint14', 'u-hugo', 'edit');
     expect(emailField()?.value).toBe('');
-    expect(document.body.textContent).not.toContain('This person is not in the organization');
+    expect(text()).not.toContain('This person');
+    expect(document.querySelectorAll('[data-testid="share-person"]')).toHaveLength(4);
   });
 
-  it('confirms a removal before removing the access', async () => {
+  it('confirms a removal, saying a member keeps the organization access', async () => {
     await render();
 
-    buttonNamed("Remove Léa Petit's access")?.click();
-    fixture.detectChanges();
-    await fixture.whenStable();
-    expect(document.body.textContent).toContain("Remove Léa Petit's access?");
-    expect(document.body.textContent).toContain(
+    await askRemoval('Léa Petit');
+    expect(text()).toContain("Remove Léa Petit's access?");
+    expect(text()).toContain(
       'Léa Petit will no longer see this list or its tasks. You can invite them again.',
     );
-    expect(store.remove).not.toHaveBeenCalled();
+    expect(text()).toContain('They can still see it through the organization access.');
+    expect(api['removeRole']).not.toHaveBeenCalled();
 
     byTestId('share-remove-confirm')?.click();
-    fixture.detectChanges();
-    await fixture.whenStable();
-    expect(store.remove).toHaveBeenCalledWith('u-lea');
+    await settle();
+    expect(api['removeRole']).toHaveBeenCalledWith('l-sprint14', 'u-lea');
   });
 
-  it('turns the organization access through the store', async () => {
+  it('says nothing of the organization access for a guest or with the switch off', async () => {
+    api['read'].mockResolvedValue({ ...sprint14Access, organizationAccess: false });
+    await render();
+
+    await askRemoval('Nadia Benali');
+    expect(text()).toContain("Remove Nadia Benali's access?");
+    expect(text()).not.toContain('through the organization access');
+    byTestId('share-remove-cancel')?.click();
+    await settle();
+
+    await askRemoval('Léa Petit');
+    expect(text()).toContain("Remove Léa Petit's access?");
+    expect(text()).not.toContain('through the organization access');
+  });
+
+  it('sends the role picked in a row, and nothing for the same role', async () => {
+    await render();
+
+    await pickRole('Léa Petit', 'Can comment');
+    expect(api['setRole']).not.toHaveBeenCalled();
+
+    await pickRole('Léa Petit', 'View only');
+    expect(api['setRole']).toHaveBeenCalledWith('l-sprint14', 'u-lea', 'view');
+  });
+
+  it('turns the organization access', async () => {
     await render();
 
     byTestId('share-organization')?.querySelector<HTMLButtonElement>('button')?.click();
-    expect(store.setOrganizationAccess).toHaveBeenCalledWith(false);
+    await settle();
+    expect(api['setOrganizationAccess']).toHaveBeenCalledWith('l-sprint14', false);
   });
 
   it('copies the link of the list with its toast', async () => {
@@ -419,15 +408,29 @@ describe('ShareDialog', () => {
     expect(toasts.show).toHaveBeenCalledWith('List link copied', { description: link });
   });
 
-  it('shows the roles as words and no invitation to a caller without edit', async () => {
-    store.canEdit.set(false);
-    store.canInvite.set(false);
-    store.privateSpace.set(true);
+  it('shows the failure toast when the link cannot be copied', async () => {
+    const writeText: Mock = vi.fn(() => Promise.reject(new Error('denied')));
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } });
     await render();
 
-    expect(byTestId('share-email')).toBeNull();
+    buttonNamed('Copy the link')?.click();
+    await expect.poll(() => toasts.error.mock.calls.length).toBe(1);
+
+    expect(toasts.error).toHaveBeenCalledWith('The link could not be copied', {
+      description: `${location.origin}/atelier-nord/l/l-sprint14`,
+    });
+    expect(toasts.show).not.toHaveBeenCalled();
+  });
+
+  it('shows the roles as words and no invitation to a caller without edit', async () => {
+    api['read'].mockResolvedValueOnce({ ...sprint14Access, canEdit: false, privateSpace: true });
+    api['directory'].mockResolvedValueOnce(null);
+    await render();
+
+    expect(emailField()).toBeNull();
     expect(byTestId('share-organization')).toBeNull();
-    expect(document.body.textContent).toContain('Can comment');
+    expect(text()).toContain('Can comment');
+    expect(text()).toContain('Unknown user');
     expect(buttonNamed("Remove Léa Petit's access")).toBeUndefined();
   });
 });
