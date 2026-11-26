@@ -194,7 +194,7 @@
           [attr.data-task-row]="shown?.task?.key ?? null"
           [attr.data-depth]="depth"
           [attr.data-undated]="item.end ? null : ''"
-          [cwContextMenuTriggerFor]="parent ? rowMenu : taskMenu.menu()"
+          [cwContextMenuTriggerFor]="parent || !item.end ? rowMenu : taskMenu.menu()"
           (opened)="menuItem.set(item.id)"
           (click)="open(item)"
         >
@@ -239,13 +239,21 @@
 <cw-menu #rowMenu ariaLabel="Task actions" i18n-ariaLabel="@@spaces.rows.menu">
   <cw-menu-label>{{ menuTitle() }}</cw-menu-label>
   @if (menuItem(); as id) {
-    <button cwMenuItem type="button" (triggered)="toggleMenuSubtasks()">
-      <ng-icon
-        [name]="parentOf(id)?.open ? 'phosphorCaretDownBold' : 'phosphorCaretRightBold'"
-        aria-hidden="true"
-      />
-      {{ subtasksLabel(id) }}
-    </button>
+    @if (itemOf(id)?.task?.due === null) {
+      <button cwMenuItem type="button" (triggered)="scheduleFromMenu()">
+        <ng-icon name="phosphorCalendarPlusBold" aria-hidden="true" />
+        {{ scheduleLabel }}
+      </button>
+    }
+    @if (parentOf(id); as parent) {
+      <button cwMenuItem type="button" (triggered)="toggleMenuSubtasks()">
+        <ng-icon
+          [name]="parent.open ? 'phosphorCaretDownBold' : 'phosphorCaretRightBold'"
+          aria-hidden="true"
+        />
+        {{ subtasksLabel(id) }}
+      </button>
+    }
   }
   <cw-menu-separator />
   <button cwMenuItem type="button" [cwMenuTriggerFor]="taskMenu.menu()">

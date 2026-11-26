@@ -151,7 +151,8 @@ included: it reads every level (`level: 'all'`) whatever the subtask display.
   period.
 - Toolbar: the period, the hint (from 1280 px), the scale radios, zoom out and in with
   `<scale> · <n>%`, `Fit` (`cw-timeline`'s `fit()`; `Nothing to fit` without a dated task),
-  `Today` and the previous and next periods. Ctrl + wheel, Ctrl +/−, T, J/S/M and Page Up/Down
+  `Today` and the previous and next periods (a week by day, four weeks by week, three months by
+  month, a month end staying a month end). Ctrl + wheel, Ctrl +/−, T, J/S/M and Page Up/Down
   come from the brick.
 - Writes go through `ViewTaskWritesStore.updateFields`, with `<key> rescheduled` /
   `From 3 to 7 November.` and `Undo`, and send only what changed. `updateTask` moves an existing
@@ -164,13 +165,15 @@ included: it reads every level (`level: 'all'`) whatever the subtask display.
   - a resized end (its edge, Shift and the arrows) sends `dueDate` with the start shown, so the
     start stays; a task without a start gets the day its bar started from;
   - the `Schedule` button of an undated task sends both, three days from the day under the
-    pointer or today (a milestone: `dueDate` alone). Enter on an undated row opens the task, as on
+    pointer or today (a milestone: `dueDate` alone); `Schedule` in the undated row's menu (the
+    keyboard's way, since the button is not a tab stop) does the same from today. Enter on an undated row opens the task, as on
     any row, and writes nothing: the page stops the key in the capture phase, where `cw-timeline`
     would schedule.
 - Menus: a right click, the Menu key or Shift F10 on a task row or its bar opens the shared
-  `cw-task-menu` (handed to the row's name in the capture phase). On a parent row, it opens the
-  row menu instead: `Show` / `Hide the n subtasks of CAD-482` (the chevron's toggle, so the
-  keyboard reaches it) and `Task actions`, the shared task menu as a submenu. Elsewhere, the chart
+  `cw-task-menu` (handed to the row's name in the capture phase). On a parent row or an undated
+  task's row, it opens the row menu instead: `Schedule` for an undated task, `Show` / `Hide the n
+subtasks of CAD-482` for a parent (the chevron's toggle, so the keyboard reaches it) and
+  `Task actions`, the shared task menu as a submenu. Elsewhere, the chart
   menu opens with `Go to today`, `Scale` and `New task`.
 - States: the first read shows the timeline's skeleton. A failed one reaches the route's error
   boundary, whose `Retry` reads again. A failed refresh keeps the chart under the inline error
@@ -189,7 +192,7 @@ included: it reads every level (`level: 'all'`) whatever the subtask display.
   - The bars' accessible names come from the brick, not the mockup's wording.
   - `cw-timeline` has no row level for a subtask: its indent and chevron are in the name cell
     only. The chevron is not a tab stop (the treegrid keeps one); the row menu toggles it from
-    the keyboard. `cw-task-menu` takes no extra item, so a parent's task actions are one level
+    the keyboard. `cw-task-menu` takes no extra item, so the task actions of a parent or an undated row are one level
     down.
   - The brick's T key and Page Up/Down derive the period from the day `today` last read.
 

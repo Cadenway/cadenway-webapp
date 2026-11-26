@@ -567,7 +567,9 @@ describe('GanttViewPage', () => {
       read++;
       return Promise.resolve({
         items: Array.from({ length: 100 }, (_: unknown, index: number) =>
-          task(`CAD-${String(first + index + 1)}`, `Task ${String(first + index + 1)}`),
+          task(`CAD-${String(first + index + 1)}`, `Task ${String(first + index + 1)}`, {
+            parentKey: first + index === 0 ? null : 'CAD-1',
+          }),
         ),
         nextCursor: 'more',
         total: 2500,
@@ -581,6 +583,7 @@ describe('GanttViewPage', () => {
         return hostOf(harness).querySelector('[role="status"]')?.textContent.trim();
       })
       .toBe('Only the first 2,000 tasks are shown.');
+    expect(rowsOf(harness)).toEqual([['CAD-1', '0']]);
     expect(button('Fit')?.getAttribute('title')).toBe('Fit to the 0 dated tasks shown');
 
     button('Fit')?.click();
@@ -679,6 +682,27 @@ describe('GanttViewPage', () => {
     menuItem('Hide the 1 subtasks of CAD-482')?.click();
     await settle(harness);
     expect(rowsOf(harness)).toEqual([['CAD-482', '0']]);
+  });
+
+  it('schedules an undated task over three days from its keyboard menu', async () => {
+    const harness: RouterTestingHarness = await open();
+    const row: Element | null | undefined = hostOf(harness)
+      .querySelector('[data-task-row="CAD-485"]')
+      ?.closest('[role="row"]');
+
+    row?.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'F10', shiftKey: true, bubbles: true, cancelable: true }),
+    );
+    await settle(harness);
+    [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')]
+      .find((element: HTMLElement): boolean => element.textContent.trim() === 'Schedule')
+      ?.click();
+    await settle(harness);
+
+    expect(update).toHaveBeenCalledWith('CAD-485', 3, {
+      startDate: '2026-11-26',
+      dueDate: '2026-11-28',
+    });
   });
 
   it('opens an undated task on Enter and schedules nothing', async () => {

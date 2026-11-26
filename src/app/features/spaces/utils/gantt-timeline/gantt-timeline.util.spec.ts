@@ -98,6 +98,24 @@ describe('gantt-timeline util', () => {
     expect(addMonths(new Date(2026, 0, 31), 1)).toEqual(new Date(2026, 1, 28));
   });
 
+  it('keeps a month end at the month end when moving months forth and back', () => {
+    const summer: { start: Date; end: Date } = {
+      start: new Date(2026, 2, 1),
+      end: new Date(2026, 7, 31),
+    };
+
+    const autumn: { start: Date; end: Date } = shiftGanttWindow(summer, 'month', 1);
+    expect(autumn).toEqual({ start: new Date(2026, 5, 1), end: new Date(2026, 10, 30) });
+    expect(shiftGanttWindow(autumn, 'month', -1)).toEqual(summer);
+    expect(shiftGanttWindow(summer, 'month', -2)).toEqual({
+      start: new Date(2025, 8, 1),
+      end: new Date(2026, 1, 28),
+    });
+    expect(
+      shiftGanttWindow({ start: new Date(2026, 2, 15), end: new Date(2026, 7, 30) }, 'month', 1),
+    ).toEqual({ start: new Date(2026, 5, 15), end: new Date(2026, 10, 30) });
+  });
+
   it('finds the step of the zoom ladder, falling back on the first step of a scale', () => {
     expect(zoomIndexOf('month', 1)).toBe(0);
     expect(zoomIndexOf('week', 1.5)).toBe(3);

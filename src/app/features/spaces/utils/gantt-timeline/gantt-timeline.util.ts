@@ -127,11 +127,29 @@ export function ganttWindow(scale: CwTimelineScale, anchor: Date): CwTimelineRan
 }
 
 /**
+ * Function shiftMonths
+ *
+ * @description
+ * A day moved by whole months that keeps a month end at the month end (31 August, three months
+ * on, is 30 November, and back again 31 August); any other day keeps its day of month, held
+ * within the target month.
+ *
+ * @param {Date} date - The day.
+ * @param {number} months - Months to add, negative to go back.
+ * @returns {Date} The moved day, at midnight.
+ */
+function shiftMonths(date: Date, months: number): Date {
+  const monthEnd: boolean = addDays(date, 1).getDate() === 1;
+  if (!monthEnd) return addMonths(date, months);
+  return new Date(date.getFullYear(), date.getMonth() + months + 1, 0);
+}
+
+/**
  * Function shiftGanttWindow
  *
  * @description
  * The period before or after one, as `cw-timeline`'s Page Up and Page Down move it: a week by
- * day, four weeks by week, three months by month.
+ * day, four weeks by week, three months by month (a month end stays a month end).
  *
  * @param {CwTimelineRange} range - The period shown.
  * @param {CwTimelineScale} scale - The scale.
@@ -144,7 +162,10 @@ export function shiftGanttWindow(
   steps: number,
 ): CwTimelineRange {
   if (scale === 'month') {
-    return { start: addMonths(range.start, 3 * steps), end: addMonths(range.end, 3 * steps) };
+    return {
+      start: shiftMonths(range.start, 3 * steps),
+      end: shiftMonths(range.end, 3 * steps),
+    };
   }
   const days: number = (scale === 'week' ? 28 : 7) * steps;
   return { start: addDays(range.start, days), end: addDays(range.end, days) };

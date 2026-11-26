@@ -549,10 +549,21 @@ export class GanttViewPage {
   );
 
   /**
+   * Property scheduleLabel
+   *
+   * @description
+   * `Schedule` in an undated row's menu, the timeline's button text.
+   *
+   * @type {string}
+   * @readonly
+   */
+  protected readonly scheduleLabel: string = $localize`:@@spaces.gantt.schedule:Schedule`;
+
+  /**
    * Property menuTitle
    *
    * @description
-   * The title of a parent row's menu, as the task menu writes it: `CAD-482 · <name>`.
+   * The title of a row menu, as the task menu writes it: `CAD-482 · <name>`.
    *
    * @type {Signal<string>}
    * @readonly
@@ -864,25 +875,27 @@ export class GanttViewPage {
    * Method schedule
    *
    * @description
-   * `Schedule` on an undated task: three days from the day given (one for a milestone).
+   * The `Schedule` button of an undated task: three days from the day given (one for a
+   * milestone).
    *
    * @param {CwTimelineSchedule} event - The task and its first day.
    */
   protected schedule(event: CwTimelineSchedule): void {
     const shown: ListTaskItem | undefined = this.itemOf(event.item.id);
-    if (!shown) return;
-    const task: TaskSummary = shown.task;
-    if (task.milestone) {
-      this.write(task, { dueDate: todayIso(event.start) }, event.start, event.start);
-      return;
-    }
-    const end: Date = addDays(event.start, GANTT_SCHEDULE_DAYS - 1);
-    this.write(
-      task,
-      { startDate: todayIso(event.start), dueDate: todayIso(end) },
-      event.start,
-      end,
-    );
+    if (shown) this.scheduleFrom(shown.task, event.start);
+  }
+
+  /**
+   * Method scheduleFromMenu
+   *
+   * @description
+   * `Schedule` in an undated row's menu, the keyboard's way to the button: three days from today
+   * (one for a milestone), as the button without a pointer gives.
+   */
+  protected scheduleFromMenu(): void {
+    const id: string | null = this.menuItem();
+    const shown: ListTaskItem | undefined = id === null ? undefined : this.itemOf(id);
+    if (shown?.task.due === null) this.scheduleFrom(shown.task, this.gantt.today());
   }
 
   /**
@@ -920,6 +933,24 @@ export class GanttViewPage {
    */
   protected create(): void {
     this.taskCreate.open({ listId: this.listId() });
+  }
+
+  /**
+   * Method scheduleFrom
+   *
+   * @description
+   * Gives an undated task three days from a day (a milestone: that day alone).
+   *
+   * @param {TaskSummary} task - The task, as shown.
+   * @param {Date} start - Its first day.
+   */
+  private scheduleFrom(task: TaskSummary, start: Date): void {
+    if (task.milestone) {
+      this.write(task, { dueDate: todayIso(start) }, start, start);
+      return;
+    }
+    const end: Date = addDays(start, GANTT_SCHEDULE_DAYS - 1);
+    this.write(task, { startDate: todayIso(start), dueDate: todayIso(end) }, start, end);
   }
 
   /**
@@ -988,8 +1019,8 @@ export class GanttViewPage {
    * Makes a whole task row open its menu, as the mockup's bars and names do (`App.dc.html`
    * lines 897, 909): a right click, the Menu key or Shift F10 on a bar or anywhere in a task row
    * is handed to the row's name, which holds the menu's trigger (the task menu, or for a parent
-   * the row menu with `Show` / `Hide the n subtasks` and the task menu as a submenu), and the
-   * chart menu does not open. Elsewhere (a group row, the empty chart) the event goes on to the chart menu. Runs in
+   * or an undated task the row menu with `Schedule`, `Show` / `Hide the n subtasks` and the task
+   * menu as a submenu), and the chart menu does not open. Elsewhere (a group row, the empty chart) the event goes on to the chart menu. Runs in
    * the capture phase, since `cw-timeline` offers no item menu.
    *
    * @param {Event} event - A `contextmenu` or `keydown` event inside the view.
