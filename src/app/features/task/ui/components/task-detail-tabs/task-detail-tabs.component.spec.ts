@@ -184,6 +184,9 @@ describe('TaskDetailTabs', () => {
       update: vi.fn(() => Promise.resolve(true)),
       accept: vi.fn(),
       acceptVersion: vi.fn(),
+      write: vi.fn((_key: string, send: (version: number) => Promise<unknown>, fallback?: number) =>
+        send(fallback ?? 4),
+      ),
       reload: vi.fn(() => Promise.resolve()),
       reloadComments: vi.fn(() => Promise.resolve()),
     };
@@ -304,6 +307,7 @@ describe('TaskDetailTabs', () => {
     await fixture.whenStable();
 
     expect(api['setChecklistItem']).toHaveBeenCalledWith('CAD-482', 'i1', true);
+    expect(detail['write']).toHaveBeenCalledWith('CAD-482', expect.any(Function), 0);
   });
 
   it('opens a subtask with Enter and advances its status from its button', async () => {
