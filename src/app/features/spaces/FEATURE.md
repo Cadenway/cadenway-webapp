@@ -136,19 +136,33 @@ columns name the mockup's seed fields: the sheet draws the space's real custom f
   inline Retry; once read, they go to `ListViewStore.followCustomFields`) and the time spent of
   the rendered rows. It builds the rows in the presentation's order (`customFieldSort` while the
   space has the field, else `sheetSort`; statuses in workflow order, priorities from urgent, empty
-  cells last; a header cycles ascending, descending, none) and the footer's totals, and writes the
-  sort and the hidden columns to the presentation (`setPresentation`).
+  cells last; a header cycles ascending, descending, none; `Time spent` does not sort, and a saved
+  `sheetSort` on it shows the read order) and the footer's totals, and writes the sort and the
+  hidden columns to the presentation (`setPresentation`).
+- `Group by` files the sorted rows into the view's groups as the `List` view does
+  (`groupSheetRows`): statuses in workflow order, priorities from urgent, assignees with the most
+  tasks first and `Unassigned` last, a task with several assignees under each of them (row id
+  `<group>/<key>`). `Cancelled` is folded by default under the status grouping; the folded groups
+  of each grouping are kept while the view lives (`setCollapsed`). The `List` view's grouping
+  helpers live in `ListRowsStore` (server group reads), so the sheet has its own in
+  `utils/sheet-view`.
+- Selection: the rows are selectable (`Select CAD-482`); the shared `cw-bulk-bar` acts on the
+  ticked tasks (once each) through `ViewTaskWritesStore` (`Mark done`, `Assign`, `Move to…`,
+  `Delete`), a refused chunk stays ticked (`onRefused`), and the task menu of a ticked row acts on
+  the whole selection.
 - Inline edits: Enter or F2 (double click too) on the name, due date, estimate (a bare number is
   hours, `parseDuration`) and custom fields (`Points` refuses a negative number and stays open
   with `aria-invalid`); Enter validates, Escape cancels, Tab goes to the next editable cell. Each
   goes through `ViewTaskWritesStore.updateFields` (`If-Match`) with a toast and `Undo`; the
   reader shows the name and the due date at once, `SheetViewStore.showEdit` the estimate and the
-  custom fields until a read reaches the version the write returned. An unchanged value writes
-  nothing. A click or Enter on the name opens the task.
+  custom fields until a read reaches the version the write returned (dropped at once when a read
+  answered before the write already reached it). An unchanged value writes nothing. A click or
+  Enter on the name opens the task.
 - A right click, Shift + F10 or the row's `…` button opens `cw-task-menu`
   (`rowContextMenu`): status, priority, assignees, `Move to`, reminder, copies, deletion.
 - The footer counts the tasks and those done, and sums the estimates, the numeric custom fields
-  and the time spent once every row's is read.
+  and the time spent once every row's is read; until then the time spent's footer stays blank and
+  tells assistive technologies `Total once every row is read`.
 - States: the table's loading state (`Loading the sheet`) until the first read answers; a failed
   first read reaches the route's error boundary; a failed refresh shows inline with Retry; an
   empty read shows the mockup's `No task matches the search or the filters.`; a read stopped at
@@ -160,9 +174,9 @@ columns name the mockup's seed fields: the sheet draws the space's real custom f
 - Known gaps:
   - G6: `TaskSummary` has no `spentMinutes`. The sheet reads `getTaskTimeSummary` for each row the
     virtual table renders (`SheetSpentCell.shown`), four at a time, again when a task detail
-    closes or changes; the time spent sorts only the rows read, and its footer sum stays blank
-    until every row's is read. `spentMinutes` on `TaskSummary` (contracts, then task-service from
-    time entries) is the fix.
+    closes or changes. Until a list-level aggregate exists, `Time spent` does not sort and its
+    footer sum shows only once every row's summary is read (rows never rendered are never read).
+    `spentMinutes` on `TaskSummary` (contracts, then task-service from time entries) is the fix.
   - Status, priority, assignees, labels and list are not edited in their cells (the mockup's
     popovers): the task menu changes the first four and `Move to` the list; labels change in the
     task detail.
@@ -179,6 +193,7 @@ columns name the mockup's seed fields: the sheet draws the space's real custom f
 | `spaces.sheet.hint`                                                                  | The mockup's hint, with the table's double click and F2. |
 | `spaces.sheet.updated`, `spaces.sheet.updated-value`, `spaces.sheet.updated-cleared` | The mockup shows no toast for a sheet edit.              |
 | `spaces.sheet.fields-failed`, `spaces.sheet.truncated`                               | The mockup draws no failed read or capped list.          |
+| `spaces.sheet.spent-pending`                                                         | The mockup reads every time entry (G6).                  |
 | `spaces.sheet.title-no-points`                                                       | The mockup's space always has points.                    |
 
 ## Activity view

@@ -33,11 +33,19 @@
     [virtual]="virtualReady()"
     manual
     editable
+    selectable
     phoneLayout="grid"
     density="default"
     [page]="null"
-    [data]="virtualReady() ? sheet.rows() : noRows"
+    [data]="virtualReady() ? sheet.groups().rows : noRows"
     [trackBy]="rowId"
+    [rowLabel]="rowLabel"
+    [groupBy]="sheet.groupBy() === null ? null : 'group'"
+    [groupLabel]="groupLabel"
+    [groupOrder]="sheet.groups().order"
+    [groups]="tableGroups()"
+    [collapsed]="sheet.collapsed()"
+    [(selection)]="tableSelection"
     [phoneColumns]="['due', 'estimate']"
     [filtered]="filtered()"
     [sort]="tableSort()"
@@ -49,7 +57,27 @@
     (sortChange)="sortChanged($event)"
     (rowOpen)="open($event)"
     (cellEdit)="edited($event)"
+    (collapsedChange)="sheet.setCollapsed($event)"
   >
+    <ng-template cwDataTableGroup let-key>
+      @switch (sheet.groupBy()) {
+        @case ('status') {
+          <cw-status-icon [status]="statusOf(key)" size="4" />
+        }
+        @case ('priority') {
+          <cw-priority-icon [priority]="priorityOf(key)" size="4" />
+        }
+        @case ('assignee') {
+          <span
+            class="flex size-5 items-center justify-center rounded-full bg-secondary text-[9px] leading-none font-semibold text-secondary-foreground"
+            aria-hidden="true"
+            >{{ groupInitials(key) }}</span
+          >
+        }
+      }
+      <span class="truncate font-medium">{{ groupLabel(key) }}</span>
+    </ng-template>
+
     <cw-data-table-column key="name" sortable [header]="labels.name" [width]="320">
       <ng-template cwCell [cwCellOf]="sheet.rows()" let-row>
         <span class="flex w-full min-w-0 items-center gap-1.5">
@@ -190,7 +218,7 @@
       <ng-template cwFooterCell>{{ estimateSum() }}</ng-template>
     </cw-data-table-column>
 
-    <cw-data-table-column key="spent" sortable align="end" [header]="labels.spent" [width]="124">
+    <cw-data-table-column key="spent" align="end" [header]="labels.spent" [width]="124">
       <ng-template cwCell [cwCellOf]="sheet.rows()" let-row>
         <cw-sheet-spent-cell
           [minutes]="row.spentMinutes"
@@ -198,7 +226,13 @@
           (shown)="sheet.requestSpent(row.task.key)"
         />
       </ng-template>
-      <ng-template cwFooterCell>{{ spentSum() }}</ng-template>
+      <ng-template cwFooterCell>
+        @if (spentSum(); as sum) {
+          {{ sum }}
+        } @else {
+          <span class="sr-only" data-testid="sheet-spent-pending">{{ spentPendingText }}</span>
+        }
+      </ng-template>
     </cw-data-table-column>
 
     <cw-data-table-column key="labels" sortable [header]="labels.labels" [width]="180">
@@ -341,6 +375,20 @@
   </button>
 </cw-menu>
 
+<div class="pointer-events-none absolute inset-x-0 bottom-4 z-20 flex justify-center px-4">
+  <cw-bulk-bar
+    [count]="selectedTasks().length"
+    [people]="bulkPeople()"
+    [targets]="writes.targets()"
+    [pending]="writes.deleting()"
+    (doneMarked)="markDone()"
+    (assigned)="writes.toggleAssignee(selectedTasks(), $event, true)"
+    (moved)="moveSelection($event)"
+    (deleted)="writes.askDelete(selectedTasks(), false)"
+    (cleared)="clearSelection()"
+  />
+</div>
+
 <cw-task-menu
   [tasks]="menuTasks()"
   [status]="menuStatus()"
@@ -349,7 +397,7 @@
   [userId]="writes.userId()"
   [lists]="writes.targets()"
   (openRequested)="writes.open($event.key, $event)"
-  (statusPicked)="writes.setStatus(menuTasks(), $event, menuTasks()[0]?.milestone ?? false)"
+  (statusPicked)="writes.setStatus(menuTasks(), $event, menuMilestone())"
   (priorityPicked)="writes.setPriority(menuTasks(), $event)"
   (assigneeToggled)="writes.toggleAssignee(menuTasks(), $event)"
   (moved)="writes.moveTo(menuTasks(), $event)"

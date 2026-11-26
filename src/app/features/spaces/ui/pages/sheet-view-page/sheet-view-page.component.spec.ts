@@ -138,6 +138,8 @@ describe('SheetViewPage', () => {
   let page: Mock<ListTasksApi['page']>;
   let update: Mock<ListTasksApi['update']>;
   let customFields: Mock<SheetTasksApi['customFields']>;
+  let spentMinutes: Mock<SheetTasksApi['spentMinutes']>;
+  let bulk: Mock<TaskActionsApi['bulk']>;
   let toasts: Record<string, Mock>;
 
   /**
@@ -225,6 +227,16 @@ describe('SheetViewPage', () => {
       Promise.resolve({ kind: 'done', version: 5 }),
     );
     customFields = vi.fn<SheetTasksApi['customFields']>(() => Promise.resolve([points]));
+    spentMinutes = vi.fn<SheetTasksApi['spentMinutes']>(() => Promise.resolve(90));
+    bulk = vi.fn<TaskActionsApi['bulk']>(() =>
+      Promise.resolve({
+        affected: 1,
+        done: [{ taskKey: 'CAD-482', version: 5, newTaskKey: null, trashEntryId: null }],
+        failed: [],
+        unknown: [],
+        notSent: [],
+      }),
+    );
     toasts = {
       show: vi.fn(() => 'toast-1'),
       error: vi.fn(),
@@ -246,7 +258,7 @@ describe('SheetViewPage', () => {
             page,
             update,
             customFields,
-            spentMinutes: vi.fn(() => Promise.resolve(90)),
+            spentMinutes,
             groups: vi.fn(),
             subtasks: vi.fn(() => Promise.resolve([])),
           },
@@ -267,7 +279,7 @@ describe('SheetViewPage', () => {
         },
         {
           provide: TaskActionsApi,
-          useValue: { bulk: vi.fn(), restore: vi.fn(), remind: vi.fn() },
+          useValue: { bulk, restore: vi.fn(), remind: vi.fn() },
         },
         {
           provide: SpacesNavigationStore,
@@ -408,7 +420,71 @@ describe('SheetViewPage', () => {
     expect(
       table(fixture)
         .data()
-        .map((item: SheetRow) => item.id),
+        .map((item: SheetRow) => item.task.key),
     ).toEqual(['CAD-479', 'CAD-482']);
+  });
+
+  it('does not sort by the time spent and totals it only once every row is read', async () => {
+    let lastRow: (minutes: number) => void = (): void => undefined;
+    spentMinutes.mockImplementation((taskKey: string): Promise<number> =>
+      taskKey === 'CAD-479'
+        ? new Promise<number>((resolve: (minutes: number) => void) => {
+            lastRow = resolve;
+          })
+        : Promise.resolve(90),
+    );
+    const view: InstanceType<typeof ListViewStore> = TestBed.inject(ListViewStore);
+    view.setPresentation({ sheetSort: { column: 'spent', direction: 'desc' } });
+    const fixture: ComponentFixture<SheetViewPage> = await render();
+    const host: HTMLElement = fixture.nativeElement as HTMLElement;
+    const header: (name: string) => Element | undefined = (name: string) =>
+      [...host.querySelectorAll('[role="columnheader"]')].find(
+        (element: Element) => element.textContent.trim() === name,
+      );
+
+    expect(header('Time spent')?.getAttribute('aria-sort')).toBeNull();
+    expect(header('Estimate')?.getAttribute('aria-sort')).toBe('none');
+    expect(
+      table(fixture)
+        .data()
+        .map((item: SheetRow) => item.task.key),
+    ).toEqual(['CAD-482', 'CAD-479']);
+    expect(host.querySelector('[data-testid="sheet-spent-pending"]')?.textContent).toBe(
+      'Total once every row is read',
+    );
+    expect(textOf(fixture)).not.toContain('Σ 1 h 30');
+
+    lastRow(90);
+    await settle(fixture);
+    expect(host.querySelector('[data-testid="sheet-spent-pending"]')).toBeNull();
+    expect(textOf(fixture)).toContain('Σ 3 h');
+  });
+
+  it('groups the rows by the view grouping with Cancelled folded by default', async () => {
+    const view: InstanceType<typeof ListViewStore> = TestBed.inject(ListViewStore);
+    view.setGroupBy('status');
+    const fixture: ComponentFixture<SheetViewPage> = await render();
+    const grid: CwDataTable<SheetRow> = table(fixture);
+    expect(grid.groupBy()).toBe('group');
+    expect(grid.groups().map((group) => [group.value, group.count])).toEqual([
+      ['todo', 1],
+      ['done', 1],
+    ]);
+    expect(grid.collapsed()).toEqual(['cancelled']);
+    expect(textOf(fixture)).toContain('To do');
+  });
+
+  it('acts on the ticked rows from the selection bar', async () => {
+    const fixture: ComponentFixture<SheetViewPage> = await render();
+    const first: SheetRow = table(fixture).data()[0];
+    expect(first.task.key).toBe('CAD-482');
+    table(fixture).selection.set([first.id]);
+    await settle(fixture);
+    button('Mark done')?.click();
+    await settle(fixture);
+    expect(bulk).toHaveBeenCalledTimes(1);
+    expect(JSON.stringify(bulk.mock.calls[0])).toContain('CAD-482');
+    expect(JSON.stringify(bulk.mock.calls[0])).not.toContain('CAD-479');
+    expect(table(fixture).selection()).toEqual([]);
   });
 });

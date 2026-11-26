@@ -30,6 +30,7 @@ import { SheetTasksApi } from '../../data-access/services/sheet-tasks-api/sheet-
 import type { ListMember } from '../../models/list-member/list-member.interface';
 import type { ListTaskItem } from '../../models/list-tasks/list-tasks.interface';
 import type {
+  ListGroupBy,
   ListViewPresentation,
   SheetColumn,
 } from '../../models/list-view-config/list-view-config.interface';
@@ -45,11 +46,14 @@ import type {
 } from '../../models/sheet-view/sheet-view.interface';
 import type { ViewTaskOutcome } from '../../models/view-task-write/view-task-write.interface';
 import {
+  collapsedGroupsOf,
   fieldIdOf,
+  groupSheetRows,
   isTableColumn,
   presentationOfOrder,
   sheetOrderOf,
   sheetTotals,
+  type SheetGroups,
   sortSheetRows,
 } from '../../utils/sheet-view/sheet-view.util';
 import { ListPageStore } from '../list-page/list-page.store';
@@ -173,6 +177,17 @@ interface SheetViewState {
    * @readonly
    */
   readonly _spent: Readonly<Partial<Record<string, number>>>;
+
+  /**
+   * Property _collapsed
+   *
+   * @description
+   * Groups the user folded, by grouping (`all` without one).
+   *
+   * @type {Readonly<Partial<Record<string, readonly string[]>>>}
+   * @readonly
+   */
+  readonly _collapsed: Readonly<Partial<Record<string, readonly string[]>>>;
   // #endregion
 }
 
@@ -184,7 +199,13 @@ interface SheetViewState {
  *
  * @type {SheetViewState}
  */
-const initialState: SheetViewState = { _listId: null, _facts: {}, _edits: {}, _spent: {} };
+const initialState: SheetViewState = {
+  _listId: null,
+  _facts: {},
+  _edits: {},
+  _spent: {},
+  _collapsed: {},
+};
 
 /**
  * Function withoutKey
@@ -319,6 +340,39 @@ export interface SheetViewStoreInstance {
    * @readonly
    */
   readonly hiddenColumns: Signal<readonly SheetColumnKey[]>;
+
+  /**
+   * Property groupBy
+   *
+   * @description
+   * The view's grouping (`Group by`), null for none.
+   *
+   * @type {Signal<ListGroupBy>}
+   * @readonly
+   */
+  readonly groupBy: Signal<ListGroupBy>;
+
+  /**
+   * Property groups
+   *
+   * @description
+   * The table's rows in their groups, the groups' order and their counts.
+   *
+   * @type {Signal<SheetGroups>}
+   * @readonly
+   */
+  readonly groups: Signal<SheetGroups>;
+
+  /**
+   * Property collapsed
+   *
+   * @description
+   * The folded groups of the grouping shown (`Cancelled` by default under the status grouping).
+   *
+   * @type {Signal<readonly string[]>}
+   * @readonly
+   */
+  readonly collapsed: Signal<readonly string[]>;
   // #endregion
 
   // #region Methods
@@ -394,6 +448,16 @@ export interface SheetViewStoreInstance {
    * `Show all`: no hidden column.
    */
   showAllColumns(): void;
+
+  /**
+   * Method setCollapsed
+   *
+   * @description
+   * Remembers the folded groups of the grouping shown, while the view lives.
+   *
+   * @param {readonly string[]} values - The folded group values.
+   */
+  setCollapsed(values: readonly string[]): void;
   // #endregion
 }
 
@@ -489,6 +553,7 @@ function createSheetViewStore(): Type<SheetViewStoreInstance> {
           );
           return {
             id: item.task.key,
+            group: '',
             task: item.task,
             status: item.status,
             ...shown,
@@ -504,8 +569,14 @@ function createSheetViewStore(): Type<SheetViewStoreInstance> {
           listName: (listId: string): string => (list?.id === listId ? list.name : ''),
         });
       });
+      const groupBy: Signal<ListGroupBy> = computed(
+        (): ListGroupBy => store._view.config().groupBy,
+      );
       return {
         rows,
+        groupBy,
+        groups: (): SheetGroups => groupSheetRows(rows(), groupBy()),
+        collapsed: (): readonly string[] => collapsedGroupsOf(store._collapsed(), groupBy()),
         totals: (): SheetTotals => sheetTotals(rows(), store.customFields()),
       };
     }),
@@ -636,6 +707,11 @@ function createSheetViewStore(): Type<SheetViewStoreInstance> {
                 dropEdit(taskKey, seq);
                 return;
               }
+              const read: SheetTaskFacts | undefined = store._facts()[taskKey];
+              if (done.version !== null && read && read.version >= done.version) {
+                dropEdit(taskKey, seq);
+                return;
+              }
               patchState(store, (state: SheetViewState) => ({
                 _edits: {
                   ...state._edits,
@@ -681,6 +757,11 @@ function createSheetViewStore(): Type<SheetViewStoreInstance> {
         showAllColumns(): void {
           store._view.setPresentation({ hiddenSheetColumns: [], hiddenCustomFieldIds: [] });
         },
+        setCollapsed(values: readonly string[]): void {
+          patchState(store, (state: SheetViewState) => ({
+            _collapsed: { ...state._collapsed, [store.groupBy() ?? 'all']: values },
+          }));
+        },
       };
     }),
     withHooks({
@@ -724,8 +805,10 @@ function createSheetViewStore(): Type<SheetViewStoreInstance> {
  * the time spent of the rows shown (gap G6: one time summary per row, four at a time, read again
  * when a task detail closes or changes). It builds the rows in the presentation's order
  * (`sheetSort`, or `customFieldSort` while the list has the field; empty cells last) and the
- * totals of the footer, shows the sheet's estimate and custom field edits at once until a read
- * reaches their version, and writes the sort and the hidden columns to the presentation
+ * totals of the footer, files the rows into the view's groups (`Group by`, `Cancelled` folded by
+ * default), shows the sheet's estimate and custom field edits at once until a read reaches
+ * their version (at once gone when a read already did), and writes the sort and the hidden
+ * columns to the presentation
  * (`ListViewStore.setPresentation`). Another list forgets everything but the fields' read.
  *
  * @type {Type<SheetViewStoreInstance>}

@@ -1,6 +1,7 @@
 import { PRIORITY_KEYS, STATUS_KEYS } from '@cadenway/contracts';
 
 import type {
+  ListGroupBy,
   ListViewPresentation,
   SheetColumn,
 } from '../../models/list-view-config/list-view-config.interface';
@@ -34,6 +35,27 @@ export const SHEET_TABLE_COLUMNS: readonly SheetColumn[] = [
   'labels',
   'list',
 ];
+
+/**
+ * Constant UNSORTABLE_COLUMNS
+ *
+ * @description
+ * The built-in columns the sheet does not sort by: the time spent is read only for the rows the
+ * virtual table renders (gap G6), so an order by it would place every other row as empty.
+ *
+ * @type {readonly SheetColumn[]}
+ */
+export const UNSORTABLE_COLUMNS: readonly SheetColumn[] = ['spent'];
+
+/**
+ * Constant NO_ASSIGNEE
+ *
+ * @description
+ * The assignee group of the unassigned tasks, as the gateway names it.
+ *
+ * @type {string}
+ */
+export const NO_ASSIGNEE: string = 'none';
 
 /**
  * Constant FIELD_PREFIX
@@ -89,8 +111,9 @@ export function isTableColumn(key: string): key is SheetColumn {
  *
  * @description
  * The order the sheet shows from the presentation: the custom field's sort while the list has
- * that field (it takes precedence), else the built-in column's sort when the sheet draws that
- * column, else none (the read order, the task query's sort).
+ * that field (it takes precedence), else the built-in column's sort when the sheet draws and
+ * sorts that column, else none (the read order, the task query's sort). A saved sort by the time
+ * spent (`UNSORTABLE_COLUMNS`) shows the read order.
  *
  * @param {ListViewPresentation} presentation - The view's presentation.
  * @param {readonly SheetCustomField[]} fields - The list's custom fields.
@@ -105,7 +128,11 @@ export function sheetOrderOf(
     return { key: fieldColumnKey(fieldSort.fieldId), direction: fieldSort.direction };
   }
   const sheetSort: ListViewPresentation['sheetSort'] = presentation.sheetSort;
-  if (sheetSort && isTableColumn(sheetSort.column)) {
+  if (
+    sheetSort &&
+    isTableColumn(sheetSort.column) &&
+    !UNSORTABLE_COLUMNS.includes(sheetSort.column)
+  ) {
     return { key: sheetSort.column, direction: sheetSort.direction };
   }
   return null;
@@ -301,4 +328,129 @@ export function sheetTotals(
     }
   }
   return { count: rows.length, done, estimateMinutes, spentMinutes, fieldSums };
+}
+
+/**
+ * Interface SheetGroups
+ *
+ * @description
+ * The rows of the table under the view's grouping, and their groups.
+ */
+export interface SheetGroups {
+  // #region Properties
+  /**
+   * Property rows
+   *
+   * @description
+   * The rows in the sheet's order, each in its group; a task with several assignees has one row
+   * per assignee while grouped by assignee.
+   *
+   * @type {readonly SheetRow[]}
+   * @readonly
+   */
+  readonly rows: readonly SheetRow[];
+
+  /**
+   * Property order
+   *
+   * @description
+   * The groups that hold rows: statuses in workflow order, priorities from urgent to low,
+   * assignees with the most tasks first (first seen first between equals) and the unassigned
+   * last; empty while the view does not group.
+   *
+   * @type {readonly string[]}
+   * @readonly
+   */
+  readonly order: readonly string[];
+
+  /**
+   * Property counts
+   *
+   * @description
+   * Rows of each group.
+   *
+   * @type {Readonly<Partial<Record<string, number>>>}
+   * @readonly
+   */
+  readonly counts: Readonly<Partial<Record<string, number>>>;
+  // #endregion
+}
+
+/**
+ * Function groupsOfRow
+ *
+ * @description
+ * The groups a row shows in under a grouping.
+ *
+ * @param {SheetRow} row - The row.
+ * @param {Exclude<ListGroupBy, null>} grouping - The grouping.
+ * @returns {readonly string[]} The group values.
+ */
+function groupsOfRow(row: SheetRow, grouping: Exclude<ListGroupBy, null>): readonly string[] {
+  switch (grouping) {
+    case 'status':
+      return [row.status];
+    case 'priority':
+      return [row.task.priority];
+    case 'assignee':
+      return row.task.assigneeIds.length === 0 ? [NO_ASSIGNEE] : row.task.assigneeIds;
+  }
+}
+
+/**
+ * Function groupSheetRows
+ *
+ * @description
+ * Files the sorted rows into the view's groups (`Group by`), as the `List` view groups its rows;
+ * without a grouping, the rows stay as they are.
+ *
+ * @param {readonly SheetRow[]} rows - The rows, in the sheet's order.
+ * @param {ListGroupBy} grouping - The view's grouping.
+ * @returns {SheetGroups} The grouped rows and their groups.
+ */
+export function groupSheetRows(rows: readonly SheetRow[], grouping: ListGroupBy): SheetGroups {
+  if (grouping === null) return { rows, order: [], counts: {} };
+  const grouped: SheetRow[] = [];
+  const counts: Record<string, number> = {};
+  for (const row of rows) {
+    for (const group of groupsOfRow(row, grouping)) {
+      grouped.push({ ...row, id: `${group}/${row.task.key}`, group });
+      counts[group] = (counts[group] ?? 0) + 1;
+    }
+  }
+  const present: readonly string[] = Object.keys(counts);
+  let order: readonly string[];
+  switch (grouping) {
+    case 'status':
+      order = STATUS_KEYS.filter((status: string) => status in counts);
+      break;
+    case 'priority':
+      order = PRIORITY_KEYS.filter((priority: string) => priority in counts);
+      break;
+    case 'assignee':
+      order = present
+        .filter((group: string) => group !== NO_ASSIGNEE)
+        .sort((first: string, second: string): number => counts[second] - counts[first])
+        .concat(NO_ASSIGNEE in counts ? [NO_ASSIGNEE] : []);
+      break;
+  }
+  return { rows: grouped, order, counts };
+}
+
+/**
+ * Function collapsedGroupsOf
+ *
+ * @description
+ * The folded groups of a grouping: the ones the user folded, else `Cancelled` under the status
+ * grouping (collapsed by default, as in the `List` view and `App.dc.html`).
+ *
+ * @param {Readonly<Partial<Record<string, readonly string[]>>>} folded - Folded groups by grouping.
+ * @param {ListGroupBy} grouping - The view's grouping.
+ * @returns {readonly string[]} The folded group values.
+ */
+export function collapsedGroupsOf(
+  folded: Readonly<Partial<Record<string, readonly string[]>>>,
+  grouping: ListGroupBy,
+): readonly string[] {
+  return folded[grouping ?? 'all'] ?? (grouping === 'status' ? ['cancelled'] : []);
 }

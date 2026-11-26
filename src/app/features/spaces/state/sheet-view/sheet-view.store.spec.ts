@@ -8,7 +8,10 @@ import { WORKSPACE_CONTEXT } from '@features/workspace/ports/workspace-context';
 
 import { SheetTasksApi } from '../../data-access/services/sheet-tasks-api/sheet-tasks-api.service';
 import type { ListTaskItem } from '../../models/list-tasks/list-tasks.interface';
-import type { ListViewPresentation } from '../../models/list-view-config/list-view-config.interface';
+import type {
+  ListGroupBy,
+  ListViewPresentation,
+} from '../../models/list-view-config/list-view-config.interface';
 import type {
   SheetCustomField,
   SheetRow,
@@ -142,6 +145,7 @@ describe('SheetViewStore', () => {
   let spentMinutes: Mock<SheetTasksApi['spentMinutes']>;
   let items: WritableSignal<readonly ListTaskItem[]>;
   let presentation: WritableSignal<ListViewPresentation>;
+  let config: WritableSignal<{ groupBy: ListGroupBy }>;
   let setPresentation: Mock;
   let followCustomFields: Mock;
   let detailClosed: Subject<string>;
@@ -165,7 +169,7 @@ describe('SheetViewStore', () => {
         { provide: ListTasksStore, useValue: { items } },
         {
           provide: ListViewStore,
-          useValue: { presentation, setPresentation, followCustomFields },
+          useValue: { presentation, config, setPresentation, followCustomFields },
         },
         {
           provide: ListPageStore,
@@ -202,6 +206,7 @@ describe('SheetViewStore', () => {
       sheetSort: null,
       customFieldSort: null,
     });
+    config = signal<{ groupBy: ListGroupBy }>({ groupBy: null });
     setPresentation = vi.fn();
     followCustomFields = vi.fn();
     detailClosed = new Subject<string>();
@@ -228,6 +233,39 @@ describe('SheetViewStore', () => {
     expect(store.rows()[0].estimateMinutes).toBe(180);
     factsRead.next([facts(6, 120)]);
     expect(store.rows()[0].estimateMinutes).toBe(120);
+  });
+
+  it('drops a confirmed edit at once when a read already reached its version', async () => {
+    const store: SheetViewStoreInstance = setup();
+    factsRead.next([facts(4, 60)]);
+    let answer: (outcome: ViewTaskOutcome) => void = (): void => undefined;
+    store.showEdit(
+      'CAD-482',
+      { estimateMinutes: 180 },
+      new Promise<ViewTaskOutcome>((resolve: (outcome: ViewTaskOutcome) => void) => {
+        answer = resolve;
+      }),
+    );
+    factsRead.next([facts(6, 120)]);
+    expect(store.rows()[0].estimateMinutes).toBe(180);
+    answer(outcome(5));
+    await flush();
+    expect(store.rows()[0].estimateMinutes).toBe(120);
+  });
+
+  it('groups the rows by the view grouping and folds Cancelled by default', () => {
+    items.set([item('CAD-482'), { ...item('CAD-475'), status: 'cancelled' }]);
+    const store: SheetViewStoreInstance = setup();
+    expect(store.groups().order).toEqual([]);
+    config.set({ groupBy: 'status' });
+    expect(store.groups().order).toEqual(['todo', 'cancelled']);
+    expect(store.collapsed()).toEqual(['cancelled']);
+    store.setCollapsed([]);
+    expect(store.collapsed()).toEqual([]);
+    config.set({ groupBy: 'priority' });
+    expect(store.collapsed()).toEqual([]);
+    config.set({ groupBy: 'status' });
+    expect(store.collapsed()).toEqual([]);
   });
 
   it('puts the read value back when the write is refused', async () => {

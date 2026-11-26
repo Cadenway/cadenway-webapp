@@ -1066,6 +1066,7 @@
     "spaces.sheet.open": "Ouvrir {$key}",
     "spaces.sheet.region": "Feuille",
     "spaces.sheet.show-all": "Tout afficher",
+    "spaces.sheet.spent-pending": "Total dès que toutes les lignes sont lues",
     "spaces.sheet.sum": "Σ {$value}",
     "spaces.sheet.table": "Feuille des tâches de {$name}",
     "spaces.sheet.title": "{$count} · {$hours} · {$points} points",

@@ -29,8 +29,11 @@ import {
   CwDataTable,
   CwDataTableColumn,
   CwDataTableEmpty,
+  CwDataTableGroup,
+  type CwDataTableSelection,
   type CwDataTableTexts,
   CwFooterCellDef,
+  type CwGroupDef,
   type CwSort,
 } from '@cadenway/ui/components/data-table';
 import { CwEmpty, CwEmptyHeader, CwEmptyMedia, CwEmptyTitle } from '@cadenway/ui/components/empty';
@@ -48,8 +51,10 @@ import { formatDuration } from '@cadenway/ui/components/time-tracker';
 import { NgIcon } from '@ng-icons/core';
 
 import {
+  initialsOf,
   type Person,
   PRIORITY_LABELS,
+  type StatusOption,
   statusLabel,
   TaskCancelDialog,
   TaskCreate,
@@ -87,7 +92,8 @@ import {
   type ViewTaskWritesStoreInstance,
 } from '../../../state/view-task-writes/view-task-writes.store';
 import { VIEW_TASK_WRITER } from '../../../state/view-task-writes/view-task-writer.token';
-import { fieldColumnKey, fieldIdOf } from '../../../utils/sheet-view/sheet-view.util';
+import { fieldColumnKey, fieldIdOf, NO_ASSIGNEE } from '../../../utils/sheet-view/sheet-view.util';
+import { BulkBar, type BulkPerson } from '../../components/bulk-bar/bulk-bar.component';
 import {
   SheetCellEditor,
   type SheetEditorValue,
@@ -215,12 +221,14 @@ function isSheetRow(data: unknown): data is SheetRow {
     CwAlertDialogCancel,
     CwAlertDialogDescription,
     CwAlertDialogTitle,
+    BulkBar,
     CwButton,
     CwCellDef,
     CwCellEditorDef,
     CwDataTable,
     CwDataTableColumn,
     CwDataTableEmpty,
+    CwDataTableGroup,
     CwEmpty,
     CwEmptyHeader,
     CwEmptyMedia,
@@ -427,9 +435,27 @@ export class SheetViewPage {
   protected readonly menuTasks: Signal<readonly TaskSummary[]> = computed(
     (): readonly TaskSummary[] => {
       const row: SheetRow | null = this.menuRow();
-      return row ? [row.task] : [];
+      if (!row) return [];
+      const selected: readonly TaskSummary[] = this.selectedTasks();
+      return selected.length > 1 && selected.some((task: TaskSummary) => task.key === row.task.key)
+        ? selected
+        : [row.task];
     },
   );
+
+  /**
+   * Property menuMilestone
+   *
+   * @description
+   * Whether every task of the menu is a milestone (the status words).
+   *
+   * @type {Signal<boolean>}
+   * @readonly
+   */
+  protected readonly menuMilestone: Signal<boolean> = computed((): boolean => {
+    const tasks: readonly TaskSummary[] = this.menuTasks();
+    return tasks.length > 0 && tasks.every((task: TaskSummary): boolean => task.milestone);
+  });
 
   /**
    * Property menuStatus
@@ -440,9 +466,139 @@ export class SheetViewPage {
    * @type {Signal<StatusKey | null>}
    * @readonly
    */
-  protected readonly menuStatus: Signal<StatusKey | null> = computed(
-    (): StatusKey | null => this.menuRow()?.status ?? null,
+  protected readonly menuStatus: Signal<StatusKey | null> = computed((): StatusKey | null => {
+    const statuses: Set<StatusKey> = new Set<StatusKey>(
+      this.menuTasks().map((task: TaskSummary) => this.tasks.shownStatus(task)),
+    );
+    return statuses.size === 1 ? [...statuses][0] : null;
+  });
+
+  /**
+   * Property tableSelection
+   *
+   * @description
+   * Row ids ticked in the table, or `all`.
+   *
+   * @type {WritableSignal<CwDataTableSelection>}
+   * @readonly
+   */
+  protected readonly tableSelection: WritableSignal<CwDataTableSelection> =
+    signal<CwDataTableSelection>([]);
+
+  /**
+   * Property selectedTasks
+   *
+   * @description
+   * The ticked tasks, once each (a task has one row per assignee while grouped by assignee).
+   *
+   * @type {Signal<readonly TaskSummary[]>}
+   * @readonly
+   */
+  protected readonly selectedTasks: Signal<readonly TaskSummary[]> = computed(
+    (): readonly TaskSummary[] => {
+      const ticked: CwDataTableSelection = this.tableSelection();
+      const tasks: Map<string, TaskSummary> = new Map<string, TaskSummary>();
+      for (const row of this.sheet.groups().rows) {
+        if (ticked === 'all' || ticked.includes(row.id)) tasks.set(row.task.key, row.task);
+      }
+      return [...tasks.values()];
+    },
   );
+
+  /**
+   * Property bulkPeople
+   *
+   * @description
+   * The people of the selection bar's `Assign`, ticked when every selected task has them.
+   *
+   * @type {Signal<readonly BulkPerson[]>}
+   * @readonly
+   */
+  protected readonly bulkPeople: Signal<readonly BulkPerson[]> = computed(
+    (): readonly BulkPerson[] => {
+      const selected: readonly TaskSummary[] = this.selectedTasks();
+      return this.writes.people().map((person: Person): BulkPerson => ({
+        id: person.id,
+        name: person.name,
+        initials: person.initials,
+        assigned:
+          selected.length > 0 &&
+          selected.every((task: TaskSummary): boolean => task.assigneeIds.includes(person.id)),
+      }));
+    },
+  );
+
+  /**
+   * Property tableGroups
+   *
+   * @description
+   * The groups the table shows, with their names and row counts.
+   *
+   * @type {Signal<readonly CwGroupDef[]>}
+   * @readonly
+   */
+  protected readonly tableGroups: Signal<readonly CwGroupDef[]> = computed(
+    (): readonly CwGroupDef[] => {
+      const groups: ReturnType<SheetViewStoreInstance['groups']> = this.sheet.groups();
+      return groups.order.map((value: string): CwGroupDef => ({
+        value,
+        label: this.groupLabel(value),
+        count: groups.counts[value] ?? 0,
+      }));
+    },
+  );
+
+  /**
+   * Property spentPendingText
+   *
+   * @description
+   * What the blank footer of the time spent says to assistive technologies until every row's time
+   * summary is read (gap G6).
+   *
+   * @type {string}
+   * @readonly
+   */
+  protected readonly spentPendingText: string = $localize`:@@spaces.sheet.spent-pending:Total once every row is read`;
+
+  /**
+   * Property rowLabel
+   *
+   * @description
+   * Short name of a row for its checkbox (`Select CAD-482`).
+   *
+   * @type {(row: SheetRow) => string}
+   * @readonly
+   */
+  protected readonly rowLabel: (row: SheetRow) => string = (row: SheetRow): string => row.task.key;
+
+  /**
+   * Property groupLabel
+   *
+   * @description
+   * The name of a group: the space's name of a status, a priority's word, a member's name or
+   * `Unassigned`.
+   *
+   * @type {(key: string) => string}
+   * @readonly
+   */
+  protected readonly groupLabel: (key: string) => string = (key: string): string => {
+    switch (this.sheet.groupBy()) {
+      case 'status':
+        return (
+          this.writes.statusOptions().find((option: StatusOption): boolean => option.key === key)
+            ?.label ?? key
+        );
+      case 'priority':
+        return PRIORITY_LABELS[key as PriorityKey];
+      case 'assignee':
+        return key === NO_ASSIGNEE
+          ? $localize`:@@spaces.rows.unassigned:Unassigned`
+          : (this.writes.people().find((person: Person): boolean => person.id === key)?.name ??
+              key);
+      case null:
+        return $localize`:@@spaces.rows.all:All tasks`;
+    }
+  };
 
   /**
    * Property list
@@ -665,6 +821,14 @@ export class SheetViewPage {
     this.sheet.load(this.listId);
     this.view.followRows(this.tasks.summary);
     this.taskCreate.useDefaults(() => ({ listId: this.listId() }), inject(DestroyRef));
+    this.writes.onRefused((taskKeys: readonly string[]): void => {
+      this.tableSelection.set(
+        this.sheet
+          .groups()
+          .rows.filter((row: SheetRow): boolean => taskKeys.includes(row.task.key))
+          .map((row: SheetRow): string => row.id),
+      );
+    });
     afterRenderEffect({
       write: (): void => {
         this.renderedFieldSet.set(this.fieldSet());
@@ -685,6 +849,82 @@ export class SheetViewPage {
    */
   protected fieldKey(field: SheetCustomField): string {
     return fieldColumnKey(field.id);
+  }
+
+  /**
+   * Method statusOf
+   *
+   * @description
+   * The status of a status group.
+   *
+   * @param {string} key - The group value.
+   * @returns {StatusKey} The status.
+   */
+  protected statusOf(key: string): StatusKey {
+    return key as StatusKey;
+  }
+
+  /**
+   * Method priorityOf
+   *
+   * @description
+   * The priority of a priority group.
+   *
+   * @param {string} key - The group value.
+   * @returns {PriorityKey} The priority.
+   */
+  protected priorityOf(key: string): PriorityKey {
+    return key as PriorityKey;
+  }
+
+  /**
+   * Method groupInitials
+   *
+   * @description
+   * The initials of an assignee group's avatar.
+   *
+   * @param {string} key - The group value.
+   * @returns {string} The initials, empty for the unassigned.
+   */
+  protected groupInitials(key: string): string {
+    return key === NO_ASSIGNEE ? '' : initialsOf(this.groupLabel(key));
+  }
+
+  /**
+   * Method markDone
+   *
+   * @description
+   * `Mark done` of the selection bar.
+   */
+  protected markDone(): void {
+    const tasks: readonly TaskSummary[] = this.selectedTasks();
+    this.clearSelection();
+    this.writes.markDone(tasks);
+  }
+
+  /**
+   * Method moveSelection
+   *
+   * @description
+   * `Move to` of the selection bar; the tasks leave the view at once.
+   *
+   * @param {string} listId - The destination.
+   */
+  protected moveSelection(listId: string): void {
+    const tasks: readonly TaskSummary[] = this.selectedTasks();
+    if (tasks.every((task: TaskSummary): boolean => task.listId === listId)) return;
+    this.clearSelection();
+    this.writes.moveTo(tasks, listId, true);
+  }
+
+  /**
+   * Method clearSelection
+   *
+   * @description
+   * Empties the selection.
+   */
+  protected clearSelection(): void {
+    this.tableSelection.set([]);
   }
 
   /**
@@ -886,7 +1126,8 @@ export class SheetViewPage {
    * Method spentSum
    *
    * @description
-   * The footer's sum of the time spent, blank until every row's is read (gap G6).
+   * The footer's sum of the time spent, blank (with `spentPendingText` for assistive
+   * technologies) until every row's is read (gap G6).
    *
    * @returns {string} `Σ 12 h 30`, or empty.
    */

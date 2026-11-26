@@ -5,6 +5,8 @@ import type { TaskSummary } from '@features/task';
 import type { ListViewPresentation } from '../../models/list-view-config/list-view-config.interface';
 import type { SheetCustomField, SheetRow } from '../../models/sheet-view/sheet-view.interface';
 import {
+  collapsedGroupsOf,
+  groupSheetRows,
   presentationOfOrder,
   type SheetSortContext,
   sheetOrderOf,
@@ -30,6 +32,7 @@ function row(
 ): SheetRow {
   return {
     id: key,
+    group: '',
     task: {
       id: key,
       key,
@@ -160,6 +163,56 @@ describe('sheetOrderOf', () => {
     expect(
       sheetOrderOf({ ...presentation, sheetSort: { column: 'points', direction: 'asc' } }, []),
     ).toBeNull();
+  });
+});
+
+describe('sheetOrderOf and the time spent', () => {
+  it('shows the read order for a saved sort by the time spent', () => {
+    expect(
+      sheetOrderOf({ ...presentation, sheetSort: { column: 'spent', direction: 'desc' } }, []),
+    ).toBeNull();
+  });
+});
+
+describe('groupSheetRows', () => {
+  const rows: readonly SheetRow[] = [
+    row('CAD-482', { status: 'progress' }, { assigneeIds: ['u-camille', 'u-ines'] }),
+    row('CAD-479', { status: 'todo' }, { assigneeIds: ['u-ines'] }),
+    row('CAD-475', { status: 'cancelled' }),
+  ];
+
+  it('keeps the rows without a grouping', () => {
+    expect(groupSheetRows(rows, null)).toEqual({ rows, order: [], counts: {} });
+  });
+
+  it('files the rows by status in workflow order, keeping the sheet order inside a group', () => {
+    const grouped: ReturnType<typeof groupSheetRows> = groupSheetRows(rows, 'status');
+    expect(grouped.order).toEqual(['todo', 'progress', 'cancelled']);
+    expect(grouped.rows.map((item: SheetRow) => [item.id, item.group])).toEqual([
+      ['progress/CAD-482', 'progress'],
+      ['todo/CAD-479', 'todo'],
+      ['cancelled/CAD-475', 'cancelled'],
+    ]);
+  });
+
+  it('puts a task under each of its assignees, the busiest first and the unassigned last', () => {
+    const grouped: ReturnType<typeof groupSheetRows> = groupSheetRows(rows, 'assignee');
+    expect(grouped.order).toEqual(['u-ines', 'u-camille', 'none']);
+    expect(grouped.counts).toEqual({ 'u-camille': 1, 'u-ines': 2, none: 1 });
+    expect(keysOf(grouped.rows)).toEqual([
+      'u-camille/CAD-482',
+      'u-ines/CAD-482',
+      'u-ines/CAD-479',
+      'none/CAD-475',
+    ]);
+  });
+});
+
+describe('collapsedGroupsOf', () => {
+  it('folds Cancelled by default under the status grouping only', () => {
+    expect(collapsedGroupsOf({}, 'status')).toEqual(['cancelled']);
+    expect(collapsedGroupsOf({}, 'priority')).toEqual([]);
+    expect(collapsedGroupsOf({ status: [] }, 'status')).toEqual([]);
   });
 });
 

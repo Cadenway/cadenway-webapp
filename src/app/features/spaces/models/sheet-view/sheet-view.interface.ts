@@ -192,12 +192,25 @@ export interface SheetRow {
    * Property id
    *
    * @description
-   * Identity of the row: the task key.
+   * Identity of the row: the task key, after its group (`<group>/<key>`) while the view groups
+   * (a task with two assignees has a row in each assignee's group).
    *
    * @type {string}
    * @readonly
    */
   readonly id: string;
+
+  /**
+   * Property group
+   *
+   * @description
+   * The group the row shows in: a status, a priority, an assignee (`none` for unassigned), empty
+   * while the view does not group.
+   *
+   * @type {string}
+   * @readonly
+   */
+  readonly group: string;
 
   /**
    * Property task

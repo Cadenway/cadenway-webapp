@@ -1223,6 +1223,7 @@
     "spaces.sheet.show-all": "Show all",
     "spaces.sheet.loading": "Loading the sheet",
     "spaces.sheet.truncated": "Only the first {$count} tasks are shown.",
+    "spaces.sheet.spent-pending": "Total once every row is read",
     "spaces.sheet.table": "Sheet of the tasks of {$name}",
     "spaces.sheet.title-no-points": "{$count} · {$hours}",
     "spaces.sheet.title": "{$count} · {$hours} · {$points} points",
