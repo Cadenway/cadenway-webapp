@@ -95,6 +95,57 @@ constants belong to the lead):
   sprint's goal line, `Space statuses` (enabled when the space is editable) and `Automations`
   (enabled for organization admins and owners) in the list menu after `Edit the space`.
 
+## Activity view
+
+`ActivityViewPage` (`ui/pages/activity-view-page/`, `App.dc.html` lines 1299-1361, 7676-7720,
+7985-8001) shows the activity log of the open list in `cw-activity-feed`, without the view tools.
+
+- Toolbar: a person select (`cw-select`: `Everyone`, then the member directory of
+  `ListPageStore.organizationMembers`), the type chips (`cw-toggle-group`, multiple: `All`,
+  `Statuses`, `Assignments`, `Creations`, `Comments`, `Priorities`, `Due dates`; turning `All` on
+  or every kind off shows every kind) and the gateway's count of matching events (`N events`,
+  `aria-live`). It wraps under 768 px.
+- Feed: grouped by local day (`Today`, `Yesterday`, the long day) with its count, newest first.
+  An entry shows its actor (a member's avatar; an icon for an automation, the Git provider or a
+  service), the verb and its details (statuses from and to with their icons and the space's
+  names, the new priority with its icon, the due dates), the comment's plain excerpt, the task
+  chip (status, key, name) and the time of day. The chip opens Task's detail
+  (`TaskDetailOpener.open(key)`, no preview: the entry does not say whether the task is a
+  milestone).
+- `ActivityViewStore`, route-scoped through `ACTIVITY_VIEW_PROVIDERS` with `ListActivityApi`
+  (`ListsService.listListActivity`, 50 entries a page, the HTTP cache bypassed). The kinds and
+  the person filter on the server (`kind`, `actorId`). The first page is the view's primary read
+  (a `resource`): a failure before anything was shown for the list reaches the route's error
+  boundary, whose `Retry` runs the route again; a later failure (another filter, a refresh) shows
+  `The activity could not be loaded.` with `Retry` in place, keeping the entries when they answer
+  the current filters. Older pages are read when the feed scrolls within 200 px of its end or
+  with `Show more`, appended once each by id; a failed one offers `Retry`. Another filter shows
+  the skeleton until its answer; another organization or list hides the entries at once and late
+  answers are dropped.
+- Refresh: the store watches the list's room and reads the first page again (as many entries as
+  shown, 100 at most) 1 s after the first `task.updated.v1`, `task.status-changed.v1` or
+  `list.tasks-changed.v1` (naming this list) of a window, once per window; so do a task created in
+  the list from this tab (`TaskCreate.created`) and a task detail that closes or whose `Undo`
+  restored a task (`TaskDetailOpener.closed`, `changed`).
+- Bricks: `activity-feed`, `select`, `toggle-group`, `button`, `status-icon`, `priority-icon`;
+  the page provides the feed's and the select's texts.
+- Known gaps:
+  - `Public form` (G8): the contract records an intake submission as a `create` by a `system`
+    actor, with no intake actor type, requester email or actor-type filter. The select does not
+    offer `Public form`, and a `system` actor shows as `System` with the gear icon.
+  - `· deleted` (G9): closed by the contract, which leaves out of `items` and `total` the entries
+    of a task the caller no longer sees, archived or in the trash; the chip always links.
+  - The task chip has no context menu yet: it comes with F2's shared task menu.
+  - Comments made in another tab appear on the next refresh only: `comment.created.v1` goes to
+    task rooms, not to the list's room.
+  - Times are times of day: the mockup's `Just now` and `N min ago` are not written.
+- Copy not taken word for word from the mockup: `spaces.activity.read-failed`,
+  `spaces.activity.more-failed`, `spaces.activity.show-more` (the mockup draws no failed read and
+  no paging), `spaces.activity.unknown-person`, `spaces.activity.automation`,
+  `spaces.activity.system` (actors the mockup does not draw), `spaces.activity.select-placeholder`
+  and `spaces.activity.select-empty` (the select's own texts), `spaces.activity.count-one` (a
+  singular the mockup writes for 0 and 1 alike).
+
 ## Public entry points
 
 | Entry point            | Consumers    |
