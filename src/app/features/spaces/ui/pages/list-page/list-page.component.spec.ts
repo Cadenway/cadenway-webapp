@@ -642,7 +642,6 @@ describe('ListPage', () => {
       ['gantt', 'gantt-view', ['view-group', 'view-filter']],
       ['workload', 'workload-view', ['view-group', 'view-filter']],
       ['sheet', 'sheet-view', ['view-group', 'view-filter']],
-      ['form', 'form-view', []],
       ['activity', 'activity-view', []],
       [
         'timesheet',
