@@ -24,4 +24,4 @@ export const RELEASED_LAYOUTS: readonly ViewLayout[] = ['list'];
  *
  * @type {readonly ListDialog[]}
  */
-export const RELEASED_LIST_DIALOGS: readonly ListDialog[] = ['space-statuses', 'automations'];
+export const RELEASED_LIST_DIALOGS: readonly ListDialog[] = ['space-statuses', 'automations', 'sprint-report'];
