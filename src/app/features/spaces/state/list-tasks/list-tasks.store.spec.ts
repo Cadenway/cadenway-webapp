@@ -906,11 +906,18 @@ describe('ListTasksStore', () => {
     await settle();
     expect(without.done).toEqual([]);
     expect(without.failed).toEqual([{ taskKey: 'CAD-482', version: 3 }]);
-    expect(itemOf(store, 'CAD-482')?.task.status).toBe('todo');
+    expect(itemOf(store, 'CAD-482')?.task.status).toBe('cancelled');
+    const after: ViewTaskOutcome = await store.act([cad482], {
+      type: 'priority',
+      priority: 'basse',
+    });
+    expect(after.before['CAD-482']).toMatchObject({ status: 'cancelled', cancelNote: null });
 
-    bulk.mockResolvedValueOnce(lost).mockResolvedValueOnce(refused);
+    bulk
+      .mockResolvedValueOnce({ ...lost, unknown: [{ taskKey: 'CAD-482', version: 4 }] })
+      .mockResolvedValueOnce({ ...refused, failed: [{ taskKey: 'CAD-482', version: 4 }] });
     readBack.mockResolvedValueOnce({
-      ...readBackOf(cancelled),
+      ...readBackOf({ ...cancelled, version: 6 }),
       cancelNote: 'Same as CAD-470',
     });
     const saved: Promise<ViewTaskOutcome> = store.act([cad482], cancel);
@@ -927,6 +934,95 @@ describe('ListTasksStore', () => {
       status: 'cancelled',
       cancelNote: 'Same as CAD-470',
     });
+  });
+
+  it('decides and snapshots the next write on a read back applied in full, never on its version alone', async () => {
+    update
+      .mockResolvedValueOnce({ kind: 'unknown' })
+      .mockResolvedValueOnce({ kind: 'refused', stale: true });
+    readBack.mockResolvedValueOnce(
+      readBackOf({
+        ...cad482,
+        name: 'Sign-in',
+        due: '2026-12-04',
+        start: '2026-11-30',
+        version: 5,
+      }),
+    );
+    const store: InstanceType<typeof ListTasksStore> = setup(sprint);
+    await settle();
+
+    const pending: Promise<ViewTaskOutcome> = store.update(cad482, { name: 'Sign-in' });
+    await vi.advanceTimersByTimeAsync(resendsWait(1));
+    await pending;
+    await settle();
+    expect(itemOf(store, 'CAD-482')?.task).toMatchObject({ name: 'Sign-in', due: '2026-12-04' });
+
+    update.mockResolvedValueOnce({ kind: 'done', version: 6 });
+    const next: ViewTaskOutcome = await store.update(cad482, { dueDate: '2026-12-10' });
+
+    expect(update).toHaveBeenLastCalledWith('CAD-482', 5, { dueDate: '2026-12-10' });
+    expect(next.before['CAD-482']).toMatchObject({ due: '2026-12-04', version: 5 });
+  });
+
+  it('records the note of a held cancellation a read back settles', async () => {
+    bulk.mockResolvedValue(lost);
+    readBack.mockResolvedValue({
+      ...readBackOf({ ...cad482, status: 'cancelled', cancelReason: 'duplicate', version: 4 }),
+      cancelNote: 'Same as CAD-470',
+    });
+    const store: InstanceType<typeof ListTasksStore> = setup(sprint);
+    await settle();
+
+    const pending: Promise<ViewTaskOutcome> = store.act([cad482], {
+      type: 'status',
+      status: 'cancelled',
+      cancelReason: 'duplicate',
+      cancelNote: 'Same as CAD-470',
+    });
+    await vi.advanceTimersByTimeAsync(resendsWait());
+    const held: ViewTaskOutcome = await pending;
+    expect(held.unknown).toEqual([{ taskKey: 'CAD-482', version: 3 }]);
+    await vi.advanceTimersByTimeAsync(RECONCILE_DELAY_MS);
+    await settle();
+
+    bulk.mockResolvedValue(done(5));
+    const reopened: ViewTaskOutcome = await store.act([cad482], { type: 'status', status: 'todo' });
+    expect(reopened.before['CAD-482']).toMatchObject({
+      status: 'cancelled',
+      cancelReason: 'duplicate',
+      cancelNote: 'Same as CAD-470',
+      version: 4,
+    });
+  });
+
+  it('releases a lost deletion still readable at the version sent once the reads reach their longest wait', async () => {
+    bulk.mockResolvedValueOnce(lost);
+    readBack.mockResolvedValue(readBackOf(cad482));
+    const store: InstanceType<typeof ListTasksStore> = setup(sprint);
+    await settle();
+
+    const trashed: ViewTaskOutcome = await store.act([cad482], { type: 'trash' });
+    const next: Promise<ViewTaskOutcome> = store.act([cad482], {
+      type: 'priority',
+      priority: 'urgente',
+    });
+    expect(trashed.unknown).toEqual([{ taskKey: 'CAD-482', version: 3 }]);
+    expect(itemOf(store, 'CAD-482')).toBeUndefined();
+
+    await vi.advanceTimersByTimeAsync(2_000 + 4_000 + 8_000 + 16_000);
+    await settle();
+    expect(bulk).toHaveBeenCalledTimes(1);
+
+    await vi.advanceTimersByTimeAsync(30_000);
+    await settle();
+    await next;
+    expect(bulk).toHaveBeenLastCalledWith(
+      [{ taskKey: 'CAD-482', version: 3 }],
+      { type: 'priority', priority: 'urgente' },
+      expect.any(Function),
+    );
+    expect(itemOf(store, 'CAD-482')?.task.priority).toBe('urgente');
   });
 
   it('sends a status change again after a lost answer', async () => {

@@ -709,20 +709,24 @@ computed from the navigation's reads, for the command palette's `Lists` and the 
     until a read settles it, and only then do its patch and its hold go: a `versioned` write
     (above) by any read of the task, applied when it is past the version sent and holds the
     written values; a deletion once the task reads in the trash (`404 task.trashed`, applied) or
-    past the version sent (the deletion can no longer commit).
+    past the version sent (the deletion can no longer commit), or once a read after the 30 s
+    wait still finds it at the version sent (the deletion never reached the server, or the view's
+    next read shows it).
+  - A read back past the version the view knows is applied in full: its values show over the
+    view's older read until the view reaches that version, its cancellation note is recorded for
+    `Undo`, and the task's next write is decided on, snapshotted for `Undo` and sent at that
+    state, never at the read's version over the view's older values.
   - A `versioned` task released by a read still at the version sent is read again 10 s and 30 s
     after its release (`FOLLOW_UP_READS_MS`), without holding its writes, until the view or its
-    scope changes: a read past that version that holds the written values shows them again, and
-    the view is read again.
+    scope changes: a read past that version is applied in full, and the view is read again.
   - A write that only a read back of its task settled is applied without an `Undo`: a matching
     value at a later version does not prove this request wrote it, so the task is absent from
     the outcome's `before` and `after`, and the toast offers no `Undo`. An `Undo` is offered only
     for tasks whose version comes from the write's own successful answer.
-  - A released task's next write is sent at the version the view read (or one a write returned),
-    not at a version only a read back showed (except one version past the one sent and holding
-    the written values, which was this write). Every write carries that version, so an original
-    request committing after the release makes the next write refused (`412`), which reads the
-    tasks again, instead of overwriting what the original wrote.
+  - A released task's next write is sent at the version of the state it shows (the view's read, a
+    write's answer or a read back applied in full). Every write carries that version, so an
+    original request committing after the release makes the next write refused (`412`), which
+    reads the tasks again, instead of overwriting what the original wrote.
 - The table declares gateway groups in order, omitting hidden and empty groups except the five default empty status groups in an unfiltered view. Filtered empty results show the empty state. `nearEnd` requests further pages with a threshold accounting for unread group lines. Under 768 px the grid keeps selection, name and due date.
 
 ## Organization pin
@@ -741,6 +745,9 @@ gateway checks them and `ORGANIZATION_PIN_OPERATIONS` lists them.
   otherwise it restores the reason without a note.
 - Row writes and the status icon's writes (`TaskStatusChangesStore`) are serialized separately;
   each reads the other's confirmed version only once it is read or settled.
+- A write released by a read at the version sent whose original request commits after the last
+  follow-up read (30 s) shows its old values until a realtime notice or the view's next read
+  reconciles it; the next write on the task is refused (`412`) and reads it again.
 
 - `cw-sidebar-space` has no slot next to the name: the private lock of a space shows on its
   overview, not in the sidebar, until the design system adds one.
