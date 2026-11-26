@@ -308,6 +308,10 @@ function createPublicIntakeStore(): Type<PublicIntakeStoreInstance> {
           previous?.body === body ? previous : { body, idempotencyKey: crypto.randomUUID() };
         const draftKey: string = store._draftKey();
         patchState(store, { pending: true, failure: null, _attempt: attempt });
+        // Whether the publication and draft this send began with are still the shown ones; once
+        // they are not, the send stops and its answers are dropped.
+        const current: () => boolean = (): boolean =>
+          store.publicKey() === publicKey && store._draftKey() === draftKey;
         try {
           const ids: string[] = [];
           if (form.fields.attachments !== 'disabled') {
@@ -315,6 +319,7 @@ function createPublicIntakeStore(): Type<PublicIntakeStoreInstance> {
               const key: string = fileKeyOf(file);
               const known: string | undefined = store._uploads()[key];
               const id: string = known ?? (await store._api.upload(publicKey, draftKey, file));
+              if (!current()) return false;
               if (known === undefined) {
                 patchState(store, { _uploads: { ...store._uploads(), [key]: id } });
               }
@@ -325,11 +330,11 @@ function createPublicIntakeStore(): Type<PublicIntakeStoreInstance> {
             draftKey,
             idempotencyKey: attempt.idempotencyKey,
           });
-          if (store.publicKey() !== publicKey) return false;
+          if (!current()) return false;
           patchState(store, { pending: false, sent: request.title, ...freshDraft() });
           return true;
         } catch (error: unknown) {
-          if (store.publicKey() === publicKey) {
+          if (current()) {
             patchState(store, { pending: false, failure: intakeFailureOf(error) });
           }
           return false;
@@ -349,7 +354,8 @@ function createPublicIntakeStore(): Type<PublicIntakeStoreInstance> {
  * The state of the public request form (`/f/:publicKey`), page-scoped on `IntakePage`. Each
  * draft has its own private key, and each body its own idempotency key, so a retry after a lost
  * answer neither uploads a file again nor creates a second task; a request sent starts a new
- * draft. A late answer for another key is dropped.
+ * draft. A send whose key or draft is no longer the shown one stops before storing an upload
+ * or submitting, and drops its answers.
  *
  * @type {Type<PublicIntakeStoreInstance>}
  */

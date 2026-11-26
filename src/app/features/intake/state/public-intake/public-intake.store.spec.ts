@@ -129,4 +129,33 @@ describe('PublicIntakeStore', () => {
     expect(drafts).toHaveLength(2);
     expect(drafts[1]).not.toBe(drafts[0]);
   });
+
+  it('drops an upload that completes after the key changed, and sends nothing for it', async () => {
+    let complete: (id: string) => void = (): void => undefined;
+    api.upload.mockReturnValueOnce(
+      new Promise<string>((resolve: (id: string) => void): void => {
+        complete = resolve;
+      }),
+    );
+
+    const sending: Promise<boolean> = store.submit(request);
+    store.load('key-2');
+    complete('att-old');
+
+    expect(await sending).toBe(false);
+    expect(api.submit).not.toHaveBeenCalled();
+    expect(store.pending()).toBe(false);
+    expect(store.failure()).toBeNull();
+
+    await expect.poll(() => api.form.mock.calls.length).toBe(2);
+    await expect.poll(() => store.form.hasValue()).toBe(true);
+    expect(await store.submit(request)).toBe(true);
+    const [first, second]: [unknown[], unknown[]] = api.upload.mock.calls as [unknown[], unknown[]];
+    expect(second[0]).toBe('key-2');
+    expect(second[1]).not.toBe(first[1]);
+    expect(api.submit).toHaveBeenCalledWith('key-2', request, form, ['att-1'], {
+      draftKey: second[1] as string,
+      idempotencyKey: expect.any(String) as string,
+    });
+  });
 });

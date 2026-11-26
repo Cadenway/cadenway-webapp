@@ -50,7 +50,8 @@ It provides the English texts of its bricks itself. It also publishes `INTAKE_FI
   answer); each submission body keeps its `Idempotency-Key`, so a retry of the same body after a
   lost answer replays it, while a changed body gets a new key. The draft key is sent with the
   submission only when it carries attachments. A `409 attachment.upload-not-ready` is retried
-  three times, one second apart, with the same keys. A request sent starts a new draft; a late
+  three times, one second apart, with the same keys. A send stops, without storing an upload or submitting, once the key or the
+  draft it began with is no longer shown. A request sent starts a new draft; a late
   answer for another key is dropped.
 - The renderer validates as the mockup's `fmErrsOf` (`App.dc.html` lines 7733-7746): the title
   always, the other fields when required, the address whenever one is typed. A field shows its
