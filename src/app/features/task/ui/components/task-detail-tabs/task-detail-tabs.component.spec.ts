@@ -186,6 +186,7 @@ describe('TaskDetailTabs', () => {
       development: signal({ items: [], nextCursor: null }),
       partial: signal([]),
       gitRevision: signal(0),
+      developmentRevision: signal(0),
       update: vi.fn(() => Promise.resolve(true)),
       accept: vi.fn(),
       acceptVersion: vi.fn(),

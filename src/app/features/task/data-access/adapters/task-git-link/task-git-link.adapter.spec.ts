@@ -133,6 +133,24 @@ describe('toTaskGitLink', () => {
     });
   });
 
+  it('keeps only an https or http provider address without credentials', () => {
+    expect(
+      toTaskGitLink({
+        ...PULL_REQUEST,
+        url: 'http://gitlab.ateliernord.fr/nord/infra/-/merge_requests/31',
+      })?.url,
+    ).toBe('http://gitlab.ateliernord.fr/nord/infra/-/merge_requests/31');
+    for (const url of [
+      'javascript:alert(1)',
+      'data:text/html,<p>PR</p>',
+      '/atelier-nord/cadenway-web/pull/214',
+      'not an address',
+      'https://cmartin:secret@github.com/atelier-nord/cadenway-web/pull/214',
+    ]) {
+      expect(toTaskGitLink({ ...PULL_REQUEST, url })?.url).toBeNull();
+    }
+  });
+
   it('leaves out a link of an unknown host or kind', () => {
     expect(toTaskGitLink({ ...PULL_REQUEST, provider: 'bitbucket' })).toBeNull();
     expect(toTaskGitLink({ ...PULL_REQUEST, kind: 'tag' })).toBeNull();

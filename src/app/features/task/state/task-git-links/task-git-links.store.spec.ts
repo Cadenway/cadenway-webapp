@@ -59,6 +59,69 @@ function page(ids: readonly string[], nextCursor: string | null): TaskGitLinkPag
 }
 
 /**
+ * Interface Deferred
+ *
+ * @description
+ * A page answer the spec settles when it chooses.
+ */
+interface Deferred {
+  // #region Properties
+  /**
+   * Property promise
+   *
+   * @description
+   * The pending answer.
+   *
+   * @type {Promise<TaskGitLinkPage>}
+   * @readonly
+   */
+  readonly promise: Promise<TaskGitLinkPage>;
+
+  /**
+   * Property resolve
+   *
+   * @description
+   * Answers with a page.
+   *
+   * @type {(value: TaskGitLinkPage) => void}
+   * @readonly
+   */
+  readonly resolve: (value: TaskGitLinkPage) => void;
+
+  /**
+   * Property reject
+   *
+   * @description
+   * Fails the read.
+   *
+   * @type {(reason: Error) => void}
+   * @readonly
+   */
+  readonly reject: (reason: Error) => void;
+  // #endregion
+}
+
+/**
+ * Function deferred
+ *
+ * @description
+ * A page answer settled by the spec.
+ *
+ * @returns {Deferred} The answer and its settlers.
+ */
+function deferred(): Deferred {
+  let resolve: (value: TaskGitLinkPage) => void = (): void => undefined;
+  let reject: (reason: Error) => void = (): void => undefined;
+  const promise: Promise<TaskGitLinkPage> = new Promise<TaskGitLinkPage>(
+    (done: (value: TaskGitLinkPage) => void, fail: (reason: Error) => void) => {
+      resolve = done;
+      reject = fail;
+    },
+  );
+  return { promise, resolve, reject };
+}
+
+/**
  * Function ids
  *
  * @description
@@ -77,6 +140,7 @@ describe('TaskGitLinksStore', () => {
   let development: WritableSignal<TaskGitLinkPage | null>;
   let partial: WritableSignal<readonly string[]>;
   let gitRevision: WritableSignal<number>;
+  let developmentRevision: WritableSignal<number>;
   let api: { page: Mock<(key: string, cursor: string | null) => Promise<TaskGitLinkPage>> };
 
   /**
@@ -99,6 +163,7 @@ describe('TaskGitLinksStore', () => {
     development = signal<TaskGitLinkPage | null>(page(['g1', 'g2'], 'c2'));
     partial = signal<readonly string[]>([]);
     gitRevision = signal(3);
+    developmentRevision = signal(3);
     api = {
       page: vi.fn((_key: string, cursor: string | null) =>
         Promise.resolve(cursor === null ? page(['g0', 'g1', 'g2'], 'c2') : page(['g3'], null)),
@@ -109,7 +174,7 @@ describe('TaskGitLinksStore', () => {
         TaskGitLinksStore,
         {
           provide: TaskDetailStore,
-          useValue: { taskKey, ready, development, partial, gitRevision },
+          useValue: { taskKey, ready, development, partial, gitRevision, developmentRevision },
         },
         { provide: TaskGitLinksApi, useValue: api },
       ],
@@ -247,5 +312,99 @@ describe('TaskGitLinksStore', () => {
 
     expect(ids(store)).toEqual(['b1']);
     expect(store.hasMore()).toBe(false);
+  });
+
+  it('reads again at once when a Git notice came after the detail read began', async () => {
+    developmentRevision.set(2);
+    const store: TaskGitLinksStoreInstance = create();
+
+    await vi.waitFor(() => {
+      expect(ids(store)).toEqual(['g0', 'g1', 'g2']);
+    });
+    expect(api.page).toHaveBeenCalledOnce();
+  });
+
+  it('refuses Show more while the list is read again', async () => {
+    const reread: Deferred = deferred();
+    api.page.mockReturnValueOnce(reread.promise);
+    const store: TaskGitLinksStoreInstance = create();
+    const reading: Promise<void> = store.load();
+
+    await store.loadMore();
+
+    expect(api.page).toHaveBeenCalledOnce();
+    expect(store.loadingMore()).toBe(false);
+    reread.resolve(page(['g0', 'g1'], 'c2'));
+    await reading;
+    expect(ids(store)).toEqual(['g0', 'g1']);
+  });
+
+  it('ends a Show more in flight when a reread starts, whether it succeeds or fails', async () => {
+    const more: Deferred = deferred();
+    api.page.mockReturnValueOnce(more.promise);
+    const store: TaskGitLinksStoreInstance = create();
+    const paging: Promise<void> = store.loadMore();
+    expect(store.loadingMore()).toBe(true);
+
+    api.page.mockRejectedValueOnce(new Error('offline'));
+    await store.load();
+
+    expect(store.loadingMore()).toBe(false);
+    expect(store.failed()).toBe(true);
+    more.resolve(page(['g3'], null));
+    await paging;
+    expect(ids(store)).toEqual(['g1', 'g2']);
+    expect(store.loadingMore()).toBe(false);
+    expect(store.hasMore()).toBe(true);
+  });
+
+  it('drops a Show more answered after a successful reread', async () => {
+    const more: Deferred = deferred();
+    api.page.mockReturnValueOnce(more.promise);
+    const store: TaskGitLinksStoreInstance = create();
+    const paging: Promise<void> = store.loadMore();
+
+    await store.load();
+    more.resolve(page(['stale'], null));
+    await paging;
+
+    expect(ids(store)).toEqual(['g0', 'g1', 'g2']);
+    expect(store.loadingMore()).toBe(false);
+  });
+
+  it('stops paging a superseded reread', async () => {
+    const store: TaskGitLinksStoreInstance = create();
+    await store.loadMore();
+    const first: Deferred = deferred();
+    api.page.mockClear();
+    api.page.mockReturnValueOnce(first.promise);
+
+    const older: Promise<void> = store.load();
+    const newer: Promise<void> = store.load();
+    first.resolve(page(['old'], 'c2'));
+    await Promise.all([older, newer]);
+
+    expect(api.page.mock.calls).toEqual([
+      ['CAD-482', null],
+      ['CAD-482', null],
+      ['CAD-482', 'c2'],
+    ]);
+    expect(ids(store)).toEqual(['g0', 'g1', 'g2', 'g3']);
+  });
+
+  it('keeps the inline error while Retry reads, until a read succeeds', async () => {
+    development.set(null);
+    partial.set(['development']);
+    const store: TaskGitLinksStoreInstance = create();
+    const retry: Deferred = deferred();
+    api.page.mockReturnValueOnce(retry.promise);
+
+    const reading: Promise<void> = store.load();
+
+    expect(store.loading()).toBe(true);
+    expect(store.failed()).toBe(true);
+    retry.resolve(page(['g1'], null));
+    await reading;
+    expect(store.failed()).toBe(false);
   });
 });

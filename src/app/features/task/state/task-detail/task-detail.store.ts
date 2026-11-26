@@ -15,8 +15,10 @@ import {
   catchError,
   EMPTY,
   filter,
+  from,
   groupBy,
   map,
+  merge,
   mergeMap,
   type Observable,
   pipe,
@@ -86,6 +88,17 @@ const NOTICE_PARTS: Readonly<Record<string, TaskDetailPart>> = {
   'comment.created.v1': 'comments',
   'git.links-changed.v1': 'git',
 };
+
+/**
+ * Constant RECONNECT_PARTS
+ *
+ * @description
+ * The parts a reconnection of the socket makes stale: notices sent while it was down are not
+ * replayed, so the detail, its comments and its Git links are read again.
+ *
+ * @type {readonly TaskDetailPart[]}
+ */
+const RECONNECT_PARTS: readonly TaskDetailPart[] = ['task', 'comments', 'git'];
 
 /**
  * Type TaskDetailAction
@@ -314,6 +327,18 @@ interface TaskDetailState {
   readonly gitRevision: number;
 
   /**
+   * Property developmentRevision
+   *
+   * @description
+   * The `gitRevision` at which the detail read now shown began, so the development panel knows
+   * whether a Git notice came after the links that read carried.
+   *
+   * @type {number}
+   * @readonly
+   */
+  readonly developmentRevision: number;
+
+  /**
    * Property watchersRevision
    *
    * @description
@@ -363,6 +388,7 @@ const initialState: TaskDetailState = {
   action: null,
   commentsRevision: 0,
   gitRevision: 0,
+  developmentRevision: 0,
   watchersRevision: 0,
   _pending: {},
 };
@@ -794,12 +820,25 @@ export interface TaskDetailStoreInstance {
    * Property gitRevision
    *
    * @description
-   * Grows on each pushed Git link notice.
+   * Grows on each pushed Git link notice and each reconnection of the socket, also while the
+   * detail is being read.
    *
    * @type {Signal<number>}
    * @readonly
    */
   readonly gitRevision: Signal<number>;
+
+  /**
+   * Property developmentRevision
+   *
+   * @description
+   * The `gitRevision` at which the detail read now shown began: the links in `development`
+   * reflect the Git notices counted up to it.
+   *
+   * @type {Signal<number>}
+   * @readonly
+   */
+  readonly developmentRevision: Signal<number>;
 
   /**
    * Property watchersRevision
@@ -1172,6 +1211,7 @@ function createTaskDetailStore(): Type<TaskDetailStoreInstance> {
     withMethods((store) => {
       let readToken: number = 0;
       let writeCount: number = 0;
+      let waiting: { readonly key: string; readonly parts: Set<TaskDetailPart> } | null = null;
       let detailRead: Promise<void> | null = null;
       let duplication: { key: string; version: number; idempotencyKey: string } | null = null;
       const noteWrites: {
@@ -1226,11 +1266,24 @@ function createTaskDetailStore(): Type<TaskDetailStoreInstance> {
         }
       };
 
+      const replayNotices: (key: string) => void = (key: string): void => {
+        const missed: { readonly key: string; readonly parts: Set<TaskDetailPart> } | null =
+          waiting;
+        waiting = null;
+        if (missed?.key !== key) return;
+        if (missed.parts.has('task')) void readDetail(key, false);
+        if (missed.parts.has('comments')) {
+          patchState(store, { commentsRevision: store.commentsRevision() + 1 });
+          void readComments(key);
+        }
+      };
+
       const loadDetail: (key: string, initial: boolean) => Promise<void> = async (
         key: string,
         initial: boolean,
       ): Promise<void> => {
         const token: number = ++readToken;
+        const revision: number = store.gitRevision();
         if (initial) patchState(store, { loading: true, error: null });
         try {
           const detail: TaskDetail = await store._api.read(key);
@@ -1246,7 +1299,9 @@ function createTaskDetailStore(): Type<TaskDetailStoreInstance> {
             loading: false,
             error: null,
             commentsFailed: false,
+            developmentRevision: revision,
           });
+          replayNotices(key);
         } catch (error: unknown) {
           if (token !== readToken || !current(key)) return;
           if (store.detail() && !initial) {
@@ -1472,6 +1527,7 @@ function createTaskDetailStore(): Type<TaskDetailStoreInstance> {
             return;
           }
           readToken++;
+          waiting = null;
           patchState(store, { ...initialState, taskKey, preview, loading: true });
           void readDetail(taskKey, true);
           void readWatchers(taskKey);
@@ -1480,6 +1536,7 @@ function createTaskDetailStore(): Type<TaskDetailStoreInstance> {
 
         close(): void {
           readToken++;
+          waiting = null;
           patchState(store, initialState);
         },
 
@@ -1835,12 +1892,22 @@ function createTaskDetailStore(): Type<TaskDetailStoreInstance> {
 
         _refresh(part: TaskDetailPart): void {
           const key: string | null = keyOf();
-          if (key === null || !store.detail()) return;
-          if (part === 'task') void readDetail(key, false);
-          else if (part === 'comments') {
-            patchState(store, { commentsRevision: store.commentsRevision() + 1 });
-            void readComments(key);
-          } else patchState(store, { gitRevision: store.gitRevision() + 1 });
+          if (key === null) return;
+          if (part === 'git') {
+            patchState(store, { gitRevision: store.gitRevision() + 1 });
+            return;
+          }
+          if (!store.detail()) {
+            waiting = waiting?.key === key ? waiting : { key, parts: new Set<TaskDetailPart>() };
+            waiting.parts.add(part);
+            return;
+          }
+          if (part === 'task') {
+            void readDetail(key, false);
+            return;
+          }
+          patchState(store, { commentsRevision: store.commentsRevision() + 1 });
+          void readComments(key);
         },
       };
     }),
@@ -1850,14 +1917,20 @@ function createTaskDetailStore(): Type<TaskDetailStoreInstance> {
           switchMap((taskKey: string | null): Observable<TaskDetailPart> => {
             const realtime: RealtimeConnection | null = store._realtime;
             if (taskKey === null || !realtime) return EMPTY;
-            return realtime.watch({ kind: 'task', taskKey }).pipe(
-              catchError((): Observable<RealtimeChange> => EMPTY),
-              map(
-                (notice: RealtimeChange): TaskDetailPart | undefined => NOTICE_PARTS[notice.type],
+            return merge(
+              realtime.watch({ kind: 'task', taskKey }).pipe(
+                catchError((): Observable<RealtimeChange> => EMPTY),
+                map(
+                  (notice: RealtimeChange): TaskDetailPart | undefined => NOTICE_PARTS[notice.type],
+                ),
+                filter(
+                  (part: TaskDetailPart | undefined): part is TaskDetailPart => part !== undefined,
+                ),
               ),
-              filter(
-                (part: TaskDetailPart | undefined): part is TaskDetailPart => part !== undefined,
+              realtime.reconnected.pipe(
+                mergeMap((): Observable<TaskDetailPart> => from(RECONNECT_PARTS)),
               ),
+            ).pipe(
               groupBy((part: TaskDetailPart): TaskDetailPart => part),
               mergeMap((parts: Observable<TaskDetailPart>): Observable<TaskDetailPart> =>
                 parts.pipe(auditTime(NOTICE_WINDOW_MS)),
@@ -1893,7 +1966,10 @@ function createTaskDetailStore(): Type<TaskDetailStoreInstance> {
  * watches the task's realtime room while a
  * task is open: a task update or status change reads the detail again, a new comment reads the
  * first comment page, a Git link change counts `gitRevision`; each part at most once per
- * `NOTICE_WINDOW_MS`, never over a pending local value. The socket names no task key and hands
+ * `NOTICE_WINDOW_MS`, never over a pending local value. A reconnection of the socket makes every
+ * part stale. A notice that comes before the first read settles is not lost: a Git one counts at
+ * once (`developmentRevision` tells which read the links came with), a task or comment one is
+ * applied once the detail is shown. The socket names no task key and hands
  * every watched room's notices to every watch, so a notice of another task also reads again.
  * The header's actions (follow, reminder, duplicate, archive, trash, template, move, attach,
  * detach) are its methods, with their toasts.

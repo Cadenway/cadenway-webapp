@@ -1429,6 +1429,7 @@
     "task.development.checks-failed-some": "Checks en échec",
     "task.development.checks-failed-one": "1 check en échec",
     "task.development.checks-failed": "{$count} checks en échec",
+    "task.development.checks-failed-short": "{$failed}/{$total} en échec",
     "task.development.checks-passed": "Checks réussis",
     "task.development.detected-title": "détectée : {$key} dans le titre",
     "task.development.detected-description": "détectée : {$key} dans la description",

@@ -220,7 +220,11 @@ the task` with `Retry`; otherwise Errors' `RouteErrorPanel` renders the typed ro
     `task.status-changed.v1` read the detail again, `comment.created.v1` the first comment page
     (`commentsRevision`), `git.links-changed.v1` counts `gitRevision`, on which the Development
     panel reads its links again; each part at most once
-    per 300 ms (`NOTICE_WINDOW_MS`). Notices name a task id, not its key, and the socket hands
+    per 300 ms (`NOTICE_WINDOW_MS`). A reconnection of the socket (`reconnected`) makes the three
+    parts stale, since missed notices are not replayed. A notice that comes before the first read
+    settles is kept: a Git one counts at once (`developmentRevision`, the `gitRevision` at which
+    the read now shown began, tells the panel whether its links predate it), a task or comment
+    one is applied once the detail is shown. Notices name a task id, not its key, and the socket hands
     every watched room's notices to every watch, so a notice about another task (of an open list)
     also reads again.
   - Header: key, `Subtask of <key> · <name>` (opens the parent), the read-only status badge with
@@ -288,13 +292,19 @@ large` and an empty file with `Empty file`, a name already attached skipped, fil
     the rows under the inline error, and an answer for another task or older than a newer read is
     dropped. A row has the state icon (branch, draft, open, merged, closed), the request's title
     or the branch name linking to the provider in a new tab (`rel="noopener noreferrer"`) with
-    `#214` or `!31`, the state chip, the checks (passed or failed with `<passing>/<total>` when
-    the provider sent the counts, running), when they completed in the tooltip, the review
+    `#214` or `!31` (not repeated when it stands in for a missing title), the state chip, the
+    checks (passed with `<passed>/<total>`, failed with `<failed>/<total> failed` only when some
+    failed, since suites may still run then, running), when they completed in the tooltip and
+    the screen reader text, the review
     request unless merged, the repository with the host's logo, the diff size (GitHub only),
     the author's first name or login and when the link was recorded (`relativeInstant`), and where
-    the key was detected; links of an unknown host or kind are left out. The heading counts the
-    links listed (`50+` while more remain); no link keeps the mockup's empty state, and the key
-    hint stays with its `Copy the identifier`). `Subtasks`: progress, rows that open the subtask
+    the key was detected; links of an unknown host or kind are left out, and an address that is
+    not `https:` or `http:` (self-managed GitLab) without credentials is not a link. The heading
+    counts the links listed (`50+` while more remain); `Show more` is refused while the list is
+    read again, a reread ends any `Show more` in flight and the pages of a superseded reread are
+    not read; the empty state shows only on the last page with no link (a page can hold only
+    links of an unknown host), the inline error stays while `Retry` reads, and the key hint stays
+    with its `Copy the identifier`). `Subtasks`: progress, rows that open the subtask
     through `TaskDetailOpener` (click, Enter, Space) with a status button that advances through
     `TaskStatusChangesStore`, the add field (`createSubtask`, toast, detail read again; the name
     stays in the field until the creation is saved, and a creation sent again reuses its
@@ -457,4 +467,5 @@ people`), and the due trigger shows the short date without `Tomorrow ·` or the
 | `task.attachments.empty`, `task.attachments.empty-text`                                     | The mockup draws no refused empty file.                            |
 | `task.development.read-failed`, `loading`, `more-failed`, `show-more`, `list`               | The mockup draws no failed, loading or paged read of the links.    |
 | `task.development.checks-failed-some`, `task.development.checks-failed`                     | The mockup writes one failed check; counts from the contract.      |
+| `task.development.checks-failed-short`                                                      | The mockup's `11/12` counts suites still running as passed.        |
 | `task.development.detected-description`                                                     | The mockup detects no key in a request's description.              |

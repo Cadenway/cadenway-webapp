@@ -81,6 +81,30 @@ function toState(link: GitLink, kind: TaskGitLinkKind): TaskGitLinkState {
 }
 
 /**
+ * Function webAddress
+ *
+ * @description
+ * A provider address the panel may open: an absolute `https:` address, or `http:` for a
+ * self-managed GitLab, without credentials. Any other value (another scheme such as
+ * `javascript:`, a relative or malformed address) is null, so the row shows its title as text.
+ *
+ * @param {string | undefined} value - The address the gateway sent.
+ * @returns {string | null} The normalized address, or null.
+ */
+export function webAddress(value: string | undefined): string | null {
+  if (value === undefined) return null;
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    return null;
+  }
+  if (url.protocol !== 'https:' && url.protocol !== 'http:') return null;
+  if (url.username !== '' || url.password !== '') return null;
+  return url.href;
+}
+
+/**
  * Function toChecks
  *
  * @description
@@ -122,7 +146,7 @@ export function toTaskGitLink(link: GitLink): TaskGitLink | null {
     state: toState(link, kind),
     title: request ? (link.title ?? null) : null,
     number: request ? link.number : null,
-    url: link.url ?? null,
+    url: webAddress(link.url),
     repository: link.repository
       ? { fullName: link.repository.fullName, url: link.repository.url }
       : null,

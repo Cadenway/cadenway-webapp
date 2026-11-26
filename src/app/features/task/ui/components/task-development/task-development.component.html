@@ -92,7 +92,7 @@
                     [class]="checks.tone"
                     aria-hidden="true"
                   />
-                  <span class="sr-only">{{ checks.label }}</span>
+                  <span class="sr-only">{{ checks.title }}</span>
                   @if (checks.short; as short) {
                     <span aria-hidden="true">{{ short }}</span>
                   }
@@ -149,30 +149,7 @@
         </li>
       }
     </ul>
-    @if (hasMore() || moreFailed()) {
-      <div class="flex items-center justify-center gap-2 text-sm">
-        @if (moreFailed()) {
-          <span class="text-muted-foreground" role="alert" i18n="@@task.development.more-failed"
-            >Older links could not be loaded.</span
-          >
-        }
-        <button
-          cwButton
-          variant="ghost"
-          size="sm"
-          type="button"
-          [loading]="loadingMore()"
-          (click)="moreLoaded.emit()"
-        >
-          @if (moreFailed()) {
-            <ng-container i18n="@@task.retry">Retry</ng-container>
-          } @else {
-            <ng-container i18n="@@task.development.show-more">Show more</ng-container>
-          }
-        </button>
-      </div>
-    }
-  } @else if (ready() && !failed()) {
+  } @else if (ready() && !failed() && !hasMore()) {
     <div class="flex items-center gap-3 rounded-lg border border-dashed border-border px-3 py-2.5">
       <span
         class="flex size-8 shrink-0 items-center justify-center rounded-md bg-muted"
@@ -189,7 +166,7 @@
         >
       </span>
     </div>
-  } @else if (!failed()) {
+  } @else if (!ready() && !failed()) {
     <div role="status" aria-busy="true" class="flex flex-col gap-2">
       <span class="sr-only" i18n="@@task.development.loading">Loading the Git links</span>
       @for (line of [1, 2]; track line) {
@@ -198,6 +175,30 @@
           aria-hidden="true"
         ></div>
       }
+    </div>
+  }
+  @if (hasMore() || moreFailed()) {
+    <div class="flex items-center justify-center gap-2 text-sm">
+      @if (moreFailed()) {
+        <span class="text-muted-foreground" role="alert" i18n="@@task.development.more-failed"
+          >Older links could not be loaded.</span
+        >
+      }
+      <button
+        cwButton
+        variant="ghost"
+        size="sm"
+        type="button"
+        [loading]="loadingMore()"
+        [disabled]="loading()"
+        (click)="moreLoaded.emit()"
+      >
+        @if (moreFailed()) {
+          <ng-container i18n="@@task.retry">Retry</ng-container>
+        } @else {
+          <ng-container i18n="@@task.development.show-more">Show more</ng-container>
+        }
+      </button>
     </div>
   }
   <p class="flex items-start gap-1.5 text-xs/5 text-muted-foreground">

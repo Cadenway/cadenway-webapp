@@ -140,9 +140,11 @@ describe('TaskDevelopment', () => {
     expect(title?.getAttribute('rel')).toContain('noopener');
     expect(text()).toContain('#214');
     expect(text()).toContain('Open');
-    expect(text()).toContain('1 check failed');
-    expect(text()).toContain('11/12');
-    expect(host().querySelector('[title^="1 check failed · "]')).not.toBeNull();
+    expect(text()).toContain('1/12 failed');
+    expect(text()).not.toContain('11/12');
+    expect(host().querySelector('[title="1 check failed · 30 min ago"]')?.textContent).toContain(
+      '1 check failed · 30 min ago',
+    );
     expect(text()).toContain('Review requested');
     expect(text()).toContain('atelier-nord/cadenway-web');
     expect(text()).toContain('+418');
@@ -208,6 +210,44 @@ describe('TaskDevelopment', () => {
     button?.click();
 
     expect(more).toHaveLength(1);
+  });
+
+  it('shows no ratio for failed checks without a failed count', async () => {
+    await render({
+      links: [{ ...PULL_REQUEST, checks: { state: 'failed', total: 12, failed: 0 } }],
+      ready: true,
+    });
+
+    expect(text()).toContain('Checks failed');
+    expect(text()).not.toContain('/12');
+  });
+
+  it('writes the number once when it stands in for a missing title and branch', async () => {
+    await render({ links: [{ ...PULL_REQUEST, title: null, branch: null }], ready: true });
+
+    expect(host().querySelector('a[href]')?.textContent.trim()).toBe('#214');
+    expect(text().match(/#214/gu)).toHaveLength(1);
+  });
+
+  it('offers Show more, not the empty state, when a page listed no known link', async () => {
+    await render({ links: [], ready: true, hasMore: true });
+
+    expect(text()).not.toContain('No branch or pull request');
+    expect(host().querySelector('[role="status"]')).toBeNull();
+    expect(
+      Array.from(host().querySelectorAll('button')).some((button: HTMLButtonElement) =>
+        button.textContent.includes('Show more'),
+      ),
+    ).toBe(true);
+  });
+
+  it('disables Show more while the list is read again', async () => {
+    await render({ links: [PULL_REQUEST], ready: true, hasMore: true, loading: true });
+
+    const more: HTMLButtonElement | undefined = Array.from(host().querySelectorAll('button')).find(
+      (button: HTMLButtonElement) => button.textContent.includes('Show more'),
+    );
+    expect(more?.disabled).toBe(true);
   });
 
   it('keeps the empty state and the hint when no link exists', async () => {

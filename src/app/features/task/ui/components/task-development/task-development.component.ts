@@ -106,7 +106,7 @@ interface GitChecksRow {
    * Property label
    *
    * @description
-   * The outcome for screen readers (`Checks passed`, `1 check failed`).
+   * The outcome (`Checks passed`, `1 check failed`).
    *
    * @type {string}
    * @readonly
@@ -128,7 +128,7 @@ interface GitChecksRow {
    * Property title
    *
    * @description
-   * The tooltip: the outcome and, once completed, when.
+   * The tooltip and screen reader text: the outcome and, once completed, when.
    *
    * @type {string}
    * @readonly
@@ -536,7 +536,8 @@ export class TaskDevelopment {
    *
    * @description
    * One link in words. A request without a recorded title shows its source branch, else its
-   * number; a merged request shows no review request, as in the mockup.
+   * number (then not repeated after it); a merged request shows no review request, as in the
+   * mockup.
    *
    * @param {TaskGitLink} link - The link.
    * @param {string} key - Key of the open task, for where it was detected.
@@ -555,14 +556,17 @@ export class TaskDevelopment {
         ? firstName(link.author.name)
         : link.author.login
       : null;
+    const title: string = (request ? (link.title ?? link.branch ?? number) : link.branch) ?? '';
     return {
       id: link.id,
       icon: look.icon,
       tone: look.tone,
-      title: (request ? (link.title ?? link.branch ?? number) : link.branch) ?? '',
+      title,
       titleClass:
-        !request || link.title === null ? 'font-mono text-[13px] font-medium' : 'font-medium',
-      number,
+        !request || (link.title === null && link.branch !== null)
+          ? 'font-mono text-[13px] font-medium'
+          : 'font-medium',
+      number: title === number ? null : number,
       url: link.url,
       state: this.stateLabel(link.state),
       checks: link.checks ? this.checksOf(link.checks, link.checksCompletedAt, now) : null,
@@ -606,9 +610,10 @@ export class TaskDevelopment {
    * Method checksOf
    *
    * @description
-   * The checks in words (`GIT_CI` of `App.dc.html`): passed and failed show the passing count
-   * over the total when the provider sent the counts, running shows `Running`; the tooltip adds
-   * when the latest suite or pipeline completed.
+   * The checks in words (`GIT_CI` of `App.dc.html`): passed shows the count over the total when
+   * the provider sent it; failed shows the failed count over the total only when some failed,
+   * since suites may still run then and the passing ones are not known; running shows `Running`.
+   * The tooltip and the screen reader text add when the latest suite or pipeline completed.
    *
    * @param {TaskGitChecks} checks - The checks.
    * @param {string | null} completedAt - When the latest one completed, or null.
@@ -616,10 +621,7 @@ export class TaskDevelopment {
    * @returns {GitChecksRow} The checks row.
    */
   private checksOf(checks: TaskGitChecks, completedAt: string | null, now: Date): GitChecksRow {
-    const counted: boolean = checks.total !== null && checks.failed !== null;
-    const ratio: string | null = counted
-      ? `${((checks.total ?? 0) - (checks.failed ?? 0)).toString()}/${(checks.total ?? 0).toString()}`
-      : null;
+    const total: number | null = checks.total;
     let row: Omit<GitChecksRow, 'title'>;
     if (checks.state === 'running') {
       row = {
@@ -630,6 +632,7 @@ export class TaskDevelopment {
       };
     } else if (checks.state === 'failed') {
       const failed: number | null = checks.failed;
+      const counted: boolean = total !== null && failed !== null && failed > 0;
       row = {
         icon: 'phosphorXCircleFill',
         tone: 'text-grenat',
@@ -639,14 +642,19 @@ export class TaskDevelopment {
             : failed === 1
               ? $localize`:@@task.development.checks-failed-one:1 check failed`
               : $localize`:@@task.development.checks-failed:${failed}:count: checks failed`,
-        short: ratio,
+        short: counted
+          ? $localize`:@@task.development.checks-failed-short:${failed}:failed:/${total}:total: failed`
+          : null,
       };
     } else {
       row = {
         icon: 'phosphorCheckCircleFill',
         tone: 'text-jade',
         label: $localize`:@@task.development.checks-passed:Checks passed`,
-        short: ratio,
+        short:
+          total !== null
+            ? `${(total - (checks.failed ?? 0)).toString()}/${total.toString()}`
+            : null,
       };
     }
     const when: string | null =
@@ -660,7 +668,7 @@ export class TaskDevelopment {
    * Method sourceLabel
    *
    * @description
-   * Where the key was detected (`détectée : CAD-482 dans …` of `App.dc.html`).
+   * Where the key was detected (the `source` of `gitRows` in `App.dc.html`).
    *
    * @param {TaskGitLinkSource} source - The place.
    * @param {string} key - Key of the open task.

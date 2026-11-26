@@ -9,7 +9,7 @@ import {
   withState,
 } from '@ngrx/signals';
 import { rxMethod } from '@ngrx/signals/rxjs-interop';
-import { distinctUntilChanged, pipe, skip, tap } from 'rxjs';
+import { pipe, tap } from 'rxjs';
 
 import { TaskGitLinksApi } from '../../data-access/services/task-git-links-api/task-git-links-api.service';
 import type {
@@ -124,6 +124,19 @@ interface TaskGitLinksState {
    * @readonly
    */
   readonly _readFailed: boolean;
+
+  /**
+   * Property _revision
+   *
+   * @description
+   * The `TaskDetailStore.gitRevision` the links shown reflect: the one at which the detail read
+   * that carried them began, or at which the panel's own read began. A higher revision reads them
+   * again.
+   *
+   * @type {number}
+   * @readonly
+   */
+  readonly _revision: number;
   // #endregion
 }
 
@@ -178,6 +191,28 @@ interface TaskGitLinksSource {
    * @readonly
    */
   readonly missing: boolean;
+
+  /**
+   * Property developmentRevision
+   *
+   * @description
+   * The Git revision at which the detail read that carried (or missed) the links began.
+   *
+   * @type {number}
+   * @readonly
+   */
+  readonly developmentRevision: number;
+
+  /**
+   * Property revision
+   *
+   * @description
+   * The Git revision now: pushed Git changes counted so far.
+   *
+   * @type {number}
+   * @readonly
+   */
+  readonly revision: number;
   // #endregion
 }
 
@@ -228,7 +263,7 @@ export interface TaskGitLinksStoreInstance {
    * @description
    * Whether the links could not be read: the detail named `development` in `partial` and the
    * panel has read none since, or the panel's own last read failed. An inline error with `Retry`
-   * (`load`).
+   * (`load`), which stays while a read runs and clears once one succeeds.
    *
    * @type {Signal<boolean>}
    * @readonly
@@ -284,7 +319,8 @@ export interface TaskGitLinksStoreInstance {
    * Method loadMore
    *
    * @description
-   * Reads the next page (`Show more`).
+   * Reads the next page (`Show more`); refused while the list is read again, since that read
+   * replaces the cursor.
    *
    * @returns {Promise<void>} Resolves once read or failed.
    */
@@ -310,6 +346,7 @@ const initialState: TaskGitLinksState = {
   _pages: 0,
   _loaded: false,
   _readFailed: false,
+  _revision: 0,
 };
 
 /**
@@ -353,7 +390,6 @@ function createTaskGitLinksStore(): Type<TaskGitLinksStoreInstance> {
         (): boolean =>
           store._readFailed() ||
           (!store._loaded() &&
-            !store.loading() &&
             store._detail.ready() &&
             store._detail.partial().includes('development')),
       ),
@@ -362,28 +398,38 @@ function createTaskGitLinksStore(): Type<TaskGitLinksStoreInstance> {
         ready: store._detail.ready(),
         development: store._detail.development(),
         missing: store._detail.partial().includes('development'),
+        developmentRevision: store._detail.developmentRevision(),
+        revision: store._detail.gitRevision(),
       })),
     })),
     withMethods((store) => {
       let readToken: number = 0;
+      let inflight: { readonly token: number; readonly revision: number } | null = null;
+
+      const release: (token: number) => void = (token: number): void => {
+        if (inflight?.token === token) inflight = null;
+      };
 
       const load: () => Promise<void> = async (): Promise<void> => {
         const key: string | null = store._detail.taskKey();
         if (key === null) return;
         const token: number = ++readToken;
+        const revision: number = store._detail.gitRevision();
         const depth: number = Math.max(1, store._pages());
-        patchState(store, { loading: true, _readFailed: false });
+        const current: () => boolean = (): boolean => token === readToken && store._key() === key;
+        inflight = { token, revision };
+        patchState(store, { loading: true, loadingMore: false });
         try {
           let items: readonly TaskGitLink[] = [];
           let cursor: string | null = null;
           let pages: number = 0;
           do {
             const page: TaskGitLinkPage = await store._api.page(key, cursor);
+            if (!current()) return;
             items = [...items, ...withoutKnown(items, page.items)];
             cursor = page.nextCursor;
             pages++;
           } while (cursor !== null && pages < depth);
-          if (token !== readToken || store._key() !== key) return;
           patchState(store, {
             items,
             nextCursor: cursor,
@@ -393,11 +439,14 @@ function createTaskGitLinksStore(): Type<TaskGitLinksStoreInstance> {
             _pages: pages,
             _loaded: true,
             _readFailed: false,
+            _revision: Math.max(store._revision(), revision),
           });
         } catch {
-          if (token === readToken && store._key() === key) {
-            patchState(store, { loading: false, _readFailed: true });
+          if (current()) {
+            patchState(store, { loading: false, loadingMore: false, _readFailed: true });
           }
+        } finally {
+          release(token);
         }
       };
 
@@ -407,7 +456,7 @@ function createTaskGitLinksStore(): Type<TaskGitLinksStoreInstance> {
         async loadMore(): Promise<void> {
           const key: string | null = store._key();
           const cursor: string | null = store.nextCursor();
-          if (key === null || cursor === null || store.loadingMore()) return;
+          if (key === null || cursor === null || store.loadingMore() || store.loading()) return;
           const token: number = readToken;
           patchState(store, { loadingMore: true, moreFailed: false });
           try {
@@ -431,30 +480,30 @@ function createTaskGitLinksStore(): Type<TaskGitLinksStoreInstance> {
             tap((source: TaskGitLinksSource): void => {
               if (source.key !== store._key()) {
                 readToken++;
+                inflight = null;
                 patchState(store, { ...initialState, _key: source.key });
               }
-              if (source.key === null || !source.ready || store._loaded()) return;
-              if (source.development) {
-                patchState(store, {
-                  items: source.development.items,
-                  nextCursor: source.development.nextCursor,
-                  _pages: 1,
-                  _loaded: true,
-                  _readFailed: false,
-                });
-              } else if (!source.missing && !store.loading()) {
+              if (source.key === null || !source.ready) return;
+              if (!store._loaded()) {
+                if (source.development) {
+                  patchState(store, {
+                    items: source.development.items,
+                    nextCursor: source.development.nextCursor,
+                    _pages: 1,
+                    _loaded: true,
+                    _readFailed: false,
+                    _revision: source.developmentRevision,
+                  });
+                } else if (!source.missing) {
+                  if (inflight === null) void load();
+                  return;
+                } else if (store._revision() < source.developmentRevision) {
+                  patchState(store, { _revision: source.developmentRevision });
+                }
+              }
+              if (source.revision > Math.max(store._revision(), inflight?.revision ?? -1)) {
                 void load();
               }
-            }),
-          ),
-        ),
-
-        _follow: rxMethod<number>(
-          pipe(
-            distinctUntilChanged(),
-            skip(1),
-            tap((): void => {
-              if (store._key() !== null && store._detail.ready()) void load();
             }),
           ),
         ),
@@ -463,7 +512,6 @@ function createTaskGitLinksStore(): Type<TaskGitLinksStoreInstance> {
     withHooks({
       onInit(store): void {
         store._sync(store._source);
-        store._follow(store._detail.gitRevision);
       },
     }),
   );
@@ -478,10 +526,13 @@ function createTaskGitLinksStore(): Type<TaskGitLinksStoreInstance> {
  * detail carries (`TaskDetail.development`) without reading it again; when the detail names
  * `development` in `partial`, `failed` holds until `Retry` (`load`) reads it, and a detail that
  * neither carries nor misses the part makes the panel read it itself. Older links are read with
- * `Show more` (`loadMore`). Each pushed `git.links-changed.v1` counted by
- * `TaskDetailStore.gitRevision` (already throttled per `NOTICE_WINDOW_MS`) reads the list again to
- * the depth shown; a reread that fails keeps the links shown with the inline error. A read
- * answered after a newer one, or for another task, is dropped.
+ * `Show more` (`loadMore`), refused while the list is read again. Each pushed
+ * `git.links-changed.v1` counted by `TaskDetailStore.gitRevision` (already throttled per
+ * `NOTICE_WINDOW_MS`, and counted for a reconnection too) past the revision the links reflect
+ * reads the list again to the depth shown, also when the notice came while the detail was read;
+ * a reread that fails keeps the links shown with the inline error. A read, or one of its pages,
+ * answered after a newer one or for another task is dropped, and a reread ends any `Show more`
+ * in flight.
  *
  * @type {Type<TaskGitLinksStoreInstance>}
  */
