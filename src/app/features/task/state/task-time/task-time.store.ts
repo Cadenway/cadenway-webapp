@@ -38,8 +38,9 @@ export const MAX_ENTRY_MINUTES: number = 1440;
  * Constant TIMER_STORAGE_PREFIX
  *
  * @description
- * Prefix of the device storage key of a running timer, followed by the organization and the
- * task key. The API has no running timer, so it lives on the device.
+ * Prefix of the device storage key of a running timer, followed by the organization, the user
+ * and the task key, so another account on the device never sees it. The API has no running
+ * timer, so it lives on the device.
  *
  * @type {string}
  */
@@ -470,7 +471,7 @@ function createTaskTimeStore(): Type<TaskTimeStoreInstance> {
         store._detail.taskKey() === key && store.key() === key;
 
       const storageKey: (key: string) => string = (key: string): string =>
-        `${TIMER_STORAGE_PREFIX}.${store._workspace.organization().id}.${key}`;
+        `${TIMER_STORAGE_PREFIX}.${store._workspace.organization().id}.${store._workspace.user().id}.${key}`;
 
       const readTimer: (key: string) => number | null = (key: string): number | null => {
         try {

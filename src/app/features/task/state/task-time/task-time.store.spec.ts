@@ -50,7 +50,7 @@ const log: TaskTimeLog = { entries: [entry], totalMinutes: 45 };
  *
  * @type {string}
  */
-const storageKey: string = `${TIMER_STORAGE_PREFIX}.o1.CAD-482`;
+const storageKey: string = `${TIMER_STORAGE_PREFIX}.o1.u1.CAD-482`;
 
 /**
  * Function settle
@@ -75,9 +75,11 @@ describe('TaskTimeStore', () => {
    * Function create
    *
    * @description
-   * Provides and starts the store for CAD-482.
+   * Provides and starts the store for CAD-482, signed in as a user.
+   *
+   * @param {string} [userId] - The signed-in user, Camille Martin by default.
    */
-  function create(): void {
+  function create(userId: string = 'u1'): void {
     taskKey = signal<string | null>('CAD-482');
     TestBed.configureTestingModule({
       providers: [
@@ -94,7 +96,10 @@ describe('TaskTimeStore', () => {
         { provide: CwToastService, useValue: toasts },
         {
           provide: WORKSPACE_CONTEXT,
-          useValue: { organization: signal({ id: 'o1', slug: 'atelier-nord' }) },
+          useValue: {
+            organization: signal({ id: 'o1', slug: 'atelier-nord' }),
+            user: signal({ id: userId }),
+          },
         },
       ],
     });
@@ -428,6 +433,17 @@ describe('TaskTimeStore', () => {
 
     expect(await removed).toBe(false);
     expect(store.log()).toEqual(log);
+  });
+
+  it('never shows the timer or the stored stop of another user of the device', async () => {
+    localStorage.setItem(storageKey, '1762592400000');
+    create('u2');
+    await settle();
+
+    expect(store.timerStartedAt()).toBeNull();
+    expect(await store.stopTimer(1762592400000 + 10 * 60_000)).toBe(false);
+    expect(api.record).not.toHaveBeenCalled();
+    expect(localStorage.getItem(storageKey)).toBe('1762592400000');
   });
 
   it('finds a running timer when the task opens again', async () => {
