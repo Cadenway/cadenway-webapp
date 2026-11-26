@@ -69,7 +69,9 @@ the detail through `TaskDetailOpener`; the typed route error states belong to Er
   `options`, `created`.
 - `TaskDetailOpener` (root): `open(taskKey, preview?, options?)` merges `?task=<KEY>` into the
   current address (the list view, the command palette, the inbox, a toast's `Open`), `close()`
-  removes it, `taskKey`, `isOpen` and `preview`; `TaskDetailPreview` (key, name, status,
+  removes it, `taskKey`, `isOpen`, `preview` and `closed` (the key of each task whose detail
+  closed or gave way to another, so the view under it reads its rows again: Spaces' list rows
+  consume it); `TaskDetailPreview` (key, name, status,
   milestone), what the opening screen shows of the task while the detail is read;
   `TaskDetailOpenOptions` (`tab`, a `TaskDetailTab`: `details`, `subtasks`, `comments` or
   `activity`) opens the column on that tab, kept out of the address, which the tabs take once
@@ -245,7 +247,9 @@ the task` with `Retry`; otherwise Errors' `RouteErrorPanel` renders the typed ro
     (`cw-block-editor` with its toolbar and the `@` menu of the participants, the composer's;
     saved 800 ms after the last change and on blur through `update` with `description` and
     `descriptionMentions`, the spans of its `@[Name](id)` tokens, under `If-Match`; an empty
-    text clears it; a confirmed text never replaces what is being typed), the checklist
+    text clears it; a confirmed text never replaces what is being typed; a draft still waiting
+    when another task opens is saved to its own task through `write`, against that task's
+    recorded version, never to the task now shown), the checklist
     (`<done> / <n>`, ticks shown at once and rolled back with the failure toast, `Add an item` with Enter and Escape; no deletion, as in the mockup), the
     attachments (`cw-attachment` tiles, `Add` and the drop zone, 25 MB refused with `File too
 large` and an empty file with `Empty file`, a name already attached skipped, files being sent
@@ -330,7 +334,10 @@ people`), and the due trigger shows the short date without `Tomorrow ·` or the
   organization and task (`cadenway-task-timer.<organizationId>.<taskKey>`) and is lost with it;
   stopping records the elapsed minutes (1 to 1,440) for today and clears the timer only once the
   entry is confirmed: a refused stop keeps it, and stopping again sends the first stop's entry
-  under the same `Idempotency-Key`, as any entry sent again after a failure. A deleted time
+  under the same `Idempotency-Key`, as any entry sent again after a failure. That stop waits in
+  the device storage next to the start (`<timer key>.stop`) until confirmed, so a stop whose
+  answer was lost is not recorded twice after a reopen or a reload. A read of the entries that
+  began before a confirmed write is dropped and made again. A deleted time
   entry's `Undo` records a new entry (the API has no restore); both `Undo`s run against their task
   after navigating away. Changing approvers starts a new round
   (`requestTaskApproval`), which clears every vote, not only the removed reviewer's; a round keeps
