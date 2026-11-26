@@ -151,9 +151,9 @@ export interface TaskFieldChanges {
  *
  * @description
  * The answer of one single-field write: applied at a version (null when the gateway returned
- * none), refused (a `4xx`; `stale` for a `412` other than an organization change: the task
+ * none), refused (a `4xx` other than `408`; `stale` for a `412` other than an organization change: the task
  * changed since the version sent, so the view reads it again), or without a certain outcome (no
- * answer, or a `5xx`).
+ * answer, a `408` or a `5xx`).
  *
  * @type {{ kind: 'done'; version: number | null } | { kind: 'refused'; stale: boolean } | { kind: 'unknown' }}
  */
