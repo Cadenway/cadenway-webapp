@@ -62,7 +62,7 @@ interface LoginModel {
    * Property rememberMe
    *
    * @description
-   * "Rester connecté pendant 30 jours".
+   * `Stay signed in for 30 days`.
    *
    * @type {boolean}
    */
@@ -75,9 +75,9 @@ interface LoginModel {
  *
  * @description
  * The sign-in screen of `Main.dc.html` (`/login`): social providers, the company SSO entry
- * (`/login/sso`), the password form with "Rester connecté pendant 30 jours", the e-mail code entry
+ * (`/login/sso`), the password form with `Stay signed in for 30 days`, the e-mail code entry
  * (`/login/code`) and the links to `/forgot` and `/signup`. A wrong password shows the attempts
- * left before the lockout; a lockout shows « Compte verrouillé pendant 15 minutes ». An address
+ * left before the lockout; a lockout shows `Account locked for 15 minutes.` An address
  * prefilled from `/logged-out` focuses the password. A `?next=` path is kept for after sign-in.
  */
 @Component({

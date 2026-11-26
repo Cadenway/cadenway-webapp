@@ -45,7 +45,7 @@ Use the `Skill` tool (fallback: `.claude/skills/<name>/SKILL.md`).
 2. Decide placement: the owning feature `ui/`, or a page under `ui/pages/`.
 3. Signal inputs and outputs (`input()`, `output()`, `model()`), `OnPush` (the Angular 22 default), external template.
 4. Compose from `@cadenway/ui`; never restyle a brick from outside; Tailwind utilities with the theme tokens.
-5. Localized copy: English source strings with `@@ids`; the mockup's French wording, word for word, goes into the `fr` translation.
+5. Localized copy: English strings with `@@ids`, never French text in sources or specs; the mockup's French wording, word for word, goes only into `src/locale/messages.fr.json`.
 6. State: a page injects its SignalStore, reads its signals and calls its methods, and lists a
    page-scoped store in its `providers` unless the route does; presentational components receive
    store values as inputs and report through outputs. Never `patchState`, never a `_` member, never

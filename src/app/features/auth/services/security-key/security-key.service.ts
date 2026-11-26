@@ -9,8 +9,8 @@ import {
  * Service SecurityKeyService
  *
  * @description
- * Runs the browser's WebAuthn assertion ceremony ("Touchez votre clé ou validez avec la
- * biométrie…") for options the gateway issued, and returns the answer serialized as JSON. It never
+ * Runs the browser's WebAuthn assertion ceremony (`Touch your key or confirm with
+ * biometrics…`) for options the gateway issued, and returns the answer serialized as JSON. It never
  * talks to the network: the auth data-access service fetches the options and sends the answer.
  * The promise rejects when the person cancels, the browser has no WebAuthn, or no key matches.
  */

@@ -11,16 +11,16 @@ import {
 } from './space.adapter';
 
 /**
- * Constant produit
+ * Constant product
  *
  * @description
- * The mockup's « Produit » space, as the gateway answers it.
+ * The mockup's `Product` space, as the gateway answers it.
  *
  * @type {SpaceDto}
  */
-const produit: SpaceDto = {
-  id: 'sp-produit',
-  name: 'Produit',
+const product: SpaceDto = {
+  id: 'sp-product',
+  name: 'Product',
   prefix: 'CAD',
   description: null,
   icon: 'rocket',
@@ -30,7 +30,7 @@ const produit: SpaceDto = {
   statuses: {
     triage: { category: 'open', name: null, hidden: true },
     backlog: { category: 'open', name: null, hidden: false },
-    todo: { category: 'open', name: 'À démarrer', hidden: false },
+    todo: { category: 'open', name: 'To start', hidden: false },
     progress: { category: 'open', name: null, hidden: false },
     review: { category: 'open', name: null, hidden: false },
     testing: { category: 'open', name: null, hidden: false },
@@ -48,17 +48,17 @@ const produit: SpaceDto = {
  * Constant sprint14
  *
  * @description
- * The mockup's « Sprint 14 », as the gateway answers it.
+ * The mockup's `Sprint 14`, as the gateway answers it.
  *
  * @type {TaskList}
  */
 const sprint14: TaskList = {
   id: 'l-sprint14',
-  spaceId: 'sp-produit',
+  spaceId: 'sp-product',
   name: 'Sprint 14',
   icon: null,
   color: 'unknown-future',
-  sprint: { startDate: '2026-11-03', endDate: '2026-11-17', goal: 'Livrer la connexion SSO' },
+  sprint: { startDate: '2026-11-03', endDate: '2026-11-17', goal: 'Ship the SSO sign-in' },
   createdAt: '2026-11-01T00:00:00Z',
   version: 4,
   callerRole: 'comment',
@@ -66,9 +66,16 @@ const sprint14: TaskList = {
 
 describe('space adapter', () => {
   it('maps a private space with its statuses in workflow order', () => {
-    const space: ReturnType<typeof toSpace> = toSpace(produit);
+    const space: ReturnType<typeof toSpace> = toSpace(product);
 
     expect(space.private).toBe(true);
+    expect(space.prefix).toBe('CAD');
+    expect(space.canEdit).toBe(true);
+    expect(space.canManage).toBe(true);
+    expect(toSpace({ ...product, callerRole: 'view', callerCanManage: false })).toMatchObject({
+      canEdit: false,
+      canManage: false,
+    });
     expect(space.icon).toBe('rocket');
     expect(space.color).toBe('violet');
     expect(space.statuses.map((status) => status.key)).toEqual([
@@ -84,10 +91,10 @@ describe('space adapter', () => {
       'cancelled',
     ]);
     expect(space.statuses[0]).toEqual({ key: 'triage', name: null, hidden: true });
-    expect(space.statuses[2]?.name).toBe('À démarrer');
+    expect(space.statuses[2]?.name).toBe('To start');
   });
 
-  it('maps a sprint, reads an unknown color as gris and a non-edit role as read only', () => {
+  it('maps a sprint, reads an unknown color as `gris` and a non-edit role as read only', () => {
     const list: ReturnType<typeof toTaskList> = toTaskList(sprint14);
 
     expect(list.color).toBe('gris');
@@ -115,7 +122,7 @@ describe('space adapter', () => {
       items: [
         {
           key: 'CAD-490',
-          name: 'Démo client',
+          name: 'Client demo',
           status: 'unknown',
           listId: 'l-sprint14',
           dueDate: '2026-11-20',
@@ -127,14 +134,14 @@ describe('space adapter', () => {
       id: 'f1',
       kind: 'saved-view',
       targetId: 'sv-bugs',
-      target: { name: 'Bugs critiques', href: '/v1/x', listId: 'l-bugs' },
+      target: { name: 'Critical bugs', href: '/v1/x', listId: 'l-bugs' },
       createdAt: '2026-11-01T00:00:00Z',
       version: 1,
     };
 
     expect(page.items[0]).toEqual({
       key: 'CAD-490',
-      name: 'Démo client',
+      name: 'Client demo',
       status: 'todo',
       listId: 'l-sprint14',
       dueDate: '2026-11-20',
@@ -143,7 +150,7 @@ describe('space adapter', () => {
       id: 'f1',
       kind: 'saved-view',
       targetId: 'sv-bugs',
-      name: 'Bugs critiques',
+      name: 'Critical bugs',
       listId: 'l-bugs',
     });
     expect(toFavorite({ ...favorite, kind: 'document' })).toBeNull();

@@ -21,13 +21,13 @@ describe('SearchApi', () => {
       .expectOne((request) => request.url === '/v1/search' && request.params.get('q') === 'sso')
       .flush({
         items: [
-          { kind: 'task', taskKey: 'CAD-482', name: 'Relecture du parcours SSO', status: 'review' },
+          { kind: 'task', taskKey: 'CAD-482', name: 'Review of the SSO flow', status: 'review' },
         ],
         nextCursor: null,
       });
 
     await expect(answer).resolves.toEqual([
-      { kind: 'task', key: 'CAD-482', name: 'Relecture du parcours SSO', status: 'review' },
+      { kind: 'task', key: 'CAD-482', name: 'Review of the SSO flow', status: 'review' },
     ]);
     http.verify();
   });

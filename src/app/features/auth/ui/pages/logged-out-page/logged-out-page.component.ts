@@ -25,8 +25,8 @@ import { AuthFlowStore } from '../../../state/auth-flow/auth-flow.store';
  * @description
  * The signed-out screen of `Deconnexion.dc.html` (`/logged-out?reason=`): a sign-out by the person
  * (`signed-out`, the default), an expired session (`expired`) or every session closed
- * (`all-devices`), then the accounts remembered on this device. « Se connecter » on an account
- * prefills `/login`; the cross forgets it, with « Annuler » until the next action.
+ * (`all-devices`), then the accounts remembered on this device. `Sign in` on an account
+ * prefills `/login`; the cross forgets it, with `Undo` until the next action.
  */
 @Component({
   selector: 'cw-logged-out-page',
@@ -97,7 +97,7 @@ export class LoggedOutPage {
    * Property firstName
    *
    * @description
-   * First name of the most recent remembered account, for « À bientôt, Camille. », or null.
+   * First name of the most recent remembered account, for `See you soon, Camille.`, or null.
    *
    * @type {Signal<string | null>}
    * @readonly
@@ -124,7 +124,7 @@ export class LoggedOutPage {
    * Method signInLabel
    *
    * @description
-   * Accessible name of an account's « Se connecter ».
+   * Accessible name of an account's `Sign in`.
    *
    * @param {RememberedAccount} account - The account.
    * @returns {string} The name.
@@ -177,7 +177,7 @@ export class LoggedOutPage {
    * Method undo
    *
    * @description
-   * Remembers the forgotten account again (Annuler).
+   * Remembers the forgotten account again (`Undo`).
    */
   protected undo(): void {
     const forgotten: ReturnType<RememberedAccountsService['forget']> = this.forgotten();

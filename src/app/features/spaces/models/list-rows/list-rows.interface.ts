@@ -1,6 +1,6 @@
 import type { StatusKey } from '@cadenway/contracts';
 
-import type { TaskSummary } from '@features/task';
+import type { TaskBulkOutcome, TaskBulkSelection, TaskSummary } from '@features/task';
 
 import type { ListGroupQuery, ListTaskQuery } from '../list-view-config/list-view-config.interface';
 
@@ -181,7 +181,7 @@ export interface GroupProgress {
  * Interface ListRowsQuery
  *
  * @description
- * What the rows of the « Liste » view read: the list, the view's query and grouping, and the
+ * What the rows of the `List` view read: the list, the view's query and grouping, and the
  * subtask display.
  */
 export interface ListRowsQuery {
@@ -225,7 +225,7 @@ export interface ListRowsQuery {
  * Interface ListRow
  *
  * @description
- * One row of the « Liste » view: a task in one group, at a subtask depth, with what its cells
+ * One row of the `List` view: a task in one group, at a subtask depth, with what its cells
  * show at once.
  */
 export interface ListRow {
@@ -324,7 +324,7 @@ export interface ListRow {
    * Property childrenFailed
    *
    * @description
-   * Whether reading its subtasks failed; the row offers « Réessayer ».
+   * Whether reading its subtasks failed; the row offers `Retry`.
    *
    * @type {boolean}
    * @readonly
@@ -341,5 +341,108 @@ export interface ListRow {
    * @readonly
    */
   readonly entering: boolean;
+  // #endregion
+}
+
+/**
+ * Interface ListRowsSummary
+ *
+ * @description
+ * What the rows of the open view tell the list page's `Filter` and `Subtasks` controls.
+ */
+export interface ListRowsSummary {
+  // #region Properties
+  /**
+   * Property visibleCount
+   *
+   * @description
+   * Tasks the view shows with its filters (`n of m tasks`), or null while unknown or when
+   * a task may be counted in several groups (grouped by assignee).
+   *
+   * @type {number | null}
+   * @readonly
+   */
+  readonly visibleCount: number | null;
+
+  /**
+   * Property hasSubtasks
+   *
+   * @description
+   * Whether a task read has subtasks or is one, or null before the first answer.
+   *
+   * @type {boolean | null}
+   * @readonly
+   */
+  readonly hasSubtasks: boolean | null;
+  // #endregion
+}
+
+/**
+ * Interface ConfirmedTask
+ *
+ * @description
+ * A task as the gateway last confirmed it when an action of the view was sent: the values its
+ * `Undo` puts back and the version that action was sent with.
+ */
+export interface ConfirmedTask extends TaskSummary {
+  // #region Properties
+  /**
+   * Property cancelNote
+   *
+   * @description
+   * The note of the task's cancellation when this view recorded it, null when there is none or
+   * it is not known (task summaries carry no note).
+   *
+   * @type {string | null}
+   * @readonly
+   */
+  readonly cancelNote: string | null;
+  // #endregion
+}
+
+/**
+ * Interface ListActOutcome
+ *
+ * @description
+ * What an action of the view ended with, and each sent task as confirmed just before it was
+ * sent. A task whose queued status change a newer one replaced is in no list: the newer change
+ * reports it.
+ */
+export interface ListActOutcome extends TaskBulkOutcome {
+  // #region Properties
+  /**
+   * Property before
+   *
+   * @description
+   * The sent tasks as confirmed before the action, by key.
+   *
+   * @type {Readonly<Partial<Record<string, ConfirmedTask>>>}
+   * @readonly
+   */
+  readonly before: Readonly<Partial<Record<string, ConfirmedTask>>>;
+
+  /**
+   * Property after
+   *
+   * @description
+   * The version each applied task stood at once the action was answered, by key: the version an
+   * `Undo` of this action expects the task to still be at.
+   *
+   * @type {Readonly<Partial<Record<string, number>>>}
+   * @readonly
+   */
+  readonly after: Readonly<Partial<Record<string, number>>>;
+
+  /**
+   * Property changed
+   *
+   * @description
+   * Tasks not sent because they changed since the version the action expected, each at its
+   * newest known version; empty for an action sent without expected versions.
+   *
+   * @type {readonly TaskBulkSelection[]}
+   * @readonly
+   */
+  readonly changed: readonly TaskBulkSelection[];
   // #endregion
 }

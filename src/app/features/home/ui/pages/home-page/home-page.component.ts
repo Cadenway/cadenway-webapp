@@ -23,7 +23,7 @@ import {
  * @description
  * The home screen of a workspace (mockup `App.dc.html` lines 1683-1690): today's date in the
  * application locale and the greeting with the signed-in person's first name. The greeting is the
- * route focus target. The statistics, the task groups and « Créer une tâche » come with the home
+ * route focus target. The statistics, the task groups and `Create a task` come with the home
  * screen step. `?notice=logo-upload-failed`, set by Auth after an organization creation whose logo
  * could not be uploaded, shows a dismissible notice pointing to the organization settings.
  */
@@ -110,7 +110,7 @@ export class HomePage {
    *
    * @description
    * Weekday, day and month of the day the page opened, in the application locale, capitalized as
-   * the mockup's « Dimanche 8 novembre ».
+   * the mockup's date line (`Sunday 8 November` in English).
    *
    * @type {string}
    * @readonly
@@ -125,7 +125,8 @@ export class HomePage {
  * Function capitalize
  *
  * @description
- * Uppercases the first character of a formatted date, since French weekday names are lowercase.
+ * Uppercases the first character of a formatted date, since some locales write weekday names in
+ * lowercase.
  *
  * @param {string} text - Formatted date.
  * @returns {string} The text with an uppercase first character.

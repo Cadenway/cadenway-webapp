@@ -13,7 +13,7 @@ import { toTaskSummary } from './task-summary.adapter';
  */
 const dto: ListTasksClientResult['items'][number] = {
   key: 'CAD-482',
-  name: 'Refondre l’écran de connexion SSO',
+  name: 'Redesign the SSO sign-in screen',
   status: 'progress',
   cancelReason: null,
   priority: 'haute',
@@ -21,10 +21,10 @@ const dto: ListTasksClientResult['items'][number] = {
   dueDate: '2026-11-12',
   startDate: '2026-11-09',
   estimateMinutes: null,
-  labels: ['Front', 'Auth', 'Sécurité'],
+  labels: ['Front', 'Auth', 'Security'],
   parentKey: null,
   listId: 'sprint-14',
-  spaceId: 'produit',
+  spaceId: 'product',
   subtaskCounts: { total: 3, closed: 1 },
   checklistCounts: { total: 4, done: 2 },
   completedAt: null,
@@ -37,14 +37,14 @@ describe('toTaskSummary', () => {
     expect(toTaskSummary(dto)).toEqual({
       id: 'CAD-482',
       key: 'CAD-482',
-      name: 'Refondre l’écran de connexion SSO',
+      name: 'Redesign the SSO sign-in screen',
       status: 'progress',
       cancelReason: null,
       priority: 'haute',
       assigneeIds: ['u1', 'u2'],
       due: '2026-11-12',
       start: '2026-11-09',
-      labels: ['Front', 'Auth', 'Sécurité'],
+      labels: ['Front', 'Auth', 'Security'],
       subtasks: { closed: 1, total: 3 },
       checklist: { closed: 2, total: 4 },
       comments: null,
@@ -52,7 +52,7 @@ describe('toTaskSummary', () => {
       milestone: false,
       recurrence: 'none',
       listId: 'sprint-14',
-      spaceId: 'produit',
+      spaceId: 'product',
       version: 7,
     });
   });

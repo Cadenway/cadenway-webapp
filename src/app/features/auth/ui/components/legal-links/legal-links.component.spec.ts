@@ -15,9 +15,9 @@ describe('LegalLinks', () => {
     expect(
       links.map((link: HTMLAnchorElement) => [link.textContent.trim(), link.getAttribute('href')]),
     ).toEqual([
-      ['Confidentialité', 'https://cadenway.example/privacy'],
-      ["Conditions d'utilisation", 'https://cadenway.example/terms'],
-      ['Aide', 'https://cadenway.example/help'],
+      ['Privacy', 'https://cadenway.example/privacy'],
+      ['Terms of use', 'https://cadenway.example/terms'],
+      ['Help', 'https://cadenway.example/help'],
     ]);
   });
 

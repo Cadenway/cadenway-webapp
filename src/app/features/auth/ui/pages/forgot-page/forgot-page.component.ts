@@ -1,4 +1,12 @@
-import { Component, inject, signal, type WritableSignal } from '@angular/core';
+import {
+  Component,
+  type ElementRef,
+  inject,
+  type Signal,
+  signal,
+  viewChild,
+  type WritableSignal,
+} from '@angular/core';
 import { email, type FieldTree, form, FormField, required, submit } from '@angular/forms/signals';
 import { RouterLink } from '@angular/router';
 import { CwAlert, CwAlertDescription } from '@cadenway/ui/components/alert';
@@ -26,8 +34,8 @@ const RESEND_SECONDS: number = 45;
  *
  * @description
  * Forgotten password of `MotDePasseOublie.dc.html` (`/forgot`): the account address, then
- * « Vérifiez vos e-mails », which always reads the same whether or not an account uses the
- * address. « Renvoyer l'e-mail » waits 45 seconds; « Modifier l'adresse » returns to the form.
+ * `Check your email`, which always reads the same whether or not an account uses the
+ * address. `Resend the email` waits 45 seconds; `Change the address` returns to the form.
  */
 @Component({
   selector: 'cw-forgot-page',
@@ -92,6 +100,19 @@ export class ForgotPage {
   protected readonly unavailable: WritableSignal<boolean> = signal(false);
 
   /**
+   * Property emailInput
+   *
+   * @description
+   * The address field, focused and selected by `Change the address`; undefined while the sent
+   * state shows.
+   *
+   * @type {Signal<ElementRef<HTMLInputElement> | undefined>}
+   * @readonly
+   */
+  private readonly emailInput: Signal<ElementRef<HTMLInputElement> | undefined> =
+    viewChild<ElementRef<HTMLInputElement>>('emailInput');
+
+  /**
    * Property model
    *
    * @description
@@ -123,7 +144,7 @@ export class ForgotPage {
    * Method send
    *
    * @description
-   * Requests the link and shows « Vérifiez vos e-mails ».
+   * Requests the link and shows `Check your email`.
    *
    * @param {Event} event - The submit event.
    * @returns {Promise<void>} Resolves once handled.
@@ -164,7 +185,9 @@ export class ForgotPage {
     this.resent.set(false);
     this.countdown.start(0);
     setTimeout(() => {
-      this.forgotForm.email().focusBoundControl();
+      const input: HTMLInputElement | undefined = this.emailInput()?.nativeElement;
+      input?.focus();
+      input?.select();
     });
   }
 

@@ -138,12 +138,23 @@ async function signIn(page: Rendered): Promise<void> {
 }
 
 describe('LoginPage', () => {
-  it('keeps the submit disabled until the form is complete, then opens the destination', async () => {
+  it('shows the errors of an incomplete form on submit, then opens the destination', async () => {
     const page: Rendered = await render({ kind: 'signed-in', destination: '/atelier-nord' });
     const submit: HTMLButtonElement | null = page.host.querySelector('button[type="submit"]');
 
     expect(page.flow['setReturnUrl']).toHaveBeenCalledWith('/invite/invitation-lumen');
-    expect(submit?.disabled).toBe(true);
+    expect(submit?.disabled).toBe(false);
+    page.host.querySelector('form')?.dispatchEvent(new Event('submit', { cancelable: true }));
+    await page.fixture.whenStable();
+
+    expect(page.host.querySelector('#login-email-help')?.textContent).toContain(
+      'Enter the email address of your account, for example camille.martin@ateliernord.fr.',
+    );
+    expect(page.host.querySelector('#login-password-help')?.textContent).toContain(
+      'Enter your password.',
+    );
+    expect(document.activeElement?.id).toBe('login-email');
+    expect(page.flow['signInWithPassword']).not.toHaveBeenCalled();
     await signIn(page);
 
     expect(page.flow['signInWithPassword']).toHaveBeenCalledWith(
@@ -170,10 +181,12 @@ describe('LoginPage', () => {
     await signIn(page);
 
     const alert: string = page.host.querySelector('cw-alert')?.textContent ?? '';
-    expect(alert).toContain('E-mail ou mot de passe incorrect.');
-    expect(alert).toContain('Il vous reste 3 tentatives avant le verrouillage temporaire.');
+    expect(alert).toContain('Wrong email or password.');
+    expect(alert).toContain(
+      'Check what you typed. You have 3 attempts left before the temporary lockout.',
+    );
     expect(page.host.querySelector('#login-password-help')?.textContent).toContain(
-      'Mot de passe incorrect : vérifiez les majuscules.',
+      'Wrong password: check the capital letters.',
     );
     expect(page.navigate).not.toHaveBeenCalled();
   });
@@ -186,8 +199,14 @@ describe('LoginPage', () => {
 
     await signIn(page);
 
-    expect(page.host.textContent).toContain('Compte verrouillé pendant 15 minutes.');
+    expect(page.host.textContent).toContain('Account locked for 15 minutes.');
     expect(page.host.querySelector('cw-alert a')?.getAttribute('href')).toBe('/forgot');
+  });
+
+  it('separates the sign-up question from its link', async () => {
+    const page: Rendered = await render({ kind: 'challenge' });
+
+    expect(page.host.textContent).toContain('No account yet? Create an account');
   });
 
   it('says the address of a remembered account is prefilled', async () => {
@@ -197,7 +216,7 @@ describe('LoginPage', () => {
       'camille.martin@ateliernord.fr',
     );
     expect(page.host.textContent).toContain(
-      'Compte mémorisé sur cet appareil : saisissez son mot de passe.',
+      'Account remembered on this device: enter its password.',
     );
   });
 
@@ -210,6 +229,6 @@ describe('LoginPage', () => {
     await page.fixture.whenStable();
 
     expect(page.flow['startFederatedSignIn']).toHaveBeenCalledWith('github');
-    expect(page.host.textContent).toContain('Connexion indisponible. Réessayez dans un instant.');
+    expect(page.host.textContent).toContain('Sign-in is unavailable. Try again in a moment.');
   });
 });

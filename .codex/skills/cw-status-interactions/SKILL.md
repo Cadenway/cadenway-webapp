@@ -9,6 +9,6 @@ description: "The mockup rules for status changes, fast clicks, toasts with undo
   view groups by status.
 - Fast clicks: one pending change per task; a new click replaces it; returning to the saved status
   cancels it; automations and the log see only the final status.
-- Cancelling asks a reason (Doublon, Ne sera pas fait, Hors périmètre, Obsolète) and an optional note.
-- Toasts: 6 s, title, description, Annuler (restores the snapshot) or Ouvrir.
+- Cancelling asks a reason (Duplicate, Will not be done, Out of scope, Obsolete) and an optional note.
+- Toasts: 6 s, title, description, Undo (restores the snapshot) or Open.
 - Deletion: confirmation; trash 30 days with subtasks; sensitive deletions type the name.

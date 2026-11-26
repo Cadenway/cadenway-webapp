@@ -5,8 +5,10 @@ import { RealtimeConnection } from './realtime-connection.service';
 export { RealtimeConnection } from './realtime-connection.service';
 export {
   REALTIME_ORGANIZATION,
+  REALTIME_SOCKET_FACTORY,
   REALTIME_TERMINAL_FAILURE,
   REALTIME_TICKET_SOURCE,
+  type RealtimeSocketFactory,
 } from './realtime.token';
 export type {
   MemberPresenceChange,

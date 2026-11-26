@@ -68,7 +68,7 @@ export interface Space {
    * Property name
    *
    * @description
-   * Space name (« Produit »).
+   * Space name (`Product`).
    *
    * @type {string}
    * @readonly
@@ -112,7 +112,7 @@ export interface Space {
    * Property private
    *
    * @description
-   * Whether only its owner and the people it is shared with see it (« Espace privé »).
+   * Whether only its owner and the people it is shared with see it (`Private space`).
    *
    * @type {boolean}
    * @readonly
@@ -129,5 +129,136 @@ export interface Space {
    * @readonly
    */
   readonly statuses: readonly SpaceStatusOption[];
+  // #endregion
+}
+
+/**
+ * Interface SpaceDetails
+ *
+ * @description
+ * A space as the sidebar reads it, with what its dialog and its menu need: the task key prefix
+ * and the caller's rights on the space itself.
+ */
+export interface SpaceDetails extends Space {
+  // #region Properties
+  /**
+   * Property prefix
+   *
+   * @description
+   * Prefix of its task keys (`CAD`), 2 to 5 unaccented capital letters.
+   *
+   * @type {string}
+   * @readonly
+   */
+  readonly prefix: string;
+
+  /**
+   * Property canEdit
+   *
+   * @description
+   * Whether the caller may change its settings and create lists in it (`edit` on the space).
+   *
+   * @type {boolean}
+   * @readonly
+   */
+  readonly canEdit: boolean;
+
+  /**
+   * Property canManage
+   *
+   * @description
+   * Whether the caller may change its visibility and delete it.
+   *
+   * @type {boolean}
+   * @readonly
+   */
+  readonly canManage: boolean;
+
+  /**
+   * Property version
+   *
+   * @description
+   * Version of the space, sent as `If-Match` by its changes.
+   *
+   * @type {number}
+   * @readonly
+   */
+  readonly version: number;
+  // #endregion
+}
+
+/**
+ * Interface SpaceDraft
+ *
+ * @description
+ * What the space dialog submits, trimmed: `Create the space` or `Save`.
+ */
+export interface SpaceDraft {
+  // #region Properties
+  /**
+   * Property name
+   *
+   * @description
+   * `Space name`, 1 to 80 characters.
+   *
+   * @type {string}
+   * @readonly
+   */
+  readonly name: string;
+
+  /**
+   * Property prefix
+   *
+   * @description
+   * `Prefix`, 2 to 5 unaccented capital letters.
+   *
+   * @type {string}
+   * @readonly
+   */
+  readonly prefix: string;
+
+  /**
+   * Property description
+   *
+   * @description
+   * `Description`, or null when empty.
+   *
+   * @type {string | null}
+   * @readonly
+   */
+  readonly description: string | null;
+
+  /**
+   * Property icon
+   *
+   * @description
+   * `Icon`, or null for the initial.
+   *
+   * @type {LookIcon}
+   * @readonly
+   */
+  readonly icon: LookIcon;
+
+  /**
+   * Property color
+   *
+   * @description
+   * `Color`.
+   *
+   * @type {LookColor}
+   * @readonly
+   */
+  readonly color: LookColor;
+
+  /**
+   * Property private
+   *
+   * @description
+   * `Private` rather than the whole organization.
+   *
+   * @type {boolean}
+   * @readonly
+   */
+  readonly private: boolean;
   // #endregion
 }

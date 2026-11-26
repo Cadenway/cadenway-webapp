@@ -42,7 +42,7 @@ export interface ShortcutGroup {
    * Property title
    *
    * @description
-   * Section title (« Partout »).
+   * Section title (`Everywhere`).
    *
    * @type {string}
    * @readonly

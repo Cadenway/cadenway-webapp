@@ -23,8 +23,8 @@ import { relativeTime } from '../../../utils/inbox-time/inbox-time.util';
  *
  * @description
  * One notification of the inbox popover (mockup `App.dc.html` line 153): the actor's initials with
- * the category icon, « <actor> <verb> », the task key and name, the quoted excerpt, the relative
- * time and, while unread, the violet dot named « Non lu ». The whole row is a button; `opened`
+ * the category icon, `<actor> <verb>`, the task key and name, the quoted excerpt, the relative
+ * time and, while unread, the violet dot named `Unread`. The whole row is a button; `opened`
  * fires on click. Read rows dim their sentence.
  */
 @Component({
@@ -109,7 +109,7 @@ export class NotificationRow {
    * Property time
    *
    * @description
-   * When it arrived (« 12 min », « hier »).
+   * When it arrived (`12 min`, `yesterday`).
    *
    * @type {Signal<string>}
    * @readonly

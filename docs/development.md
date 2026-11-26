@@ -41,15 +41,15 @@ The scripts below are this repository's contract. While the repository is being 
 create them with these exact names; afterwards, use them and never an ad-hoc equivalent. Run the
 narrowest check that covers the change first, then widen:
 
-| Changed                         | Minimum check                                                              |
-| ------------------------------- | -------------------------------------------------------------------------- |
-| Components, templates           | `pnpm test --include <area>`, `pnpm lint`, `pnpm build` (strict templates) |
-| State, services                 | `pnpm test --include <area>`, then `pnpm test:coverage`                    |
-| Routes, guards                  | `pnpm build`                                                               |
-| Browser flows                   | `pnpm e2e <spec>`                                                          |
-| Copy                            | `pnpm i18n:extract`, the `fr` units in `src/locale/messages.fr.xlf`, then  |
-|                                 | `pnpm i18n:check` and `cw-web-copy-reviewer` against the mockup            |
-| Docs or agent instructions only | Scoped formatting and link review                                          |
+| Changed                         | Minimum check                                                                |
+| ------------------------------- | ---------------------------------------------------------------------------- |
+| Components, templates           | `pnpm test --include <area>`, `pnpm lint`, `pnpm build` (strict templates)   |
+| State, services                 | `pnpm test --include <area>`, then `pnpm test:coverage`                      |
+| Routes, guards                  | `pnpm build`                                                                 |
+| Browser flows                   | `pnpm e2e <spec>`                                                            |
+| Copy                            | `pnpm i18n:extract`, the French texts in `src/locale/messages.fr.json`, then |
+|                                 | `pnpm i18n:check` and `cw-web-copy-reviewer` against the mockup              |
+| Docs or agent instructions only | Scoped formatting and link review                                            |
 
 Report the commands you actually ran and their results; a check you did not run is reported as not
 run.
@@ -70,9 +70,13 @@ pnpm test:coverage
 pnpm build
 ```
 
-`pnpm build` and `pnpm start` produce the French translation (`localize: ["fr"]`), served at the
-root; a missing translation fails the build. The `source` configuration builds the untranslated
-English source and is used by `ng extract-i18n`.
+`pnpm build` and `pnpm start` produce a single English application at the root, with the French
+catalog copied to `/messages.fr.json`; open any page with `?lang=fr` to load it at runtime,
+and `?lang=en` to return to English (the choice is remembered on the device). `pnpm i18n:check`
+compares the extracted English catalog with `src/locale/messages.json`, then runs
+`src/locale/messages.spec.ts`, which fails on a missing, empty, orphan or placeholder-mismatched
+French text. Unit specs run in English, without translations; only the `core/locale` specs load the
+French catalog.
 
 For a focused check, run `pnpm test --include "<glob>"` with one spec glob.
 

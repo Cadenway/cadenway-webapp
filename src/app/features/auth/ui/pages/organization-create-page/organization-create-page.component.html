@@ -1,7 +1,13 @@
 <div class="flex w-full max-w-[520px] flex-col gap-5">
   <cw-card class="gap-6 p-6 sm:p-8">
     <div class="flex flex-col gap-3">
-      <a cwButton variant="ghost" size="sm" class="self-start" routerLink="/organizations">
+      <a
+        cwButton
+        variant="ghost"
+        size="sm"
+        class="-ml-2 self-start text-muted-foreground hover:text-foreground"
+        routerLink="/organizations"
+      >
         <ng-icon name="phosphorArrowLeftBold" aria-hidden="true" />
         <span i18n="@@auth.organization-create.back">My organizations</span>
       </a>
@@ -16,7 +22,7 @@
     </div>
 
     @if (unavailable()) {
-      <cw-alert variant="destructive" role="alert">
+      <cw-alert variant="destructive" class="[&>ng-icon]:text-inherit" role="alert">
         <cw-alert-description i18n="@@auth.organizations.action-failed"
           >The action is unavailable. Try again in a moment.</cw-alert-description
         >
@@ -26,18 +32,21 @@
     <form class="flex flex-col gap-5" novalidate (submit)="create($event)">
       <div class="flex items-center gap-4">
         <span
-          class="flex size-14 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-dashed border-input"
+          class="flex size-14 shrink-0 items-center justify-center overflow-hidden rounded-lg text-base font-semibold text-muted-foreground"
+          [class]="
+            logo() ? 'border border-border bg-background' : 'border border-dashed border-input'
+          "
         >
           @if (logo(); as chosen) {
             <img [src]="chosen.url" [alt]="logoAlt(chosen.file)" class="size-full object-cover" />
           } @else {
-            <cw-avatar [name]="model().name || 'Aa'" />
+            <span aria-hidden="true">{{ initials(model().name) || 'Aa' }}</span>
           }
         </span>
         <div class="flex min-w-0 flex-col gap-1.5">
           <span
             id="org-logo-label"
-            class="text-sm leading-none font-medium"
+            class="flex items-center gap-2 text-sm leading-none font-medium select-none"
             i18n="@@auth.organization-create.logo"
             >Logo</span
           >
@@ -47,7 +56,7 @@
               id="org-logo"
               type="file"
               accept="image/png,image/svg+xml"
-              class="sr-only"
+              class="peer sr-only"
               aria-labelledby="org-logo-label org-logo-button"
               aria-describedby="org-logo-help"
               (change)="pickLogo($event)"
@@ -55,7 +64,7 @@
             <label
               id="org-logo-button"
               for="org-logo"
-              class="inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-lg border border-input px-3 text-sm font-medium hover:bg-muted"
+              class="relative isolate inline-flex h-7 cursor-pointer items-center justify-center gap-1.5 overflow-hidden rounded-md border border-input px-2 text-sm font-medium whitespace-nowrap transition-all peer-focus-visible:ring-2 peer-focus-visible:ring-ring peer-focus-visible:ring-offset-2 peer-focus-visible:ring-offset-background hover:bg-accent"
             >
               <ng-icon name="phosphorUploadSimpleBold" aria-hidden="true" />
               @if (logo()) {
@@ -77,10 +86,10 @@
               </button>
               <span
                 id="org-logo-help"
-                class="text-xs text-muted-foreground"
+                class="min-w-0 truncate text-xs text-muted-foreground"
                 aria-live="polite"
                 i18n="@@auth.organization-create.logo-meta"
-                >{{ chosen.file.name }} · {{ logoSize(chosen.file) }} KB</span
+                >{{ chosen.file.name }} · {{ logoSize(chosen.file) }}</span
               >
             } @else {
               <span
@@ -105,7 +114,7 @@
       <div class="flex flex-col gap-2">
         <label
           for="org-name"
-          class="text-sm leading-none font-medium"
+          class="flex items-center gap-2 text-sm leading-none font-medium select-none"
           i18n="@@auth.organization-create.name"
           >Organization name</label
         >
@@ -128,7 +137,7 @@
       <div class="flex flex-col gap-2">
         <label
           for="org-slug"
-          class="text-sm leading-none font-medium"
+          class="flex items-center gap-2 text-sm leading-none font-medium select-none"
           i18n="@@auth.organization-create.address"
           >Address</label
         >
@@ -140,7 +149,7 @@
             id="org-slug"
             type="text"
             readonly
-            class="h-full min-w-0 flex-1 bg-transparent pe-3 outline-none"
+            class="h-full min-w-0 flex-1 bg-transparent pe-3 font-mono text-xs outline-none"
             [value]="slug() || placeholderSlug"
           />
         </div>
@@ -149,13 +158,10 @@
         </p>
       </div>
 
-      <div class="flex flex-col gap-2">
-        <span
-          id="org-size-label"
-          class="text-sm leading-none font-medium"
-          i18n="@@auth.organization-create.size"
-          >Team size</span
-        >
+      <fieldset class="flex min-w-0 flex-col gap-2">
+        <legend class="mb-2 text-sm font-medium">
+          <span i18n="@@auth.organization-create.size">Team size</span>
+        </legend>
         <cw-radio-group
           class="grid grid-cols-2 gap-2 sm:grid-cols-4"
           ariaLabel="Team size"
@@ -211,12 +217,12 @@
             </span>
           </cw-radio-group-item>
         </cw-radio-group>
-      </div>
+      </fieldset>
 
       <div class="flex flex-col gap-2">
         <label
           for="org-use"
-          class="text-sm leading-none font-medium"
+          class="flex items-center gap-2 text-sm leading-none font-medium select-none"
           i18n="@@auth.organization-create.use"
           >Main use</label
         >
@@ -230,8 +236,10 @@
       </div>
 
       <div class="flex flex-col gap-2">
-        <label for="org-invite" class="text-sm leading-none font-medium"
-          ><span i18n="@@auth.organization-create.invite">Invite colleagues</span>
+        <label
+          for="org-invite"
+          class="flex items-center gap-2 text-sm leading-none font-medium select-none"
+          ><span i18n="@@auth.organization-create.invite">Invite colleagues</span>&ngsp;
           <span class="font-normal text-muted-foreground" i18n="@@auth.organization-create.optional"
             >(optional)</span
           ></label
@@ -240,7 +248,7 @@
           cwTextarea
           id="org-invite"
           rows="2"
-          placeholder="adresse@exemple.fr, autre@exemple.fr"
+          placeholder="address@example.com, other@example.com"
           i18n-placeholder="@@auth.organization-create.invite-placeholder"
           [formField]="createForm.invites"
         ></textarea>
@@ -256,15 +264,12 @@
         }
       </div>
 
-      <div
-        class="flex items-start gap-2 rounded-lg bg-muted px-3 py-2.5 text-xs text-muted-foreground"
-      >
-        <ng-icon name="phosphorInfoBold" class="mt-0.5 size-4 shrink-0" aria-hidden="true" />
-        <p i18n="@@auth.organization-create.plan">
+      <cw-alert variant="info" icon="phosphorInfoBold">
+        <cw-alert-description i18n="@@auth.organization-create.plan">
           Free plan to start: 5 members and 2 GB of storage. Move to the Team plan at any time from
           Billing.
-        </p>
-      </div>
+        </cw-alert-description>
+      </cw-alert>
 
       <button
         cwButton

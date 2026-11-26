@@ -9,17 +9,26 @@
     cwToolbarItem
     type="button"
     size="sm"
-    [variant]="milestonesOnly() ? 'secondary' : 'outline'"
+    variant="outline"
+    [class.border-primary/50]="milestonesOnly()"
+    [class.bg-primary/10]="milestonesOnly()"
+    [class.text-primary]="milestonesOnly()"
     [attr.aria-pressed]="milestonesOnly()"
     title="Show milestones only"
     i18n-title="@@spaces.tools.milestones-title"
     data-testid="view-milestones"
     (click)="milestonesToggled.emit()"
   >
-    <ng-icon name="phosphorFlagBold" aria-hidden="true" />
+    <span
+      class="size-2.5 shrink-0 rotate-45 rounded-[2px] border-[1.5px] border-current"
+      aria-hidden="true"
+    ></span>
     <ng-container i18n="@@spaces.tools.milestones">Milestones</ng-container>
     @if (milestoneCount() !== null) {
-      <span class="text-muted-foreground tabular-nums">{{ milestoneCount() }}</span>
+      <span
+        class="rounded-full bg-secondary px-1.5 text-xs leading-5 text-muted-foreground tabular-nums"
+        >{{ milestoneCount() }}</span
+      >
     }
   </button>
   <button
@@ -36,7 +45,7 @@
     <ng-container i18n="@@spaces.tools.filter">Filter</ng-container>
     @if (filterCount() > 0) {
       <span
-        class="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-foreground px-1 text-[10px] leading-none font-medium text-background tabular-nums"
+        class="inline-flex h-4 min-w-4 items-center justify-center rounded-sm bg-secondary px-1 text-[11px] font-semibold whitespace-nowrap tabular-nums"
         >{{ filterCount() }}</span
       >
     }
@@ -73,7 +82,7 @@
     {{ groupLabel() }}
   </button>
   <cw-toolbar-spacer />
-  <div class="relative flex items-center">
+  <div class="relative flex w-full items-center sm:w-56">
     <ng-icon
       name="phosphorMagnifyingGlassBold"
       class="pointer-events-none absolute left-2.5 size-3.5 text-muted-foreground"
@@ -83,7 +92,7 @@
       cwInput
       size="sm"
       type="search"
-      class="w-40 pl-8 sm:w-52"
+      class="w-full pl-8"
       aria-label="Search the list"
       i18n-aria-label="@@spaces.tools.search-label"
       placeholder="Search"
@@ -111,39 +120,42 @@
   role="region"
   aria-label="Active filters"
   i18n-aria-label="@@spaces.chips.label"
-  class="flex flex-wrap items-center gap-1.5"
+  class="flex flex-wrap items-center gap-2"
   data-testid="view-chips"
 >
   @for (chip of chips(); track chip.field) {
     <div
-      class="inline-flex h-7 items-center overflow-hidden rounded-md border border-input text-xs"
+      class="inline-flex h-7 items-stretch overflow-hidden rounded-md border border-input bg-background text-xs"
       data-testid="view-chip"
     >
-      <span class="flex items-center gap-1 px-2 font-medium">
-        <ng-icon [name]="chip.icon" class="size-3.5 text-muted-foreground" aria-hidden="true" />{{
-          chip.name
-        }}
+      <span class="flex items-center gap-1.5 px-2 text-muted-foreground">
+        <ng-icon [name]="chip.icon" class="size-3.5" aria-hidden="true" />{{ chip.name }}
       </span>
       <span class="flex items-center border-l border-input px-2 text-muted-foreground">{{
         chip.operator
       }}</span>
-      <span class="flex max-w-48 items-center truncate border-l border-input px-2 font-medium">{{
-        chip.values
-      }}</span>
+      <span
+        class="flex max-w-48 items-center gap-1.5 truncate border-l border-input px-2 font-medium"
+        >{{ chip.values }}</span
+      >
       <button
-        cwButton
         type="button"
-        variant="ghost"
-        size="icon-xs"
-        class="rounded-none border-l border-input"
+        class="flex items-center border-l border-input px-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:z-10 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none focus-visible:ring-inset"
         [attr.aria-label]="removeLabel(chip)"
         (click)="filterCleared.emit(chip.field)"
       >
-        <ng-icon name="phosphorXBold" class="size-3" aria-hidden="true" />
+        <ng-icon name="phosphorXBold" class="size-3.5" aria-hidden="true" />
       </button>
     </div>
   }
-  <button cwButton type="button" variant="ghost" size="xs" (click)="filterOpen.set(true)">
+  <button
+    cwButton
+    type="button"
+    variant="ghost"
+    size="sm"
+    class="h-7 px-2 text-muted-foreground"
+    (click)="filterOpen.set(true)"
+  >
     <ng-icon name="phosphorPlusBold" aria-hidden="true" />
     <ng-container i18n="@@spaces.chips.add">Filter</ng-container>
   </button>
@@ -162,7 +174,8 @@
       cwButton
       type="button"
       variant="ghost"
-      size="xs"
+      size="sm"
+      class="h-7 px-2.5"
       data-testid="view-clear-filters"
       (click)="filtersCleared.emit()"
       i18n="@@spaces.chips.clear"
@@ -173,7 +186,7 @@
   @if (savedView(); as view) {
     @if (modified()) {
       <div
-        class="flex items-center gap-1 rounded-md border border-border px-1"
+        class="ml-auto flex items-center gap-1.5"
         role="group"
         aria-label="Modified saved view"
         i18n-aria-label="@@spaces.saved.modified-group"
@@ -185,15 +198,23 @@
           ><span class="size-1.5 shrink-0 rounded-full bg-balise" aria-hidden="true"></span
           ><ng-container i18n="@@spaces.saved.modified">Modified</ng-container></span
         >
-        <button cwButton type="button" variant="ghost" size="xs" (click)="savedReverted.emit()">
+        <button
+          cwButton
+          type="button"
+          variant="ghost"
+          size="sm"
+          class="h-7"
+          (click)="savedReverted.emit()"
+        >
           <ng-icon name="phosphorArrowCounterClockwiseBold" aria-hidden="true" />
           <ng-container i18n="@@spaces.saved.revert">Revert</ng-container>
         </button>
         <button
           cwButton
           type="button"
-          variant="ghost"
-          size="xs"
+          variant="outline"
+          size="sm"
+          class="h-7"
           data-testid="view-save-settings"
           (click)="savedUpdated.emit()"
         >
@@ -203,18 +224,21 @@
       </div>
     }
   }
-  <button
-    cwButton
-    type="button"
-    variant="outline"
-    size="xs"
-    [cwMenuTriggerFor]="subtaskMenu"
-    data-testid="view-subtasks"
-  >
-    <ng-icon name="phosphorTreeStructureBold" aria-hidden="true" />
-    <ng-container i18n="@@spaces.subtasks.button">Subtasks</ng-container
-    ><span class="text-muted-foreground">: {{ subtaskShort() }}</span>
-  </button>
+  @if (hasSubtasks()) {
+    <button
+      cwButton
+      type="button"
+      variant="outline"
+      size="sm"
+      class="h-7"
+      [cwMenuTriggerFor]="subtaskMenu"
+      data-testid="view-subtasks"
+    >
+      <ng-icon name="phosphorTreeStructureBold" aria-hidden="true" />
+      <ng-container i18n="@@spaces.subtasks.button">Subtasks</ng-container
+      ><span class="text-muted-foreground">: {{ subtaskShort() }}</span>
+    </button>
+  }
   @if (canSave()) {
     <button
       cwButton
@@ -241,7 +265,10 @@
   [open]="filterOpen()"
   (openChange)="filterOpen.set($event)"
 >
-  <div class="flex max-h-[28rem] flex-col gap-3 overflow-y-auto" data-testid="view-filter-dialog">
+  <div
+    class="grid max-h-[28rem] w-[34rem] max-w-[calc(100vw-6rem)] grid-cols-2 gap-x-2 gap-y-3 overflow-y-auto max-md:max-w-[calc(100vw-2rem)] sm:grid-cols-4"
+    data-testid="view-filter-dialog"
+  >
     @for (section of sections(); track section.field) {
       @if (section.options.length > 0) {
         <fieldset class="flex flex-col gap-0.5">
@@ -269,7 +296,12 @@
         </fieldset>
       }
     }
-    <div class="flex items-center justify-end border-t border-border pt-2">
+    <div class="col-span-full flex items-center justify-between border-t border-border pt-2">
+      <span class="text-xs whitespace-nowrap text-muted-foreground tabular-nums">
+        @if (visibleCount() !== null && taskTotal() !== null) {
+          {{ visibleLabel() }}
+        }
+      </span>
       <button
         cwButton
         type="button"

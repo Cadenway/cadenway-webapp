@@ -1,6 +1,20 @@
-export { STATUS_LABELS, PRIORITY_LABELS } from './constants/task-copy/task-copy.constants';
+export {
+  CANCEL_REASON_LABELS,
+  MILESTONE_STATUS_HINTS,
+  PRIORITY_LABELS,
+  STATUS_CATEGORY_LABELS,
+  STATUS_HINTS,
+  STATUS_LABELS,
+} from './constants/task-copy/task-copy.constants';
 export type { Person } from './models/person/person.interface';
 export type { StatusOption } from './models/status-option/status-option.interface';
+export type {
+  TaskBulkAction,
+  TaskBulkEntry,
+  TaskBulkOutcome,
+  TaskBulkSelection,
+} from './models/task-bulk/task-bulk.interface';
+export { TaskActionsApi } from './data-access/services/task-actions-api/task-actions-api.service';
 export type { CreatedTask, TaskCreateOptions } from './models/task-create/task-create.interface';
 export type {
   TaskCancellation,
@@ -24,6 +38,7 @@ export { TaskCancelDialog } from './ui/dialogs/task-cancel-dialog/task-cancel-di
 export {
   defaultStatusOptions,
   isClosedStatus,
+  isMilestoneStatus,
   nextStatus,
   pickableStatuses,
   statusLabel,

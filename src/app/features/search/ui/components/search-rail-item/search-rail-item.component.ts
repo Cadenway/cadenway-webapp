@@ -7,8 +7,9 @@ import { CommandPalette } from '../../../services/command-palette/command-palett
  * Component SearchRailItem
  *
  * @description
- * The « Rechercher » item of the rail footer (mockup `App.dc.html` lines 56-59): a magnifying
- * glass whose tooltip shows Ctrl K, opening the command palette. It stays in the phone tab bar. Its
+ * The `Search` item of the rail footer (mockup `App.dc.html` lines 55-58): a magnifying
+ * glass named `Search (Ctrl K)` whose tooltip reads `Search · Ctrl K`, opening the
+ * command palette. It stays in the phone tab bar. Its
  * host is `display: contents`, so the item joins the rail footer's layout.
  */
 @Component({
@@ -19,28 +20,28 @@ import { CommandPalette } from '../../../services/command-palette/command-palett
     <button
       cwAppRailItem
       icon="phosphorMagnifyingGlassBold"
-      [shortcut]="shortcut"
+      [tooltip]="tooltip"
       aria-keyshortcuts="Control+K Meta+K"
       data-testid="search-rail-item"
       (click)="palette.setOpen(true)"
       i18n="@@search.rail.label"
     >
-      Search
+      Search (Ctrl K)
     </button>
   `,
 })
 export class SearchRailItem {
   // #region Properties
   /**
-   * Property shortcut
+   * Property tooltip
    *
    * @description
-   * Keys shown in the tooltip after the label.
+   * Tooltip of the item, the label and its shortcut on one line.
    *
-   * @type {readonly string[]}
+   * @type {string}
    * @readonly
    */
-  protected readonly shortcut: readonly string[] = [$localize`:@@search.key-ctrl:Ctrl`, 'K'];
+  protected readonly tooltip: string = $localize`:@@search.rail.tooltip:Search · Ctrl K`;
 
   /**
    * Property palette

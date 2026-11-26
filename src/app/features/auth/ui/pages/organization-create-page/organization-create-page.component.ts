@@ -1,9 +1,10 @@
-import { DOCUMENT } from '@angular/common';
+import { DOCUMENT, formatNumber } from '@angular/common';
 import {
   Component,
   computed,
   DestroyRef,
   inject,
+  LOCALE_ID,
   type Signal,
   signal,
   type WritableSignal,
@@ -19,7 +20,6 @@ import {
 } from '@angular/forms/signals';
 import { Router, RouterLink } from '@angular/router';
 import { CwAlert, CwAlertDescription } from '@cadenway/ui/components/alert';
-import { CwAvatar } from '@cadenway/ui/components/avatar';
 import { CwButton } from '@cadenway/ui/components/button';
 import { CwCard } from '@cadenway/ui/components/card';
 import { CwInput } from '@cadenway/ui/components/input';
@@ -34,6 +34,7 @@ import {
   OrganizationCreateStore,
 } from '../../../state/organization-create/organization-create.store';
 import { focusFirstError, serverError } from '../../../utils/form-focus/form-focus.util';
+import { initials } from '../../../utils/initials/initials.util';
 import { slugFromName } from '../../../utils/slug/slug.util';
 
 /**
@@ -155,7 +156,6 @@ interface CreateModel {
   imports: [
     CwAlert,
     CwAlertDescription,
-    CwAvatar,
     CwButton,
     CwCard,
     CwInput,
@@ -207,6 +207,17 @@ export class OrganizationCreatePage {
   private readonly destroyRef: DestroyRef = inject(DestroyRef);
 
   /**
+   * Property initials
+   *
+   * @description
+   * The mark of the draft name, shown in the empty logo box (`Aa` while the name is blank).
+   *
+   * @type {(name: string) => string}
+   * @readonly
+   */
+  protected readonly initials: (name: string) => string = initials;
+
+  /**
    * Property host
    *
    * @description
@@ -216,6 +227,17 @@ export class OrganizationCreatePage {
    * @readonly
    */
   protected readonly host: string = inject(DOCUMENT).location.host;
+
+  /**
+   * Property locale
+   *
+   * @description
+   * Locale of the page, for the logo size's decimal separator.
+   *
+   * @type {string}
+   * @readonly
+   */
+  private readonly locale: string = inject(LOCALE_ID);
 
   /**
    * Property slugInvalidMessage
@@ -472,13 +494,23 @@ export class OrganizationCreatePage {
    * Method logoSize
    *
    * @description
-   * Size of the logo in kilobytes, for its caption.
+   * Size of the logo for its caption, as `Organisations.dc.html` writes it: bytes below 1 KiB,
+   * whole kilobytes below 1 MiB, megabytes with one decimal above, in the page's locale.
    *
    * @param {File} file - The logo.
-   * @returns {number} Whole kilobytes, at least 1.
+   * @returns {string} The localized size.
    */
-  protected logoSize(file: File): number {
-    return Math.max(1, Math.round(file.size / 1024));
+  protected logoSize(file: File): string {
+    const bytes: number = file.size;
+    if (bytes < 1024) {
+      return $localize`:@@auth.organization-create.size-bytes:${bytes}:count: bytes`;
+    }
+    if (bytes < 1_048_576) {
+      const kilobytes: number = Math.round(bytes / 1024);
+      return $localize`:@@auth.organization-create.size-kb:${kilobytes}:count: KB`;
+    }
+    const megabytes: string = formatNumber(bytes / 1_048_576, this.locale, '1.1-1');
+    return $localize`:@@auth.organization-create.size-mb:${megabytes}:count: MB`;
   }
 
   /**

@@ -9,7 +9,7 @@ store, private slice, a computed that guards a missing value, an async method ov
 Use this example as a starting point for the matching feature pattern: entities, a debounced search whose failure
 is a state flag with a retry, and the mockup's status rules (status shown at once, one pending
 change per task settling 460 ms after the last click, a return to the saved status cancelling it,
-sends of one task never overlapping, rollback on failure, Annuler with its own rollback). `TaskApi`,
+sends of one task never overlapping, rollback on failure, Undo with its own rollback). `TaskApi`,
 `Task` and `StatusKey` are example names; the toast is a comment until `core/` provides it. The
 example and its spec were compiled, linted and tested against the installed versions.
 
@@ -53,7 +53,7 @@ interface TaskListState {
   readonly selectedIds: readonly string[];
   /** Status shown at once for a click that has not settled: one pending change per task. */
   readonly _pending: Readonly<Record<string, StatusKey>>;
-  /** Status before the last sent change, kept while the toast offers Annuler. */
+  /** Status before the last sent change, kept while the toast offers Undo. */
   readonly _undo: Readonly<Record<string, StatusKey>>;
 }
 
@@ -103,7 +103,7 @@ export const TaskListStore = signalStore(
               next: (tasks) => {
                 patchState(store, setAllEntities(tasks), { isLoading: false });
               },
-              // Keep the last tasks: the page shows the error panel with Réessayer.
+              // Keep the last tasks: the page shows the error panel with Retry.
               error: () => {
                 patchState(store, { isLoading: false, searchFailed: true });
               },
@@ -159,7 +159,7 @@ export const TaskListStore = signalStore(
         patchState(store, { selectedIds: ids });
       },
       search,
-      /** Réessayer on the error panel. */
+      /** Retry on the error panel. */
       retrySearch(): void {
         search(store.query());
       },
@@ -173,7 +173,7 @@ export const TaskListStore = signalStore(
         patchState(store, ({ _pending }) => ({ _pending: { ..._pending, [id]: status } }));
         send({ id, status, undo: false });
       },
-      /** The toast's Annuler: restores the status the last change replaced. */
+      /** The toast's Undo: restores the status the last change replaced. */
       undo(id: string): void {
         const snapshots = store._undo();
         if (!Object.hasOwn(snapshots, id)) return;
@@ -181,7 +181,7 @@ export const TaskListStore = signalStore(
         patchState(store, ({ _pending }) => ({ _pending: { ..._pending, [id]: status } }));
         send({ id, status, undo: true });
       },
-      /** Called when the toast closes: Annuler is no longer offered. */
+      /** Called when the toast closes: Undo is no longer offered. */
       forgetUndo(id: string): void {
         patchState(store, ({ _undo }) => ({ _undo: omitTask(_undo, id) }));
       },

@@ -15,19 +15,20 @@ import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 import { AccessDeniedRouteError } from '@shared/route-errors';
 
 import { DEFAULT_VIEW_CONFIG } from '../../../utils/list-view-query/list-view-query.util';
+import type { ListSprint } from '../../../models/task-list/task-list.interface';
 import { ListsApi } from './lists-api.service';
 
 /**
  * Constant bugs
  *
  * @description
- * The « Bugs » list as the gateway answers it.
+ * The `Bugs` list as the gateway answers it.
  *
  * @type {TaskList}
  */
 const bugs: TaskList = {
   id: 'l-bugs',
-  spaceId: 'sp-produit',
+  spaceId: 'sp-product',
   name: 'Bugs',
   icon: 'bug',
   color: 'rouge',
@@ -54,12 +55,13 @@ describe('ListsApi', () => {
       exportListTasks: vi.fn(() =>
         of(
           new HttpResponse({
-            body: '"Identifiant";"Nom"\n"CAD-499";"Notifications"',
+            body: '"Key";"Name"\n"CAD-499";"Notifications"',
             headers: new HttpHeaders({ 'Content-Disposition': 'attachment; filename="bugs.csv"' }),
           }),
         ),
       ),
       deleteList: vi.fn(() => of(undefined)),
+      createList: vi.fn(() => of({ ...bugs, id: 'l-sprint15', name: 'Sprint 15' })),
       listSavedViews: vi.fn(),
       createSavedView: vi.fn((_listId: string, body: Record<string, unknown>) =>
         of({
@@ -89,7 +91,10 @@ describe('ListsApi', () => {
         { provide: ListsService, useValue: lists },
         { provide: TasksService, useValue: tasks },
         { provide: MembersService, useValue: members },
-        { provide: ArchivesService, useValue: { archiveList: vi.fn(() => of(bugs)) } },
+        {
+          provide: ArchivesService,
+          useValue: { archiveList: vi.fn(() => of(bugs)), unarchiveList: vi.fn(() => of(bugs)) },
+        },
         {
           provide: AccessService,
           useValue: {
@@ -193,27 +198,47 @@ describe('ListsApi', () => {
   it('writes the list with its version and exports with the gateway file name', async () => {
     const list: Awaited<ReturnType<ListsApi['list']>> = await api.list('l-bugs');
 
-    expect((await api.rename(list, 'Anomalies')).version).toBe(3);
+    expect(
+      (await api.update(list, { name: 'Anomalies', icon: 'bug', color: 'rouge', sprint: null }))
+        .version,
+    ).toBe(3);
     expect(lists['updateList']).toHaveBeenCalledWith(
       'l-bugs',
-      { name: 'Anomalies' },
+      { name: 'Anomalies', icon: 'bug', color: 'rouge', sprint: null },
       { headers: { 'If-Match': '"2"' } },
     );
     expect((await api.duplicate(list)).taskCount).toBe(3);
     expect(await api.exportCsv(list, { level: 'roots', sort: 'manual' })).toEqual({
       fileName: 'bugs.csv',
-      content: '"Identifiant";"Nom"\n"CAD-499";"Notifications"',
+      content: '"Key";"Name"\n"CAD-499";"Notifications"',
     });
     await api.archive('l-bugs');
     await api.remove(list);
     expect(lists['deleteList']).toHaveBeenCalledWith('l-bugs', { headers: { 'If-Match': '"2"' } });
+    expect((await api.unarchive('l-bugs')).id).toBe('l-bugs');
+  });
+
+  it('creates a sprint with its dates in a space', async () => {
+    const sprint: ListSprint = { startDate: '2026-11-18', endDate: '2026-12-01', goal: null };
+    const created: Awaited<ReturnType<ListsApi['create']>> = await api.create(
+      'sp-product',
+      { name: 'Sprint 15', icon: 'lightning', color: 'violet', sprint },
+      'key-15',
+    );
+
+    expect(created.name).toBe('Sprint 15');
+    expect(lists['createList']).toHaveBeenCalledWith(
+      'sp-product',
+      { name: 'Sprint 15', icon: 'lightning', color: 'violet', sprint },
+      { headers: { 'Idempotency-Key': 'key-15' } },
+    );
   });
 
   it('creates and deletes saved views and runs a bulk action', async () => {
     const view: Awaited<ReturnType<ListsApi['createSavedView']>> = await api.createSavedView(
       'l-bugs',
       {
-        name: 'Par personne',
+        name: 'By person',
         icon: null,
         layout: 'list',
         config: { ...DEFAULT_VIEW_CONFIG, groupBy: 'assignee' },

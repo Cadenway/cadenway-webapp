@@ -46,6 +46,20 @@ describe('parseRuntimeConfig', () => {
     }
   });
 
+  it('keeps an optional status page address and refuses one that is not an HTTP URL', () => {
+    expect(
+      parseRuntimeConfig({
+        apiUrl: localConfig.apiUrl,
+        statusUrl: 'https://status.cadenway.test/',
+      }),
+    ).toEqual({ apiUrl: localConfig.apiUrl, statusUrl: 'https://status.cadenway.test' });
+    for (const statusUrl of ['', 'status.cadenway.test', 'javascript:alert(1)', 4]) {
+      expect(() => parseRuntimeConfig({ apiUrl: localConfig.apiUrl, statusUrl })).toThrow(
+        TypeError,
+      );
+    }
+  });
+
   it('refuses a missing REST address or an invalid configured address', () => {
     expect(() => parseRuntimeConfig({ realtimeUrl: localConfig.realtimeUrl })).toThrow(TypeError);
     expect(() => parseRuntimeConfig({ ...localConfig, realtimeUrl: '' })).toThrow(TypeError);

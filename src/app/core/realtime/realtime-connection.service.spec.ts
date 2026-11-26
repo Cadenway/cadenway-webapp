@@ -1,7 +1,7 @@
 import { signal, type WritableSignal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { firstValueFrom, throwError, type Subscription } from 'rxjs';
-import { io, type Socket } from 'socket.io-client';
+import { type Socket } from 'socket.io-client';
 import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 
 import { HttpErrorResponse } from '@angular/common/http';
@@ -13,12 +13,11 @@ import {
   type RealtimeChange,
   provideRealtime,
   REALTIME_ORGANIZATION,
+  REALTIME_SOCKET_FACTORY,
   REALTIME_TERMINAL_FAILURE,
   REALTIME_TICKET_SOURCE,
   RealtimeConnection,
 } from './index';
-
-vi.mock('socket.io-client', () => ({ io: vi.fn() }));
 
 /**
  * Class FakeSocket
@@ -297,11 +296,11 @@ function setup(enabled: boolean = true): {
   const terminal: Mock = vi.fn();
   const sockets: FakeSocket[] = [];
   const ticket: Mock = vi.fn().mockResolvedValue('ticket');
-  vi.mocked(io).mockImplementation(() => {
+  const factory: () => Socket = () => {
     const socket: FakeSocket = new FakeSocket();
     sockets.push(socket);
     return socket as unknown as Socket;
-  });
+  };
   TestBed.configureTestingModule({
     providers: [
       provideRealtime(),
@@ -312,6 +311,7 @@ function setup(enabled: boolean = true): {
         },
       },
       { provide: REALTIME_TICKET_SOURCE, useValue: ticket },
+      { provide: REALTIME_SOCKET_FACTORY, useValue: factory },
       { provide: REALTIME_ORGANIZATION, useValue: organizationSignal },
       { provide: REALTIME_TERMINAL_FAILURE, useValue: terminal },
     ],

@@ -20,7 +20,7 @@ Import `FormField` from `@angular/forms/signals` and add it to the component imp
 ```
 
 - Messages: English source strings with a stable `@@feature.area.key` id in `$localize`; the French
-  wording of the mockup screen's script goes, word for word, into the `fr` translation.
+  wording of the mockup screen's script goes, word for word, into `src/locale/messages.fr.json` only.
 - Submit with `submit()`; on an invalid submit, focus the first invalid field. Map a `422` problem back
   to its fields.
 - Read the state from the field, for example `loginForm.email().touched()`,

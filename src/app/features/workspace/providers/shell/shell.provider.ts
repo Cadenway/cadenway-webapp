@@ -45,7 +45,7 @@ export function withShortcutsDialog(): SlotFeature<SlotContribution> {
  * Function withShortcutsButton
  *
  * @description
- * Contributes the « Raccourcis clavier » row, last in the shell's `sidebarFooter` slot.
+ * Contributes the `Keyboard shortcuts` row, last in the shell's `sidebarFooter` slot.
  *
  * @returns {SlotFeature<SlotContribution>} The slot contribution factory.
  */

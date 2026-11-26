@@ -1,7 +1,6 @@
-import { LOCALE_ID } from '@angular/core';
 import { type ComponentFixture, TestBed } from '@angular/core/testing';
 import type { StatusKey } from '@cadenway/contracts';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 
 import { TaskDueDate } from './task-due-date.component';
 
@@ -25,31 +24,26 @@ async function render(due: string | null, status: StatusKey = 'todo'): Promise<H
 }
 
 describe('TaskDueDate', () => {
-  beforeEach(() => {
-    TestBed.configureTestingModule({ providers: [{ provide: LOCALE_ID, useValue: 'fr' }] });
-  });
-
   it('reads today and tomorrow in words, today in violet', async () => {
     const today: HTMLElement = await render('2026-11-08');
     const tomorrow: HTMLElement = await render('2026-11-09');
 
-    expect(today.textContent).not.toContain('8 nov.');
+    expect(today.textContent.trim()).toBe('Today');
     expect(today.getAttribute('data-tone')).toBe('today');
-    expect(tomorrow.textContent).not.toContain('9 nov.');
-    expect(tomorrow.textContent.trim()).not.toBe(today.textContent.trim());
+    expect(tomorrow.textContent.trim()).toBe('Tomorrow');
     expect(tomorrow.getAttribute('data-tone')).toBe('plain');
   });
 
   it('shows the short date, with the year only for another year', async () => {
-    expect((await render('2026-11-12')).textContent.trim()).toBe('12 nov.');
-    expect((await render('2027-01-04')).textContent.trim()).toBe('4 janv. 2027');
+    expect((await render('2026-11-12')).textContent.trim()).toBe('12 Nov');
+    expect((await render('2027-01-04')).textContent.trim()).toBe('4 Jan 2027');
   });
 
   it('is late in garnet before today unless the task is closed', async () => {
     const late: HTMLElement = await render('2026-11-05');
 
     expect(late.getAttribute('data-tone')).toBe('late');
-    expect(late.textContent).toContain('5 nov.');
+    expect(late.textContent).toContain('5 Nov');
     expect((await render('2026-11-05', 'done')).getAttribute('data-tone')).toBe('plain');
   });
 

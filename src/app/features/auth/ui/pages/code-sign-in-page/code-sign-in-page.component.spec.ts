@@ -4,6 +4,8 @@ import { provideRouter, Router } from '@angular/router';
 import { provideCadenwayIcons } from '@cadenway/icons';
 import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 
+import { RuntimeConfigStore } from '@core/config';
+
 import { AuthFlowStore } from '../../../state/auth-flow/auth-flow.store';
 import { CodeSignInPage } from './code-sign-in-page.component';
 
@@ -11,14 +13,14 @@ import { CodeSignInPage } from './code-sign-in-page.component';
  * Function resendButton
  *
  * @description
- * Finds « Renvoyer le code ».
+ * Finds `Resend the code`.
  *
  * @param {HTMLElement} host - The page.
  * @returns {HTMLButtonElement | undefined} The button.
  */
 function resendButton(host: HTMLElement): HTMLButtonElement | undefined {
   return Array.from(host.querySelectorAll('button')).find((button: HTMLButtonElement) =>
-    button.textContent.includes('Renvoyer'),
+    button.textContent.includes('Resend'),
   );
 }
 
@@ -46,6 +48,12 @@ describe('CodeSignInPage', () => {
         provideRouter([]),
         provideCadenwayIcons(),
         {
+          provide: RuntimeConfigStore,
+          useValue: {
+            config: signal({ apiUrl: 'http://api.localhost', siteUrl: 'https://cadenway.example' }),
+          },
+        },
+        {
           provide: AuthFlowStore,
           useValue: {
             email: signal('camille.martin@ateliernord.fr'),
@@ -65,7 +73,7 @@ describe('CodeSignInPage', () => {
 
     expect(requestSignInCode).toHaveBeenCalledWith('camille.martin@ateliernord.fr');
     expect(host.textContent).toContain('camille.martin@ateliernord.fr');
-    expect(resendButton(host)?.textContent.trim()).toBe('Renvoyer le code dans 0:30');
+    expect(resendButton(host)?.textContent.trim()).toBe('Resend the code in 0:30');
     expect(resendButton(host)?.disabled).toBe(true);
     await vi.advanceTimersByTimeAsync(30_000);
     await fixture.whenStable();
@@ -74,7 +82,10 @@ describe('CodeSignInPage', () => {
     await vi.advanceTimersByTimeAsync(0);
     await fixture.whenStable();
     expect(requestSignInCode).toHaveBeenCalledTimes(2);
-    expect(host.textContent).toContain('Nouveau code envoyé ; le précédent ne fonctionne plus.');
+    expect(host.textContent).toContain('New code sent; the previous one no longer works.');
+    expect(host.querySelector('cw-code-help a')?.getAttribute('href')).toBe(
+      'https://cadenway.example/help',
+    );
 
     const input: HTMLInputElement | null = host.querySelector('#code-input');
     if (input === null) throw new Error('Expected the code input.');
@@ -87,20 +98,24 @@ describe('CodeSignInPage', () => {
       await fixture.whenStable();
     };
     await submitCode();
-    expect(host.textContent).toContain(
-      'Code incorrect ou expiré : vérifiez le dernier e-mail reçu.',
-    );
+    expect(host.textContent).toContain('Wrong or expired code: check the last email you received.');
     await submitCode();
     expect(navigate).toHaveBeenCalledWith('/login/two-step', { replaceUrl: true });
   });
 
-  it('asks for the address first when none is known', async () => {
+  it('asks for the address first when none is known and shows its error on submit', async () => {
     const requestSignInCode: Mock = vi.fn(() => Promise.resolve({ ok: true, value: undefined }));
     TestBed.configureTestingModule({
       imports: [CodeSignInPage],
       providers: [
         provideRouter([]),
         provideCadenwayIcons(),
+        {
+          provide: RuntimeConfigStore,
+          useValue: {
+            config: signal({ apiUrl: 'http://api.localhost', siteUrl: 'https://cadenway.example' }),
+          },
+        },
         { provide: AuthFlowStore, useValue: { email: signal(''), requestSignInCode } },
       ],
     });
@@ -110,5 +125,15 @@ describe('CodeSignInPage', () => {
 
     expect(requestSignInCode).not.toHaveBeenCalled();
     expect(host.querySelector('#code-email')).not.toBeNull();
+    expect(host.querySelector('cw-code-help')).toBeNull();
+    expect(host.querySelector<HTMLButtonElement>('button[type="submit"]')?.disabled).toBe(false);
+    host.querySelector('form')?.dispatchEvent(new Event('submit', { cancelable: true }));
+    await fixture.whenStable();
+
+    expect(host.querySelector('#code-email-help')?.textContent).toContain(
+      'Enter the email address of your account, for example camille.martin@ateliernord.fr.',
+    );
+    expect(document.activeElement?.id).toBe('code-email');
+    expect(requestSignInCode).not.toHaveBeenCalled();
   });
 });

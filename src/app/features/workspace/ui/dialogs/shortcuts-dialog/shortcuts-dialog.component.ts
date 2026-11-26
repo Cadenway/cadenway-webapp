@@ -24,10 +24,10 @@ import { ShortcutsHelp } from '../../../services/shortcuts-help/shortcuts-help.s
  *
  * @description
  * The keyboard shortcuts dialog of mockup `App.dc.html` (lines 3318-3326 and `SHORTCUTS`):
- * « Raccourcis clavier », its hint, then the « Partout », « Listes et tâches » and « Édition »
- * sections, each shortcut drawn with `kbd[cwKbd]` keys, and « Fermer ». `?` opens it from anywhere
+ * `Keyboard shortcuts`, its hint, then the `Everywhere`, `Lists and tasks` and `Editing`
+ * sections, each shortcut drawn with `kbd[cwKbd]` keys, and `Close`. `?` opens it from anywhere
  * outside a field, through `ShortcutsService`, for as long as the shell lives; the sidebar
- * footer's « Raccourcis clavier » button opens it through `ShortcutsHelp`. It is an `overlays`
+ * footer's `Keyboard shortcuts` button opens it through `ShortcutsHelp`. It is an `overlays`
  * slot contribution.
  */
 @Component({

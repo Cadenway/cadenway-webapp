@@ -20,7 +20,10 @@ export function parseRuntimeConfig(value: unknown): RuntimeConfig {
     ...(source.realtimeUrl === undefined
       ? {}
       : { realtimeUrl: readAddress(source.realtimeUrl, 'realtimeUrl') }),
-    ...(source.siteUrl === undefined ? {} : { siteUrl: readSiteAddress(source.siteUrl) }),
+    ...(source.siteUrl === undefined ? {} : { siteUrl: readWebAddress(source.siteUrl, 'siteUrl') }),
+    ...(source.statusUrl === undefined
+      ? {}
+      : { statusUrl: readWebAddress(source.statusUrl, 'statusUrl') }),
   };
 }
 
@@ -43,26 +46,28 @@ function readAddress(value: unknown, key: keyof RuntimeConfig): string {
 }
 
 /**
- * Function readSiteAddress
+ * Function readWebAddress
  *
  * @description
- * Checks that the public site address is an absolute HTTP or HTTPS URL without credentials, since
- * the application renders links to it, and drops a trailing slash so callers can append paths.
+ * Checks that a public page address (the site, the status page) is an absolute HTTP or HTTPS URL
+ * without credentials, since the application renders links to it, and drops a trailing slash so
+ * callers can append paths.
  *
  * @param {unknown} value - Address to validate.
+ * @param {'siteUrl' | 'statusUrl'} key - Configuration key used in error messages.
  * @returns {string} The validated address, without a trailing slash.
  * @throws {TypeError} When the value is not an absolute HTTP or HTTPS URL without credentials.
  */
-function readSiteAddress(value: unknown): string {
-  const address: string = readAddress(value, 'siteUrl');
+function readWebAddress(value: unknown, key: 'siteUrl' | 'statusUrl'): string {
+  const address: string = readAddress(value, key);
   let url: URL;
   try {
     url = new URL(address);
   } catch {
-    throw new TypeError('config.json: "siteUrl" must be an absolute URL.');
+    throw new TypeError(`config.json: "${key}" must be an absolute URL.`);
   }
   if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password) {
-    throw new TypeError('config.json: "siteUrl" must use HTTP or HTTPS without credentials.');
+    throw new TypeError(`config.json: "${key}" must use HTTP or HTTPS without credentials.`);
   }
   return address.replace(/\/+$/u, '');
 }

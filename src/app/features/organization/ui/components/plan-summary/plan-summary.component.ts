@@ -16,10 +16,10 @@ import { planName } from '../../../utils/plan-label/plan-label.util';
  * Component PlanSummary
  *
  * @description
- * The « Plan Équipe · 18 / 25 sièges » line of the sidebar footer (mockup `App.dc.html` line
+ * The `Team plan · 18 / 25 seats` line of the sidebar footer (mockup `App.dc.html` line
  * 263), linking to `/<slug>/organization/billing`. It shows once Billing answered, which it does
  * for an owner only; nothing shows before the answer, after a `403` or a `404`, or for anyone
- * else. Any other failure shows an inline error with « Réessayer », which reads the subscription
+ * else. Any other failure shows an inline error with `Retry`, which reads the subscription
  * again. It reads the `SubscriptionStore` of the `/:org` route and is a `sidebarFooter` slot
  * contribution.
  */
@@ -105,7 +105,7 @@ export class PlanSummary {
    * Method label
    *
    * @description
-   * The plan and the seats (« Plan Équipe · 18 / 25 sièges »).
+   * The plan and the seats (`Team plan · 18 / 25 seats`).
    *
    * @param {OrganizationSubscription} subscription - Plan and usage.
    * @returns {string} The line.

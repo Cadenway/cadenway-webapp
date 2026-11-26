@@ -11,6 +11,7 @@ import {
   viewChild,
   type WritableSignal,
 } from '@angular/core';
+import { toSignal } from '@angular/core/rxjs-interop';
 import { Router } from '@angular/router';
 import { CwAppRailGroup, CwAppRailItem } from '@cadenway/ui/components/app-rail';
 import { CwButton } from '@cadenway/ui/components/button';
@@ -27,6 +28,7 @@ import { CwSkeleton } from '@cadenway/ui/components/skeleton';
 import { CwTab, CwTabPanel, CwTabs, CwTabsList } from '@cadenway/ui/components/tabs';
 import { CwToastService } from '@cadenway/ui/components/toast';
 import { NgIcon } from '@ng-icons/core';
+import { interval, map } from 'rxjs';
 
 import { PRESENCE, type PresencePort } from '@features/account/ports/presence';
 import {
@@ -37,22 +39,38 @@ import {
 import type { InboxNotification } from '../../../models/inbox-notification/inbox-notification.interface';
 import type { InboxReminder } from '../../../models/inbox-reminder/inbox-reminder.interface';
 import { InboxStore } from '../../../state/inbox/inbox.store';
-import { reminderTime, tomorrowMorning } from '../../../utils/inbox-time/inbox-time.util';
+import {
+  overdueCount,
+  reminderTime,
+  tomorrowMorning,
+} from '../../../utils/inbox-time/inbox-time.util';
 import { NotificationRow } from '../notification-row/notification-row.component';
 import { ReminderRow } from '../reminder-row/reminder-row.component';
+
+/**
+ * Constant CLOCK_MS
+ *
+ * @description
+ * How often the badge checks which pending reminders became due, in milliseconds.
+ *
+ * @type {number}
+ */
+const CLOCK_MS: number = 60_000;
 
 /**
  * Component InboxRailItem
  *
  * @description
- * The « Boîte de réception » item of the rail and its popover (mockup `App.dc.html` lines 39-43
- * and 139-174). The badge counts unread notifications, refreshed by realtime, focus and polling.
- * It is hidden while the person's presence is « Ne pas déranger ». The popover has the
- * title with the unread count, « Tout marquer comme lu » (disabled with nothing to read), the
- * « Notifications » and « Rappels » tabs with their counts, the do-not-disturb notice, the rows,
- * the empty states, skeletons while loading, an inline error with « Réessayer », and « Tout
- * afficher dans l’accueil », which opens `/<slug>`. Opening a notification marks it read and opens
- * `/<slug>/t/<key>`; a reminder offers « demain matin » and « Marquer comme fait », confirmed by a
+ * The `Inbox` item of the rail and its popover (mockup `App.dc.html` lines 39-43
+ * and 139-174). The badge counts unread notifications, refreshed by realtime, focus and polling,
+ * plus the listed pending reminders already due, checked every minute (lines 4974 and 8241). It
+ * is hidden while the person's presence is `Do not disturb`. While the popover is open, the
+ * item is highlighted through its `aria-expanded` state (line 8243). The popover has the
+ * title with the unread count, `Mark all as read` (disabled with nothing to read), the
+ * `Notifications` and `Reminders` tabs with their counts, the do-not-disturb notice, the rows,
+ * the empty states, skeletons while loading, an inline error with `Retry`, and `Show everything
+ * on the home screen`, which opens `/<slug>`. Opening a notification marks it read and opens
+ * `/<slug>/t/<key>`; a reminder offers `Postpone to tomorrow morning` and `Mark as done`, confirmed by a
  * toast. Writes are optimistic; a refusal restores the row and shows an error toast. It provides
  * its own `InboxStore` and acts as a page of the shell. Its host is `display: contents`, so the
  * item joins the rail group's layout.
@@ -90,7 +108,7 @@ export class InboxRailItem {
    * Property title
    *
    * @description
-   * « Boîte de réception », the popover's accessible name and visible heading.
+   * `Inbox`, the popover's accessible name and visible heading.
    *
    * @type {string}
    * @readonly
@@ -225,7 +243,7 @@ export class InboxRailItem {
    * Property doNotDisturb
    *
    * @description
-   * Whether the person's presence is « Ne pas déranger ».
+   * Whether the person's presence is `Do not disturb`.
    *
    * @type {Signal<boolean>}
    * @readonly
@@ -246,29 +264,63 @@ export class InboxRailItem {
   protected readonly unread: Signal<number> = computed((): number => this.store.unreadCount() ?? 0);
 
   /**
+   * Property clock
+   *
+   * @description
+   * The current moment, renewed every minute, against which reminders become due.
+   *
+   * @type {Signal<Date>}
+   * @readonly
+   */
+  private readonly clock: Signal<Date> = toSignal(
+    interval(CLOCK_MS).pipe(map((): Date => new Date())),
+    { initialValue: new Date() },
+  );
+
+  /**
+   * Property overdue
+   *
+   * @description
+   * Pending reminders already due, among the listed ones; zero before the first answer.
+   *
+   * @type {Signal<number>}
+   * @readonly
+   */
+  protected readonly overdue: Signal<number> = computed((): number =>
+    this.store.reminders.hasValue()
+      ? overdueCount(this.store.reminders.value().items, this.clock())
+      : 0,
+  );
+
+  /**
    * Property badge
    *
    * @description
-   * The rail badge: the unread count, hidden at zero and while « Ne pas déranger ».
+   * The rail badge: the unread count plus the due reminders, hidden at zero and while `Do not
+   * disturb`.
    *
    * @type {Signal<number | null>}
    * @readonly
    */
-  protected readonly badge: Signal<number | null> = computed((): number | null =>
-    this.unread() > 0 && !this.doNotDisturb() ? this.unread() : null,
-  );
+  protected readonly badge: Signal<number | null> = computed((): number | null => {
+    const count: number = this.unread() + this.overdue();
+    return count > 0 && !this.doNotDisturb() ? count : null;
+  });
 
   /**
    * Property badgeLabel
    *
    * @description
-   * How the badge is read after the item's name.
+   * How the badge is read after the item's name: the unread count, and the due reminders when
+   * there are some.
    *
    * @type {Signal<string>}
    * @readonly
    */
-  protected readonly badgeLabel: Signal<string> = computed(
-    (): string => $localize`:@@inbox.rail.badge:${this.unread()}:count: unread`,
+  protected readonly badgeLabel: Signal<string> = computed((): string =>
+    this.overdue() > 0
+      ? $localize`:@@inbox.rail.badge-overdue:${this.unread()}:count: unread, ${this.overdue()}:overdue: overdue reminders`
+      : $localize`:@@inbox.rail.badge:${this.unread()}:count: unread`,
   );
   // #endregion
 
@@ -376,7 +428,7 @@ export class InboxRailItem {
    *
    * @description
    * Marks a reminder done and confirms with a toast. Its row disappears at once, so focus moves to
-   * the row that takes its place, or to the « Rappels » tab when it was the last one.
+   * the row that takes its place, or to the `Reminders` tab when it was the last one.
    *
    * @param {InboxReminder} reminder - The reminder.
    * @returns {Promise<void>} Resolves once handled.

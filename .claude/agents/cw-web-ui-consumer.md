@@ -37,7 +37,7 @@ Use the `Skill` tool (fallback: `.claude/skills/<name>/SKILL.md`).
 
 ## Procedure
 
-1. Find the brick in `@cadenway/ui` (guide section "Composants de base").
+1. Find the brick in `@cadenway/ui` (the integration guide's base components section).
 2. Missing or insufficient: specify it (name, API, states, keyboard, mockup reference) and hand it back, so the brick is built in cadenway-design-system and its exact version bumped here; never copy or fork the brick locally. Feature-specific wrappers (forms, dialogs, sheets) stay in the feature.
 
 ## Checks

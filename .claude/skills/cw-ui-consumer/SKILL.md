@@ -36,7 +36,7 @@ nothing. A selector's name does not always give its entry point: use the third c
 @source "../node_modules/@cadenway/ui";`.
 
 **Brick copy and locale** (`@cadenway/ui` 0.4.0 and later): the application's source copy is English.
-The bricks' French defaults are replaced once, in `core/locale`, with `$localize` texts given to each
+The bricks' French defaults are replaced by the layout or feature that renders them, with `$localize` texts given to each
 entry point's labels provider:
 - most entry points: `provideCw<Entry>Labels()`;
 - status and priority: `provideCwStatusLabels` and `provideCwPriorityLabels`;

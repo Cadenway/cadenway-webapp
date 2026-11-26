@@ -5,6 +5,7 @@ import {
   input,
   type InputSignal,
   type InputSignalWithTransform,
+  linkedSignal,
   output,
   type OutputEmitterRef,
   type Signal,
@@ -22,7 +23,7 @@ import { PRIORITY_LABELS } from '../../../constants/task-copy/task-copy.constant
  * @description
  * The priority property of the task detail and the create dialog (`App.dc.html` near line
  * 2940): a button with the priority icon and word that opens the menu of the four priorities,
- * from « Urgente » to « Basse », the current one marked. It emits `priorityChanged` with the
+ * from `Urgent` to `Low`, the current one marked. It emits `priorityChanged` with the
  * chosen key; the owner passes the new priority back.
  */
 @Component({
@@ -32,14 +33,15 @@ import { PRIORITY_LABELS } from '../../../constants/task-copy/task-copy.constant
     <button
       cwButton
       type="button"
-      variant="ghost"
-      size="sm"
+      variant="outline"
+      size="xs"
+      class="h-7 w-full justify-start"
       [disabled]="disabled()"
       [cwMenuTriggerFor]="menu"
       [attr.aria-label]="ariaLabel()"
       [class.text-destructive]="priority() === 'urgente'"
     >
-      <cw-priority-icon [priority]="priority()" size="3.5" />
+      <cw-priority-icon [priority]="priority()" [from]="from()" size="3.5" />
       <span>{{ label() }}</span>
     </button>
     <cw-menu #menu ariaLabel="Priority" i18n-ariaLabel="@@task.priority-picker.menu">
@@ -64,6 +66,25 @@ export class TaskPriorityPicker {
    * @readonly
    */
   public readonly priority: InputSignal<PriorityKey> = input.required<PriorityKey>();
+
+  /**
+   * Property from
+   *
+   * @description
+   * The priority the icon animates from (`PrioriteTache.dc.html`): the one shown before the last
+   * change, none at first.
+   *
+   * @type {Signal<PriorityKey | null>}
+   * @readonly
+   */
+  protected readonly from: Signal<PriorityKey | null> = linkedSignal<
+    PriorityKey,
+    PriorityKey | null
+  >({
+    source: (): PriorityKey => this.priority(),
+    computation: (_: PriorityKey, previous?: { source: PriorityKey }): PriorityKey | null =>
+      previous?.source ?? null,
+  });
 
   /**
    * Property disabled
@@ -128,7 +149,7 @@ export class TaskPriorityPicker {
    * Property ariaLabel
    *
    * @description
-   * Accessible name of the button (« Priorité : Haute »).
+   * Accessible name of the button (`Priority: High`).
    *
    * @type {Signal<string>}
    * @readonly

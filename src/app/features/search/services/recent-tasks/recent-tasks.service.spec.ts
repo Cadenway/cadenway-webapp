@@ -14,7 +14,7 @@ import { RecentTasks } from './recent-tasks.service';
  * @returns {TaskSearchResult} The task.
  */
 function task(key: string): TaskSearchResult {
-  return { kind: 'task', key, name: `Tâche ${key}`, status: 'todo' };
+  return { kind: 'task', key, name: `Task ${key}`, status: 'todo' };
 }
 
 describe('RecentTasks', () => {

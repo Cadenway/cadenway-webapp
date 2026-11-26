@@ -1,0 +1,138 @@
+<cw-dialog [(open)]="open" [pending]="pending()" data-testid="list-dialog">
+  <cw-dialog-header>
+    <div class="flex items-center gap-2.5">
+      <span
+        class="flex size-8 shrink-0 items-center justify-center rounded-lg border border-border bg-background transition-colors"
+        [class]="markTone()"
+        aria-hidden="true"
+        ><ng-icon [name]="markIcon()" class="size-[18px]"
+      /></span>
+      <h2 cwDialogTitle>{{ title() }}</h2>
+    </div>
+  </cw-dialog-header>
+  <form
+    class="flex flex-col gap-4"
+    novalidate
+    (submit)="$event.preventDefault(); submit(nameField)"
+  >
+    <div class="flex flex-col gap-2">
+      <label for="list-name" class="text-sm leading-none font-medium" i18n="@@spaces.save-view.name"
+        >Name</label
+      >
+      <input
+        #nameField
+        id="list-name"
+        cwInput
+        type="text"
+        autocomplete="off"
+        placeholder="Sprint 15"
+        i18n-placeholder="@@spaces.list-dialog.name-placeholder"
+        [formField]="listForm.name"
+        [attr.aria-describedby]="
+          listForm.name().touched() && listForm.name().invalid() ? 'list-name-error' : null
+        "
+        data-testid="list-dialog-name"
+      />
+      @if (listForm.name().touched() && listForm.name().invalid()) {
+        <p id="list-name-error" class="text-xs text-destructive">
+          @for (error of listForm.name().errors(); track error.kind) {
+            {{ error.message }}
+          }
+        </p>
+      }
+    </div>
+    <div class="flex items-center justify-between gap-3">
+      <div class="flex min-w-0 flex-col gap-1">
+        <span
+          id="list-sprint-label"
+          class="text-sm leading-none font-medium"
+          i18n="@@spaces.list-dialog.sprint"
+          >Sprint</span
+        >
+        <span class="text-xs text-muted-foreground" i18n="@@spaces.list-dialog.sprint-text"
+          >A dated period, with a goal and progress tracking.</span
+        >
+      </div>
+      <cw-switch
+        ariaLabel="Sprint"
+        i18n-ariaLabel="@@spaces.list-dialog.sprint"
+        data-testid="list-dialog-sprint"
+        [checked]="sprint()"
+        (checkedChange)="toggleSprint($event)"
+      />
+    </div>
+    @if (sprint()) {
+      <div class="flex flex-col gap-3">
+        <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div class="flex flex-col gap-2">
+            <span class="text-sm leading-none font-medium" i18n="@@spaces.list-dialog.start"
+              >Start</span
+            >
+            <cw-date-picker
+              #startPicker
+              size="sm"
+              ariaLabel="Start date"
+              i18n-ariaLabel="@@spaces.list-dialog.start-date"
+              [invalid]="!start()"
+              [value]="startDate()"
+              (valueChange)="pickStart($event)"
+            />
+          </div>
+          <div class="flex flex-col gap-2">
+            <span class="text-sm leading-none font-medium" i18n="@@spaces.list-dialog.end"
+              >End</span
+            >
+            <cw-date-picker
+              #endPicker
+              size="sm"
+              ariaLabel="End date"
+              i18n-ariaLabel="@@spaces.list-dialog.end-date"
+              [invalid]="datesInvalid()"
+              [value]="endDate()"
+              (valueChange)="pickEnd($event)"
+            />
+          </div>
+        </div>
+        @if (datesHint(); as hint) {
+          <p
+            class="text-xs"
+            [class]="datesInvalid() ? 'text-destructive' : 'text-muted-foreground'"
+            data-testid="list-dialog-dates"
+          >
+            {{ hint }}
+          </p>
+        }
+        <div class="flex flex-col gap-2">
+          <label
+            for="list-goal"
+            class="text-sm leading-none font-medium"
+            i18n="@@spaces.list-dialog.goal"
+            >Sprint goal</label
+          >
+          <textarea
+            id="list-goal"
+            cwTextarea
+            rows="2"
+            placeholder="What the team commits to deliver"
+            i18n-placeholder="@@spaces.list-dialog.goal-placeholder"
+            [formField]="listForm.goal"
+          ></textarea>
+        </div>
+      </div>
+    }
+    <cw-look-picker
+      [(icon)]="icon"
+      [(color)]="color"
+      defaultLabel="Default"
+      i18n-defaultLabel="@@spaces.look.default"
+    />
+    <cw-dialog-footer>
+      <button cwButton cwDialogClose type="button" variant="outline">
+        <ng-container i18n="@@spaces.cancel">Cancel</ng-container>
+      </button>
+      <button cwButton type="submit" [loading]="pending()" data-testid="list-dialog-submit">
+        {{ submitLabel() }}
+      </button>
+    </cw-dialog-footer>
+  </form>
+</cw-dialog>

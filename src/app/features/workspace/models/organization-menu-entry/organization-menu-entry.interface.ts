@@ -5,7 +5,7 @@ import type { WorkspaceOrganization } from '../workspace-context/workspace-conte
  *
  * @description
  * An organization of the caller as the organizations menu lists it: the workspace display model
- * and its member count (« Membres et invitations 18 »).
+ * and its member count (`Members and invitations 18`).
  */
 export interface OrganizationMenuEntry extends WorkspaceOrganization {
   // #region Properties

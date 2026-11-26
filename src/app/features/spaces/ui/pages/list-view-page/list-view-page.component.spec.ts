@@ -11,13 +11,19 @@ import { of } from 'rxjs';
 import { beforeEach, describe, expect, it, type Mock, type MockInstance, vi } from 'vitest';
 
 import { RealtimeConnection } from '@core/realtime';
-import { TaskCreate, TaskStatusChangesStore, type TaskSummary } from '@features/task';
+import {
+  TaskActionsApi,
+  type TaskBulkOutcome,
+  TaskCreate,
+  TaskStatusChangesStore,
+  type TaskSummary,
+} from '@features/task';
 import { TaskApi } from '@features/task/data-access/services/task-api/task-api.service';
 import { WORKSPACE_CONTEXT } from '@features/workspace/ports/workspace-context';
 
+import { bulkPartialText } from '../../../constants/bulk-copy/bulk-copy.constants';
 import { LIST_TABLE_TEXTS } from '../../../constants/data-table-texts/data-table-texts.constants';
 import { ListTasksApi } from '../../../data-access/services/list-tasks-api/list-tasks-api.service';
-import type { BulkOutcome } from '../../../models/bulk-action/bulk-action.interface';
 import type { ListTaskPage } from '../../../models/list-rows/list-rows.interface';
 import { ListPageStore } from '../../../state/list-page/list-page.store';
 import { ListRowsStore } from '../../../state/list-rows/list-rows.store';
@@ -29,7 +35,7 @@ import { ListViewPage } from './list-view-page.component';
  * Function task
  *
  * @description
- * A task of Sprint 14 in the « Produit » space of Atelier Nord.
+ * A task of Sprint 14 in the `Product` space of Atelier Nord.
  *
  * @param {string} key - Task key.
  * @param {string} name - Task name.
@@ -55,7 +61,7 @@ function task(key: string, name: string, status: StatusKey): TaskSummary {
     milestone: false,
     recurrence: 'none',
     listId: 'sprint-14',
-    spaceId: 'produit',
+    spaceId: 'product',
     version: 3,
   };
 }
@@ -69,8 +75,8 @@ function task(key: string, name: string, status: StatusKey): TaskSummary {
  * @type {readonly TaskSummary[]}
  */
 const sprintTasks: readonly TaskSummary[] = [
-  task('CAD-482', 'Refondre l’écran de connexion SSO', 'todo'),
-  task('CAD-483', 'Page des quotas d’organisation', 'progress'),
+  task('CAD-482', 'Redesign the SSO sign-in screen', 'todo'),
+  task('CAD-483', 'Organization quotas page', 'progress'),
 ];
 
 /**
@@ -95,8 +101,93 @@ function ready(value: unknown): object {
 describe('ListViewPage', () => {
   let page: Mock<ListTasksApi['page']>;
   let groups: Mock<ListTasksApi['groups']>;
-  let bulk: Mock<(selection: unknown[], action: unknown) => Promise<BulkOutcome>>;
+  let bulk: Mock<TaskActionsApi['bulk']>;
+  let restore: Mock<TaskActionsApi['restore']>;
+  let refreshCounts: Mock<() => void>;
   let toasts: Record<string, Mock>;
+  let openDialog: Mock<(dialog: unknown) => void>;
+
+  /**
+   * Function outcome
+   *
+   * @description
+   * A bulk answer that applied the given tasks at version 4.
+   *
+   * @param {readonly string[]} done - Keys applied.
+   * @param {Partial<TaskBulkOutcome>} [rest] - Other members.
+   * @returns {TaskBulkOutcome} The answer.
+   */
+  function outcome(done: readonly string[], rest: Partial<TaskBulkOutcome> = {}): TaskBulkOutcome {
+    return {
+      affected: done.length,
+      done: done.map((taskKey: string) => ({
+        taskKey,
+        version: 4,
+        newTaskKey: null,
+        trashEntryId: null,
+      })),
+      failed: [],
+      unknown: [],
+      notSent: [],
+      ...rest,
+    };
+  }
+
+  /**
+   * Function menuItem
+   *
+   * @description
+   * The menu item whose text starts with a label (status items carry their hint after it).
+   *
+   * @param {string} label - The label.
+   * @returns {HTMLElement | undefined} The item.
+   */
+  function menuItem(label: string): HTMLElement | undefined {
+    return [
+      ...document.querySelectorAll<HTMLElement>(
+        '[role="menuitem"], [role="menuitemcheckbox"], [role="menuitemradio"]',
+      ),
+    ].find((element: HTMLElement): boolean => element.textContent.trim().startsWith(label));
+  }
+
+  /**
+   * Function openRowMenu
+   *
+   * @description
+   * Opens the menu of a row with a right click on its `…` button.
+   *
+   * @param {ComponentFixture<ListViewPage>} fixture - The page.
+   * @param {string} key - Key of the row.
+   * @returns {Promise<void>} Resolves once the menu shows.
+   */
+  async function openRowMenu(fixture: ComponentFixture<ListViewPage>, key: string): Promise<void> {
+    required(button(`Actions on ${key}`)).dispatchEvent(
+      new MouseEvent('contextmenu', { bubbles: true, cancelable: true }),
+    );
+    fixture.detectChanges();
+    await settle(fixture);
+    fixture.detectChanges();
+  }
+
+  /**
+   * Function openSubmenu
+   *
+   * @description
+   * Opens a submenu of the open row menu.
+   *
+   * @param {ComponentFixture<ListViewPage>} fixture - The page.
+   * @param {string} label - The item that opens it.
+   * @returns {Promise<void>} Resolves once the submenu shows.
+   */
+  async function openSubmenu(
+    fixture: ComponentFixture<ListViewPage>,
+    label: string,
+  ): Promise<void> {
+    required(menuItem(label)).click();
+    fixture.detectChanges();
+    await settle(fixture);
+    fixture.detectChanges();
+  }
 
   /**
    * Function render
@@ -110,10 +201,26 @@ describe('ListViewPage', () => {
     const fixture: ComponentFixture<ListViewPage> = TestBed.createComponent(ListViewPage);
     fixture.componentRef.setInput('listId', 'sprint-14');
     for (let round: number = 0; round < 5; round++) {
-      await fixture.whenStable();
+      await settle(fixture);
       fixture.detectChanges();
     }
     return fixture;
+  }
+
+  /**
+   * Function settle
+   *
+   * @description
+   * Waits for the page to be stable and for the promises of its writes to run.
+   *
+   * @param {ComponentFixture<ListViewPage>} fixture - The page.
+   * @returns {Promise<void>} Resolves once settled.
+   */
+  async function settle(fixture: ComponentFixture<ListViewPage>): Promise<void> {
+    for (let round: number = 0; round < 4; round++) {
+      await fixture.whenStable();
+      for (let tick: number = 0; tick < 5; tick++) await Promise.resolve();
+    }
   }
 
   /**
@@ -176,16 +283,18 @@ describe('ListViewPage', () => {
         total: 1,
       }),
     );
-    bulk = vi.fn(() =>
-      Promise.resolve({
-        affected: 1,
-        done: [{ taskKey: 'CAD-482', version: 3 }],
-        failed: [],
-        unknown: [],
-        notSent: [],
-      }),
-    );
-    toasts = { show: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn(), dismiss: vi.fn() };
+    bulk = vi.fn<TaskActionsApi['bulk']>(() => Promise.resolve(outcome(['CAD-482'])));
+    restore = vi.fn<TaskActionsApi['restore']>(() => Promise.resolve());
+    refreshCounts = vi.fn();
+    toasts = {
+      show: vi.fn(() => 'toast-1'),
+      error: vi.fn(),
+      warning: vi.fn(),
+      info: vi.fn(),
+      dismiss: vi.fn(),
+      toasts: vi.fn(() => []),
+    };
+    openDialog = vi.fn();
     TestBed.configureTestingModule({
       providers: [
         provideCadenwayIcons(),
@@ -206,15 +315,23 @@ describe('ListViewPage', () => {
           provide: ListPageStore,
           useValue: {
             listId: () => 'sprint-14',
-            list: ready({ id: 'sprint-14', name: 'Sprint 14' }),
-            space: ready({ id: 'produit', statuses: [] }),
+            list: ready({
+              id: 'sprint-14',
+              name: 'Sprint 14',
+              spaceId: 'product',
+              sprint: { startDate: '2026-11-16', endDate: '2026-11-29' },
+              canEdit: true,
+            }),
+            space: ready({ id: 'product', statuses: [] }),
             organizationMembers: ready([{ userId: 'u-ines', name: 'Inès Robert' }]),
-            bulk,
+            refreshCounts,
+            exportCsv: vi.fn(() => Promise.resolve(null)),
           },
         },
+        { provide: TaskActionsApi, useValue: { bulk, restore, remind: vi.fn() } },
         {
           provide: SpacesNavigationStore,
-          useValue: { spaces: ready([]), overviews: ready({}) },
+          useValue: { spaces: ready([]), overviews: ready({}), openDialog },
         },
         { provide: TaskApi, useValue: { changeStatus: vi.fn(() => of()), read: vi.fn() } },
         { provide: CwToastService, useValue: toasts },
@@ -234,20 +351,20 @@ describe('ListViewPage', () => {
     const host: HTMLElement = (await render()).nativeElement as HTMLElement;
 
     expect(host.querySelector('[role="grid"]')?.getAttribute('aria-label')).toBe(
-      'Tâches de la liste Sprint 14',
+      'Tasks of the list Sprint 14',
     );
     const headers: string[] = [...host.querySelectorAll('[role="columnheader"]')].map(
       (header: Element) => header.textContent.trim(),
     );
     expect(headers).toEqual(
-      expect.arrayContaining(['Nom', 'Assignés', 'Échéance', 'Priorité', 'Étiquettes']),
+      expect.arrayContaining(['Name', 'Assignees', 'Due date', 'Priority', 'Labels']),
     );
     const text: string = host.textContent;
-    expect(text).toContain('À faire');
-    expect(text).toContain('En cours');
-    expect(text).toContain('Refondre l’écran de connexion SSO');
+    expect(text).toContain('To do');
+    expect(text).toContain('In progress');
+    expect(text).toContain('Redesign the SSO sign-in screen');
     expect(text).toContain('CAD-482');
-    expect(checkbox('Sélectionner CAD-482')).toBeDefined();
+    expect(checkbox('Select CAD-482')).toBeDefined();
   });
 
   it('passes server counts, phone columns and row motion to the table', async () => {
@@ -289,9 +406,7 @@ describe('ListViewPage', () => {
     const table: CwDataTable<unknown> = fixture.debugElement.query(By.directive(CwDataTable))
       .componentInstance as CwDataTable<unknown>;
     expect(table.filtered()).toBe(true);
-    expect((fixture.nativeElement as HTMLElement).textContent).toContain(
-      'Aucune tâche ne correspond',
-    );
+    expect((fixture.nativeElement as HTMLElement).textContent).toContain('No task matches');
   });
 
   it('keeps workflow order and shows only the five default empty status groups', async () => {
@@ -346,7 +461,7 @@ describe('ListViewPage', () => {
     ).toBeGreaterThan(0);
     expect(
       [...(fixture.nativeElement as HTMLElement).querySelectorAll('button')].filter(
-        (element) => element.textContent.trim() === 'Ajouter une tâche',
+        (element) => element.textContent.trim() === 'Add a task',
       ),
     ).toHaveLength(1);
   });
@@ -354,7 +469,7 @@ describe('ListViewPage', () => {
   it('shows the unfiltered empty state when no declared group is visible', async () => {
     groups.mockResolvedValue([{ value: 'triage', count: 0 }]);
     const fixture: ComponentFixture<ListViewPage> = await render();
-    expect((fixture.nativeElement as HTMLElement).textContent).toContain('Aucune tâche');
+    expect((fixture.nativeElement as HTMLElement).textContent).toContain('No task');
   });
 
   it('renders visible tasks after a full hidden status group', async () => {
@@ -363,8 +478,8 @@ describe('ListViewPage', () => {
       { value: 'todo', count: 1 },
     ]);
     vi.spyOn(TestBed.inject(ListPageStore).space, 'value').mockReturnValue({
-      id: 'produit',
-      name: 'Produit',
+      id: 'product',
+      name: 'Product',
       description: null,
       icon: null,
       color: 'gris',
@@ -386,9 +501,9 @@ describe('ListViewPage', () => {
 
     const fixture: ComponentFixture<ListViewPage> = await render();
     expect((fixture.nativeElement as HTMLElement).textContent).toContain(
-      'Refondre l’écran de connexion SSO',
+      'Redesign the SSO sign-in screen',
     );
-    expect((fixture.nativeElement as HTMLElement).textContent).not.toContain('Aucune tâche');
+    expect((fixture.nativeElement as HTMLElement).textContent).not.toContain('No task');
     expect(page.mock.calls.map((call) => call[2]?.value)).toEqual(['todo']);
   });
 
@@ -399,7 +514,7 @@ describe('ListViewPage', () => {
     const host: HTMLElement = fixture.nativeElement as HTMLElement;
     const taskButton: HTMLButtonElement = required(
       [...host.querySelectorAll<HTMLButtonElement>('button')].find((element: HTMLButtonElement) =>
-        element.textContent.includes('Refondre l’écran de connexion SSO'),
+        element.textContent.includes('Redesign the SSO sign-in screen'),
       ),
     );
     required(taskButton.querySelector<HTMLElement>('cw-status-icon')).click();
@@ -407,7 +522,7 @@ describe('ListViewPage', () => {
       [],
       expect.objectContaining({ queryParams: { task: 'CAD-482' } }),
     );
-    required(button('Ajouter une sous-tâche à CAD-482')).click();
+    required(button('Add a subtask to CAD-482')).click();
     expect(create).toHaveBeenCalledWith({ parentKey: 'CAD-482', listId: 'sprint-14' });
   });
 
@@ -416,21 +531,21 @@ describe('ListViewPage', () => {
     const host: HTMLElement = fixture.nativeElement as HTMLElement;
     const taskButton: HTMLButtonElement = required(
       [...host.querySelectorAll<HTMLButtonElement>('cw-task-title-cell button')].find(
-        (element: HTMLButtonElement) => element.textContent.includes('Refondre l’écran'),
+        (element: HTMLButtonElement) => element.textContent.includes('Redesign the SSO'),
       ),
     );
     taskButton.focus();
     TestBed.inject(TaskStatusChangesStore).request(sprintTasks[0], 'progress');
     await new Promise<void>((resolve) => setTimeout(resolve, 500));
     fixture.detectChanges();
-    await fixture.whenStable();
+    await settle(fixture);
     fixture.detectChanges();
     expect(
       TestBed.inject(ListRowsStore)
         .rows()
         .find((row) => row.task.key === 'CAD-482')?.group,
     ).toBe('progress');
-    expect(document.activeElement?.textContent).toContain('Refondre l’écran');
+    expect(document.activeElement?.textContent).toContain('Redesign the SSO');
   });
 
   it('opens a task in the address from its name', async () => {
@@ -440,7 +555,7 @@ describe('ListViewPage', () => {
     const name: HTMLButtonElement | undefined = [
       ...(fixture.nativeElement as HTMLElement).querySelectorAll<HTMLButtonElement>('button'),
     ].find((element: HTMLButtonElement) =>
-      element.textContent.includes('Refondre l’écran de connexion SSO'),
+      element.textContent.includes('Redesign the SSO sign-in screen'),
     );
     required(name).click();
 
@@ -458,14 +573,16 @@ describe('ListViewPage', () => {
     const name: HTMLButtonElement = required(
       [
         ...(fixture.nativeElement as HTMLElement).querySelectorAll<HTMLButtonElement>('button'),
-      ].find((element: HTMLButtonElement) => element.textContent.includes('Page des quotas')),
+      ].find((element: HTMLButtonElement) => element.textContent.includes('Organization quotas')),
     );
-    name.dispatchEvent(new KeyboardEvent('keydown', { key: 'F10', shiftKey: true, bubbles: true }));
+    name.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'F10', shiftKey: true, bubbles: true, cancelable: true }),
+    );
     fixture.detectChanges();
-    await fixture.whenStable();
+    await settle(fixture);
     fixture.detectChanges();
 
-    expect(document.body.textContent).toContain('CAD-483 · Page des quotas d’organisation');
+    expect(document.body.textContent).toContain('CAD-483 · Organization quotas page');
   });
 
   it('does not emit a destroyed output when a row menu is open during teardown', async () => {
@@ -474,11 +591,13 @@ describe('ListViewPage', () => {
     const name: HTMLButtonElement = required(
       [
         ...(fixture.nativeElement as HTMLElement).querySelectorAll<HTMLButtonElement>('button'),
-      ].find((element: HTMLButtonElement) => element.textContent.includes('Page des quotas')),
+      ].find((element: HTMLButtonElement) => element.textContent.includes('Organization quotas')),
     );
-    name.dispatchEvent(new KeyboardEvent('keydown', { key: 'F10', shiftKey: true, bubbles: true }));
+    name.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'F10', shiftKey: true, bubbles: true, cancelable: true }),
+    );
     fixture.detectChanges();
-    await fixture.whenStable();
+    await settle(fixture);
     fixture.destroy();
     expect(warn).not.toHaveBeenCalledWith(expect.stringContaining('NG0953'));
     warn.mockRestore();
@@ -489,7 +608,7 @@ describe('ListViewPage', () => {
     const name: HTMLButtonElement = required(
       [
         ...(fixture.nativeElement as HTMLElement).querySelectorAll<HTMLButtonElement>('button'),
-      ].find((element: HTMLButtonElement) => element.textContent.includes('Page des quotas')),
+      ].find((element: HTMLButtonElement) => element.textContent.includes('Organization quotas')),
     );
     const press: Event = new Event('pointerdown', { bubbles: true });
     Object.defineProperties(press, {
@@ -500,45 +619,41 @@ describe('ListViewPage', () => {
     name.dispatchEvent(press);
     await new Promise<void>((resolve) => setTimeout(resolve, 520));
     fixture.detectChanges();
-    await fixture.whenStable();
+    await settle(fixture);
     fixture.detectChanges();
-    expect(document.body.textContent).toContain('CAD-483 · Page des quotas d’organisation');
+    expect(document.body.textContent).toContain('CAD-483 · Organization quotas page');
   });
 
   it('retains rows and selection on a failed refresh and retries in place', async () => {
     const fixture: ComponentFixture<ListViewPage> = await render();
-    required(checkbox('Sélectionner CAD-482')).click();
+    required(checkbox('Select CAD-482')).click();
     page.mockRejectedValueOnce(new Error('503'));
     TestBed.inject(ListRowsStore).reload();
-    await fixture.whenStable();
+    await settle(fixture);
     fixture.detectChanges();
 
-    expect((fixture.nativeElement as HTMLElement).textContent).toContain('1 sélectionnée');
-    expect(button('Réessayer')).toBeDefined();
-    required(button('Réessayer')).click();
-    await fixture.whenStable();
+    expect((fixture.nativeElement as HTMLElement).textContent).toContain('1 selected');
+    expect(button('Retry')).toBeDefined();
+    required(button('Retry')).click();
+    await settle(fixture);
     fixture.detectChanges();
-    expect(button('Réessayer')).toBeUndefined();
+    expect(button('Retry')).toBeUndefined();
     expect((fixture.nativeElement as HTMLElement).textContent).toContain('CAD-482');
   });
 
   it('runs a bulk action on the selection and keeps a refused chunk selected', async () => {
-    bulk.mockResolvedValueOnce({
-      affected: 1,
-      done: [{ taskKey: 'CAD-482', version: 3 }],
-      failed: [{ taskKey: 'CAD-483', version: 3 }],
-      unknown: [],
-      notSent: [],
-    });
+    bulk.mockResolvedValueOnce(
+      outcome(['CAD-482'], { failed: [{ taskKey: 'CAD-483', version: 3 }] }),
+    );
     const fixture: ComponentFixture<ListViewPage> = await render();
 
-    required(checkbox('Sélectionner CAD-482')).click();
-    required(checkbox('Sélectionner CAD-483')).click();
+    required(checkbox('Select CAD-482')).click();
+    required(checkbox('Select CAD-483')).click();
     fixture.detectChanges();
-    expect((fixture.nativeElement as HTMLElement).textContent).toContain('2 sélectionnées');
+    expect((fixture.nativeElement as HTMLElement).textContent).toContain('2 selected');
 
-    required(button('Marquer terminé')).click();
-    await fixture.whenStable();
+    required(button('Mark done')).click();
+    await settle(fixture);
     fixture.detectChanges();
 
     expect(bulk).toHaveBeenCalledWith(
@@ -546,57 +661,95 @@ describe('ListViewPage', () => {
         { taskKey: 'CAD-482', version: 3 },
         { taskKey: 'CAD-483', version: 3 },
       ],
-      { type: 'done' },
+      { type: 'status', status: 'done' },
+      expect.any(Function),
     );
-    expect(toasts['show']).toHaveBeenCalledWith('1 tâche terminée', expect.anything());
+    expect(toasts['show']).toHaveBeenCalledWith('1 task done', expect.anything());
+    expect(refreshCounts).toHaveBeenCalled();
     expect(toasts['error']).toHaveBeenCalledWith(
-      '1 tâche sur 2 n’a pas pu être modifiée',
+      '1 of 2 tasks could not be changed',
       expect.anything(),
     );
-    expect((fixture.nativeElement as HTMLElement).textContent).toContain('1 sélectionnée');
+    expect((fixture.nativeElement as HTMLElement).textContent).toContain('1 selected');
   });
 
   it('shows the plural toast when two selected tasks are marked done', async () => {
-    bulk.mockResolvedValueOnce({
-      affected: 2,
-      done: [
-        { taskKey: 'CAD-482', version: 3 },
-        { taskKey: 'CAD-483', version: 3 },
-      ],
-      failed: [],
-      unknown: [],
-      notSent: [],
-    });
+    bulk.mockResolvedValueOnce(outcome(['CAD-482', 'CAD-483']));
     const fixture: ComponentFixture<ListViewPage> = await render();
-    required(checkbox('Sélectionner CAD-482')).click();
-    required(checkbox('Sélectionner CAD-483')).click();
+    required(checkbox('Select CAD-482')).click();
+    required(checkbox('Select CAD-483')).click();
     fixture.detectChanges();
 
-    required(button('Marquer terminé')).click();
-    await fixture.whenStable();
+    required(button('Mark done')).click();
+    fixture.detectChanges();
+    expect((fixture.nativeElement as HTMLElement).textContent).not.toContain('2 selected');
+    await settle(fixture);
 
-    expect(toasts['show']).toHaveBeenCalledWith('2 tâches terminées', expect.anything());
+    expect(toasts['show']).toHaveBeenCalledWith('2 tasks done', {
+      description: 'Status: Done.',
+      undo: expect.any(Function) as unknown,
+    });
+  });
+
+  it("puts the statuses back with the reverse write of the toast's Undo", async () => {
+    bulk.mockResolvedValueOnce(outcome(['CAD-482', 'CAD-483']));
+    const fixture: ComponentFixture<ListViewPage> = await render();
+    required(checkbox('Select CAD-482')).click();
+    required(checkbox('Select CAD-483')).click();
+    fixture.detectChanges();
+    required(button('Mark done')).click();
+    await settle(fixture);
+    const options: { undo: () => void } = toasts['show'].mock.calls[0][1] as { undo: () => void };
+
+    options.undo();
+    await settle(fixture);
+
+    expect(bulk).toHaveBeenCalledWith(
+      [{ taskKey: 'CAD-482', version: 4 }],
+      { type: 'status', status: 'todo' },
+      expect.any(Function),
+    );
+    expect(bulk).toHaveBeenCalledWith(
+      [{ taskKey: 'CAD-483', version: 4 }],
+      { type: 'status', status: 'progress' },
+      expect.any(Function),
+    );
+  });
+
+  it('shows the done icons at once and puts them back when the write is refused', async () => {
+    let answer: (result: TaskBulkOutcome) => void = () => undefined;
+    bulk.mockReturnValueOnce(
+      new Promise<TaskBulkOutcome>((resolve) => {
+        answer = resolve;
+      }),
+    );
+    const fixture: ComponentFixture<ListViewPage> = await render();
+    const rows: InstanceType<typeof ListRowsStore> = TestBed.inject(ListRowsStore);
+    required(checkbox('Select CAD-482')).click();
+    fixture.detectChanges();
+    required(button('Mark done')).click();
+
+    expect(rows.rows().find((row) => row.task.key === 'CAD-482')?.status).toBe('done');
+    answer(outcome([], { failed: [{ taskKey: 'CAD-482', version: 3 }] }));
+    await settle(fixture);
+
+    expect(rows.rows().find((row) => row.task.key === 'CAD-482')?.status).toBe('todo');
+    expect(toasts['error']).toHaveBeenCalledWith('The selection could not be changed');
   });
 
   it('does not update the page or show a toast when a bulk action completes after destruction', async () => {
-    let finish: (outcome: BulkOutcome) => void = () => undefined;
+    let finish: (result: TaskBulkOutcome) => void = () => undefined;
     bulk.mockReturnValueOnce(
-      new Promise<BulkOutcome>((resolve) => {
+      new Promise<TaskBulkOutcome>((resolve) => {
         finish = resolve;
       }),
     );
     const fixture: ComponentFixture<ListViewPage> = await render();
-    required(checkbox('Sélectionner CAD-482')).click();
+    required(checkbox('Select CAD-482')).click();
     fixture.detectChanges();
-    required(button('Marquer terminé')).click();
+    required(button('Mark done')).click();
     fixture.destroy();
-    finish({
-      affected: 1,
-      done: [{ taskKey: 'CAD-482', version: 3 }],
-      failed: [],
-      unknown: [],
-      notSent: [],
-    });
+    finish(outcome(['CAD-482']));
     await Promise.resolve();
     expect(toasts['show']).not.toHaveBeenCalled();
     expect(toasts['warning']).not.toHaveBeenCalled();
@@ -605,50 +758,251 @@ describe('ListViewPage', () => {
 
   it('changes the status of a selection through one bulk action', async () => {
     const fixture: ComponentFixture<ListViewPage> = await render();
-    required(checkbox('Sélectionner CAD-482')).click();
-    required(checkbox('Sélectionner CAD-483')).click();
+    required(checkbox('Select CAD-482')).click();
+    required(checkbox('Select CAD-483')).click();
     fixture.detectChanges();
-    required(button('Actions sur CAD-482')).click();
-    fixture.detectChanges();
-    await fixture.whenStable();
-    required(button('Statut')).click();
-    fixture.detectChanges();
-    await fixture.whenStable();
-    required(button('En cours')).click();
-    await fixture.whenStable();
+    bulk.mockResolvedValueOnce(outcome(['CAD-482', 'CAD-483']));
+    await openRowMenu(fixture, 'CAD-482');
+    expect(document.body.textContent).toContain('2 tasks selected');
+    await openSubmenu(fixture, 'Status');
+    expect(document.body.textContent).toContain('Not started');
+    expect(document.body.textContent).toContain('Active');
+    required(menuItem('Done')).click();
+    await settle(fixture);
 
     expect(bulk).toHaveBeenCalledWith(
       [
         { taskKey: 'CAD-482', version: 3 },
         { taskKey: 'CAD-483', version: 3 },
       ],
-      { type: 'status', status: 'progress' },
+      { type: 'status', status: 'done' },
+      expect.any(Function),
     );
+    expect(toasts['show']).toHaveBeenCalledWith('2 tasks · Done', {
+      description: '2 tasks updated.',
+      undo: expect.any(Function) as unknown,
+    });
+  });
+
+  it('opens the task from the `…` button and its menu from a right click', async () => {
+    const fixture: ComponentFixture<ListViewPage> = await render();
+    const navigate: MockInstance = vi.spyOn(TestBed.inject(Router), 'navigate');
+    required(button('Actions on CAD-482')).click();
+    expect(navigate).toHaveBeenCalledWith(
+      [],
+      expect.objectContaining({ queryParams: { task: 'CAD-482' } }),
+    );
+
+    await openRowMenu(fixture, 'CAD-482');
+    for (const label of [
+      'Open',
+      'Status',
+      'Priority',
+      'Assign',
+      'Remind me tomorrow morning',
+      'Duplicate',
+      'Copy the link',
+      'Copy the identifier',
+      'Delete the task',
+    ]) {
+      expect(menuItem(label)).toBeDefined();
+    }
+  });
+
+  it('edits the sprint from the list background menu', async () => {
+    const fixture: ComponentFixture<ListViewPage> = await render();
+    const host: HTMLElement = fixture.nativeElement as HTMLElement;
+    required(host.querySelector('[data-testid="list-rows"]')).dispatchEvent(
+      new MouseEvent('contextmenu', { bubbles: true, cancelable: true }),
+    );
+    fixture.detectChanges();
+    await settle(fixture);
+    fixture.detectChanges();
+
+    const labels: readonly string[] = [
+      ...document.querySelectorAll<HTMLElement>('[role="menuitem"]'),
+    ].map((element: HTMLElement): string => element.textContent.trim());
+    expect(labels.at(-1)).toBe('Edit the sprint');
+    required(menuItem('Edit the sprint')).click();
+
+    expect(openDialog).toHaveBeenCalledOnce();
+    expect(openDialog.mock.calls[0]?.[0]).toMatchObject({
+      kind: 'list',
+      spaceId: 'product',
+      list: { id: 'sprint-14' },
+      sprint: true,
+    });
+  });
+
+  it('sets a priority from the row menu and undoes it with the previous one', async () => {
+    const fixture: ComponentFixture<ListViewPage> = await render();
+    await openRowMenu(fixture, 'CAD-482');
+    await openSubmenu(fixture, 'Priority');
+    required(menuItem('Urgent')).click();
+    await settle(fixture);
+
+    expect(bulk).toHaveBeenCalledWith(
+      [{ taskKey: 'CAD-482', version: 3 }],
+      { type: 'priority', priority: 'urgente' },
+      expect.any(Function),
+    );
+    expect(toasts['show']).toHaveBeenCalledWith('CAD-482 · urgent priority', {
+      description: 'Priority changed.',
+      undo: expect.any(Function) as unknown,
+    });
+    (toasts['show'].mock.calls[0][1] as { undo: () => void }).undo();
+    await settle(fixture);
+    expect(bulk).toHaveBeenLastCalledWith(
+      [{ taskKey: 'CAD-482', version: 4 }],
+      { type: 'priority', priority: 'haute' },
+      expect.any(Function),
+    );
+  });
+
+  it('skips the Undo of a priority a newer priority replaced and says so', async () => {
+    const changed: TaskBulkOutcome = outcome(['CAD-482']);
+    bulk.mockResolvedValueOnce(changed).mockResolvedValueOnce({
+      ...changed,
+      done: [{ taskKey: 'CAD-482', version: 5, newTaskKey: null, trashEntryId: null }],
+    });
+    const fixture: ComponentFixture<ListViewPage> = await render();
+    await openRowMenu(fixture, 'CAD-482');
+    await openSubmenu(fixture, 'Priority');
+    required(menuItem('Urgent')).click();
+    await settle(fixture);
+    await openRowMenu(fixture, 'CAD-482');
+    await openSubmenu(fixture, 'Priority');
+    required(menuItem('Low')).click();
+    await settle(fixture);
+    expect(bulk).toHaveBeenLastCalledWith(
+      [{ taskKey: 'CAD-482', version: 4 }],
+      { type: 'priority', priority: 'basse' },
+      expect.any(Function),
+    );
+    const calls: number = bulk.mock.calls.length;
+
+    (toasts['show'].mock.calls[0][1] as { undo: () => void }).undo();
+    await settle(fixture);
+
+    expect(bulk).toHaveBeenCalledTimes(calls);
+    expect(toasts['warning']).toHaveBeenCalledWith('CAD-482 changed since', {
+      description: 'Undo skipped it: its latest values are shown.',
+    });
+    expect(toasts['error']).not.toHaveBeenCalled();
+
+    (toasts['show'].mock.calls[1][1] as { undo: () => void }).undo();
+    await settle(fixture);
+    expect(bulk).toHaveBeenLastCalledWith(
+      [{ taskKey: 'CAD-482', version: 5 }],
+      { type: 'priority', priority: 'urgente' },
+      expect.any(Function),
+    );
+  });
+
+  it('deletes a task after its confirmation and restores it from the toast', async () => {
+    bulk.mockResolvedValueOnce({
+      affected: 3,
+      done: [{ taskKey: 'CAD-482', version: 4, newTaskKey: null, trashEntryId: 'trash-1' }],
+      failed: [],
+      unknown: [],
+      notSent: [],
+    });
+    const fixture: ComponentFixture<ListViewPage> = await render();
+    await openRowMenu(fixture, 'CAD-482');
+    required(menuItem('Delete the task')).click();
+    fixture.detectChanges();
+    await settle(fixture);
+
+    expect(document.body.textContent).toContain('Delete “Redesign the SSO sign-in screen”?');
+    required(
+      [...document.querySelectorAll<HTMLButtonElement>('[role="alertdialog"] button')].find(
+        (element: HTMLButtonElement) => element.textContent.trim() === 'Delete the task',
+      ),
+    ).click();
+    await settle(fixture);
+
+    expect(bulk).toHaveBeenCalledWith(
+      [{ taskKey: 'CAD-482', version: 3 }],
+      { type: 'trash' },
+      expect.any(Function),
+    );
+    expect(toasts['show']).toHaveBeenCalledWith('CAD-482 deleted', {
+      description: 'With 2 subtasks. Kept 30 days in the trash.',
+      undo: expect.any(Function) as unknown,
+    });
+    (toasts['show'].mock.calls[0][1] as { undo: () => void }).undo();
+    await settle(fixture);
+    expect(restore).toHaveBeenCalledWith('trash-1');
+  });
+
+  it('removes a person every selected task has from the selection bar', async () => {
+    const fixture: ComponentFixture<ListViewPage> = await render();
+    const rows: InstanceType<typeof ListRowsStore> = TestBed.inject(ListRowsStore);
+    const assigned: TaskSummary = { ...sprintTasks[0], assigneeIds: ['u-ines'] };
+    page.mockImplementation((_listId, _query, group) =>
+      Promise.resolve({
+        items: [assigned, sprintTasks[1]].filter((item) => item.status === group?.value),
+        nextCursor: null,
+        total: 1,
+      }),
+    );
+    rows.reload();
+    await settle(fixture);
+    fixture.detectChanges();
+    required(checkbox('Select CAD-482')).click();
+    fixture.detectChanges();
+    required(button('Assign')).click();
+    fixture.detectChanges();
+    await settle(fixture);
+    required(menuItem('IR')).click();
+    await settle(fixture);
+
+    expect(bulk).toHaveBeenCalledWith(
+      [{ taskKey: 'CAD-482', version: 3 }],
+      { type: 'unassign', userId: 'u-ines' },
+      expect.any(Function),
+    );
+    expect(toasts['show']).toHaveBeenCalledWith('Inès Robert removed', expect.anything());
   });
 
   it('sends a shared cancellation reason for a selected group', async () => {
     const fixture: ComponentFixture<ListViewPage> = await render();
-    required(checkbox('Sélectionner CAD-482')).click();
-    required(checkbox('Sélectionner CAD-483')).click();
+    required(checkbox('Select CAD-482')).click();
+    required(checkbox('Select CAD-483')).click();
     fixture.detectChanges();
-    required(button('Actions sur CAD-482')).click();
+    await openRowMenu(fixture, 'CAD-482');
+    await openSubmenu(fixture, 'Status');
+    required(menuItem('Cancelled')).click();
     fixture.detectChanges();
-    await fixture.whenStable();
-    required(button('Statut')).click();
-    fixture.detectChanges();
-    await fixture.whenStable();
-    required(button('Annulé')).click();
-    fixture.detectChanges();
-    await fixture.whenStable();
-    required(button('Annuler la tâche')).click();
-    await fixture.whenStable();
+    await settle(fixture);
+    required(button('Cancel the task')).click();
+    await settle(fixture);
 
-    expect(bulk).toHaveBeenCalledWith(expect.anything(), {
-      type: 'status',
-      status: 'cancelled',
-      cancelReason: 'duplicate',
-      cancelNote: null,
+    expect(bulk).toHaveBeenCalledWith(
+      expect.anything(),
+      {
+        type: 'status',
+        status: 'cancelled',
+        cancelReason: 'duplicate',
+        cancelNote: null,
+      },
+      expect.any(Function),
+    );
+    expect(toasts['show']).toHaveBeenCalledWith('CAD-482 cancelled', {
+      description: 'Reason: Duplicate.',
+      undo: expect.any(Function) as unknown,
     });
+  });
+
+  it('creates from a priority group with its priority', async () => {
+    TestBed.inject(ListViewStore).setGroupBy('priority');
+    groups.mockResolvedValue([{ value: 'haute', count: 2 }]);
+    page.mockResolvedValue({ items: [...sprintTasks], nextCursor: null, total: 2 });
+    const open: MockInstance = vi.spyOn(TestBed.inject(TaskCreate), 'open');
+    await render();
+    required(button('Add a task')).click();
+
+    expect(open).toHaveBeenCalledWith({ listId: 'sprint-14', priority: 'haute' });
   });
 
   it('shows empty groups and creates a task with the selected status', async () => {
@@ -657,15 +1011,15 @@ describe('ListViewPage', () => {
     const open: MockInstance = vi.spyOn(TestBed.inject(TaskCreate), 'open');
     await render();
 
-    expect(document.body.textContent).toContain('À faire');
-    required(button('Ajouter une tâche')).click();
+    expect(document.body.textContent).toContain('To do');
+    required(button('Add a task')).click();
 
     expect(open).toHaveBeenCalledWith({ listId: 'sprint-14', status: 'todo' });
   });
 
   it('offers Retry in place when the next page fails', async () => {
     const first: TaskSummary[] = Array.from({ length: 50 }, (_: unknown, index: number) =>
-      task(`CAD-${String(400 + index)}`, `Tâche ${String(index)}`, 'todo'),
+      task(`CAD-${String(400 + index)}`, `Task ${String(index)}`, 'todo'),
     );
     page
       .mockResolvedValueOnce({ items: first, nextCursor: 'cursor-2', total: 60 })
@@ -676,17 +1030,16 @@ describe('ListViewPage', () => {
     const table: CwDataTable<unknown> = fixture.debugElement.query(By.directive(CwDataTable))
       .componentInstance as CwDataTable<unknown>;
     table.nearEnd.emit();
-    await fixture.whenStable();
+    await settle(fixture);
     fixture.detectChanges();
 
     const alert: Element | undefined = [...host.querySelectorAll('[role="alert"]')].find(
-      (element: Element) =>
-        element.textContent.includes('Les tâches suivantes n’ont pas pu être chargées.'),
+      (element: Element) => element.textContent.includes('The next tasks could not be loaded.'),
     );
     expect(alert).toBeDefined();
     const calls: number = page.mock.calls.length;
     required(alert?.querySelector<HTMLButtonElement>('button')).click();
-    await fixture.whenStable();
+    await settle(fixture);
 
     expect(page.mock.calls.length).toBeGreaterThan(calls);
     expect(page).toHaveBeenCalledWith(
@@ -697,5 +1050,159 @@ describe('ListViewPage', () => {
       50,
       expect.any(AbortSignal),
     );
+  });
+  it('reports the tasks of an Undo that were not sent or have no certain outcome', async () => {
+    bulk.mockResolvedValueOnce(outcome(['CAD-482', 'CAD-483']));
+    const fixture: ComponentFixture<ListViewPage> = await render();
+    required(checkbox('Select CAD-482')).click();
+    required(checkbox('Select CAD-483')).click();
+    fixture.detectChanges();
+    required(button('Mark done')).click();
+    await settle(fixture);
+    bulk
+      .mockResolvedValueOnce(outcome([], { unknown: [{ taskKey: 'CAD-482', version: 4 }] }))
+      .mockResolvedValueOnce(outcome([], { notSent: [{ taskKey: 'CAD-483', version: 4 }] }));
+
+    (toasts['show'].mock.calls[0][1] as { undo: () => void }).undo();
+    await settle(fixture);
+
+    expect(toasts['warning']).toHaveBeenCalledWith('Some selected tasks were not sent.');
+    expect(toasts['warning']).toHaveBeenCalledWith(
+      'The outcome is unknown. The tasks are being refreshed.',
+    );
+    expect(toasts['error']).not.toHaveBeenCalled();
+  });
+
+  it('counts the refused tasks of an Undo and reads the rows again', async () => {
+    bulk.mockResolvedValueOnce(outcome(['CAD-482', 'CAD-483']));
+    const fixture: ComponentFixture<ListViewPage> = await render();
+    required(checkbox('Select CAD-482')).click();
+    required(checkbox('Select CAD-483')).click();
+    fixture.detectChanges();
+    required(button('Mark done')).click();
+    await settle(fixture);
+    const reads: number = page.mock.calls.length;
+    bulk
+      .mockResolvedValueOnce(outcome(['CAD-482']))
+      .mockResolvedValueOnce(outcome([], { failed: [{ taskKey: 'CAD-483', version: 4 }] }));
+
+    (toasts['show'].mock.calls[0][1] as { undo: () => void }).undo();
+    await settle(fixture);
+
+    expect(toasts['error']).toHaveBeenCalledWith(bulkPartialText(1, 2));
+    expect(page.mock.calls.length).toBeGreaterThan(reads);
+  });
+
+  it('dismisses the toasts whose Undo writes through the view when the view is left', async () => {
+    const fixture: ComponentFixture<ListViewPage> = await render();
+    await openRowMenu(fixture, 'CAD-482');
+    await openSubmenu(fixture, 'Priority');
+    required(menuItem('Urgent')).click();
+    await settle(fixture);
+    expect(toasts['show']).toHaveBeenCalledWith('CAD-482 · urgent priority', expect.anything());
+
+    fixture.destroy();
+
+    expect(toasts['dismiss']).toHaveBeenCalledWith('toast-1');
+  });
+
+  it('puts the cancellation reason and note back when the change from Cancelled is undone', async () => {
+    const fixture: ComponentFixture<ListViewPage> = await render();
+    await openRowMenu(fixture, 'CAD-482');
+    await openSubmenu(fixture, 'Status');
+    required(menuItem('Cancelled')).click();
+    fixture.detectChanges();
+    await settle(fixture);
+    const note: HTMLTextAreaElement = required(
+      document.querySelector<HTMLTextAreaElement>('#task-cancel-note'),
+    );
+    note.value = 'Replaced by CAD-490';
+    note.dispatchEvent(new Event('input'));
+    required(button('Cancel the task')).click();
+    await settle(fixture);
+    bulk.mockResolvedValue({
+      ...outcome(['CAD-482']),
+      done: [{ taskKey: 'CAD-482', version: 5, newTaskKey: null, trashEntryId: null }],
+    });
+    toasts['show'].mockClear();
+
+    await openRowMenu(fixture, 'CAD-482');
+    await openSubmenu(fixture, 'Status');
+    required(menuItem('To do')).click();
+    await settle(fixture);
+    (toasts['show'].mock.calls[0][1] as { undo: () => void }).undo();
+    await settle(fixture);
+
+    expect(bulk).toHaveBeenLastCalledWith(
+      [{ taskKey: 'CAD-482', version: 5 }],
+      {
+        type: 'status',
+        status: 'cancelled',
+        cancelReason: 'duplicate',
+        cancelNote: 'Replaced by CAD-490',
+      },
+      expect.any(Function),
+    );
+  });
+  /**
+   * Function menuLabels
+   *
+   * @description
+   * The items of the open menus.
+   *
+   * @returns {readonly string[]} Their texts.
+   */
+  function menuLabels(): readonly string[] {
+    return [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].map(
+      (element: HTMLElement): string => element.textContent.trim(),
+    );
+  }
+
+  it('opens the row menu with a right click on a cell no row trigger covers', async () => {
+    const fixture: ComponentFixture<ListViewPage> = await render();
+    const cell: Element = required(checkbox('Select CAD-482')?.closest('[role="gridcell"]'));
+
+    cell.dispatchEvent(
+      new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 40, clientY: 80 }),
+    );
+    fixture.detectChanges();
+    await settle(fixture);
+    fixture.detectChanges();
+
+    expect(menuLabels()).toContain('Duplicate');
+    expect(menuLabels()).not.toContain('Edit the sprint');
+  });
+
+  it('opens the row menu with Shift F10 on a focused cell', async () => {
+    const fixture: ComponentFixture<ListViewPage> = await render();
+    const cell: Element = required(
+      checkbox('Select CAD-482')
+        ?.closest('[role="row"]')
+        ?.querySelector('[role="gridcell"]:last-child'),
+    );
+
+    cell.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'F10', shiftKey: true, bubbles: true, cancelable: true }),
+    );
+    fixture.detectChanges();
+    await settle(fixture);
+    fixture.detectChanges();
+
+    expect(menuLabels()).toContain('Duplicate');
+    expect(menuLabels()).not.toContain('Edit the sprint');
+  });
+
+  it('opens the list menu with a right click outside the task rows', async () => {
+    const fixture: ComponentFixture<ListViewPage> = await render();
+    const host: HTMLElement = fixture.nativeElement as HTMLElement;
+    const header: Element = required(host.querySelector('[role="columnheader"]'));
+
+    header.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
+    fixture.detectChanges();
+    await settle(fixture);
+    fixture.detectChanges();
+
+    expect(menuLabels()).toContain('Edit the sprint');
+    expect(menuLabels()).not.toContain('Duplicate');
   });
 });

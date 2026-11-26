@@ -5,17 +5,17 @@ import type { SavedView } from '../../models/saved-view/saved-view.interface';
 import { ListViewStore } from './list-view.store';
 
 /**
- * Constant bugsCritiques
+ * Constant criticalBugs
  *
  * @description
- * The mockup's « Bugs critiques »: urgent and high priorities, by due date.
+ * The mockup's `Critical bugs`: urgent and high priorities, by due date.
  *
  * @type {SavedView}
  */
-const bugsCritiques: SavedView = {
+const criticalBugs: SavedView = {
   id: 'sv-bugs',
   listId: 'l-bugs',
-  name: 'Bugs critiques',
+  name: 'Critical bugs',
   icon: 'bug',
   layout: 'list',
   config: {
@@ -76,7 +76,7 @@ describe('ListViewStore', () => {
   it('applies a saved view over the standard tab and gives the tab back on leaving', () => {
     store.setGroupBy('assignee');
     store.setSubtasks('expanded');
-    store.applySaved(bugsCritiques);
+    store.applySaved(criticalBugs);
 
     expect(store.savedView()?.id).toBe('sv-bugs');
     expect(store.config().filters.priority).toEqual(['urgente', 'haute']);
@@ -101,7 +101,7 @@ describe('ListViewStore', () => {
 
   it('records a saved view as applied and starts over with reset', () => {
     store.toggleFilter('priority', 'haute');
-    store.markSaved({ ...bugsCritiques, config: store.config() });
+    store.markSaved({ ...criticalBugs, config: store.config() });
 
     expect(store.savedView()?.id).toBe('sv-bugs');
     expect(store.modified()).toBe(false);

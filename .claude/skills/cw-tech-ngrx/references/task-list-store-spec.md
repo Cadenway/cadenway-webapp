@@ -14,7 +14,7 @@ import { TaskApi } from '../data-access/services/task-api';
 import type { Task } from '../models/task';
 import { TaskListStore } from './task-list-store';
 
-const tasks: Task[] = [{ id: 't1', title: 'Maquette', status: 'todo' }];
+const tasks: Task[] = [{ id: 't1', title: 'Mockup', status: 'todo' }];
 
 function setup(api: Partial<TaskApi>) {
   TestBed.configureTestingModule({
@@ -84,7 +84,7 @@ describe('TaskListStore', () => {
     expect(changeStatus).toHaveBeenLastCalledWith('t1', 'todo');
   });
 
-  it('a refused undo restores the changed status and keeps Annuler available', async () => {
+  it('a refused undo restores the changed status and keeps Undo available', async () => {
     const changeStatus = vi
       .fn<() => Promise<void>>()
       .mockResolvedValueOnce()

@@ -52,7 +52,7 @@ import { SORT_FIELDS } from '../../../utils/list-view-query/list-view-query.util
  * Interface FilterSection
  *
  * @description
- * A fieldset of the « Filtrer » dialog.
+ * A fieldset of the `Filter` dialog.
  */
 interface FilterSection {
   // #region Properties
@@ -120,14 +120,14 @@ const FIELDS: readonly FilterField[] = ['status', 'priority', 'assignee', 'label
  * Component ViewTools
  *
  * @description
- * The tools of a list view (`App.dc.html` lines 371-483): the « Outils de la vue » toolbar with
- * « Jalons n », « Filtrer » (a dialog of checkboxes by status, priority, assignee — « Moi »,
- * « Non assigné » — and label, with « Tout effacer »), « Trier par » (five criteria and the
- * direction), « Grouper par » (status, priority, assignee, none), the search and « Créer une
- * tâche »; then the « Filtres actifs » row: a chip per field with its removal, « + Filtre » (which
- * opens the same dialog), « Tout effacer » or « Aucun filtre · n tâches », the applied saved view's
- * « Modifiée » with « Rétablir » and « Enregistrer », the subtask display menu and « Enregistrer
- * la vue ». Presentational: it renders the configuration it receives and emits each change;
+ * The tools of a list view (`App.dc.html` lines 371-483): the `View tools` toolbar with
+ * `Milestones n`, `Filter` (a dialog of checkboxes by status, priority, assignee — `Me`,
+ * `Unassigned` — and label, with `Clear all`), `Sort by` (five criteria and the
+ * direction), `Group by` (status, priority, assignee, none), the search and `Create a
+ * task`; then the `Active filters` row: a chip per field with its removal, `+ Filter` (which
+ * opens the same dialog), `Clear all` or `No filter · n tasks`, the applied saved view's
+ * `Modified` with `Revert` and `Save`, the subtask display menu and `Save the
+ * view`. Presentational: it renders the configuration it receives and emits each change;
  * `taskCreated` is left for the task feature's creation dialog.
  */
 @Component({
@@ -183,7 +183,7 @@ export class ViewTools {
    * Property labels
    *
    * @description
-   * Labels offered by the « Étiquette » filter.
+   * Labels offered by the `Label` filter.
    *
    * @type {InputSignal<readonly string[]>}
    * @readonly
@@ -216,7 +216,7 @@ export class ViewTools {
    * Property milestonesOnly
    *
    * @description
-   * Whether « Jalons » is pressed.
+   * Whether `Milestones` is pressed.
    *
    * @type {InputSignal<boolean>}
    * @readonly
@@ -238,12 +238,47 @@ export class ViewTools {
    * Property taskTotal
    *
    * @description
-   * Top-level tasks of the list, for « Aucun filtre · n tâches », or null.
+   * Top-level tasks of the list, for `No filter · n tasks`, or null.
    *
    * @type {InputSignal<number | null>}
    * @readonly
    */
   public readonly taskTotal: InputSignal<number | null> = input<number | null>(null);
+
+  /**
+   * Property visibleCount
+   *
+   * @description
+   * Tasks the view shows with its filters, for `n of m tasks` in the filter dialog, or null
+   * when unknown (the footer then shows `Clear all` alone).
+   *
+   * @type {InputSignal<number | null>}
+   * @readonly
+   */
+  public readonly visibleCount: InputSignal<number | null> = input<number | null>(null);
+
+  /**
+   * Property hasSubtasks
+   *
+   * @description
+   * Whether the list has subtasks; `Subtasks: …` shows only then (`listHasKids` of
+   * `App.dc.html`). True by default, so the display stays reachable while it is unknown.
+   *
+   * @type {InputSignal<boolean>}
+   * @readonly
+   */
+  public readonly hasSubtasks: InputSignal<boolean> = input(true);
+
+  /**
+   * Property userId
+   *
+   * @description
+   * The signed-in member, offered once as `Me` in the assignee filter rather than by name.
+   *
+   * @type {InputSignal<string | null>}
+   * @readonly
+   */
+  public readonly userId: InputSignal<string | null> = input<string | null>(null);
 
   /**
    * Property savedView
@@ -271,7 +306,7 @@ export class ViewTools {
    * Property canSave
    *
    * @description
-   * Whether « Enregistrer la vue » shows.
+   * Whether `Save the view` shows.
    *
    * @type {InputSignal<boolean>}
    * @readonly
@@ -293,7 +328,7 @@ export class ViewTools {
    * Property milestonesToggled
    *
    * @description
-   * Emits when « Jalons » is pressed or released.
+   * Emits when `Milestones` is pressed or released.
    *
    * @type {OutputEmitterRef<void>}
    * @readonly
@@ -304,7 +339,7 @@ export class ViewTools {
    * Property filterToggled
    *
    * @description
-   * Emits a value checked or unchecked in « Filtrer ».
+   * Emits a value checked or unchecked in `Filter`.
    *
    * @type {OutputEmitterRef<{ field: FilterField; value: string }>}
    * @readonly
@@ -329,7 +364,7 @@ export class ViewTools {
    * Property filtersCleared
    *
    * @description
-   * Emits on « Tout effacer ».
+   * Emits on `Clear all`.
    *
    * @type {OutputEmitterRef<void>}
    * @readonly
@@ -351,7 +386,7 @@ export class ViewTools {
    * Property sortDirectionToggled
    *
    * @description
-   * Emits on « Ordre ».
+   * Emits on `Order`.
    *
    * @type {OutputEmitterRef<void>}
    * @readonly
@@ -395,7 +430,7 @@ export class ViewTools {
    * Property taskCreated
    *
    * @description
-   * Emits on « Créer une tâche »; the task feature's creation dialog answers it in the next pass.
+   * Emits on `Create a task`; the task feature's creation dialog answers it in the next pass.
    *
    * @type {OutputEmitterRef<void>}
    * @readonly
@@ -406,7 +441,7 @@ export class ViewTools {
    * Property saveRequested
    *
    * @description
-   * Emits on « Enregistrer la vue ».
+   * Emits on `Save the view`.
    *
    * @type {OutputEmitterRef<void>}
    * @readonly
@@ -417,7 +452,7 @@ export class ViewTools {
    * Property savedReverted
    *
    * @description
-   * Emits on « Rétablir ».
+   * Emits on `Revert`.
    *
    * @type {OutputEmitterRef<void>}
    * @readonly
@@ -428,7 +463,7 @@ export class ViewTools {
    * Property savedUpdated
    *
    * @description
-   * Emits on « Enregistrer » of a modified saved view.
+   * Emits on `Save` of a modified saved view.
    *
    * @type {OutputEmitterRef<void>}
    * @readonly
@@ -439,7 +474,7 @@ export class ViewTools {
    * Property filterOpen
    *
    * @description
-   * Whether the « Filtrer » dialog is open; « + Filtre » opens it too.
+   * Whether the `Filter` dialog is open; `+ Filter` opens it too.
    *
    * @type {WritableSignal<boolean>}
    * @readonly
@@ -472,7 +507,7 @@ export class ViewTools {
    * Property sortOptions
    *
    * @description
-   * Criteria of « Trier par ».
+   * Criteria of `Sort by`.
    *
    * @type {readonly ViewOption<ListSortField>[]}
    * @readonly
@@ -485,7 +520,7 @@ export class ViewTools {
    * Property groupOptions
    *
    * @description
-   * Choices of « Grouper par », « Aucun » valued `none`.
+   * Choices of `Group by`, `None` valued `none`.
    *
    * @type {readonly ViewOption[]}
    * @readonly
@@ -520,7 +555,7 @@ export class ViewTools {
    * Property sections
    *
    * @description
-   * The fieldsets of « Filtrer ».
+   * The fieldsets of `Filter`.
    *
    * @type {Signal<readonly FilterSection[]>}
    * @readonly
@@ -543,8 +578,10 @@ export class ViewTools {
           title: this.fieldLabels.assignee,
           options: [
             { value: 'me', label: $localize`:@@spaces.filter.me:Me` },
+            ...this.people().filter(
+              (person: ViewOption): boolean => person.value !== this.userId(),
+            ),
             { value: 'none', label: $localize`:@@spaces.filter.unassigned:Unassigned` },
-            ...this.people(),
           ],
         },
         {
@@ -560,7 +597,8 @@ export class ViewTools {
    * Property chips
    *
    * @description
-   * The active filters, a chip per field.
+   * The active filters, a chip per field. An assignee id names its member, the signed-in one
+   * included (a saved view may name them).
    *
    * @type {Signal<readonly FilterChip[]>}
    * @readonly
@@ -570,8 +608,11 @@ export class ViewTools {
     return FIELDS.flatMap((field: FilterField): FilterChip[] => {
       const values: readonly string[] = this.config().filters[field];
       if (values.length === 0) return [];
-      const options: readonly ViewOption[] =
-        sections.find((section: FilterSection): boolean => section.field === field)?.options ?? [];
+      const options: readonly ViewOption[] = [
+        ...(sections.find((section: FilterSection): boolean => section.field === field)?.options ??
+          []),
+        ...(field === 'assignee' ? this.people() : []),
+      ];
       return [
         {
           field,
@@ -597,7 +638,7 @@ export class ViewTools {
    * Property filterCount
    *
    * @description
-   * Number on « Filtrer »: fields that filter something.
+   * Number on `Filter`: fields that filter something.
    *
    * @type {Signal<number>}
    * @readonly
@@ -608,7 +649,7 @@ export class ViewTools {
    * Property sortLabel
    *
    * @description
-   * « Trier », or « Tri : échéance ».
+   * `Sort`, or `Sort: due date`.
    *
    * @type {Signal<string>}
    * @readonly
@@ -624,7 +665,7 @@ export class ViewTools {
    * Property groupLabel
    *
    * @description
-   * « Grouper : statut ».
+   * `Group: status`.
    *
    * @type {Signal<string>}
    * @readonly
@@ -683,7 +724,7 @@ export class ViewTools {
    * Method removeLabel
    *
    * @description
-   * Name of a chip's removal (« Retirer le filtre Statut »).
+   * Name of a chip's removal (`Remove the Status filter`).
    *
    * @param {FilterChip} chip - The chip.
    * @returns {string} The label.
@@ -763,10 +804,26 @@ export class ViewTools {
   }
 
   /**
+   * Method visibleLabel
+   *
+   * @description
+   * Footer of the filter dialog: `3 of 12 tasks`.
+   *
+   * @returns {string} The label.
+   */
+  protected visibleLabel(): string {
+    const shown: number = this.visibleCount() ?? 0;
+    const total: number = this.taskTotal() ?? 0;
+    return total === 1
+      ? $localize`:@@spaces.filter.visible-one:${shown}:shown: of ${total}:total: task`
+      : $localize`:@@spaces.filter.visible-many:${shown}:shown: of ${total}:total: tasks`;
+  }
+
+  /**
    * Method modifiedHint
    *
    * @description
-   * Hint of « Modifiée » (« Différente de « Bugs critiques » enregistrée »).
+   * Hint of `Modified` (`Different from the saved “Critical bugs”`).
    *
    * @param {SavedView} view - The applied saved view.
    * @returns {string} The hint.

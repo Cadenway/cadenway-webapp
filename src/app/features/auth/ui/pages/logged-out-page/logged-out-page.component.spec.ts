@@ -56,10 +56,10 @@ describe('LoggedOutPage', () => {
     const { host, fixture, navigate, prefill }: Awaited<ReturnType<typeof render>> =
       await render(undefined);
 
-    expect(host.querySelector('h1')?.textContent.trim()).toBe('Vous êtes déconnecté');
-    expect(host.textContent).toContain('À bientôt, Camille.');
+    expect(host.querySelector('h1')?.textContent.trim()).toBe('You are signed out');
+    expect(host.textContent).toContain('See you soon, Camille. Your session');
     host
-      .querySelector<HTMLButtonElement>('[aria-label="Se connecter avec c.martin@lumen.coop"]')
+      .querySelector<HTMLButtonElement>('[aria-label="Sign in with c.martin@lumen.coop"]')
       ?.click();
     await fixture.whenStable();
 
@@ -70,16 +70,16 @@ describe('LoggedOutPage', () => {
   it('forgets an account with an undo', async () => {
     const { host, fixture }: Awaited<ReturnType<typeof render>> = await render('expired');
 
-    expect(host.querySelector('h1')?.textContent.trim()).toBe('Session expirée');
+    expect(host.querySelector('h1')?.textContent.trim()).toBe('Session expired');
     host
       .querySelector<HTMLButtonElement>(
-        '[aria-label="Oublier camille.martin@ateliernord.fr sur cet appareil"]',
+        '[aria-label="Forget camille.martin@ateliernord.fr on this device"]',
       )
       ?.click();
     await fixture.whenStable();
     expect(host.querySelectorAll('li')).toHaveLength(1);
     expect(host.querySelector('[role="status"]')?.textContent).toContain(
-      'camille.martin@ateliernord.fr n’est plus mémorisé sur cet appareil.',
+      'camille.martin@ateliernord.fr is no longer remembered on this device.',
     );
 
     Array.from(host.querySelectorAll<HTMLButtonElement>('[role="status"] button'))[0]?.click();
@@ -93,6 +93,6 @@ describe('LoggedOutPage', () => {
   it('says every session was closed', async () => {
     const { host }: Awaited<ReturnType<typeof render>> = await render('all-devices');
 
-    expect(host.querySelector('h1')?.textContent.trim()).toBe('Déconnecté de tous les appareils');
+    expect(host.querySelector('h1')?.textContent.trim()).toBe('Signed out of all devices');
   });
 });

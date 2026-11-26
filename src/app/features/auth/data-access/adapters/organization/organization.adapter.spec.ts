@@ -30,7 +30,7 @@ describe('organization adapters', () => {
         id: 'invitation-lumen',
         organization: {
           id: 'org-lumen',
-          name: 'Coopérative Lumen',
+          name: 'Lumen Cooperative',
           slug: 'lumen',
           description: null,
           memberCount: 41,
@@ -41,7 +41,7 @@ describe('organization adapters', () => {
       }),
     ).toEqual({
       id: 'invitation-lumen',
-      organizationName: 'Coopérative Lumen',
+      organizationName: 'Lumen Cooperative',
       role: 'member',
       inviterName: 'Inès Robert',
       expiresAt: '2026-11-15T10:00:00Z',

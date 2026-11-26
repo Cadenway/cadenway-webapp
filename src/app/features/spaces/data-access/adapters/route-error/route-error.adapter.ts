@@ -11,8 +11,8 @@ import {
  * @description
  * Turns the failure of a page's primary read into the typed state of the route boundary. The
  * gateway answers `404 space.not-found` or `list.not-found` both for a deleted resource and for a
- * private one the caller does not see, and never tells them apart: that answer is « Accès refusé »
- * with « Demander l’accès » (an access request never reveals whether the target exists). Any other
+ * private one the caller does not see, and never tells them apart: that answer is `Access denied`
+ * with `Request access` (an access request never reveals whether the target exists). Any other
  * `404` or a malformed identifier (`400`) is not found; anything else is unavailable with its
  * status and request reference.
  *

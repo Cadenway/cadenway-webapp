@@ -39,5 +39,17 @@ export interface RuntimeConfig {
    * @readonly
    */
   readonly siteUrl?: string;
+
+  /**
+   * Property statusUrl
+   *
+   * @description
+   * Address of the public status page, when the environment has one. The unavailable error state
+   * offers `Service status` only when it is set.
+   *
+   * @type {string | undefined}
+   * @readonly
+   */
+  readonly statusUrl?: string;
   // #endregion
 }

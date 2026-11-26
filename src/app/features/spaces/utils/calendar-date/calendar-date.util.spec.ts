@@ -11,6 +11,8 @@ describe('calendar dates', () => {
   it('writes a sprint range as the mockup does', () => {
     expect(formatSprintRange('2026-11-03', '2026-11-17', 'fr')).toBe('3 – 17 nov.');
     expect(formatSprintRange('2026-10-27', '2026-11-09', 'fr')).toBe('27 oct. – 9 nov.');
+    expect(formatSprintRange('2026-11-03', '2026-11-16', 'en-US')).toBe('Nov 3 – 16');
+    expect(formatSprintRange('2026-10-27', '2026-11-09', 'en-US')).toBe('Oct 27 – Nov 9');
   });
 
   it('checks an inclusive range', () => {

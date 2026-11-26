@@ -57,7 +57,7 @@ const ICON_NAMES: Readonly<Record<Exclude<LookIcon, null>, readonly [string, str
  * Constant LOOK_ICON_KEYS
  *
  * @description
- * The icon choices of the « Enregistrer la vue » dialog, after the layout's own icon.
+ * The icon choices of the `Save the view` dialog, after the layout's own icon.
  *
  * @type {readonly Exclude<LookIcon, null>[]}
  */

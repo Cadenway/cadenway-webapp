@@ -1,4 +1,4 @@
-import { Component, computed, signal } from '@angular/core';
+import { Component, computed, signal, type WritableSignal } from '@angular/core';
 import { rxResource } from '@angular/core/rxjs-interop';
 import { TestBed } from '@angular/core/testing';
 import {
@@ -13,6 +13,7 @@ import { provideCadenwayIcons } from '@cadenway/icons';
 import { type Observable, of, throwError } from 'rxjs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { type RuntimeConfig, RuntimeConfigStore } from '@core/config';
 import {
   WORKSPACE_CONTEXT,
   type WorkspaceContextPort,
@@ -29,6 +30,7 @@ import {
 import { ErrorRecovery } from './data-access/services/error-recovery/error-recovery.service';
 import { ERRORS_ROUTES } from './errors.routes';
 import type { RestoreOutcome } from './models/error-recovery/error-recovery.type';
+import type { RouteErrorData } from './models/route-error-data/route-error-data.interface';
 import { RouteErrorBoundary } from './ui/components/route-error-boundary/route-error-boundary.component';
 
 /**
@@ -122,7 +124,10 @@ describe('ERRORS_ROUTES and the route error boundary', () => {
     restoreTask: ReturnType<typeof vi.fn<(entryId: string) => Observable<RestoreOutcome>>>;
   };
 
+  let config: WritableSignal<RuntimeConfig>;
+
   beforeEach(() => {
+    config = signal<RuntimeConfig>({ apiUrl: 'http://api.cadenway.localhost' });
     loads.count = 0;
     loads.failures = [];
     recovery = {
@@ -140,7 +145,17 @@ describe('ERRORS_ROUTES and the route error boundary', () => {
                 provideCadenwayIcons(),
                 { provide: WORKSPACE_CONTEXT, useValue: workspace },
               ],
-              children: [{ path: 'page', component: LoadingPage }, ...ERRORS_ROUTES],
+              children: [
+                { path: 'page', component: LoadingPage },
+                {
+                  path: 'tasks',
+                  component: LoadingPage,
+                  data: {
+                    unavailableTitle: 'Could not load the tasks',
+                  } satisfies RouteErrorData,
+                },
+                ...ERRORS_ROUTES,
+              ],
             },
             ...ERRORS_ROUTES,
           ],
@@ -149,6 +164,7 @@ describe('ERRORS_ROUTES and the route error boundary', () => {
           withErrorBoundaries({ defaultErrorComponent: RouteErrorBoundary }),
         ),
         { provide: ErrorRecovery, useValue: recovery },
+        { provide: RuntimeConfigStore, useValue: { config } },
       ],
     });
   });
@@ -219,16 +235,16 @@ describe('ERRORS_ROUTES and the route error boundary', () => {
   it('renders the 404 of an unknown address at the root, without a shell', async () => {
     const { element }: { element: HTMLElement } = await open('/');
 
-    expect(heading(element)).toBe('Page introuvable');
+    expect(heading(element)).toBe('Page not found');
     expect(element.querySelector('[data-testid="shell"]')).toBeNull();
   });
 
   it('renders the 404 of an unknown address inside the workspace shell', async () => {
     const { element }: { element: HTMLElement } = await open('/atelier-nord/missing/page');
 
-    expect(heading(element)).toBe('Page introuvable');
+    expect(heading(element)).toBe('Page not found');
     expect(element.querySelector('[data-testid="shell"]')).not.toBeNull();
-    expect(button(element, 'Retour à l’accueil')?.getAttribute('href')).toBe('/home');
+    expect(button(element, 'Back to home')?.getAttribute('href')).toBe('/home');
     expect(loads.count).toBe(0);
   });
 
@@ -237,8 +253,8 @@ describe('ERRORS_ROUTES and the route error boundary', () => {
 
     const { element }: { element: HTMLElement } = await open('/atelier-nord/page');
 
-    expect(heading(element)).toBe('Page introuvable');
-    expect(element.textContent).toContain('Erreur 404');
+    expect(heading(element)).toBe('Page not found');
+    expect(element.textContent).toContain('Error 404');
     expect(element.querySelector('[data-testid="shell"]')).not.toBeNull();
   });
 
@@ -255,18 +271,18 @@ describe('ERRORS_ROUTES and the route error boundary', () => {
     const { harness, element }: { harness: RouterTestingHarness; element: HTMLElement } =
       await open('/atelier-nord/page');
 
-    expect(heading(element)).toBe('Vous n’avez pas accès à cet espace');
+    expect(heading(element)).toBe('You do not have access to this space');
     expect(element.textContent.replace(/\s+/gu, ' ')).toContain(
-      '« Direction » est un espace privé. Léa Petit, sa propriétaire, peut vous y ajouter.',
+      '“Direction” is a private space. Léa Petit, its owner, can add you.',
     );
     expect(element.querySelector('label')?.textContent.replace(/\s+/gu, ' ').trim()).toBe(
-      'Message pour Léa (facultatif)',
+      'Message for Léa (optional)',
     );
     const message: HTMLTextAreaElement | null = element.querySelector('textarea');
     if (!message) throw new Error('The message field is missing.');
-    message.value = 'Je dois chiffrer la part outillage du budget 2027.';
+    message.value = 'I need to cost the tooling share of the 2027 budget.';
     message.dispatchEvent(new Event('input'));
-    button(element, 'Demander l’accès')?.click();
+    button(element, 'Request access')?.click();
     await vi.waitFor(() => {
       expect(recovery.requestAccess).toHaveBeenCalled();
     });
@@ -274,27 +290,25 @@ describe('ERRORS_ROUTES and the route error boundary', () => {
 
     expect(recovery.requestAccess).toHaveBeenCalledWith(
       { kind: 'space', id: 'space-direction' },
-      'Je dois chiffrer la part outillage du budget 2027.',
+      'I need to cost the tooling share of the 2027 budget.',
     );
-    const sent: HTMLElement | undefined = button(element, 'Demande envoyée');
+    const sent: HTMLElement | undefined = button(element, 'Request sent');
     expect(sent?.hasAttribute('disabled')).toBe(true);
     expect(element.querySelector('textarea')).toBeNull();
   });
 
   it('restores a deleted task, then runs the route again', async () => {
     loads.failures.push(
-      new DeletedTaskRouteError({ key: 'CAD-452', name: 'Ancien écran de connexion' }, 'entry-1'),
+      new DeletedTaskRouteError({ key: 'CAD-452', name: 'Old sign-in screen' }, 'entry-1'),
     );
 
     const { harness, element }: { harness: RouterTestingHarness; element: HTMLElement } =
       await open('/atelier-nord/page');
 
-    expect(heading(element)).toBe('Cette tâche a été supprimée');
-    expect(element.textContent).toContain('CAD-452 « Ancien écran de connexion » a été supprimée.');
-    expect(button(element, 'Ouvrir la corbeille')?.getAttribute('href')).toBe(
-      '/atelier-nord/trash',
-    );
-    button(element, 'Restaurer la tâche')?.click();
+    expect(heading(element)).toBe('This task has been deleted');
+    expect(element.textContent).toContain('CAD-452 “Old sign-in screen” has been deleted.');
+    expect(button(element, 'Open the trash')?.getAttribute('href')).toBe('/atelier-nord/trash');
+    button(element, 'Restore the task')?.click();
     await settle(harness);
 
     expect(recovery.restoreTask).toHaveBeenCalledWith('entry-1');
@@ -305,15 +319,15 @@ describe('ERRORS_ROUTES and the route error boundary', () => {
   it('marks a task that is no longer in the trash as already restored', async () => {
     recovery.restoreTask.mockReturnValue(of<RestoreOutcome>('already-restored'));
     loads.failures.push(
-      new DeletedTaskRouteError({ key: 'CAD-452', name: 'Ancien écran de connexion' }, 'entry-1'),
+      new DeletedTaskRouteError({ key: 'CAD-452', name: 'Old sign-in screen' }, 'entry-1'),
     );
 
     const { harness, element }: { harness: RouterTestingHarness; element: HTMLElement } =
       await open('/atelier-nord/page');
-    button(element, 'Restaurer la tâche')?.click();
+    button(element, 'Restore the task')?.click();
     await settle(harness);
 
-    expect(button(element, 'Déjà restaurée')?.hasAttribute('disabled')).toBe(true);
+    expect(button(element, 'Already restored')?.hasAttribute('disabled')).toBe(true);
     expect(loads.count).toBe(1);
   });
 
@@ -323,20 +337,43 @@ describe('ERRORS_ROUTES and the route error boundary', () => {
     const { harness, element }: { harness: RouterTestingHarness; element: HTMLElement } =
       await open('/atelier-nord/page');
 
-    expect(heading(element)).toBe('Impossible de charger cette page');
+    expect(heading(element)).toBe('Could not load this page');
     expect(
       element
         .querySelector('[data-testid="route-error-reference"]')
         ?.textContent.replace(/\s+/gu, ' ')
         .trim(),
-    ).toBe('Erreur 503 · réf. REQ-7F3A');
-    expect(element.textContent).not.toContain('État des services');
-    button(element, 'Réessayer')?.click();
+    ).toBe('Error 503 · ref. REQ-7F3A');
+    expect(element.querySelector('[data-testid="route-error-status"]')).toBeNull();
+    button(element, 'Retry')?.click();
     await settle(harness);
 
     expect(loads.count).toBe(2);
     expect(element.querySelector('[data-testid="loaded"]')?.textContent).toBe('Sprint 14');
     expect(element.querySelector('[data-testid="shell"]')).not.toBeNull();
+  });
+
+  it('titles the unavailable state after its route and links to a configured status page', async () => {
+    config.set({
+      apiUrl: 'http://api.cadenway.localhost',
+      statusUrl: 'https://status.cadenway.test',
+    });
+    loads.failures.push(new UnavailableRouteError(503, null));
+
+    const { element }: { harness: RouterTestingHarness; element: HTMLElement } =
+      await open('/atelier-nord/tasks');
+
+    expect(heading(element)).toBe('Could not load the tasks');
+    expect(element.textContent).toContain(
+      'The server did not answer in time. Your data is not lost: try again in a moment.',
+    );
+    expect(button(element, 'Retry')).toBeDefined();
+    const status: HTMLAnchorElement | null = element.querySelector(
+      '[data-testid="route-error-status"]',
+    );
+    expect(status?.textContent.trim()).toBe('Service status');
+    expect(status?.getAttribute('href')).toBe('https://status.cadenway.test');
+    expect(status?.getAttribute('target')).toBe('_blank');
   });
 
   it('renders any other failure as unavailable, and Retry keeps failing until the read succeeds', async () => {
@@ -345,14 +382,14 @@ describe('ERRORS_ROUTES and the route error boundary', () => {
     const { harness, element }: { harness: RouterTestingHarness; element: HTMLElement } =
       await open('/atelier-nord/page');
 
-    expect(heading(element)).toBe('Impossible de charger cette page');
+    expect(heading(element)).toBe('Could not load this page');
     expect(element.querySelector('[data-testid="route-error-reference"]')).toBeNull();
-    button(element, 'Réessayer')?.click();
+    button(element, 'Retry')?.click();
     await settle(harness);
     expect(loads.count).toBe(2);
-    expect(heading(element)).toBe('Impossible de charger cette page');
+    expect(heading(element)).toBe('Could not load this page');
 
-    button(element, 'Réessayer')?.click();
+    button(element, 'Retry')?.click();
     await settle(harness);
     expect(loads.count).toBe(3);
     expect(element.querySelector('[data-testid="loaded"]')?.textContent).toBe('Sprint 14');

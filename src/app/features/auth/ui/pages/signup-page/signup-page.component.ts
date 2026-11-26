@@ -103,7 +103,7 @@ interface SignupModel {
  * @description
  * Account creation of `Inscription.dc.html` (`/signup`): social providers, then name, work address,
  * password with `cw-password-strength` and the acceptance of the terms. A taken address shows
- * « Un compte existe déjà avec cette adresse : connectez-vous » on the field; a created account
+ * `An account already uses this address: sign in.` on the field; a created account
  * opens `/signup/verify`.
  */
 @Component({
@@ -209,7 +209,7 @@ export class SignupPage {
    */
   protected readonly signupForm: FieldTree<SignupModel> = form(this.model, (path) => {
     required(path.name, { message: $localize`:@@auth.signup.name-required:Enter your full name.` });
-    const emailMessage: string = $localize`:@@auth.login.email-invalid:Enter the email address of your account, for example camille.martin@ateliernord.fr.`;
+    const emailMessage: string = $localize`:@@auth.signup.email-invalid:Enter your work email address, for example camille.martin@ateliernord.fr.`;
     required(path.email, { message: emailMessage });
     email(path.email, { message: emailMessage });
     const passwordMessage: string = $localize`:@@auth.signup.password-short:Choose a password of at least 12 characters.`;
@@ -270,7 +270,7 @@ export class SignupPage {
    * Method emailTaken
    *
    * @description
-   * Whether the address field holds the « adresse déjà utilisée » refusal, shown with its link.
+   * Whether the address field holds the `email-taken` refusal, shown with its link.
    *
    * @returns {boolean} Whether the address is taken.
    */

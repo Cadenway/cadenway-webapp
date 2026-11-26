@@ -42,6 +42,12 @@ import {
 import { type RealtimeChange, RealtimeConnection } from '@core/realtime';
 import {
   type CreatedTask,
+  STATUS_SETTLE_MS,
+  TaskActionsApi,
+  type TaskBulkAction,
+  type TaskBulkEntry,
+  type TaskBulkOutcome,
+  type TaskBulkSelection,
   TaskCreate,
   type TaskStatusChange,
   TaskStatusChangesStore,
@@ -54,9 +60,12 @@ import {
 
 import { ListTasksApi } from '../../data-access/services/list-tasks-api/list-tasks-api.service';
 import type {
+  ConfirmedTask,
   GroupProgress,
+  ListActOutcome,
   ListRow,
   ListRowsQuery,
+  ListRowsSummary,
   ListTaskPage,
 } from '../../models/list-rows/list-rows.interface';
 import type {
@@ -68,6 +77,7 @@ import {
   groupValuesOf,
   nextGroup,
   rowsKey,
+  settleLimited,
   startGroups,
 } from '../../utils/list-rows/list-rows.util';
 
@@ -108,17 +118,319 @@ const ENTER_MS: number = 520;
  * @description
  * Time between the first realtime notice or completed status write of a window and the read of the
  * rows it gathers, in milliseconds: one read per window, so a steady flow of changes cannot hold
- * the rows back, and wide enough that the reads leave room for « load more » while it lasts.
+ * the rows back, and wide enough that the reads leave room for loading more while it lasts.
  *
  * @type {number}
  */
 const NOTICE_REFRESH_MS: number = 1000;
 
 /**
+ * Type RowChanges
+ *
+ * @description
+ * The fields of a task an action of the view changes before the gateway confirms it.
+ *
+ * @type {Partial<Pick<TaskSummary, 'status' | 'cancelReason' | 'priority' | 'assigneeIds' | 'listId'>>}
+ */
+type RowChanges = Partial<
+  Pick<TaskSummary, 'status' | 'cancelReason' | 'priority' | 'assigneeIds' | 'listId'>
+>;
+
+/**
+ * Interface RowPatch
+ *
+ * @description
+ * The optimistic change one action of the view made to one task: shown at once, filed (grouped)
+ * 460 ms after the task's last action, removed alone when its action fails, and applied once
+ * confirmed until a read of the task reaches the version the gateway returned, so that read wins
+ * over it. A task's patches apply in the order of their actions.
+ */
+interface RowPatch {
+  // #region Properties
+  /**
+   * Property seq
+   *
+   * @description
+   * Sequence number of the action that made the change.
+   *
+   * @type {number}
+   * @readonly
+   */
+  readonly seq: number;
+
+  /**
+   * Property pending
+   *
+   * @description
+   * Whether the action is not answered yet.
+   *
+   * @type {boolean}
+   * @readonly
+   */
+  readonly pending: boolean;
+
+  /**
+   * Property until
+   *
+   * @description
+   * Once confirmed, the version the gateway returned: a read at that version or later replaces
+   * the change. Null when the gateway returned none: the next read begun after the confirmation
+   * replaces it.
+   *
+   * @type {number | null}
+   * @readonly
+   */
+  readonly until: number | null;
+
+  /**
+   * Property reads
+   *
+   * @description
+   * Reads of the rows begun when the action was confirmed; a later read replaces a change without
+   * a returned version.
+   *
+   * @type {number}
+   * @readonly
+   */
+  readonly reads: number;
+
+  /**
+   * Property changes
+   *
+   * @description
+   * The changed fields.
+   *
+   * @type {RowChanges}
+   * @readonly
+   */
+  readonly changes: RowChanges;
+
+  /**
+   * Property filed
+   *
+   * @description
+   * Whether the row is already grouped by the changed fields.
+   *
+   * @type {boolean}
+   * @readonly
+   */
+  readonly filed: boolean;
+
+  /**
+   * Property hidden
+   *
+   * @description
+   * Whether the row leaves the view at once (moved to another list or deleted).
+   *
+   * @type {boolean}
+   * @readonly
+   */
+  readonly hidden: boolean;
+  // #endregion
+}
+
+/**
+ * Interface AppliedPatch
+ *
+ * @description
+ * What the patches still applied to a task change, merged in the order of their actions.
+ */
+interface AppliedPatch {
+  // #region Properties
+  /**
+   * Property changes
+   *
+   * @description
+   * Every applied change.
+   *
+   * @type {RowChanges}
+   * @readonly
+   */
+  readonly changes: RowChanges;
+
+  /**
+   * Property filedChanges
+   *
+   * @description
+   * The applied changes the row is already grouped by.
+   *
+   * @type {RowChanges}
+   * @readonly
+   */
+  readonly filedChanges: RowChanges;
+
+  /**
+   * Property hidden
+   *
+   * @description
+   * Whether an applied change takes the row out of the view.
+   *
+   * @type {boolean}
+   * @readonly
+   */
+  readonly hidden: boolean;
+  // #endregion
+}
+
+/**
+ * Interface QueuedAct
+ *
+ * @description
+ * An action waiting for an earlier write of one of its tasks to end before it is sent.
+ */
+interface QueuedAct {
+  // #region Properties
+  /**
+   * Property seq
+   *
+   * @description
+   * Sequence number of the action.
+   *
+   * @type {number}
+   * @readonly
+   */
+  readonly seq: number;
+
+  /**
+   * Property status
+   *
+   * @description
+   * Whether the action changes the status: a newer status change of the same task replaces it.
+   *
+   * @type {boolean}
+   * @readonly
+   */
+  readonly status: boolean;
+
+  /**
+   * Property superseded
+   *
+   * @description
+   * Keys of its tasks a newer status change took over; they are not sent.
+   *
+   * @type {Set<string>}
+   * @readonly
+   */
+  readonly superseded: Set<string>;
+  // #endregion
+}
+
+/**
+ * Function patchApplies
+ *
+ * @description
+ * Whether a patch still shows over a task read at a version: always while its action is pending,
+ * then until a read reaches the version the gateway returned.
+ *
+ * @param {RowPatch} patch - The patch.
+ * @param {number} version - Version of the task as read.
+ * @returns {boolean} Whether it applies.
+ */
+function patchApplies(patch: RowPatch, version: number): boolean {
+  return patch.pending || patch.until === null || version < patch.until;
+}
+
+/**
+ * Function appliedOf
+ *
+ * @description
+ * Merges the patches of a task that still apply, oldest action first; null when none applies.
+ *
+ * @param {readonly RowPatch[] | undefined} patches - The task's patches, oldest first.
+ * @param {number} version - Version of the task as read.
+ * @returns {AppliedPatch | null} The merged changes.
+ */
+function appliedOf(patches: readonly RowPatch[] | undefined, version: number): AppliedPatch | null {
+  const applied: readonly RowPatch[] = (patches ?? []).filter((patch: RowPatch) =>
+    patchApplies(patch, version),
+  );
+  if (applied.length === 0) return null;
+  return {
+    changes: Object.assign({}, ...applied.map((patch: RowPatch) => patch.changes)) as RowChanges,
+    filedChanges: Object.assign(
+      {},
+      ...applied.filter((patch: RowPatch) => patch.filed).map((patch: RowPatch) => patch.changes),
+    ) as RowChanges,
+    hidden: applied.some((patch: RowPatch): boolean => patch.hidden),
+  };
+}
+
+/**
+ * Constant NO_OUTCOME
+ *
+ * @description
+ * The outcome of an action whose every task a newer status change replaced.
+ *
+ * @type {ListActOutcome}
+ */
+const NO_OUTCOME: ListActOutcome = {
+  affected: 0,
+  done: [],
+  failed: [],
+  unknown: [],
+  notSent: [],
+  before: {},
+  after: {},
+  changed: [],
+};
+
+/**
+ * Constant WRITE_CALLS
+ *
+ * @description
+ * Reminder and restore calls in flight at most for one action of the view.
+ *
+ * @type {number}
+ */
+const WRITE_CALLS: number = 4;
+
+/**
+ * Function changesOf
+ *
+ * @description
+ * What an action changes on a task, shown before the gateway confirms it; null for an action
+ * that changes nothing visible in the row (a copy).
+ *
+ * @param {TaskSummary} task - The task.
+ * @param {TaskBulkAction} action - The action.
+ * @returns {{ changes: RowChanges; hidden: boolean } | null} The changes.
+ */
+function changesOf(
+  task: TaskSummary,
+  action: TaskBulkAction,
+): { changes: RowChanges; hidden: boolean } | null {
+  switch (action.type) {
+    case 'status':
+      return {
+        changes: { status: action.status, cancelReason: action.cancelReason ?? null },
+        hidden: false,
+      };
+    case 'priority':
+      return { changes: { priority: action.priority }, hidden: false };
+    case 'assign':
+      return {
+        changes: { assigneeIds: [...new Set([...task.assigneeIds, action.userId])] },
+        hidden: false,
+      };
+    case 'unassign':
+      return {
+        changes: { assigneeIds: task.assigneeIds.filter((id: string) => id !== action.userId) },
+        hidden: false,
+      };
+    case 'move':
+      return { changes: { listId: action.listId }, hidden: true };
+    case 'trash':
+      return { changes: {}, hidden: true };
+    case 'duplicate':
+      return null;
+  }
+}
+
+/**
  * Constant CHILD_READS
  *
  * @description
- * Subtask reads in flight at most when « Dépliées sous leur parent » opens every task.
+ * Subtask reads in flight at most when `Unfolded under their parent` opens every task.
  *
  * @type {number}
  */
@@ -174,6 +486,17 @@ export interface RowsSnapshot {
    * @readonly
    */
   readonly key: string;
+
+  /**
+   * Property generation
+   *
+   * @description
+   * Rank of the read among the reads of the rows begun by the store, from 1.
+   *
+   * @type {number}
+   * @readonly
+   */
+  readonly generation: number;
 
   /**
    * Property groups
@@ -265,7 +588,7 @@ interface ListRowsState {
    * Property moreFailed
    *
    * @description
-   * Whether reading the next page failed; the page offers « Réessayer ».
+   * Whether reading the next page failed; the page offers `Retry`.
    *
    * @type {boolean}
    * @readonly
@@ -392,6 +715,17 @@ interface ListRowsState {
    * @readonly
    */
   readonly _hidden: readonly string[];
+
+  /**
+   * Property _patches
+   *
+   * @description
+   * Optimistic changes of the view's actions, by task key, oldest action first.
+   *
+   * @type {Readonly<Partial<Record<string, readonly RowPatch[]>>>}
+   * @readonly
+   */
+  readonly _patches: Readonly<Partial<Record<string, readonly RowPatch[]>>>;
   // #endregion
 }
 
@@ -399,7 +733,7 @@ interface ListRowsState {
  * Constant initialState
  *
  * @description
- * Nothing read, « Repliées sous leur parent ».
+ * Nothing read, `Folded under their parent`.
  *
  * @type {ListRowsState}
  */
@@ -417,6 +751,7 @@ const initialState: ListRowsState = {
   _children: {},
   _entering: [],
   _hidden: [],
+  _patches: {},
 };
 
 /**
@@ -436,7 +771,7 @@ function groupingOf(query: ListRowsQuery | null | undefined): ListGroupQuery['gr
  * Function collapsedOf
  *
  * @description
- * The folded groups of a grouping: what the user folded, else « Annulé » when grouping by
+ * The folded groups of a grouping: what the user folded, else `Cancelled` when grouping by
  * status (collapsed by default, as in `App.dc.html`).
  *
  * @param {Readonly<Partial<Record<string, readonly string[]>>>} collapsed - Folded groups by grouping.
@@ -482,6 +817,7 @@ function uniqueTasks(tasks: readonly TaskSummary[]): TaskSummary[] {
  * @param {readonly string[]} collapsed - Folded group values.
  * @param {readonly string[]} hidden - Hidden status group values.
  * @param {number} want - Tasks of open groups to read at least.
+ * @param {number} generation - Rank of the read.
  * @param {AbortSignal} signal - Cancels a superseded read.
  * @returns {Promise<RowsSnapshot>} What was read.
  */
@@ -491,6 +827,7 @@ async function loadSnapshot(
   collapsed: readonly string[],
   hidden: readonly string[],
   want: number,
+  generation: number,
   signal: AbortSignal,
 ): Promise<RowsSnapshot> {
   const grouping: ListGroupQuery | null = params.groupQuery;
@@ -526,7 +863,7 @@ async function loadSnapshot(
     (groupKeys[target.value] ??= []).push(...page.items.map((task: TaskSummary) => task.key));
     if (!folded) shown += page.items.length;
   }
-  return { key: params.key, groups, tasks, groupKeys };
+  return { key: params.key, generation, groups, tasks, groupKeys };
 }
 
 /**
@@ -597,7 +934,7 @@ export interface ListRowsStoreInstance {
    * Property collapsed
    *
    * @description
-   * Folded group values; « Annulé » by default when grouping by status.
+   * Folded group values; `Cancelled` by default when grouping by status.
    *
    * @type {Signal<readonly string[]>}
    * @readonly
@@ -669,6 +1006,18 @@ export interface ListRowsStoreInstance {
    * @readonly
    */
   readonly moreFailed: Signal<boolean>;
+
+  /**
+   * Property summary
+   *
+   * @description
+   * The count of tasks the view shows (the sum of its groups' counts, null while one is unknown
+   * or when grouped by assignee) and whether the tasks read have subtasks, for the list page.
+   *
+   * @type {Signal<ListRowsSummary>}
+   * @readonly
+   */
+  readonly summary: Signal<ListRowsSummary>;
   // #endregion
 
   // #region Methods
@@ -736,7 +1085,7 @@ export interface ListRowsStoreInstance {
    * Method retryMore
    *
    * @description
-   * « Réessayer » after a failed next page.
+   * `Retry` after a failed next page.
    */
   retryMore(): void;
 
@@ -754,7 +1103,7 @@ export interface ListRowsStoreInstance {
    * Method retrySubtasks
    *
    * @description
-   * « Réessayer » after a failed read of the subtasks of a task.
+   * `Retry` after a failed read of the subtasks of a task.
    *
    * @param {string} taskKey - The parent task.
    */
@@ -767,6 +1116,64 @@ export interface ListRowsStoreInstance {
    * Reads the rows again in place, as deep as they are read; queued while a read runs.
    */
   reload(): void;
+
+  /**
+   * Method act
+   *
+   * @description
+   * Applies an action of the row menu or of the selection bar to tasks shown by the view, through
+   * `TaskActionsApi.bulk` (chunks of 50). Writes are serialized per task: an action waits until
+   * the earlier actions of its tasks are answered, then sends each task at its newest known
+   * version (the last read, or the version the gateway returned to an earlier action), never at a
+   * version the gateway already superseded. A status change still waiting is replaced by a newer
+   * status change of the same task and that task is not sent with it. The rows change at once:
+   * the icon, the word or the people at once, the group 460 ms after the task's last action (at
+   * once with reduced motion); a moved or deleted row leaves at once. A refused, uncertain or
+   * unsent task loses only this action's change. The rows are read again when something may have
+   * changed. The promise never rejects.
+   *
+   * With `expected` (an `Undo`, from the `after` of the action it undoes), a task is sent only
+   * while its newest known version is still the expected one, and at that version, so a change
+   * the view has not read yet makes the gateway refuse it (`412`). A task known to have changed
+   * since, by this view or a read, is not sent and is reported in `changed`.
+   *
+   * @param {readonly TaskSummary[]} tasks - The tasks, as shown.
+   * @param {TaskBulkAction} action - The action.
+   * @param {Readonly<Partial<Record<string, number>>>} [expected] - The version each task must
+   * still be at; a task without one counts as changed.
+   * @returns {Promise<ListActOutcome>} What was applied, refused, uncertain, not sent or changed,
+   * the sent tasks as confirmed before the action and the versions it left them at.
+   */
+  act(
+    tasks: readonly TaskSummary[],
+    action: TaskBulkAction,
+    expected?: Readonly<Partial<Record<string, number>>>,
+  ): Promise<ListActOutcome>;
+
+  /**
+   * Method remind
+   *
+   * @description
+   * Sets the caller's reminder of each task at the same moment, four calls at a time; resolves
+   * with the keys whose reminder was recorded.
+   *
+   * @param {readonly string[]} taskKeys - The tasks.
+   * @param {Date} at - When to remind.
+   * @returns {Promise<readonly string[]>} The recorded keys.
+   */
+  remind(taskKeys: readonly string[], at: Date): Promise<readonly string[]>;
+
+  /**
+   * Method restore
+   *
+   * @description
+   * Takes deleted tasks out of the trash (the `Undo` of a deletion), four calls at a time, then
+   * reads the rows again; resolves with whether every entry came back.
+   *
+   * @param {readonly string[]} entryIds - The trash entries.
+   * @returns {Promise<boolean>} Whether all were restored.
+   */
+  restore(entryIds: readonly string[]): Promise<boolean>;
   // #endregion
 }
 
@@ -774,7 +1181,7 @@ export interface ListRowsStoreInstance {
  * Function createListRowsStore
  *
  * @description
- * Creates the store of the rows of the « Liste » view.
+ * Creates the store of the rows of the `List` view.
  *
  * @returns {Type<ListRowsStoreInstance>} Injectable store constructor.
  */
@@ -794,6 +1201,7 @@ function createListRowsStore(): Type<ListRowsStoreInstance> {
         },
         { equal: (a: RowsParams | undefined, b: RowsParams | undefined) => a?.key === b?.key },
       );
+      let reads: number = 0;
       const primary: ResourceRef<RowsSnapshot | undefined> = resource({
         params: () => params(),
         loader: ({
@@ -825,12 +1233,15 @@ function createListRowsStore(): Type<ListRowsStoreInstance> {
                 )
               : 0,
           );
-          return loadSnapshot(api, read, collapsed, hidden, want, abortSignal);
+          return loadSnapshot(api, read, collapsed, hidden, want, ++reads, abortSignal);
         },
       });
       return {
         _api: api,
+        _actions: inject(TaskActionsApi),
+        _destroyRef: inject(DestroyRef),
         _reloadRequests: new Subject<void>(),
+        _reads: (): number => reads,
         _params: params,
         _status: inject(TaskStatusChangesStore),
         _reduceMotion: inject(MediaMatcher).matchMedia('(prefers-reduced-motion: reduce)').matches,
@@ -840,11 +1251,17 @@ function createListRowsStore(): Type<ListRowsStoreInstance> {
       };
     }),
     withComputed((store) => {
+      const patchOf: (task: TaskSummary) => AppliedPatch | null = (
+        task: TaskSummary,
+      ): AppliedPatch | null =>
+        appliedOf(store._patches()[task.key], store._status.settledTask(task).version);
       const effective: (task: TaskSummary) => TaskSummary = (task: TaskSummary): TaskSummary => {
         const settled: TaskSummary = store._status.settledTask(task);
-        return store._reduceMotion
+        const shown: TaskSummary = store._reduceMotion
           ? { ...settled, status: store._status.displayedStatus(settled) }
           : settled;
+        const patch: AppliedPatch | null = patchOf(task);
+        return patch ? { ...shown, ...patch.filedChanges } : shown;
       };
       const groupBy: () => ListGroupQuery['groupBy'] | null = () => groupingOf(store._params());
       return {
@@ -880,7 +1297,11 @@ function createListRowsStore(): Type<ListRowsStoreInstance> {
             group: string,
             depth: number,
           ): void => {
-            const shown: TaskSummary = effective(task);
+            const patch: AppliedPatch | null = patchOf(task);
+            if (patch?.hidden) return;
+            const shown: TaskSummary = patch
+              ? { ...effective(task), ...patch.changes }
+              : effective(task);
             const expandable: boolean =
               mode !== 'separate' && depth < SUBTASK_DEPTH && shown.subtasks.total > 0;
             const expanded: boolean = expandable && (open[shown.key] ?? mode === 'expanded');
@@ -902,7 +1323,7 @@ function createListRowsStore(): Type<ListRowsStoreInstance> {
               id: grouping === 'assignee' ? `${group}/${shown.key}` : shown.key,
               group,
               task: shown,
-              status: store._status.displayedStatus(shown),
+              status: patch?.changes.status ?? store._status.displayedStatus(shown),
               depth,
               canAddSubtask: actualDepth < SUBTASK_DEPTH && shown.subtasks.total < 25,
               expandable,
@@ -963,6 +1384,23 @@ function createListRowsStore(): Type<ListRowsStoreInstance> {
         !store.moreFailed(),
       empty: (): boolean =>
         store.hasCurrentSnapshot() && store.rows().length === 0 && !store._hasMoreVisible(),
+      summary: (): ListRowsSummary => {
+        if (!store.hasCurrentSnapshot()) return { visibleCount: null, hasSubtasks: null };
+        const counts: readonly (number | null)[] =
+          store.groupBy() === 'assignee'
+            ? [null]
+            : store._groups().map((group: GroupProgress): number | null => group.count);
+        return {
+          visibleCount: counts.includes(null)
+            ? null
+            : counts.reduce((sum: number, count: number | null): number => sum + (count ?? 0), 0),
+          hasSubtasks: store
+            .entities()
+            .some(
+              (task: TaskSummary): boolean => task.subtasks.total > 0 || task.parentKey !== null,
+            ),
+        };
+      },
     })),
     withMethods((store) => {
       let moreController: AbortController | null = null;
@@ -1100,15 +1538,205 @@ function createListRowsStore(): Type<ListRowsStoreInstance> {
       const reload: () => void = (): void => {
         if (!store.primary.reload() && store._params() !== undefined) reloadQueued = true;
       };
+      const timers: Set<ReturnType<typeof setTimeout>> = new Set<ReturnType<typeof setTimeout>>();
+      store._destroyRef.onDestroy((): void => {
+        for (const timer of timers) clearTimeout(timer);
+      });
+      const later: (ms: number, run: () => void) => void = (ms: number, run: () => void): void => {
+        const timer: ReturnType<typeof setTimeout> = setTimeout((): void => {
+          timers.delete(timer);
+          run();
+        }, ms);
+        timers.add(timer);
+      };
+      const editPatches: (
+        keys: readonly string[],
+        edit: (patches: readonly RowPatch[], key: string) => readonly RowPatch[],
+      ) => void = (
+        keys: readonly string[],
+        edit: (patches: readonly RowPatch[], key: string) => readonly RowPatch[],
+      ): void => {
+        if (keys.length === 0) return;
+        patchState(store, (state: ListRowsState): Partial<ListRowsState> => {
+          const edited: Map<string, readonly RowPatch[]> = new Map<string, readonly RowPatch[]>(
+            keys.map((key: string): [string, readonly RowPatch[]] => [
+              key,
+              edit(state._patches[key] ?? [], key),
+            ]),
+          );
+          return {
+            _patches: Object.fromEntries(
+              [
+                ...Object.entries(state._patches).filter(
+                  ([key]: [string, readonly RowPatch[] | undefined]) => !edited.has(key),
+                ),
+                ...edited.entries(),
+              ].filter(
+                ([, patches]: [string, readonly RowPatch[] | undefined]) =>
+                  patches !== undefined && patches.length > 0,
+              ),
+            ),
+          };
+        });
+      };
+      const fileLater: (seq: number, keys: readonly string[]) => void = (
+        seq: number,
+        keys: readonly string[],
+      ): void => {
+        later(STATUS_SETTLE_MS, (): void => {
+          const filed: string[] = keys.filter(
+            (key: string): boolean => store._patches()[key]?.at(-1)?.seq === seq,
+          );
+          if (filed.length === 0) return;
+          editPatches(filed, (patches: readonly RowPatch[]) =>
+            patches.map((patch: RowPatch): RowPatch => ({ ...patch, filed: true })),
+          );
+          patchState(store, (state: ListRowsState): Partial<ListRowsState> => ({
+            _entering: [
+              ...state._entering.filter((key: string): boolean => !filed.includes(key)),
+              ...filed,
+            ],
+          }));
+          later(ENTER_MS, (): void => {
+            patchState(store, (state: ListRowsState): Partial<ListRowsState> => ({
+              _entering: state._entering.filter((key: string): boolean => !filed.includes(key)),
+            }));
+          });
+        });
+      };
+
+      const confirmedVersions: Map<string, number> = new Map<string, number>();
+      const notes: Map<string, { note: string | null; version: number }> = new Map<
+        string,
+        { note: string | null; version: number }
+      >();
+      const tails: Map<string, Promise<void>> = new Map<string, Promise<void>>();
+      const queued: Map<string, QueuedAct> = new Map<string, QueuedAct>();
+      let actions: number = 0;
+      // Incremented on every list or organization change of the reused route store, so a write
+      // captured before a change never starts after it, even once the user is back on its list.
+      let generation: number = 0;
+      // A write queued behind others must not start once its view is gone, its organization changed
+      // (the organization pin is read when each request leaves) or the reused route store moved to
+      // another list, even if it came back since.
+      const notSent: Error = new Error('The list view, its list or its organization changed.');
+      const sameContext: () => () => boolean = (): (() => boolean) => {
+        const organizationId: string | undefined = store._params()?.organizationId;
+        const listId: string | undefined = store._params()?.listId;
+        const captured: number = generation;
+        return (): boolean =>
+          !store._destroyRef.destroyed &&
+          generation === captured &&
+          store._params()?.organizationId === organizationId &&
+          store._params()?.listId === listId;
+      };
+
+      const loadedTask: (key: string) => TaskSummary | undefined = (
+        key: string,
+      ): TaskSummary | undefined =>
+        store.entityMap()[key] ??
+        Object.values(store._children())
+          .flatMap((rows: ChildRows | undefined): readonly TaskSummary[] => rows?.tasks ?? [])
+          .find((task: TaskSummary): boolean => task.key === key);
+      const versionOf: (task: TaskSummary) => number = (task: TaskSummary): number => {
+        const loaded: TaskSummary | undefined = loadedTask(task.key);
+        return Math.max(
+          task.version,
+          loaded ? store._status.settledTask(loaded).version : 0,
+          confirmedVersions.get(task.key) ?? 0,
+        );
+      };
+      const shownOf: (task: TaskSummary) => TaskSummary = (task: TaskSummary): TaskSummary => {
+        const loaded: TaskSummary = store._status.settledTask(loadedTask(task.key) ?? task);
+        const applied: AppliedPatch | null = appliedOf(store._patches()[task.key], loaded.version);
+        return applied ? { ...loaded, ...applied.changes } : loaded;
+      };
+      const confirmedOf: (task: TaskSummary) => ConfirmedTask = (
+        task: TaskSummary,
+      ): ConfirmedTask => {
+        const loaded: TaskSummary = store._status.settledTask(loadedTask(task.key) ?? task);
+        const changes: RowChanges = Object.assign(
+          {},
+          ...(store._patches()[task.key] ?? [])
+            .filter((patch: RowPatch): boolean => !patch.pending)
+            .filter((patch: RowPatch): boolean => patchApplies(patch, loaded.version))
+            .map((patch: RowPatch) => patch.changes),
+        ) as RowChanges;
+        const merged: TaskSummary = { ...loaded, ...changes };
+        const note: { note: string | null; version: number } | undefined = notes.get(task.key);
+        return {
+          ...merged,
+          version: versionOf(task),
+          cancelNote:
+            merged.status === 'cancelled' && note && note.version >= loaded.version
+              ? note.note
+              : null,
+        };
+      };
+      const record: (
+        action: TaskBulkAction,
+        seq: number,
+        outcome: TaskBulkOutcome,
+        before: Readonly<Partial<Record<string, ConfirmedTask>>>,
+        skipped: readonly string[],
+      ) => void = (
+        action: TaskBulkAction,
+        seq: number,
+        outcome: TaskBulkOutcome,
+        before: Readonly<Partial<Record<string, ConfirmedTask>>>,
+        skipped: readonly string[],
+      ): void => {
+        const returned: Map<string, number | null> = new Map<string, number | null>(
+          outcome.done.map((entry: TaskBulkEntry): [string, number | null] => [
+            entry.taskKey,
+            entry.version,
+          ]),
+        );
+        for (const [key, version] of returned) {
+          if (version !== null) {
+            confirmedVersions.set(key, Math.max(confirmedVersions.get(key) ?? 0, version));
+          }
+          if (action.type !== 'status') continue;
+          if (action.status === 'cancelled') {
+            notes.set(key, {
+              note: action.cancelNote === '' ? null : (action.cancelNote ?? null),
+              version: version ?? before[key]?.version ?? 0,
+            });
+          } else {
+            notes.delete(key);
+          }
+        }
+        const reads: number = store._reads();
+        editPatches([...returned.keys()], (patches: readonly RowPatch[], key: string) =>
+          patches.map((patch: RowPatch): RowPatch =>
+            patch.seq === seq
+              ? { ...patch, pending: false, until: returned.get(key) ?? null, reads }
+              : patch,
+          ),
+        );
+        editPatches(
+          [
+            ...[...outcome.failed, ...outcome.unknown, ...outcome.notSent].map(
+              (item: TaskBulkSelection): string => item.taskKey,
+            ),
+            ...skipped,
+          ],
+          (patches: readonly RowPatch[]) =>
+            patches.filter((patch: RowPatch): boolean => patch.seq !== seq),
+        );
+      };
 
       return {
         _follow: signalMethod<RowsParams | undefined>((params: RowsParams | undefined): void => {
           if (!params) return;
           const scope: string = `${params.organizationId}\u0000${params.listId}`;
           if (scope === store._scope()) return;
+          generation++;
           abortMore();
           childQueue.length = 0;
           childVersions.clear();
+          confirmedVersions.clear();
+          notes.clear();
           patchState(store, removeAllEntities(), {
             _scope: scope,
             _key: null,
@@ -1117,6 +1745,7 @@ function createListRowsStore(): Type<ListRowsStoreInstance> {
             _children: {},
             _open: {},
             _entering: [],
+            _patches: {},
             loadingMore: false,
             moreFailed: false,
           });
@@ -1133,6 +1762,28 @@ function createListRowsStore(): Type<ListRowsStoreInstance> {
               loadingMore: false,
               moreFailed: false,
             });
+            editPatches(
+              Object.keys(store._patches()),
+              (patches: readonly RowPatch[], key: string) => {
+                const task: TaskSummary | undefined = loadedTask(key);
+                const version: number | null = task
+                  ? store._status.settledTask(task).version
+                  : null;
+                return patches.filter(
+                  (patch: RowPatch): boolean =>
+                    patch.pending ||
+                    (patch.until === null
+                      ? snapshot.generation <= patch.reads
+                      : version === null || version < patch.until),
+                );
+              },
+            );
+            for (const [key, version] of confirmedVersions) {
+              const task: TaskSummary | undefined = loadedTask(key);
+              if (task && store._status.settledTask(task).version >= version) {
+                confirmedVersions.delete(key);
+              }
+            }
             if (sameKey) {
               for (const taskKey of store._visibleChildren()) {
                 if (store._children()[taskKey]) readChildren(taskKey, true);
@@ -1222,12 +1873,19 @@ function createListRowsStore(): Type<ListRowsStoreInstance> {
           const effectiveKeys: ReadonlySet<string> = new Set(
             store
               .entities()
-              .filter(
-                (task) =>
+              .filter((task) => {
+                const own: AppliedPatch | null = appliedOf(
+                  store._patches()[task.key],
+                  store._status.settledTask(task).version,
+                );
+                if (own?.hidden) return false;
+                const status: string =
+                  own?.filedChanges.status ??
                   (store._reduceMotion
                     ? store._status.displayedStatus(task)
-                    : store._status.settledTask(task).status) === value,
-              )
+                    : store._status.settledTask(task).status);
+                return status === value;
+              })
               .map((task) => task.key),
           );
           return count + effectiveKeys.size - serverKeys.size;
@@ -1257,6 +1915,170 @@ function createListRowsStore(): Type<ListRowsStoreInstance> {
           readChildren(taskKey);
         },
         reload,
+        act(
+          tasks: readonly TaskSummary[],
+          action: TaskBulkAction,
+          expected?: Readonly<Partial<Record<string, number>>>,
+        ): Promise<ListActOutcome> {
+          const current: () => boolean = sameContext();
+          const seq: number = ++actions;
+          const changedSince: (task: TaskSummary) => boolean = (task: TaskSummary): boolean => {
+            if (!expected) return false;
+            const at: number | undefined = expected[task.key];
+            return at === undefined || versionOf(task) > at;
+          };
+          const unique: readonly TaskSummary[] = [
+            ...new Map(tasks.map((task: TaskSummary) => [task.key, task])).values(),
+          ];
+          const early: readonly TaskSummary[] = unique.filter(changedSince);
+          const targets: readonly TaskSummary[] = unique.filter(
+            (task: TaskSummary): boolean => !changedSince(task),
+          );
+          const changedOf: (stale: readonly TaskSummary[]) => TaskBulkSelection[] = (
+            stale: readonly TaskSummary[],
+          ): TaskBulkSelection[] =>
+            [...early, ...stale].map((task: TaskSummary): TaskBulkSelection => ({
+              taskKey: task.key,
+              version: versionOf(task),
+            }));
+          if (targets.length === 0) {
+            return Promise.resolve({ ...NO_OUTCOME, changed: changedOf([]) });
+          }
+          const keys: readonly string[] = targets.map((task: TaskSummary): string => task.key);
+          const entry: QueuedAct = {
+            seq,
+            status: action.type === 'status',
+            superseded: new Set<string>(),
+          };
+          const replaced: Map<string, number> = new Map<string, number>();
+          if (entry.status) {
+            for (const key of keys) {
+              const waiting: QueuedAct | undefined = queued.get(key);
+              if (!waiting?.status) continue;
+              waiting.superseded.add(key);
+              replaced.set(key, waiting.seq);
+            }
+          }
+          const changes: Map<string, { changes: RowChanges; hidden: boolean }> = new Map<
+            string,
+            { changes: RowChanges; hidden: boolean }
+          >();
+          for (const task of targets) {
+            const change: { changes: RowChanges; hidden: boolean } | null = changesOf(
+              shownOf(task),
+              action,
+            );
+            if (change) changes.set(task.key, change);
+          }
+          editPatches(
+            keys.filter((key: string): boolean => changes.has(key) || replaced.has(key)),
+            (patches: readonly RowPatch[], key: string): readonly RowPatch[] => {
+              const merged: readonly RowPatch[] = patches.map((patch: RowPatch): RowPatch =>
+                patch.seq === replaced.get(key) ? { ...patch, seq } : patch,
+              );
+              const change: { changes: RowChanges; hidden: boolean } | undefined = changes.get(key);
+              return change
+                ? [
+                    ...merged,
+                    {
+                      seq,
+                      pending: true,
+                      until: null,
+                      reads: 0,
+                      changes: change.changes,
+                      filed: store._reduceMotion || change.hidden,
+                      hidden: change.hidden,
+                    },
+                  ]
+                : merged;
+            },
+          );
+          if (changes.size > 0 && !store._reduceMotion) fileLater(seq, [...changes.keys()]);
+          for (const key of keys) queued.set(key, entry);
+
+          const send: () => Promise<ListActOutcome> = async (): Promise<ListActOutcome> => {
+            for (const key of keys) if (queued.get(key) === entry) queued.delete(key);
+            const unsuperseded: readonly TaskSummary[] = targets.filter(
+              (task: TaskSummary): boolean => !entry.superseded.has(task.key),
+            );
+            const late: readonly TaskSummary[] = unsuperseded.filter(changedSince);
+            const live: readonly TaskSummary[] = unsuperseded.filter(
+              (task: TaskSummary): boolean => !changedSince(task),
+            );
+            const skipped: readonly string[] = late.map((task: TaskSummary): string => task.key);
+            const changed: readonly TaskBulkSelection[] = changedOf(late);
+            if (live.length === 0) {
+              record(action, seq, NO_OUTCOME, {}, skipped);
+              return { ...NO_OUTCOME, changed };
+            }
+            const before: Readonly<Partial<Record<string, ConfirmedTask>>> = Object.fromEntries(
+              live.map((task: TaskSummary): [string, ConfirmedTask] => [
+                task.key,
+                confirmedOf(task),
+              ]),
+            );
+            const selection: TaskBulkSelection[] = live.map(
+              (task: TaskSummary): TaskBulkSelection => ({
+                taskKey: task.key,
+                version: expected?.[task.key] ?? before[task.key]?.version ?? task.version,
+              }),
+            );
+            const outcome: TaskBulkOutcome = await store._actions.bulk(selection, action, current);
+            const afterOf: () => Readonly<Partial<Record<string, number>>> = () =>
+              Object.fromEntries(
+                outcome.done.map((done: TaskBulkEntry): [string, number] => {
+                  const sent: ConfirmedTask | undefined = before[done.taskKey];
+                  return [done.taskKey, done.version ?? (sent ? versionOf(sent) : 0)];
+                }),
+              );
+            if (store._destroyRef.destroyed) {
+              return { ...outcome, before, after: afterOf(), changed };
+            }
+            record(action, seq, outcome, before, skipped);
+            if (current() && (outcome.done.length > 0 || outcome.unknown.length > 0)) reload();
+            return { ...outcome, before, after: afterOf(), changed };
+          };
+          const earlier: readonly Promise<void>[] = keys.flatMap((key: string): Promise<void>[] => {
+            const tail: Promise<void> | undefined = tails.get(key);
+            return tail ? [tail] : [];
+          });
+          const result: Promise<ListActOutcome> =
+            earlier.length > 0 ? Promise.all(earlier).then(send) : send();
+          const tail: Promise<void> = result.then(
+            (): void => undefined,
+            (): void => undefined,
+          );
+          for (const key of keys) tails.set(key, tail);
+          void tail.then((): void => {
+            for (const key of keys) if (tails.get(key) === tail) tails.delete(key);
+          });
+          return result;
+        },
+        async remind(taskKeys: readonly string[], at: Date): Promise<readonly string[]> {
+          const stillCurrent: () => boolean = sameContext();
+          const results: PromiseSettledResult<void>[] = await settleLimited(
+            taskKeys,
+            WRITE_CALLS,
+            (key: string): Promise<void> =>
+              stillCurrent() ? store._actions.remind(key, at) : Promise.reject(notSent),
+          );
+          return taskKeys.filter(
+            (_: string, index: number) => results[index].status === 'fulfilled',
+          );
+        },
+        async restore(entryIds: readonly string[]): Promise<boolean> {
+          const stillCurrent: () => boolean = sameContext();
+          const results: PromiseSettledResult<void>[] = await settleLimited(
+            entryIds,
+            WRITE_CALLS,
+            (id: string): Promise<void> =>
+              stillCurrent() ? store._actions.restore(id) : Promise.reject(notSent),
+          );
+          if (!store._destroyRef.destroyed) reload();
+          return results.every(
+            (result: PromiseSettledResult<void>) => result.status === 'fulfilled',
+          );
+        },
       };
     }),
     withHooks({
@@ -1328,7 +2150,7 @@ function createListRowsStore(): Type<ListRowsStoreInstance> {
  * Constant ListRowsStore
  *
  * @description
- * The rows of the « Liste » view, provided by the `list` route with `TaskStatusChangesStore`. Grouping is a filter: the primary read takes the group counts
+ * The rows of the `List` view, provided by the `list` route with `TaskStatusChangesStore`. Grouping is a filter: the primary read takes the group counts
  * (`countTaskGroups`), then cursor pages of each group in order (`queryListTasks` with the
  * group's value); `loadMore` reads the next page as the table scrolls, and a folded group reads
  * its first page only, so its header shows. A row is filed under its settled status, so it joins

@@ -72,7 +72,7 @@ export class ErrorRecovery {
    * @description
    * Restores the trash entry of a deleted task. An entry that is gone, already restored or that
    * the caller may not restore answers `404 trash-entry.not-found`, reported as `already-restored`
-   * (« Déjà restaurée » in the mockup).
+   * (`Already restored` in the mockup).
    *
    * @param {string} entryId - Trash entry of the task.
    * @returns {Observable<RestoreOutcome>} The outcome; other failures error.

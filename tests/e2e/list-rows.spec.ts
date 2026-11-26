@@ -5,7 +5,7 @@ const user = {
   id: '019a5f3c-8d2e-7c4a-9b1f-3e5d7a9c1b30',
   name: 'Camille Martin',
   email: 'camille.martin@ateliernord.fr',
-  language: 'fr',
+  language: 'en',
   displayName: null,
   jobTitle: null,
   timeZone: 'Europe/Paris',
@@ -25,11 +25,11 @@ const status = (name: string | null = null, hidden = false) => ({
   name,
   hidden,
 });
-const produit = {
+const product = {
   id: '019a6000-0000-7000-8000-000000000001',
-  name: 'Produit',
+  name: 'Product',
   prefix: 'CAD',
-  description: 'Le produit Cadenway.',
+  description: 'The Cadenway product.',
   icon: 'rocket',
   color: 'violet',
   visibility: 'organization',
@@ -52,14 +52,14 @@ const produit = {
 };
 const sprint14 = {
   id: '019a6000-0000-7000-8000-000000000101',
-  spaceId: produit.id,
+  spaceId: product.id,
   name: 'Sprint 14',
   icon: 'lightning',
   color: 'violet',
   sprint: {
     startDate: '2026-11-03',
     endDate: '2026-11-17',
-    goal: 'Livrer la connexion SSO et la page des quotas d’organisation.',
+    goal: 'Ship the SSO sign-in and the organization quotas page.',
   },
   createdAt: '2026-11-01T10:00:00Z',
   version: 4,
@@ -103,7 +103,7 @@ function toTask(task: StubTask) {
     labels: ['Auth'],
     parentKey: null,
     listId: sprint14.id,
-    spaceId: produit.id,
+    spaceId: product.id,
     subtaskCounts: { total: 0, closed: 0 },
     checklist: [],
     checklistCounts: { total: 0, done: 0 },
@@ -134,8 +134,8 @@ async function stubGateway(page: Page): Promise<Gateway> {
   const calls: string[] = [];
   const writes: { key: string; body: unknown }[] = [];
   const tasks: StubTask[] = [
-    { key: 'CAD-482', name: 'Refondre l’écran de connexion SSO', status: 'todo', version: 3 },
-    { key: 'CAD-483', name: 'Page des quotas d’organisation', status: 'todo', version: 2 },
+    { key: 'CAD-482', name: 'Redesign the SSO sign-in screen', status: 'todo', version: 3 },
+    { key: 'CAD-483', name: 'Organization quotas page', status: 'todo', version: 2 },
   ];
 
   await page.route('**/config.json', async (route: Route) => {
@@ -167,7 +167,7 @@ async function stubGateway(page: Page): Promise<Gateway> {
             ...atelierNord,
             description: null,
             website: null,
-            defaultLanguage: 'fr',
+            defaultLanguage: 'en',
             createdAt: '2026-11-01T10:00:00Z',
             version: 1,
           },
@@ -188,24 +188,24 @@ async function stubGateway(page: Page): Promise<Gateway> {
           },
         });
       case 'GET /v1/spaces':
-        return route.fulfill({ json: { items: [produit], nextCursor: null } });
-      case `GET /v1/spaces/${produit.id}`:
-        return route.fulfill({ json: produit });
-      case `GET /v1/spaces/${produit.id}/lists`:
+        return route.fulfill({ json: { items: [product], nextCursor: null } });
+      case `GET /v1/spaces/${product.id}`:
+        return route.fulfill({ json: product });
+      case `GET /v1/spaces/${product.id}/lists`:
         return route.fulfill({ json: { items: [sprint14], nextCursor: null } });
-      case `GET /v1/spaces/${produit.id}/task-templates`:
+      case `GET /v1/spaces/${product.id}/task-templates`:
         return route.fulfill({ json: { items: [], nextCursor: null } });
-      case `GET /v1/spaces/${produit.id}/overview`:
+      case `GET /v1/spaces/${product.id}/overview`:
         return route.fulfill({
           json: {
-            spaceId: produit.id,
+            spaceId: product.id,
             listCount: 1,
             taskCount: tasks.length,
             items: [{ list: sprint14, counts }],
             nextCursor: null,
           },
         });
-      case `GET /v1/spaces/${produit.id}/milestones`:
+      case `GET /v1/spaces/${product.id}/milestones`:
         return route.fulfill({ json: { items: [], nextCursor: null, total: 0 } });
       case 'GET /v1/me/favorites':
         return route.fulfill({ json: { items: [], nextCursor: null } });
@@ -309,13 +309,11 @@ test('the list view shows the rows of Sprint 14 under their status', async ({ pa
   const gateway = await stubGateway(page);
   await page.goto(`/atelier-nord/l/${sprint14.id}/list`);
 
-  const grid = page.getByRole('grid', { name: 'Tâches de la liste Sprint 14' });
+  const grid = page.getByRole('grid', { name: 'Tasks of the list Sprint 14' });
   await expect(grid).toBeVisible();
-  await expect(grid.getByText('Refondre l’écran de connexion SSO')).toBeVisible();
-  await expect(grid.getByText('Page des quotas d’organisation')).toBeVisible();
-  await expect(
-    grid.getByRole('button', { name: /Refondre l’écran de connexion SSO/ }),
-  ).toBeVisible();
+  await expect(grid.getByText('Redesign the SSO sign-in screen')).toBeVisible();
+  await expect(grid.getByText('Organization quotas page')).toBeVisible();
+  await expect(grid.getByRole('button', { name: /Redesign the SSO sign-in screen/ })).toBeVisible();
   expect(gateway.calls).toContain(`GET /v1/lists/${sprint14.id}/task-groups`);
   expect(gateway.calls).toContain(`QUERY /v1/lists/${sprint14.id}/tasks`);
 });
@@ -323,46 +321,46 @@ test('the list view shows the rows of Sprint 14 under their status', async ({ pa
 test('the row status icon opens the task without changing its status', async ({ page }) => {
   const gateway = await stubGateway(page);
   await page.goto(`/atelier-nord/l/${sprint14.id}/list`);
-  const grid = page.getByRole('grid', { name: 'Tâches de la liste Sprint 14' });
+  const grid = page.getByRole('grid', { name: 'Tasks of the list Sprint 14' });
   await grid
-    .getByRole('button', { name: /Refondre l’écran de connexion SSO/ })
+    .getByRole('button', { name: /Redesign the SSO sign-in screen/ })
     .locator('cw-status-icon')
     .click();
   await expect(page).toHaveURL(/task=CAD-482/);
   expect(gateway.writes).toEqual([]);
 });
 
-test('« Créer une tâche » creates in the list and the row shows', async ({ page }) => {
+test('Create a task creates in the list and the row shows', async ({ page }) => {
   const gateway = await stubGateway(page);
   await page.goto(`/atelier-nord/l/${sprint14.id}/list`);
-  const grid = page.getByRole('grid', { name: 'Tâches de la liste Sprint 14' });
-  await expect(grid.getByText('Refondre l’écran de connexion SSO')).toBeVisible();
+  const grid = page.getByRole('grid', { name: 'Tasks of the list Sprint 14' });
+  await expect(grid.getByText('Redesign the SSO sign-in screen')).toBeVisible();
 
   await page.getByTestId('view-create-task').click();
-  const dialog = page.getByRole('dialog', { name: 'Créer une tâche' });
+  const dialog = page.getByRole('dialog', { name: 'Create a task' });
   await expect(dialog.getByTestId('task-create-destination')).toContainText('Sprint 14');
-  await dialog.getByPlaceholder('Nom de la tâche').fill('Préparer la démo du sprint');
-  await dialog.getByRole('button', { name: /Créer la tâche/ }).click();
+  await dialog.getByPlaceholder('Task name').fill('Prepare the sprint demo');
+  await dialog.getByRole('button', { name: /Create the task/ }).click();
 
   await expect(dialog).toBeHidden();
-  await expect(grid.getByText('Préparer la démo du sprint')).toBeVisible();
+  await expect(grid.getByText('Prepare the sprint demo')).toBeVisible();
   expect(gateway.calls).toContain(`POST /v1/lists/${sprint14.id}/tasks`);
 });
 
 test('the selection marks its tasks done through the bulk action', async ({ page }) => {
   const gateway = await stubGateway(page);
   await page.goto(`/atelier-nord/l/${sprint14.id}/list`);
-  const grid = page.getByRole('grid', { name: 'Tâches de la liste Sprint 14' });
-  await expect(grid.getByText('Refondre l’écran de connexion SSO')).toBeVisible();
+  const grid = page.getByRole('grid', { name: 'Tasks of the list Sprint 14' });
+  await expect(grid.getByText('Redesign the SSO sign-in screen')).toBeVisible();
 
-  await grid.getByRole('checkbox', { name: 'Sélectionner CAD-482' }).click();
-  await grid.getByRole('checkbox', { name: 'Sélectionner CAD-483' }).click();
+  await grid.getByRole('checkbox', { name: 'Select CAD-482' }).click();
+  await grid.getByRole('checkbox', { name: 'Select CAD-483' }).click();
   const bar = page.getByTestId('bulk-bar');
-  await expect(bar).toContainText('2 sélectionnées');
-  await bar.getByRole('button', { name: 'Marquer terminé' }).click();
+  await expect(bar).toContainText('2 selected');
+  await bar.getByRole('button', { name: 'Mark done' }).click();
 
   await expect(
-    page.getByRole('region', { name: 'Notifications (F8)' }).getByText('2 tâches terminées'),
+    page.getByRole('region', { name: 'Notifications (F8)' }).getByText('2 tasks done'),
   ).toBeVisible();
   await expect(bar).toBeHidden();
   expect(gateway.writes).toContainEqual({

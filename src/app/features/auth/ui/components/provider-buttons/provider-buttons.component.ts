@@ -26,7 +26,7 @@ import type { FederatedProvider } from '../../../models/session/session.interfac
           (click)="selected.emit(provider.id)"
         >
           <ng-icon [name]="provider.icon" aria-hidden="true" />
-          {{ provider.label }}
+          <span class="leading-none [text-box:trim-both_cap_alphabetic]">{{ provider.label }}</span>
         </button>
       }
     </div>

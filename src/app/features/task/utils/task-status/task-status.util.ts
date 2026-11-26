@@ -17,7 +17,7 @@ import type { StatusOption } from '../../models/status-option/status-option.inte
  *
  * @description
  * Status the main part of the status split button moves a task to (`NEXT_STATUS` of
- * `App.dc.html`). À planifier, En attente, Bloqué and Annulé are only chosen by hand, and a
+ * `App.dc.html`). `To plan`, `Waiting`, `Blocked` and `Cancelled` are only chosen by hand, and a
  * closed task has no next status.
  *
  * @type {Readonly<Partial<Record<StatusKey, StatusKey>>>}
@@ -51,7 +51,7 @@ export function isMilestoneStatus(status: StatusKey): status is MilestoneStatusK
  *
  * @description
  * The status one click on the main part of the split button gives: `NEXT_STATUS` for a task, and
- * « Atteint » for an upcoming or at-risk milestone (`App.dc.html` near line 5358).
+ * `Reached` for an upcoming or at-risk milestone (`App.dc.html` near line 5358).
  *
  * @param {StatusKey} status - Status shown now.
  * @param {boolean} milestone - Whether the task is a milestone.

@@ -1,7 +1,7 @@
-<div class="flex w-full max-w-[420px] flex-col gap-5">
+<div class="flex w-full max-w-[400px] flex-col gap-5">
   <cw-card class="gap-6 p-6 sm:p-8">
     @if (unavailable()) {
-      <cw-alert variant="destructive" role="alert">
+      <cw-alert variant="destructive" class="[&>ng-icon]:text-inherit" role="alert">
         <cw-alert-description i18n="@@auth.reset.unavailable"
           >The password could not be changed. Try again in a moment.</cw-alert-description
         >
@@ -17,11 +17,13 @@
         </div>
       }
       @case ('expired') {
-        <div class="flex flex-col gap-4">
-          <div
-            class="flex size-10 items-center justify-center rounded-lg bg-grenat-soft text-grenat-text"
-          >
-            <ng-icon name="phosphorLinkBreakBold" class="size-5" aria-hidden="true" />
+        <div class="flex flex-col items-center gap-3 text-center">
+          <div class="flex size-10 items-center justify-center rounded-lg bg-muted">
+            <ng-icon
+              name="phosphorWarningCircleFill"
+              class="size-5 text-destructive"
+              aria-hidden="true"
+            />
           </div>
           <div class="flex flex-col gap-1">
             <h1 class="text-2xl font-semibold tracking-tight" i18n="@@auth.reset.expired-heading">
@@ -44,11 +46,9 @@
       }
       @case ('done') {
         @if (result(); as done) {
-          <div class="flex flex-col gap-4" aria-live="polite">
-            <div
-              class="flex size-10 items-center justify-center rounded-lg bg-jade-soft text-jade-text"
-            >
-              <ng-icon name="phosphorCheckCircleBold" class="size-5" aria-hidden="true" />
+          <div class="flex flex-col items-center gap-3 text-center" aria-live="polite">
+            <div class="flex size-10 items-center justify-center rounded-lg bg-muted">
+              <ng-icon name="phosphorCheckCircleFill" class="size-5 text-jade" aria-hidden="true" />
             </div>
             <div class="flex flex-col gap-1">
               <h1 class="text-2xl font-semibold tracking-tight" i18n="@@auth.reset.done-heading">
@@ -56,13 +56,14 @@
               </h1>
               <p class="text-sm text-muted-foreground">
                 @if (done.closedSessionCount === 1) {
-                  <span i18n="@@auth.reset.done-closed-one">Your other session was closed.</span>
+                  <span i18n="@@auth.reset.done-closed-one">Your other session was closed.</span
+                  >&ngsp;
                 } @else if (done.closedSessionCount > 1) {
                   <span i18n="@@auth.reset.done-closed"
                     >Your {{ done.closedSessionCount }} other sessions were closed.</span
-                  >
+                  >&ngsp;
                 } @else {
-                  <span i18n="@@auth.reset.done-open">Your other sessions stay open.</span>
+                  <span i18n="@@auth.reset.done-open">Your other sessions stay open.</span>&ngsp;
                 }
                 <span i18n="@@auth.reset.done-email"
                   >A confirmation email has just been sent to {{ done.email }}.</span
@@ -82,9 +83,11 @@
         }
       }
       @case ('form') {
-        <div class="flex flex-col gap-4">
-          <div class="flex size-10 items-center justify-center rounded-lg bg-muted text-foreground">
-            <ng-icon name="phosphorPasswordBold" class="size-5" aria-hidden="true" />
+        <div class="flex flex-col gap-3">
+          <div
+            class="flex size-10 items-center justify-center rounded-lg bg-muted text-muted-foreground"
+          >
+            <ng-icon name="phosphorLockKeyBold" class="size-5" aria-hidden="true" />
           </div>
           <div class="flex flex-col gap-1">
             <h1 class="text-2xl font-semibold tracking-tight" i18n="@@auth.reset.heading">
@@ -169,8 +172,11 @@
                 {{ resetForm.confirmation().errors()[0]?.message }}
               </p>
             } @else if (model().confirmation !== '') {
-              <p id="rp-confirm-help" class="flex items-center gap-1 text-xs text-jade-text">
-                <ng-icon name="phosphorCheckBold" class="size-3.5" aria-hidden="true" />
+              <p
+                id="rp-confirm-help"
+                class="flex items-center gap-1 text-xs font-medium text-jade-text"
+              >
+                <ng-icon name="phosphorCheckCircleFill" class="size-3.5" aria-hidden="true" />
                 <span i18n="@@auth.reset.match">The passwords match.</span>
               </p>
             }
@@ -181,10 +187,10 @@
               [id]="'rp-signout'"
               [formField]="resetForm.closeOtherSessions"
             />
-            <div class="flex flex-col gap-1">
+            <div class="flex flex-col gap-0.5">
               <label
                 for="rp-signout"
-                class="text-sm leading-none font-medium select-none"
+                class="text-sm leading-5 font-medium select-none"
                 i18n="@@auth.reset.close-others"
                 >Close my other sessions</label
               >
@@ -206,7 +212,6 @@
               cwButton
               type="submit"
               class="w-full"
-              [disabled]="resetForm().invalid() || resetForm().submitting()"
               [loading]="resetForm().submitting()"
               i18n="@@auth.reset.submit"
             >

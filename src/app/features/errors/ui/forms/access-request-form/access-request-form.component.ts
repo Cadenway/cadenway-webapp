@@ -37,7 +37,7 @@ interface AccessRequestModel {
  *
  * @description
  * The access request of the access-denied state (mockup `App.dc.html` lines 1508-1518): the
- * optional message « Message pour <prénom> (facultatif) », then the row with « Demander l’accès »
+ * optional message `Message for <first name> (optional)`, then the row with `Request access`
  * and the projected secondary action. Submitting a valid message emits it as typed; the page trims
  * and sends it. While `sending`, the button shows its spinner and ignores clicks.
  */

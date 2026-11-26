@@ -34,13 +34,13 @@ const atelierNord: OrganizationChoice = {
  * Constant invitation
  *
  * @description
- * Inès Robert's invitation to Coopérative Lumen.
+ * Inès Robert's invitation to Lumen Cooperative.
  *
  * @type {ReceivedInvitation}
  */
 const invitation: ReceivedInvitation = {
   id: 'invitation-lumen',
-  organizationName: 'Coopérative Lumen',
+  organizationName: 'Lumen Cooperative',
   role: 'member',
   inviterName: 'Inès Robert',
   expiresAt: '2026-11-15T10:00:00Z',
@@ -169,11 +169,11 @@ describe('OrganizationsPage', () => {
     const fake: FakeChooser = chooser();
     const { host, fixture, navigate }: Awaited<ReturnType<typeof render>> = await render(fake);
 
-    expect(host.textContent).toContain('Connecté en tant que camille.martin@ateliernord.fr.');
+    expect(host.textContent).toContain('Signed in as camille.martin@ateliernord.fr.');
     expect(
       host.querySelector('[data-testid="invitation-invitation-lumen"]')?.textContent,
-    ).toContain('Inès Robert vous invite comme Membre');
-    expect(host.textContent).toContain('Propriétaire · 18 membres · plan Équipe');
+    ).toContain('Inès Robert invites you as Member');
+    expect(host.textContent).toContain('Owner · 18 members · Team plan');
 
     Array.from(host.querySelectorAll('button'))
       .find((button: HTMLButtonElement) => button.textContent.includes('Atelier Nord'))
@@ -188,16 +188,16 @@ describe('OrganizationsPage', () => {
     fake.loadProblem.set({ status: 503, code: 'upstream.unavailable', remainingAttempts: null });
     const { host, fixture }: Awaited<ReturnType<typeof render>> = await render(fake);
 
-    expect(host.textContent).toContain('Impossible de charger cette page');
+    expect(host.textContent).toContain('This page could not be loaded');
     expect(host.textContent).not.toContain('Atelier Nord');
     Array.from(host.querySelectorAll('button'))
-      .find((button: HTMLButtonElement) => button.textContent.trim() === 'Réessayer')
+      .find((button: HTMLButtonElement) => button.textContent.trim() === 'Retry')
       ?.click();
     await fixture.whenStable();
     expect(fake.store['reload']).toHaveBeenCalledOnce();
   });
 
-  it('shows a failed invitation list inline with Réessayer instead of an empty list', async () => {
+  it('shows a failed invitation list inline with `Retry` instead of an empty list', async () => {
     const fake: FakeChooser = chooser();
     (fake.store['invitationsProblem'] as WritableSignal<AuthProblem | null>).set({
       status: 503,
@@ -207,7 +207,7 @@ describe('OrganizationsPage', () => {
     const { host, fixture }: Awaited<ReturnType<typeof render>> = await render(fake);
 
     const error: Element | null = host.querySelector('[data-testid="invitations-error"]');
-    expect(error?.textContent).toContain('Impossible de charger cette section');
+    expect(error?.textContent).toContain('This section could not be loaded');
     expect(host.querySelector('[data-testid="invitation-invitation-lumen"]')).toBeNull();
     expect(host.textContent).toContain('Atelier Nord');
     error?.querySelector('button')?.click();
@@ -227,7 +227,7 @@ describe('OrganizationsPage', () => {
     const { host, fixture, navigate }: Awaited<ReturnType<typeof render>> = await render(chooser());
 
     Array.from(host.querySelectorAll('button'))
-      .find((button: HTMLButtonElement) => button.textContent.includes('Se déconnecter'))
+      .find((button: HTMLButtonElement) => button.textContent.includes('Sign out'))
       ?.click();
     await fixture.whenStable();
 

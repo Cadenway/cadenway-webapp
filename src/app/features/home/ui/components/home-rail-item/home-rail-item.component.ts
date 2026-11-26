@@ -11,7 +11,7 @@ import {
  * Component HomeRailItem
  *
  * @description
- * The « Accueil » item at the top of the rail's applications (mockup `App.dc.html` line 38,
+ * The `Home` item at the top of the rail's applications (mockup `App.dc.html` line 38,
  * `railDefs`): a link to `/<slug>` whose house turns filled and violet, with `aria-current="page"`,
  * while the home screen is shown. It follows an organization switch in place through the
  * `workspace` port. Its host is `display: contents`, so its group joins the rail's layout.

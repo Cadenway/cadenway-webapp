@@ -1,8 +1,10 @@
 import {
   Component,
   computed,
+  inject,
   input,
   type InputSignal,
+  LOCALE_ID,
   output,
   type OutputEmitterRef,
   type Signal,
@@ -25,6 +27,7 @@ import { NgIcon } from '@ng-icons/core';
 import { layoutLabels } from '../../../constants/view-labels/view-labels.constants';
 import type { SavedView, ViewLayout } from '../../../models/saved-view/saved-view.interface';
 import { layoutIconName, lookIconName } from '../../../utils/look/look.util';
+import { viewSummary } from '../../../utils/view-summary/view-summary.util';
 
 /**
  * Constant SAVED_PREFIX
@@ -40,10 +43,10 @@ const SAVED_PREFIX: string = 'saved:';
  * Component ViewTabs
  *
  * @description
- * The view tabs of a list (`App.dc.html` lines 336-368): the standard views (only « Liste » in
- * step 4a), a tab per saved view with « , modifiée » when its settings changed, the options of the
- * applied saved view (« … » and a right click: open, save the changes, revert, rename, duplicate,
- * delete) and the « Vue » menu with « Enregistrer la vue actuelle… ». Presentational: picking a
+ * The view tabs of a list (`App.dc.html` lines 336-368): the standard views (only `List` in
+ * step 4a), a tab per saved view with `, modified` when its settings changed, the options of the
+ * applied saved view (`…` and a right click: open, save the changes, revert, rename, duplicate,
+ * delete) and the `View` menu with `Save the current view…`. Presentational: picking a
  * tab emits `layoutPicked` or `savedPicked`; the page navigates.
  */
 @Component({
@@ -160,7 +163,7 @@ export class ViewTabs {
    * Property saveRequested
    *
    * @description
-   * Emits on « Enregistrer la vue actuelle… ».
+   * Emits on `Save the current view…`.
    *
    * @type {OutputEmitterRef<void>}
    * @readonly
@@ -171,7 +174,7 @@ export class ViewTabs {
    * Property settingsSaved
    *
    * @description
-   * Emits on « Enregistrer les modifications ».
+   * Emits on `Save the changes`.
    *
    * @type {OutputEmitterRef<SavedView>}
    * @readonly
@@ -182,7 +185,7 @@ export class ViewTabs {
    * Property reverted
    *
    * @description
-   * Emits on « Rétablir ».
+   * Emits on `Revert`.
    *
    * @type {OutputEmitterRef<SavedView>}
    * @readonly
@@ -193,7 +196,7 @@ export class ViewTabs {
    * Property renameRequested
    *
    * @description
-   * Emits on « Renommer ».
+   * Emits on `Rename`.
    *
    * @type {OutputEmitterRef<SavedView>}
    * @readonly
@@ -204,7 +207,7 @@ export class ViewTabs {
    * Property duplicated
    *
    * @description
-   * Emits on « Dupliquer ».
+   * Emits on `Duplicate`.
    *
    * @type {OutputEmitterRef<SavedView>}
    * @readonly
@@ -215,7 +218,7 @@ export class ViewTabs {
    * Property deleted
    *
    * @description
-   * Emits on « Supprimer la vue ».
+   * Emits on `Delete the view`.
    *
    * @type {OutputEmitterRef<SavedView>}
    * @readonly
@@ -243,6 +246,17 @@ export class ViewTabs {
    * @readonly
    */
   protected readonly layoutNames: Readonly<Record<ViewLayout, string>> = layoutLabels();
+
+  /**
+   * Property locale
+   *
+   * @description
+   * Application locale, for the lower case of the tab tooltip's summary.
+   *
+   * @type {string}
+   * @readonly
+   */
+  private readonly locale: string = inject(LOCALE_ID);
 
   /**
    * Property value
@@ -302,10 +316,25 @@ export class ViewTabs {
   }
 
   /**
+   * Method viewTitle
+   *
+   * @description
+   * Tooltip of a saved view's tab: `Saved view · List · 1 filter` (`cfgSummary` of
+   * `App.dc.html`).
+   *
+   * @param {SavedView} view - The view.
+   * @returns {string} The tooltip.
+   */
+  protected viewTitle(view: SavedView): string {
+    const summary: string = viewSummary(view.layout, view.config, this.locale);
+    return $localize`:@@spaces.saved.tab-title:Saved view · ${summary}:summary:`;
+  }
+
+  /**
    * Method optionsLabel
    *
    * @description
-   * Name of a saved view's options button (« Options de la vue Bugs critiques »).
+   * Name of a saved view's options button (`Options of the view Critical bugs`).
    *
    * @param {SavedView} view - The view.
    * @returns {string} The label.

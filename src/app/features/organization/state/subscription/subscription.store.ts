@@ -14,7 +14,7 @@ import type { OrganizationSubscription } from '../../models/organization-subscri
  * Constant NEARLY_FULL
  *
  * @description
- * Share of the storage quota from which the « Stockage presque plein » banner shows.
+ * Share of the storage quota from which the `Storage nearly full` banner shows.
  *
  * @type {number}
  */
@@ -65,7 +65,7 @@ interface SubscriptionStoreInstance {
    * Property failed
    *
    * @description
-   * Whether the read failed for a reason worth a « Réessayer » (not a `403` or a `404`).
+   * Whether the read failed for a reason worth a `Retry` (not a `403` or a `404`).
    *
    * @type {Signal<boolean>}
    * @readonly

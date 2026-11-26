@@ -8,6 +8,8 @@ import {
 import { provideRouter, Router } from '@angular/router';
 import { describe, expect, it, type Mock, vi } from 'vitest';
 
+import { RuntimeConfigStore } from '@core/config';
+
 import { ErrorRecovery } from '../../../data-access/services/error-recovery/error-recovery.service';
 import { RouteErrorBoundary } from './route-error-boundary.component';
 
@@ -27,7 +29,11 @@ async function render(): Promise<{
 }> {
   TestBed.configureTestingModule({
     imports: [RouteErrorBoundary],
-    providers: [provideRouter([]), { provide: ErrorRecovery, useValue: {} }],
+    providers: [
+      provideRouter([]),
+      { provide: ErrorRecovery, useValue: {} },
+      { provide: RuntimeConfigStore, useValue: { config: () => ({ apiUrl: 'http://api.test' }) } },
+    ],
     deferBlockBehavior: DeferBlockBehavior.Manual,
   });
   const navigate: Mock = vi
@@ -48,7 +54,7 @@ describe('RouteErrorBoundary', () => {
 
     expect(
       (fixture.nativeElement as HTMLElement).querySelector('[role="status"]')?.textContent,
-    ).toContain('Chargement…');
+    ).toContain('Loading…');
   });
 
   it('keeps an inline Retry when its view cannot load', async () => {
@@ -58,7 +64,7 @@ describe('RouteErrorBoundary', () => {
     const alert: HTMLElement | null = (fixture.nativeElement as HTMLElement).querySelector(
       '[role="alert"]',
     );
-    expect(alert?.textContent).toContain('Impossible de charger cette page');
+    expect(alert?.textContent).toContain('Could not load this page');
     alert?.querySelector('button')?.click();
 
     expect(navigate).toHaveBeenCalledWith('/', { onSameUrlNavigation: 'reload' });

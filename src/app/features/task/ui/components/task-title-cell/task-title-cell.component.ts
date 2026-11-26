@@ -21,7 +21,7 @@ import type { TaskSummary } from '../../../models/task-summary/task-summary.inte
  *
  * @description
  * The name cell of a task row (`App.dc.html` lines 667-675): a button with the status icon and name (struck through when cancelled, muted when done), the key, the repeat icon of a
- * recurring task, the « Sous-tâche de CAD-… » hint, the subtasks done (« 1/3 », tree icon) or,
+ * recurring task, the `Subtask of CAD-…` hint, the subtasks done (`1/3`, tree icon) or,
  * without subtasks, the checklist entries checked (list icon), and the comment count when the
  * gateway gives it. The button emits `opened`. The Git chip is not
  * drawn: no API exists for it yet (B4).

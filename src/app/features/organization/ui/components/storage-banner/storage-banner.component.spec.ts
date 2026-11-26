@@ -133,9 +133,9 @@ describe('StorageBanner', () => {
     );
     const host: HTMLElement = fixture.nativeElement as HTMLElement;
 
-    expect(host.textContent).toContain('Stockage presque plein');
+    expect(host.textContent).toContain('Storage nearly full');
     expect(host.textContent).toContain(
-      '92,4 Go utilisés sur 100 Go. Au-delà, les nouvelles pièces jointes seront refusées.',
+      '92.4 GB used out of 100 GB. Beyond that, new attachments will be refused.',
     );
     expect(host.querySelector('a')?.getAttribute('href')).toBe('/atelier-nord/organization/quotas');
   });
@@ -164,7 +164,7 @@ describe('StorageBanner', () => {
     expect((fixture.nativeElement as HTMLElement).querySelector('cw-banner')).toBeNull();
   });
 
-  it('hides for the session after « Plus tard »', async () => {
+  it('hides for the session after `Later`', async () => {
     const fixture: ComponentFixture<StorageBanner> = await render(
       StorageBanner,
       'owner',
@@ -173,7 +173,7 @@ describe('StorageBanner', () => {
     const host: HTMLElement = fixture.nativeElement as HTMLElement;
 
     Array.from(host.querySelectorAll('button'))
-      .find((button: HTMLButtonElement) => button.textContent.trim() === 'Plus tard')
+      .find((button: HTMLButtonElement) => button.textContent.trim() === 'Later')
       ?.click();
     await fixture.whenStable();
 
@@ -193,11 +193,11 @@ describe('PlanSummary', () => {
       'a',
     );
 
-    expect(link?.textContent.trim()).toBe('Plan Équipe · 18 / 25 sièges');
+    expect(link?.textContent.trim()).toBe('Team plan · 18 / 25 seats');
     expect(link?.getAttribute('href')).toBe('/atelier-nord/organization/billing');
   });
 
-  it('offers Réessayer when Billing fails, and shows the plan once it answers', async () => {
+  it('offers `Retry` when Billing fails, and shows the plan once it answers', async () => {
     const subscription: Mock<() => Promise<OrganizationSubscription>> = vi.fn(() =>
       Promise.reject(httpError(503)),
     );
@@ -205,17 +205,17 @@ describe('PlanSummary', () => {
     const host: HTMLElement = fixture.nativeElement as HTMLElement;
     await vi.waitFor(async () => {
       await fixture.whenStable();
-      expect(host.textContent).toContain('Impossible de charger le plan.');
+      expect(host.textContent).toContain('The plan could not be loaded.');
     });
 
     subscription.mockResolvedValueOnce(usage(1));
     Array.from(host.querySelectorAll('button'))
-      .find((button: HTMLButtonElement) => button.textContent.trim() === 'Réessayer')
+      .find((button: HTMLButtonElement) => button.textContent.trim() === 'Retry')
       ?.click();
 
     await vi.waitFor(async () => {
       await fixture.whenStable();
-      expect(host.querySelector('a')?.textContent.trim()).toBe('Plan Équipe · 18 / 25 sièges');
+      expect(host.querySelector('a')?.textContent.trim()).toBe('Team plan · 18 / 25 seats');
     });
     expect(subscription).toHaveBeenCalledTimes(2);
   });
@@ -241,6 +241,6 @@ describe('PlanSummary', () => {
     await fixture.whenStable();
 
     expect(subscription).toHaveBeenCalledOnce();
-    expect((banner.nativeElement as HTMLElement).textContent).toContain('Stockage presque plein');
+    expect((banner.nativeElement as HTMLElement).textContent).toContain('Storage nearly full');
   });
 });

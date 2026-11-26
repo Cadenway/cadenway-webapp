@@ -1,5 +1,12 @@
 import type { Signal, Type } from '@angular/core';
-import { patchState, signalStore, withComputed, withMethods, withState } from '@ngrx/signals';
+import {
+  patchState,
+  signalMethod,
+  signalStore,
+  withComputed,
+  withMethods,
+  withState,
+} from '@ngrx/signals';
 
 import type {
   FilterField,
@@ -11,6 +18,7 @@ import type {
   ListViewFilters,
   SubtaskMode,
 } from '../../models/list-view-config/list-view-config.interface';
+import type { ListRowsSummary } from '../../models/list-rows/list-rows.interface';
 import type { SavedView, ViewLayout } from '../../models/saved-view/saved-view.interface';
 import {
   DEFAULT_VIEW_CONFIG,
@@ -44,7 +52,7 @@ interface ListViewState {
    * Property search
    *
    * @description
-   * Text typed in « Rechercher ».
+   * Text typed in `Search`.
    *
    * @type {string}
    * @readonly
@@ -55,7 +63,7 @@ interface ListViewState {
    * Property milestonesOnly
    *
    * @description
-   * Whether « Jalons » keeps only the milestones.
+   * Whether `Milestones` keeps only the milestones.
    *
    * @type {boolean}
    * @readonly
@@ -72,6 +80,17 @@ interface ListViewState {
    * @readonly
    */
   readonly savedView: SavedView | null;
+
+  /**
+   * Property rows
+   *
+   * @description
+   * What the rows of the view shown tell `Filter` and `Subtasks`, published by that view.
+   *
+   * @type {ListRowsSummary}
+   * @readonly
+   */
+  readonly rows: ListRowsSummary;
 
   /**
    * Property _before
@@ -110,7 +129,7 @@ export interface ListViewStoreInstance {
    * Property search
    *
    * @description
-   * Text typed in « Rechercher ».
+   * Text typed in `Search`.
    *
    * @type {Signal<string>}
    * @readonly
@@ -121,7 +140,7 @@ export interface ListViewStoreInstance {
    * Property milestonesOnly
    *
    * @description
-   * Whether « Jalons » keeps only the milestones.
+   * Whether `Milestones` keeps only the milestones.
    *
    * @type {Signal<boolean>}
    * @readonly
@@ -165,7 +184,7 @@ export interface ListViewStoreInstance {
    * Property modified
    *
    * @description
-   * Whether the applied saved view differs from what it saved (« Modifiée »).
+   * Whether the applied saved view differs from what it saved (`Modified`).
    *
    * @type {Signal<boolean>}
    * @readonly
@@ -176,7 +195,7 @@ export interface ListViewStoreInstance {
    * Property canSave
    *
    * @description
-   * Whether a standard tab differs from the default, so « Enregistrer la vue » shows.
+   * Whether a standard tab differs from the default, so `Save the view` shows.
    *
    * @type {Signal<boolean>}
    * @readonly
@@ -204,9 +223,31 @@ export interface ListViewStoreInstance {
    * @readonly
    */
   readonly groupQuery: Signal<ListGroupQuery | null>;
+
+  /**
+   * Property rows
+   *
+   * @description
+   * What the rows of the view shown tell `Filter` and `Subtasks`: unknown until a view
+   * publishes it with `followRows`.
+   *
+   * @type {Signal<ListRowsSummary>}
+   * @readonly
+   */
+  readonly rows: Signal<ListRowsSummary>;
   // #endregion
 
   // #region Methods
+  /**
+   * Method followRows
+   *
+   * @description
+   * Publishes the summary of the shown view's rows to the list page, until the caller is destroyed.
+   *
+   * @param {Signal<ListRowsSummary> | ListRowsSummary} summary - The rows' summary.
+   */
+  followRows(summary: Signal<ListRowsSummary> | ListRowsSummary): void;
+
   /**
    * Method toggleFilter
    *
@@ -232,7 +273,7 @@ export interface ListViewStoreInstance {
    * Method clearFilters
    *
    * @description
-   * Removes every filter (« Tout effacer »).
+   * Removes every filter (`Clear all`).
    */
   clearFilters(): void;
 
@@ -250,7 +291,7 @@ export interface ListViewStoreInstance {
    * Method toggleSortDirection
    *
    * @description
-   * Switches between « Croissant » and « Décroissant ».
+   * Switches between `ascending` and `descending`.
    */
   toggleSortDirection(): void;
 
@@ -288,7 +329,7 @@ export interface ListViewStoreInstance {
    * Method toggleMilestones
    *
    * @description
-   * Presses or releases « Jalons ».
+   * Presses or releases `Milestones`.
    */
   toggleMilestones(): void;
 
@@ -315,7 +356,7 @@ export interface ListViewStoreInstance {
    * Method revert
    *
    * @description
-   * Puts back what the applied saved view saved (« Rétablir »).
+   * Puts back what the applied saved view saved (`Revert`).
    */
   revert(): void;
 
@@ -324,7 +365,7 @@ export interface ListViewStoreInstance {
    *
    * @description
    * Records that a view now saves the current configuration: after creating it (the view becomes
-   * the applied one) or after « Enregistrer ».
+   * the applied one) or after `Save`.
    *
    * @param {SavedView} view - The saved view as the gateway answered.
    */
@@ -353,6 +394,7 @@ const initialState: ListViewState = {
   search: '',
   milestonesOnly: false,
   savedView: null,
+  rows: { visibleCount: null, hasSubtasks: null },
   _before: null,
 };
 
@@ -458,6 +500,9 @@ function createListViewStore(): Type<ListViewStoreInstance> {
         reset(): void {
           patchState(store, initialState);
         },
+        followRows: signalMethod<ListRowsSummary>((rows: ListRowsSummary): void => {
+          patchState(store, { rows });
+        }),
       };
     }),
   );
@@ -471,8 +516,8 @@ function createListViewStore(): Type<ListViewStoreInstance> {
  * list shares it: switching view never changes the data shown. It maps the configuration to the
  * `queryListTasks` body (`taskQuery`) and the `countTaskGroups` parameters (`groupQuery`) for the
  * rows. A saved view is applied over the standard tab, which gets its configuration back when the
- * view is left; the subtask display, the search and « Jalons » stay local and never make a saved
- * view « Modifiée ».
+ * view is left; the subtask display, the search and `Milestones` stay local and never make a saved
+ * view `Modified`.
  *
  * @type {ReturnType<typeof createListViewStore>}
  */

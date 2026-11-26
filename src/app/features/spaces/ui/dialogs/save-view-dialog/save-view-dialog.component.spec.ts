@@ -18,50 +18,50 @@ function submitButton(): HTMLButtonElement | null {
 }
 
 describe('SaveViewDialog', () => {
-  it('keeps « Enregistrer la vue » disabled without a name, then submits the name and icon', async () => {
+  it('keeps the submit button disabled without a name, then submits the name and icon', async () => {
     TestBed.configureTestingModule({ providers: [provideCadenwayIcons()] });
     const fixture: ComponentFixture<SaveViewDialog> = TestBed.createComponent(SaveViewDialog);
     const submitted: Mock<(draft: SavedViewDraft) => void> = vi.fn();
     fixture.componentInstance.submitted.subscribe((draft: SavedViewDraft) => {
       submitted(draft);
     });
-    fixture.componentRef.setInput('summary', 'Liste · 1 filtre.');
-    fixture.componentRef.setInput('placeholder', 'Liste · filtrée');
+    fixture.componentRef.setInput('summary', 'List · 1 filter.');
+    fixture.componentRef.setInput('placeholder', 'List · filtered');
     fixture.componentRef.setInput('open', true);
     fixture.detectChanges();
     await fixture.whenStable();
 
-    expect(document.body.textContent).toContain('Enregistrer la vue');
-    expect(document.body.textContent).toContain('Liste · 1 filtre.');
+    expect(document.body.textContent).toContain('Save the view');
+    expect(document.body.textContent).toContain('List · 1 filter.');
     expect(submitButton()?.disabled).toBe(true);
 
     const name: HTMLInputElement | null = document.querySelector<HTMLInputElement>(
       '[data-testid="save-view-name"]',
     );
     if (name) {
-      name.value = '  Mes bugs  ';
+      name.value = '  My bugs  ';
       name.dispatchEvent(new Event('input'));
     }
-    document.querySelector<HTMLButtonElement>('[aria-label="Bogue"]')?.click();
+    document.querySelector<HTMLButtonElement>('[aria-label="Bug"]')?.click();
     fixture.detectChanges();
     expect(submitButton()?.disabled).toBe(false);
     submitButton()?.click();
 
-    expect(submitted).toHaveBeenCalledWith({ name: 'Mes bugs', icon: 'bug' });
+    expect(submitted).toHaveBeenCalledWith({ name: 'My bugs', icon: 'bug' });
   });
 
   it('renames with the current name filled in', async () => {
     TestBed.configureTestingModule({ providers: [provideCadenwayIcons()] });
     const fixture: ComponentFixture<SaveViewDialog> = TestBed.createComponent(SaveViewDialog);
     fixture.componentRef.setInput('mode', 'rename');
-    fixture.componentRef.setInput('initialName', 'Bugs critiques');
+    fixture.componentRef.setInput('initialName', 'Critical bugs');
     fixture.componentRef.setInput('open', true);
     fixture.detectChanges();
     await fixture.whenStable();
 
-    expect(document.body.textContent).toContain('Renommer la vue');
+    expect(document.body.textContent).toContain('Rename the view');
     expect(document.querySelector<HTMLInputElement>('[data-testid="save-view-name"]')?.value).toBe(
-      'Bugs critiques',
+      'Critical bugs',
     );
   });
 });

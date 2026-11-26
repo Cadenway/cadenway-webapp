@@ -22,13 +22,13 @@ import { TaskCreateApi } from './task-create-api.service';
  * Constant space
  *
  * @description
- * The Produit space of Atelier Nord.
+ * The Product space of Atelier Nord.
  *
  * @type {Record<string, unknown>}
  */
 const space: Record<string, unknown> = {
-  id: 'produit',
-  name: 'Produit',
+  id: 'product',
+  name: 'Product',
   prefix: 'CAD',
   description: null,
   icon: null,
@@ -50,7 +50,7 @@ const space: Record<string, unknown> = {
  * Function list
  *
  * @description
- * A list of the Produit space.
+ * A list of the Product space.
  *
  * @param {string} id - Id of the list.
  * @param {string} name - Name of the list.
@@ -59,7 +59,7 @@ const space: Record<string, unknown> = {
 function list(id: string, name: string): Record<string, unknown> {
   return {
     id,
-    spaceId: 'produit',
+    spaceId: 'product',
     name,
     icon: null,
     color: 'violet',
@@ -78,7 +78,7 @@ function list(id: string, name: string): Record<string, unknown> {
  * @type {TaskDraft}
  */
 const draft: TaskDraft = {
-  name: 'Préparer la démo',
+  name: 'Prepare the demo',
   description: '',
   status: 'todo',
   cancelReason: null,
@@ -111,7 +111,7 @@ describe('TaskCreateApi', () => {
     http
       .expectOne((request) => request.url === '/v1/spaces' && request.params.get('cursor') === 'c2')
       .flush({ items: [], nextCursor: null });
-    http.expectOne('/v1/spaces/produit/lists?limit=100').flush({
+    http.expectOne('/v1/spaces/product/lists?limit=100').flush({
       items: [list('backlog', 'Backlog'), list('sprint-14', 'Sprint 14')],
       nextCursor: null,
     });
@@ -120,15 +120,15 @@ describe('TaskCreateApi', () => {
       {
         listId: 'backlog',
         listName: 'Backlog',
-        spaceId: 'produit',
-        spaceName: 'Produit',
+        spaceId: 'product',
+        spaceName: 'Product',
         sprintEnd: null,
       },
       {
         listId: 'sprint-14',
         listName: 'Sprint 14',
-        spaceId: 'produit',
-        spaceName: 'Produit',
+        spaceId: 'product',
+        spaceName: 'Product',
         sprintEnd: null,
       },
     ]);
@@ -136,8 +136,8 @@ describe('TaskCreateApi', () => {
   });
 
   it('reads the next key and the statuses of a space without the cache', async () => {
-    const answer: Promise<SpaceSetup> = firstValueFrom(api.space('produit'));
-    const request: TestRequest = http.expectOne('/v1/spaces/produit');
+    const answer: Promise<SpaceSetup> = firstValueFrom(api.space('product'));
+    const request: TestRequest = http.expectOne('/v1/spaces/product');
 
     expect(request.request.cache).toBe('no-store');
     request.flush(space);
@@ -182,9 +182,9 @@ describe('TaskCreateApi', () => {
   });
 
   it('lists the saved templates of a space', async () => {
-    const answer: Promise<unknown> = firstValueFrom(api.templates('produit'));
+    const answer: Promise<unknown> = firstValueFrom(api.templates('product'));
     http
-      .expectOne((r) => r.url === '/v1/spaces/produit/task-templates')
+      .expectOne((r) => r.url === '/v1/spaces/product/task-templates')
       .flush({ items: [], nextCursor: null });
 
     await expect(answer).resolves.toEqual([]);

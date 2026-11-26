@@ -6,8 +6,9 @@ import type { StatusOption } from '../status-option/status-option.interface';
  * Interface TaskCreateOptions
  *
  * @description
- * What a caller presets when it opens the task create dialog: the « + » of a group gives its
- * status, a calendar day its due date, a task its key for a new subtask. Everything is optional.
+ * What a caller presets when it opens the task create dialog: the `+` of a group gives its
+ * status, priority or assignee, a calendar day its due date, a task its key for a new subtask.
+ * Everything is optional.
  */
 export interface TaskCreateOptions {
   // #region Properties
@@ -54,6 +55,29 @@ export interface TaskCreateOptions {
    * @readonly
    */
   readonly parentKey?: string;
+
+  /**
+   * Property priority
+   *
+   * @description
+   * Initial priority; `moyenne` by default.
+   *
+   * @type {PriorityKey | undefined}
+   * @readonly
+   */
+  readonly priority?: PriorityKey;
+
+  /**
+   * Property assigneeIds
+   *
+   * @description
+   * Initial assignees (account ids); the signed-in user by default, an empty array for nobody
+   * (the `Unassigned` group).
+   *
+   * @type {readonly string[] | undefined}
+   * @readonly
+   */
+  readonly assigneeIds?: readonly string[];
   // #endregion
 }
 
@@ -61,7 +85,7 @@ export interface TaskCreateOptions {
  * Interface ListDestination
  *
  * @description
- * A list the dialog can create a task in (« dans » Produit › Sprint 14).
+ * A list the dialog can create a task in (`in` Product › Sprint 14).
  */
 export interface ListDestination {
   // #region Properties
@@ -113,7 +137,7 @@ export interface ListDestination {
    * Property sprintEnd
    *
    * @description
-   * Last day of the sprint when the list is one, as an ISO calendar date, for « Fin du sprint ».
+   * Last day of the sprint when the list is one, as an ISO calendar date, for `End of the sprint`.
    *
    * @type {string | null}
    * @readonly

@@ -7,12 +7,12 @@
 
     @switch (alert()) {
       @case ('invalid') {
-        <cw-alert variant="destructive" role="alert">
+        <cw-alert variant="destructive" class="[&>ng-icon]:text-inherit" role="alert">
           <cw-alert-title i18n="@@auth.login.invalid-title"
             >Wrong email or password.</cw-alert-title
           >
           <cw-alert-description>
-            <span i18n="@@auth.login.invalid-check">Check what you typed.</span>
+            <span i18n="@@auth.login.invalid-check">Check what you typed.</span>&ngsp;
             @if (problem()?.remainingAttempts; as attempts) {
               @if (attempts === 1) {
                 <span i18n="@@auth.login.invalid-attempt-one"
@@ -28,7 +28,12 @@
         </cw-alert>
       }
       @case ('locked') {
-        <cw-alert variant="destructive" icon="phosphorLockKeyFill" role="alert">
+        <cw-alert
+          variant="destructive"
+          icon="phosphorLockKeyFill"
+          class="[&>ng-icon]:text-inherit"
+          role="alert"
+        >
           <cw-alert-title i18n="@@auth.login.locked-title"
             >Account locked for 15 minutes.</cw-alert-title
           >
@@ -44,14 +49,14 @@
         </cw-alert>
       }
       @case ('unverified') {
-        <cw-alert variant="destructive" role="alert">
+        <cw-alert variant="destructive" class="[&>ng-icon]:text-inherit" role="alert">
           <cw-alert-description i18n="@@auth.login.unverified"
             >Confirm your email address before signing in.</cw-alert-description
           >
         </cw-alert>
       }
       @case ('unavailable') {
-        <cw-alert variant="destructive" role="alert">
+        <cw-alert variant="destructive" class="[&>ng-icon]:text-inherit" role="alert">
           <cw-alert-description i18n="@@auth.login.unavailable"
             >Sign-in is unavailable. Try again in a moment.</cw-alert-description
           >
@@ -102,7 +107,11 @@
           "
         />
         @if (loginForm.email().touched() && loginForm.email().invalid()) {
-          <p id="login-email-help" class="text-xs font-medium text-destructive">
+          <p
+            id="login-email-help"
+            class="flex items-center gap-1 text-xs font-medium text-destructive"
+          >
+            <ng-icon name="phosphorWarningCircleFill" class="size-3.5" aria-hidden="true" />
             {{ loginForm.email().errors()[0]?.message }}
           </p>
         } @else if (flow.prefilled()) {
@@ -185,7 +194,7 @@
         cwButton
         type="submit"
         class="w-full"
-        [disabled]="loginForm().invalid() || loginForm().submitting() || flow.federatedStarting()"
+        [disabled]="flow.federatedStarting()"
         [loading]="loginForm().submitting()"
         i18n="@@auth.login.submit"
       >
@@ -205,7 +214,7 @@
   </cw-card>
 
   <p class="text-center text-sm text-muted-foreground">
-    <span i18n="@@auth.login.no-account">No account yet?</span>
+    <span i18n="@@auth.login.no-account">No account yet?</span>&ngsp;
     <a
       routerLink="/signup"
       class="rounded-sm font-medium text-primary underline-offset-4 hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"

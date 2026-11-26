@@ -35,6 +35,6 @@ paths:
   A page's primary read that fails (its resource loader rejects) is caught by the route's error
   boundary: `errorComponent` replaces the page content with the typed state, which is not found,
   access denied (with an access request), deleted task (with Restore) or unavailable (with Retry,
-  `Réessayer` in French, which runs the route again). A secondary or partial read (a shell widget,
+  `errors.unavailable.retry`, which runs the route again). A secondary or partial read (a shell widget,
   a popover, `TaskDetail.partial`) keeps an inline error whose Retry calls its `reload()`. Guards and
   resolvers never reach the boundary: they redirect with a `UrlTree` or a `RedirectCommand`.

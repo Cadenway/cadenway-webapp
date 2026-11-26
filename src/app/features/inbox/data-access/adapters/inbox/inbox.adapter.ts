@@ -18,7 +18,7 @@ import type {
  * Function initialsOf
  *
  * @description
- * The first letters of the first and last words of a name (« Inès Robert » gives « IR »), or the
+ * The first letters of the first and last words of a name (`Camille Martin` gives `CM`), or the
  * first two letters of a single word.
  *
  * @param {string} name - Full name.
@@ -80,7 +80,7 @@ export function toInboxNotificationPage(page: InboxPage): InboxNotificationPage 
  * Function toInboxReminder
  *
  * @description
- * Keeps the fields of a pending reminder the « Rappels » tab shows.
+ * Keeps the fields of a pending reminder the `Reminders` tab shows.
  *
  * @param {Reminder} reminder - A reminder of `GET /v1/reminders`.
  * @returns {InboxReminder} Display model of the reminder.

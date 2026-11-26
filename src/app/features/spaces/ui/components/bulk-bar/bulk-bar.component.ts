@@ -3,19 +3,18 @@ import { CwButton } from '@cadenway/ui/components/button';
 import {
   CwMenu,
   CwMenuItem,
+  CwMenuItemCheckbox,
   CwMenuLabel,
   CwMenuShortcut,
   CwMenuTriggerFor,
 } from '@cadenway/ui/components/menu';
 import { NgIcon } from '@ng-icons/core';
 
-import type { ViewOption } from '../../../models/view-option/view-option.interface';
-
 /**
  * Interface MoveTarget
  *
  * @description
- * A list the selection may move to, with its space.
+ * A list the selection may move to, with its icon, its tone and its space.
  */
 export interface MoveTarget {
   // #region Properties
@@ -51,6 +50,82 @@ export interface MoveTarget {
    * @readonly
    */
   readonly spaceName: string;
+
+  /**
+   * Property icon
+   *
+   * @description
+   * Icon of the list (its own, the sprint's lightning or the bullets).
+   *
+   * @type {string}
+   * @readonly
+   */
+  readonly icon: string;
+
+  /**
+   * Property tone
+   *
+   * @description
+   * Text class of the list's color, `text-muted-foreground` for grey.
+   *
+   * @type {string}
+   * @readonly
+   */
+  readonly tone: string;
+  // #endregion
+}
+
+/**
+ * Interface BulkPerson
+ *
+ * @description
+ * A person of `Assign`, ticked when every selected task has them.
+ */
+export interface BulkPerson {
+  // #region Properties
+  /**
+   * Property id
+   *
+   * @description
+   * Account id.
+   *
+   * @type {string}
+   * @readonly
+   */
+  readonly id: string;
+
+  /**
+   * Property name
+   *
+   * @description
+   * Display name.
+   *
+   * @type {string}
+   * @readonly
+   */
+  readonly name: string;
+
+  /**
+   * Property initials
+   *
+   * @description
+   * Initials of the avatar.
+   *
+   * @type {string}
+   * @readonly
+   */
+  readonly initials: string;
+
+  /**
+   * Property assigned
+   *
+   * @description
+   * Whether every selected task has the person.
+   *
+   * @type {boolean}
+   * @readonly
+   */
+  readonly assigned: boolean;
   // #endregion
 }
 
@@ -58,22 +133,33 @@ export interface MoveTarget {
  * Component BulkBar
  *
  * @description
- * The selection bar of a list view (`App.dc.html` lines 1451-1480): « n sélectionnée(s) »,
- * « Marquer terminé », « Assigner » (a menu of people), « Déplacer vers… » (a menu of the other
- * lists with their space), « Supprimer » and the cross that clears the selection, in a toolbar
- * named « Actions sur la sélection ». Presentational: the rows pass owns the selection and the page
- * runs the actions; nothing renders without a selection.
+ * The selection bar of a list view (`App.dc.html` lines 1451-1480): `n selected`,
+ * `Mark done`, `Assign` (people with their initials, ticked when every selected task
+ * has them; picking a ticked person removes them), `Move to…` (the other lists with their
+ * icon and space), `Delete` and the cross that clears the selection, in a toolbar named
+ * `Actions on the selection` that scrolls sideways without a scrollbar on a narrow screen.
+ * Presentational: the page owns the selection and runs the actions; nothing renders without a
+ * selection.
  */
 @Component({
   selector: 'cw-bulk-bar',
-  imports: [CwButton, CwMenu, CwMenuItem, CwMenuLabel, CwMenuShortcut, CwMenuTriggerFor, NgIcon],
+  imports: [
+    CwButton,
+    CwMenu,
+    CwMenuItem,
+    CwMenuItemCheckbox,
+    CwMenuLabel,
+    CwMenuShortcut,
+    CwMenuTriggerFor,
+    NgIcon,
+  ],
   template: `
     @if (count() > 0) {
       <div
         role="toolbar"
         aria-label="Actions on the selection"
         i18n-aria-label="@@spaces.bulk.label"
-        class="pointer-events-auto flex items-center gap-1 rounded-xl border border-border bg-popover p-1.5 shadow-lg animate-pop-in motion-reduce:animate-none"
+        class="pointer-events-auto flex max-w-full items-center gap-1 overflow-x-auto overflow-y-hidden rounded-lg border border-border bg-popover p-1 whitespace-nowrap text-popover-foreground shadow-lg [scrollbar-width:none] animate-pop-in motion-reduce:animate-none [&::-webkit-scrollbar]:hidden"
         data-testid="bulk-bar"
       >
         <span
@@ -81,7 +167,7 @@ export interface MoveTarget {
           i18n="@@spaces.bulk.count"
           >{count(), plural, =1 {1 selected} other {{{ count() }} selected}}</span
         >
-        <span class="mx-1 h-5 w-px bg-border" aria-hidden="true"></span>
+        <span class="mx-1 h-5 w-px shrink-0 bg-border" aria-hidden="true"></span>
         <button
           cwButton
           type="button"
@@ -148,8 +234,20 @@ export interface MoveTarget {
       i18n-ariaLabel="@@spaces.bulk.assign-menu"
     >
       <cw-menu-label i18n="@@spaces.bulk.assign-title">Assign to</cw-menu-label>
-      @for (person of people(); track person.value) {
-        <button cwMenuItem (triggered)="assigned.emit(person.value)">{{ person.label }}</button>
+      @for (person of people(); track person.id) {
+        <button
+          cwMenuItemCheckbox
+          type="button"
+          [checked]="person.assigned"
+          (checkedChange)="assigned.emit(person.id)"
+        >
+          <span
+            class="flex size-5 shrink-0 items-center justify-center rounded-full bg-secondary text-[9px] leading-none font-semibold text-secondary-foreground"
+            aria-hidden="true"
+            >{{ person.initials }}</span
+          >
+          <span class="truncate">{{ person.name }}</span>
+        </button>
       }
     </cw-menu>
 
@@ -161,7 +259,7 @@ export interface MoveTarget {
     >
       <cw-menu-label i18n="@@spaces.bulk.move-title">Move to the list</cw-menu-label>
       @for (target of targets(); track target.listId) {
-        <button cwMenuItem (triggered)="moved.emit(target.listId)">
+        <button cwMenuItem type="button" (triggered)="moved.emit(target.listId)">
           <ng-icon name="phosphorListBulletsBold" aria-hidden="true" />
           <span class="truncate">{{ target.name }}</span>
           <cw-menu-shortcut>{{ target.spaceName }}</cw-menu-shortcut>
@@ -187,12 +285,12 @@ export class BulkBar {
    * Property people
    *
    * @description
-   * People the selection may be assigned to, by account id.
+   * People the selection may be assigned to or removed from.
    *
-   * @type {InputSignal<readonly ViewOption[]>}
+   * @type {InputSignal<readonly BulkPerson[]>}
    * @readonly
    */
-  public readonly people: InputSignal<readonly ViewOption[]> = input<readonly ViewOption[]>([]);
+  public readonly people: InputSignal<readonly BulkPerson[]> = input<readonly BulkPerson[]>([]);
 
   /**
    * Property targets
@@ -209,7 +307,7 @@ export class BulkBar {
    * Property pending
    *
    * @description
-   * Whether an action is being recorded.
+   * Whether a deletion is being recorded.
    *
    * @type {InputSignal<boolean>}
    * @readonly
@@ -220,7 +318,7 @@ export class BulkBar {
    * Property doneMarked
    *
    * @description
-   * Emits on « Marquer terminé ».
+   * Emits on `Mark done`.
    *
    * @type {OutputEmitterRef<void>}
    * @readonly
@@ -231,7 +329,8 @@ export class BulkBar {
    * Property assigned
    *
    * @description
-   * Emits the account the selection is assigned to.
+   * Emits the account picked in `Assign`: the page assigns it, or removes it when every
+   * selected task has it.
    *
    * @type {OutputEmitterRef<string>}
    * @readonly
@@ -253,7 +352,7 @@ export class BulkBar {
    * Property deleted
    *
    * @description
-   * Emits on « Supprimer ».
+   * Emits on `Delete`.
    *
    * @type {OutputEmitterRef<void>}
    * @readonly
@@ -264,7 +363,7 @@ export class BulkBar {
    * Property cleared
    *
    * @description
-   * Emits on « Annuler la sélection ».
+   * Emits on `Cancel the selection`.
    *
    * @type {OutputEmitterRef<void>}
    * @readonly

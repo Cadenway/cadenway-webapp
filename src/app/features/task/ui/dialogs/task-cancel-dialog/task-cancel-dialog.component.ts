@@ -34,11 +34,11 @@ import type { TaskCancellation } from '../../../models/task-status-change/task-s
  * Component TaskCancelDialog
  *
  * @description
- * The cancel reason dialog (`App.dc.html` lines 3227-3245): « Annuler CAD-482 ? » (or « Annuler
- * 3 tâches ? »), the four reasons as cards (« Doublon » chosen first), an optional « Précision »,
- * then « Garder la tâche » and « Annuler la tâche ». It is open while `taskKeys` is set and starts
- * afresh each time it opens. « Annuler la tâche » emits `confirmed` with the reason and the trimmed
- * note; « Garder la tâche », Escape and the backdrop emit `kept`.
+ * The cancel reason dialog (`App.dc.html` lines 3227-3245): `Cancel CAD-482?` (or `Cancel
+ * 3 tasks?`), the four reasons as cards (`Duplicate` chosen first), optional `Details`,
+ * then `Keep the task` and `Cancel the task`. It is open while `taskKeys` is set and starts
+ * afresh each time it opens. `Cancel the task` emits `confirmed` with the reason and the trimmed
+ * note; `Keep the task`, Escape and the backdrop emit `kept`.
  */
 @Component({
   selector: 'cw-task-cancel-dialog',
@@ -78,7 +78,7 @@ export class TaskCancelDialog {
    * Property confirmed
    *
    * @description
-   * Emits the reason and the note when « Annuler la tâche » is pressed.
+   * Emits the reason and the note when `Cancel the task` is pressed.
    *
    * @type {OutputEmitterRef<TaskCancellation>}
    * @readonly
@@ -155,7 +155,7 @@ export class TaskCancelDialog {
    * Property title
    *
    * @description
-   * « Annuler CAD-482 ? » for one task, « Annuler 3 tâches ? » for several.
+   * `Cancel CAD-482?` for one task, `Cancel 3 tasks?` for several.
    *
    * @type {Signal<string>}
    * @readonly
@@ -171,7 +171,7 @@ export class TaskCancelDialog {
    * Property reason
    *
    * @description
-   * Chosen reason; « Doublon » each time the dialog opens.
+   * Chosen reason; `Duplicate` each time the dialog opens.
    *
    * @type {WritableSignal<CancelReason>}
    * @readonly
@@ -188,7 +188,7 @@ export class TaskCancelDialog {
    * Property note
    *
    * @description
-   * Typed « Précision »; empty each time the dialog opens.
+   * Typed `Details`; empty each time the dialog opens.
    *
    * @type {WritableSignal<string>}
    * @readonly
@@ -231,7 +231,7 @@ export class TaskCancelDialog {
    * Method confirm
    *
    * @description
-   * « Annuler la tâche ».
+   * `Cancel the task`.
    */
   protected confirm(): void {
     this.confirmed.emit({ reason: this.reason(), note: this.note().trim() });
@@ -241,7 +241,7 @@ export class TaskCancelDialog {
    * Method openChange
    *
    * @description
-   * Reports a close by Escape, the backdrop or « Garder la tâche » as `kept`.
+   * Reports a close by Escape, the backdrop or `Keep the task` as `kept`.
    *
    * @param {boolean} open - Whether the dialog stays open.
    */

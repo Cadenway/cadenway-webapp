@@ -4,7 +4,7 @@ import { Router } from '@angular/router';
 import { provideCadenwayIcons } from '@cadenway/icons';
 import { CwToastService } from '@cadenway/ui/components/toast';
 import { of } from 'rxjs';
-import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 
 import { PRESENCE, type PresenceStatus } from '@features/account/ports/presence';
 import {
@@ -64,7 +64,7 @@ function page(): InboxNotificationPage {
         actorName: 'Inès Robert',
         actorInitials: 'IR',
         taskKey: 'CAD-482',
-        taskName: 'Relecture du parcours SSO',
+        taskName: 'Review of the SSO flow',
         excerpt: null,
         status: null,
         createdAt: new Date(Date.now() - 12.5 * 60_000).toISOString(),
@@ -89,14 +89,14 @@ function reminderPage(): InboxReminderPage {
       {
         id: 'r0',
         taskKey: 'CAD-479',
-        taskName: 'Prévenir le support',
+        taskName: 'Notify the support team',
         remindAt: '2026-11-08T08:00:00Z',
         note: null,
       },
       {
         id: 'r1',
         taskKey: 'CAD-488',
-        taskName: 'Maquettes',
+        taskName: 'Mockups',
         remindAt: '2099-11-08T14:00:00Z',
         note: null,
       },
@@ -114,6 +114,8 @@ describe('InboxRailItem', () => {
   let fixture: ComponentFixture<InboxRailItem>;
 
   beforeEach(async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date(2026, 10, 9, 12, 0, 0));
     status = signal<PresenceStatus>('online');
     notifications = vi.fn(() => Promise.resolve(page()));
     navigate = vi.fn(() => Promise.resolve(true));
@@ -143,6 +145,10 @@ describe('InboxRailItem', () => {
     });
     fixture = TestBed.createComponent(InboxRailItem);
     await fixture.whenStable();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   /**
@@ -184,30 +190,55 @@ describe('InboxRailItem', () => {
   it('shows the unread count on the rail, except in do-not-disturb', async () => {
     await vi.waitFor(() => {
       fixture.detectChanges();
-      expect(trigger().textContent).toContain('1 non lues');
+      expect(trigger().textContent).toContain('1 unread');
     });
     status.set('do-not-disturb');
     await fixture.whenStable();
 
-    expect(trigger().textContent).not.toContain('1 non lues');
+    expect(trigger().textContent).not.toContain('1 unread');
   });
 
-  it('lists the notifications, marks them all read and clears the badge', async () => {
+  it('adds the due reminders to the badge, which a completed reminder leaves', async () => {
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      expect(trigger().getAttribute('aria-label')).toBe('Inbox, 1 unread, 1 overdue reminders');
+      expect(trigger().textContent.trim().endsWith('2')).toBe(true);
+    });
+
+    await openPopover();
+    Array.from(document.querySelectorAll<HTMLButtonElement>('[role="tab"]'))
+      .find((tab: HTMLButtonElement) => tab.textContent.includes('Reminders'))
+      ?.click();
+    await fixture.whenStable();
+    document
+      .querySelector<HTMLButtonElement>(
+        '[data-testid="reminder-row"] button[aria-label="Mark the reminder of CAD-479 as done"]',
+      )
+      ?.click();
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      expect(trigger().getAttribute('aria-label')).toBe('Inbox, 1 unread');
+    });
+    expect(trigger().textContent.trim().endsWith('1')).toBe(true);
+  });
+
+  it('lists the notifications, marks them all read and clears the unread count', async () => {
     const content: HTMLElement = await openPopover();
     expect(content.textContent).toContain('Inès Robert');
-    expect(content.textContent).toContain('a mentionné votre nom');
+    expect(content.textContent).toContain('mentioned you');
     expect(content.textContent).toContain('12 min');
 
     const markAll: HTMLButtonElement | undefined = Array.from(
       content.querySelectorAll('button'),
-    ).find((button: HTMLButtonElement) => button.textContent.includes('Tout marquer comme lu'));
+    ).find((button: HTMLButtonElement) => button.textContent.includes('Mark all as read'));
     markAll?.click();
     await fixture.whenStable();
 
-    expect(content.querySelector('[aria-label="Non lu"]')).toBeNull();
+    expect(content.querySelector('[aria-label="Unread"]')).toBeNull();
     expect(markAll?.disabled).toBe(true);
     expect(document.activeElement?.hasAttribute('data-inbox-heading')).toBe(true);
-    expect(trigger().textContent).not.toContain('1 non lues');
+    expect(trigger().textContent).not.toContain('1 unread');
+    expect(trigger().textContent).toContain('0 unread, 1 overdue reminders');
   });
 
   it('opens the task of a notification', async () => {
@@ -226,7 +257,7 @@ describe('InboxRailItem', () => {
 
     await vi.waitFor(() => {
       expect(error).toHaveBeenCalledWith(
-        'Impossible de marquer la notification comme lue',
+        'The notification could not be marked as read',
         expect.anything(),
       );
     });
@@ -235,12 +266,12 @@ describe('InboxRailItem', () => {
   it('moves focus to the next reminder, then to the tab, as they are completed', async () => {
     await openPopover();
     Array.from(document.querySelectorAll<HTMLButtonElement>('[role="tab"]'))
-      .find((tab: HTMLButtonElement) => tab.textContent.includes('Rappels'))
+      .find((tab: HTMLButtonElement) => tab.textContent.includes('Reminders'))
       ?.click();
     await fixture.whenStable();
     const done: () => HTMLButtonElement | undefined = (): HTMLButtonElement | undefined =>
       document.querySelector<HTMLButtonElement>(
-        '[data-testid="reminder-row"] button[aria-label^="Marquer le rappel"]',
+        '[data-testid="reminder-row"] button[aria-label^="Mark the reminder"]',
       ) ?? undefined;
 
     done()?.click();
@@ -263,21 +294,21 @@ describe('InboxRailItem', () => {
     status.set('do-not-disturb');
     const content: HTMLElement = await openPopover();
 
-    expect(content.textContent).toContain('Ne pas déranger : notifications en pause');
+    expect(content.textContent).toContain('Do not disturb: notifications paused');
   });
 
-  it('offers Réessayer after a failed read, which reads again', async () => {
+  it('offers Retry after a failed read, which reads again', async () => {
     notifications.mockRejectedValueOnce(new Error('unavailable'));
     trigger().click();
     let retry: HTMLButtonElement | undefined;
     await vi.waitFor(() => {
       fixture.detectChanges();
       retry = Array.from(document.querySelectorAll<HTMLButtonElement>('button')).find(
-        (button: HTMLButtonElement) => button.textContent.trim() === 'Réessayer',
+        (button: HTMLButtonElement) => button.textContent.trim() === 'Retry',
       );
       expect(retry).toBeDefined();
     });
-    expect(document.body.textContent).toContain('Impossible de charger les notifications');
+    expect(document.body.textContent).toContain('The notifications could not be loaded');
 
     retry?.click();
     await vi.waitFor(() => {

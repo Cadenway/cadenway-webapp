@@ -48,8 +48,8 @@ function dayNumber(iso: string): number {
  * Component TaskDueDate
  *
  * @description
- * The due date of a row or a property (`dueInfo` of `App.dc.html`): « Aujourd’hui », « Demain »,
- * else the short date (« 12 nov. », with the year when it is not the current one), « — » without
+ * The due date of a row or a property (`dueInfo` of `App.dc.html`): `Today`, `Tomorrow`,
+ * else the short date (`12 Nov`, with the year when it is not the current one), a dash without
  * a date. A date before today on a task that is not closed is late: garnet with a warning icon;
  * today on an open task is violet; the rest is muted. The full date is its tooltip.
  */

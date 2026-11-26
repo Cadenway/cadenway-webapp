@@ -11,6 +11,8 @@ import { CwAlert, CwAlertDescription } from '@cadenway/ui/components/alert';
 import { CwCard } from '@cadenway/ui/components/card';
 import { NgIcon } from '@ng-icons/core';
 
+import { RuntimeConfigStore } from '@core/config';
+
 import {
   AuthFlowStore,
   type SessionResult,
@@ -18,6 +20,7 @@ import {
 } from '../../../state/auth-flow/auth-flow.store';
 import { Countdown } from '../../../utils/countdown/countdown.util';
 import { CodeForm } from '../../forms/code-form/code-form.component';
+import { CodeHelp } from '../../components/code-help/code-help.component';
 
 /**
  * Constant RESEND_SECONDS
@@ -41,7 +44,7 @@ const RESEND_SECONDS: number = 30;
  */
 @Component({
   selector: 'cw-signup-verify-page',
-  imports: [CodeForm, CwAlert, CwAlertDescription, CwCard, NgIcon],
+  imports: [CodeForm, CodeHelp, CwAlert, CwAlertDescription, CwCard, NgIcon],
   templateUrl: './signup-verify-page.component.html',
 })
 export class SignupVerifyPage implements OnInit {
@@ -78,6 +81,17 @@ export class SignupVerifyPage implements OnInit {
    * @readonly
    */
   private readonly destroyRef: DestroyRef = inject(DestroyRef);
+
+  /**
+   * Property siteUrl
+   *
+   * @description
+   * The public site whose Help page the line below the card links to, or null without one.
+   *
+   * @type {string | null}
+   * @readonly
+   */
+  protected readonly siteUrl: string | null = inject(RuntimeConfigStore).config().siteUrl ?? null;
 
   /**
    * Property countdown

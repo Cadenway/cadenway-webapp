@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 
 import { UnavailableRouteError } from '@shared/route-errors';
 
+import type { SpaceDraft } from '../../../models/space/space.interface';
 import { SpacesApi } from './spaces-api.service';
 
 describe('SpacesApi', () => {
@@ -17,7 +18,7 @@ describe('SpacesApi', () => {
       listSpaces: vi
         .fn()
         .mockReturnValueOnce(
-          of({ items: [{ id: 'sp-1', name: 'Produit', statuses: {} }], nextCursor: 'c2' }),
+          of({ items: [{ id: 'sp-1', name: 'Product', statuses: {} }], nextCursor: 'c2' }),
         )
         .mockReturnValueOnce(
           of({ items: [{ id: 'sp-2', name: 'Design', statuses: {} }], nextCursor: null }),
@@ -39,16 +40,33 @@ describe('SpacesApi', () => {
         }),
       ),
       createFavorite: vi.fn(() =>
-        of({ id: 'f3', kind: 'space', targetId: 'sp-1', target: { name: 'Produit', href: '/' } }),
+        of({ id: 'f3', kind: 'space', targetId: 'sp-1', target: { name: 'Product', href: '/' } }),
       ),
       deleteFavorite: vi.fn(() => of(undefined)),
+      createSpace: vi.fn(() =>
+        of({
+          space: {
+            id: 'sp-hr',
+            name: 'HR',
+            prefix: 'HR',
+            statuses: {},
+            visibility: 'private',
+            version: 2,
+          },
+          firstList: { id: 'l-1', spaceId: 'sp-hr', name: 'First list', version: 1 },
+        }),
+      ),
+      updateSpace: vi.fn(() =>
+        of({ id: 'sp-1', name: 'Product 2', prefix: 'CAD', statuses: {}, visibility: 'private' }),
+      ),
+      deleteSpace: vi.fn(() => of(undefined)),
     };
     TestBed.configureTestingModule({ providers: [{ provide: SpacesService, useValue: spaces }] });
     api = TestBed.inject(SpacesApi);
   });
 
   it('follows every page of the spaces', async () => {
-    expect((await api.spaces()).map((space) => space.name)).toEqual(['Produit', 'Design']);
+    expect((await api.spaces()).map((space) => space.name)).toEqual(['Product', 'Design']);
     expect(spaces['listSpaces']).toHaveBeenLastCalledWith({ limit: 100, cursor: 'c2' });
   });
 
@@ -85,5 +103,48 @@ describe('SpacesApi', () => {
     expect((await api.addFavorite('space', 'sp-1'))?.id).toBe('f3');
     await api.removeFavorite('f3');
     expect(spaces['deleteFavorite']).toHaveBeenCalledWith('f3');
+  });
+
+  it('creates a space with its first list and sends a visibility change only', async () => {
+    const draft: SpaceDraft = {
+      name: 'HR',
+      prefix: 'HR',
+      description: null,
+      icon: null,
+      color: 'gris',
+      private: true,
+    };
+    const created: Awaited<ReturnType<SpacesApi['createSpace']>> = await api.createSpace(
+      draft,
+      'key-1',
+    );
+
+    expect(created.firstList.id).toBe('l-1');
+    expect(created.space.private).toBe(true);
+    expect(spaces['createSpace']).toHaveBeenCalledWith(
+      {
+        name: 'HR',
+        prefix: 'HR',
+        description: null,
+        icon: null,
+        color: 'gris',
+        visibility: 'private',
+      },
+      { headers: { 'Idempotency-Key': 'key-1' } },
+    );
+    await api.updateSpace(created.space, { ...draft, name: 'HR 2' });
+    expect(spaces['updateSpace']).toHaveBeenCalledWith(
+      'sp-hr',
+      {
+        name: 'HR 2',
+        prefix: 'HR',
+        description: null,
+        icon: null,
+        color: 'gris',
+      },
+      { headers: { 'If-Match': '"2"' } },
+    );
+    await api.deleteSpace('sp-hr');
+    expect(spaces['deleteSpace']).toHaveBeenCalledWith('sp-hr');
   });
 });

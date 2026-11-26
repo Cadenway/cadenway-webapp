@@ -111,7 +111,7 @@ interface AuthFlowState {
    * Property rememberMe
    *
    * @description
-   * "Rester connecté pendant 30 jours", ticked by default as in `Main.dc.html`.
+   * `Stay signed in for 30 days`, ticked by default as in `Main.dc.html`.
    *
    * @type {boolean}
    * @readonly
@@ -533,7 +533,7 @@ const initialState: AuthFlowState = {
  * @description
  * Creates the flow store provided by the auth root route, so its screens share the address, the
  * pending challenge and the pending sign-up while the person moves between them. A session that
- * opens remembers its account on this device when « Rester connecté » is ticked, clears the tab's
+ * opens remembers its account on this device when `Stay signed in for 30 days` is ticked, clears the tab's
  * challenge token, and resolves the
  * destination: the `?next=` path, else `/<slug>` of the session's organization, else
  * `/organizations` when the person must still choose.

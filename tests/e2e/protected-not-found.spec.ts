@@ -4,7 +4,7 @@ const user = {
   id: '019a5f3c-8d2e-7c4a-9b1f-3e5d7a9c1b30',
   name: 'Camille Martin',
   email: 'camille.martin@ateliernord.fr',
-  language: 'fr',
+  language: 'en',
   displayName: null,
   jobTitle: null,
   timeZone: 'Europe/Paris',
@@ -16,7 +16,7 @@ const organization = {
   slug: 'atelier-nord',
   description: null,
   website: null,
-  defaultLanguage: 'fr',
+  defaultLanguage: 'en',
   plan: 'team',
   memberCount: 18,
   role: 'owner',
@@ -27,7 +27,7 @@ const sessionExpired = {
   status: 401,
   json: {
     type: 'about:blank',
-    title: 'Session expirée',
+    title: 'Session expired',
     status: 401,
     code: 'auth.session-expired',
   },
@@ -52,23 +52,23 @@ test('an unknown workspace address shows a 404 in the shell with a way back home
 }) => {
   await stubGateway(page, { signedIn: true });
 
-  await page.goto('/atelier-nord/lien/introuvable');
+  await page.goto('/atelier-nord/missing/page');
 
-  await expect(page.getByRole('heading', { name: 'Page introuvable' })).toBeVisible();
-  await expect(page).toHaveURL(/\/atelier-nord\/lien\/introuvable$/u);
+  await expect(page.getByRole('heading', { name: 'Page not found' })).toBeVisible();
+  await expect(page).toHaveURL(/\/atelier-nord\/missing\/page$/u);
   await expect(
-    page.getByRole('button', { name: 'Changer d’organisation : Atelier Nord' }),
+    page.getByRole('button', { name: 'Switch organization: Atelier Nord' }),
   ).toBeVisible();
-  await page.getByRole('link', { name: 'Retour à l’accueil' }).click();
+  await page.getByRole('link', { name: 'Back to home' }).click();
   await expect(page).toHaveURL(/\/atelier-nord$/u);
-  await expect(page.getByRole('heading', { name: 'Bonjour Camille' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Hello Camille' })).toBeVisible();
 });
 
 test('unknown workspace addresses require a session', async ({ page }) => {
   await stubGateway(page, { signedIn: false });
 
-  await page.goto('/atelier-nord/lien/introuvable');
+  await page.goto('/atelier-nord/missing/page');
 
-  await expect(page).toHaveURL(/\/login\?next=%2Fatelier-nord%2Flien%2Fintrouvable$/u);
-  await expect(page.getByRole('heading', { name: 'Page introuvable' })).toHaveCount(0);
+  await expect(page).toHaveURL(/\/login\?next=%2Fatelier-nord%2Fmissing%2Fpage$/u);
+  await expect(page.getByRole('heading', { name: 'Page not found' })).toHaveCount(0);
 });

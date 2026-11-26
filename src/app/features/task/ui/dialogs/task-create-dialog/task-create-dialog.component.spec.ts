@@ -55,7 +55,7 @@ const workspace: WorkspaceContextPort = {
  * Constant destinations
  *
  * @description
- * Backlog and Sprint 14 of the Produit space.
+ * Backlog and Sprint 14 of the Product space.
  *
  * @type {readonly ListDestination[]}
  */
@@ -63,15 +63,15 @@ const destinations: readonly ListDestination[] = [
   {
     listId: 'backlog',
     listName: 'Backlog',
-    spaceId: 'produit',
-    spaceName: 'Produit',
+    spaceId: 'product',
+    spaceName: 'Product',
     sprintEnd: null,
   },
   {
     listId: 'sprint-14',
     listName: 'Sprint 14',
-    spaceId: 'produit',
-    spaceName: 'Produit',
+    spaceId: 'product',
+    spaceName: 'Product',
     sprintEnd: '2026-11-17',
   },
 ];
@@ -80,12 +80,12 @@ const destinations: readonly ListDestination[] = [
  * Constant space
  *
  * @description
- * Produit, whose next key is CAD-495.
+ * Product, whose next key is CAD-495.
  *
  * @type {SpaceSetup}
  */
 const space: SpaceSetup = {
-  spaceId: 'produit',
+  spaceId: 'product',
   nextKey: 'CAD-495',
   statuses: defaultStatusOptions(),
 };
@@ -201,7 +201,7 @@ describe('TaskCreateDialog', () => {
     await fixture.whenStable();
     typeName('First draft');
     await fixture.whenStable();
-    buttonNamed('Créer la tâche')?.click();
+    buttonNamed('Create the task')?.click();
     await fixture.whenStable();
     service.close();
     await fixture.whenStable();
@@ -223,9 +223,7 @@ describe('TaskCreateDialog', () => {
     await fixture.whenStable();
 
     expect(TestBed.inject(TaskCreate).isOpen()).toBe(true);
-    expect(document.querySelector('[role="dialog"] h2')?.textContent.trim()).toBe(
-      'Créer une tâche',
-    );
+    expect(document.querySelector('[role="dialog"] h2')?.textContent.trim()).toBe('Create a task');
   });
 
   it('names the empty due date picker by its text, and a set one by label and date', async () => {
@@ -236,13 +234,13 @@ describe('TaskCreateDialog', () => {
       document.querySelector<HTMLButtonElement>('[role="dialog"] cw-date-picker button');
 
     expect(trigger()?.getAttribute('aria-label')).toBeNull();
-    expect(trigger()?.textContent.trim()).toBe('Échéance');
+    expect(trigger()?.textContent.trim()).toBe('Due date');
     service.close();
     await fixture.whenStable();
     service.open({ listId: 'sprint-14', due: '2026-11-18' });
     await fixture.whenStable();
 
-    expect(trigger()?.getAttribute('aria-label')).toMatch(/^Échéance, .*18/u);
+    expect(trigger()?.getAttribute('aria-label')).toMatch(/^Due date, .*18/u);
   });
 
   it('ignores N in an editable field and while the dialog is open', async () => {
@@ -278,7 +276,7 @@ describe('TaskCreateDialog', () => {
     expect(document.querySelector('input[role="combobox"]')).toBeNull();
   });
 
-  it('creates the task in the preset list and offers « Ouvrir »', async () => {
+  it('creates the task in the preset list and offers `Open`', async () => {
     TestBed.inject(TaskCreate).open({ listId: 'sprint-14' });
     await fixture.whenStable();
 
@@ -288,15 +286,15 @@ describe('TaskCreateDialog', () => {
     expect(document.querySelector('[data-testid="task-create-next-key"]')?.textContent.trim()).toBe(
       'CAD-495',
     );
-    expect(buttonNamed('Créer la tâche')?.disabled).toBe(true);
-    typeName('Préparer la démo');
+    expect(buttonNamed('Create the task')?.disabled).toBe(true);
+    typeName('Prepare the demo');
     const subtask: HTMLInputElement | null = document.querySelector('#task-create-subtask');
     if (!subtask) throw new Error('No subtask field');
     subtask.value = 'Slides';
     subtask.dispatchEvent(new Event('input'));
     subtask.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }));
     await fixture.whenStable();
-    buttonNamed('Créer la tâche')?.click();
+    buttonNamed('Create the task')?.click();
     await fixture.whenStable();
 
     expect(create).toHaveBeenCalledOnce();
@@ -304,28 +302,40 @@ describe('TaskCreateDialog', () => {
     expect(listId).toBe('sprint-14');
     expect(key).toMatch(/^[0-9a-f-]{36}$/u);
     expect(draft).toMatchObject({
-      name: 'Préparer la démo',
+      name: 'Prepare the demo',
       status: 'todo',
       priority: 'moyenne',
       assigneeIds: ['u1'],
       subtasks: ['Slides'],
     });
     const [title, options]: [string, CwToastOptions?] = show.mock.calls[0];
-    expect(title).toBe('Tâche CAD-495 créée');
-    expect(options?.description).toBe('Sprint 14 · À faire · 1 sous-tâche.');
-    expect(options?.action?.label).toBe('Ouvrir');
+    expect(title).toBe('Task CAD-495 created');
+    expect(options?.description).toBe('Sprint 14 · To do · 1 subtask.');
+    expect(options?.action?.label).toBe('Open');
     options?.action?.run();
     expect(navigate).toHaveBeenCalledWith(['/', 'atelier-nord', 't', 'CAD-495']);
     expect(TestBed.inject(TaskCreate).isOpen()).toBe(false);
   });
 
-  it('keeps the dialog open with an empty name for « Créer d’autres tâches »', async () => {
+  it('creates with the priority and the assignees of the group it was opened from', async () => {
+    TestBed.inject(TaskCreate).open({ listId: 'sprint-14', priority: 'urgente', assigneeIds: [] });
+    await fixture.whenStable();
+    expect(document.querySelector('[data-testid="task-create-next-key"]')).not.toBeNull();
+    typeName('Fix the crash');
+    await fixture.whenStable();
+    buttonNamed('Create the task')?.click();
+    await fixture.whenStable();
+
+    expect(create.mock.calls[0][1]).toMatchObject({ priority: 'urgente', assigneeIds: [] });
+  });
+
+  it('keeps the dialog open with an empty name for `Create more tasks`', async () => {
     TestBed.inject(TaskCreate).open();
     await fixture.whenStable();
     document.querySelector<HTMLButtonElement>('#task-create-more')?.click();
-    typeName('Première');
+    typeName('First');
     await fixture.whenStable();
-    buttonNamed('Créer la tâche')?.click();
+    buttonNamed('Create the task')?.click();
     await fixture.whenStable();
 
     expect(create).toHaveBeenCalledWith('backlog', expect.anything(), expect.any(String));
@@ -337,9 +347,9 @@ describe('TaskCreateDialog', () => {
   it('creates a subtask under its parent', async () => {
     TestBed.inject(TaskCreate).open({ parentKey: 'CAD-482', listId: 'sprint-14' });
     await fixture.whenStable();
-    typeName('Relire le parcours');
+    typeName('Review the flow');
     await fixture.whenStable();
-    buttonNamed('Créer la tâche')?.click();
+    buttonNamed('Create the task')?.click();
     await fixture.whenStable();
 
     expect(createSubtask).toHaveBeenCalledWith(
@@ -354,14 +364,14 @@ describe('TaskCreateDialog', () => {
     create.mockReturnValueOnce(throwError(() => new Error('503')));
     TestBed.inject(TaskCreate).open();
     await fixture.whenStable();
-    typeName('Préparer la démo');
+    typeName('Prepare the demo');
     await fixture.whenStable();
-    buttonNamed('Créer la tâche')?.click();
+    buttonNamed('Create the task')?.click();
     await fixture.whenStable();
 
     expect(error).toHaveBeenCalledOnce();
     expect(TestBed.inject(TaskCreate).isOpen()).toBe(true);
-    buttonNamed('Créer la tâche')?.click();
+    buttonNamed('Create the task')?.click();
     await fixture.whenStable();
     expect(create).toHaveBeenCalledTimes(2);
     expect(create.mock.calls[1][2]).toBe(create.mock.calls[0][2]);
@@ -372,17 +382,17 @@ describe('TaskCreateDialog', () => {
     const service: TaskCreate = TestBed.inject(TaskCreate);
     service.open();
     await fixture.whenStable();
-    typeName('Préparer la démo');
+    typeName('Prepare the demo');
     await fixture.whenStable();
-    buttonNamed('Créer la tâche')?.click();
+    buttonNamed('Create the task')?.click();
     await fixture.whenStable();
     service.close();
     await fixture.whenStable();
     service.open();
     await fixture.whenStable();
-    typeName('Préparer la démo');
+    typeName('Prepare the demo');
     await fixture.whenStable();
-    buttonNamed('Créer la tâche')?.click();
+    buttonNamed('Create the task')?.click();
     await fixture.whenStable();
     expect(create).toHaveBeenCalledTimes(2);
     expect(create.mock.calls[1][2]).toBe(create.mock.calls[0][2]);
@@ -399,20 +409,20 @@ describe('TaskCreateDialog', () => {
       );
       TestBed.inject(TaskCreate).open();
       await fixture.whenStable();
-      typeName('Préparer la démo');
+      typeName('Prepare the demo');
       await fixture.whenStable();
-      buttonNamed('Créer la tâche')?.click();
+      buttonNamed('Create the task')?.click();
       await fixture.whenStable();
       expect(error).toHaveBeenCalledOnce();
-      expect(error.mock.calls[0][1]?.description).not.toContain('serveur');
+      expect(error.mock.calls[0][1]?.description).not.toContain('server');
     },
   );
 
-  it('opens without announcing the empty name, which only disables « Créer la tâche »', async () => {
+  it('opens without announcing the empty name, which only disables `Create the task`', async () => {
     TestBed.inject(TaskCreate).open({ listId: 'sprint-14' });
     await fixture.whenStable();
 
-    expect(buttonNamed('Créer la tâche')?.disabled).toBe(true);
+    expect(buttonNamed('Create the task')?.disabled).toBe(true);
     expect(document.querySelector('[role="dialog"] [role="alert"]')).toBeNull();
     const field: HTMLInputElement | null = document.querySelector('#task-create-name');
     field?.dispatchEvent(new Event('blur'));
@@ -422,7 +432,7 @@ describe('TaskCreateDialog', () => {
       document.querySelectorAll<HTMLElement>('[role="dialog"] [role="alert"]'),
     );
     expect(alerts.map((alert: HTMLElement) => alert.textContent.trim())).toEqual([
-      'Saisissez le nom de la tâche.',
+      'Enter a name for the task.',
     ]);
     expect(document.querySelector('cw-dialog-footer [role="alert"]')).toBeNull();
   });
@@ -439,9 +449,9 @@ describe('TaskCreateDialog', () => {
     );
     TestBed.inject(TaskCreate).open();
     await fixture.whenStable();
-    typeName('Préparer la démo');
+    typeName('Prepare the demo');
     await fixture.whenStable();
-    buttonNamed('Créer la tâche')?.click();
+    buttonNamed('Create the task')?.click();
     await fixture.whenStable();
     expect(error).not.toHaveBeenCalled();
     expect(document.querySelector('#task-create-name ~ [role="alert"]')?.textContent).toBeTruthy();
@@ -459,12 +469,12 @@ describe('TaskCreateDialog', () => {
     );
     TestBed.inject(TaskCreate).open({ listId: 'sprint-14' });
     await fixture.whenStable();
-    typeName('Préparer la démo');
+    typeName('Prepare the demo');
     await fixture.whenStable();
-    buttonNamed('Créer la tâche')?.click();
+    buttonNamed('Create the task')?.click();
     await fixture.whenStable();
 
-    typeName('Préparer la démo du jeudi');
+    typeName('Prepare the Thursday demo');
     await fixture.whenStable();
     refuse(
       new HttpErrorResponse({ status: 422, error: { details: { issues: [{ path: 'name' }] } } }),
@@ -474,7 +484,7 @@ describe('TaskCreateDialog', () => {
     await expect.poll(() => error.mock.calls.length).toBe(1);
     expect(document.querySelector('#task-create-name ~ [role="alert"]')).toBeNull();
     expect(error.mock.calls[0][1]?.description).toBe(
-      'Impossible de créer la tâche. Vérifiez les informations et réessayez.',
+      'The task could not be created. Check its details and try again.',
     );
   });
 
@@ -490,18 +500,18 @@ describe('TaskCreateDialog', () => {
     );
     TestBed.inject(TaskCreate).open({ listId: 'sprint-14' });
     await fixture.whenStable();
-    typeName('Préparer la démo');
+    typeName('Prepare the demo');
     await fixture.whenStable();
-    buttonNamed('Créer la tâche')?.click();
+    buttonNamed('Create the task')?.click();
     await fixture.whenStable();
-    expect(buttonNamed('Créer la tâche')?.disabled).toBe(true);
+    expect(buttonNamed('Create the task')?.disabled).toBe(true);
 
-    typeName('Préparer la démo du jeudi');
+    typeName('Prepare the Thursday demo');
     await fixture.whenStable();
-    typeName('Préparer la démo');
+    typeName('Prepare the demo');
     await fixture.whenStable();
 
-    expect(buttonNamed('Créer la tâche')?.disabled).toBe(false);
+    expect(buttonNamed('Create the task')?.disabled).toBe(false);
   });
 
   it('starts each opening without the issues a refused creation left', async () => {
@@ -517,24 +527,24 @@ describe('TaskCreateDialog', () => {
     const service: TaskCreate = TestBed.inject(TaskCreate);
     service.open({ listId: 'sprint-14' });
     await fixture.whenStable();
-    typeName('Préparer la démo');
+    typeName('Prepare the demo');
     await fixture.whenStable();
-    buttonNamed('Créer la tâche')?.click();
+    buttonNamed('Create the task')?.click();
     await fixture.whenStable();
     expect(document.querySelector('cw-dialog-footer [role="alert"]')?.textContent).toContain(
-      'Vérifiez cette information.',
+      'Check this information.',
     );
 
     service.close();
     await fixture.whenStable();
     service.open({ listId: 'sprint-14' });
     await fixture.whenStable();
-    typeName('Préparer la démo');
+    typeName('Prepare the demo');
     await fixture.whenStable();
     document.querySelector('#task-create-name')?.dispatchEvent(new Event('blur'));
     await fixture.whenStable();
 
-    expect(buttonNamed('Créer la tâche')?.disabled).toBe(false);
+    expect(buttonNamed('Create the task')?.disabled).toBe(false);
     expect(document.querySelector('cw-dialog-footer [role="alert"]')).toBeNull();
   });
 
@@ -553,16 +563,16 @@ describe('TaskCreateDialog', () => {
     );
     TestBed.inject(TaskCreate).open();
     await fixture.whenStable();
-    typeName('Préparer la démo');
+    typeName('Prepare the demo');
     await fixture.whenStable();
-    buttonNamed('Créer la tâche')?.click();
+    buttonNamed('Create the task')?.click();
     await fixture.whenStable();
     expect(error).not.toHaveBeenCalled();
     expect(document.querySelectorAll('cw-dialog-footer [role="alert"] p')).toHaveLength(6);
     expect(document.querySelector('#task-create-name ~ [role="alert"]')).not.toBeNull();
   });
 
-  it('asks the reason before taking « Annulé »', async () => {
+  it('asks the reason before taking `Cancelled`', async () => {
     TestBed.inject(TaskCreate).open();
     await fixture.whenStable();
     const caret: HTMLButtonElement | undefined = Array.from(
@@ -571,15 +581,15 @@ describe('TaskCreateDialog', () => {
     caret?.click();
     await fixture.whenStable();
     Array.from(document.querySelectorAll<HTMLElement>('[role="menuitem"]'))
-      .find((item: HTMLElement) => item.textContent.trim().startsWith('Annulé'))
+      .find((item: HTMLElement) => item.textContent.trim().startsWith('Cancelled'))
       ?.click();
     await fixture.whenStable();
 
-    expect(document.body.textContent).toContain('Annuler CAD-495 ?');
-    buttonNamed('Annuler la tâche')?.click();
-    typeName('Doublon de CAD-482');
+    expect(document.body.textContent).toContain('Cancel CAD-495?');
+    buttonNamed('Cancel the task')?.click();
+    typeName('Duplicate of CAD-482');
     await fixture.whenStable();
-    buttonNamed('Créer la tâche')?.click();
+    buttonNamed('Create the task')?.click();
     await fixture.whenStable();
 
     expect(create.mock.calls[0][1]).toMatchObject({

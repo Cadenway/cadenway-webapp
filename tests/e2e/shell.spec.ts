@@ -5,7 +5,7 @@ const user = {
   id: '019a5f3c-8d2e-7c4a-9b1f-3e5d7a9c1b30',
   name: 'Camille Martin',
   email: 'camille.martin@ateliernord.fr',
-  language: 'fr',
+  language: 'en',
   displayName: null,
   jobTitle: null,
   timeZone: 'Europe/Paris',
@@ -22,7 +22,7 @@ const atelierNord = {
 };
 const lumen = {
   id: '019a5f3c-8d2e-7c4a-9b1f-3e5d7a9c1c40',
-  name: 'Coopérative Lumen',
+  name: 'Lumen Cooperative',
   slug: 'lumen',
   role: 'member',
   memberCount: 42,
@@ -32,9 +32,9 @@ const lumen = {
 const mention = {
   id: '019a7000-1a2b-7c3d-8e4f-5a6b7c8d9e11',
   kind: 'mention',
-  actor: { userId: '019a7000-1a2b-7c3d-8e4f-5a6b7c8d9e02', name: 'Inès Robert' },
-  task: { taskKey: 'CAD-482', name: 'Relecture du parcours SSO' },
-  excerpt: '@Camille tu peux relire le parcours SSO avant la démo de jeudi ?',
+  actor: { userId: '019a7000-1a2b-7c3d-8e4f-5a6b7c8d9e02', name: 'Nora Robert' },
+  task: { taskKey: 'CAD-482', name: 'SSO flow review' },
+  excerpt: '@Camille can you review the SSO flow before the Thursday demo?',
   status: null,
   createdAt: '2026-11-08T08:48:00Z',
   archivedAt: null,
@@ -86,7 +86,7 @@ async function stubGateway(page: Page): Promise<Gateway> {
             ...current,
             description: null,
             website: null,
-            defaultLanguage: 'fr',
+            defaultLanguage: 'en',
             createdAt: '2026-11-01T10:00:00Z',
             version: 1,
           },
@@ -139,7 +139,7 @@ async function stubGateway(page: Page): Promise<Gateway> {
                     {
                       kind: 'task',
                       taskKey: 'CAD-482',
-                      name: 'Relecture du parcours SSO',
+                      name: 'SSO flow review',
                       status: 'review',
                     },
                   ]
@@ -168,30 +168,30 @@ test('the shell renders its rail, sidebar and banner', async ({ page }) => {
   await page.goto('/atelier-nord');
 
   const rail = page.getByRole('navigation', { name: 'Applications' });
-  await expect(rail.getByRole('link', { name: 'Accueil' })).toHaveAttribute('aria-current', 'page');
-  await expect(rail.getByRole('button', { name: /Boîte de réception/ })).toBeVisible();
-  await expect(rail.getByRole('button', { name: /Rechercher/ })).toBeVisible();
+  await expect(rail.getByRole('link', { name: 'Home' })).toHaveAttribute('aria-current', 'page');
+  await expect(rail.getByRole('button', { name: /Inbox/ })).toBeVisible();
+  await expect(rail.getByRole('button', { name: /Search/ })).toBeVisible();
   await expect(
-    rail.getByRole('button', { name: 'Compte de Camille Martin', exact: true }),
+    rail.getByRole('button', { name: 'Account of Camille Martin', exact: true }),
   ).toBeVisible();
-  await expect(page.getByRole('link', { name: 'Plan Équipe · 18 / 25 sièges' })).toBeVisible();
-  await expect(page.getByText('Stockage presque plein')).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Team plan · 18 / 25 seats' })).toBeVisible();
+  await expect(page.getByText('Storage nearly full')).toBeVisible();
 });
 
 test('Ctrl K opens the palette and a search shows its results', async ({ page }) => {
   const gateway = await stubGateway(page);
   await page.goto('/atelier-nord');
-  await expect(page.getByRole('heading', { name: 'Bonjour Camille' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Hello Camille' })).toBeVisible();
 
   await page.keyboard.press('Control+k');
-  const palette = page.getByRole('dialog', { name: 'Palette de commandes' });
+  const palette = page.getByRole('dialog', { name: 'Command palette' });
   await expect(palette).toBeVisible();
   await palette.getByRole('combobox').fill('sso');
 
-  await expect(palette.getByRole('option', { name: /Relecture du parcours SSO/ })).toBeVisible();
+  await expect(palette.getByRole('option', { name: /SSO flow review/ })).toBeVisible();
   expect(gateway.calls).toContain('GET /v1/search');
-  await palette.getByRole('combobox').fill('introuvable');
-  await expect(palette.getByText('Aucun résultat pour « introuvable ».')).toBeVisible();
+  await palette.getByRole('combobox').fill('nowhere');
+  await expect(palette.getByText('No results for “nowhere”.')).toBeVisible();
 });
 
 test('the inbox marks everything read and its badge clears', async ({ page }) => {
@@ -202,12 +202,12 @@ test('the inbox marks everything read and its badge clears', async ({ page }) =>
 
   await inbox.click();
   const popover = page.getByTestId('inbox-popover');
-  await expect(popover.getByText('Inès Robert')).toBeVisible();
-  await expect(popover.getByRole('img', { name: 'Non lu' })).toBeVisible();
-  await popover.getByRole('button', { name: 'Tout marquer comme lu' }).click();
+  await expect(popover.getByText('Nora Robert')).toBeVisible();
+  await expect(popover.getByRole('img', { name: 'Unread' })).toBeVisible();
+  await popover.getByRole('button', { name: 'Mark all as read' }).click();
 
-  await expect(popover.getByRole('img', { name: 'Non lu' })).toHaveCount(0);
-  await expect(popover.getByRole('button', { name: 'Tout marquer comme lu' })).toBeDisabled();
+  await expect(popover.getByRole('img', { name: 'Unread' })).toHaveCount(0);
+  await expect(popover.getByRole('button', { name: 'Mark all as read' })).toBeDisabled();
   await expect(inbox).not.toContainText('1');
 });
 
@@ -215,40 +215,40 @@ test('the account menu signs out to the signed-out screen', async ({ page }) => 
   await stubGateway(page);
   await page.goto('/atelier-nord');
 
-  await page.getByRole('button', { name: /Compte de Camille Martin/ }).click();
-  await page.getByRole('menuitem', { name: 'Se déconnecter' }).click();
+  await page.getByRole('button', { name: /Account of Camille Martin/ }).click();
+  await page.getByRole('menuitem', { name: 'Sign out' }).click();
 
   await expect(page).toHaveURL(/\/logged-out\?reason=signed-out$/);
-  await expect(page.getByRole('heading', { name: 'Vous êtes déconnecté' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'You are signed out' })).toBeVisible();
 });
 
-test('« ? » opens the keyboard shortcuts', async ({ page }) => {
+test('the question mark key opens the keyboard shortcuts', async ({ page }) => {
   await stubGateway(page);
   await page.goto('/atelier-nord');
-  await expect(page.getByRole('heading', { name: 'Bonjour Camille' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Hello Camille' })).toBeVisible();
 
   await page.keyboard.press('?');
 
-  const dialog = page.getByRole('dialog', { name: 'Raccourcis clavier' });
+  const dialog = page.getByRole('dialog', { name: 'Keyboard shortcuts' });
   await expect(dialog).toBeVisible();
-  await expect(dialog.getByRole('heading', { name: 'Partout' })).toBeVisible();
-  await expect(dialog.getByRole('heading', { name: 'Édition' })).toBeVisible();
+  await expect(dialog.getByRole('heading', { name: 'Everywhere' })).toBeVisible();
+  await expect(dialog.getByRole('heading', { name: 'Editing' })).toBeVisible();
 });
 
 test('the organizations menu switches to another organization', async ({ page }) => {
   const gateway = await stubGateway(page);
   await page.goto('/atelier-nord');
 
-  await page.getByRole('button', { name: 'Changer d’organisation : Atelier Nord' }).click();
+  await page.getByRole('button', { name: 'Switch organization: Atelier Nord' }).click();
   await expect(page.getByRole('menuitemradio', { name: /Atelier Nord/ })).toHaveAttribute(
     'aria-checked',
     'true',
   );
-  await page.getByRole('menuitemradio', { name: /Coopérative Lumen/ }).click();
+  await page.getByRole('menuitemradio', { name: /Lumen Cooperative/ }).click();
 
   await expect(page).toHaveURL(/\/lumen$/);
   await expect(
-    page.getByRole('button', { name: 'Changer d’organisation : Coopérative Lumen' }),
+    page.getByRole('button', { name: 'Switch organization: Lumen Cooperative' }),
   ).toBeVisible();
   expect(gateway.calls).toContain('PUT /v1/session/organization');
 });

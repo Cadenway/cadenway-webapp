@@ -21,7 +21,7 @@ export const KIND_ICONS: Readonly<Record<string, string>> = {
  * Constant STATUS_WORDS
  *
  * @description
- * Words of the workflow statuses, for « a passé la tâche à Bloqué ».
+ * Words of the workflow statuses, for `moved the task to Blocked`.
  *
  * @type {Readonly<Record<CwStatusKey, string>>}
  */
@@ -42,7 +42,7 @@ export const STATUS_WORDS: Readonly<Record<CwStatusKey, string>> = {
  * Function notificationVerb
  *
  * @description
- * What the actor did, written after their name as in the mockup (« vous a mentionnée »). A
+ * What the actor did, written after their name as in the mockup (`mentioned you`). A
  * category the mockup does not draw reads as a generic notification.
  *
  * @param {string} kind - Notification category.

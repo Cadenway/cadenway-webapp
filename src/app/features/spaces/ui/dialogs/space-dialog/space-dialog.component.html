@@ -1,0 +1,177 @@
+<cw-dialog [(open)]="open" [pending]="pending()" data-testid="space-dialog">
+  <cw-dialog-header>
+    <h2 cwDialogTitle>{{ title() }}</h2>
+    <p cwDialogDescription i18n="@@spaces.space-dialog.description">
+      A space groups the lists and sprints of a team or a field.
+    </p>
+  </cw-dialog-header>
+  <form
+    class="flex flex-col gap-4"
+    novalidate
+    (submit)="$event.preventDefault(); submit(nameField, prefixField)"
+  >
+    <div class="flex items-center gap-3">
+      <span
+        class="flex size-[3.375rem] shrink-0 items-center justify-center rounded-xl border border-border bg-background transition-colors"
+        [class]="markTone()"
+        aria-hidden="true"
+      >
+        @if (markIcon(); as name) {
+          <ng-icon [name]="name" class="size-6" />
+        } @else {
+          <span class="text-xl font-semibold">{{ initial() }}</span>
+        }
+      </span>
+      <div class="flex min-w-0 flex-1 flex-col gap-2">
+        <label
+          for="space-name"
+          class="text-sm leading-none font-medium"
+          i18n="@@spaces.space-dialog.name"
+          >Space name</label
+        >
+        <input
+          #nameField
+          id="space-name"
+          cwInput
+          type="text"
+          autocomplete="off"
+          placeholder="Human resources"
+          i18n-placeholder="@@spaces.space-dialog.name-placeholder"
+          [formField]="spaceForm.name"
+          [attr.aria-describedby]="
+            spaceForm.name().touched() && spaceForm.name().invalid() ? 'space-name-error' : null
+          "
+          data-testid="space-dialog-name"
+          (input)="nameTyped()"
+        />
+        @if (spaceForm.name().touched() && spaceForm.name().invalid()) {
+          <p id="space-name-error" class="text-xs text-destructive">
+            @for (error of spaceForm.name().errors(); track error.kind) {
+              {{ error.message }}
+            }
+          </p>
+        }
+      </div>
+    </div>
+    <div class="grid grid-cols-[7rem_1fr] items-start gap-x-3 gap-y-2">
+      <label
+        for="space-prefix"
+        class="flex h-8 items-center text-sm leading-none font-medium"
+        i18n="@@spaces.space-dialog.prefix"
+        >Prefix</label
+      >
+      <div class="flex flex-col gap-1.5">
+        <input
+          #prefixField
+          id="space-prefix"
+          cwInput
+          type="text"
+          autocomplete="off"
+          class="w-28 font-mono uppercase"
+          placeholder="HR"
+          i18n-placeholder="@@spaces.space-dialog.prefix-placeholder"
+          aria-describedby="space-prefix-hint"
+          [formField]="spaceForm.prefix"
+          data-testid="space-dialog-prefix"
+          (input)="prefixTyped()"
+        />
+        <p
+          id="space-prefix-hint"
+          class="text-xs"
+          [class]="
+            spaceForm.prefix().value() && spaceForm.prefix().invalid()
+              ? 'text-destructive'
+              : 'text-muted-foreground'
+          "
+          data-testid="space-dialog-prefix-hint"
+        >
+          @if (spaceForm.prefix().value() && spaceForm.prefix().invalid()) {
+            @for (error of spaceForm.prefix().errors(); track error.kind) {
+              {{ error.message }}
+            }
+          } @else {
+            {{ prefixHint() }}
+          }
+        </p>
+      </div>
+      <label
+        for="space-description"
+        class="flex h-8 items-center text-sm leading-none font-medium"
+        i18n="@@spaces.space-dialog.description-label"
+        >Description</label
+      >
+      <textarea
+        id="space-description"
+        cwTextarea
+        rows="2"
+        placeholder="Optional"
+        i18n-placeholder="@@spaces.space-dialog.optional"
+        [formField]="spaceForm.description"
+      ></textarea>
+    </div>
+    <cw-look-picker
+      [(icon)]="icon"
+      [(color)]="color"
+      [initial]="initial()"
+      defaultLabel="Initial"
+      i18n-defaultLabel="@@spaces.look.initial"
+    />
+    @if (canChangeVisibility()) {
+      <div class="flex flex-col gap-2">
+        <span
+          id="space-visibility-label"
+          class="text-sm leading-none font-medium"
+          i18n="@@spaces.space-dialog.visibility"
+          >Confidentiality</span
+        >
+        <cw-radio-group
+          class="grid grid-cols-1 gap-2 sm:grid-cols-2"
+          orientation="horizontal"
+          ariaLabel="Confidentiality"
+          i18n-ariaLabel="@@spaces.space-dialog.visibility"
+          [value]="visibility()"
+          (valueChange)="pickVisibility($event)"
+        >
+          <cw-radio-group-item value="organization" variant="card">
+            <span class="flex items-center gap-1.5 text-sm font-medium">
+              <ng-icon name="phosphorUsersThreeBold" class="size-4 shrink-0" aria-hidden="true" />
+              {{ organizationLabel() }}
+            </span>
+            <span
+              class="text-xs text-muted-foreground"
+              i18n="@@spaces.space-dialog.organization-text"
+              >Every member of the organization sees the space and can join it.</span
+            >
+          </cw-radio-group-item>
+          <cw-radio-group-item value="private" variant="card">
+            <span class="flex items-center gap-1.5 text-sm font-medium">
+              <ng-icon name="phosphorLockKeyBold" class="size-4 shrink-0" aria-hidden="true" />
+              <ng-container i18n="@@spaces.space-dialog.private">Private</ng-container>
+            </span>
+            <span class="text-xs text-muted-foreground" i18n="@@spaces.space-dialog.private-text"
+              >Only the people invited see it. The others get “Access denied”.</span
+            >
+          </cw-radio-group-item>
+        </cw-radio-group>
+      </div>
+    }
+    <cw-dialog-footer>
+      <button cwButton cwDialogClose type="button" variant="outline">
+        <ng-container i18n="@@spaces.cancel">Cancel</ng-container>
+      </button>
+      <button
+        cwButton
+        type="submit"
+        [loading]="pending()"
+        [disabled]="spaceForm.name().invalid() || spaceForm.prefix().invalid()"
+        data-testid="space-dialog-submit"
+      >
+        @if (editing()) {
+          <ng-container i18n="@@spaces.save-view.rename-submit">Save</ng-container>
+        } @else {
+          <ng-container i18n="@@spaces.space-dialog.create-submit">Create the space</ng-container>
+        }
+      </button>
+    </cw-dialog-footer>
+  </form>
+</cw-dialog>

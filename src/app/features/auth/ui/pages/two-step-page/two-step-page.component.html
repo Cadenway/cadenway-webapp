@@ -1,13 +1,17 @@
 <div class="flex w-full max-w-[420px] flex-col gap-5">
   @if (shown(); as challenge) {
     <cw-card class="gap-6 p-6 sm:p-8">
-      <div class="flex flex-col gap-4">
-        <div class="flex items-center gap-3">
-          <div class="flex size-10 items-center justify-center rounded-lg bg-muted text-foreground">
+      <div class="flex flex-col gap-3">
+        <div class="flex items-center justify-between gap-3">
+          <div
+            class="flex size-10 items-center justify-center rounded-lg bg-muted text-muted-foreground"
+          >
             <ng-icon name="phosphorShieldCheckBold" class="size-5" aria-hidden="true" />
           </div>
-          <div class="flex min-w-0 items-center gap-2 rounded-full bg-muted py-1 ps-1 pe-3">
-            <cw-avatar size="xs" [name]="challenge.name" />
+          <div
+            class="flex min-w-0 items-center gap-2 rounded-full border border-border py-0.5 ps-0.5 pe-2.5"
+          >
+            <cw-avatar size="sm" [name]="challenge.name" />
             <span class="truncate text-xs text-muted-foreground">{{ challenge.email }}</span>
           </div>
         </div>
@@ -20,7 +24,7 @@
       </div>
 
       @if (message(); as alert) {
-        <cw-alert variant="destructive" role="alert">
+        <cw-alert variant="destructive" class="[&>ng-icon]:text-inherit" role="alert">
           <cw-alert-description>{{ alert }}</cw-alert-description>
         </cw-alert>
       }
@@ -43,7 +47,11 @@
           >
             @for (item of challenge.methods; track item) {
               <button cwTab type="button" class="flex-1" [value]="item">
-                <ng-icon [name]="icons[item]" aria-hidden="true" />
+                @if (item === method()) {
+                  <ng-icon [name]="activeIcons[item]" class="text-primary" aria-hidden="true" />
+                } @else {
+                  <ng-icon [name]="icons[item]" aria-hidden="true" />
+                }
                 {{ labels[item] }}
               </button>
             }
@@ -106,18 +114,46 @@
           <cw-tab-panel value="security-key">
             <div class="flex flex-col gap-4 pt-4">
               <div
-                class="flex flex-col items-center gap-2 rounded-lg border border-dashed border-border p-4 text-center"
+                class="flex flex-col items-center gap-3 rounded-lg bg-muted px-4 py-6 text-center"
               >
-                <ng-icon
-                  name="phosphorFingerprintBold"
-                  class="size-6 text-muted-foreground"
-                  aria-hidden="true"
-                />
-                @if (busy()) {
-                  <p class="text-sm" aria-live="polite" i18n="@@auth.two-step.key-waiting">
+                @if (recognized()) {
+                  <ng-icon
+                    name="phosphorCheckCircleFill"
+                    class="size-8 text-jade"
+                    aria-hidden="true"
+                  />
+                  @if (challenge.securityKeys.length === 1) {
+                    <p
+                      class="text-sm font-medium"
+                      aria-live="polite"
+                      i18n="@@auth.two-step.key-recognized"
+                    >
+                      Key recognized: {{ challenge.securityKeys[0] }}
+                    </p>
+                  } @else {
+                    <p
+                      class="text-sm font-medium"
+                      aria-live="polite"
+                      i18n="@@auth.two-step.key-recognized-generic"
+                    >
+                      Key recognized
+                    </p>
+                  }
+                } @else if (busy()) {
+                  <svg cwSpinner size="page" class="text-foreground" aria-hidden="true"></svg>
+                  <p
+                    class="text-sm font-medium"
+                    aria-live="polite"
+                    i18n="@@auth.two-step.key-waiting"
+                  >
                     Touch your key or confirm with biometrics…
                   </p>
                 } @else {
+                  <ng-icon
+                    name="phosphorFingerprintBold"
+                    class="size-8 text-muted-foreground"
+                    aria-hidden="true"
+                  />
                   @if (challenge.securityKeys.length === 1) {
                     <p class="text-sm text-muted-foreground" i18n="@@auth.two-step.key-one">
                       1 registered key: {{ keys(challenge) }}.
@@ -129,17 +165,29 @@
                   }
                 }
               </div>
-              <button
-                cwButton
-                type="button"
-                class="w-full"
-                [disabled]="busy()"
-                [attr.aria-busy]="busy()"
-                (click)="useKey()"
-              >
-                <ng-icon name="phosphorKeyBold" aria-hidden="true" />
-                <span i18n="@@auth.two-step.use-key">Use my security key</span>
-              </button>
+              @if (recognized(); as destination) {
+                <button
+                  cwButton
+                  type="button"
+                  class="w-full"
+                  (click)="proceed(destination)"
+                  i18n="@@auth.two-step.continue"
+                >
+                  Continue
+                </button>
+              } @else {
+                <button
+                  cwButton
+                  type="button"
+                  class="w-full"
+                  [disabled]="busy()"
+                  [attr.aria-busy]="busy()"
+                  (click)="useKey()"
+                >
+                  <ng-icon name="phosphorKeyBold" aria-hidden="true" />
+                  <span i18n="@@auth.two-step.use-key">Use my security key</span>
+                </button>
+              }
             </div>
           </cw-tab-panel>
 
@@ -158,7 +206,7 @@
                   type="text"
                   autocomplete="one-time-code"
                   placeholder="XXXX-XXXX"
-                  class="font-mono tracking-widest"
+                  class="font-mono tracking-[0.2em] uppercase"
                   [formField]="twoStepForm.backupCode"
                   (input)="formatBackup()"
                 />
@@ -188,21 +236,28 @@
         </cw-tabs>
       }
 
-      <div class="flex flex-col gap-2 border-t border-border pt-4">
-        <p class="text-xs text-muted-foreground" i18n="@@auth.two-step.no-method">
+      <div class="flex flex-col gap-1 border-t border-border pt-4 text-xs text-muted-foreground">
+        <p i18n="@@auth.two-step.no-method">
           No access to any method anymore? Ask your organization's administrator for a reset.
         </p>
-        <button
-          cwButton
-          type="button"
-          variant="ghost"
-          size="sm"
-          class="self-start"
-          (click)="useAnotherAccount()"
-          i18n="@@auth.two-step.other-account"
-        >
-          Use another account
-        </button>
+        <div class="flex flex-wrap items-center gap-x-4 gap-y-1">
+          @if (siteUrl; as site) {
+            <a
+              [href]="site + '/help'"
+              class="w-fit rounded-sm font-medium text-primary underline-offset-4 hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background focus-visible:outline-none"
+              i18n="@@auth.two-step.contact-admin"
+              >Contact the administrator</a
+            >
+          }
+          <button
+            type="button"
+            class="w-fit cursor-pointer rounded-sm font-medium text-primary underline-offset-4 hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background focus-visible:outline-none"
+            (click)="useAnotherAccount()"
+            i18n="@@auth.two-step.other-account"
+          >
+            Use another account
+          </button>
+        </div>
       </div>
     </cw-card>
   } @else {

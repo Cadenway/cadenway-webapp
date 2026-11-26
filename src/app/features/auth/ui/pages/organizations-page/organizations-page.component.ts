@@ -13,7 +13,6 @@ import {
 } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
 import { CwAlert, CwAlertDescription } from '@cadenway/ui/components/alert';
-import { CwAvatar } from '@cadenway/ui/components/avatar';
 import { CwBadge } from '@cadenway/ui/components/badge';
 import { CwButton } from '@cadenway/ui/components/button';
 import { CwCard } from '@cadenway/ui/components/card';
@@ -36,23 +35,23 @@ import type {
 } from '../../../models/organization/organization.interface';
 import { AuthFlowStore, type StepResult } from '../../../state/auth-flow/auth-flow.store';
 import { OrganizationChoiceStore } from '../../../state/organization-choice/organization-choice.store';
+import { initials } from '../../../utils/initials/initials.util';
 
 /**
  * Component OrganizationsPage
  *
  * @description
  * The chooser of `Organisations.dc.html` (`/organizations`): the account of the session, the
- * invitations addressed to it (Accepter, Refuser with « Annuler »), its organizations, « Créer une
- * organisation » and « Se déconnecter ». Choosing an organization moves the session to it and
+ * invitations addressed to it (`Accept`, `Refuse` with `Undo`), its organizations, `Create an
+ * organization` and `Sign out`. Choosing an organization moves the session to it and
  * opens `/<slug>`. An invitation named by `?invitation=` stands out. A failed list shows
- * « Impossible de charger cette page » with « Réessayer »; a lost session returns to `/login`.
+ * `This page could not be loaded` with `Retry`; a lost session returns to `/login`.
  */
 @Component({
   selector: 'cw-organizations-page',
   imports: [
     CwAlert,
     CwAlertDescription,
-    CwAvatar,
     CwBadge,
     CwButton,
     CwCard,
@@ -200,6 +199,17 @@ export class OrganizationsPage {
     team: $localize`:@@auth.plan.team:Team`,
     enterprise: $localize`:@@auth.plan.enterprise:Enterprise`,
   };
+
+  /**
+   * Property initials
+   *
+   * @description
+   * The square mark of an organization or an invitation.
+   *
+   * @type {(name: string) => string}
+   * @readonly
+   */
+  protected readonly initials: (name: string) => string = initials;
   // #endregion
 
   // #region Constructor
@@ -261,7 +271,7 @@ export class OrganizationsPage {
    * Whether an organization was joined during this visit.
    *
    * @param {OrganizationChoice} organization - The organization.
-   * @returns {boolean} Whether it shows « Nouveau ».
+   * @returns {boolean} Whether it shows `New`.
    */
   protected isNew(organization: OrganizationChoice): boolean {
     return this.store.joined().some((item: OrganizationChoice) => item.id === organization.id);

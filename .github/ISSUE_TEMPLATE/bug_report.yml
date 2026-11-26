@@ -36,8 +36,8 @@ body:
     attributes:
       label: Steps to reproduce
       placeholder: |
-        1. Open the "Produit" space, list "Sprint 14"
-        2. Drag a task to "En revue"
+        1. Open the "Product" space, list "Sprint 14"
+        2. Drag a task to "In review"
         3. ...
     validations:
       required: true

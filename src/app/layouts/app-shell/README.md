@@ -10,7 +10,7 @@ The application frame of mockup `App.dc.html` (lines 17-300): the banners across
 - From 768 to 1023 px the expanded sidebar floats over the content (`overlayBelow="lg"`, closed by
   default, Escape or an outside click closes it), and its backdrop stays inside the main panel
   (`backdrop="container"`), clear of the phone tab bar.
-- **Toggles.** The sidebar header always ends with a collapse button. While the sidebar is collapsed, an expand toggle sits above the routed screen.
+- **Toggles.** The first row of the sidebar header ends with the collapse button, so it sits on the organization row (mockup line 196). While the sidebar is collapsed, an expand toggle sits above the routed screen. Neither toggle declares a keyboard shortcut: the mockup keeps Ctrl B for bold in the editors (line 3639). `cw-sidebar` 0.8.0 still binds Ctrl B itself, without an option to turn it off.
 - **Focus.** Opening with a toggle moves focus to the first control of the sidebar. A collapse that leaves focus in the sidebar returns it to the control that opened it, or else to the expand toggle.
 - **Screen toggle.** A screen can render the expand toggle itself through `SHELL_SIDEBAR` and `claimToggle(destroyRef)` (see [the port](../../shared/layout-slot/README.md#shell-sidebar-port)). `AppShellSidebar`, provided by the shell, holds this state.
 - **Icon.** The route provides the `phosphorSidebarSimpleBold` icon through `provideCadenwayIcons()`.

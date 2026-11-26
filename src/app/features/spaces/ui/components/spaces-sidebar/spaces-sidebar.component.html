@@ -1,122 +1,335 @@
-@if (navigation.favorites.error()) {
-  <div role="alert">
-    <span i18n="@@spaces.secondary.favorites-failed">The favorites could not be loaded.</span>
-    <button cwButton variant="outline" size="xs" (click)="navigation.favorites.reload()">
-      {{ retryLabel }}
-    </button>
-  </div>
-}
-@if (favorites().length > 0) {
-  <cw-sidebar-group
-    label="Favorites"
-    i18n-label="@@spaces.sidebar.favorites"
-    data-testid="sidebar-favorites"
-  >
-    @for (favorite of favorites(); track favorite.id) {
-      <a
-        cwSidebarItem
-        [icon]="
-          favorite.kind === 'saved-view' ? 'phosphorFunnelSimpleBold' : 'phosphorListBulletsBold'
-        "
-        [routerLink]="favoriteLink(favorite)"
-        [queryParams]="favoriteQuery(favorite)"
-        routerLinkActive
-        #favoriteActive="routerLinkActive"
-        [routerLinkActiveOptions]="{
-          paths: 'exact',
-          queryParams: 'exact',
-          fragment: 'ignored',
-          matrixParams: 'ignored',
-        }"
-        [active]="favoriteActive.isActive"
-        >{{ favorite.name }}</a
-      >
-    }
-  </cw-sidebar-group>
-}
-
-<cw-sidebar-group label="Spaces" i18n-label="@@spaces.sidebar.spaces" data-testid="sidebar-spaces">
-  @if (navigation.spaces.status() === 'error') {
-    <div
-      class="flex flex-col items-start gap-2 px-2 py-1 text-xs text-muted-foreground"
-      role="alert"
-    >
-      <span i18n="@@spaces.sidebar.failed">The spaces could not be loaded.</span>
-      <button
-        cwButton
-        type="button"
-        variant="outline"
-        size="xs"
-        (click)="navigation.spaces.reload()"
-      >
+<div
+  class="flex min-h-0 flex-1 flex-col gap-3"
+  data-testid="sidebar-background"
+  [cwContextMenuTriggerFor]="backgroundMenu"
+>
+  @if (navigation.favorites.error()) {
+    <div role="alert">
+      <span i18n="@@spaces.secondary.favorites-failed">The favorites could not be loaded.</span>
+      <button cwButton variant="outline" size="xs" (click)="navigation.favorites.reload()">
         {{ retryLabel }}
       </button>
     </div>
-  } @else if (!navigation.spaces.hasValue()) {
-    <div
-      class="flex flex-col gap-1.5 px-2 py-1"
-      aria-busy="true"
-      data-testid="sidebar-spaces-loading"
-    >
-      <div cwSkeleton class="h-6 w-3/4"></div>
-      <div cwSkeleton class="h-6 w-2/3"></div>
-      <div cwSkeleton class="h-6 w-1/2"></div>
-    </div>
-  } @else {
-    @for (view of spaces(); track view.space.id) {
-      <cw-sidebar-space
-        [name]="view.space.name"
-        [icon]="view.icon"
-        [color]="view.color"
-        [count]="view.total"
-        [expanded]="navigation.expanded()[view.space.id] === true"
-        (expandedChange)="setExpanded(view.space.id, $event)"
-      >
-        <a
-          cwSidebarSpaceAction
-          cwButton
-          variant="ghost"
-          size="icon-xs"
-          [routerLink]="['/', slug(), 'spaces', view.space.id]"
-          [attr.aria-label]="overviewLabel(view.space)"
-          [attr.title]="overviewLabel(view.space)"
-        >
-          <ng-icon name="phosphorSquaresFourBold" class="size-3.5" aria-hidden="true" />
-        </a>
-        @if (navigation.overviews.hasValue() && !navigation.overviews.value()[view.space.id]) {
-          <div role="alert">
-            <span i18n="@@spaces.secondary.overview-failed">The lists could not be loaded.</span>
-            <button cwButton variant="outline" size="xs" (click)="navigation.overviews.reload()">
-              {{ retryLabel }}
-            </button>
-          </div>
-        }
-        @for (summary of view.lists; track summary.list.id) {
-          <a
-            cwSidebarItem
-            [icon]="listIcon(summary)"
-            [count]="summary.counts.total"
-            [routerLink]="['/', slug(), 'l', summary.list.id]"
-            routerLinkActive
-            #listActive="routerLinkActive"
-            [active]="listActive.isActive"
-            >{{ summary.list.name }}</a
-          >
-        }
-      </cw-sidebar-space>
-    }
   }
-</cw-sidebar-group>
+  @if (favorites().length > 0) {
+    <cw-sidebar-group
+      label="Favorites"
+      i18n-label="@@spaces.sidebar.favorites"
+      data-testid="sidebar-favorites"
+    >
+      @for (view of favorites(); track view.favorite.id) {
+        <a
+          cwSidebarItem
+          [icon]="view.icon"
+          [routerLink]="favoriteLink(view.favorite)"
+          [queryParams]="favoriteQuery(view.favorite)"
+          routerLinkActive
+          #favoriteActive="routerLinkActive"
+          [routerLinkActiveOptions]="{
+            paths: 'exact',
+            queryParams: 'exact',
+            fragment: 'ignored',
+            matrixParams: 'ignored',
+          }"
+          [active]="favoriteActive.isActive"
+          [cwContextMenuTriggerFor]="view.list ? listMenu : viewMenu"
+          [cwContextMenuData]="view.list ?? view.favorite"
+          >{{ view.favorite.name }}</a
+        >
+      }
+    </cw-sidebar-group>
+  }
 
-@if (tips().length > 0) {
-  <cw-sidebar-tips
-    class="mt-auto"
-    [tip]="tips()[tipPosition()]"
-    [link]="['/', slug(), ...tips()[tipPosition()].path]"
-    [position]="tipPosition() + 1"
-    [count]="tips().length"
-    (previous)="moveTip(-1)"
-    (next)="moveTip(1)"
-    (dismissed)="dismissTips()"
-  />
-}
+  <cw-sidebar-group
+    label="Spaces"
+    i18n-label="@@spaces.sidebar.spaces"
+    data-testid="sidebar-spaces"
+  >
+    <button
+      cwSidebarGroupAction
+      cwButton
+      type="button"
+      variant="ghost"
+      size="icon-xs"
+      aria-label="Create a space"
+      i18n-aria-label="@@spaces.sidebar.create-space"
+      title="Create a space"
+      i18n-title="@@spaces.sidebar.create-space"
+      data-testid="sidebar-create-space"
+      (click)="createSpace()"
+    >
+      <ng-icon name="phosphorPlusBold" class="size-3.5" aria-hidden="true" />
+    </button>
+    @if (navigation.spaces.status() === 'error') {
+      <div
+        class="flex flex-col items-start gap-2 px-2 py-1 text-xs text-muted-foreground"
+        role="alert"
+      >
+        <span i18n="@@spaces.sidebar.failed">The spaces could not be loaded.</span>
+        <button
+          cwButton
+          type="button"
+          variant="outline"
+          size="xs"
+          (click)="navigation.spaces.reload()"
+        >
+          {{ retryLabel }}
+        </button>
+      </div>
+    } @else if (!navigation.spaces.hasValue()) {
+      <div
+        class="flex flex-col gap-1.5 px-2 py-1"
+        aria-busy="true"
+        data-testid="sidebar-spaces-loading"
+      >
+        <div cwSkeleton class="h-6 w-3/4"></div>
+        <div cwSkeleton class="h-6 w-2/3"></div>
+        <div cwSkeleton class="h-6 w-1/2"></div>
+      </div>
+    } @else {
+      @for (view of spaces(); track view.space.id) {
+        <cw-sidebar-space
+          [name]="view.space.name"
+          [icon]="view.icon"
+          [color]="view.color"
+          [count]="view.total"
+          [expanded]="navigation.expanded()[view.space.id] === true"
+          [cwContextMenuTriggerFor]="spaceMenu"
+          [cwContextMenuData]="view.space"
+          (expandedChange)="setExpanded(view.space.id, $event)"
+        >
+          <button
+            cwSidebarSpaceAction
+            cwButton
+            type="button"
+            variant="ghost"
+            size="icon-xs"
+            [disabled]="!view.space.canEdit"
+            [attr.aria-label]="editLabel(view.space)"
+            [attr.title]="editLabel(view.space)"
+            (click)="editSpace(view.space)"
+          >
+            <ng-icon name="phosphorPencilSimpleBold" class="size-3.5" aria-hidden="true" />
+          </button>
+          <a
+            cwSidebarSpaceAction
+            cwButton
+            variant="ghost"
+            size="icon-xs"
+            [routerLink]="['/', slug(), 'spaces', view.space.id]"
+            [attr.aria-label]="overviewLabel(view.space)"
+            [attr.title]="overviewLabel(view.space)"
+          >
+            <ng-icon name="phosphorSquaresFourBold" class="size-3.5" aria-hidden="true" />
+          </a>
+          @if (navigation.overviews.hasValue() && !navigation.overviews.value()[view.space.id]) {
+            <div role="alert">
+              <span i18n="@@spaces.secondary.overview-failed">The lists could not be loaded.</span>
+              <button cwButton variant="outline" size="xs" (click)="navigation.overviews.reload()">
+                {{ retryLabel }}
+              </button>
+            </div>
+          }
+          @for (summary of view.lists; track summary.list.id) {
+            <a
+              cwSidebarItem
+              [icon]="listIcon(summary)"
+              [count]="summary.counts.total"
+              [routerLink]="['/', slug(), 'l', summary.list.id]"
+              routerLinkActive
+              #listActive="routerLinkActive"
+              [active]="listActive.isActive"
+              [cwContextMenuTriggerFor]="listMenu"
+              [cwContextMenuData]="summary.list"
+              >{{ summary.list.name }}</a
+            >
+          }
+        </cw-sidebar-space>
+      }
+    }
+  </cw-sidebar-group>
+
+  @if (tips().length > 0) {
+    <cw-sidebar-tips
+      class="mt-auto"
+      [tip]="tips()[tipPosition()]"
+      [link]="['/', slug(), ...tips()[tipPosition()].path]"
+      [position]="tipPosition() + 1"
+      [count]="tips().length"
+      (previous)="moveTip(-1)"
+      (next)="moveTip(1)"
+      (dismissed)="dismissTips()"
+    />
+  }
+</div>
+
+<cw-menu #backgroundMenu ariaLabel="Spaces" i18n-ariaLabel="@@spaces.sidebar.spaces">
+  <button cwMenuItem (triggered)="createSpace()">
+    <ng-icon name="phosphorPlusBold" aria-hidden="true" />
+    <ng-container i18n="@@spaces.menu.new-space">New space</ng-container>
+  </button>
+  <cw-menu-separator />
+  <button cwMenuItem (triggered)="navigation.setAllExpanded(true)">
+    <ng-icon name="phosphorCaretDownBold" aria-hidden="true" />
+    <ng-container i18n="@@spaces.menu.expand-all">Expand all spaces</ng-container>
+  </button>
+  <button cwMenuItem (triggered)="navigation.setAllExpanded(false)">
+    <ng-icon name="phosphorCaretUpBold" aria-hidden="true" />
+    <ng-container i18n="@@spaces.menu.collapse-all">Collapse all spaces</ng-container>
+  </button>
+</cw-menu>
+
+<cw-menu #listMenu [ariaLabel]="asList(listMenu.data())?.name ?? ''">
+  @if (asList(listMenu.data()); as list) {
+    <button cwMenuItem (triggered)="openList(list)">
+      <ng-icon name="phosphorArrowSquareOutBold" aria-hidden="true" />
+      <ng-container i18n="@@spaces.menu.open">Open</ng-container>
+    </button>
+    <button cwMenuItem [disabled]="!list.canEdit" (triggered)="newTask(list)">
+      <ng-icon name="phosphorPlusBold" aria-hidden="true" />
+      <ng-container i18n="@@spaces.menu.new-task">New task</ng-container>
+    </button>
+    <cw-menu-separator />
+    <button cwMenuItem [disabled]="!list.canEdit" (triggered)="editList(list)">
+      <ng-icon name="phosphorPencilSimpleBold" aria-hidden="true" />
+      @if (list.sprint) {
+        <ng-container i18n="@@spaces.header.rename-sprint">Edit the sprint</ng-container>
+      } @else {
+        <ng-container i18n="@@spaces.header.rename-list">Edit the list</ng-container>
+      }
+    </button>
+    <button cwMenuItem (triggered)="toggleListFavorite(list)">
+      <ng-icon
+        [name]="isFavoriteList(list) ? 'phosphorStarFill' : 'phosphorStarBold'"
+        aria-hidden="true"
+      />
+      @if (isFavoriteList(list)) {
+        <ng-container i18n="@@spaces.header.favorite-remove">Remove from favorites</ng-container>
+      } @else {
+        <ng-container i18n="@@spaces.header.favorite-add">Add to favorites</ng-container>
+      }
+    </button>
+    <button cwMenuItem (triggered)="copyListLink(list)">
+      <ng-icon name="phosphorLinkSimpleBold" aria-hidden="true" />
+      <ng-container i18n="@@spaces.header.copy-link">Copy the link</ng-container>
+    </button>
+    <cw-menu-separator />
+    <button
+      cwMenuItem
+      variant="destructive"
+      [disabled]="!list.canEdit"
+      (triggered)="archiveList(list)"
+    >
+      <ng-icon name="phosphorArchiveBold" aria-hidden="true" />
+      <ng-container i18n="@@spaces.menu.archive">Archive</ng-container>
+    </button>
+  }
+</cw-menu>
+
+<cw-menu #viewMenu [ariaLabel]="asFavorite(viewMenu.data())?.name ?? ''">
+  @if (asFavorite(viewMenu.data()); as favorite) {
+    <button cwMenuItem (triggered)="openFavorite(favorite)">
+      <ng-icon name="phosphorArrowSquareOutBold" aria-hidden="true" />
+      <ng-container i18n="@@spaces.menu.open">Open</ng-container>
+    </button>
+  }
+</cw-menu>
+
+<cw-menu #spaceMenu [ariaLabel]="asSpace(spaceMenu.data())?.name ?? ''">
+  @if (asSpace(spaceMenu.data()); as space) {
+    <button cwMenuItem (triggered)="openOverview(space)">
+      <ng-icon name="phosphorSquaresFourBold" aria-hidden="true" />
+      <ng-container i18n="@@spaces.menu.overview">Overview</ng-container>
+    </button>
+    <button cwMenuItem [disabled]="!space.canEdit" (triggered)="editSpace(space)">
+      <ng-icon name="phosphorPencilSimpleBold" aria-hidden="true" />
+      <ng-container i18n="@@spaces.menu.edit-space">Edit the space</ng-container>
+    </button>
+    <button cwMenuItem (triggered)="toggleSpaceFavorite(space)">
+      <ng-icon
+        [name]="isFavoriteSpace(space) ? 'phosphorStarFill' : 'phosphorStarBold'"
+        aria-hidden="true"
+      />
+      @if (isFavoriteSpace(space)) {
+        <ng-container i18n="@@spaces.overview.favorite-remove"
+          >Remove from favorite spaces</ng-container
+        >
+      } @else {
+        <ng-container i18n="@@spaces.overview.favorite-add">Add to favorite spaces</ng-container>
+      }
+    </button>
+    <cw-menu-separator />
+    <button cwMenuItem [disabled]="!space.canEdit" (triggered)="newList(space, false)">
+      <ng-icon name="phosphorPlusBold" aria-hidden="true" />
+      <ng-container i18n="@@spaces.menu.new-list">New list</ng-container>
+    </button>
+    <button cwMenuItem [disabled]="!space.canEdit" (triggered)="newList(space, true)">
+      <ng-icon name="phosphorLightningBold" aria-hidden="true" />
+      <ng-container i18n="@@spaces.menu.new-sprint">New sprint</ng-container>
+    </button>
+    <cw-menu-separator />
+    @if (navigation.expanded()[space.id]) {
+      <button cwMenuItem (triggered)="setExpanded(space.id, false)">
+        <ng-icon name="phosphorCaretUpBold" aria-hidden="true" />
+        <ng-container i18n="@@spaces.menu.collapse-space">Collapse the space</ng-container>
+      </button>
+    } @else {
+      <button cwMenuItem (triggered)="setExpanded(space.id, true)">
+        <ng-icon name="phosphorCaretDownBold" aria-hidden="true" />
+        <ng-container i18n="@@spaces.menu.expand-space">Expand the space</ng-container>
+      </button>
+    }
+    <cw-menu-separator />
+    <button
+      cwMenuItem
+      variant="destructive"
+      [disabled]="!space.canManage"
+      (triggered)="askDeleteSpace(space)"
+    >
+      <ng-icon name="phosphorTrashBold" aria-hidden="true" />
+      <ng-container i18n="@@spaces.menu.delete-space">Delete the space</ng-container>
+    </button>
+  }
+</cw-menu>
+
+<cw-space-dialog
+  [open]="spaceDialog() !== null"
+  [space]="spaceDialog()?.space ?? null"
+  [organizationName]="organizationName()"
+  [takenPrefixes]="takenPrefixes()"
+  [prefixTaken]="prefixTaken()"
+  [pending]="pending()"
+  (openChange)="dialogOpenChanged($event)"
+  (submitted)="saveSpace($event)"
+/>
+
+<cw-list-dialog
+  [open]="listDialog() !== null"
+  [mode]="listDialog()?.list ? 'edit' : 'create'"
+  [initial]="listDraft()"
+  [pending]="pending()"
+  (openChange)="dialogOpenChanged($event)"
+  (submitted)="saveList($event)"
+/>
+
+@let deleting = deletedSpace();
+<cw-alert-dialog
+  variant="destructive"
+  size="sm"
+  [open]="deleting !== null"
+  [confirmText]="deleting?.name ?? ''"
+  [pending]="pending()"
+  data-testid="space-delete-dialog"
+  (openChange)="dialogOpenChanged($event)"
+  (confirm)="deleting && confirmDeleteSpace(deleting)"
+>
+  <cw-alert-dialog-media>
+    <ng-icon name="phosphorWarningBold" aria-hidden="true" />
+  </cw-alert-dialog-media>
+  <h2 cwAlertDialogTitle>{{ deleteTitle() }}</h2>
+  <p cwAlertDialogDescription>{{ deleteText() }}</p>
+  <button cwButton cwAlertDialogCancel variant="outline" i18n="@@spaces.cancel">Cancel</button>
+  <button cwButton cwAlertDialogAction variant="destructive" [loading]="pending()">
+    <ng-container i18n="@@spaces.menu.delete-space">Delete the space</ng-container>
+  </button>
+</cw-alert-dialog>

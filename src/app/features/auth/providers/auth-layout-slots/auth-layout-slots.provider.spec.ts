@@ -5,9 +5,10 @@ import { describe, expect, it } from 'vitest';
 
 import { RuntimeConfigStore } from '@core/config';
 
+import { HostName } from '../../ui/components/host-name/host-name.component';
 import { LegalLinks } from '../../ui/components/legal-links/legal-links.component';
 import { ThemeToggle } from '../../ui/components/theme-toggle/theme-toggle.component';
-import { withLegalLinks, withThemeToggle } from './auth-layout-slots.provider';
+import { withHostName, withLegalLinks, withThemeToggle } from './auth-layout-slots.provider';
 
 /**
  * Function legalLinks
@@ -31,6 +32,14 @@ function legalLinks(siteUrl: string | undefined): SlotContribution {
 }
 
 describe('auth layout slot contributions', () => {
+  it('contributes the host name before the theme button', () => {
+    expect(withHostName().useFactory()).toEqual({
+      id: 'auth-host',
+      order: 10,
+      component: HostName,
+    });
+  });
+
   it('contributes the theme button', () => {
     expect(withThemeToggle().useFactory()).toEqual({
       id: 'auth-theme',

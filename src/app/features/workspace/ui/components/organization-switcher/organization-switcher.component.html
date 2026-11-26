@@ -1,22 +1,48 @@
-<button
-  cwAppRailItem
-  variant="primary"
-  desktopOnly
-  [cwMenuTriggerFor]="organizationMenu"
-  [tooltip]="workspace.organization().name"
-  data-testid="organization-switcher"
-  (click)="store.load()"
-  (keydown)="store.load()"
->
-  <span cwAppRailItemMedia>{{ workspace.organization().initials }}</span>
-  <ng-container i18n="@@workspace.organization-switcher.label"
-    >Switch organization: {{ workspace.organization().name }}</ng-container
+@if (placement() === 'sidebar') {
+  <div class="flex h-9 min-w-0 items-center">
+    <button
+      type="button"
+      class="flex min-w-0 flex-1 items-center gap-2 rounded-md px-1.5 py-1 text-left transition-colors hover:bg-sidebar-accent focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:outline-none focus-visible:ring-inset"
+      [cwMenuTriggerFor]="organizationMenu"
+      data-testid="organization-row"
+      (click)="store.load()"
+      (keydown)="store.load()"
+    >
+      <cw-logo [size]="20" decorative />
+      <span class="flex min-w-0 flex-col">
+        <span class="truncate text-sm leading-4 font-semibold">{{
+          workspace.organization().name
+        }}</span>
+        <span class="truncate text-xs text-muted-foreground">{{ address() }}</span>
+      </span>
+      <ng-icon
+        name="phosphorCaretUpDownBold"
+        class="ml-auto size-3.5 shrink-0 text-muted-foreground"
+        aria-hidden="true"
+      />
+    </button>
+  </div>
+} @else {
+  <button
+    cwAppRailItem
+    variant="primary"
+    desktopOnly
+    [cwMenuTriggerFor]="organizationMenu"
+    [tooltip]="workspace.organization().name"
+    data-testid="organization-switcher"
+    (click)="store.load()"
+    (keydown)="store.load()"
   >
-</button>
+    <span cwAppRailItemMedia>{{ workspace.organization().initials }}</span>
+    <ng-container i18n="@@workspace.organization-switcher.label"
+      >Switch organization: {{ workspace.organization().name }}</ng-container
+    >
+  </button>
+}
 
 <cw-menu
   #organizationMenu
-  side="right"
+  [side]="placement() === 'sidebar' ? 'bottom' : 'right'"
   align="start"
   ariaLabel="Organizations"
   i18n-ariaLabel="@@workspace.organization-menu.aria-label"

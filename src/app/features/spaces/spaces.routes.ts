@@ -8,6 +8,7 @@ import { provideCwInlineEditLabels } from '@cadenway/ui/components/inline-edit';
 import { provideCwStatusLabels } from '@cadenway/ui/components/status-icon';
 import { provideCwToolbarLabels } from '@cadenway/ui/components/toolbar';
 
+import type { RouteErrorData } from '@features/errors';
 import { TaskStatusChangesStore } from '@features/task';
 
 import { LIST_TABLE_TEXTS } from './constants/data-table-texts/data-table-texts.constants';
@@ -28,7 +29,8 @@ import { ListViewStore } from './state/list-view/list-view.store';
  * status store and rows data access, so they can use the workspace context and pending changes
  * die with the view. The default error
  * boundary renders a failed primary read in the failing route's outlet, so a failed view keeps
- * the list header. The bricks' texts are the English source copy.
+ * the list header; the `list` view's `RouteErrorData` titles it `Could not load the tasks`
+ * (`spaces.list-view.load-failed`). The bricks' texts are the English source copy.
  *
  * @type {Routes}
  */
@@ -91,6 +93,9 @@ export const SPACES_ROUTES: Routes = [
           { path: '', pathMatch: 'full', redirectTo: 'list' },
           {
             path: 'list',
+            data: {
+              unavailableTitle: $localize`:@@spaces.list-view.load-failed:Could not load the tasks`,
+            } satisfies RouteErrorData,
             providers: [TaskStatusChangesStore, ListTasksApi, ListRowsStore, LIST_TABLE_TEXTS],
             loadComponent: async (): Promise<Type<unknown>> =>
               (await import('./ui/pages/list-view-page/list-view-page.component')).ListViewPage,

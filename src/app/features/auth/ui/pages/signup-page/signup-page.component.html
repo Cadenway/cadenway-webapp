@@ -18,7 +18,7 @@
       </cw-alert>
     }
     @if (problem()) {
-      <cw-alert variant="destructive" role="alert">
+      <cw-alert variant="destructive" class="[&>ng-icon]:text-inherit" role="alert">
         <cw-alert-description i18n="@@auth.login.unavailable"
           >Sign-in is unavailable. Try again in a moment.</cw-alert-description
         >
@@ -50,9 +50,13 @@
           autocomplete="name"
           placeholder="Camille Martin"
           [formField]="signupForm.name"
+          [attr.aria-describedby]="
+            signupForm.name().touched() && signupForm.name().invalid() ? 'su-name-help' : null
+          "
         />
         @if (signupForm.name().touched() && signupForm.name().invalid()) {
-          <p class="text-xs font-medium text-destructive">
+          <p id="su-name-help" class="flex items-center gap-1 text-xs font-medium text-destructive">
+            <ng-icon name="phosphorWarningCircleFill" class="size-3.5" aria-hidden="true" />
             {{ signupForm.name().errors()[0]?.message }}
           </p>
         }
@@ -83,7 +87,11 @@
             >
           </p>
         } @else if (signupForm.email().touched() && signupForm.email().invalid()) {
-          <p id="su-email-help" class="text-xs font-medium text-destructive">
+          <p
+            id="su-email-help"
+            class="flex items-center gap-1 text-xs font-medium text-destructive"
+          >
+            <ng-icon name="phosphorWarningCircleFill" class="size-3.5" aria-hidden="true" />
             {{ signupForm.email().errors()[0]?.message }}
           </p>
         } @else {
@@ -136,7 +144,8 @@
         </div>
         <cw-password-strength #strength [value]="model().password" [minLength]="12" />
         @if (signupForm.password().touched() && signupForm.password().invalid()) {
-          <p class="text-xs font-medium text-destructive" role="alert">
+          <p role="alert" class="flex items-center gap-1 text-xs font-medium text-destructive">
+            <ng-icon name="phosphorWarningCircleFill" class="size-3.5" aria-hidden="true" />
             {{ signupForm.password().errors()[0]?.message }}
           </p>
         }
@@ -145,7 +154,10 @@
         <div class="flex items-start gap-2">
           <cw-checkbox class="mt-0.5" [id]="'su-terms'" [formField]="signupForm.acceptTerms" />
           @if (siteUrl; as site) {
-            <label for="su-terms" class="text-sm leading-5 select-none" i18n="@@auth.signup.terms"
+            <label
+              for="su-terms"
+              class="text-sm leading-5 text-muted-foreground select-none"
+              i18n="@@auth.signup.terms"
               >I accept Cadenway's
               <a
                 [href]="site + '/terms'"
@@ -162,14 +174,18 @@
           } @else {
             <label
               for="su-terms"
-              class="text-sm leading-5 select-none"
+              class="text-sm leading-5 text-muted-foreground select-none"
               i18n="@@auth.signup.terms-plain"
               >I accept Cadenway's terms of use and privacy policy.</label
             >
           }
         </div>
         @if (signupForm.acceptTerms().touched() && signupForm.acceptTerms().invalid()) {
-          <p role="alert" class="flex items-center gap-1 text-xs font-medium text-destructive">
+          <p
+            id="su-terms-help"
+            role="alert"
+            class="flex items-center gap-1 pl-6 text-xs font-medium text-destructive"
+          >
             <ng-icon name="phosphorWarningCircleFill" class="size-3.5" aria-hidden="true" />
             {{ signupForm.acceptTerms().errors()[0]?.message }}
           </p>
@@ -179,7 +195,6 @@
         cwButton
         type="submit"
         class="w-full"
-        [disabled]="signupForm().invalid() || signupForm().submitting()"
         [loading]="signupForm().submitting()"
         i18n="@@auth.signup.submit"
       >
@@ -187,7 +202,7 @@
       </button>
     </form>
   </cw-card>
-  <p class="text-center text-sm text-muted-foreground" i18n="@@auth.signup.invitation">
+  <p class="text-center text-xs text-muted-foreground" i18n="@@auth.signup.invitation">
     Received an invitation? Open the link in the email: the organization will be joined
     automatically.
   </p>

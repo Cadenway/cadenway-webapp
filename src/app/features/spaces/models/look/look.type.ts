@@ -2,7 +2,7 @@
  * Type LookColor
  *
  * @description
- * Color of a space, a list or a sprint (« Couleur »): the keys of `LOOK_COLORS` in
+ * Color of a space, a list or a sprint (`Color`): the keys of `LOOK_COLORS` in
  * `App.dc.html`, `gris` being the default.
  *
  * @type {'gris' | 'violet' | 'indigo' | 'azur' | 'lagon' | 'vert' | 'olive' | 'jaune' | 'orange' | 'rouge' | 'rose' | 'fuchsia' | 'ardoise'}

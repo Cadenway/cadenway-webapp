@@ -69,7 +69,7 @@ function groupAllowed(query: ListTaskQuery, group: GroupFilter, userId: string):
  * Service ListTasksApi
  *
  * @description
- * The reads of the rows of the « Liste » view: the group counts (`countTaskGroups`), the cursor
+ * The reads of the rows of the `List` view: the group counts (`countTaskGroups`), the cursor
  * pages of the tasks of a list or of one of its groups (`queryListTasks`) and the subtasks of a
  * task (`listSubtasks`), mapped to task summaries. Every read bypasses the HTTP cache, so a
  * reload after a realtime notice reads the gateway again. A failed read rejects with the typed

@@ -6,7 +6,7 @@ import type { TaskSearchResult } from '../../models/search-result/search-result.
  * Constant LIMIT
  *
  * @description
- * Tasks the « Tâches récentes » group keeps, the most recent first.
+ * Tasks the `Recent tasks` group keeps, the most recent first.
  *
  * @type {number}
  */
@@ -58,7 +58,7 @@ function isRecentTask(value: unknown): value is TaskSearchResult {
  * Service RecentTasks
  *
  * @description
- * The palette's « Tâches récentes »: the last tasks opened from the palette, kept in this
+ * The palette's `Recent tasks`: the last tasks opened from the palette, kept in this
  * browser's `localStorage` per person and organization
  * (`cadenway-recent-tasks:<userId>:<organizationId>`), so neither another person on the device nor
  * another organization sees them. Auth's `SignOut` removes every key with this prefix. Inaccessible

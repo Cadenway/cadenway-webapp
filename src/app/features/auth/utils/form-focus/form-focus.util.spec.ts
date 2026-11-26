@@ -29,13 +29,15 @@ describe('form focus helpers', () => {
     const model: WritableSignal<{ email: string }> = signal({ email: 'camille@ateliernord.fr' });
     const fields: FieldTree<{ email: string }> = TestBed.runInInjectionContext(() => form(model));
 
-    await submit(fields, () => Promise.resolve(serverError(fields.email, 'Adresse déjà utilisée')));
+    await submit(fields, () =>
+      Promise.resolve(serverError(fields.email, 'Address already in use')),
+    );
 
     expect(
       fields
         .email()
         .errors()
         .map((error) => error.message),
-    ).toEqual(['Adresse déjà utilisée']);
+    ).toEqual(['Address already in use']);
   });
 });

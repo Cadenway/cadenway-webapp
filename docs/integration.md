@@ -24,7 +24,7 @@ Source: `cw-angular22-conventions` ([Claude](../.claude/skills/cw-angular22-conv
 - Change detection is OnPush by default; zoneless.
 - Forms: Signal Forms (`form()`, `[formField]`).
 - Async data: `resource()` or the established helper, backed by the generated client (loading → skeleton, error →
-  error panel, `reload()` → Réessayer).
+  error panel, `reload()` → Retry).
 - Overlays: CDK Overlay and Angular Aria (`ngMenu`, `ngCombobox`, `ngListbox`, `ngTabs`) through
   `@cadenway/ui`.
 
@@ -51,8 +51,8 @@ Source: `cw-status-interactions` ([Claude](../.claude/skills/cw-status-interacti
   view groups by status.
 - Fast clicks: one pending change per task; a new click replaces it; returning to the saved status
   cancels it; automations and the log see only the final status.
-- Cancelling asks a reason (Doublon, Ne sera pas fait, Hors périmètre, Obsolète) and an optional note.
-- Toasts: 6 s, title, description, Annuler (restores the snapshot) or Ouvrir.
+- Cancelling asks a reason (Duplicate, Will not be done, Out of scope, Obsolete) and an optional note.
+- Toasts: 6 s, title, description, Undo (restores the snapshot) or Open.
 - Deletion: confirmation; trash 30 days with subtasks; sensitive deletions type the name.
 
 ## References

@@ -8,7 +8,7 @@ const user = {
   id: '019a5f3c-8d2e-7c4a-9b1f-3e5d7a9c1b30',
   name: 'Camille Martin',
   email,
-  language: 'fr',
+  language: 'en',
   displayName: null,
   jobTitle: null,
   timeZone: 'Europe/Paris',
@@ -168,7 +168,7 @@ async function stubGateway(page: Page, options: GatewayOptions = {}): Promise<Ga
             ...organization,
             description: null,
             website: null,
-            defaultLanguage: 'fr',
+            defaultLanguage: 'en',
             createdAt: '2026-11-01T10:00:00Z',
             version: 1,
           },
@@ -194,6 +194,16 @@ test('a protected screen sends a signed-out visitor to the sign-in page', async 
   await page.goto('/organizations');
 
   await expect(page).toHaveURL(/\/login\?next=%2Forganizations$/);
+  await expect(page.getByRole('heading', { name: 'Sign in' })).toBeVisible();
+});
+
+// The only French in the specs: `?lang=fr` loads the French catalog at runtime.
+test('?lang=fr serves the sign-in page in French', async ({ page }) => {
+  await stubGateway(page);
+
+  await page.goto('/login?lang=fr');
+
+  await expect(page.locator('html')).toHaveAttribute('lang', 'fr');
   await expect(page.getByRole('heading', { name: 'Se connecter' })).toBeVisible();
 });
 
@@ -203,19 +213,19 @@ test('sign-in with two-step verification, then the organization choice opens its
   const gateway = await stubGateway(page, { requireChallenge: true });
 
   await page.goto('/login');
-  const submit = page.getByRole('button', { name: 'Se connecter', exact: true });
+  const submit = page.getByRole('button', { name: 'Sign in', exact: true });
   await expect(submit).toBeDisabled();
-  await page.getByLabel('Adresse e-mail').fill(email);
-  await page.getByLabel('Mot de passe', { exact: true }).fill(password);
+  await page.getByLabel('Email address').fill(email);
+  await page.getByLabel('Password', { exact: true }).fill(password);
   await submit.click();
 
   await expect(page).toHaveURL(/\/login\/two-step$/);
-  await expect(page.getByRole('heading', { name: 'Vérification en deux étapes' })).toBeVisible();
-  await typeCode(page, "Code de l'application", '123456');
-  await page.getByRole('button', { name: 'Vérifier (6 / 6)' }).click();
+  await expect(page.getByRole('heading', { name: 'Two-step verification' })).toBeVisible();
+  await typeCode(page, 'App code', '123456');
+  await page.getByRole('button', { name: 'Verify (6 / 6)' }).click();
 
   await expect(page).toHaveURL(/\/organizations$/);
-  await expect(page.getByText(`Connecté en tant que ${email}.`)).toBeVisible();
+  await expect(page.getByText(`Signed in as ${email}.`)).toBeVisible();
   await page.getByRole('button', { name: /Atelier Nord/ }).click();
 
   await expect(page).toHaveURL(/\/atelier-nord$/);
@@ -231,25 +241,25 @@ test('a wrong password shows the attempts left before the lockout', async ({ pag
   await stubGateway(page);
 
   await page.goto('/login');
-  await page.getByLabel('Adresse e-mail').fill(email);
-  await page.getByLabel('Mot de passe', { exact: true }).fill('wrong-password');
-  await page.getByRole('button', { name: 'Se connecter', exact: true }).click();
+  await page.getByLabel('Email address').fill(email);
+  await page.getByLabel('Password', { exact: true }).fill('wrong-password');
+  await page.getByRole('button', { name: 'Sign in', exact: true }).click();
 
-  await expect(page.getByText('E-mail ou mot de passe incorrect.')).toBeVisible();
+  await expect(page.getByText('Wrong email or password.')).toBeVisible();
   await expect(
-    page.getByText('Il vous reste 3 tentatives avant le verrouillage temporaire.'),
+    page.getByText('You have 3 attempts left before the temporary lockout.'),
   ).toBeVisible();
-  await expect(page.getByText('Mot de passe incorrect : vérifiez les majuscules.')).toBeVisible();
+  await expect(page.getByText('Wrong password: check the capital letters.')).toBeVisible();
   await expect(page).toHaveURL(/\/login$/);
 });
 
-test('an unavailable organization list offers Réessayer', async ({ page }) => {
+test('an unavailable organization list offers Retry', async ({ page }) => {
   const gateway = await stubGateway(page, { signedIn: true, unavailableOrganizations: true });
 
   await page.goto('/organizations');
 
-  await expect(page.getByText('Impossible de charger cette page')).toBeVisible();
-  await page.getByRole('button', { name: 'Réessayer' }).click();
+  await expect(page.getByText('This page could not be loaded')).toBeVisible();
+  await page.getByRole('button', { name: 'Retry' }).click();
   await expect(page.getByRole('button', { name: /Atelier Nord/ })).toBeVisible();
   expect(gateway.calls.filter((call: string) => call === 'GET /v1/organizations')).toHaveLength(2);
 });
@@ -278,17 +288,17 @@ test('sign-up verifies the address with its code', async ({ page }) => {
   const gateway = await stubGateway(page);
 
   await page.goto('/signup');
-  await page.getByLabel('Nom complet').fill('Camille Martin');
-  await page.getByLabel('Adresse e-mail professionnelle').fill(email);
-  await page.getByLabel('Mot de passe', { exact: true }).fill('atelier-nord-2026');
+  await page.getByLabel('Full name').fill('Camille Martin');
+  await page.getByLabel('Work email address').fill(email);
+  await page.getByLabel('Password', { exact: true }).fill('atelier-nord-2026');
   await page.getByRole('checkbox').click();
-  await page.getByRole('button', { name: 'Créer mon compte' }).click();
+  await page.getByRole('button', { name: 'Create my account' }).click();
 
   await expect(page).toHaveURL(/\/signup\/verify$/);
-  await expect(page.getByRole('heading', { name: 'Confirmez votre adresse e-mail' })).toBeVisible();
-  await expect(page.getByRole('button', { name: /Renvoyer le code dans 0:/ })).toBeDisabled();
-  await typeCode(page, 'Code de vérification', '654321');
-  await page.getByRole('button', { name: 'Confirmer mon adresse' }).click();
+  await expect(page.getByRole('heading', { name: 'Confirm your email address' })).toBeVisible();
+  await expect(page.getByRole('button', { name: /Resend the code in 0:/ })).toBeDisabled();
+  await typeCode(page, 'Verification code', '654321');
+  await page.getByRole('button', { name: 'Confirm my address' }).click();
 
   await expect(page).toHaveURL(/\/organizations$/);
   expect(gateway.bodies.get('POST /v1/auth/sign-up/verification')).toEqual([
@@ -300,20 +310,20 @@ test('a forgotten password is reset from the e-mail link', async ({ page }) => {
   const gateway = await stubGateway(page);
 
   await page.goto('/forgot');
-  await page.getByLabel('Adresse e-mail').fill(email);
-  await page.getByRole('button', { name: 'Envoyer le lien de réinitialisation' }).click();
-  await expect(page.getByRole('heading', { name: 'Vérifiez vos e-mails' })).toBeVisible();
-  await expect(page.getByRole('button', { name: /Renvoyer l'e-mail dans 0:4/ })).toBeDisabled();
+  await page.getByLabel('Email address').fill(email);
+  await page.getByRole('button', { name: 'Send the reset link' }).click();
+  await expect(page.getByRole('heading', { name: 'Check your email' })).toBeVisible();
+  await expect(page.getByRole('button', { name: /Resend the email in 0:4/ })).toBeDisabled();
 
   await page.goto('/reset#token=synthetic-reset-token');
-  await expect(page.getByText(`Pour le compte ${email}.`)).toBeVisible();
+  await expect(page.getByText(`For the account ${email}.`)).toBeVisible();
   await expect(page).toHaveURL(/\/reset$/);
-  await page.getByLabel('Nouveau mot de passe').fill('atelier-nord-2027');
-  await page.getByLabel('Confirmer le mot de passe').fill('atelier-nord-2027');
-  await page.getByRole('button', { name: 'Enregistrer le mot de passe' }).click();
+  await page.getByLabel('New password').fill('atelier-nord-2027');
+  await page.getByLabel('Confirm the password').fill('atelier-nord-2027');
+  await page.getByRole('button', { name: 'Save the password' }).click();
 
-  await expect(page.getByRole('heading', { name: 'Mot de passe modifié' })).toBeVisible();
-  await expect(page.getByText('Vos 3 autres sessions ont été fermées.')).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Password changed' })).toBeVisible();
+  await expect(page.getByText('Your 3 other sessions were closed.')).toBeVisible();
   expect(gateway.bodies.get('POST /v1/auth/password-reset/confirmation')).toEqual([
     { token: 'synthetic-reset-token', newPassword: 'atelier-nord-2027', closeOtherSessions: true },
   ]);
@@ -329,16 +339,16 @@ test('the signed-out screen signs in again with a remembered account', async ({ 
   }, email);
 
   await page.goto('/logged-out?reason=signed-out');
-  await expect(page.getByRole('heading', { name: 'Vous êtes déconnecté' })).toBeVisible();
-  await expect(page.getByText('À bientôt, Camille.')).toBeVisible();
-  await page.getByRole('button', { name: `Se connecter avec ${email}` }).click();
+  await expect(page.getByRole('heading', { name: 'You are signed out' })).toBeVisible();
+  await expect(page.getByText('See you soon, Camille.')).toBeVisible();
+  await page.getByRole('button', { name: `Sign in with ${email}` }).click();
 
   await expect(page).toHaveURL(/\/login$/);
-  await expect(page.getByLabel('Adresse e-mail')).toHaveValue(email);
+  await expect(page.getByLabel('Email address')).toHaveValue(email);
   await expect(
-    page.getByText('Compte mémorisé sur cet appareil : saisissez son mot de passe.'),
+    page.getByText('Account remembered on this device: enter its password.'),
   ).toBeVisible();
-  await expect(page.getByLabel('Mot de passe', { exact: true })).toBeFocused();
+  await expect(page.getByLabel('Password', { exact: true })).toBeFocused();
 });
 
 test('a protected workspace link opened signed out comes back after sign-in with its query', async ({
@@ -346,12 +356,12 @@ test('a protected workspace link opened signed out comes back after sign-in with
 }) => {
   await stubGateway(page);
 
-  await page.goto('/atelier-nord/lien/introuvable?x=1');
-  await expect(page).toHaveURL(/\/login\?next=%2Fatelier-nord%2Flien%2Fintrouvable%3Fx%3D1$/u);
-  await page.getByLabel('Adresse e-mail').fill(email);
-  await page.getByLabel('Mot de passe', { exact: true }).fill(password);
-  await page.getByRole('button', { name: 'Se connecter', exact: true }).click();
+  await page.goto('/atelier-nord/missing/page?x=1');
+  await expect(page).toHaveURL(/\/login\?next=%2Fatelier-nord%2Fmissing%2Fpage%3Fx%3D1$/u);
+  await page.getByLabel('Email address').fill(email);
+  await page.getByLabel('Password', { exact: true }).fill(password);
+  await page.getByRole('button', { name: 'Sign in', exact: true }).click();
 
-  await expect(page).toHaveURL(/\/atelier-nord\/lien\/introuvable\?x=1$/u);
-  await expect(page.getByRole('heading', { name: 'Page introuvable' })).toBeVisible();
+  await expect(page).toHaveURL(/\/atelier-nord\/missing\/page\?x=1$/u);
+  await expect(page.getByRole('heading', { name: 'Page not found' })).toBeVisible();
 });

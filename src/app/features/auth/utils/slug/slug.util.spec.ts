@@ -4,9 +4,10 @@ import { slugFromName } from './slug.util';
 
 describe('slugFromName', () => {
   it('derives the address the gateway derives from the name', () => {
-    expect(slugFromName('Coopérative Lumen')).toBe('cooperative-lumen');
+    expect(slugFromName('Lumen Cooperative')).toBe('lumen-cooperative');
+    expect(slugFromName('Na\u00efve Lumen')).toBe('naive-lumen');
     expect(slugFromName('  Atelier — Nord & Co!  ')).toBe('atelier-nord-co');
-    expect(slugFromName('é')).toBe('e');
+    expect(slugFromName('\u00e9')).toBe('e');
     expect(slugFromName('***')).toBe('');
   });
 

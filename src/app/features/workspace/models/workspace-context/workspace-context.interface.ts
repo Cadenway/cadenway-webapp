@@ -32,7 +32,7 @@ export interface WorkspaceUser {
    * Property name
    *
    * @description
-   * Full name (« Camille Martin »).
+   * Full name (`Camille Martin`).
    *
    * @type {string}
    * @readonly
@@ -43,7 +43,7 @@ export interface WorkspaceUser {
    * Property firstName
    *
    * @description
-   * First word of the full name, used by the greeting (« Camille »).
+   * First word of the full name, used by the greeting (`Camille`).
    *
    * @type {string}
    * @readonly
@@ -76,7 +76,7 @@ export interface WorkspaceUser {
    * Property initials
    *
    * @description
-   * One or two uppercase letters derived from the full name (« CM »).
+   * One or two uppercase letters derived from the full name (`CM`).
    *
    * @type {string}
    * @readonly
@@ -119,7 +119,7 @@ export interface WorkspaceOrganization {
    * Property name
    *
    * @description
-   * Organization name (« Atelier Nord »).
+   * Organization name (`Atelier Nord`).
    *
    * @type {string}
    * @readonly
@@ -130,7 +130,7 @@ export interface WorkspaceOrganization {
    * Property initials
    *
    * @description
-   * One or two uppercase letters derived from the name (« AN »).
+   * One or two uppercase letters derived from the name (`AN`).
    *
    * @type {string}
    * @readonly

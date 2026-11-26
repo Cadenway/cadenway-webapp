@@ -75,7 +75,7 @@ describe('HomeRailItem', () => {
       ) ?? null;
 
     expect(link()?.getAttribute('href')).toBe('/atelier-nord');
-    expect(link()?.textContent).toContain('Accueil');
+    expect(link()?.textContent).toContain('Home');
     expect(link()?.getAttribute('aria-current')).toBe('page');
 
     await harness.navigateByUrl('/atelier-nord/t/CAD-482');

@@ -10,7 +10,7 @@ import type {
  *
  * @description
  * Derives the initials the rail and the avatars show: the first letters of the first and last
- * words of a name (« Atelier Nord » gives « AN »), or the first two letters of a single word.
+ * words of a name (`Atelier Nord` gives `AN`), or the first two letters of a single word.
  *
  * @param {string} name - Full name of a person or an organization.
  * @returns {string} One or two uppercase letters, or an empty string for a blank name.

@@ -32,7 +32,7 @@ export type PriorityKey = 'urgente' | 'haute' | 'moyenne' | 'basse';
  * Type ListSortField
  *
  * @description
- * The five criteria of « Trier par »: manual order, due date, priority, name and creation date.
+ * The five criteria of `Sort by`: manual order, due date, priority, name and creation date.
  *
  * @type {'manual' | 'dueDate' | 'priority' | 'name' | 'createdAt'}
  */
@@ -42,7 +42,7 @@ export type ListSortField = 'manual' | 'dueDate' | 'priority' | 'name' | 'create
  * Type SortDirection
  *
  * @description
- * Direction of the sort (« Croissant », « Décroissant »).
+ * Direction of the sort (`Ascending`, `Descending`).
  *
  * @type {'asc' | 'desc'}
  */
@@ -52,7 +52,7 @@ export type SortDirection = 'asc' | 'desc';
  * Type ListGroupBy
  *
  * @description
- * Grouping of « Grouper par »; null is « Aucun ».
+ * Grouping of `Group by`; null is `None`.
  *
  * @type {'status' | 'priority' | 'assignee' | null}
  */
@@ -72,7 +72,7 @@ export type SubtaskMode = 'nested' | 'expanded' | 'separate';
  * Type FilterField
  *
  * @description
- * The four fields of the « Filtrer » dialog.
+ * The four fields of the `Filter` dialog.
  *
  * @type {'status' | 'priority' | 'assignee' | 'label'}
  */
@@ -82,8 +82,8 @@ export type FilterField = 'status' | 'priority' | 'assignee' | 'label';
  * Type AssigneeFilter
  *
  * @description
- * An assignee kept by the filter: `me` for the reader (« Moi »), `none` for the unassigned tasks
- * (« Non assigné »), or an account id.
+ * An assignee kept by the filter: `me` for the reader (`Me`), `none` for the unassigned tasks
+ * (`Unassigned`), or an account id.
  *
  * @type {string}
  */
@@ -147,7 +147,7 @@ export interface ListViewFilters {
  * Interface ListSort
  *
  * @description
- * The sort of « Trier par » and its direction.
+ * The sort of `Sort by` and its direction.
  */
 export interface ListSort {
   // #region Properties
@@ -298,7 +298,7 @@ export interface ListTaskQuery {
    * Property milestone
    *
    * @description
-   * True to keep only the milestones (« Jalons »); absent otherwise.
+   * True to keep only the milestones (`Milestones`); absent otherwise.
    *
    * @type {boolean | undefined}
    * @readonly

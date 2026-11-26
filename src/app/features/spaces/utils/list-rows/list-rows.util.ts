@@ -12,7 +12,7 @@ import type { ListGroupQuery } from '../../models/list-view-config/list-view-con
  * Constant ALL_GROUP
  *
  * @description
- * Value of the one group of a view that does not group (« Toutes les tâches »).
+ * Value of the one group of a view that does not group (`All tasks`).
  *
  * @type {string}
  */
@@ -22,7 +22,7 @@ export const ALL_GROUP: string = 'all';
  * Constant NO_ASSIGNEE_GROUP
  *
  * @description
- * Value of the group of the tasks nobody is assigned (« Non assignées »).
+ * Value of the group of the tasks nobody is assigned (`Unassigned`).
  *
  * @type {string}
  */
@@ -143,4 +143,39 @@ export function groupValuesOf(
  */
 export function rowsKey(organizationId: string, query: ListRowsQuery): string {
   return JSON.stringify([organizationId, query.listId, query.query, query.groupQuery]);
+}
+
+/**
+ * Function settleLimited
+ *
+ * @description
+ * Runs one call per item with at most `limit` of them in flight, starting each in the items'
+ * order, and resolves with every outcome in that order once all have settled. Never rejects.
+ *
+ * @param {readonly T[]} items - The items.
+ * @param {number} limit - Calls in flight at most, at least 1.
+ * @param {(item: T) => Promise<R>} run - The call of one item.
+ * @returns {Promise<PromiseSettledResult<R>[]>} The outcomes, in the items' order.
+ */
+export async function settleLimited<T, R>(
+  items: readonly T[],
+  limit: number,
+  run: (item: T) => Promise<R>,
+): Promise<PromiseSettledResult<R>[]> {
+  const results: PromiseSettledResult<R>[] = new Array<PromiseSettledResult<R>>(items.length);
+  let next: number = 0;
+  const worker: () => Promise<void> = async (): Promise<void> => {
+    while (next < items.length) {
+      const index: number = next++;
+      try {
+        results[index] = { status: 'fulfilled', value: await run(items[index]) };
+      } catch (reason: unknown) {
+        results[index] = { status: 'rejected', reason };
+      }
+    }
+  };
+  await Promise.all(
+    Array.from({ length: Math.min(Math.max(1, limit), items.length) }, () => worker()),
+  );
+  return results;
 }

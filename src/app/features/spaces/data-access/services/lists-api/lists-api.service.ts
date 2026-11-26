@@ -28,7 +28,11 @@ import type {
 } from '../../../models/list-view-config/list-view-config.interface';
 import type { LookIcon } from '../../../models/look/look.type';
 import type { SavedView, ViewLayout } from '../../../models/saved-view/saved-view.interface';
-import type { ListSummary, TaskList } from '../../../models/task-list/task-list.interface';
+import type {
+  ListDraft,
+  ListSummary,
+  TaskList,
+} from '../../../models/task-list/task-list.interface';
 import { abortableRead } from '../../utils/abortable-read/abortable-read.util';
 import { toRouteError } from '../../adapters/route-error/route-error.adapter';
 import {
@@ -254,7 +258,7 @@ export class ListsApi {
    * Method milestoneCount
    *
    * @description
-   * Counts the milestones of a list, subtasks included, for « Jalons n ».
+   * Counts the milestones of a list, subtasks included, for `Milestones n`.
    *
    * @param {string} listId - The list.
    * @param {AbortSignal | undefined} signal - Cancels a superseded read.
@@ -332,7 +336,7 @@ export class ListsApi {
    * Method labels
    *
    * @description
-   * Reads the labels of the tasks the caller sees, for the « Étiquette » filter.
+   * Reads the labels of the tasks the caller sees, for the `Label` filter.
    *
    * @param {AbortSignal | undefined} signal - Cancels a superseded read.
    * @returns {Promise<readonly string[]>} The labels, alphabetically.
@@ -352,19 +356,52 @@ export class ListsApi {
   }
 
   /**
-   * Method rename
+   * Method create
    *
    * @description
-   * Renames a list from the version shown.
+   * Creates a list, or a sprint when the draft has dates, after the other lists of a space. A
+   * retry of the same creation reuses its idempotency key, so a lost answer creates nothing twice.
    *
-   * @param {TaskList} list - The list as shown.
-   * @param {string} name - New name.
-   * @returns {Promise<TaskList>} The renamed list.
+   * @param {string} spaceId - The space.
+   * @param {ListDraft} draft - The dialog's values.
+   * @param {string} idempotencyKey - Key of this creation.
+   * @returns {Promise<TaskList>} The list as recorded.
    */
-  public async rename(list: TaskList, name: string): Promise<TaskList> {
+  public async create(
+    spaceId: string,
+    draft: ListDraft,
+    idempotencyKey: string,
+  ): Promise<TaskList> {
     return toTaskList(
       await firstValueFrom(
-        this.lists.updateList(list.id, { name }, { headers: ifMatch(list.version) }),
+        this.lists.createList(
+          spaceId,
+          { name: draft.name, icon: draft.icon, color: draft.color, sprint: draft.sprint },
+          { headers: { 'Idempotency-Key': idempotencyKey } },
+        ),
+      ),
+    );
+  }
+
+  /**
+   * Method update
+   *
+   * @description
+   * Changes a list from the version shown: its name, look and sprint (a null sprint makes a
+   * sprint a list again).
+   *
+   * @param {TaskList} list - The list as shown.
+   * @param {ListDraft} draft - The dialog's values.
+   * @returns {Promise<TaskList>} The list as recorded.
+   */
+  public async update(list: TaskList, draft: ListDraft): Promise<TaskList> {
+    return toTaskList(
+      await firstValueFrom(
+        this.lists.updateList(
+          list.id,
+          { name: draft.name, icon: draft.icon, color: draft.color, sprint: draft.sprint },
+          { headers: ifMatch(list.version) },
+        ),
       ),
     );
   }
@@ -373,7 +410,7 @@ export class ListsApi {
    * Method duplicate
    *
    * @description
-   * Copies a list with every live task (« Dupliquer avec les tâches »).
+   * Copies a list with every live task (`Duplicate with the tasks`).
    *
    * @param {TaskList} list - The list as shown.
    * @returns {Promise<{ list: TaskList; taskCount: number }>} The copy and its task count.
@@ -418,6 +455,19 @@ export class ListsApi {
    */
   public async archive(listId: string): Promise<void> {
     await firstValueFrom(this.archives.archiveList(listId, {}));
+  }
+
+  /**
+   * Method unarchive
+   *
+   * @description
+   * Brings an archived list back to the sidebar, the undo of its archiving.
+   *
+   * @param {string} listId - The list.
+   * @returns {Promise<TaskList>} The list as recorded.
+   */
+  public async unarchive(listId: string): Promise<TaskList> {
+    return toTaskList(await firstValueFrom(this.archives.unarchiveList(listId, {})));
   }
 
   /**

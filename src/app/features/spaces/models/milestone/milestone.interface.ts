@@ -12,7 +12,7 @@ export interface Milestone {
    * Property key
    *
    * @description
-   * Task key (« CAD-490 »).
+   * Task key (`CAD-490`).
    *
    * @type {string}
    * @readonly

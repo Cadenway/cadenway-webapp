@@ -22,9 +22,9 @@ import { focusFirstError, serverError } from '../../../utils/form-focus/form-foc
  *
  * @description
  * The SSO view of `Main.dc.html` (`/login/sso`): a work address, checked with
- * `discoverSignInMethods`. A domain without SAML shows « Aucun SSO n’est configuré pour « domaine »
- * »; otherwise the browser goes to the organization's identity provider. "Autres méthodes de
- * connexion" returns to `/login`.
+ * `discoverSignInMethods`. A domain without SAML shows `No SSO is set up for “domain”: use
+ * another sign-in method.`; otherwise the browser goes to the organization's identity provider.
+ * `Other sign-in methods` returns to `/login`.
  */
 @Component({
   selector: 'cw-sso-page',
@@ -76,7 +76,7 @@ export class SsoPage {
    * @readonly
    */
   protected readonly ssoForm: FieldTree<{ email: string }> = form(this.model, (path) => {
-    const message: string = $localize`:@@auth.sso.email-invalid:Enter your work address, for example prenom.nom@ateliernord.fr.`;
+    const message: string = $localize`:@@auth.sso.email-invalid:Enter your work address, for example first.last@ateliernord.fr.`;
     required(path.email, { message });
     email(path.email, { message });
   });

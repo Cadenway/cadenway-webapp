@@ -15,13 +15,14 @@ export const SPACES_RETRY: string = $localize`:@@spaces.retry:Retry`;
  * Constant LIST_TABLE_TEXTS
  *
  * @description
- * The English source texts of the data table of the « Liste » view, replacing the brick's French
- * defaults; their `fr` translations are those defaults.
+ * The English source texts of the data table of the `List` view, replacing the brick's default
+ * texts; their `fr` translations are those defaults, except the mockup's wording of
+ * `spaces.table.select-all` (header checkbox) and `spaces.table.loading` (loading state).
  *
  * @type {Provider}
  */
 export const LIST_TABLE_TEXTS: Provider = provideCwDataTableTexts(() => ({
-  selectAll: $localize`:@@spaces.table.select-all:Select all on the page`,
+  selectAll: $localize`:@@spaces.table.select-all:Select all tasks`,
   selectRow: (label: string): string =>
     $localize`:@@spaces.table.select-row:Select ${label}:label:`,
   selected: (count: number): string =>
@@ -59,7 +60,7 @@ export const LIST_TABLE_TEXTS: Provider = provideCwDataTableTexts(() => ({
     $localize`:@@spaces.table.column-resized:${header}:header: column: ${width}:width: pixels`,
   columnMoved: (header: string, position: number): string =>
     $localize`:@@spaces.table.column-moved:${header}:header: column in position ${position}:position:`,
-  loading: $localize`:@@spaces.table.loading:Loading`,
+  loading: $localize`:@@spaces.table.loading:Loading tasks`,
   retry: SPACES_RETRY,
   bulkBar: $localize`:@@spaces.bulk.label:Actions on the selection`,
   deselect: $localize`:@@spaces.table.deselect:Deselect`,

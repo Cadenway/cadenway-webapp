@@ -4,6 +4,7 @@ import {
   DestroyRef,
   effect,
   inject,
+  linkedSignal,
   type Signal,
   signal,
   untracked,
@@ -40,7 +41,6 @@ import { CwKbd } from '@cadenway/ui/components/kbd';
 import { CwMenu, CwMenuItem, CwMenuLabel, CwMenuTriggerFor } from '@cadenway/ui/components/menu';
 import { CwStatusIcon } from '@cadenway/ui/components/status-icon';
 import { CwSwitch } from '@cadenway/ui/components/switch';
-import { CwTextarea } from '@cadenway/ui/components/textarea';
 import { CwToastService } from '@cadenway/ui/components/toast';
 import { NgIcon } from '@ng-icons/core';
 
@@ -72,7 +72,7 @@ import { TaskCancelDialog } from '../task-cancel-dialog/task-cancel-dialog.compo
  * Function dueLabel
  *
  * @description
- * « Échéance »: the due date picker's placeholder, and its name once a date is picked.
+ * `Due date`: the due date picker's placeholder, and its name once a date is picked.
  *
  * @returns {string} The label.
  */
@@ -142,7 +142,7 @@ interface TaskCreateModel {
    * Property subtaskDraft
    *
    * @description
-   * Text of the « Ajouter une sous-tâche » field.
+   * Text of the `Add a subtask` field.
    *
    * @type {string}
    */
@@ -212,7 +212,7 @@ interface TaskCreateModel {
    * Property priority
    *
    * @description
-   * Priority; « Moyenne » by default.
+   * Priority; `Medium` by default.
    *
    * @type {PriorityKey}
    */
@@ -290,15 +290,15 @@ function addDays(date: Date, days: number): Date {
  * The task create dialog of mockup `App.dc.html` (lines 2820-2975, logic near line 7232), on
  * `cw-dialog`, an `overlays` slot contribution bound by `withTaskCreate()`. `N` opens it outside
  * fields and `TaskCreate.open` opens it from any screen with presets. The header picks the
- * destination list (« dans » Produit › Sprint 14, with « Réessayer » when the lists cannot be
+ * destination list (`in` Product › Sprint 14, with `Retry` when the lists cannot be
  * read), shows the next key and offers the space's saved templates. The body holds the required
- * name, a plain description (the block editor comes in step 5) and the subtask drafts (Entrée
- * adds one). The properties are the status split button (« Annulé » asks its reason first), the
- * assignees (the current user by default), the due date, the priority (« Moyenne ») and the
- * labels. « Créer la tâche » or Ctrl Entrée creates the task with an `Idempotency-Key`, then a
- * toast offers « Ouvrir » towards `/<slug>/t/<key>`; « Créer d'autres tâches » keeps the dialog
+ * name, a plain description (the block editor comes in step 5) and the subtask drafts (Enter
+ * adds one). The properties are the status split button (`Cancelled` asks its reason first), the
+ * assignees (the current user by default), the due date, the priority (`Medium`) and the
+ * labels. `Create the task` or Ctrl Enter creates the task with an `Idempotency-Key`, then a
+ * toast offers `Open` towards `/<slug>/t/<key>`; `Create more tasks` keeps the dialog
  * open with an empty name. Escape closes an open menu first, then the dialog. An empty name only
- * disables « Créer la tâche », as in the mockup, and is said under the field once it was left. The
+ * disables `Create the task`, as in the mockup, and is said under the field once it was left. The
  * footer's error summary, an alert, holds the other fields' errors once a field was left or a
  * creation was refused. It provides its own `TaskCreateStore`.
  */
@@ -319,7 +319,6 @@ function addDays(date: Date, days: number): Date {
     CwMenuTriggerFor,
     CwStatusIcon,
     CwSwitch,
-    CwTextarea,
     FormField,
     NgIcon,
     TaskCancelDialog,
@@ -349,7 +348,7 @@ export class TaskCreateDialog {
    * Property retryLabel
    *
    * @description
-   * Label of the « Réessayer » button of a failed read.
+   * Label of the `Retry` button of a failed read.
    *
    * @type {string}
    * @readonly
@@ -382,7 +381,7 @@ export class TaskCreateDialog {
    * Property dueName
    *
    * @description
-   * Name of the due date picker, put before the picked date (« Échéance, 18 nov. »). Without a
+   * Name of the due date picker, put before the picked date (`Due date, Nov 18`). Without a
    * date the trigger shows the same word as its placeholder and takes its name from that text, so
    * it is not announced twice. Valid for the button variant only: the `input` variant would need
    * its name at all times.
@@ -420,7 +419,7 @@ export class TaskCreateDialog {
    * Property workspace
    *
    * @description
-   * Workspace whose person is the default assignee and whose slug the « Ouvrir » address uses.
+   * Workspace whose person is the default assignee and whose slug the `Open` address uses.
    *
    * @type {WorkspaceContextPort}
    * @readonly
@@ -560,7 +559,7 @@ export class TaskCreateDialog {
    * Property more
    *
    * @description
-   * « Créer d'autres tâches »: the dialog stays open after a creation.
+   * `Create more tasks`: the dialog stays open after a creation.
    *
    * @type {WritableSignal<boolean>}
    * @readonly
@@ -571,7 +570,7 @@ export class TaskCreateDialog {
    * Property cancelAsk
    *
    * @description
-   * Keys the cancel reason dialog names while « Annulé » waits for its reason, or null.
+   * Keys the cancel reason dialog names while `Cancelled` waits for its reason, or null.
    *
    * @type {WritableSignal<readonly string[] | null>}
    * @readonly
@@ -610,11 +609,44 @@ export class TaskCreateDialog {
   );
 
   /**
+   * Property statusFrom
+   *
+   * @description
+   * The status the picker's icon animates from: the previous status of the draft.
+   *
+   * @type {Signal<StatusKey | null>}
+   * @readonly
+   */
+  protected readonly statusFrom: Signal<StatusKey | null> = linkedSignal<
+    StatusKey,
+    StatusKey | null
+  >({
+    source: (): StatusKey => this.model().status,
+    computation: (_: StatusKey, previous?: { source: StatusKey }): StatusKey | null =>
+      previous?.source ?? null,
+  });
+
+  /**
+   * Property dueFormat
+   *
+   * @description
+   * The due date as the trigger shows it: `Mon, Nov 9`.
+   *
+   * @type {Intl.DateTimeFormatOptions}
+   * @readonly
+   */
+  protected readonly dueFormat: Intl.DateTimeFormatOptions = {
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+  };
+
+  /**
    * Property presets
    *
    * @description
-   * Due date shortcuts: « Aujourd’hui », « Demain », « Vendredi », « Fin du sprint » for a
-   * sprint list, « Sans échéance ».
+   * Due date shortcuts: `Today`, `Tomorrow`, `Friday`, `End of the sprint` for a
+   * sprint list, `No due date`.
    *
    * @type {Signal<readonly CwDatePreset[]>}
    * @readonly
@@ -645,7 +677,7 @@ export class TaskCreateDialog {
    * Property unregisterSubmit
    *
    * @description
-   * Ends the Ctrl Entrée shortcut, bound only while the dialog is open.
+   * Ends the Ctrl Enter shortcut, bound only while the dialog is open.
    *
    * @type {(() => void) | null}
    */
@@ -658,7 +690,7 @@ export class TaskCreateDialog {
    *
    * @description
    * Binds `N` to the dialog outside fields until the shell is destroyed, and starts each opening
-   * from the presets: reads the data the first time, empties the fields and binds Ctrl Entrée.
+   * from the presets: reads the data the first time, empties the fields and binds Ctrl Enter.
    *
    * @constructor
    */
@@ -731,7 +763,7 @@ export class TaskCreateDialog {
    * Method destinationLabel
    *
    * @description
-   * « Produit › Sprint 14 ».
+   * `Product › Sprint 14`.
    *
    * @param {ListDestination} destination - A destination.
    * @returns {string} Its label.
@@ -744,7 +776,7 @@ export class TaskCreateDialog {
    * Method pickStatus
    *
    * @description
-   * Takes a status; « Annulé » asks its reason first.
+   * Takes a status; `Cancelled` asks its reason first.
    *
    * @param {StatusKey} status - Chosen status.
    */
@@ -807,7 +839,7 @@ export class TaskCreateDialog {
    * Method addSubtask
    *
    * @description
-   * Entrée in « Ajouter une sous-tâche »: drafts the typed subtask.
+   * Enter in `Add a subtask`: drafts the typed subtask.
    *
    * @param {Event} event - The keydown event.
    */
@@ -854,13 +886,42 @@ export class TaskCreateDialog {
    * Method removeLabel
    *
    * @description
-   * Accessible name of a subtask's remove button (« Retirer la sous-tâche Maquette »).
+   * Accessible name of a subtask's remove button (`Remove the subtask Mockup`).
    *
    * @param {string} subtask - Name of the subtask.
    * @returns {string} The name of the button.
    */
   protected removeLabel(subtask: string): string {
     return $localize`:@@task.create.subtask-remove:Remove the subtask ${subtask}:name:`;
+  }
+
+  /**
+   * Method templateHint
+   *
+   * @description
+   * What a template drafts, under its name: `3 subtasks · 4 items · Bug, Front`.
+   *
+   * @param {TaskTemplateOption} template - The template.
+   * @returns {string} The hint, empty when it drafts nothing.
+   */
+  protected templateHint(template: TaskTemplateOption): string {
+    const subtasks: number = template.subtasks.length;
+    const checks: number = template.checklist.length;
+    return [
+      subtasks === 0
+        ? ''
+        : subtasks === 1
+          ? $localize`:@@task.create.template-subtask:${subtasks}:count: subtask`
+          : $localize`:@@task.create.template-subtasks:${subtasks}:count: subtasks`,
+      checks === 0
+        ? ''
+        : checks === 1
+          ? $localize`:@@task.create.template-check:${checks}:count: item`
+          : $localize`:@@task.create.template-checks:${checks}:count: items`,
+      template.labels.join(', '),
+    ]
+      .filter((part: string): boolean => part !== '')
+      .join(' · ');
   }
 
   /**
@@ -883,7 +944,7 @@ export class TaskCreateDialog {
    *
    * @param {ServerIssueField} field - The field, or the whole form.
    * @param {unknown} value - Its current value.
-   * @returns {ValidationError.WithoutFieldTree | undefined} « Vérifiez cette information. », or
+   * @returns {ValidationError.WithoutFieldTree | undefined} `Check this information.`, or
    * nothing.
    */
   private serverIssue(
@@ -903,9 +964,9 @@ export class TaskCreateDialog {
    * Method create
    *
    * @description
-   * « Créer la tâche » and Ctrl Entrée: an invalid form focuses the name; a valid one is created,
-   * announced and confirmed by a toast with « Ouvrir », then the dialog closes or, with « Créer
-   * d'autres tâches », empties the name, the description and the subtasks. A refusal keeps every
+   * `Create the task` and Ctrl Enter: an invalid form focuses the name; a valid one is created,
+   * announced and confirmed by a toast with `Open`, then the dialog closes or, with `Create
+   * more tasks`, empties the name, the description and the subtasks. A refusal keeps every
    * field and shows the failure toast.
    *
    * @returns {Promise<void>} Resolves once handled.
@@ -1017,7 +1078,7 @@ export class TaskCreateDialog {
    * Method confirm
    *
    * @description
-   * « Tâche CAD-495 créée », « Sprint 14 · À faire · 2 sous-tâches. », with « Ouvrir ».
+   * `Task CAD-495 created`, `Sprint 14 · To do · 2 subtasks.`, with `Open`.
    *
    * @param {CreatedTask} created - The created task.
    * @param {ListDestination | null} destination - Its list.
@@ -1046,7 +1107,8 @@ export class TaskCreateDialog {
    * Method blank
    *
    * @description
-   * The fields of a new opening: empty, the current user assigned, « Moyenne », then the presets.
+   * The fields of a new opening: empty, the current user assigned, `Medium`, then the presets
+   * (status, due date, priority and assignees).
    *
    * @param {TaskCreateOptions} options - Presets of the opening.
    * @returns {TaskCreateModel} The fields.
@@ -1060,9 +1122,9 @@ export class TaskCreateDialog {
       checklist: [],
       status: options.status && options.status !== 'cancelled' ? options.status : 'todo',
       cancellation: null,
-      assigneeIds: [this.workspace.user().id],
+      assigneeIds: options.assigneeIds ? [...options.assigneeIds] : [this.workspace.user().id],
       due: options.due ? toDate(options.due) : null,
-      priority: 'moyenne',
+      priority: options.priority ?? 'moyenne',
       labels: [],
       templateId: null,
     };
@@ -1072,7 +1134,7 @@ export class TaskCreateDialog {
    * Method start
    *
    * @description
-   * Begins an opening: reads the data, resets the fields and binds Ctrl Entrée.
+   * Begins an opening: reads the data, resets the fields and binds Ctrl Enter.
    *
    * @param {TaskCreateOptions} options - Presets of the opening.
    */
@@ -1100,7 +1162,7 @@ export class TaskCreateDialog {
    * Method stop
    *
    * @description
-   * Ends an opening: Ctrl Entrée is unbound.
+   * Ends an opening: Ctrl Enter is unbound.
    */
   private stop(): void {
     this.openingId++;

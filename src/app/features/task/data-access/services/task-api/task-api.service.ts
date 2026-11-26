@@ -9,6 +9,7 @@ import { hasProblemCode } from '@core/api';
 import type { TaskSummary } from '../../../models/task-summary/task-summary.interface';
 import type { TaskCancellation } from '../../../models/task-status-change/task-status-change.interface';
 import { TaskVersionConflict } from '../../../models/task-write-error/task-write-error.model';
+import { toTaskRouteError } from '../../adapters/route-error/task-route-error.adapter';
 import { toTaskSummary } from '../../adapters/task-summary/task-summary.adapter';
 
 /**
@@ -120,6 +121,22 @@ export class TaskApi {
     return this.client
       .getTask(taskKey, { cache: 'no-store' })
       .pipe(map((task: UpdateTaskClientResult) => toTaskSummary(task)));
+  }
+
+  /**
+   * Method readLink
+   *
+   * @description
+   * Reads a task for its deep link, without the HTTP cache; a failure is the typed route error the
+   * error boundary renders (`toTaskRouteError`: deleted task, not found or unavailable).
+   *
+   * @param {string} taskKey - Key of the task.
+   * @returns {Observable<TaskSummary>} The task, or the typed route error.
+   */
+  public readLink(taskKey: string): Observable<TaskSummary> {
+    return this.read(taskKey).pipe(
+      catchError((error: unknown) => throwError(() => toTaskRouteError(error))),
+    );
   }
   // #endregion
 }

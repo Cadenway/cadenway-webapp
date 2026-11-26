@@ -5,6 +5,8 @@
     [task]="deletedTask()?.task ?? null"
     [status]="status()"
     [requestId]="requestId()"
+    [unavailableTitle]="unavailableTitle"
+    [statusUrl]="kind() === 'unavailable' ? statusUrl() : null"
     [trashLink]="trashLink"
     [accessRequest]="store.accessRequest()"
     [restore]="store.restore()"

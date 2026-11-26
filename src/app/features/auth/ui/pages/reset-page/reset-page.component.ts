@@ -4,7 +4,6 @@ import {
   type FieldTree,
   form,
   FormField,
-  minLength,
   required,
   submit,
   validate,
@@ -16,6 +15,9 @@ import { CwCard } from '@cadenway/ui/components/card';
 import { CwCheckbox } from '@cadenway/ui/components/checkbox';
 import { CwInput } from '@cadenway/ui/components/input';
 import {
+  CW_PASSWORD_STRENGTH_LABELS,
+  type CwPasswordRule,
+  cwPasswordRules,
   CwPasswordStrength,
   CwPasswordStrengthLevel,
 } from '@cadenway/ui/components/password-strength';
@@ -61,7 +63,7 @@ interface ResetModel {
    * Property closeOtherSessions
    *
    * @description
-   * "Fermer mes autres sessions", ticked by default.
+   * `Close my other sessions`, ticked by default.
    *
    * @type {boolean}
    */
@@ -80,13 +82,25 @@ interface ResetModel {
 type ResetView = 'loading' | 'form' | 'done' | 'expired';
 
 /**
+ * Constant PASSWORD_RULES
+ *
+ * @description
+ * The four rules the strength meter lists (12 characters, upper and lower case, a digit, a
+ * symbol), built by the brick itself so the check and the list never differ. Only their tests are
+ * used here: the labels come from the meter's providers.
+ *
+ * @type {readonly CwPasswordRule[]}
+ */
+const PASSWORD_RULES: readonly CwPasswordRule[] = cwPasswordRules(CW_PASSWORD_STRENGTH_LABELS, 12);
+
+/**
  * Component ResetPage
  *
  * @description
  * New password of `Reinitialisation.dc.html` (`/reset#token=…`). The token is read from the URL
  * fragment, which no server receives, then removed from the address bar and sent in bodies only.
- * The link is inspected first (« Pour le compte … »); an expired, used or replaced link shows
- * « Ce lien a expiré ». The success says how many sessions closed and offers « Se connecter ».
+ * The link is inspected first (`For the account …`); an expired, used or replaced link shows
+ * `This link has expired`. The success says how many sessions closed and offers `Sign in`.
  */
 @Component({
   selector: 'cw-reset-page',
@@ -253,9 +267,13 @@ export class ResetPage implements OnInit {
    * @readonly
    */
   protected readonly resetForm: FieldTree<ResetModel> = form(this.model, (path) => {
-    const passwordMessage: string = $localize`:@@auth.signup.password-short:Choose a password of at least 12 characters.`;
-    required(path.password, { message: passwordMessage });
-    minLength(path.password, 12, { message: passwordMessage });
+    const rulesMessage: string = $localize`:@@auth.reset.password-rules:Choose a password that meets the 4 rules.`;
+    required(path.password, { message: rulesMessage });
+    validate(path.password, (context: FieldContext<string>) =>
+      PASSWORD_RULES.every((rule: CwPasswordRule) => rule.test(context.value()))
+        ? undefined
+        : { kind: 'password-rules', message: rulesMessage },
+    );
     required(path.confirmation, {
       message: $localize`:@@auth.reset.confirm-missing:Type the password again to confirm it.`,
     });

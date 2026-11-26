@@ -91,7 +91,7 @@ describe('TaskStatusPicker', () => {
       'button',
     );
 
-    expect(main?.getAttribute('aria-label')).toBe('Statut : À faire. Passer à « En cours »');
+    expect(main?.getAttribute('aria-label')).toBe('Status: To do. Move to “In progress”');
     main?.click();
 
     expect(emitted).toEqual(['progress']);
@@ -108,11 +108,11 @@ describe('TaskStatusPicker', () => {
     caret?.click();
     await fixture.whenStable();
 
-    expect(document.body.textContent).toContain('Non commencé');
-    expect(document.body.textContent).toContain('Fermé');
-    expect(menuItems().some((text: string) => text.startsWith('En attente'))).toBe(false);
+    expect(document.body.textContent).toContain('Not started');
+    expect(document.body.textContent).toContain('Closed');
+    expect(menuItems().some((text: string) => text.startsWith('Waiting'))).toBe(false);
     Array.from(document.querySelectorAll<HTMLElement>('[role="menuitem"]'))
-      .find((item: HTMLElement) => item.textContent.trim().startsWith('Bloqué'))
+      .find((item: HTMLElement) => item.textContent.trim().startsWith('Blocked'))
       ?.click();
 
     expect(emitted).toEqual(['blocked']);
@@ -127,8 +127,8 @@ describe('TaskStatusPicker', () => {
     await fixture.whenStable();
 
     expect(menuItems()).toHaveLength(4);
-    expect(document.body.textContent).toContain('À venir');
-    expect(document.body.textContent).toContain('Atteint');
+    expect(document.body.textContent).toContain('Upcoming');
+    expect(document.body.textContent).toContain('Reached');
   });
 
   it('names the milestone action for upcoming and reached milestones', async () => {
@@ -137,13 +137,13 @@ describe('TaskStatusPicker', () => {
       (upcoming.fixture.nativeElement as HTMLElement)
         .querySelector('button')
         ?.getAttribute('aria-label'),
-    ).toBe('Marquer le jalon comme atteint');
+    ).toBe('Mark the milestone as reached');
     upcoming.fixture.componentRef.setInput('status', 'done');
     await upcoming.fixture.whenStable();
     expect(
       (upcoming.fixture.nativeElement as HTMLElement)
         .querySelector('button')
         ?.getAttribute('aria-label'),
-    ).toBe('Changer le statut du jalon');
+    ).toBe('Change the milestone status');
   });
 });

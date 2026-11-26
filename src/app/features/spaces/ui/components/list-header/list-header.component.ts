@@ -3,8 +3,6 @@ import {
   computed,
   input,
   type InputSignal,
-  model,
-  type ModelSignal,
   output,
   type OutputEmitterRef,
   type Signal,
@@ -17,7 +15,6 @@ import {
   CwBreadcrumbPage,
 } from '@cadenway/ui/components/breadcrumb';
 import { CwButton } from '@cadenway/ui/components/button';
-import { CwInlineEdit } from '@cadenway/ui/components/inline-edit';
 import {
   CwMenu,
   CwMenuItem,
@@ -37,11 +34,12 @@ import { listIconName, lookIconName, lookTone } from '../../../utils/look/look.u
  *
  * @description
  * The header of a list page (`App.dc.html` lines 277-334): the breadcrumb row (the sidebar's
- * expand toggle while the sidebar is collapsed, the space, the list), the list's icon, its title
- * as an inline edit (`[(editing)]` lets « Modifier la liste » open it), the favorite toggle, the
- * description line (« Sprint du 3 – 17 nov. · 98 tâches · 25 % terminé »), the sprint goal, the
- * members' avatars and the « … » menu: rename, duplicate with tasks, export CSV, copy link, archive
- * and delete. « Partager », « Rapport de sprint » and the space dialogs come in step 4b.
+ * expand toggle while the sidebar is collapsed, the space's badge in its color, the list), the
+ * list's icon in its color, a button that opens the list dialog, its title, the favorite toggle,
+ * the description line (`Sprint of Nov 3 – 17 · 98 tasks · 25 % done`), the sprint goal,
+ * the members' avatars from 768 px and the `…` menu: edit the list or sprint, edit the space,
+ * duplicate with tasks, export CSV, copy link, archive and delete. `Share`, `Sprint report`,
+ * `Space statuses` and `Automations` come in step 4b.
  * Presentational: every action is an output; the page confirms the deletion.
  */
 @Component({
@@ -53,7 +51,6 @@ import { listIconName, lookIconName, lookTone } from '../../../utils/look/look.u
     CwBreadcrumbLink,
     CwBreadcrumbPage,
     CwButton,
-    CwInlineEdit,
     CwMenu,
     CwMenuItem,
     CwMenuSeparator,
@@ -189,26 +186,15 @@ export class ListHeader {
   public readonly showSidebarToggle: InputSignal<boolean> = input(false);
 
   /**
-   * Property saving
+   * Property spaceEditable
    *
    * @description
-   * Whether a rename is being recorded.
+   * Whether `Edit the space` is offered: the space is read and the caller has `edit` on it.
    *
    * @type {InputSignal<boolean>}
    * @readonly
    */
-  public readonly saving: InputSignal<boolean> = input(false);
-
-  /**
-   * Property editing
-   *
-   * @description
-   * Whether the title is being edited; `[(editing)]`.
-   *
-   * @type {ModelSignal<boolean>}
-   * @readonly
-   */
-  public readonly editing: ModelSignal<boolean> = model(false);
+  public readonly spaceEditable: InputSignal<boolean> = input(false);
 
   /**
    * Property sidebarToggled
@@ -222,15 +208,26 @@ export class ListHeader {
   public readonly sidebarToggled: OutputEmitterRef<void> = output();
 
   /**
-   * Property renamed
+   * Property editRequested
    *
    * @description
-   * Emits a new, trimmed, non-empty name.
+   * Emits on the list's icon and on `Edit the list` or `Edit the sprint`.
    *
-   * @type {OutputEmitterRef<string>}
+   * @type {OutputEmitterRef<void>}
    * @readonly
    */
-  public readonly renamed: OutputEmitterRef<string> = output<string>();
+  public readonly editRequested: OutputEmitterRef<void> = output();
+
+  /**
+   * Property spaceEditRequested
+   *
+   * @description
+   * Emits on `Edit the space`.
+   *
+   * @type {OutputEmitterRef<void>}
+   * @readonly
+   */
+  public readonly spaceEditRequested: OutputEmitterRef<void> = output();
 
   /**
    * Property favoriteToggled
@@ -247,7 +244,7 @@ export class ListHeader {
    * Property duplicated
    *
    * @description
-   * Emits on « Dupliquer avec les tâches ».
+   * Emits on `Duplicate with the tasks`.
    *
    * @type {OutputEmitterRef<void>}
    * @readonly
@@ -258,7 +255,7 @@ export class ListHeader {
    * Property exported
    *
    * @description
-   * Emits on « Exporter en CSV ».
+   * Emits on `Export as CSV`.
    *
    * @type {OutputEmitterRef<void>}
    * @readonly
@@ -269,7 +266,7 @@ export class ListHeader {
    * Property linkCopied
    *
    * @description
-   * Emits on « Copier le lien ».
+   * Emits on `Copy the link`.
    *
    * @type {OutputEmitterRef<void>}
    * @readonly
@@ -280,7 +277,7 @@ export class ListHeader {
    * Property archived
    *
    * @description
-   * Emits on « Archiver la liste ».
+   * Emits on `Archive the list`.
    *
    * @type {OutputEmitterRef<void>}
    * @readonly
@@ -291,7 +288,7 @@ export class ListHeader {
    * Property deleteRequested
    *
    * @description
-   * Emits on « Supprimer la liste »; the page asks for the typed name.
+   * Emits on `Delete the list`; the page asks for the typed name.
    *
    * @type {OutputEmitterRef<void>}
    * @readonly
@@ -302,24 +299,24 @@ export class ListHeader {
    * Property icon
    *
    * @description
-   * Fill icon of the list.
+   * Bold icon of the list.
    *
    * @type {Signal<string>}
    * @readonly
    */
-  protected readonly icon: Signal<string> = computed((): string => listIconName(this.list(), true));
+  protected readonly icon: Signal<string> = computed((): string => listIconName(this.list()));
 
   /**
    * Property tone
    *
    * @description
-   * Color class of the list's icon.
+   * Color class of the list's badge, the foreground for the default gray.
    *
    * @type {Signal<string>}
    * @readonly
    */
   protected readonly tone: Signal<string> = computed((): string =>
-    this.list().color === 'gris' ? 'text-primary' : lookTone(this.list().color),
+    this.list().color === 'gris' ? 'text-foreground' : lookTone(this.list().color),
   );
 
   /**
@@ -342,7 +339,7 @@ export class ListHeader {
    * Property renameLabel
    *
    * @description
-   * « Modifier le sprint » or « Modifier la liste ».
+   * `Edit the sprint` or `Edit the list`.
    *
    * @type {Signal<string>}
    * @readonly
@@ -372,7 +369,7 @@ export class ListHeader {
    * Property membersLabel
    *
    * @description
-   * Name of the avatar group (« 4 membres sur cette liste »).
+   * Name of the avatar group (`4 members on this list`).
    *
    * @type {Signal<string>}
    * @readonly
@@ -398,16 +395,16 @@ export class ListHeader {
   }
 
   /**
-   * Method save
+   * Method spaceTone
    *
    * @description
-   * Emits a changed, non-empty name.
+   * Color class of the space's badge in the breadcrumb, the foreground for the default gray.
    *
-   * @param {string} value - Validated text.
+   * @param {Space} space - The space.
+   * @returns {string} The class.
    */
-  protected save(value: string): void {
-    const name: string = value.trim();
-    if (name && name !== this.list().name) this.renamed.emit(name);
+  protected spaceTone(space: Space): string {
+    return space.color === 'gris' ? 'text-foreground' : lookTone(space.color);
   }
   // #endregion
 }

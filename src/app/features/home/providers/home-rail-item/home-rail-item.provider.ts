@@ -6,7 +6,7 @@ import { HomeRailItem } from '../../ui/components/home-rail-item/home-rail-item.
  * Function withHomeRailItem
  *
  * @description
- * Contributes « Accueil », first in the shell's `railNavigation` slot. Bind it on the `/:org`
+ * Contributes `Home`, first in the shell's `railNavigation` slot. Bind it on the `/:org`
  * route, whose injector provides `WORKSPACE_CONTEXT`.
  *
  * @returns {SlotFeature<SlotContribution>} The slot contribution factory.

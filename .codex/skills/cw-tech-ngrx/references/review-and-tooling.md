@@ -33,11 +33,11 @@
    flattening operator.
 8. Optimistic changes: the status shows at once, one pending change per task settles 460 ms after
    the last click, a return to the saved status cancels it, sends of one task never overlap, a
-   failure rolls back with the error toast, Annuler restores the snapshot, a refused undo keeps
-   Annuler, the snapshot is dropped when the toast closes; a pushed change never overwrites a
+   failure rolls back with the error toast, Undo restores the snapshot, a refused undo keeps
+   Undo, the snapshot is dropped when the toast closes; a pushed change never overwrites a
    pending edit.
 9. Loading, error and empty states reach the page: an error is a state flag (not an empty list),
-   with a retry method for Réessayer.
+   with a retry method for Retry.
 10. Spec next to the store: `TestBed`, data-access faked, typed fixtures, fake timers for delays,
     public API, the rules of item 8 covered; `unprotected` only to arrange.
 11. `FEATURE.md` lists the store and its scope, and the invariants a reader would get wrong (for

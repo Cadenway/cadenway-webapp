@@ -13,9 +13,9 @@ describe('view summary', () => {
           groupBy: 'priority',
           subtasks: 'nested',
         },
-        'fr',
+        'en',
       ),
-    ).toBe('Liste · 1 filtre · tri : échéance · groupée par priorité');
+    ).toBe('List · 1 filter · sort: due date · grouped by priority');
     expect(
       viewSummary(
         'list',
@@ -25,8 +25,8 @@ describe('view summary', () => {
           groupBy: 'status',
           subtasks: 'nested',
         },
-        'fr',
+        'en',
       ),
-    ).toBe('Liste · 2 filtres');
+    ).toBe('List · 2 filters');
   });
 });

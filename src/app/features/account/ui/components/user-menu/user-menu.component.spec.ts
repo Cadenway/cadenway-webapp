@@ -1,8 +1,10 @@
 import { signal, type WritableSignal } from '@angular/core';
 import { type ComponentFixture, TestBed } from '@angular/core/testing';
+import { By } from '@angular/platform-browser';
 import { Router } from '@angular/router';
 import { provideCadenwayIcons } from '@cadenway/icons';
 import { CwToastService } from '@cadenway/ui/components/toast';
+import { CwTooltip } from '@cadenway/ui/components/tooltip';
 import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 
 import type { PresenceStatus } from '@core/realtime';
@@ -58,7 +60,7 @@ function item(text: string): HTMLButtonElement {
   const found: HTMLButtonElement | undefined = Array.from(
     document.querySelectorAll<HTMLButtonElement>('[role^="menuitem"]'),
   ).find((candidate: HTMLButtonElement) => candidate.textContent.includes(text));
-  if (!found) throw new Error(`No menu item « ${text} »`);
+  if (!found) throw new Error(`No menu item "${text}"`);
   return found;
 }
 
@@ -119,11 +121,17 @@ describe('UserMenu', () => {
   it('names the person without a presence until one is chosen in this tab', async () => {
     const trigger: HTMLButtonElement = await openMenu();
 
-    expect(trigger.textContent).toContain('Compte de Camille Martin');
-    expect(trigger.textContent).not.toContain('statut');
+    expect(trigger.textContent).toContain('Account of Camille Martin');
+    expect(trigger.textContent).not.toContain('status');
+    expect(trigger.hasAttribute('aria-describedby')).toBe(false);
+    const tooltip: CwTooltip = fixture.debugElement
+      .query(By.css('[data-testid="user-menu-trigger"]'))
+      .query(By.directive(CwTooltip))
+      .injector.get(CwTooltip);
+    expect(tooltip.cwTooltip()).toBe('');
     expect(trigger.querySelector('cw-presence-dot')).toBeNull();
     expect(document.body.textContent).toContain('camille.martin@ateliernord.fr');
-    item('Statut').click();
+    item('Status').click();
     await fixture.whenStable();
     expect(document.querySelector('[role="menuitemradio"][aria-checked="true"]')).toBeNull();
   });
@@ -132,16 +140,14 @@ describe('UserMenu', () => {
     status.set('away');
     const trigger: HTMLButtonElement = await openMenu();
 
-    expect(trigger.textContent).toContain('Compte de Camille Martin, statut : Absent');
-    expect(trigger.querySelector('cw-avatar')?.getAttribute('title')).toBe(
-      'Camille Martin (absent)',
-    );
+    expect(trigger.textContent).toContain('Account of Camille Martin, status: Away');
+    expect(trigger.querySelector('cw-avatar')?.getAttribute('title')).toBe('Camille Martin (away)');
   });
 
   it.each([
-    ['online', 'en ligne'],
-    ['away', 'absent'],
-    ['do-not-disturb', 'ne pas déranger'],
+    ['online', 'online'],
+    ['away', 'away'],
+    ['do-not-disturb', 'do not disturb'],
     ['invisible', 'invisible'],
   ] as const)(
     'shows %s on both avatars without repeating it in the button name',
@@ -159,14 +165,14 @@ describe('UserMenu', () => {
     },
   );
 
-  it('disables « Statut » without realtime, and never confirms anything', async () => {
+  it('disables `Status` without realtime, and never confirms anything', async () => {
     connection.set('disabled');
     await fixture.whenStable();
     await openMenu();
 
-    const status: HTMLButtonElement = item('Statut');
+    const status: HTMLButtonElement = item('Status');
     expect(status.getAttribute('aria-disabled')).toBe('true');
-    expect(status.textContent).toContain('Indisponible');
+    expect(status.textContent).toContain('Unavailable');
     status.click();
     await fixture.whenStable();
 
@@ -177,45 +183,45 @@ describe('UserMenu', () => {
 
   it('reports a presence the server refused', async () => {
     await openMenu();
-    item('Statut').click();
+    item('Status').click();
     await fixture.whenStable();
-    item('Absent').click();
+    item('Away').click();
     await fixture.whenStable();
 
     status.set(null);
     await fixture.whenStable();
 
-    expect(toasts.error).toHaveBeenCalledWith('Impossible de changer de statut', expect.anything());
+    expect(toasts.error).toHaveBeenCalledWith('The status could not be changed', expect.anything());
   });
 
-  it('sets the presence from « Statut » and confirms it', async () => {
+  it('sets the presence from `Status` and confirms it', async () => {
     await openMenu();
-    item('Statut').click();
+    item('Status').click();
     await fixture.whenStable();
 
-    item('Ne pas déranger').click();
+    item('Do not disturb').click();
     await fixture.whenStable();
 
     expect(setPresence).toHaveBeenCalledExactlyOnceWith('do-not-disturb');
-    expect(toasts.show).toHaveBeenCalledWith('Statut : Ne pas déranger', {
-      description: 'Notifications en pause.',
+    expect(toasts.show).toHaveBeenCalledWith('Status: Do not disturb', {
+      description: 'Notifications paused.',
     });
   });
 
   it('opens the account sections of the current organization', async () => {
     await openMenu();
 
-    item('Sécurité et connexions').click();
+    item('Security and sign-ins').click();
 
     expect(navigate).toHaveBeenCalledWith(['/', 'atelier-nord', 'account', 'security']);
   });
 
-  it('switches the theme from « Thème »', async () => {
+  it('switches the theme from `Theme`', async () => {
     await openMenu();
-    item('Thème').click();
+    item('Theme').click();
     await fixture.whenStable();
 
-    item('Sombre').click();
+    item('Dark').click();
 
     expect(theme.set).toHaveBeenCalledOnce();
     expect(theme.set.mock.calls[0]?.[0]).toBe('dark');
@@ -223,7 +229,7 @@ describe('UserMenu', () => {
 
   it('signs out, and reports a refusal', async () => {
     await openMenu();
-    item('Se déconnecter').click();
+    item('Sign out').click();
     await vi.waitFor(() => {
       expect(run).toHaveBeenCalledOnce();
     });
@@ -231,12 +237,9 @@ describe('UserMenu', () => {
 
     run.mockResolvedValueOnce(false);
     await openMenu();
-    item('Se déconnecter').click();
+    item('Sign out').click();
     await vi.waitFor(() => {
-      expect(toasts.error).toHaveBeenCalledWith(
-        'Impossible de vous déconnecter',
-        expect.anything(),
-      );
+      expect(toasts.error).toHaveBeenCalledWith('Sign-out failed', expect.anything());
     });
   });
 });

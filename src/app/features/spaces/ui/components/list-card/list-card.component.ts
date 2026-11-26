@@ -11,7 +11,7 @@ import { listIconName, lookTone } from '../../../utils/look/look.util';
  *
  * @description
  * A list card of the space overview (`App.dc.html` lines 1652-1659): a link to the list with its
- * icon, name, sprint range and task count, « done / live terminées » with the done percentage
+ * icon, name, sprint range and task count, `done / live done` with the done percentage
  * and its bar, the open tasks and, when any, the late ones in garnet. The percentage leaves the
  * cancelled tasks out. Presentational.
  */
@@ -22,7 +22,7 @@ import { listIconName, lookTone } from '../../../utils/look/look.util';
   template: `
     <a
       [routerLink]="link()"
-      class="flex flex-col gap-3 rounded-xl border border-border bg-card p-4 text-left transition-colors hover:bg-muted/50 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background focus-visible:outline-none"
+      class="flex flex-col gap-3 rounded-xl border border-border bg-card p-4 text-left transition-colors hover:bg-linear-to-b hover:from-hover hover:to-hover focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background focus-visible:outline-none"
       data-testid="list-card"
     >
       <span class="flex min-w-0 items-center gap-2">
@@ -99,7 +99,7 @@ export class ListCard {
    * Property range
    *
    * @description
-   * Formatted sprint range (« 3 – 17 nov. »), or null for a plain list.
+   * Formatted sprint range (`Nov 3 – 17` in English), or null for a plain list.
    *
    * @type {InputSignal<string | null>}
    * @readonly

@@ -16,17 +16,17 @@ import {
 } from './saved-view.adapter';
 
 /**
- * Constant bugsCritiques
+ * Constant criticalBugs
  *
  * @description
- * The mockup's « Bugs critiques » view (`SAVED_INIT`), as the gateway answers it.
+ * The mockup's `Critical bugs` view (`SAVED_INIT`), as the gateway answers it.
  *
  * @type {SavedViewDto}
  */
-const bugsCritiques: SavedViewDto = {
+const criticalBugs: SavedViewDto = {
   id: 'sv-bugs',
   listId: 'l-bugs',
-  name: 'Bugs critiques',
+  name: 'Critical bugs',
   icon: 'bug',
   configuration: {
     layout: 'list',
@@ -56,10 +56,10 @@ const filtered: ListViewConfig = {
 
 describe('saved view adapter', () => {
   it('maps a saved view, dropping unknown priorities', () => {
-    expect(toSavedView(bugsCritiques)).toEqual({
+    expect(toSavedView(criticalBugs)).toEqual({
       id: 'sv-bugs',
       listId: 'l-bugs',
-      name: 'Bugs critiques',
+      name: 'Critical bugs',
       icon: 'bug',
       layout: 'list',
       config: {

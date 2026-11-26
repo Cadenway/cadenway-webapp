@@ -15,7 +15,7 @@ import { TaskTitleCell } from './task-title-cell.component';
 const task: TaskSummary = {
   id: 'CAD-482',
   key: 'CAD-482',
-  name: 'Refondre l’écran de connexion SSO',
+  name: 'Redesign the SSO sign-in screen',
   status: 'todo',
   cancelReason: null,
   priority: 'haute',
@@ -30,7 +30,7 @@ const task: TaskSummary = {
   milestone: false,
   recurrence: 'weekly',
   listId: 'sprint-14',
-  spaceId: 'produit',
+  spaceId: 'product',
   version: 1,
 };
 
@@ -59,7 +59,7 @@ describe('TaskTitleCell', () => {
   it('shows the name, the key, the subtask progress and the comment count', async () => {
     const host: HTMLElement = (await render(task)).nativeElement as HTMLElement;
 
-    expect(host.textContent).toContain('Refondre l’écran de connexion SSO');
+    expect(host.textContent).toContain('Redesign the SSO sign-in screen');
     expect(host.textContent).toContain('CAD-482');
     expect(host.textContent).toContain('1/3');
     expect(host.textContent).not.toContain('2/4');

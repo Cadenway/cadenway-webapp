@@ -7,10 +7,18 @@ import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 
 import { type CreatedTask, TaskCreate } from '@features/task';
 
+import { HttpErrorResponse } from '@angular/common/http';
+
+import { ListsApi } from '../../data-access/services/lists-api/lists-api.service';
+import { SidebarApi } from '../../data-access/services/sidebar-api/sidebar-api.service';
 import { SpacesApi } from '../../data-access/services/spaces-api/spaces-api.service';
 import type { Favorite } from '../../models/favorite/favorite.interface';
-import type { Space } from '../../models/space/space.interface';
-import type { SpaceOverview, TaskList } from '../../models/task-list/task-list.interface';
+import type { SpaceDetails, SpaceDraft } from '../../models/space/space.interface';
+import type {
+  ListDraft,
+  SpaceOverview,
+  TaskList,
+} from '../../models/task-list/task-list.interface';
 import { todayIso } from '../../utils/calendar-date/calendar-date.util';
 import { SpacesNavigationStore } from './spaces-navigation.store';
 
@@ -22,10 +30,43 @@ import { SpacesNavigationStore } from './spaces-navigation.store';
  *
  * @param {string} id - Identifier.
  * @param {string} name - Name.
- * @returns {Space} The space.
+ * @returns {SpaceDetails} The space.
  */
-function space(id: string, name: string): Space {
-  return { id, name, description: null, icon: null, color: 'gris', private: false, statuses: [] };
+function space(id: string, name: string): SpaceDetails {
+  return {
+    id,
+    name,
+    prefix: name.slice(0, 3).toUpperCase(),
+    canEdit: true,
+    canManage: true,
+    version: 3,
+    description: null,
+    icon: null,
+    color: 'gris',
+    private: false,
+    statuses: [],
+  };
+}
+
+/**
+ * Function draftOf
+ *
+ * @description
+ * The settings of a space as a draft, with a new name.
+ *
+ * @param {SpaceDetails} source - The space.
+ * @param {string} name - The new name.
+ * @returns {SpaceDraft} The draft.
+ */
+function draftOf(source: SpaceDetails, name: string): SpaceDraft {
+  return {
+    name,
+    prefix: source.prefix,
+    description: null,
+    icon: 'rocket',
+    color: 'violet',
+    private: false,
+  };
 }
 
 /**
@@ -119,6 +160,39 @@ interface SpacesApiFake {
    * @readonly
    */
   readonly removeFavorite: Mock;
+
+  /**
+   * Property createSpace
+   *
+   * @description
+   * Fake of `createSpace`.
+   *
+   * @type {Mock}
+   * @readonly
+   */
+  readonly createSpace: Mock;
+
+  /**
+   * Property updateSpace
+   *
+   * @description
+   * Fake of `updateSpace`.
+   *
+   * @type {Mock}
+   * @readonly
+   */
+  readonly updateSpace: Mock;
+
+  /**
+   * Property deleteSpace
+   *
+   * @description
+   * Fake of `deleteSpace`.
+   *
+   * @type {Mock}
+   * @readonly
+   */
+  readonly deleteSpace: Mock;
   // #endregion
 }
 
@@ -127,12 +201,13 @@ describe('SpacesNavigationStore', () => {
   let api: SpacesApiFake;
   let store: InstanceType<typeof SpacesNavigationStore>;
   let creations: Subject<CreatedTask>;
+  let lists: Record<string, Mock>;
   const today: string = todayIso();
   const roadmap: Favorite = {
     id: 'f1',
     kind: 'list',
     targetId: 'l-roadmap',
-    name: 'Feuille de route',
+    name: 'Roadmap',
     listId: null,
   };
 
@@ -141,7 +216,7 @@ describe('SpacesNavigationStore', () => {
     creations = new Subject<CreatedTask>();
     api = {
       spaces: vi.fn(() =>
-        Promise.resolve([space('sp-produit', 'Produit'), space('sp-design', 'Design')]),
+        Promise.resolve([space('sp-product', 'Product'), space('sp-design', 'Design')]),
       ),
       overview: vi.fn((spaceId: string): Promise<SpaceOverview> => {
         if (spaceId === 'sp-design') return Promise.reject(new Error('unavailable'));
@@ -163,11 +238,30 @@ describe('SpacesNavigationStore', () => {
       favorites: vi.fn(() => Promise.resolve([roadmap])),
       addFavorite: vi.fn(),
       removeFavorite: vi.fn(),
+      createSpace: vi.fn(),
+      updateSpace: vi.fn(),
+      deleteSpace: vi.fn(),
+    };
+    lists = {
+      create: vi.fn(),
+      update: vi.fn(),
+      archive: vi.fn(),
+      unarchive: vi.fn(),
+      remove: vi.fn(),
     };
     TestBed.configureTestingModule({
       providers: [
         SpacesNavigationStore,
         { provide: SpacesApi, useValue: api },
+        { provide: ListsApi, useValue: lists },
+        {
+          provide: SidebarApi,
+          useValue: {
+            seats: vi.fn(() => Promise.resolve({ plan: 'team', free: 7 })),
+            trashCount: vi.fn(() => Promise.resolve(2)),
+            archiveCount: vi.fn(() => Promise.resolve(3)),
+          },
+        },
         { provide: WORKSPACE_CONTEXT, useValue: { organization } },
         { provide: TaskCreate, useValue: { created: creations.asObservable() } },
       ],
@@ -179,17 +273,216 @@ describe('SpacesNavigationStore', () => {
     TestBed.tick();
     await expect.poll(() => store.overviews.hasValue()).toBe(true);
 
-    expect(store.spaces.value()?.map((item: Space) => item.name)).toEqual(['Produit', 'Design']);
-    expect(Object.keys(store.overviews.value() ?? {})).toEqual(['sp-produit']);
+    expect(store.spaces.value()?.map((item: SpaceDetails) => item.name)).toEqual([
+      'Product',
+      'Design',
+    ]);
+    expect(Object.keys(store.overviews.value() ?? {})).toEqual(['sp-product']);
     expect(store.currentSprint()?.list.id).toBe('l-sprint14');
     await expect.poll(() => store.favorites.hasValue()).toBe(true);
     expect(store.favoriteOf('list', 'l-roadmap')).toEqual(roadmap);
   });
 
+  it('reads the free seats and the trash and archive counts of the organization', async () => {
+    await expect.poll(() => store.archiveCount.hasValue()).toBe(true);
+    await expect.poll(() => store.trashCount.hasValue() && store.seats.hasValue()).toBe(true);
+
+    expect(store.seats.value()).toEqual({ plan: 'team', free: 7 });
+    expect(store.trashCount.value()).toBe(2);
+    expect(store.archiveCount.value()).toBe(3);
+  });
+
+  it('shows new space settings at once and restores them when the gateway refuses', async () => {
+    await expect.poll(() => store.spaces.hasValue()).toBe(true);
+    const product: SpaceDetails = space('sp-product', 'Product');
+    let refuse: (reason: unknown) => void = () => undefined;
+    api.updateSpace.mockReturnValueOnce(
+      new Promise((_resolve, reject) => {
+        refuse = reject;
+      }),
+    );
+
+    const pending: Promise<SpaceDetails | 'prefix-taken' | null> = store.updateSpace(
+      product,
+      draftOf(product, 'Product & design'),
+    );
+    expect(store.spaceById('sp-product')).toMatchObject({
+      name: 'Product & design',
+      icon: 'rocket',
+    });
+    refuse(new Error('unavailable'));
+
+    expect(await pending).toBeNull();
+    expect(store.spaceById('sp-product')?.name).toBe('Product');
+  });
+
+  it('reports a used prefix and emits the recorded space', async () => {
+    await expect.poll(() => store.spaces.hasValue()).toBe(true);
+    const product: SpaceDetails = space('sp-product', 'Product');
+    const edits: SpaceDetails[] = [];
+    store.spaceEdited.subscribe((edited: SpaceDetails) => edits.push(edited));
+    api.updateSpace.mockRejectedValueOnce(
+      new HttpErrorResponse({
+        status: 409,
+        error: { type: 'about:blank', status: 409, code: 'space.prefix-taken' },
+      }),
+    );
+    api.updateSpace.mockResolvedValueOnce({ ...product, name: 'Product 2' });
+
+    expect(await store.updateSpace(product, { ...draftOf(product, 'X'), prefix: 'DES' })).toBe(
+      'prefix-taken',
+    );
+    expect(await store.updateSpace(product, draftOf(product, 'Product 2'))).toMatchObject({
+      name: 'Product 2',
+    });
+    expect(edits.map((edited: SpaceDetails) => edited.name)).toEqual(['Product 2']);
+  });
+
+  it('removes a deleted space at once and puts it back in place when refused', async () => {
+    await expect.poll(() => store.spaces.hasValue()).toBe(true);
+    api.deleteSpace.mockRejectedValueOnce(new Error('space.manage-forbidden'));
+    let settled: boolean | undefined;
+
+    const pending: Promise<boolean> = store
+      .deleteSpace(space('sp-product', 'Product'))
+      .then((value: boolean) => (settled = value));
+    expect(store.spaceById('sp-product')).toBeUndefined();
+    await pending;
+
+    expect(settled).toBe(false);
+    expect(store.spaces.value()?.map((item: SpaceDetails) => item.id)).toEqual([
+      'sp-product',
+      'sp-design',
+    ]);
+  });
+
+  it('creates a space with one key per draft and opens it', async () => {
+    await expect.poll(() => store.overviews.hasValue()).toBe(true);
+    const created: SpaceDetails = space('sp-hr', 'Human resources');
+    const draft: SpaceDraft = draftOf(created, 'Human resources');
+    api.createSpace.mockRejectedValueOnce(new Error('unavailable'));
+    api.createSpace.mockResolvedValueOnce({ space: created, firstList: list('l-hr', 'sp-hr') });
+
+    expect(await store.createSpace(draft)).toBeNull();
+    expect(await store.createSpace(draft)).toMatchObject({ firstList: { id: 'l-hr' } });
+    expect(api.createSpace.mock.calls[0][1]).toBe(api.createSpace.mock.calls[1][1]);
+    expect(store.expanded()['sp-hr']).toBe(true);
+    await expect.poll(() => api.spaces.mock.calls.length).toBe(2);
+  });
+
+  it('creates a space with a new key in another organization or after the dialog closed', async () => {
+    await expect.poll(() => store.overviews.hasValue()).toBe(true);
+    const created: SpaceDetails = space('sp-hr', 'Human resources');
+    const draft: SpaceDraft = draftOf(created, 'Human resources');
+    api.createSpace.mockRejectedValue(new Error('unavailable'));
+
+    await store.createSpace(draft);
+    store.closeDialog();
+    await store.createSpace(draft);
+    organization.set({ id: 'org-2', slug: 'lumen' });
+    TestBed.tick();
+    await store.createSpace(draft);
+
+    const keys: readonly unknown[] = api.createSpace.mock.calls.map((call: unknown[]) => call[1]);
+    expect(new Set(keys).size).toBe(3);
+  });
+
+  it('creates a list with one key per draft, reused for a retry and renewed after a change', async () => {
+    await expect.poll(() => store.overviews.hasValue()).toBe(true);
+    const draft: ListDraft = {
+      name: 'Sprint 15',
+      icon: 'lightning',
+      color: 'violet',
+      sprint: { startDate: '2026-11-17', endDate: '2026-11-30', goal: null },
+    };
+    lists['create']
+      .mockRejectedValueOnce(new Error('unavailable'))
+      .mockResolvedValueOnce(list('l-sprint15', 'sp-product'))
+      .mockResolvedValueOnce(list('l-sprint16', 'sp-product'));
+
+    expect(await store.createList('sp-product', draft)).toBeNull();
+    expect(await store.createList('sp-product', draft)).toMatchObject({ id: 'l-sprint15' });
+    await store.createList('sp-product', { ...draft, name: 'Sprint 16' });
+
+    const keys: readonly unknown[] = lists['create'].mock.calls.map((call: unknown[]) => call[2]);
+    expect(keys[0]).toEqual(expect.any(String));
+    expect(keys[1]).toBe(keys[0]);
+    expect(keys[2]).not.toBe(keys[0]);
+  });
+
+  it('shows a list change in the sidebar at once and restores it when refused', async () => {
+    await expect.poll(() => store.overviews.hasValue()).toBe(true);
+    const backlog: TaskList | undefined = store.overviews.value()?.['sp-product']?.lists[0]?.list;
+    if (!backlog) throw new Error('No list');
+    let refuse: (reason: unknown) => void = () => undefined;
+    lists['update'].mockReturnValueOnce(
+      new Promise((_resolve, reject) => {
+        refuse = reject;
+      }),
+    );
+
+    const pending: Promise<TaskList | null> = store.updateList(backlog, {
+      name: 'Notebook',
+      icon: 'bug',
+      color: 'rouge',
+      sprint: null,
+    });
+    expect(store.overviews.value()?.['sp-product']?.lists[0]?.list.name).toBe('Notebook');
+    refuse(new Error('list.version-mismatch'));
+
+    expect(await pending).toBeNull();
+    expect(store.overviews.value()?.['sp-product']?.lists[0]?.list).toEqual(backlog);
+  });
+
+  it('takes an archived list out of the sidebar and puts it back when refused', async () => {
+    await expect.poll(() => store.overviews.hasValue()).toBe(true);
+    const backlog: TaskList | undefined = store.overviews.value()?.['sp-product']?.lists[0]?.list;
+    if (!backlog) throw new Error('No list');
+    let refuse: (reason: unknown) => void = () => undefined;
+    lists['archive'].mockReturnValueOnce(
+      new Promise((_resolve, reject) => {
+        refuse = reject;
+      }),
+    );
+
+    const pending: Promise<boolean> = store.archiveList(backlog);
+    expect(store.overviews.value()?.['sp-product']?.lists.map((item) => item.list.id)).toEqual([
+      'l-sprint14',
+    ]);
+    expect(store.overviews.value()?.['sp-product']?.taskCount).toBe(20);
+    refuse(new Error('unavailable'));
+
+    expect(await pending).toBe(false);
+    expect(store.overviews.value()?.['sp-product']?.lists.map((item) => item.list.id)).toEqual([
+      'l-backlog',
+      'l-sprint14',
+    ]);
+    expect(store.overviews.value()?.['sp-product']?.taskCount).toBe(30);
+  });
+
+  it('opens every space, closes them all and keeps one dialog open', async () => {
+    await expect.poll(() => store.spaces.hasValue()).toBe(true);
+    store.setAllExpanded(true);
+    expect(store.expanded()).toEqual({ 'sp-product': true, 'sp-design': true });
+    store.setAllExpanded(false);
+    expect(store.expanded()).toEqual({});
+
+    store.openDialog({ kind: 'space', space: null });
+    store.openDialog({ kind: 'list', spaceId: 'sp-product', list: null, sprint: true });
+    expect(store.dialog()).toEqual({
+      kind: 'list',
+      spaceId: 'sp-product',
+      list: null,
+      sprint: true,
+    });
+    store.closeDialog();
+    expect(store.dialog()).toBeNull();
+  });
+
   it('closes the spaces and reads again for another organization', async () => {
     await expect.poll(() => store.spaces.hasValue()).toBe(true);
-    store.setExpanded('sp-produit', true);
-    expect(store.expanded()).toEqual({ 'sp-produit': true });
+    store.setExpanded('sp-product', true);
+    expect(store.expanded()).toEqual({ 'sp-product': true });
 
     organization.set({ id: 'org-2', slug: 'lumen' });
     TestBed.tick();
@@ -213,11 +506,11 @@ describe('SpacesNavigationStore', () => {
     await expect.poll(() => store.favorites.hasValue()).toBe(true);
     api.removeFavorite.mockRejectedValueOnce(new Error('unavailable'));
 
-    expect(await store.setFavorite('list', 'l-roadmap', 'Feuille de route', false)).toBe(false);
+    expect(await store.setFavorite('list', 'l-roadmap', 'Roadmap', false)).toBe(false);
     expect(store.favoriteOf('list', 'l-roadmap')).toEqual(roadmap);
 
     api.removeFavorite.mockResolvedValueOnce(undefined);
-    expect(await store.setFavorite('list', 'l-roadmap', 'Feuille de route', false)).toBe(true);
+    expect(await store.setFavorite('list', 'l-roadmap', 'Roadmap', false)).toBe(true);
     expect(store.favoriteOf('list', 'l-roadmap')).toBeUndefined();
     expect(api.removeFavorite).toHaveBeenLastCalledWith('f1');
   });
@@ -288,11 +581,11 @@ describe('SpacesNavigationStore', () => {
     await expect.poll(() => store.overviews.hasValue()).toBe(true);
     const reads: number = api.overview.mock.calls.length;
     api.overview.mockResolvedValueOnce({
-      spaceId: 'sp-produit',
+      spaceId: 'sp-product',
       taskCount: 31,
       lists: [
         {
-          list: list('l-backlog', 'sp-produit'),
+          list: list('l-backlog', 'sp-product'),
           counts: { total: 11, open: 9, done: 2, cancelled: 0, late: 0 },
         },
       ],
@@ -300,9 +593,9 @@ describe('SpacesNavigationStore', () => {
 
     creations.next({ key: 'CAD-483', listId: 'l-backlog', status: 'todo', subtasks: 0 });
 
-    await expect.poll(() => store.overviews.value()?.['sp-produit']?.taskCount).toBe(31);
+    await expect.poll(() => store.overviews.value()?.['sp-product']?.taskCount).toBe(31);
     expect(api.overview).toHaveBeenCalledTimes(reads + 1);
-    expect(api.overview.mock.calls.at(-1)?.[0]).toBe('sp-produit');
+    expect(api.overview.mock.calls.at(-1)?.[0]).toBe('sp-product');
     expect(api.spaces).toHaveBeenCalledTimes(1);
   });
 
@@ -314,7 +607,7 @@ describe('SpacesNavigationStore', () => {
     creations.next({ key: 'CAD-483', listId: 'l-backlog', status: 'todo', subtasks: 0 });
 
     await expect.poll(() => api.overview.mock.calls.length).toBe(reads * 2 + 1);
-    expect(store.overviews.value()?.['sp-produit']?.taskCount).toBe(30);
+    expect(store.overviews.value()?.['sp-product']?.taskCount).toBe(30);
   });
 
   it('reads every overview again when the space of the created task is unknown', async () => {
@@ -343,7 +636,7 @@ describe('SpacesNavigationStore', () => {
 
     creations.next({ key: 'CAD-483', listId: 'l-backlog', status: 'todo', subtasks: 0 });
     api.overview.mockImplementation(answer);
-    for (const resolve of pending) resolve(await answer('sp-produit'));
+    for (const resolve of pending) resolve(await answer('sp-product'));
 
     await expect.poll(() => api.overview.mock.calls.length).toBe(reads + 2);
   });

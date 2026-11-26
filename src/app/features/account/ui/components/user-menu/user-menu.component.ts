@@ -41,7 +41,7 @@ import { PresenceDot } from '../presence-dot/presence-dot.component';
  * Interface PresenceOption
  *
  * @description
- * One choice of the « Statut » submenu.
+ * One choice of the `Status` submenu.
  */
 interface PresenceOption {
   // #region Properties
@@ -60,7 +60,7 @@ interface PresenceOption {
    * Property label
    *
    * @description
-   * Name of the presence (« Actif »).
+   * Name of the presence (`Active`).
    *
    * @type {string}
    * @readonly
@@ -71,7 +71,7 @@ interface PresenceOption {
    * Property hint
    *
    * @description
-   * What the presence means for the others (« Vous apparaissez en ligne »).
+   * What the presence means for the others (`You appear online`).
    *
    * @type {string}
    * @readonly
@@ -94,8 +94,8 @@ type AccountSection = 'profile' | 'security' | 'notifications';
  * Constant PRESENCE_OPTIONS
  *
  * @description
- * The choices of the « Statut » submenu, in the mockup's order (`USER_STATUSES` without « Hors
- * ligne », which is never chosen).
+ * The choices of the `Status` submenu, in the mockup's order (`USER_STATUSES` without `Offline`,
+ * which is never chosen).
  *
  * @type {readonly PresenceOption[]}
  */
@@ -127,13 +127,13 @@ const PRESENCE_OPTIONS: readonly PresenceOption[] = [
  *
  * @description
  * The account button at the bottom of the rail and its menu (mockup `App.dc.html` lines 65-68 and
- * 93-136): the person's initials with their presence dot; a header with their name and address;
- * the « Statut » submenu (Actif, Ne pas déranger, Absent, Invisible) writing `PRESENCE` and
- * confirming with a toast; « Mon profil », « Sécurité et connexions » and « Notifications », which
- * open `/<slug>/account/<section>`; the « Thème » submenu (Clair, Sombre) driving `ThemeService`
- * from the button's centre; and « Se déconnecter », which goes through Auth's `SignOut` to
+ * 93-136): the person's initials with their presence dot, without a tooltip; a header with their name and address;
+ * the `Status` submenu (`Active`, `Do not disturb`, `Away`, `Invisible`) writing `PRESENCE` and
+ * confirming with a toast; `My profile`, `Security and sign-ins` and `Notifications`, which
+ * open `/<slug>/account/<section>`; the `Theme` submenu (`Light`, `Dark`) driving `ThemeService`
+ * from the button's centre; and `Sign out`, which goes through Auth's `SignOut` to
  * `/logged-out?reason=signed-out` and shows an error toast when the gateway refuses.
- * « Définir un message de statut » is left out: the backend has no status message yet. It is a
+ * The mockup's `Set a status message` item is left out: the backend has no status message yet. It is a
  * slot contribution acting as a widget, so it injects the services it drives. Its host is
  * `display: contents`, so the item joins the rail footer's layout.
  */
@@ -181,7 +181,7 @@ export class UserMenu {
    * Property presenceOptions
    *
    * @description
-   * Choices of the « Statut » submenu.
+   * Choices of the `Status` submenu.
    *
    * @type {readonly PresenceOption[]}
    * @readonly
@@ -304,7 +304,7 @@ export class UserMenu {
    *
    * @description
    * Whether a chosen presence can reach the gateway: false when realtime is disabled (no
-   * `realtimeUrl`), in which case « Statut » is disabled with a hint and nothing is confirmed.
+   * `realtimeUrl`), in which case `Status` is disabled with a hint and nothing is confirmed.
    *
    * @type {Signal<boolean>}
    * @readonly
@@ -328,7 +328,8 @@ export class UserMenu {
    * Property label
    *
    * @description
-   * Accessible name and tooltip of the rail button: the person and, once chosen, their presence.
+   * Accessible name of the rail button, which has no tooltip: the person and, once chosen, their
+   * presence.
    *
    * @type {Signal<string>}
    * @readonly
@@ -345,7 +346,7 @@ export class UserMenu {
    * Property themeName
    *
    * @description
-   * Name of the effective theme, shown after « Thème ».
+   * Name of the effective theme, shown after `Theme`.
    *
    * @type {Signal<string>}
    * @readonly

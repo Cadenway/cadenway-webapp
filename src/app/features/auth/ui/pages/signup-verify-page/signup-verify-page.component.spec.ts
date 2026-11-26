@@ -4,6 +4,8 @@ import { provideRouter, Router } from '@angular/router';
 import { provideCadenwayIcons } from '@cadenway/icons';
 import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 
+import { RuntimeConfigStore } from '@core/config';
+
 import { AuthFlowStore } from '../../../state/auth-flow/auth-flow.store';
 import { SignupVerifyPage } from './signup-verify-page.component';
 
@@ -27,6 +29,12 @@ async function render(flow: Record<string, unknown>): Promise<{
     providers: [
       provideRouter([]),
       provideCadenwayIcons(),
+      {
+        provide: RuntimeConfigStore,
+        useValue: {
+          config: signal({ apiUrl: 'http://api.localhost', siteUrl: 'https://cadenway.example' }),
+        },
+      },
       { provide: AuthFlowStore, useValue: { abandonSignUp: vi.fn(), ...flow } },
     ],
   });
@@ -67,12 +75,15 @@ describe('SignupVerifyPage', () => {
       resendSignUpCode,
     });
 
-    expect(host.textContent).toContain('Confirmez votre adresse e-mail');
-    expect(host.textContent).toContain('Renvoyer le code dans 0:30');
+    expect(host.textContent).toContain('Confirm your email address');
+    expect(host.textContent).toContain('Resend the code in 0:30');
+    expect(host.querySelector('cw-code-help a')?.getAttribute('href')).toBe(
+      'https://cadenway.example/help',
+    );
     await vi.advanceTimersByTimeAsync(30_000);
     await fixture.whenStable();
     Array.from(host.querySelectorAll('button'))
-      .find((button: HTMLButtonElement) => button.textContent.includes('Renvoyer le code'))
+      .find((button: HTMLButtonElement) => button.textContent.includes('Resend the code'))
       ?.click();
     await vi.advanceTimersByTimeAsync(0);
     expect(resendSignUpCode).toHaveBeenCalledOnce();
@@ -108,6 +119,30 @@ describe('SignupVerifyPage', () => {
     await vi.advanceTimersByTimeAsync(0);
 
     expect(navigate).toHaveBeenCalledWith('/signup?reason=sign-up-replaced', { replaceUrl: true });
-    expect(host.textContent).not.toContain('Code incorrect ou expiré');
+    expect(host.textContent).not.toContain('Wrong or expired code');
+  });
+
+  it('says the verification is unavailable when the code cannot be checked', async () => {
+    const { host, fixture }: Awaited<ReturnType<typeof render>> = await render({
+      signUpEmail: signal('camille.martin@ateliernord.fr'),
+      verifySignUp: vi.fn(() =>
+        Promise.resolve({
+          kind: 'failed',
+          problem: { status: 503, code: null, remainingAttempts: null },
+        }),
+      ),
+    });
+    const input: HTMLInputElement | null = host.querySelector('#code-input');
+    if (input === null) throw new Error('Expected the code input.');
+    input.value = '654321';
+    input.dispatchEvent(new Event('input'));
+    await fixture.whenStable();
+    host.querySelector('form')?.dispatchEvent(new Event('submit', { cancelable: true }));
+    await vi.advanceTimersByTimeAsync(0);
+    await fixture.whenStable();
+
+    expect(host.querySelector('cw-alert')?.textContent).toContain(
+      'Address verification is unavailable. Try again in a moment.',
+    );
   });
 });

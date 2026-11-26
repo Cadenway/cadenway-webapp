@@ -15,6 +15,7 @@ import {
   Router,
   withAutoCleanupInjectors,
   withComponentInputBinding,
+  withErrorBoundaries,
   withRouterConfig,
 } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
@@ -31,7 +32,7 @@ import {
   TasksService,
 } from '@cadenway/api-client';
 import { filter, firstValueFrom, Observable, of, Subject, throwError } from 'rxjs';
-import { io, type Socket } from 'socket.io-client';
+import { type Socket } from 'socket.io-client';
 import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 
 import {
@@ -41,7 +42,12 @@ import {
   PASSIVE_REQUEST,
 } from '@core/api';
 import { RuntimeConfigStore } from '@core/config';
-import { REALTIME_TERMINAL_FAILURE, RealtimeConnection } from '@core/realtime';
+import {
+  REALTIME_SOCKET_FACTORY,
+  REALTIME_TERMINAL_FAILURE,
+  RealtimeConnection,
+} from '@core/realtime';
+import { RouteErrorBoundary } from '@features/errors';
 
 import { WorkspaceSession } from './data-access/services/workspace-session/workspace-session.service';
 import type {
@@ -52,8 +58,6 @@ import type {
 } from './models/workspace-context/workspace-context.interface';
 import { WORKSPACE_ROUTES } from './workspace.routes';
 import { provideWorkspaceRuntime } from './providers/workspace-runtime/workspace-runtime.provider';
-
-vi.mock('socket.io-client', () => ({ io: vi.fn() }));
 
 /**
  * Component AuthStub
@@ -109,7 +113,7 @@ const atelierNord: WorkspaceOrganization = {
 const lumen: WorkspaceOrganization = {
   id: '019a5f3c-8d2e-7c4a-9b1f-3e5d7a9c1c40',
   slug: 'lumen',
-  name: 'Coopérative Lumen',
+  name: 'Lumen Cooperative',
   initials: 'CL',
   role: 'member',
   plan: 'enterprise',
@@ -251,6 +255,7 @@ describe('WORKSPACE_ROUTES', () => {
           withAutoCleanupInjectors(),
           withComponentInputBinding(),
           withRouterConfig({ paramsInheritanceStrategy: 'always' }),
+          withErrorBoundaries({ defaultErrorComponent: RouteErrorBoundary }),
         ),
         { provide: WorkspaceSession, useValue: session },
         { provide: RuntimeConfigStore, useValue: { config: () => ({}) } },
@@ -306,20 +311,20 @@ describe('WORKSPACE_ROUTES', () => {
     const harness: RouterTestingHarness = await open('/atelier-nord');
 
     const element: HTMLElement = harness.fixture.nativeElement as HTMLElement;
-    expect(element.querySelector('h1')?.textContent.trim()).toBe('Bonjour Camille');
+    expect(element.querySelector('h1')?.textContent.trim()).toBe('Hello Camille');
     const switcher: HTMLButtonElement | null = element.querySelector(
       '[data-testid="organization-switcher"]',
     );
     expect(switcher?.getAttribute('aria-haspopup')).toBe('menu');
     expect(switcher?.textContent).toContain('AN');
-    expect(switcher?.textContent).toContain('Changer d’organisation : Atelier Nord');
+    expect(switcher?.textContent).toContain('Switch organization: Atelier Nord');
     expect(session.switchOrganization).not.toHaveBeenCalled();
   });
 
   it('renders the list grid inside the workspace route', async () => {
     const list: Record<string, unknown> = {
       id: 'sprint-14',
-      spaceId: 'produit',
+      spaceId: 'product',
       name: 'Sprint 14',
       icon: null,
       color: null,
@@ -345,7 +350,7 @@ describe('WORKSPACE_ROUTES', () => {
         {
           provide: SpacesService,
           useValue: {
-            getSpace: () => of({ id: 'produit', name: 'Produit', statuses: {} }),
+            getSpace: () => of({ id: 'product', name: 'Product', statuses: {} }),
             listSpaces: () => of(empty),
             listFavorites: () => of(empty),
           },
@@ -384,8 +389,11 @@ describe('WORKSPACE_ROUTES', () => {
       'search-rail-item',
       'theme-rail-item',
       'user-menu-trigger',
+      'organization-row',
       'search-button',
       'plan-summary',
+      'sidebar-trash',
+      'sidebar-archives',
       'shortcuts-button',
       'storage-banner',
     ]) {
@@ -1261,7 +1269,7 @@ describe('WORKSPACE_ROUTES', () => {
 
     const element: HTMLElement = harness.fixture.nativeElement as HTMLElement;
     expect(element.querySelector('[data-testid="organization-switcher"]')?.textContent).toContain(
-      'Coopérative Lumen',
+      'Lumen Cooperative',
     );
   });
 
@@ -1276,35 +1284,37 @@ describe('WORKSPACE_ROUTES', () => {
       useValue: { config: () => ({ realtimeUrl: 'https://realtime.example.test' }) },
     });
     TestBed.overrideProvider(RealtimeService, { useValue: { issueRealtimeTicket: tickets } });
-    vi.mocked(io).mockImplementation(() => {
-      const events: Map<string, (data: unknown) => void> = new Map<
-        string,
-        (data: unknown) => void
-      >();
-      handlers.push(events);
-      const disconnect: Mock<() => void> = vi.fn();
-      disconnects.push(disconnect);
-      return {
-        once: (name: string, callback: (data: unknown) => void) => events.set(name, callback),
-        on: (name: string, callback: (data: unknown) => void) => events.set(name, callback),
-        connect: () => undefined,
-        disconnect,
-        removeAllListeners: () => {
-          events.clear();
-        },
-        volatile: { emit: () => undefined },
-        timeout: () => ({
-          emit: (
-            event: string,
-            body: unknown,
-            callback: (error: null, response: unknown) => void,
-          ) => {
-            if (event === 'room:join') joins.push(body);
-            callback(null, { ok: true });
+    TestBed.overrideProvider(REALTIME_SOCKET_FACTORY, {
+      useValue: (): Socket => {
+        const events: Map<string, (data: unknown) => void> = new Map<
+          string,
+          (data: unknown) => void
+        >();
+        handlers.push(events);
+        const disconnect: Mock<() => void> = vi.fn();
+        disconnects.push(disconnect);
+        return {
+          once: (name: string, callback: (data: unknown) => void) => events.set(name, callback),
+          on: (name: string, callback: (data: unknown) => void) => events.set(name, callback),
+          connect: () => undefined,
+          disconnect,
+          removeAllListeners: () => {
+            events.clear();
           },
-        }),
-        emit: () => undefined,
-      } as unknown as Socket;
+          volatile: { emit: () => undefined },
+          timeout: () => ({
+            emit: (
+              event: string,
+              body: unknown,
+              callback: (error: null, response: unknown) => void,
+            ) => {
+              if (event === 'room:join') joins.push(body);
+              callback(null, { ok: true });
+            },
+          }),
+          emit: () => undefined,
+        } as unknown as Socket;
+      },
     });
     const harness: RouterTestingHarness = await open('/atelier-nord');
     const realtime: RealtimeConnection | undefined =
@@ -1437,9 +1447,25 @@ describe('WORKSPACE_ROUTES', () => {
     const harness: RouterTestingHarness = await open('/atelier-nord/missing/page');
 
     const element: HTMLElement = harness.fixture.nativeElement as HTMLElement;
-    expect(element.querySelector('h1')?.textContent.trim()).toBe('Page introuvable');
+    expect(element.querySelector('h1')?.textContent.trim()).toBe('Page not found');
     expect(element.querySelector('[data-testid="organization-switcher"]')).not.toBeNull();
     expect(TestBed.inject(Router).url).toBe('/atelier-nord/missing/page');
+  });
+
+  it('mounts the task deep link inside the shell and renders not found for a missing task', async () => {
+    const getTask: Mock<() => Observable<never>> = vi.fn(() =>
+      throwError(() => new HttpErrorResponse({ status: 404, url: '/tasks/CAD-482' })),
+    );
+    TestBed.configureTestingModule({
+      providers: [{ provide: TasksService, useValue: { getTask } }],
+    });
+
+    const harness: RouterTestingHarness = await open('/atelier-nord/t/CAD-482');
+
+    const element: HTMLElement = harness.fixture.nativeElement as HTMLElement;
+    expect(getTask).toHaveBeenCalledWith('CAD-482', { cache: 'no-store' });
+    expect(element.querySelector('h1')?.textContent.trim()).toBe('Page not found');
+    expect(element.querySelector('[data-testid="organization-switcher"]')).not.toBeNull();
   });
 
   it.each([

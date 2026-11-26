@@ -8,7 +8,7 @@ import { ShortcutsHelp } from '../../../services/shortcuts-help/shortcuts-help.s
  * Component ShortcutsButton
  *
  * @description
- * The « Raccourcis clavier ? » row of the sidebar footer (mockup `App.dc.html` line 266): it opens
+ * The `Keyboard shortcuts ?` row of the sidebar footer (mockup `App.dc.html` line 266): it opens
  * the keyboard shortcuts dialog through `ShortcutsHelp`, as `?` does. It is a `sidebarFooter`
  * slot contribution.
  */
