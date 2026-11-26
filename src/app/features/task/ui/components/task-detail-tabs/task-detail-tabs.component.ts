@@ -67,6 +67,10 @@ import {
   type TaskDetailStoreInstance,
 } from '../../../state/task-detail/task-detail.store';
 import {
+  TaskGitLinksStore,
+  type TaskGitLinksStoreInstance,
+} from '../../../state/task-git-links/task-git-links.store';
+import {
   type TaskStatusChangesInstance,
   TaskStatusChangesStore,
 } from '../../../state/task-status-changes/task-status-changes.store';
@@ -113,10 +117,10 @@ const MENTION_OPTIONS: number = 8;
  *
  * It is a container of the detail dialog, which acts as a page and provides `TaskDetailStore` and
  * `TaskStatusChangesStore`; it provides the section stores (`TaskDetailSectionsStore`,
- * `TaskApprovalCardStore`, `TaskAttachmentsStore`, `TaskCommentsStore`, `TaskActivityStore`) and
- * the bricks' English texts, so all of them die with the open task, and wires the presentational
- * sections: `Details` (approval card, description, checklist, attachments with their preview,
- * the development placeholder), `Subtasks` (status advance through the status changes, opening
+ * `TaskApprovalCardStore`, `TaskAttachmentsStore`, `TaskCommentsStore`, `TaskActivityStore`,
+ * `TaskGitLinksStore`) and the bricks' English texts, so all of them die with the open task, and
+ * wires the presentational sections: `Details` (approval card, description, checklist,
+ * attachments with their preview, the Development panel with its Git links), `Subtasks` (status advance through the status changes, opening
  * through `TaskDetailOpener`, creation), `Comments` (list, menu actions, composer with mentions of
  * the task's participants and files attached to the task too) and `Activity` (the log, read each
  * time the tab is shown). The description's `@` menu offers the same participants as the
@@ -147,6 +151,7 @@ const MENTION_OPTIONS: number = 8;
     TaskAttachmentsStore,
     TaskCommentsStore,
     TaskActivityStore,
+    TaskGitLinksStore,
     ...TASK_SECTIONS_BRICK_LABELS,
   ],
   host: { class: 'flex min-h-0 min-w-0 flex-1 flex-col' },
@@ -219,6 +224,17 @@ export class TaskDetailTabs {
    * @readonly
    */
   protected readonly activity: TaskActivityStoreInstance = inject(TaskActivityStore);
+
+  /**
+   * Property gitLinks
+   *
+   * @description
+   * The Git links of the Development panel.
+   *
+   * @type {TaskGitLinksStoreInstance}
+   * @readonly
+   */
+  protected readonly gitLinks: TaskGitLinksStoreInstance = inject(TaskGitLinksStore);
 
   /**
    * Property tab

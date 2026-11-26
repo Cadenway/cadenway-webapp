@@ -158,6 +158,7 @@ function detailAt(version: number, changes: Partial<TaskDetail> = {}): TaskDetai
     parent: null,
     subtasks: [],
     comments,
+    development: { items: [], nextCursor: null },
     partial: [],
     ...changes,
   };
@@ -171,6 +172,7 @@ describe('TaskDetailStore', () => {
   let readComments: Mock<(key: string) => Promise<TaskCommentPage>>;
   let follow: Mock<(key: string, userId: string, following: boolean) => Promise<number | null>>;
   let notices: Subject<RealtimeChange>;
+  let reconnected: Subject<void>;
   let duplicate: Mock<
     (key: string, version: number, idempotencyKey: string) => Promise<TaskDetailTask>
   >;
@@ -221,7 +223,7 @@ describe('TaskDetailStore', () => {
             reminder: reminderRead,
           },
         },
-        { provide: RealtimeConnection, useValue: { watch } },
+        { provide: RealtimeConnection, useValue: { watch, reconnected } },
         {
           provide: TaskDetailOpener,
           useValue: { open: openTask, notifyChanged, taskKey: openedKey },
@@ -246,6 +248,7 @@ describe('TaskDetailStore', () => {
     readComments = vi.fn(() => Promise.resolve(comments));
     follow = vi.fn(() => Promise.resolve(5));
     notices = new Subject<RealtimeChange>();
+    reconnected = new Subject<void>();
     duplicate = vi.fn(() =>
       Promise.resolve(taskAt(1, { id: 'CAD-495', key: 'CAD-495', name: 'Redesign (copy)' })),
     );
@@ -546,6 +549,77 @@ describe('TaskDetailStore', () => {
     expect(store.commentsRevision()).toBe(1);
     expect(store.gitRevision()).toBe(1);
     expect(read).toHaveBeenCalledOnce();
+  });
+
+  it('applies the notices pushed while the first read runs once the detail is shown', async () => {
+    vi.useFakeTimers();
+    let answer: (detail: TaskDetail) => void = (): void => undefined;
+    read.mockReturnValueOnce(
+      new Promise<TaskDetail>((resolve: (detail: TaskDetail) => void) => {
+        answer = resolve;
+      }),
+    );
+    read.mockResolvedValueOnce(detailAt(5, { task: taskAt(5, { name: 'Renamed elsewhere' }) }));
+    TestBed.configureTestingModule({
+      providers: [
+        TaskDetailStore,
+        {
+          provide: TaskDetailApi,
+          useValue: {
+            read,
+            readComments,
+            watchers: () => Promise.resolve({ total: 2, following: false }),
+            reminder: reminderRead,
+          },
+        },
+        { provide: RealtimeConnection, useValue: { watch, reconnected } },
+        {
+          provide: TaskDetailOpener,
+          useValue: { open: openTask, notifyChanged, taskKey: openedKey },
+        },
+        { provide: WORKSPACE_CONTEXT, useValue: workspace },
+        { provide: CwToastService, useValue: { show, error, warning, dismiss: vi.fn() } },
+      ],
+    });
+    const store: TaskDetailStoreInstance = TestBed.inject(TaskDetailStore);
+    store.open('CAD-482', null);
+    TestBed.tick();
+
+    for (const type of ['task.updated.v1', 'comment.created.v1', 'git.links-changed.v1']) {
+      notices.next({
+        id: type,
+        type,
+        at: '2026-11-06T11:00:00Z',
+        data: { taskId: '0190d2c4-0000-7000-8000-000000000001' },
+      });
+    }
+    await vi.advanceTimersByTimeAsync(NOTICE_WINDOW_MS);
+
+    expect(store.gitRevision()).toBe(1);
+    expect(readComments).not.toHaveBeenCalled();
+    answer(detailAt(4));
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(read).toHaveBeenCalledTimes(2);
+    expect(readComments).toHaveBeenCalledOnce();
+    expect(store.commentsRevision()).toBe(1);
+    await vi.waitFor(() => {
+      expect(store.task()?.name).toBe('Renamed elsewhere');
+    });
+    expect(store.developmentRevision()).toBe(1);
+  });
+
+  it('reads every part again after the socket reconnects', async () => {
+    vi.useFakeTimers();
+    const store: TaskDetailStoreInstance = await setup();
+
+    reconnected.next();
+    await vi.advanceTimersByTimeAsync(NOTICE_WINDOW_MS);
+
+    expect(read).toHaveBeenCalledTimes(2);
+    expect(readComments).toHaveBeenCalledOnce();
+    expect(store.commentsRevision()).toBe(1);
+    expect(store.gitRevision()).toBe(1);
   });
 
   it('follows the task at once, takes the new version and says so', async () => {

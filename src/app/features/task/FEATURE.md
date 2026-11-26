@@ -8,9 +8,10 @@ the status change interaction of `cw-status-interactions`, the cancel reason dia
 priority, people and label pickers, the due date, the label chips and the name cell of a row, the
 create dialog with its `N` shortcut, and the task detail: a dialog over the current page driven by
 `?task=<KEY>`, its store, header, layout, properties panel (`cw-task-properties-panel`), tabs
-(`cw-task-detail-tabs`: details, subtasks, comments, activity) and their stores, list and parent
-pickers. Lists, boards and their grouping belong to Spaces, which composes these blocks and opens
-the detail through `TaskDetailOpener`; the typed route error states belong to Errors.
+(`cw-task-detail-tabs`: details with the Development panel of the task's Git links, subtasks,
+comments, activity) and their stores, list and parent pickers. Lists, boards and their grouping
+belong to Spaces, which composes these blocks and opens the detail through `TaskDetailOpener`;
+the typed route error states belong to Errors.
 
 ## Routes
 
@@ -105,6 +106,9 @@ the detail through `TaskDetailOpener`; the typed route error states belong to Er
   (`Idempotency-Key`), `deleteTaskTimeEntry`, `getTaskStatusDurations`; `ListsService.getList`
   (the sprint end); the people and labels of `TaskCreateApi`. `parseDuration` and
   `formatDuration` of `@cadenway/ui/components/time-tracker`.
+- For the Development panel (`TaskGitLinksApi`): `GitLinksService.listTaskGitLinks` (paged by
+  cursor, 50 per page, `cache: 'no-store'`, pinned with `If-Organization-Match`); its first page
+  comes with `getTaskDetail` (`development`).
 - `@cadenway/contracts` enums: `STATUS_KEYS`, `STATUS_CATEGORIES`, `STATUS_CATEGORY_BY_KEY`,
   `MILESTONE_STATUS_KEYS`, `PRIORITY_KEYS`, `CANCEL_REASONS`, `RECURRENCES`.
 - `@core/api` (`hasProblemCode`, `readProblem`, `OrganizationPin`), `@shared/route-errors`, `@core/shortcuts` (`N`, Ctrl Enter), `@shared/layout-slot`
@@ -187,7 +191,9 @@ task` (`cw-task-properties-panel`, `md:w-96`, its own scroll); under 768 px the 
 the task` with `Retry`; otherwise Errors' `RouteErrorPanel` renders the typed route error of
     `toTaskRouteError` (not found, deleted task with `Restore the task` then a new read,
     unavailable with `Retry`). A partial detail (`partial: ['comments']`) shows the rest and
-    `commentsFailed` with `reloadComments()` for the comments' inline error.
+    `commentsFailed` with `reloadComments()` for the comments' inline error; a detail without
+    its Git links (`partial: ['development']`) shows the Development panel's inline error with
+    `Retry`.
   - `TaskDetailStore` is provided by the dialog, so its state dies with it. It keeps the confirmed
     task and its version; `update(patch)` shows the values at once (`pendingFields`,
     `isPending(field)`), sends the writes one after the other, each with `If-Match` set to the
@@ -212,8 +218,13 @@ the task` with `Retry`; otherwise Errors' `RouteErrorPanel` renders the typed ro
     `TaskDetailStore` (`useExisting`), so a status write never overlaps another write of the task.
   - Realtime: while a task is open the store watches its `task:` room; `task.updated.v1` and
     `task.status-changed.v1` read the detail again, `comment.created.v1` the first comment page
-    (`commentsRevision`), `git.links-changed.v1` counts `gitRevision`; each part at most once
-    per 300 ms (`NOTICE_WINDOW_MS`). Notices name a task id, not its key, and the socket hands
+    (`commentsRevision`), `git.links-changed.v1` counts `gitRevision`, on which the Development
+    panel reads its links again; each part at most once
+    per 300 ms (`NOTICE_WINDOW_MS`). A reconnection of the socket (`reconnected`) makes the three
+    parts stale, since missed notices are not replayed. A notice that comes before the first read
+    settles is kept: a Git one counts at once (`developmentRevision`, the `gitRevision` at which
+    the read now shown began, tells the panel whether its links predate it), a task or comment
+    one is applied once the detail is shown. Notices name a task id, not its key, and the socket hands
     every watched room's notices to every watch, so a notice about another task (of an open list)
     also reads again.
   - Header: key, `Subtask of <key> · <name>` (opens the parent), the read-only status badge with
@@ -273,8 +284,27 @@ your unsaved changes are restored from this device.`) and offers `Keep my versio
 large` and an empty file with `Empty file`, a name already attached skipped, files being sent
     shown with a spinner (the fetch backend reports no upload progress), `Remove “<name>”?` confirmed then toasted, the
     preview dialog with previous and next, arrow keys and `Download`, raster images drawn from
-    their signed address) and `cw-task-development`, the placeholder of the Git panel (empty
-    state and the key hint, no action yet). `Subtasks`: progress, rows that open the subtask
+    their signed address) and the Development panel (`cw-task-development`, `App.dc.html` lines
+    2192-2268, with `TaskGitLinksStore`, provided by the tabs: it shows the first page of links
+    the detail carries without reading it again, reads it itself when the detail names
+    `development` in `partial` (inline error until `Retry` succeeds), `Show more` for older pages,
+    and reads the list again to the depth shown on each `gitRevision`; a reread that fails keeps
+    the rows under the inline error, and an answer for another task or older than a newer read is
+    dropped. A row has the state icon (branch, draft, open, merged, closed), the request's title
+    or the branch name linking to the provider in a new tab (`rel="noopener noreferrer"`) with
+    `#214` or `!31` (not repeated when it stands in for a missing title), the state chip, the
+    checks (passed with `<passed>/<total>`, failed with `<failed>/<total> failed` only when some
+    failed, since suites may still run then, running), when they completed in the tooltip and
+    the screen reader text, the review
+    request unless merged, the repository with the host's logo, the diff size (GitHub only),
+    the author's first name or login and when the link was recorded (`relativeInstant`), and where
+    the key was detected; links of an unknown host or kind are left out, and an address that is
+    not `https:` or `http:` (self-managed GitLab) without credentials is not a link. The heading
+    counts the links listed (`50+` while more remain); `Show more` is refused while the list is
+    read again, a reread ends any `Show more` in flight and the pages of a superseded reread are
+    not read; the empty state shows only on the last page with no link (a page can hold only
+    links of an unknown host), the inline error stays while `Retry` reads, and the key hint stays
+    with its `Copy the identifier`). `Subtasks`: progress, rows that open the subtask
     through `TaskDetailOpener` (click, Enter, Space) with a status button that advances through
     `TaskStatusChangesStore`, the add field (`createSubtask`, toast, detail read again; the name
     stays in the field until the creation is saved, and a creation sent again reuses its
@@ -299,9 +329,10 @@ large` and an empty file with `Empty file`, a name already attached skipped, fil
     not comment.
   - Extension points: `TaskDetailStoreInstance` (`task`, `confirmedTask`, `space`, `statuses`,
     `list`, `canEdit`, `canComment`, `parent`, `subtasks`, `comments`, `commentsFailed`,
-    `partial`, `pendingFields`, `commentsRevision`, `gitRevision`; `update`, `write`, `accept(task)`,
+    `development`, `partial`, `pendingFields`, `commentsRevision`, `gitRevision`; `update`, `write`, `accept(task)`,
     `acceptVersion(version, changes?, key?)`, `reload`, `reloadComments`), which `cw-task-properties-panel` and
-    `cw-task-detail-tabs`, containers of the dialog, inject; each provides its own stores. The
+    `cw-task-detail-tabs`, containers of the dialog, inject (`development` is the first page of
+    Git links the last read carried); each provides its own stores. The
     dialog also provides `TaskStatusChangesStore` for the panel's status and the subtasks' status
     buttons; a completed status write reads the detail again.
   - Properties panel (`cw-task-properties-panel`, `App.dc.html` lines 2368-2610): `Status`
@@ -386,8 +417,15 @@ people`), and the due trigger shows the short date without `Tomorrow ·` or the
   so the checklist composes `cw-checkbox`, `cw-progress` and `cw-input`; the attachment preview
   is a full-size `cw-dialog`, not the mockup's dark viewer. The approval card and the properties
   panel each read the approval (`getTaskApproval` into their own models); both read it again
-  once the confirmed version moves past the one they read, so they agree after any write. The
-  Git panel waits for the read of a task's Git links.
+  once the confirmed version moves past the one they read, so they agree after any write.
+- Development gaps: `Link a PR` and `Create a branch` are left out, not shown disabled, as other
+  actions without an API are (the Git chip, `Share`): linking, unlinking and branch creation need
+  the outbound provider client of gap B5. The row menu (`Copy the link`, `Copy the branch name`,
+  `Open a pull request`, `Mark ready for review`, `Unlink`) goes with them. The contract carries no
+  commits, so a row has no commit list; it says only whether reviewers are requested, not the
+  mockup's `1 approval of 2`; and links are only detected today, so no row reads `linked by …`. A
+  pull request whose title is not recorded yet shows its source branch, else its number. The
+  empty state's text still offers to create the branch or link a PR, as in the mockup.
 
 ## Copy not taken word for word from the mockup
 
@@ -427,3 +465,7 @@ people`), and the due trigger shows the short date without `Tomorrow ·` or the
 | `task.activity.automation`                                                                  | The mockup names no automation actor.                              |
 | `task.description.restored*`, `discard`, `keep`, `kept-*`                                   | The mockup draws no failed description save nor a kept draft.      |
 | `task.attachments.empty`, `task.attachments.empty-text`                                     | The mockup draws no refused empty file.                            |
+| `task.development.read-failed`, `loading`, `more-failed`, `show-more`, `list`               | The mockup draws no failed, loading or paged read of the links.    |
+| `task.development.checks-failed-some`, `task.development.checks-failed`                     | The mockup writes one failed check; counts from the contract.      |
+| `task.development.checks-failed-short`                                                      | The mockup's `11/12` counts suites still running as passed.        |
+| `task.development.detected-description`                                                     | The mockup detects no key in a request's description.              |

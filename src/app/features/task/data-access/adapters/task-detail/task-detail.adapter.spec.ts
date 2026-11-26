@@ -124,6 +124,41 @@ describe('toTaskDetail', () => {
     expect(detail.list.canEdit).toBe(true);
   });
 
+  it('maps the first page of Git links, and null when that part is missing', () => {
+    const complete: GetTaskDetailClientResult = {
+      ...dto('edit'),
+      development: {
+        items: [
+          {
+            id: '019a700b-1a2b-7c3d-8e4f-5a6b7c8d9e02',
+            taskKey: 'CAD-482',
+            provider: 'github',
+            kind: 'branch',
+            state: 'branch',
+            providerRepositoryId: 734912058,
+            number: null,
+            branch: 'cad-482-sso-sign-in-screen',
+            headSha: null,
+            checksCompletedAt: null,
+            createdAt: '2026-11-03T09:30:00Z',
+            updatedAt: '2026-11-03T09:30:00Z',
+            version: 1,
+          },
+        ],
+        nextCursor: 'c2',
+      },
+      partial: [],
+    };
+
+    expect(toTaskDetail(complete).development).toMatchObject({
+      items: [{ kind: 'branch', branch: 'cad-482-sso-sign-in-screen' }],
+      nextCursor: 'c2',
+    });
+    const degraded: TaskDetail = toTaskDetail({ ...dto('edit'), partial: ['development'] });
+    expect(degraded.development).toBeNull();
+    expect(degraded.partial).toEqual(['development']);
+  });
+
   it('lets the caller edit without a reported role, and not as a viewer', () => {
     expect(toTaskDetail(dto(undefined)).list.canEdit).toBe(true);
     expect(toTaskDetail(dto('view')).list.canEdit).toBe(false);

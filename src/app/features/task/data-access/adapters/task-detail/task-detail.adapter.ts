@@ -18,6 +18,7 @@ import type {
 } from '../../../models/task-detail/task-detail.interface';
 import type { TaskSummary } from '../../../models/task-summary/task-summary.interface';
 import { toStatusOptions } from '../status-option/status-option.adapter';
+import { toTaskGitLinkPage } from '../task-git-link/task-git-link.adapter';
 import { toTaskSummary } from '../task-summary/task-summary.adapter';
 
 /**
@@ -114,8 +115,8 @@ export function toTaskCommentPage(page: ListTaskCommentsClientResult): TaskComme
  * @description
  * Maps the detail aggregate. The list's `callerRole` decides whether the caller may change the
  * task (`edit`) and comment on it (`edit` or `comment`); no role reported reads as `edit` (the
- * rule before grants existed) and an unknown one as `view`. Comments missing from the aggregate
- * are null and named in `partial`.
+ * rule before grants existed) and an unknown one as `view`. Comments or Git links missing from
+ * the aggregate are null and named in `partial`.
  *
  * @param {GetTaskDetailClientResult} detail - The gateway aggregate.
  * @returns {TaskDetail} The detail model.
@@ -141,6 +142,7 @@ export function toTaskDetail(detail: GetTaskDetailClientResult): TaskDetail {
       : null,
     subtasks: detail.subtasks.map(toTaskSummary),
     comments: detail.comments ? toTaskCommentPage(detail.comments) : null,
+    development: detail.development ? toTaskGitLinkPage(detail.development) : null,
     partial: [...detail.partial],
   };
 }

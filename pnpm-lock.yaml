@@ -197,11 +197,11 @@ importers:
         specifier: ^22.3.0
         version: 22.3.0(@angular/common@22.3.0(@angular/core@22.3.0(@angular/compiler@22.3.0)(rxjs@7.8.2))(rxjs@7.8.2))(@angular/core@22.3.0(@angular/compiler@22.3.0)(rxjs@7.8.2))(@angular/platform-browser@22.3.0(@angular/common@22.3.0(@angular/core@22.3.0(@angular/compiler@22.3.0)(rxjs@7.8.2))(rxjs@7.8.2))(@angular/core@22.3.0(@angular/compiler@22.3.0)(rxjs@7.8.2)))(rxjs@7.8.2)
       '@cadenway/api-client':
-        specifier: 1.2.0
-        version: 1.2.0(@angular/common@22.3.0(@angular/core@22.3.0(@angular/compiler@22.3.0)(rxjs@7.8.2))(rxjs@7.8.2))(@angular/core@22.3.0(@angular/compiler@22.3.0)(rxjs@7.8.2))(rxjs@7.8.2)
+        specifier: 1.3.0
+        version: 1.3.0(@angular/common@22.3.0(@angular/core@22.3.0(@angular/compiler@22.3.0)(rxjs@7.8.2))(rxjs@7.8.2))(@angular/core@22.3.0(@angular/compiler@22.3.0)(rxjs@7.8.2))(rxjs@7.8.2)
       '@cadenway/contracts':
-        specifier: 0.42.0
-        version: 0.42.0
+        specifier: 0.44.0
+        version: 0.44.0
       '@cadenway/icons':
         specifier: ^0.4.0
         version: 0.4.0(@angular/core@22.3.0(@angular/compiler@22.3.0)(rxjs@7.8.2))(@ng-icons/core@36.1.0(@angular-devkit/schematics@22.3.0(chokidar@6.0.0))(@angular/common@22.3.0(@angular/core@22.3.0(@angular/compiler@22.3.0)(rxjs@7.8.2))(rxjs@7.8.2))(@angular/core@22.3.0(@angular/compiler@22.3.0)(rxjs@7.8.2))(@schematics/angular@22.3.0(chokidar@6.0.0))(rxjs@7.8.2))
@@ -645,15 +645,15 @@ packages:
     peerDependencies:
       typescript: '>=6.0 <6.1'
 
-  '@cadenway/api-client@1.2.0':
-    resolution: {integrity: sha512-Y8Wt8OLoUVK3VOUiI2ybg0aDsmvn2fK7VXMbwTewvm3FhyypIKvjd7YnWbrMVOERj7ekqJa8IPLRlpAgfZP/ew==, tarball: https://npm.pkg.github.com/download/@cadenway/api-client/1.2.0/cfcabdebada1b82fb0555d6e43ab37114a234aa1}
+  '@cadenway/api-client@1.3.0':
+    resolution: {integrity: sha512-qcnF8RNoePI79gPJWhFMabSaml7wcd3XKuBGZys0yQN4KXbUb9TqH4ANoStPiwtzljhBcVyfOxMyZA67eo/EBQ==, tarball: https://npm.pkg.github.com/download/@cadenway/api-client/1.3.0/26b33d2802d51ae520f234711ef22880547a8fa5}
     peerDependencies:
       '@angular/common': ^22.3.0
       '@angular/core': ^22.3.0
       rxjs: ^7.4.0
 
-  '@cadenway/contracts@0.42.0':
-    resolution: {integrity: sha512-L0nA9UshsBhR4WJxbaWCVx06iElh7BgkwZD8EFKvcuv4J6v+qp7vDo5s5zBZTAEkTx04zKihyjteVw2qrevQfA==, tarball: https://npm.pkg.github.com/download/@cadenway/contracts/0.42.0/8b5feed83965e0d4b127ea4d86e89b20cb5020c2}
+  '@cadenway/contracts@0.44.0':
+    resolution: {integrity: sha512-YAooZDLUKalORsBocThlnf2/nXyrJwE6RnTA6Mx/fvNJIxvys8QzJWtZ+PtCV9d3Z0CDjRM074n7w9ovcvaBTA==, tarball: https://npm.pkg.github.com/download/@cadenway/contracts/0.44.0/3f82bf5e621ddbe191f2c737f6de2d20eb4a5862}
 
   '@cadenway/icons@0.4.0':
     resolution: {integrity: sha512-Hb5jO7lvFgLmSFjUGiO6WfcWV+mNZtG+SS3YFn8D2R8xRBxSoUJAlJ0IRhk9i7HhNHdgDZSqzXItD/xvix7wew==, tarball: https://npm.pkg.github.com/download/@cadenway/icons/0.4.0/b9c8987b58bbc8db217cb7c5961231871babb900}
@@ -4358,14 +4358,14 @@ snapshots:
     dependencies:
       typescript: 6.0.3
 
-  '@cadenway/api-client@1.2.0(@angular/common@22.3.0(@angular/core@22.3.0(@angular/compiler@22.3.0)(rxjs@7.8.2))(rxjs@7.8.2))(@angular/core@22.3.0(@angular/compiler@22.3.0)(rxjs@7.8.2))(rxjs@7.8.2)':
+  '@cadenway/api-client@1.3.0(@angular/common@22.3.0(@angular/core@22.3.0(@angular/compiler@22.3.0)(rxjs@7.8.2))(rxjs@7.8.2))(@angular/core@22.3.0(@angular/compiler@22.3.0)(rxjs@7.8.2))(rxjs@7.8.2)':
     dependencies:
       '@angular/common': 22.3.0(@angular/core@22.3.0(@angular/compiler@22.3.0)(rxjs@7.8.2))(rxjs@7.8.2)
       '@angular/core': 22.3.0(@angular/compiler@22.3.0)(rxjs@7.8.2)
       rxjs: 7.8.2
       tslib: 2.9.1
 
-  '@cadenway/contracts@0.42.0':
+  '@cadenway/contracts@0.44.0':
     dependencies:
       zod: 4.6.7
 
