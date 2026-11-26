@@ -69,9 +69,10 @@ the detail through `TaskDetailOpener`; the typed route error states belong to Er
   `options`, `created`.
 - `TaskDetailOpener` (root): `open(taskKey, preview?, options?)` merges `?task=<KEY>` into the
   current address (the list view, the command palette, the inbox, a toast's `Open`), `close()`
-  removes it, `taskKey`, `isOpen`, `preview` and `closed` (the key of each task whose detail
-  closed or gave way to another, so the view under it reads its rows again: Spaces' list rows
-  consume it); `TaskDetailPreview` (key, name, status,
+  removes it, `taskKey`, `isOpen`, `preview`, `closed` (the key of each task whose detail
+  closed or gave way to another) and `changed` with `notifyChanged(taskKey)` (a task the detail's
+  archive or deletion `Undo` restored), so the view under it reads its rows again: Spaces' list
+  rows consume both; `TaskDetailPreview` (key, name, status,
   milestone), what the opening screen shows of the task while the detail is read;
   `TaskDetailOpenOptions` (`tab`, a `TaskDetailTab`: `details`, `subtasks`, `comments` or
   `activity`) opens the column on that tab, kept out of the address, which the tabs take once
@@ -218,11 +219,15 @@ the task` with `Retry`; otherwise Errors' `RouteErrorPanel` renders the typed ro
     changed and not blank), follow (count, `aria-pressed`, toasts), the reminder (presets from
     the opening instant: in 1 hour (an hour from now, to the minute), this afternoon before 15 h, tomorrow 9 h, the Monday of next
     week 9 h, the day before the due date 9 h; custom day among 14 and hour among six, a past
-    hour refused; the note saved on change while a reminder exists; `Delete the reminder`),
+    hour refused; the note saved on change while a reminder exists, one note write after the
+    other, the last typed winning and a refusal rolling back only the latest to the last
+    confirmed note; `Delete the reminder`),
     `Copy the link` (`<origin>/<slug>/t/<KEY>`), `More actions` (`Copy the identifier`,
     `Duplicate` with `Open`, `Move to…`, `Archive` with `Undo`, `Save as a template`,
     `Convert to a subtask of…` or `Move to another task…`, `Detach from <key>`, `Delete`
-    confirmed, then `Undo` restores the trash entry) and `Close`. Writing actions need the list's
+    confirmed, then `Undo` restores the trash entry) and `Close`. Duplicate, archive and delete
+    go through `write`, against the version the task's earlier writes confirmed; a confirmed
+    `Undo` of an archive or a deletion calls `TaskDetailOpener.notifyChanged`. Writing actions need the list's
     `edit` role (`callerRole`, absent reads as `edit`); commenting needs `edit` or `comment`
     (`canComment`; an unknown role reads as `view`).
   - Pickers: `Move to…` lists Spaces' `LIST_DIRECTORY` (the sidebar's lists) filtered by name; the
