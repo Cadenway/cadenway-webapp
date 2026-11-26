@@ -75,9 +75,13 @@ constants belong to the lead):
   `ListViewStore`: `taskQuery` and `groupQuery` (the filters, search, milestones, level and sort to
   read), `layout`, `tools`, `presentation` and `setPresentation(change)` (the board's
   `hiddenBoardStatusKeys`; the sheet's `hiddenSheetColumns`, `hiddenCustomFieldIds`, `sheetSort`,
-  `customFieldSort`), and `followRows(summary)` to publish its visible count and subtask flag to
-  the tools. `Save the view`, `Modified`, the saved-view summary (`N columns hidden`) and the CSV
-  export (`sheetExportSort`) follow the presentation of the shown layout on their own.
+  `customFieldSort`), `followRows(summary)` to publish its visible count and subtask flag to
+  the tools, and, for the sheet, `followCustomFields(fields)` to publish the list's custom fields
+  (`ActiveCustomField`: id and name). `Save the view`, `Modified`, the saved-view summary
+  (`N columns hidden`, `sort: time spent` for the sheet's own sort) and the CSV export
+  (`sheetExportSort`) follow the presentation of the shown layout on their own; once the fields
+  are published, they ignore the ids of retired fields. The sheet's column names are
+  `sheetColumnLabels()`.
 - `LAYOUT_TOOLS` gives the tools of each layout: all of them with `Columns` instead of `Group by`
   on the board (which shows `Columns shown`, writing `hiddenBoardStatusKeys`); none on `form` and
   `activity`, which hides the toolbar (`App.dc.html` line 7811); all of them elsewhere,
@@ -193,7 +197,8 @@ computed from the navigation's reads, for the command palette's `Lists` and the 
     statuses, columns or sorts) are kept beside the view (`SavedView.unknownPresentation`) and
     merged back on `Save` and on the `Undo` of a deletion, so this client never erases them.
     The export follows the sheet sort on the sheet (`sheetExportSort`, the custom field's
-    first).
+    first while the list has it). The sheet publishes the list's custom fields
+    (`followCustomFields`); until then (`customFields` null) every stored field id counts.
     The shown view publishes its rows' summary to it (`followRows`, until the view is destroyed),
     so the list page's tools read `rows`: the tasks shown with the filters and whether the tasks
     read have subtasks.
@@ -351,8 +356,6 @@ gateway checks them and `ORGANIZATION_PIN_OPERATIONS` lists them.
 - The tabs show every released layout: the mockup's views added per list (`Added` / `Add`,
   `App.dc.html` lines 6187, 8792-8795) have no list setting in the contract (G12) and are not
   kept.
-- The CSV export sends a sheet's custom-field sort by its field id, even when the list no longer
-  has that field: the frame does not read the custom fields.
 - `View deleted` restores the saved configuration, not unsaved changes of the applied view.
 - The trash and archives screens are not built: the footer rows link to their future addresses.
 - The plan names of `Invite your team` are spaces units (`spaces.tips.plan-*`): Organization

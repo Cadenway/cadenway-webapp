@@ -265,6 +265,39 @@ export interface CustomFieldSort {
 }
 
 /**
+ * Interface ActiveCustomField
+ *
+ * @description
+ * A custom field the list still has, as the sheet publishes it to the frame
+ * (`ListViewStore.followCustomFields`): stored ids of other fields are retired.
+ */
+export interface ActiveCustomField {
+  // #region Properties
+  /**
+   * Property id
+   *
+   * @description
+   * Stable id of the field.
+   *
+   * @type {string}
+   * @readonly
+   */
+  readonly id: string;
+
+  /**
+   * Property name
+   *
+   * @description
+   * Name of the field, its column header.
+   *
+   * @type {string}
+   * @readonly
+   */
+  readonly name: string;
+  // #endregion
+}
+
+/**
  * Interface ListViewPresentation
  *
  * @description

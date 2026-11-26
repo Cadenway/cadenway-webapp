@@ -560,8 +560,8 @@ export class ListPage {
   protected readonly dialogSummary: Signal<string> = computed((): string => {
     const renamed: SavedView | null = this.dialogView();
     const text: string = renamed
-      ? viewSummary(renamed.layout, renamed.config, this.locale)
-      : viewSummary(this.view.layout(), this.view.config(), this.locale);
+      ? viewSummary(renamed.layout, renamed.config, this.locale, this.view.customFields())
+      : viewSummary(this.view.layout(), this.view.config(), this.locale, this.view.customFields());
     return `${text.charAt(0).toLocaleUpperCase(this.locale)}${text.slice(1)}.`;
   });
 
@@ -1086,7 +1086,12 @@ export class ListPage {
       return;
     }
     const layout: ViewLayout = this.view.layout();
-    const summary: string = viewSummary(layout, this.view.config(), this.locale);
+    const summary: string = viewSummary(
+      layout,
+      this.view.config(),
+      this.locale,
+      this.view.customFields(),
+    );
     const created: SavedView | null = await this.store.createView(
       draft,
       layout,

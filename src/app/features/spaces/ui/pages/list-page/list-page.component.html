@@ -83,6 +83,7 @@
         [savedViews]="store.savedViews.hasValue() ? store.savedViews.value() : []"
         [activeViewId]="view.savedView()?.id ?? null"
         [modified]="view.modified()"
+        [customFields]="view.customFields()"
         [canEdit]="
           canEdit() &&
           store.savedViews.hasValue() &&

@@ -3,11 +3,37 @@ import type {
   ListGroupBy,
   ListSortField,
   PriorityKey,
+  SheetColumn,
   StatusKey,
   SubtaskMode,
 } from '../../models/list-view-config/list-view-config.interface';
 import type { LookIcon } from '../../models/look/look.type';
 import type { ViewLayout } from '../../models/saved-view/saved-view.interface';
+
+/**
+ * Function sheetColumnLabels
+ *
+ * @description
+ * The names of the sheet's built-in columns (`TBL_COLS` of `App.dc.html` lines 3768-3780), for
+ * its headers and the saved-view summary's sort.
+ *
+ * @returns {Readonly<Record<SheetColumn, string>>} The labels.
+ */
+export function sheetColumnLabels(): Readonly<Record<SheetColumn, string>> {
+  return {
+    name: $localize`:@@spaces.sheet-column.name:Name`,
+    status: $localize`:@@spaces.sheet-column.status:Status`,
+    priority: $localize`:@@spaces.sheet-column.priority:Priority`,
+    people: $localize`:@@spaces.sheet-column.people:Assignees`,
+    due: $localize`:@@spaces.sheet-column.due:Due date`,
+    estimate: $localize`:@@spaces.sheet-column.estimate:Estimate`,
+    spent: $localize`:@@spaces.sheet-column.spent:Time spent`,
+    labels: $localize`:@@spaces.sheet-column.labels:Labels`,
+    list: $localize`:@@spaces.sheet-column.list:List`,
+    points: $localize`:@@spaces.sheet-column.points:Points`,
+    client: $localize`:@@spaces.sheet-column.client:Client`,
+  };
+}
 
 /**
  * Function statusLabels

@@ -169,4 +169,25 @@ describe('ListViewStore', () => {
     store.setPresentation({ customFieldSort: { fieldId: 'cf-points', direction: 'asc' } });
     expect(store.sheetExportSort()).toEqual({ column: 'cf-points', direction: 'asc' });
   });
+
+  it('exports by the built-in column once the sorted custom field is known to be retired', () => {
+    store.showLayout('table');
+    store.setPresentation({
+      sheetSort: { column: 'due', direction: 'desc' },
+      customFieldSort: { fieldId: 'cf-old', direction: 'asc' },
+    });
+    expect(store.customFields()).toBeNull();
+    expect(store.sheetExportSort()).toEqual({ column: 'cf-old', direction: 'asc' });
+
+    store.followCustomFields([{ id: 'cf-points', name: 'Points' }]);
+    TestBed.tick();
+    expect(store.sheetExportSort()).toEqual({ column: 'due', direction: 'desc' });
+
+    store.followCustomFields([{ id: 'cf-old', name: 'Old' }]);
+    TestBed.tick();
+    expect(store.sheetExportSort()).toEqual({ column: 'cf-old', direction: 'asc' });
+
+    store.reset();
+    expect(store.customFields()).toBeNull();
+  });
 });

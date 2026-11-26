@@ -10,6 +10,7 @@ import {
 
 import { LAYOUT_TOOLS } from '../../constants/view-layouts/view-layouts.constants';
 import type {
+  ActiveCustomField,
   FilterField,
   ListGroupBy,
   ListGroupQuery,
@@ -99,6 +100,17 @@ interface ListViewState {
    * @readonly
    */
   readonly layout: ViewLayout;
+
+  /**
+   * Property customFields
+   *
+   * @description
+   * The list's custom fields as the sheet published them, or null while no view did.
+   *
+   * @type {readonly ActiveCustomField[] | null}
+   * @readonly
+   */
+  readonly customFields: readonly ActiveCustomField[] | null;
 
   /**
    * Property rows
@@ -213,10 +225,23 @@ export interface ListViewStoreInstance {
   readonly presentation: Signal<ListViewPresentation>;
 
   /**
+   * Property customFields
+   *
+   * @description
+   * The list's custom fields, published by the sheet (`followCustomFields`), or null while no
+   * view published them: until then every stored custom-field id counts as active.
+   *
+   * @type {Signal<readonly ActiveCustomField[] | null>}
+   * @readonly
+   */
+  readonly customFields: Signal<readonly ActiveCustomField[] | null>;
+
+  /**
    * Property sheetExportSort
    *
    * @description
-   * The sheet's sort the CSV export follows, or null outside the sheet or without one.
+   * The sheet's sort the CSV export follows, or null outside the sheet or without one; a sort by
+   * a retired custom field gives way to the built-in column's.
    *
    * @type {Signal<SheetExportSort | null>}
    * @readonly
@@ -314,6 +339,19 @@ export interface ListViewStoreInstance {
    * @param {Signal<ViewLayout> | ViewLayout} layout - The routed layout.
    */
   showLayout(layout: Signal<ViewLayout> | ViewLayout): void;
+
+  /**
+   * Method followCustomFields
+   *
+   * @description
+   * Publishes the list's custom fields (the sheet, once it read them), so the summary, the hidden
+   * column count and the export sort ignore retired field ids; until the caller is destroyed.
+   *
+   * @param {Signal<readonly ActiveCustomField[]> | readonly ActiveCustomField[]} fields - The fields.
+   */
+  followCustomFields(
+    fields: Signal<readonly ActiveCustomField[]> | readonly ActiveCustomField[],
+  ): void;
 
   /**
    * Method setPresentation
@@ -472,6 +510,7 @@ const initialState: ListViewState = {
   milestonesOnly: false,
   savedView: null,
   layout: 'list',
+  customFields: null,
   rows: { visibleCount: null, hasSubtasks: null },
   _before: null,
 };
@@ -491,7 +530,11 @@ function createListViewStore(): Type<ListViewStoreInstance> {
       tools: (): readonly ViewTool[] => LAYOUT_TOOLS[store.layout()],
       presentation: (): ListViewPresentation => store.config().presentation,
       sheetExportSort: (): SheetExportSort | null =>
-        sheetExportSort(store.layout(), store.config().presentation),
+        sheetExportSort(
+          store.layout(),
+          store.config().presentation,
+          store.customFields()?.map((field: ActiveCustomField): string => field.id) ?? null,
+        ),
       filterCount: (): number => filterCount(store.config().filters),
       modified: (): boolean => {
         const saved: SavedView | null = store.savedView();
@@ -608,6 +651,11 @@ function createListViewStore(): Type<ListViewStoreInstance> {
           if (layout === store.layout()) return;
           patchState(store, { layout, rows: initialState.rows });
         }),
+        followCustomFields: signalMethod<readonly ActiveCustomField[]>(
+          (customFields: readonly ActiveCustomField[]): void => {
+            patchState(store, { customFields });
+          },
+        ),
       };
     }),
   );

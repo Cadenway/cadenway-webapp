@@ -229,45 +229,69 @@ export function samePresentation(
  *
  * @description
  * Columns a layout hides, as the saved-view summary counts them (`cfgSummary`): the board's
- * status columns, or the sheet's built-in and custom columns.
+ * status columns, or the sheet's built-in and custom columns. Once the list's custom fields are
+ * known, hidden ids of retired fields are not counted.
  *
  * @param {ViewLayout} layout - Layout.
  * @param {ListViewPresentation} presentation - Presentation.
+ * @param {readonly string[] | null} activeFieldIds - Ids of the list's custom fields, or null while unknown.
  * @returns {number} The count.
  */
-export function hiddenColumnCount(layout: ViewLayout, presentation: ListViewPresentation): number {
+export function hiddenColumnCount(
+  layout: ViewLayout,
+  presentation: ListViewPresentation,
+  activeFieldIds: readonly string[] | null = null,
+): number {
   const used: ListViewPresentation = presentationFor(layout, presentation);
   return (
     used.hiddenBoardStatusKeys.length +
     used.hiddenSheetColumns.length +
-    used.hiddenCustomFieldIds.length
+    used.hiddenCustomFieldIds.filter((id: string): boolean => isActiveField(id, activeFieldIds))
+      .length
   );
+}
+
+/**
+ * Function isActiveField
+ *
+ * @description
+ * Whether a stored custom-field id is still one of the list's fields; any id is while the fields
+ * are unknown.
+ *
+ * @param {string} id - Stored id.
+ * @param {readonly string[] | null} activeFieldIds - Ids of the list's custom fields, or null while unknown.
+ * @returns {boolean} Whether it counts.
+ */
+export function isActiveField(id: string, activeFieldIds: readonly string[] | null): boolean {
+  return activeFieldIds === null || activeFieldIds.includes(id);
 }
 
 /**
  * Function sheetExportSort
  *
  * @description
- * The sheet's sort for the CSV export: the custom field's when set, else the built-in column's;
- * null outside the sheet or without a sheet sort.
+ * The sheet's sort for the CSV export: the custom field's when set and still a field of the list
+ * (or while the fields are unknown), else the built-in column's; null outside the sheet or
+ * without a sheet sort.
  *
  * @param {ViewLayout} layout - Layout shown.
  * @param {ListViewPresentation} presentation - Presentation.
+ * @param {readonly string[] | null} activeFieldIds - Ids of the list's custom fields, or null while unknown.
  * @returns {SheetExportSort | null} The export sort.
  */
 export function sheetExportSort(
   layout: ViewLayout,
   presentation: ListViewPresentation,
+  activeFieldIds: readonly string[] | null = null,
 ): SheetExportSort | null {
   if (layout !== 'table') return null;
-  const sort: { readonly column: string; readonly direction: 'asc' | 'desc' } | null =
-    presentation.customFieldSort
-      ? {
-          column: presentation.customFieldSort.fieldId,
-          direction: presentation.customFieldSort.direction,
-        }
-      : presentation.sheetSort;
-  return sort ? { column: sort.column, direction: sort.direction } : null;
+  const custom: ListViewPresentation['customFieldSort'] = presentation.customFieldSort;
+  if (custom && isActiveField(custom.fieldId, activeFieldIds)) {
+    return { column: custom.fieldId, direction: custom.direction };
+  }
+  return presentation.sheetSort
+    ? { column: presentation.sheetSort.column, direction: presentation.sheetSort.direction }
+    : null;
 }
 
 /**
