@@ -1,0 +1,221 @@
+<cw-dialog [(open)]="open" [showClose]="false" data-testid="share-dialog">
+  <cw-dialog-header>
+    <h2 cwDialogTitle class="truncate leading-tight">{{ title() }}</h2>
+    <p cwDialogDescription i18n="@@spaces.share.text">
+      Invite people from the organization or external guests.
+    </p>
+  </cw-dialog-header>
+
+  @if (store.access.error()) {
+    <div class="flex items-center gap-2 text-sm text-muted-foreground" data-testid="share-failed">
+      <span i18n="@@spaces.share.read-failed">The people with access could not be loaded.</span>
+      <button cwButton type="button" variant="outline" size="xs" (click)="store.access.reload()">
+        <ng-container i18n="@@spaces.retry">Retry</ng-container>
+      </button>
+    </div>
+  } @else if (!store.access.hasValue()) {
+    <div class="flex flex-col gap-3" aria-busy="true" data-testid="share-loading">
+      <div cwSkeleton class="h-8 w-full"></div>
+      <div cwSkeleton class="h-7 w-3/4"></div>
+      <div cwSkeleton class="h-7 w-2/3"></div>
+    </div>
+  } @else {
+    <div class="flex flex-col gap-4">
+      @if (store.canInvite()) {
+        <form
+          class="flex flex-col gap-2"
+          novalidate
+          (submit)="$event.preventDefault(); invite(emailField)"
+        >
+          <label
+            for="share-email"
+            class="text-sm leading-none font-medium"
+            i18n="@@spaces.share.invite-label"
+            >Invite by email</label
+          >
+          <div class="flex gap-2">
+            <input
+              #emailField
+              id="share-email"
+              cwInput
+              type="email"
+              autocomplete="off"
+              class="min-w-0 flex-1"
+              placeholder="first.last@company.com"
+              i18n-placeholder="@@spaces.share.email-placeholder"
+              [formField]="inviteForm.email"
+              [attr.aria-describedby]="
+                inviteForm.email().touched() && inviteForm.email().invalid()
+                  ? 'share-email-error'
+                  : inviteNote()
+                    ? 'share-email-note'
+                    : null
+              "
+              data-testid="share-email"
+            />
+            <cw-select
+              class="w-36 shrink-0"
+              ariaLabel="Access right"
+              i18n-ariaLabel="@@spaces.share.role-label"
+              [formField]="inviteForm.role"
+              data-testid="share-invite-role"
+            >
+              @for (option of roles; track option.value) {
+                <cw-select-option [value]="option.value">{{ option.label }}</cw-select-option>
+              }
+            </cw-select>
+            <button cwButton type="submit" class="shrink-0" data-testid="share-invite">
+              <ng-container i18n="@@spaces.share.invite">Invite</ng-container>
+            </button>
+          </div>
+          @if (inviteForm.email().touched() && inviteForm.email().invalid()) {
+            <p
+              id="share-email-error"
+              class="flex items-center gap-1 text-xs font-medium text-destructive"
+            >
+              <ng-icon name="phosphorWarningCircleFill" class="size-3.5" aria-hidden="true" />
+              @for (error of inviteForm.email().errors(); track error.kind) {
+                {{ error.message }}
+              }
+            </p>
+          } @else if (inviteNote() === 'unknown') {
+            <p id="share-email-note" class="flex items-start gap-1.5 text-xs text-muted-foreground">
+              <ng-icon name="phosphorInfoBold" class="mt-px size-3.5 shrink-0" aria-hidden="true" />
+              <span i18n="@@spaces.share.not-member"
+                >This person is not in the organization: invite them first.</span
+              >
+            </p>
+          } @else if (inviteNote() === 'owner') {
+            <p id="share-email-note" class="flex items-start gap-1.5 text-xs text-muted-foreground">
+              <ng-icon name="phosphorInfoBold" class="mt-px size-3.5 shrink-0" aria-hidden="true" />
+              <span i18n="@@spaces.share.already-owner"
+                >This person owns the space and already has access to the list.</span
+              >
+            </p>
+          }
+        </form>
+      }
+
+      <div class="flex flex-col gap-1">
+        <p
+          id="share-people"
+          class="text-xs font-medium text-muted-foreground"
+          i18n="@@spaces.share.people"
+        >
+          People with access
+        </p>
+        <ul class="flex flex-col" aria-labelledby="share-people" data-testid="share-people">
+          @for (person of store.people(); track person.userId) {
+            <li class="flex items-center gap-2.5 py-1.5" data-testid="share-person">
+              <cw-avatar size="sm" [name]="person.name" />
+              <span class="flex min-w-0 flex-1 flex-col">
+                <span class="flex min-w-0 items-center gap-1.5">
+                  <span class="truncate text-sm font-medium">{{ nameOf(person) }}</span>
+                  @if (person.guest) {
+                    <span cwBadge variant="outline" i18n="@@spaces.share.guest">Guest</span>
+                  }
+                </span>
+                @if (person.email) {
+                  <span class="truncate text-xs text-muted-foreground">{{ person.email }}</span>
+                }
+              </span>
+              @if (person.role === 'owner') {
+                <span
+                  class="flex h-7 w-36 shrink-0 items-center px-2 text-xs whitespace-nowrap text-muted-foreground"
+                  i18n="@@spaces.share.owner"
+                  >Owner</span
+                >
+                <span class="size-7 shrink-0" aria-hidden="true"></span>
+              } @else if (store.canEdit()) {
+                <cw-select
+                  size="sm"
+                  class="w-36 shrink-0"
+                  [ariaLabel]="accessLabel(person)"
+                  [value]="person.role"
+                  (valueChange)="changeRole(person, $event)"
+                >
+                  @for (option of roles; track option.value) {
+                    <cw-select-option [value]="option.value">{{ option.label }}</cw-select-option>
+                  }
+                </cw-select>
+                <button
+                  cwButton
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  class="shrink-0 text-muted-foreground"
+                  [attr.aria-label]="removeLabel(person)"
+                  (click)="askRemove(person)"
+                >
+                  <ng-icon name="phosphorXBold" aria-hidden="true" />
+                </button>
+              } @else {
+                <span
+                  class="flex h-7 w-36 shrink-0 items-center px-2 text-xs whitespace-nowrap text-muted-foreground"
+                  >{{ roleLabel(person.role) }}</span
+                >
+                <span class="size-7 shrink-0" aria-hidden="true"></span>
+              }
+            </li>
+          }
+        </ul>
+        @if (guestSum()) {
+          <p class="text-xs text-muted-foreground" data-testid="share-guests">{{ guestSum() }}</p>
+        }
+      </div>
+
+      @if (!store.privateSpace()) {
+        <div class="flex items-start justify-between gap-4 border-t border-border pt-4">
+          <div class="grid gap-0.5">
+            <span
+              id="share-organization"
+              class="text-sm leading-5 font-medium"
+              i18n="@@spaces.share.organization"
+              >Organization access</span
+            >
+            <span class="text-xs text-pretty text-muted-foreground">{{ organizationLabel() }}</span>
+          </div>
+          <cw-switch
+            ariaLabel="Organization access"
+            i18n-ariaLabel="@@spaces.share.organization"
+            [checked]="store.organizationAccess()"
+            [disabled]="!store.canEdit()"
+            (checkedChange)="store.setOrganizationAccess($event)"
+            data-testid="share-organization"
+          />
+        </div>
+      }
+    </div>
+  }
+
+  <cw-dialog-footer>
+    <button cwButton type="button" variant="ghost" class="mr-auto" (click)="copyLink()">
+      <ng-icon name="phosphorLinkSimpleBold" aria-hidden="true" />
+      <ng-container i18n="@@spaces.share.copy-link">Copy the link</ng-container>
+    </button>
+    <button cwButton cwDialogClose type="button" variant="outline" data-testid="share-done">
+      <ng-container i18n="@@spaces.share.done">Done</ng-container>
+    </button>
+  </cw-dialog-footer>
+</cw-dialog>
+
+@let person = removing();
+@if (person) {
+  <cw-alert-dialog
+    variant="destructive"
+    size="sm"
+    [(open)]="confirmOpen"
+    data-testid="share-remove-dialog"
+    (confirm)="confirmRemove()"
+  >
+    <cw-alert-dialog-media>
+      <ng-icon name="phosphorUserMinusBold" aria-hidden="true" />
+    </cw-alert-dialog-media>
+    <h2 cwAlertDialogTitle>{{ removeTitle(person) }}</h2>
+    <p cwAlertDialogDescription>{{ removeText(person) }}</p>
+    <button cwButton cwAlertDialogCancel variant="outline" i18n="@@spaces.cancel">Cancel</button>
+    <button cwButton cwAlertDialogAction variant="destructive" data-testid="share-remove-confirm">
+      <ng-container i18n="@@spaces.share.remove">Remove access</ng-container>
+    </button>
+  </cw-alert-dialog>
+}

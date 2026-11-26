@@ -95,6 +95,48 @@ constants belong to the lead):
   sprint's goal line, `Space statuses` (enabled when the space is editable) and `Automations`
   (enabled for organization admins and owners) in the list menu after `Edit the space`.
 
+### Share dialog
+
+`ui/dialogs/share-dialog` (`ShareDialog`, `App.dc.html` lines 2980-3016, 5448, 6871, 8830-8855)
+provides its own `ListShareStore` (`state/list-share/`, component-scoped), which reaches the
+gateway through `ListAccessApi` (`data-access/services/list-access-api/`, adapter
+`data-access/adapters/list-access/`, models `models/list-share/`).
+
+- Each opening on a list reads, at once, `ListsService.getList` (the `Organization access` switch,
+  `organizationAccess`, and `callerRole`), `SpacesService.getSpace` (the owner and the
+  visibility), every page of `AccessService.listListGrants` and every page of
+  `MembersService.listMembers` (names, addresses, guests). A refused directory leaves the names
+  unknown and hides `Invite by email`; any other failure is the dialog's inline error with
+  `Retry`, distinct from its skeleton. Closing forgets the read and the changes; answers for a
+  list the dialog left are dropped.
+- `People with access`: the space's owner first (`Owner`, no select: `Grant` has no owner, who
+  is `Space.owner`), then the grants in the order access was given, then the people invited from
+  the dialog. Grants of the space, which also open the list, are not listed. Guests carry
+  `Guest`, and the guest sum follows. Without `edit` on the list, the roles read as words, the
+  switch is disabled and the invitation hidden.
+- Writes are optimistic, one after the other per person (and for the switch): a role
+  (`setListGrant`), a removal (`removeListGrant`, after `Remove X's access?` in a
+  `cw-alert-dialog`), the switch (`updateList` with `organizationAccess` only). A refusal puts
+  back the last confirmed value, unless a newer change of the same person is still on its way,
+  with a failure toast. None sends `If-Match`, which the contract makes optional on all three:
+  each write sets one absolute value, so two people sharing at once never overwrite each other.
+  Every grant change raises the list's version: a recorded write hands the version the gateway
+  answered (`ETag`, or the patched list) to `ListPageStore.followListEdits`, so the header's
+  later writes send the current `If-Match`, and reads the header's members again.
+- `Invite by email` (G10): the contract has no invitation by email carrying a list role, and no
+  feature publishes an organization invitation entry. The address therefore resolves, without
+  regard to case, against the member directory: a member or guest gets the chosen role
+  (`setListGrant`) at once, then `Invitation sent` / `<email> can now edit the list.`; an address
+  outside the organization gets `This person is not in the organization: invite them first.` and
+  nothing is sent; the owner's gets a note that they already have access. The mockup's external
+  invitation (`Adresse externe : …` note and `Invité ajouté` toast) is not built.
+- `Organization access` is hidden in a private space, where it changes nothing
+  (`openapi/public/lists.yaml`).
+- `Copy the link` copies `/<slug>/l/<listId>` with `List link copied` (`navigator.clipboard`).
+- Gaps: no presence on the avatars (Account's `PRESENCE` publishes the person's own presence
+  only); no realtime follow of `list.access-changed.v1` while the dialog is open; `cw-dialog`
+  has no `max-w-lg` size, so the dialog uses `default` (`max-w-md`).
+
 ## Public entry points
 
 | Entry point            | Consumers    |
@@ -130,7 +172,9 @@ computed from the navigation's reads, for the command palette's `Lists` and the 
   `ArchivesService` (`archiveList`, `unarchiveList`, `listArchivedLists` and `listArchivedTasks`
   for the footer count), `TrashService.listTrash` (the footer count),
   `BillingService.getBillingSubscription` (the free seats of `Invite your team`),
-  `AccessService.listListGrants`,
+  `AccessService.listListGrants`, and for the `Share` dialog (`ListAccessApi`) `setListGrant`,
+  `removeListGrant`, `ListsService.getList` and `updateList` (`organizationAccess`),
+  `SpacesService.getSpace` and `MembersService.listMembers`,
   `MembersService.listMembers`, `TasksService` (`listLabels`, `executeBulkTaskAction`,
   `listSubtasks`) and `TaskQueriesService` (`queryListTasks` for the rows and the milestone count,
   `countTaskGroups` for the groups). Every rows read bypasses the HTTP cache.
@@ -351,9 +395,8 @@ gateway checks them and `ORGANIZATION_PIN_OPERATIONS` lists them.
   `Favorite` carries no icon.
 - A favorite saved view's menu holds `Open` only: renaming, duplicating and deleting a view
   live on its list page.
-- `Share` (no grant write in the gateway yet), `Sprint report`, `Space statuses`
-  and `Automations` are stub dialogs whose openers stay hidden until `RELEASED_LIST_DIALOGS`
-  lists them; the Git section of `Automations` stays hidden until B6 is decided. The Slack and
+- `Sprint report`, `Space statuses` and `Automations` are stub dialogs; their openers and
+  `Share`'s (built, see "Share dialog") stay hidden until `RELEASED_LIST_DIALOGS` lists them; the Git section of `Automations` stays hidden until B6 is decided. The Slack and
   Figma suggestions need integrations no service provides.
 - The tabs show every released layout: the mockup's views added per list (`Added` / `Add`,
   `App.dc.html` lines 6187, 8792-8795) have no list setting in the contract (G12) and are not
@@ -400,3 +443,9 @@ gateway checks them and `ORGANIZATION_PIN_OPERATIONS` lists them.
 | `spaces.list-dialog.date-*`, `spaces.list-dialog.pick-date`, `spaces.footer.*`                                                 | The date picker's texts and the footer rows' names.                        |
 | `spaces.look.*`                                                                                                                | `LOOK_COLORS` names and the default choices of `lookPicker`.               |
 | `spaces.view-stub.text`                                                                                                        | The stub of a view not built yet, which the mockup does not have.          |
+| `spaces.share.*-failed`, `spaces.share.read-failed`                                                                            | The mockup draws no failed read or refused write.                          |
+| `spaces.share.not-member`                                                                                                      | The contract's `access.grantee-invalid` title (G10).                       |
+| `spaces.share.already-owner`                                                                                                   | The mockup does not draw the owner's address.                              |
+| `spaces.share.email-placeholder`                                                                                               | The mockup's address names its own organization.                           |
+| `spaces.share.guests-one`                                                                                                      | Singular form the mockup builds in its script.                             |
+| `spaces.share.access-of`, `spaces.share.remove-label`                                                                          | Accessible names, from the mockup's `aria-label`s.                         |
