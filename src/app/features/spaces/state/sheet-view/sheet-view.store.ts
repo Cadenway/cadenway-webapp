@@ -1,16 +1,714 @@
-import type { Type } from '@angular/core';
-import { signalStore, withState } from '@ngrx/signals';
+import {
+  computed,
+  DestroyRef,
+  inject,
+  LOCALE_ID,
+  resource,
+  type ResourceRef,
+  type Signal,
+  type Type,
+} from '@angular/core';
+import {
+  patchState,
+  signalMethod,
+  signalStore,
+  withComputed,
+  withHooks,
+  withMethods,
+  withProps,
+  withState,
+} from '@ngrx/signals';
+import { merge } from 'rxjs';
+
+import { type TaskBulkEntry, TaskDetailOpener } from '@features/task';
+import {
+  WORKSPACE_CONTEXT,
+  type WorkspaceContextPort,
+} from '@features/workspace/ports/workspace-context';
+
+import { SheetTasksApi } from '../../data-access/services/sheet-tasks-api/sheet-tasks-api.service';
+import type { ListMember } from '../../models/list-member/list-member.interface';
+import type { ListTaskItem } from '../../models/list-tasks/list-tasks.interface';
+import type {
+  ListViewPresentation,
+  SheetColumn,
+} from '../../models/list-view-config/list-view-config.interface';
+import type {
+  SheetColumnKey,
+  SheetCustomField,
+  SheetFactChanges,
+  SheetFieldValue,
+  SheetOrder,
+  SheetRow,
+  SheetTaskFacts,
+  SheetTotals,
+} from '../../models/sheet-view/sheet-view.interface';
+import type { ViewTaskOutcome } from '../../models/view-task-write/view-task-write.interface';
+import {
+  fieldIdOf,
+  isTableColumn,
+  presentationOfOrder,
+  sheetOrderOf,
+  sheetTotals,
+  sortSheetRows,
+} from '../../utils/sheet-view/sheet-view.util';
+import { ListPageStore } from '../list-page/list-page.store';
+import { ListTasksStore, type ListTasksStoreInstance } from '../list-tasks/list-tasks.store';
+import { ListViewStore } from '../list-view/list-view.store';
+
+/**
+ * Constant SPENT_CONCURRENCY
+ *
+ * @description
+ * Time summaries read at the same time (gap G6: one `getTaskTimeSummary` per shown row).
+ *
+ * @type {number}
+ */
+export const SPENT_CONCURRENCY: number = 4;
+
+/**
+ * Interface FactEdit
+ *
+ * @description
+ * An estimate or custom field edit of the sheet: shown while pending, then until a read of the
+ * task reaches the version the gateway returned (or, without one, until the next read of the
+ * task); removed when the write is refused or its outcome is uncertain.
+ */
+interface FactEdit {
+  // #region Properties
+  /**
+   * Property seq
+   *
+   * @description
+   * Sequence number of the edit.
+   *
+   * @type {number}
+   * @readonly
+   */
+  readonly seq: number;
+
+  /**
+   * Property pending
+   *
+   * @description
+   * Whether the write is not answered yet.
+   *
+   * @type {boolean}
+   * @readonly
+   */
+  readonly pending: boolean;
+
+  /**
+   * Property until
+   *
+   * @description
+   * Once confirmed, the version the gateway returned; null when it returned none.
+   *
+   * @type {number | null}
+   * @readonly
+   */
+  readonly until: number | null;
+
+  /**
+   * Property changes
+   *
+   * @description
+   * The edited values.
+   *
+   * @type {SheetFactChanges}
+   * @readonly
+   */
+  readonly changes: SheetFactChanges;
+  // #endregion
+}
+
+/**
+ * Interface SheetViewState
+ *
+ * @description
+ * The sheet's own data next to the shared reader's tasks.
+ */
+interface SheetViewState {
+  // #region Properties
+  /**
+   * Property _listId
+   *
+   * @description
+   * The list shown, null before `load`.
+   *
+   * @type {string | null}
+   * @readonly
+   */
+  readonly _listId: string | null;
+
+  /**
+   * Property _facts
+   *
+   * @description
+   * Estimate and custom field values of each task read, by key.
+   *
+   * @type {Readonly<Partial<Record<string, SheetTaskFacts>>>}
+   * @readonly
+   */
+  readonly _facts: Readonly<Partial<Record<string, SheetTaskFacts>>>;
+
+  /**
+   * Property _edits
+   *
+   * @description
+   * Edits of the sheet still shown, by task key, oldest first.
+   *
+   * @type {Readonly<Partial<Record<string, readonly FactEdit[]>>>}
+   * @readonly
+   */
+  readonly _edits: Readonly<Partial<Record<string, readonly FactEdit[]>>>;
+
+  /**
+   * Property _spent
+   *
+   * @description
+   * Time spent of each task read so far, in minutes, by key.
+   *
+   * @type {Readonly<Partial<Record<string, number>>>}
+   * @readonly
+   */
+  readonly _spent: Readonly<Partial<Record<string, number>>>;
+  // #endregion
+}
+
+/**
+ * Constant initialState
+ *
+ * @description
+ * Nothing read.
+ *
+ * @type {SheetViewState}
+ */
+const initialState: SheetViewState = { _listId: null, _facts: {}, _edits: {}, _spent: {} };
+
+/**
+ * Function withoutKey
+ *
+ * @description
+ * A copy of a record without one of its keys.
+ *
+ * @param {Readonly<Partial<Record<string, T>>>} record - The record.
+ * @param {string} key - The key to leave out.
+ * @returns {Readonly<Partial<Record<string, T>>>} The copy.
+ */
+function withoutKey<T>(
+  record: Readonly<Partial<Record<string, T>>>,
+  key: string,
+): Readonly<Partial<Record<string, T>>> {
+  const copy: Partial<Record<string, T>> = {};
+  for (const [name, value] of Object.entries(record)) {
+    if (name !== key) copy[name] = value;
+  }
+  return copy;
+}
+
+/**
+ * Function withChanges
+ *
+ * @description
+ * Applies edits to a task's facts, in their order.
+ *
+ * @param {Pick<SheetRow, 'estimateMinutes' | 'customFieldValues'>} facts - The read values.
+ * @param {readonly FactEdit[]} edits - The edits shown.
+ * @returns {Pick<SheetRow, 'estimateMinutes' | 'customFieldValues'>} The values shown.
+ */
+function withChanges(
+  facts: Pick<SheetRow, 'estimateMinutes' | 'customFieldValues'>,
+  edits: readonly FactEdit[],
+): Pick<SheetRow, 'estimateMinutes' | 'customFieldValues'> {
+  let estimateMinutes: number | null = facts.estimateMinutes;
+  let values: Readonly<Partial<Record<string, SheetFieldValue>>> = facts.customFieldValues;
+  for (const edit of edits) {
+    if (edit.changes.estimateMinutes !== undefined) estimateMinutes = edit.changes.estimateMinutes;
+    for (const [id, value] of Object.entries(edit.changes.customFieldValues ?? {})) {
+      values = value === null ? withoutKey(values, id) : { ...values, [id]: value };
+    }
+  }
+  return { estimateMinutes, customFieldValues: values };
+}
+
+/**
+ * Interface SheetViewStoreInstance
+ *
+ * @description
+ * Public API of `SheetViewStore`.
+ */
+export interface SheetViewStoreInstance {
+  // #region Properties
+  /**
+   * Property fields
+   *
+   * @description
+   * The read of the list's custom fields, a secondary read: a failure keeps the built-in columns
+   * and shows an inline error whose Retry calls `reloadFields`.
+   *
+   * @type {ResourceRef<readonly SheetCustomField[] | undefined>}
+   * @readonly
+   */
+  readonly fields: ResourceRef<readonly SheetCustomField[] | undefined>;
+
+  /**
+   * Property customFields
+   *
+   * @description
+   * The list's custom fields in their order, empty until read.
+   *
+   * @type {Signal<readonly SheetCustomField[]>}
+   * @readonly
+   */
+  readonly customFields: Signal<readonly SheetCustomField[]>;
+
+  /**
+   * Property fieldsFailed
+   *
+   * @description
+   * Whether the custom fields could not be read.
+   *
+   * @type {Signal<boolean>}
+   * @readonly
+   */
+  readonly fieldsFailed: Signal<boolean>;
+
+  /**
+   * Property order
+   *
+   * @description
+   * The order shown, from the presentation; null for the read order.
+   *
+   * @type {Signal<SheetOrder | null>}
+   * @readonly
+   */
+  readonly order: Signal<SheetOrder | null>;
+
+  /**
+   * Property rows
+   *
+   * @description
+   * The rows of the sheet in the order shown: the reader's tasks as shown, their estimate and
+   * custom field values with the sheet's edits applied, their time spent once read.
+   *
+   * @type {Signal<readonly SheetRow[]>}
+   * @readonly
+   */
+  readonly rows: Signal<readonly SheetRow[]>;
+
+  /**
+   * Property totals
+   *
+   * @description
+   * The footer's and the title's aggregates.
+   *
+   * @type {Signal<SheetTotals>}
+   * @readonly
+   */
+  readonly totals: Signal<SheetTotals>;
+
+  /**
+   * Property hiddenColumns
+   *
+   * @description
+   * The columns the presentation hides among those the sheet draws (built-in columns and the
+   * list's custom fields).
+   *
+   * @type {Signal<readonly SheetColumnKey[]>}
+   * @readonly
+   */
+  readonly hiddenColumns: Signal<readonly SheetColumnKey[]>;
+  // #endregion
+
+  // #region Methods
+  /**
+   * Method load
+   *
+   * @description
+   * Follows the list: another one forgets the facts, edits and time spent of the previous one.
+   *
+   * @param {Signal<string> | string} listId - The list.
+   */
+  load(listId: Signal<string> | string): void;
+
+  /**
+   * Method reloadFields
+   *
+   * @description
+   * Reads the custom fields again (the inline error's Retry).
+   */
+  reloadFields(): void;
+
+  /**
+   * Method showEdit
+   *
+   * @description
+   * Shows an estimate or custom field edit at once while its write runs; a confirmed edit stays
+   * until a read reaches the version the gateway returned, a refused or uncertain one goes away.
+   *
+   * @param {string} taskKey - The task.
+   * @param {SheetFactChanges} changes - The edited values.
+   * @param {Promise<ViewTaskOutcome>} result - The write (`ViewTaskWritesStore.updateFields`).
+   */
+  showEdit(taskKey: string, changes: SheetFactChanges, result: Promise<ViewTaskOutcome>): void;
+
+  /**
+   * Method requestSpent
+   *
+   * @description
+   * Asks for the time spent of a shown row once (its cell rendered); reads run four at a time
+   * after the current rendering. A failed read is asked again the next time the row shows.
+   *
+   * @param {string} taskKey - The task.
+   */
+  requestSpent(taskKey: string): void;
+
+  /**
+   * Method setOrder
+   *
+   * @description
+   * Stores the sheet's order in the presentation (`sheetSort` or `customFieldSort`); null goes
+   * back to the read order.
+   *
+   * @param {SheetOrder | null} order - The order.
+   */
+  setOrder(order: SheetOrder | null): void;
+
+  /**
+   * Method setColumnShown
+   *
+   * @description
+   * Shows or hides a column in the presentation (`hiddenSheetColumns`,
+   * `hiddenCustomFieldIds`); the name always shows.
+   *
+   * @param {SheetColumnKey} key - The column.
+   * @param {boolean} shown - Whether it shows.
+   */
+  setColumnShown(key: SheetColumnKey, shown: boolean): void;
+
+  /**
+   * Method showAllColumns
+   *
+   * @description
+   * `Show all`: no hidden column.
+   */
+  showAllColumns(): void;
+  // #endregion
+}
 
 /**
  * Function createSheetViewStore
  *
  * @description
- * Creates the `Sheet` view's store, empty until the view's package fills it.
+ * Creates the `Sheet` view's store.
  *
- * @returns {Type<object>} Injectable store constructor.
+ * @returns {Type<SheetViewStoreInstance>} Injectable store constructor.
  */
-function createSheetViewStore(): Type<object> {
-  return signalStore(withState({}));
+function createSheetViewStore(): Type<SheetViewStoreInstance> {
+  return signalStore(
+    withState(initialState),
+    withProps((store) => {
+      const api: SheetTasksApi = inject(SheetTasksApi);
+      const workspace: WorkspaceContextPort = inject(WORKSPACE_CONTEXT);
+      const fields: ResourceRef<readonly SheetCustomField[] | undefined> = resource({
+        params: (): { listId: string; organizationId: string } | undefined => {
+          const listId: string | null = store._listId();
+          return listId === null
+            ? undefined
+            : { listId, organizationId: workspace.organization().id };
+        },
+        loader: ({
+          params,
+          abortSignal,
+        }: {
+          params: { listId: string; organizationId: string };
+          abortSignal: AbortSignal;
+        }): Promise<readonly SheetCustomField[]> => api.customFields(params.listId, abortSignal),
+      });
+      return {
+        _api: api,
+        _tasks: inject<ListTasksStoreInstance>(ListTasksStore),
+        _view: inject(ListViewStore),
+        _page: inject(ListPageStore),
+        _detail: inject(TaskDetailOpener),
+        _destroyRef: inject(DestroyRef),
+        _locale: inject(LOCALE_ID),
+        _spentQueue: [] as string[],
+        _spentAsked: new Set<string>(),
+        _spentRunning: { count: 0, aborts: new AbortController() },
+        _editSeq: { value: 0 },
+        fields,
+      };
+    }),
+    withComputed((store) => ({
+      customFields: (): readonly SheetCustomField[] =>
+        store.fields.hasValue() ? store.fields.value() : [],
+      fieldsFailed: (): boolean => store.fields.status() === 'error',
+    })),
+    withComputed((store) => ({
+      order: (): SheetOrder | null =>
+        sheetOrderOf(store._view.presentation(), store.customFields()),
+      hiddenColumns: (): readonly SheetColumnKey[] => {
+        const presentation: ListViewPresentation = store._view.presentation();
+        return [
+          ...presentation.hiddenSheetColumns.filter(
+            (column: SheetColumn): boolean => column !== 'name' && isTableColumn(column),
+          ),
+          ...store
+            .customFields()
+            .filter((field: SheetCustomField) =>
+              presentation.hiddenCustomFieldIds.includes(field.id),
+            )
+            .map((field: SheetCustomField): SheetColumnKey => `field:${field.id}`),
+        ];
+      },
+    })),
+    withComputed((store) => {
+      const names: Signal<ReadonlyMap<string, string>> = computed(
+        (): ReadonlyMap<string, string> =>
+          new Map(
+            (store._page.organizationMembers.hasValue()
+              ? store._page.organizationMembers.value()
+              : []
+            ).map((member: ListMember): [string, string] => [member.userId, member.name ?? '']),
+          ),
+      );
+      const rows: Signal<readonly SheetRow[]> = computed((): readonly SheetRow[] => {
+        const facts: SheetViewState['_facts'] = store._facts();
+        const edits: SheetViewState['_edits'] = store._edits();
+        const spent: SheetViewState['_spent'] = store._spent();
+        const read: readonly SheetRow[] = store._tasks.items().map((item: ListTaskItem) => {
+          const known: SheetTaskFacts | undefined = facts[item.task.key];
+          const shown: Pick<SheetRow, 'estimateMinutes' | 'customFieldValues'> = withChanges(
+            {
+              estimateMinutes: known?.estimateMinutes ?? null,
+              customFieldValues: known?.customFieldValues ?? {},
+            },
+            edits[item.task.key] ?? [],
+          );
+          return {
+            id: item.task.key,
+            task: item.task,
+            status: item.status,
+            ...shown,
+            spentMinutes: spent[item.task.key] ?? null,
+          };
+        });
+        const list: { id: string; name: string } | null = store._page.list.hasValue()
+          ? store._page.list.value()
+          : null;
+        return sortSheetRows(read, store.order(), {
+          locale: store._locale,
+          personName: (userId: string): string => names().get(userId) ?? '',
+          listName: (listId: string): string => (list?.id === listId ? list.name : ''),
+        });
+      });
+      return {
+        rows,
+        totals: (): SheetTotals => sheetTotals(rows(), store.customFields()),
+      };
+    }),
+    withMethods((store) => {
+      const pumpSpent: () => void = (): void => {
+        const running: { count: number; aborts: AbortController } = store._spentRunning;
+        while (running.count < SPENT_CONCURRENCY && store._spentQueue.length > 0) {
+          const key: string | undefined = store._spentQueue.shift();
+          if (key === undefined) return;
+          const listId: string | null = store._listId();
+          const aborts: AbortController = running.aborts;
+          running.count++;
+          store._api
+            .spentMinutes(key, aborts.signal)
+            .then(
+              (minutes: number): void => {
+                if (aborts.signal.aborted || store._listId() !== listId) return;
+                patchState(store, (state: SheetViewState) => ({
+                  _spent: { ...state._spent, [key]: minutes },
+                }));
+              },
+              (): void => {
+                store._spentAsked.delete(key);
+              },
+            )
+            .finally((): void => {
+              if (aborts === store._spentRunning.aborts) running.count--;
+              pumpSpent();
+            });
+        }
+      };
+      const queueSpent: (keys: readonly string[]) => void = (keys: readonly string[]): void => {
+        for (const key of keys) {
+          if (!store._spentQueue.includes(key)) store._spentQueue.push(key);
+        }
+        queueMicrotask(pumpSpent);
+      };
+      const resetSpent: () => void = (): void => {
+        store._spentRunning.aborts.abort();
+        store._spentRunning.aborts = new AbortController();
+        store._spentRunning.count = 0;
+        store._spentQueue.length = 0;
+        store._spentAsked.clear();
+      };
+      const dropEdit: (taskKey: string, seq: number) => void = (
+        taskKey: string,
+        seq: number,
+      ): void => {
+        patchState(store, (state: SheetViewState) => {
+          const left: readonly FactEdit[] = (state._edits[taskKey] ?? []).filter(
+            (edit: FactEdit): boolean => edit.seq !== seq,
+          );
+          return {
+            _edits:
+              left.length > 0
+                ? { ...state._edits, [taskKey]: left }
+                : withoutKey(state._edits, taskKey),
+          };
+        });
+      };
+      return {
+        _resetSpent: resetSpent,
+        _merge(batch: readonly SheetTaskFacts[]): void {
+          if (batch.length === 0) return;
+          patchState(store, (state: SheetViewState) => {
+            let facts: SheetViewState['_facts'] = state._facts;
+            let edits: SheetViewState['_edits'] = state._edits;
+            for (const fact of batch) {
+              const known: SheetTaskFacts | undefined = facts[fact.key];
+              if (known && known.version > fact.version) continue;
+              facts = { ...facts, [fact.key]: fact };
+              const shown: readonly FactEdit[] | undefined = edits[fact.key];
+              if (!shown) continue;
+              const kept: readonly FactEdit[] = shown.filter(
+                (edit: FactEdit): boolean =>
+                  edit.pending || (edit.until !== null && fact.version < edit.until),
+              );
+              edits =
+                kept.length > 0 ? { ...edits, [fact.key]: kept } : withoutKey(edits, fact.key);
+            }
+            return { _facts: facts, _edits: edits };
+          });
+        },
+        _refreshSpent(): void {
+          const keys: readonly string[] = Object.keys(store._spent());
+          if (keys.length === 0) return;
+          queueSpent(keys);
+        },
+        _publishFields: signalMethod<readonly SheetCustomField[] | null>(
+          (fields: readonly SheetCustomField[] | null): void => {
+            if (fields === null) return;
+            store._view.followCustomFields(
+              fields.map((field: SheetCustomField) => ({ id: field.id, name: field.name })),
+            );
+          },
+        ),
+        load: signalMethod<string>((listId: string): void => {
+          if (listId === store._listId()) return;
+          resetSpent();
+          patchState(store, { _listId: listId, _facts: {}, _edits: {}, _spent: {} });
+        }),
+        reloadFields(): void {
+          store.fields.reload();
+        },
+        showEdit(
+          taskKey: string,
+          changes: SheetFactChanges,
+          result: Promise<ViewTaskOutcome>,
+        ): void {
+          const seq: number = ++store._editSeq.value;
+          const listId: string | null = store._listId();
+          patchState(store, (state: SheetViewState) => ({
+            _edits: {
+              ...state._edits,
+              [taskKey]: [
+                ...(state._edits[taskKey] ?? []),
+                { seq, pending: true, until: null, changes },
+              ],
+            },
+          }));
+          void result.then(
+            (outcome: ViewTaskOutcome): void => {
+              if (store._destroyRef.destroyed || store._listId() !== listId) return;
+              const done: TaskBulkEntry | undefined = outcome.done.find(
+                (entry: TaskBulkEntry): boolean => entry.taskKey === taskKey,
+              );
+              if (!done) {
+                dropEdit(taskKey, seq);
+                return;
+              }
+              patchState(store, (state: SheetViewState) => ({
+                _edits: {
+                  ...state._edits,
+                  [taskKey]: (state._edits[taskKey] ?? []).map((edit: FactEdit): FactEdit =>
+                    edit.seq === seq ? { ...edit, pending: false, until: done.version } : edit,
+                  ),
+                },
+              }));
+            },
+            (): void => {
+              if (!store._destroyRef.destroyed) dropEdit(taskKey, seq);
+            },
+          );
+        },
+        requestSpent(taskKey: string): void {
+          if (store._spentAsked.has(taskKey)) return;
+          store._spentAsked.add(taskKey);
+          queueSpent([taskKey]);
+        },
+        setOrder(order: SheetOrder | null): void {
+          store._view.setPresentation(presentationOfOrder(order));
+        },
+        setColumnShown(key: SheetColumnKey, shown: boolean): void {
+          const presentation: ListViewPresentation = store._view.presentation();
+          const fieldId: string | null = fieldIdOf(key);
+          if (fieldId !== null) {
+            const others: readonly string[] = presentation.hiddenCustomFieldIds.filter(
+              (id: string): boolean => id !== fieldId,
+            );
+            store._view.setPresentation({
+              hiddenCustomFieldIds: shown ? others : [...others, fieldId],
+            });
+            return;
+          }
+          if (key === 'name') return;
+          const others: readonly SheetColumn[] = presentation.hiddenSheetColumns.filter(
+            (column: SheetColumn): boolean => column !== key,
+          );
+          store._view.setPresentation({
+            hiddenSheetColumns: shown ? others : [...others, key as SheetColumn],
+          });
+        },
+        showAllColumns(): void {
+          store._view.setPresentation({ hiddenSheetColumns: [], hiddenCustomFieldIds: [] });
+        },
+      };
+    }),
+    withHooks({
+      onInit(store): void {
+        const facts: { unsubscribe: () => void } = store._api.facts.subscribe(
+          (batch: readonly SheetTaskFacts[]): void => {
+            store._merge(batch);
+          },
+        );
+        const detail: { unsubscribe: () => void } = merge(
+          store._detail.closed,
+          store._detail.changed,
+        ).subscribe((): void => {
+          store._refreshSpent();
+        });
+        store._publishFields(
+          computed((): readonly SheetCustomField[] | null =>
+            store.fields.hasValue() ? store.fields.value() : null,
+          ),
+        );
+        store._destroyRef.onDestroy((): void => {
+          facts.unsubscribe();
+          detail.unsubscribe();
+          store._resetSpent();
+        });
+      },
+    }),
+  );
 }
 
 /**
@@ -18,8 +716,18 @@ function createSheetViewStore(): Type<object> {
  *
  * @description
  * The state of the `Sheet` view (`l/:listId/sheet`), route-scoped through
- * `SHEET_VIEW_PROVIDERS`. A stub: the view's package owns this file and replaces it.
+ * `SHEET_VIEW_PROVIDERS` next to the shared flat reader (`ListTasksStore`) and the sheet's data
+ * access (`SheetTasksApi`, which also stands for `ListTasksApi` there). It keeps what a task
+ * summary does not carry: the estimate and custom field values of every task read (`facts` of
+ * each page, an older version never replacing a newer one), the list's custom fields (a
+ * secondary read, published to the frame with `ListViewStore.followCustomFields` once read), and
+ * the time spent of the rows shown (gap G6: one time summary per row, four at a time, read again
+ * when a task detail closes or changes). It builds the rows in the presentation's order
+ * (`sheetSort`, or `customFieldSort` while the list has the field; empty cells last) and the
+ * totals of the footer, shows the sheet's estimate and custom field edits at once until a read
+ * reaches their version, and writes the sort and the hidden columns to the presentation
+ * (`ListViewStore.setPresentation`). Another list forgets everything but the fields' read.
  *
- * @type {ReturnType<typeof createSheetViewStore>}
+ * @type {Type<SheetViewStoreInstance>}
  */
-export const SheetViewStore: ReturnType<typeof createSheetViewStore> = createSheetViewStore();
+export const SheetViewStore: Type<SheetViewStoreInstance> = createSheetViewStore();
