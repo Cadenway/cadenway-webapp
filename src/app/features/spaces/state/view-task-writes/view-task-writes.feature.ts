@@ -22,7 +22,10 @@ import {
   type TaskSummary,
 } from '@features/task';
 
-import { ListTasksApi } from '../../data-access/services/list-tasks-api/list-tasks-api.service';
+import {
+  ListTasksApi,
+  type TaskReadBack,
+} from '../../data-access/services/list-tasks-api/list-tasks-api.service';
 import type {
   ConfirmedTask,
   TaskFieldChanges,
@@ -228,6 +231,41 @@ interface QueuedWrite {
 }
 
 /**
+ * Interface ReadWaiter
+ *
+ * @description
+ * A write whose outcome stays unknown, waiting for a read of the view begun after it gave up.
+ */
+interface ReadWaiter {
+  // #region Properties
+  /**
+   * Property after
+   *
+   * @description
+   * Reads of the view begun when it started waiting (`source.reads()`); a read of a higher rank
+   * settles it.
+   *
+   * @type {number}
+   * @readonly
+   */
+  readonly after: number;
+  // #endregion
+
+  // #region Methods
+  /**
+   * Method settle
+   *
+   * @description
+   * Called once, synchronously: with true when such a read answered, with false when the view
+   * went or its scope changed first.
+   *
+   * @param {boolean} read - Whether a read settled it.
+   */
+  settle(read: boolean): void;
+  // #endregion
+}
+
+/**
  * Interface WritePlan
  *
  * @description
@@ -246,6 +284,18 @@ interface WritePlan {
    * @readonly
    */
   readonly action: TaskBulkAction | null;
+
+  /**
+   * Property resend
+   *
+   * @description
+   * Whether a task without a certain outcome is sent again as it was: the write sets a target
+   * state at the version it was decided on, so sending it twice cannot apply it twice.
+   *
+   * @type {boolean}
+   * @readonly
+   */
+  readonly resend: boolean;
   // #endregion
 
   // #region Methods
@@ -259,6 +309,18 @@ interface WritePlan {
    * @returns {{ changes: TaskWriteChanges; hidden: boolean } | null} The changes.
    */
   changesOf(task: TaskSummary): { changes: TaskWriteChanges; hidden: boolean } | null;
+
+  /**
+   * Method shows
+   *
+   * @description
+   * Whether a task read back after a refused resend holds what the write sets: the write (or one
+   * with the same effect) was applied.
+   *
+   * @param {TaskReadBack} read - The task as read back.
+   * @returns {boolean} Whether it shows the written values.
+   */
+  shows(read: TaskReadBack): boolean;
 
   /**
    * Method send
@@ -391,7 +453,7 @@ export interface ViewTaskWritesMethods extends Pick<
    *
    * @description
    * Forgets every write when the host's scope (organization or list) changes: no queued write
-   * starts afterwards.
+   * starts afterwards, no resend leaves and no task stays held by an uncertain write.
    */
   _resetWrites(): void;
 
@@ -400,7 +462,9 @@ export interface ViewTaskWritesMethods extends Pick<
    *
    * @description
    * Drops the confirmed patches a read replaced: those it read the returned version of, and
-   * those without a returned version once a read begun after their confirmation answered.
+   * those without a returned version once a read begun after their confirmation answered. Also
+   * settles the writes without a certain outcome that wait for a read begun after they gave up:
+   * their patches go and their tasks' next writes may leave.
    *
    * @param {number} generation - Rank of the read that answered, as `source.reads()` counted it.
    */
@@ -439,6 +503,28 @@ type Literal<T> = { [K in keyof T]: T[K] };
  * @type {number}
  */
 const WRITE_CALLS: number = 4;
+
+/**
+ * Constant RESEND_DELAYS_MS
+ *
+ * @description
+ * Waits before each resend of a write without a certain outcome (a lost answer, a timeout, a
+ * `5xx`), in milliseconds; once they are spent, the outcome stays unknown.
+ *
+ * @type {readonly number[]}
+ */
+export const RESEND_DELAYS_MS: readonly number[] = [1_000, 2_000, 4_000];
+
+/**
+ * Constant RECONCILE_DELAY_MS
+ *
+ * @description
+ * Wait, in milliseconds, between the end of a write whose outcome stays unknown and the read of
+ * the view that settles it, so a request still running on the server has time to commit first.
+ *
+ * @type {number}
+ */
+export const RECONCILE_DELAY_MS: number = 2_000;
 
 /**
  * Constant NO_OUTCOME
@@ -550,6 +636,80 @@ function actionChangesOf(
 }
 
 /**
+ * Function resendsAction
+ *
+ * @description
+ * Whether a bulk action without a certain outcome is sent again: a status, a priority, an
+ * assignee added or removed and a destination list set a target state at the version sent, so a
+ * second send changes nothing more. A deletion is not (its trash entry, which its `Undo` needs,
+ * comes only with the answer of the send that applied it, and a deleted task cannot be read
+ * back), nor a copy (each send creates one): both settle by a read of the view.
+ *
+ * @param {TaskBulkAction} action - The action.
+ * @returns {boolean} Whether it is sent again.
+ */
+function resendsAction(action: TaskBulkAction): boolean {
+  return action.type !== 'trash' && action.type !== 'duplicate';
+}
+
+/**
+ * Function actionShown
+ *
+ * @description
+ * Whether a task read back holds what a bulk action sets.
+ *
+ * @param {TaskReadBack} read - The task as read back.
+ * @param {TaskBulkAction} action - The action.
+ * @returns {boolean} Whether it shows the action's target state.
+ */
+function actionShown(read: TaskReadBack, action: TaskBulkAction): boolean {
+  const task: TaskSummary = read.task;
+  switch (action.type) {
+    case 'status':
+      return (
+        task.status === action.status &&
+        (action.cancelReason === undefined || task.cancelReason === action.cancelReason)
+      );
+    case 'priority':
+      return task.priority === action.priority;
+    case 'assign':
+      return task.assigneeIds.includes(action.userId);
+    case 'unassign':
+      return !task.assigneeIds.includes(action.userId);
+    case 'move':
+      return task.listId === action.listId;
+    case 'trash':
+    case 'duplicate':
+      return false;
+  }
+}
+
+/**
+ * Function fieldsShown
+ *
+ * @description
+ * Whether a task read back holds every field a single-field write sets; a cleared custom field
+ * is absent from the read.
+ *
+ * @param {TaskReadBack} read - The task as read back.
+ * @param {TaskFieldChanges} changes - The written fields.
+ * @returns {boolean} Whether it shows them.
+ */
+function fieldsShown(read: TaskReadBack, changes: TaskFieldChanges): boolean {
+  const task: TaskSummary = read.task;
+  return (
+    (changes.name === undefined || task.name === changes.name) &&
+    (changes.dueDate === undefined || task.due === changes.dueDate) &&
+    (changes.startDate === undefined || task.start === changes.startDate) &&
+    (changes.estimateMinutes === undefined || read.estimateMinutes === changes.estimateMinutes) &&
+    Object.entries(changes.customFieldValues ?? {}).every(
+      ([id, value]: [string, number | string | null]): boolean =>
+        (read.customFieldValues[id] ?? null) === value,
+    )
+  );
+}
+
+/**
  * Function shiftDate
  *
  * @description
@@ -651,13 +811,24 @@ function fieldOutcomeOf(sent: TaskBulkSelection, result: TaskFieldWriteResult): 
  * its newest known version (the last read, or the version the gateway returned to an earlier
  * write); a waiting status change gives way to a newer status change of the same task, which
  * alone is sent. Each write patches its tasks at once (`_appliedWrite`), files them 460 ms after
- * the task's last write (at once with reduced motion), and a refused, uncertain or unsent task
- * loses only that write's patch; a confirmed patch applies until a read reaches the version the
- * gateway returned. The tasks are read again after an applied or uncertain write, and after a
- * refusal that may come from a version the view has not read: a `412` of a single-field write,
- * any refused chunk of a bulk action (whose answer gives no reason). With expected versions (an `Undo`), a task known to have changed since is not
- * sent and is reported in `changed`. Every send checks the view, its scope and its organization:
- * once one changed, the rest is reported as not sent.
+ * the task's last write (at once with reduced motion), and a refused or unsent task loses only
+ * that write's patch; a confirmed patch applies until a read reaches the version the gateway
+ * returned. The tasks are read again after an applied write, and after a refusal that may come
+ * from a version the view has not read: a `412` of a single-field write, any refused chunk of a
+ * bulk action (whose answer gives no reason). With expected versions (an `Undo`), a task known to
+ * have changed since is not sent and is reported in `changed`. Every send checks the view, its
+ * scope and its organization: once one changed, the rest is reported as not sent.
+ *
+ * A task without a certain outcome (no answer, a timeout, a `5xx`) keeps its pending patch and
+ * holds the next writes of that task until its outcome is settled. A single-field write and a
+ * bulk status, priority, assignee or move is sent again unchanged, at the same version, after
+ * each wait of `RESEND_DELAYS_MS`: a success applied it; a refusal means the version moved or the
+ * request cannot pass, so the task is read back (`ListTasksApi.readBack`) and the write counts as
+ * applied (at the version read) when the task holds what it sets, refused otherwise, and stays
+ * uncertain when the task cannot be read. A deletion and a copy are never sent again. Whatever
+ * stays uncertain is reported in `unknown`; `RECONCILE_DELAY_MS` later the view reads its tasks
+ * again, and the patch goes and the task's next write leaves only once that read, begun after
+ * the write gave up, answered (`_settleWrites`), or the view or its scope changed.
  *
  * The host connects its reads in `onInit` (`_connectWrites`), forgets every write when its scope
  * changes (`_resetWrites`) and prunes the patches a read replaced (`_settleWrites`).
@@ -685,9 +856,34 @@ export function withViewTaskWrites(): SignalStoreFeature<
     withMethods((store) => {
       let source: ViewTaskWriteSource | null = null;
       const timers: Set<ReturnType<typeof setTimeout>> = new Set<ReturnType<typeof setTimeout>>();
+      // Waits of the resends and reconciliations, ended early when the view goes or its scope
+      // changes, so no write stays blocked behind a wait that no longer leads anywhere.
+      const wakers: Set<() => void> = new Set<() => void>();
+      // Writes without a certain outcome waiting for a read of the view begun after they gave up.
+      const readWaiters: Set<ReadWaiter> = new Set<ReadWaiter>();
+      const wakeAll: () => void = (): void => {
+        for (const wake of [...wakers]) wake();
+        for (const waiter of [...readWaiters]) {
+          readWaiters.delete(waiter);
+          waiter.settle(false);
+        }
+      };
       store._writeDestroyRef.onDestroy((): void => {
         for (const timer of timers) clearTimeout(timer);
+        wakeAll();
       });
+      const pause: (ms: number) => Promise<void> = (ms: number): Promise<void> =>
+        new Promise<void>((resolve: () => void): void => {
+          const wake: () => void = (): void => {
+            clearTimeout(timer);
+            timers.delete(timer);
+            wakers.delete(wake);
+            resolve();
+          };
+          const timer: ReturnType<typeof setTimeout> = setTimeout(wake, ms);
+          timers.add(timer);
+          wakers.add(wake);
+        });
       const confirmedVersions: Map<string, number> = new Map<string, number>();
       const notes: Map<string, { note: string | null; version: number }> = new Map<
         string,
@@ -746,6 +942,14 @@ export function withViewTaskWrites(): SignalStoreFeature<
             ),
           };
         });
+      };
+      const dropPatches: (seq: number, keys: readonly string[]) => void = (
+        seq: number,
+        keys: readonly string[],
+      ): void => {
+        editPatches(keys, (patches: readonly TaskWritePatch[]) =>
+          patches.filter((patch: TaskWritePatch): boolean => patch.seq !== seq),
+        );
       };
       const fileLater: (seq: number, keys: readonly string[]) => void = (
         seq: number,
@@ -843,16 +1047,104 @@ export function withViewTaskWrites(): SignalStoreFeature<
               : patch,
           ),
         );
-        editPatches(
-          [
-            ...[...outcome.failed, ...outcome.unknown, ...outcome.notSent].map(
-              (item: TaskBulkSelection): string => item.taskKey,
-            ),
-            ...skipped,
-          ],
-          (patches: readonly TaskWritePatch[]) =>
-            patches.filter((patch: TaskWritePatch): boolean => patch.seq !== seq),
-        );
+        // A task without a certain outcome keeps its pending patch: `reconcile` drops it once a
+        // read of the view begun after the write gave up answered.
+        dropPatches(seq, [
+          ...[...outcome.failed, ...outcome.notSent].map(
+            (item: TaskBulkSelection): string => item.taskKey,
+          ),
+          ...skipped,
+        ]);
+      };
+      const readBack: (key: string) => Promise<TaskReadBack | null> = async (
+        key: string,
+      ): Promise<TaskReadBack | null> => {
+        try {
+          return await store._writeFields.readBack(key);
+        } catch {
+          return null;
+        }
+      };
+      const resolveUncertain: (
+        plan: WritePlan,
+        sent: { readonly outcome: TaskBulkOutcome; readonly stale: boolean },
+        current: () => boolean,
+      ) => Promise<{ outcome: TaskBulkOutcome; stale: boolean }> = async (
+        plan: WritePlan,
+        sent: { readonly outcome: TaskBulkOutcome; readonly stale: boolean },
+        current: () => boolean,
+      ): Promise<{ outcome: TaskBulkOutcome; stale: boolean }> => {
+        let affected: number = sent.outcome.affected;
+        const done: TaskBulkEntry[] = [...sent.outcome.done];
+        const failed: TaskBulkSelection[] = [...sent.outcome.failed];
+        let unknown: readonly TaskBulkSelection[] = sent.outcome.unknown;
+        let stale: boolean = sent.stale;
+        for (const delay of RESEND_DELAYS_MS) {
+          if (unknown.length === 0) break;
+          await pause(delay);
+          if (!current()) break;
+          // The same write at the same versions: a first request that committed meanwhile
+          // makes it refused (the version moved), never applied twice.
+          const resent: TaskBulkOutcome = (await plan.send(unknown, current)).outcome;
+          affected += resent.affected;
+          done.push(...resent.done);
+          unknown = [...resent.unknown, ...resent.notSent];
+          if (resent.failed.length > 0) {
+            stale = true;
+            const reads: readonly PromiseSettledResult<TaskReadBack | null>[] = await settleLimited(
+              resent.failed,
+              WRITE_CALLS,
+              (item: TaskBulkSelection): Promise<TaskReadBack | null> => readBack(item.taskKey),
+            );
+            resent.failed.forEach((item: TaskBulkSelection, index: number): void => {
+              const settled: PromiseSettledResult<TaskReadBack | null> = reads[index];
+              const read: TaskReadBack | null =
+                settled.status === 'fulfilled' ? settled.value : null;
+              if (read === null) {
+                unknown = [...unknown, item];
+              } else if (plan.shows(read)) {
+                affected++;
+                done.push({
+                  taskKey: item.taskKey,
+                  version: read.task.version,
+                  newTaskKey: null,
+                  trashEntryId: null,
+                });
+              } else {
+                failed.push(item);
+              }
+            });
+          }
+          if (resent.notSent.length > 0) break;
+        }
+        return {
+          outcome: { affected, done, failed, unknown, notSent: sent.outcome.notSent },
+          stale,
+        };
+      };
+      const reconcile: (
+        seq: number,
+        keys: readonly string[],
+        current: () => boolean,
+        release: (keys: readonly string[]) => void,
+      ) => void = (
+        seq: number,
+        keys: readonly string[],
+        current: () => boolean,
+        release: (keys: readonly string[]) => void,
+      ): void => {
+        const settle: (read: boolean) => void = (read: boolean): void => {
+          if (read && current()) dropPatches(seq, keys);
+          release(keys);
+        };
+        void pause(RECONCILE_DELAY_MS).then((): void => {
+          if (!current()) {
+            settle(false);
+            return;
+          }
+          readWaiters.add({ after: source?.reads() ?? 0, settle });
+          source?.reload();
+        });
       };
       const run: (
         tasks: readonly TaskSummary[],
@@ -943,65 +1235,93 @@ export function withViewTaskWrites(): SignalStoreFeature<
         if (changes.size > 0 && !store._writeReduceMotion) fileLater(seq, [...changes.keys()]);
         for (const key of keys) queued.set(key, entry);
 
-        const send: () => Promise<ViewTaskOutcome> = async (): Promise<ViewTaskOutcome> => {
-          for (const key of keys) if (queued.get(key) === entry) queued.delete(key);
-          const unsuperseded: readonly TaskSummary[] = targets.filter(
-            (task: TaskSummary): boolean => !entry.superseded.has(task.key),
-          );
-          const late: readonly TaskSummary[] = unsuperseded.filter(changedSince);
-          const live: readonly TaskSummary[] = unsuperseded.filter(
-            (task: TaskSummary): boolean => !changedSince(task),
-          );
-          const skipped: readonly string[] = late.map((task: TaskSummary): string => task.key);
-          const changed: readonly TaskBulkSelection[] = changedOf(late);
-          if (live.length === 0) {
-            if (generation === scoped) record(plan.action, seq, NO_OUTCOME, {}, skipped);
-            return { ...NO_OUTCOME, changed };
-          }
-          const before: Readonly<Partial<Record<string, ConfirmedTask>>> = Object.fromEntries(
-            live.map((task: TaskSummary): [string, ConfirmedTask] => [task.key, confirmedOf(task)]),
-          );
-          const selection: TaskBulkSelection[] = live.map(
-            (task: TaskSummary): TaskBulkSelection => ({
-              taskKey: task.key,
-              version: expected?.[task.key] ?? before[task.key]?.version ?? task.version,
-            }),
-          );
-          const { outcome, stale }: { outcome: TaskBulkOutcome; stale: boolean } = await plan.send(
-            selection,
-            current,
-          );
-          const afterOf: () => Readonly<Partial<Record<string, number>>> = () =>
-            Object.fromEntries(
-              outcome.done.map((done: TaskBulkEntry): [string, number] => {
-                const sent: ConfirmedTask | undefined = before[done.taskKey];
-                return [done.taskKey, done.version ?? (sent ? versionOf(sent) : 0)];
-              }),
-            );
-          if (store._writeDestroyRef.destroyed) {
-            return { ...outcome, before, after: afterOf(), changed };
-          }
-          if (generation === scoped) record(plan.action, seq, outcome, before, skipped);
-          if (current() && (outcome.done.length > 0 || outcome.unknown.length > 0 || stale)) {
-            source?.reload();
-          }
-          return { ...outcome, before, after: afterOf(), changed };
-        };
+        // Each task of the write holds the next write of that task until it is released: once
+        // its outcome is settled, which for a task without a certain outcome is only after a read
+        // of the view begun once the write gave up.
         const earlier: readonly Promise<void>[] = keys.flatMap((key: string): Promise<void>[] => {
           const tail: Promise<void> | undefined = tails.get(key);
           return tail ? [tail] : [];
         });
-        const result: Promise<ViewTaskOutcome> =
-          earlier.length > 0 ? Promise.all(earlier).then(send) : send();
-        const tail: Promise<void> = result.then(
-          (): void => undefined,
-          (): void => undefined,
-        );
-        for (const key of keys) tails.set(key, tail);
-        void tail.then((): void => {
-          for (const key of keys) if (tails.get(key) === tail) tails.delete(key);
-        });
-        return result;
+        const releases: Map<string, () => void> = new Map<string, () => void>();
+        for (const key of keys) {
+          const tail: Promise<void> = new Promise<void>((resolve: () => void): void => {
+            releases.set(key, resolve);
+          });
+          tails.set(key, tail);
+          void tail.then((): void => {
+            if (tails.get(key) === tail) tails.delete(key);
+          });
+        }
+        const release: (released: readonly string[]) => void = (
+          released: readonly string[],
+        ): void => {
+          for (const key of released) releases.get(key)?.();
+        };
+
+        const send: () => Promise<ViewTaskOutcome> = async (): Promise<ViewTaskOutcome> => {
+          let held: readonly string[] = [];
+          try {
+            for (const key of keys) if (queued.get(key) === entry) queued.delete(key);
+            // A newer status change took these tasks over: it sends them, and waits only for
+            // this write to start.
+            release([...entry.superseded]);
+            const unsuperseded: readonly TaskSummary[] = targets.filter(
+              (task: TaskSummary): boolean => !entry.superseded.has(task.key),
+            );
+            const late: readonly TaskSummary[] = unsuperseded.filter(changedSince);
+            const live: readonly TaskSummary[] = unsuperseded.filter(
+              (task: TaskSummary): boolean => !changedSince(task),
+            );
+            const skipped: readonly string[] = late.map((task: TaskSummary): string => task.key);
+            const changed: readonly TaskBulkSelection[] = changedOf(late);
+            if (live.length === 0) {
+              if (generation === scoped) record(plan.action, seq, NO_OUTCOME, {}, skipped);
+              return { ...NO_OUTCOME, changed };
+            }
+            const before: Readonly<Partial<Record<string, ConfirmedTask>>> = Object.fromEntries(
+              live.map((task: TaskSummary): [string, ConfirmedTask] => [
+                task.key,
+                confirmedOf(task),
+              ]),
+            );
+            const selection: TaskBulkSelection[] = live.map(
+              (task: TaskSummary): TaskBulkSelection => ({
+                taskKey: task.key,
+                version: expected?.[task.key] ?? before[task.key]?.version ?? task.version,
+              }),
+            );
+            let sent: { outcome: TaskBulkOutcome; stale: boolean } = await plan.send(
+              selection,
+              current,
+            );
+            if (sent.outcome.unknown.length > 0 && plan.resend && generation === scoped) {
+              sent = await resolveUncertain(plan, sent, current);
+            }
+            const { outcome, stale }: { outcome: TaskBulkOutcome; stale: boolean } = sent;
+            const after: Readonly<Partial<Record<string, number>>> = Object.fromEntries(
+              outcome.done.map((done: TaskBulkEntry): [string, number] => {
+                const confirmed: ConfirmedTask | undefined = before[done.taskKey];
+                return [done.taskKey, done.version ?? (confirmed ? versionOf(confirmed) : 0)];
+              }),
+            );
+            if (store._writeDestroyRef.destroyed) return { ...outcome, before, after, changed };
+            if (generation === scoped) record(plan.action, seq, outcome, before, skipped);
+            if (current() && (outcome.done.length > 0 || stale)) source?.reload();
+            const uncertain: readonly string[] = outcome.unknown.map(
+              (item: TaskBulkSelection): string => item.taskKey,
+            );
+            if (uncertain.length > 0 && current()) {
+              held = uncertain;
+              reconcile(seq, uncertain, current, release);
+            } else if (generation === scoped) {
+              dropPatches(seq, uncertain);
+            }
+            return { ...outcome, before, after, changed };
+          } finally {
+            release(keys.filter((key: string): boolean => !held.includes(key)));
+          }
+        };
+        return earlier.length > 0 ? Promise.all(earlier).then(send) : send();
       };
 
       return {
@@ -1013,6 +1333,7 @@ export function withViewTaskWrites(): SignalStoreFeature<
           confirmedVersions.clear();
           notes.clear();
           patchState(store, { _patches: {} });
+          wakeAll();
         },
         _settleWrites(generationRead: number): void {
           editPatches(
@@ -1037,6 +1358,11 @@ export function withViewTaskWrites(): SignalStoreFeature<
               confirmedVersions.delete(key);
             }
           }
+          for (const waiter of [...readWaiters]) {
+            if (generationRead <= waiter.after) continue;
+            readWaiters.delete(waiter);
+            waiter.settle(true);
+          }
         },
         _appliedWrite(task: TaskSummary): AppliedTaskWrite | null {
           return appliedOf(
@@ -1053,7 +1379,9 @@ export function withViewTaskWrites(): SignalStoreFeature<
             tasks,
             {
               action,
+              resend: resendsAction(action),
               changesOf: (task: TaskSummary) => actionChangesOf(task, action),
+              shows: (read: TaskReadBack): boolean => actionShown(read, action),
               send: async (
                 selection: readonly TaskBulkSelection[],
                 current: () => boolean,
@@ -1080,7 +1408,9 @@ export function withViewTaskWrites(): SignalStoreFeature<
             [task],
             {
               action: null,
+              resend: true,
               changesOf: (shown: TaskSummary) => fieldChangesOf(shown, changes),
+              shows: (read: TaskReadBack): boolean => fieldsShown(read, changes),
               send: async (
                 selection: readonly TaskBulkSelection[],
                 current: () => boolean,

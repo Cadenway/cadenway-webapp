@@ -18,7 +18,10 @@ import {
 import { TaskApi } from '@features/task/data-access/services/task-api/task-api.service';
 import { WORKSPACE_CONTEXT } from '@features/workspace/ports/workspace-context';
 
-import { ListTasksApi } from '../../data-access/services/list-tasks-api/list-tasks-api.service';
+import {
+  ListTasksApi,
+  type TaskReadBack,
+} from '../../data-access/services/list-tasks-api/list-tasks-api.service';
 import type { ListTaskPage } from '../../models/list-rows/list-rows.interface';
 import type { ListTaskItem, ListTasksRead } from '../../models/list-tasks/list-tasks.interface';
 import type { ListTaskQuery } from '../../models/list-view-config/list-view-config.interface';
@@ -26,6 +29,7 @@ import type {
   TaskFieldWriteResult,
   ViewTaskOutcome,
 } from '../../models/view-task-write/view-task-write.interface';
+import { RECONCILE_DELAY_MS, RESEND_DELAYS_MS } from '../view-task-writes/view-task-writes.feature';
 import {
   LIST_TASKS_CAP,
   LIST_TASKS_PAGE_SIZE,
@@ -140,9 +144,52 @@ function done(version: number): TaskBulkOutcome {
   };
 }
 
+/**
+ * Function readBackOf
+ *
+ * @description
+ * A task as a single read of it answers, without an estimate or custom fields.
+ *
+ * @param {TaskSummary} read - The task.
+ * @returns {TaskReadBack} The read.
+ */
+function readBackOf(read: TaskSummary): TaskReadBack {
+  return { task: read, estimateMinutes: null, customFieldValues: {} };
+}
+
+/**
+ * Function resendsWait
+ *
+ * @description
+ * Milliseconds until a given number of resends of a write without a certain outcome left.
+ *
+ * @param {number} count - Resends to wait for, all of them by default.
+ * @returns {number} The total wait.
+ */
+function resendsWait(count: number = RESEND_DELAYS_MS.length): number {
+  return RESEND_DELAYS_MS.slice(0, count).reduce((sum: number, ms: number) => sum + ms, 0);
+}
+
+/**
+ * Constant lost
+ *
+ * @description
+ * A bulk answer without a certain outcome for CAD-482 at version 3.
+ *
+ * @type {TaskBulkOutcome}
+ */
+const lost: TaskBulkOutcome = {
+  affected: 0,
+  done: [],
+  failed: [],
+  unknown: [{ taskKey: 'CAD-482', version: 3 }],
+  notSent: [],
+};
+
 describe('ListTasksStore', () => {
   let page: Mock<ListTasksApi['page']>;
   let update: Mock<ListTasksApi['update']>;
+  let readBack: Mock<ListTasksApi['readBack']>;
   let bulk: Mock<TaskActionsApi['bulk']>;
   let notices: Subject<RealtimeChange>;
   let detailClosings: Subject<string>;
@@ -165,7 +212,7 @@ describe('ListTasksStore', () => {
         ListTasksStore,
         {
           provide: ListTasksApi,
-          useValue: { page, update, groups: vi.fn(), subtasks: vi.fn() },
+          useValue: { page, update, readBack, groups: vi.fn(), subtasks: vi.fn() },
         },
         {
           provide: TaskApi,
@@ -239,6 +286,7 @@ describe('ListTasksStore', () => {
     update = vi.fn<ListTasksApi['update']>(() =>
       Promise.resolve<TaskFieldWriteResult>({ kind: 'done', version: 4 }),
     );
+    readBack = vi.fn<ListTasksApi['readBack']>(() => Promise.resolve(null));
     bulk = vi.fn<TaskActionsApi['bulk']>(() => Promise.resolve(done(4)));
   });
 
@@ -613,17 +661,164 @@ describe('ListTasksStore', () => {
     await pending;
   });
 
-  it('puts the fields back and reads again when a field write has no certain outcome', async () => {
-    update.mockResolvedValueOnce({ kind: 'unknown' });
+  it('sends a field write again at the same version after a lost answer, and applies its success', async () => {
+    update
+      .mockResolvedValueOnce({ kind: 'unknown' })
+      .mockResolvedValueOnce({ kind: 'done', version: 4 });
     const store: InstanceType<typeof ListTasksStore> = setup(sprint);
     await settle();
 
-    const outcome: ViewTaskOutcome = await store.update(cad482, { name: 'Sign-in' });
+    const pending: Promise<ViewTaskOutcome> = store.update(cad482, { name: 'Sign-in' });
+    await settle();
+    expect(update).toHaveBeenCalledTimes(1);
+    expect(page).toHaveBeenCalledTimes(1);
+    expect(itemOf(store, 'CAD-482')?.task.name).toBe('Sign-in');
 
-    expect(outcome.unknown).toEqual([{ taskKey: 'CAD-482', version: 3 }]);
-    expect(itemOf(store, 'CAD-482')?.task.name).toBe('Redesign the SSO sign-in screen');
+    await vi.advanceTimersByTimeAsync(resendsWait(1));
+    const outcome: ViewTaskOutcome = await pending;
+
+    expect(update).toHaveBeenNthCalledWith(2, 'CAD-482', 3, { name: 'Sign-in' });
+    expect(outcome.done).toEqual([
+      { taskKey: 'CAD-482', version: 4, newTaskKey: null, trashEntryId: null },
+    ]);
+    expect(outcome.unknown).toEqual([]);
+    expect(outcome.after).toEqual({ 'CAD-482': 4 });
+  });
+
+  it('keeps the written fields over a read that answers before the lost write commits', async () => {
+    update
+      .mockResolvedValueOnce({ kind: 'unknown' })
+      .mockResolvedValueOnce({ kind: 'done', version: 4 })
+      .mockResolvedValueOnce({ kind: 'done', version: 5 });
+    const store: InstanceType<typeof ListTasksStore> = setup(sprint);
+    await settle();
+    const pending: Promise<ViewTaskOutcome> = store.update(cad482, { name: 'Sign-in' });
+    await settle();
+
+    store.reload();
     await settle();
     expect(page).toHaveBeenCalledTimes(2);
+    expect(itemOf(store, 'CAD-482')?.task.name).toBe('Sign-in');
+
+    page.mockResolvedValue(pageOf([{ ...cad482, name: 'Sign-in', version: 4 }]));
+    await vi.advanceTimersByTimeAsync(resendsWait(1));
+    await pending;
+    await settle();
+    expect(page).toHaveBeenCalledTimes(3);
+    expect(itemOf(store, 'CAD-482')?.task).toMatchObject({ name: 'Sign-in', version: 4 });
+
+    await store.update(cad482, { dueDate: '2026-12-01' });
+    expect(update).toHaveBeenLastCalledWith('CAD-482', 4, { dueDate: '2026-12-01' });
+  });
+
+  it('counts a resend refused on a moved version as applied when the task reads back written', async () => {
+    update
+      .mockResolvedValueOnce({ kind: 'unknown' })
+      .mockResolvedValueOnce({ kind: 'refused', stale: true });
+    readBack.mockResolvedValueOnce(readBackOf({ ...cad482, name: 'Sign-in', version: 4 }));
+    const store: InstanceType<typeof ListTasksStore> = setup(sprint);
+    await settle();
+
+    const pending: Promise<ViewTaskOutcome> = store.update(cad482, { name: 'Sign-in' });
+    await vi.advanceTimersByTimeAsync(resendsWait(1));
+    const outcome: ViewTaskOutcome = await pending;
+
+    expect(readBack).toHaveBeenCalledWith('CAD-482');
+    expect(outcome.done).toEqual([
+      { taskKey: 'CAD-482', version: 4, newTaskKey: null, trashEntryId: null },
+    ]);
+    expect(outcome.failed).toEqual([]);
+    expect(outcome.after).toEqual({ 'CAD-482': 4 });
+    expect(itemOf(store, 'CAD-482')?.task.name).toBe('Sign-in');
+  });
+
+  it('counts a resend refused on a moved version as refused when the task reads back otherwise', async () => {
+    update
+      .mockResolvedValueOnce({ kind: 'unknown' })
+      .mockResolvedValueOnce({ kind: 'refused', stale: true });
+    const renamed: TaskSummary = { ...cad482, name: 'Login screen', version: 4 };
+    readBack.mockResolvedValueOnce(readBackOf(renamed));
+    const store: InstanceType<typeof ListTasksStore> = setup(sprint);
+    await settle();
+
+    const pending: Promise<ViewTaskOutcome> = store.update(cad482, { name: 'Sign-in' });
+    page.mockResolvedValue(pageOf([renamed]));
+    await vi.advanceTimersByTimeAsync(resendsWait(1));
+    const outcome: ViewTaskOutcome = await pending;
+    await settle();
+
+    expect(outcome.failed).toEqual([{ taskKey: 'CAD-482', version: 3 }]);
+    expect(outcome.done).toEqual([]);
+    expect(page).toHaveBeenCalledTimes(2);
+    expect(itemOf(store, 'CAD-482')?.task.name).toBe('Login screen');
+  });
+
+  it('holds the next action of a task whose write stays uncertain until a later read settles it', async () => {
+    update.mockResolvedValue({ kind: 'unknown' });
+    const store: InstanceType<typeof ListTasksStore> = setup(sprint);
+    await settle();
+
+    const first: Promise<ViewTaskOutcome> = store.update(cad482, { name: 'Sign-in' });
+    const second: Promise<ViewTaskOutcome> = store.act([cad482], {
+      type: 'priority',
+      priority: 'urgente',
+    });
+    await vi.advanceTimersByTimeAsync(resendsWait());
+    const outcome: ViewTaskOutcome = await first;
+
+    expect(update).toHaveBeenCalledTimes(1 + RESEND_DELAYS_MS.length);
+    expect(outcome.unknown).toEqual([{ taskKey: 'CAD-482', version: 3 }]);
+    expect(page).toHaveBeenCalledTimes(1);
+    expect(bulk).not.toHaveBeenCalled();
+    expect(itemOf(store, 'CAD-482')?.task).toMatchObject({
+      name: 'Sign-in',
+      priority: 'urgente',
+    });
+
+    page.mockResolvedValue(pageOf([{ ...cad482, name: 'Sign-in', version: 4 }]));
+    await vi.advanceTimersByTimeAsync(RECONCILE_DELAY_MS);
+    await settle();
+    await second;
+
+    expect(page).toHaveBeenCalledTimes(3);
+    expect(bulk).toHaveBeenCalledWith(
+      [{ taskKey: 'CAD-482', version: 4 }],
+      { type: 'priority', priority: 'urgente' },
+      expect.any(Function),
+    );
+  });
+
+  it('sends a status change again after a lost answer, and a copy never', async () => {
+    bulk.mockResolvedValueOnce(lost).mockResolvedValueOnce(done(4));
+    const store: InstanceType<typeof ListTasksStore> = setup(sprint);
+    await settle();
+
+    const pending: Promise<ViewTaskOutcome> = store.act([cad482], {
+      type: 'status',
+      status: 'done',
+    });
+    await vi.advanceTimersByTimeAsync(resendsWait(1));
+    const changed: ViewTaskOutcome = await pending;
+    expect(bulk).toHaveBeenNthCalledWith(
+      2,
+      [{ taskKey: 'CAD-482', version: 3 }],
+      { type: 'status', status: 'done' },
+      expect.any(Function),
+    );
+    expect(changed.done.map((item) => item.taskKey)).toEqual(['CAD-482']);
+    await settle();
+
+    bulk.mockResolvedValueOnce(lost);
+    const reads: number = page.mock.calls.length;
+    const copied: ViewTaskOutcome = await store.act([cad482], { type: 'duplicate' });
+    await settle();
+    expect(copied.unknown).toEqual([{ taskKey: 'CAD-482', version: 3 }]);
+    expect(page).toHaveBeenCalledTimes(reads);
+
+    await vi.advanceTimersByTimeAsync(RECONCILE_DELAY_MS + resendsWait());
+    await settle();
+    expect(bulk).toHaveBeenCalledTimes(3);
+    expect(page).toHaveBeenCalledTimes(reads + 1);
   });
 
   it('sends a field write after an earlier action of the task, at the version it returned', async () => {

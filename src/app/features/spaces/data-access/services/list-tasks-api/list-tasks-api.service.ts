@@ -1,6 +1,7 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { inject, Service } from '@angular/core';
 import {
+  type GetTaskClientResult,
   type TaskGroup,
   type TaskGroupPage,
   TaskQueriesService,
@@ -53,6 +54,50 @@ import { abortableRead } from '../../utils/abortable-read/abortable-read.util';
 const SUBTASK_PAGE_LIMIT: number = 100;
 
 /**
+ * Interface TaskReadBack
+ *
+ * @description
+ * A task as a single read of it answers, to settle a write whose outcome was uncertain: its
+ * summary and the written fields a summary does not carry.
+ */
+export interface TaskReadBack {
+  // #region Properties
+  /**
+   * Property task
+   *
+   * @description
+   * The task, at the version the gateway has it now.
+   *
+   * @type {TaskSummary}
+   * @readonly
+   */
+  readonly task: TaskSummary;
+
+  /**
+   * Property estimateMinutes
+   *
+   * @description
+   * Its estimate in minutes, null when it has none.
+   *
+   * @type {number | null}
+   * @readonly
+   */
+  readonly estimateMinutes: number | null;
+
+  /**
+   * Property customFieldValues
+   *
+   * @description
+   * Its custom field values by field id; a cleared field is absent.
+   *
+   * @type {Readonly<Record<string, number | string>>}
+   * @readonly
+   */
+  readonly customFieldValues: Readonly<Record<string, number | string>>;
+  // #endregion
+}
+
+/**
  * Function groupAllowed
  *
  * @description
@@ -80,10 +125,10 @@ function groupAllowed(query: ListTaskQuery, group: GroupFilter, userId: string):
  * @description
  * The reads of the task views: the group counts (`countTaskGroups`), the cursor pages of the
  * tasks of a list or of one of its groups, optionally within a due window (`queryListTasks`), and
- * the subtasks of a task (`listSubtasks`), mapped to task summaries; and the single-field writes
- * of a task (`updateTask` with `If-Match`). Every read bypasses the HTTP cache, so a reload after
- * a realtime notice reads the gateway again. A failed read rejects with the typed route error of
- * the list.
+ * the subtasks of a task (`listSubtasks`), mapped to task summaries; one task read back after an
+ * uncertain write (`getTask`); and the single-field writes of a task (`updateTask` with
+ * `If-Match`). Every read bypasses the HTTP cache, so a reload after a realtime notice reads the
+ * gateway again. A failed read of the list rejects with the typed route error of the list.
  */
 @Service()
 export class ListTasksApi {
@@ -240,6 +285,32 @@ export class ListTasksApi {
       cursor = page.nextCursor;
     } while (cursor !== null);
     return items;
+  }
+
+  /**
+   * Method readBack
+   *
+   * @description
+   * Reads one task without the HTTP cache (`getTask`), to tell whether a write whose answer was
+   * lost or refused on a resend left the task with the written values. It never rejects: null
+   * when the task could not be read (no answer, an error, a deleted or moved-away task).
+   *
+   * @param {string} taskKey - Key of the task.
+   * @returns {Promise<TaskReadBack | null>} The task, or null.
+   */
+  public async readBack(taskKey: string): Promise<TaskReadBack | null> {
+    try {
+      const task: GetTaskClientResult = await firstValueFrom(
+        this.tasks.getTask(taskKey, { cache: 'no-store' }),
+      );
+      return {
+        task: toListTask(task),
+        estimateMinutes: task.estimateMinutes,
+        customFieldValues: { ...task.customFieldValues },
+      };
+    } catch {
+      return null;
+    }
   }
 
   /**
