@@ -1,4 +1,10 @@
-import { HttpClient, HttpErrorResponse, type HttpEvent, HttpEventType } from '@angular/common/http';
+import {
+  HttpClient,
+  HttpErrorResponse,
+  type HttpEvent,
+  HttpEventType,
+  type HttpResponse,
+} from '@angular/common/http';
 import { inject, Service } from '@angular/core';
 import {
   AttachmentsService,
@@ -21,6 +27,8 @@ import {
 } from '@cadenway/api-client';
 import { firstValueFrom, lastValueFrom, tap } from 'rxjs';
 
+import { hasProblemCode } from '@core/api';
+
 import type {
   TaskActivityPage,
   TaskApprovalSnapshot,
@@ -33,6 +41,7 @@ import type {
   TaskDetailTask,
 } from '../../../models/task-detail/task-detail.interface';
 import type { Person } from '../../../models/person/person.interface';
+import { TaskVersionConflict } from '../../../models/task-write-error/task-write-error.model';
 import {
   type AttachmentDto,
   toActivityPage,
@@ -127,7 +136,8 @@ export interface TaskCommentDraft {
  *
  * @description
  * The reads and writes of the task detail's tabs through the generated client, mapped to their
- * display models: the approval round and its votes, the comment pages, comment creation and
+ * display models: the approval round and its votes (sent with `If-Match`, a `412` rejecting
+ * with `TaskVersionConflict`), the comment pages, comment creation and
  * deletion, the participants a comment may mention, the attachments (signed upload, deletion,
  * signed download), the activity log, the checklist items, subtask creation, the parent of a task
  * (the depth of the subtree) and the organization's member directory. Collections are read to
@@ -214,15 +224,30 @@ export class TaskSectionsApi {
    * Method approve
    *
    * @description
-   * Records the caller's approval; the last approval moves the task to `done`.
+   * Records the caller's approval against the task version (`If-Match`); the last approval
+   * moves the task to `done`.
    *
    * @param {string} taskKey - Key of the task.
    * @param {string} roundId - The current round.
+   * @param {number} version - Newest confirmed version of the task.
    * @returns {Promise<TaskApprovalSnapshot>} The approval after the vote.
+   * @throws {TaskVersionConflict} When the task changed since that version (`412`).
    */
-  public async approve(taskKey: string, roundId: string): Promise<TaskApprovalSnapshot> {
-    const state: GetTaskApprovalClientResult = await firstValueFrom(
-      this.tasks.voteOnTaskApproval(taskKey, roundId, { decision: 'approved' }),
+  public async approve(
+    taskKey: string,
+    roundId: string,
+    version: number,
+  ): Promise<TaskApprovalSnapshot> {
+    const state: GetTaskApprovalClientResult = await this.versioned(
+      taskKey,
+      firstValueFrom(
+        this.tasks.voteOnTaskApproval(
+          taskKey,
+          roundId,
+          { decision: 'approved' },
+          { headers: ifMatch(version) },
+        ),
+      ),
     );
     return toApprovalSnapshot(state);
   }
@@ -231,21 +256,32 @@ export class TaskSectionsApi {
    * Method requestChanges
    *
    * @description
-   * Records the caller's change request: the gateway stores the reason as a task comment and
-   * moves the task to `progress`.
+   * Records the caller's change request against the task version (`If-Match`): the gateway
+   * stores the reason as a task comment and moves the task to `progress`.
    *
    * @param {string} taskKey - Key of the task.
    * @param {string} roundId - The current round.
    * @param {string} reason - What to change (Markdown, not blank).
+   * @param {number} version - Newest confirmed version of the task.
    * @returns {Promise<TaskApprovalSnapshot>} The approval after the vote.
+   * @throws {TaskVersionConflict} When the task changed since that version (`412`).
    */
   public async requestChanges(
     taskKey: string,
     roundId: string,
     reason: string,
+    version: number,
   ): Promise<TaskApprovalSnapshot> {
-    const state: GetTaskApprovalClientResult = await firstValueFrom(
-      this.tasks.voteOnTaskApproval(taskKey, roundId, { decision: 'changes-requested', reason }),
+    const state: GetTaskApprovalClientResult = await this.versioned(
+      taskKey,
+      firstValueFrom(
+        this.tasks.voteOnTaskApproval(
+          taskKey,
+          roundId,
+          { decision: 'changes-requested', reason },
+          { headers: ifMatch(version) },
+        ),
+      ),
     );
     return toApprovalSnapshot(state);
   }
@@ -254,34 +290,60 @@ export class TaskSectionsApi {
    * Method withdrawVote
    *
    * @description
-   * Withdraws the caller's vote; the task status and an earlier comment stay.
+   * Withdraws the caller's vote against the task version (`If-Match`); the task status and an
+   * earlier comment stay.
    *
    * @param {string} taskKey - Key of the task.
    * @param {string} roundId - The current round.
-   * @returns {Promise<void>} Resolves once withdrawn.
+   * @param {number} version - Newest confirmed version of the task.
+   * @returns {Promise<number | null>} The task version of the `ETag`, or null without one.
+   * @throws {TaskVersionConflict} When the task changed since that version (`412`).
    */
-  public async withdrawVote(taskKey: string, roundId: string): Promise<void> {
-    await firstValueFrom(this.tasks.withdrawTaskApprovalVote(taskKey, roundId));
+  public async withdrawVote(
+    taskKey: string,
+    roundId: string,
+    version: number,
+  ): Promise<number | null> {
+    const response: HttpResponse<unknown> = await this.versioned(
+      taskKey,
+      firstValueFrom<HttpResponse<unknown>>(
+        this.tasks.withdrawTaskApprovalVote(taskKey, roundId, {
+          observe: 'response',
+          headers: ifMatch(version),
+        }),
+      ),
+    );
+    const match: RegExpExecArray | null = /^"([1-9][0-9]*)"$/u.exec(
+      response.headers.get('ETag') ?? '',
+    );
+    return match ? Number(match[1]) : null;
   }
 
   /**
-   * Method requestApproval
+   * Method versioned
    *
    * @description
-   * Starts or replaces the approval round with its reviewers (editors of the task).
+   * Awaits an approval write, turning its `412` (other than an organization change) into
+   * `TaskVersionConflict`.
    *
    * @param {string} taskKey - Key of the task.
-   * @param {readonly string[]} reviewerIds - Accounts of the reviewers, 1 to 20.
-   * @returns {Promise<TaskApprovalSnapshot>} The new approval.
+   * @param {Promise<T>} request - The write.
+   * @returns {Promise<T>} What the write answered.
+   * @throws {TaskVersionConflict} When the task changed since the version written against.
    */
-  public async requestApproval(
-    taskKey: string,
-    reviewerIds: readonly string[],
-  ): Promise<TaskApprovalSnapshot> {
-    const state: GetTaskApprovalClientResult = await firstValueFrom(
-      this.tasks.requestTaskApproval(taskKey, { reviewerUserIds: [...reviewerIds] }),
-    );
-    return toApprovalSnapshot(state);
+  private async versioned<T>(taskKey: string, request: Promise<T>): Promise<T> {
+    try {
+      return await request;
+    } catch (error: unknown) {
+      if (
+        error instanceof HttpErrorResponse &&
+        error.status === 412 &&
+        !hasProblemCode(error, 'organization.context-changed')
+      ) {
+        throw new TaskVersionConflict(taskKey);
+      }
+      throw error;
+    }
   }
 
   /**

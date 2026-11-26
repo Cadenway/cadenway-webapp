@@ -41,7 +41,8 @@ import {
  * a blank title comes back), then the actions: follow (`aria-pressed`, the count), the reminder
  * (`cw-task-reminder-menu`), `Copy the link`, the `More actions` menu (copy the identifier,
  * duplicate, move to…, archive, save as a template, convert to a subtask of… or move to another
- * task…, detach from the parent, delete) and `Close`. Before the detail is read it shows what
+ * task…, detach from the parent, delete) and `Close`. A failed read of the followers or of the
+ * reminder shows an inline error under the title with `Retry`. Before the detail is read it shows what
  * the opening screen gave and disables the actions; without edit rights the title is read-only and
  * the writing actions are disabled. It only emits: the detail dialog acts.
  */
@@ -175,6 +176,17 @@ export class TaskDetailHeader {
   public readonly watchers: InputSignal<TaskWatchers | null> = input<TaskWatchers | null>(null);
 
   /**
+   * Property watchersFailed
+   *
+   * @description
+   * Whether the followers could not be read: an inline error with `Retry` (`watchersRetried`).
+   *
+   * @type {InputSignal<boolean>}
+   * @readonly
+   */
+  public readonly watchersFailed: InputSignal<boolean> = input<boolean>(false);
+
+  /**
    * Property watchPending
    *
    * @description
@@ -195,6 +207,18 @@ export class TaskDetailHeader {
    * @readonly
    */
   public readonly reminder: InputSignal<TaskReminder | null> = input<TaskReminder | null>(null);
+
+  /**
+   * Property reminderFailed
+   *
+   * @description
+   * Whether the caller's reminder could not be read: an inline error with `Retry`
+   * (`reminderRetried`).
+   *
+   * @type {InputSignal<boolean>}
+   * @readonly
+   */
+  public readonly reminderFailed: InputSignal<boolean> = input<boolean>(false);
 
   /**
    * Property reminderPending
@@ -239,6 +263,28 @@ export class TaskDetailHeader {
    * @readonly
    */
   public readonly watchToggled: OutputEmitterRef<void> = output();
+
+  /**
+   * Property watchersRetried
+   *
+   * @description
+   * Emitted when the person asks to read the followers again.
+   *
+   * @type {OutputEmitterRef<void>}
+   * @readonly
+   */
+  public readonly watchersRetried: OutputEmitterRef<void> = output();
+
+  /**
+   * Property reminderRetried
+   *
+   * @description
+   * Emitted when the person asks to read the reminder again.
+   *
+   * @type {OutputEmitterRef<void>}
+   * @readonly
+   */
+  public readonly reminderRetried: OutputEmitterRef<void> = output();
 
   /**
    * Property reminderScheduled

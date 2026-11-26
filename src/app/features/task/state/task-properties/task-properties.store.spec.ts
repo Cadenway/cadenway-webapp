@@ -148,24 +148,39 @@ describe('TaskPropertiesStore', () => {
     ready: WritableSignal<boolean>;
     task: WritableSignal<TaskDetailTask>;
     confirmedTask: WritableSignal<TaskDetailTask>;
+    watchersRevision: WritableSignal<number>;
+    write: Mock;
     accept: Mock;
     acceptVersion: Mock;
     reload: Mock;
     reloadWatchers: Mock;
   };
+  let lane: Promise<void>;
   let api: Record<string, Mock>;
   let follow: Mock;
   let toasts: { show: Mock; error: Mock };
 
   beforeEach(() => {
     task = signal(taskAt(7));
+    lane = Promise.resolve();
     detail = {
       taskKey: signal<string | null>('CAD-482'),
       ready: signal(true),
       task,
       confirmedTask: task,
+      watchersRevision: signal(0),
+      write: vi.fn((_key: string, send: (version: number) => Promise<unknown>) => {
+        const run: Promise<unknown> = lane.then(() => send(task().version));
+        lane = run.then(
+          (): void => undefined,
+          (): void => undefined,
+        );
+        return run;
+      }),
       accept: vi.fn(),
-      acceptVersion: vi.fn(),
+      acceptVersion: vi.fn((version: number, changes: Partial<TaskDetailTask> = {}) => {
+        if (version === task().version + 1) task.set({ ...task(), ...changes, version });
+      }),
       reload: vi.fn(() => Promise.resolve()),
       reloadWatchers: vi.fn(() => Promise.resolve()),
     };
@@ -256,7 +271,9 @@ describe('TaskPropertiesStore', () => {
     await store.toggleAssignee('u1');
 
     expect(api['unassign']).toHaveBeenCalledWith('CAD-482', 'u1');
-    expect(detail.accept).toHaveBeenCalledWith(taskAt(8, { assigneeIds: [] }));
+    expect(detail.write).toHaveBeenCalledWith('CAD-482', expect.any(Function), 0);
+    expect(detail.acceptVersion).toHaveBeenCalledWith(8, { assigneeIds: [] }, 'CAD-482');
+    expect(task().assigneeIds).toEqual([]);
   });
 
   it('puts the assignees back when the gateway refuses', async () => {
@@ -288,7 +305,7 @@ describe('TaskPropertiesStore', () => {
 
     expect(follow).toHaveBeenCalledWith('CAD-482', 'u3', true);
     expect(store.watcherIds()).toEqual(['u1', 'u2', 'u3']);
-    expect(detail.acceptVersion).toHaveBeenCalledWith(8);
+    expect(detail.acceptVersion).toHaveBeenCalledWith(8, {}, 'CAD-482');
     expect(detail.reloadWatchers).toHaveBeenCalled();
 
     follow.mockRejectedValueOnce(new Error('refused'));
@@ -304,7 +321,93 @@ describe('TaskPropertiesStore', () => {
 
     expect(api['requestApproval']).toHaveBeenCalledWith('CAD-482', 7, ['u2']);
     expect(store.approval()?.reviewers).toEqual([{ userId: 'u2', decision: null }]);
-    expect(detail.acceptVersion).toHaveBeenCalledWith(8);
+    expect(detail.acceptVersion).toHaveBeenCalledWith(8, {}, 'CAD-482');
+  });
+
+  it('sends quick approver ticks one round at a time, the last selection deciding', async () => {
+    await settle();
+    let answer: (approval: TaskApproval) => void = (): void => undefined;
+    api['requestApproval']
+      .mockReturnValueOnce(
+        new Promise<TaskApproval>((resolve: (approval: TaskApproval) => void) => {
+          answer = resolve;
+        }),
+      )
+      .mockResolvedValueOnce({
+        taskVersion: 9,
+        reviewers: [
+          { userId: 'u2', decision: null },
+          { userId: 'u1', decision: null },
+        ],
+      });
+
+    const first: Promise<void> = store.toggleApprover('u3');
+    const second: Promise<void> = store.toggleApprover('u1');
+
+    expect(store.approval()?.reviewers.map((reviewer) => reviewer.userId)).toEqual(['u2', 'u1']);
+    await settle();
+    expect(api['requestApproval']).toHaveBeenCalledOnce();
+    answer({ taskVersion: 8, reviewers: [{ userId: 'u2', decision: null }] });
+    await Promise.all([first, second]);
+
+    expect(api['requestApproval'].mock.calls).toEqual([
+      ['CAD-482', 7, ['u2']],
+      ['CAD-482', 8, ['u2', 'u1']],
+    ]);
+    expect(store.approval()?.taskVersion).toBe(9);
+    expect(store.approval()?.reviewers.map((reviewer) => reviewer.userId)).toEqual(['u2', 'u1']);
+    expect(toasts.error).not.toHaveBeenCalled();
+  });
+
+  it('puts back the round shown before quick ticks when one is refused', async () => {
+    await settle();
+    api['requestApproval'].mockRejectedValueOnce(new Error('refused'));
+
+    const first: Promise<void> = store.toggleApprover('u3');
+    const second: Promise<void> = store.toggleApprover('u1');
+    await Promise.all([first, second]);
+
+    expect(api['requestApproval']).toHaveBeenCalledOnce();
+    expect(store.approval()).toEqual(approval);
+    expect(toasts.error).toHaveBeenCalledWith('Could not change the approvers', expect.anything());
+  });
+
+  it('writes the assignees, labels and approvers through the detail write path', async () => {
+    await settle();
+
+    await store.toggleAssignee('u2');
+    await store.toggleLabel('Back');
+    await store.toggleApprover('u3');
+
+    expect(detail.write.mock.calls.map((call: unknown[]) => call[0])).toEqual([
+      'CAD-482',
+      'CAD-482',
+      'CAD-482',
+    ]);
+  });
+
+  it('reads the sprint end again when the task moves to another list', async () => {
+    await settle();
+    expect(api['sprintEnd']).toHaveBeenCalledExactlyOnceWith('sprint-14');
+    api['sprintEnd'].mockResolvedValueOnce('2026-11-27');
+
+    task.set(taskAt(8, { listId: 'sprint-15' }));
+    await settle();
+
+    expect(api['sprintEnd']).toHaveBeenLastCalledWith('sprint-15');
+    expect(store.sprintEnd()).toBe('2026-11-27');
+  });
+
+  it('reads the followers again after a follow change from the header', async () => {
+    await settle();
+    expect(api['watchers']).toHaveBeenCalledOnce();
+    api['watchers'].mockResolvedValueOnce(['u1', 'u2', 'u3']);
+
+    detail.watchersRevision.set(1);
+    await settle();
+
+    expect(api['watchers']).toHaveBeenCalledTimes(2);
+    expect(store.watcherIds()).toEqual(['u1', 'u2', 'u3']);
   });
 
   it('reads the approval again once the confirmed version moves past it', async () => {

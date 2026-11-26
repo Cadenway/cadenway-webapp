@@ -313,6 +313,18 @@ interface TaskDetailState {
   readonly gitRevision: number;
 
   /**
+   * Property watchersRevision
+   *
+   * @description
+   * Counts the follow changes made from the header, so the properties panel reads its Followers
+   * row again.
+   *
+   * @type {number}
+   * @readonly
+   */
+  readonly watchersRevision: number;
+
+  /**
    * Property _pending
    *
    * @description
@@ -350,6 +362,7 @@ const initialState: TaskDetailState = {
   action: null,
   commentsRevision: 0,
   gitRevision: 0,
+  watchersRevision: 0,
   _pending: {},
 };
 
@@ -413,8 +426,10 @@ export interface TaskDetailHeader {
  *
  * @description
  * The public API of the task detail store, shared by the header, the properties panel and the
- * tabs. Every field write goes through `update`; other writes (assignees, labels, checklist,
- * comments) hand the task they return to `accept`.
+ * tabs. Every field write goes through `update`; the other writes of a task (status, assignees,
+ * labels, followers, approvers, votes, checklist) run through `write`, so one task's writes never
+ * overlap and each goes against the newest confirmed version, and hand what they return to
+ * `accept` or `acceptVersion`.
  */
 export interface TaskDetailStoreInstance {
   // #region Properties
@@ -738,6 +753,17 @@ export interface TaskDetailStoreInstance {
    * @readonly
    */
   readonly gitRevision: Signal<number>;
+
+  /**
+   * Property watchersRevision
+   *
+   * @description
+   * Grows on each follow change confirmed from the header.
+   *
+   * @type {Signal<number>}
+   * @readonly
+   */
+  readonly watchersRevision: Signal<number>;
   // #endregion
 
   // #region Methods
@@ -817,11 +843,13 @@ export interface TaskDetailStoreInstance {
    * Method update
    *
    * @description
-   * Changes fields of the task optimistically: the values show at once, the writes of the detail
-   * are sent one after the other, each with `If-Match` set to the newest confirmed version. A
-   * success confirms the returned task; a `412` drops the local values, reads the detail again
-   * and warns; any other failure drops them (the confirmed values come back) and shows the
-   * failure toast. A later write of the same field keeps its own value shown.
+   * Changes fields of the task optimistically: the values show at once, the write goes through
+   * `write` (after the earlier writes of the task, with `If-Match` set to the newest confirmed
+   * version). A success confirms the returned task; a `412` drops the local values, reads the
+   * detail again before the next write and warns; any other failure drops them (the confirmed
+   * values come back) and shows the failure toast. A later write of the same field keeps its own
+   * value shown. A write still queued when another task opens is sent with its own task's key
+   * and version.
    *
    * @param {TaskDetailPatch} patch - The changed fields.
    * @returns {Promise<boolean>} Whether the gateway saved the change.
@@ -829,11 +857,31 @@ export interface TaskDetailStoreInstance {
   update(patch: TaskDetailPatch): Promise<boolean>;
 
   /**
+   * Method write
+   *
+   * @description
+   * The one write path of a task in the detail: runs `send` after the earlier writes of the same
+   * task (field patches, statuses, assignees, labels, followers, approvers, approval votes,
+   * dependencies) and after any read the task waits for, with the newest confirmed version of
+   * that task (`fallback` for a task the detail never confirmed, such as a subtask). `send`
+   * adopts what its write returned (`accept` or `acceptVersion`) before it resolves, so the next
+   * write goes against it. A `TaskVersionConflict` reads the task again, and the next write of
+   * the task waits for that read; the error is rethrown to the caller.
+   *
+   * @param {string} key - Key of the task written.
+   * @param {(version: number) => Promise<T>} send - Sends the write against a version.
+   * @param {number} [fallback] - Version to use when the detail confirmed none of that task.
+   * @returns {Promise<T>} What `send` resolved with.
+   * @throws {Error} When no version of the task is known and no fallback is given.
+   */
+  write<T>(key: string, send: (version: number) => Promise<T>, fallback?: number): Promise<T>;
+
+  /**
    * Method accept
    *
    * @description
-   * Takes a task another write of the open task returned (assignees, labels, checklist...), when
-   * it is not older than the confirmed one.
+   * Takes a task another write returned (assignees, labels, checklist...), when it is not older
+   * than the confirmed one; the version of a task no longer shown is recorded for its next write.
    *
    * @param {TaskDetailTask} task - The task the gateway returned.
    */
@@ -843,18 +891,24 @@ export interface TaskDetailStoreInstance {
    * Method acceptVersion
    *
    * @description
-   * Records a newer task version a write reported without the task (an `ETag`), so the next
-   * `If-Match` matches.
+   * Takes a version a write reported without the whole task (an `ETag`, an approval's
+   * `taskVersion`, a status write), with the fields that write is known to have changed. It is
+   * adopted only when it follows the confirmed version (confirmed + 1): the write was then the
+   * only change. Any other newer version means another change happened too, so the task is read
+   * again and its next write waits for that read rather than writing against an unseen version.
    *
    * @param {number} version - The task's new version.
+   * @param {Partial<TaskSummary>} [changes] - Fields that write set, shown with the version.
+   * @param {string} [key] - Key of the task written, the open task by default.
    */
-  acceptVersion(version: number): void;
+  acceptVersion(version: number, changes?: Partial<TaskSummary>, key?: string): void;
 
   /**
    * Method toggleWatch
    *
    * @description
-   * Follows the task, or stops following it, at once; a refusal puts the watchers back.
+   * Follows the task, or stops following it, at once, through `write`; a confirmed change counts
+   * `watchersRevision`, a refusal puts the watchers back.
    *
    * @returns {Promise<void>} Resolves once the write settled.
    */
@@ -898,7 +952,8 @@ export interface TaskDetailStoreInstance {
    * Method duplicate
    *
    * @description
-   * Copies the task in its list; the toast's `Open` opens the copy.
+   * Copies the task in its list; the toast's `Open` opens the copy. A retry of a failed copy of
+   * the same task at the same version sends the same `Idempotency-Key`, so it never copies twice.
    *
    * @returns {Promise<void>} Resolves once copied.
    */
@@ -949,7 +1004,8 @@ export interface TaskDetailStoreInstance {
    * Method attachTo
    *
    * @description
-   * Makes the task a subtask of another one; the toast's `Undo` puts the previous parent back.
+   * Makes the task a subtask of another one; the toast's `Undo` puts the previous parent back,
+   * on that task even once another one is shown (the shown task then stays as it is).
    *
    * @param {{ readonly key: string; readonly name: string }} parent - The new parent.
    * @returns {Promise<boolean>} Whether it was attached.
@@ -960,7 +1016,8 @@ export interface TaskDetailStoreInstance {
    * Method detach
    *
    * @description
-   * Makes a subtask a top-level task again; the toast's `Undo` attaches it back.
+   * Makes a subtask a top-level task again; the toast's `Undo` attaches it back, on that task
+   * even once another one is shown.
    *
    * @returns {Promise<boolean>} Whether it was detached.
    */
@@ -1062,7 +1119,11 @@ function createTaskDetailStore(): Type<TaskDetailStoreInstance> {
     withMethods((store) => {
       let readToken: number = 0;
       let writeCount: number = 0;
-      let writes: Promise<unknown> = Promise.resolve();
+      let detailRead: Promise<void> | null = null;
+      let duplication: { key: string; version: number; idempotencyKey: string } | null = null;
+      const lanes: Map<string, Promise<void>> = new Map<string, Promise<void>>();
+      const versions: Map<string, number> = new Map<string, number>();
+      const reconciling: Map<string, Promise<void>> = new Map<string, Promise<void>>();
       const current: (key: string) => boolean = (key: string): boolean => {
         return store.taskKey() === key;
       };
@@ -1070,7 +1131,22 @@ function createTaskDetailStore(): Type<TaskDetailStoreInstance> {
         return store.taskKey();
       };
 
+      const record: (key: string, version: number) => void = (
+        key: string,
+        version: number,
+      ): void => {
+        if (version > (versions.get(key) ?? 0)) versions.set(key, version);
+      };
+
+      const knownVersion: (key: string) => number | undefined = (
+        key: string,
+      ): number | undefined => {
+        const detail: TaskDetail | null = store.detail();
+        return current(key) && detail?.task.key === key ? detail.task.version : versions.get(key);
+      };
+
       const confirm: (task: TaskDetailTask) => void = (task: TaskDetailTask): void => {
+        record(task.key, task.version);
         const detail: TaskDetail | null = store.detail();
         if (detail?.task.key !== task.key || task.version < detail.task.version) return;
         patchState(store, { detail: { ...detail, task } });
@@ -1090,7 +1166,7 @@ function createTaskDetailStore(): Type<TaskDetailStoreInstance> {
         }
       };
 
-      const readDetail: (key: string, initial: boolean) => Promise<void> = async (
+      const loadDetail: (key: string, initial: boolean) => Promise<void> = async (
         key: string,
         initial: boolean,
       ): Promise<void> => {
@@ -1098,6 +1174,7 @@ function createTaskDetailStore(): Type<TaskDetailStoreInstance> {
         if (initial) patchState(store, { loading: true, error: null });
         try {
           const detail: TaskDetail = await store._api.read(key);
+          record(detail.task.key, detail.task.version);
           if (token !== readToken || !current(key)) return;
           const shown: TaskDetail | null = store.detail();
           const task: TaskDetailTask =
@@ -1120,6 +1197,98 @@ function createTaskDetailStore(): Type<TaskDetailStoreInstance> {
             loading: false,
             detail: null,
             error: error instanceof Error ? error : new Error(String(error)),
+          });
+        }
+      };
+
+      const readDetail: (key: string, initial: boolean) => Promise<void> = (
+        key: string,
+        initial: boolean,
+      ): Promise<void> => {
+        const run: Promise<void> = loadDetail(key, initial).finally((): void => {
+          if (detailRead === run) detailRead = null;
+        });
+        detailRead = run;
+        return run;
+      };
+
+      const reconcile: (key: string) => Promise<void> = (key: string): Promise<void> => {
+        const running: Promise<void> | undefined = reconciling.get(key);
+        if (running) return running;
+        const run: Promise<void> = (async (): Promise<void> => {
+          try {
+            if (current(key) && store.detail()) {
+              await readDetail(key, false);
+              while (detailRead !== null && current(key)) await detailRead;
+            } else {
+              const detail: TaskDetail = await store._api.read(key);
+              record(detail.task.key, detail.task.version);
+            }
+          } catch {
+            // The next write goes against the version known; a new 412 reads again.
+          } finally {
+            reconciling.delete(key);
+          }
+        })();
+        reconciling.set(key, run);
+        return run;
+      };
+
+      const write: <T>(
+        key: string,
+        sendWrite: (version: number) => Promise<T>,
+        fallback?: number,
+      ) => Promise<T> = <T>(
+        key: string,
+        sendWrite: (version: number) => Promise<T>,
+        fallback?: number,
+      ): Promise<T> => {
+        const before: Promise<void> = lanes.get(key) ?? Promise.resolve();
+        const run: Promise<T> = before.then(async (): Promise<T> => {
+          const read: Promise<void> | undefined = reconciling.get(key);
+          if (read) await read;
+          const shown: boolean = current(key) && store.detail()?.task.key === key;
+          const known: number | undefined = knownVersion(key);
+          const version: number | undefined = shown
+            ? known
+            : known === undefined
+              ? fallback
+              : Math.max(known, fallback ?? 0);
+          if (version === undefined) throw new Error(`No confirmed version of ${key}.`);
+          try {
+            return await sendWrite(version);
+          } catch (error: unknown) {
+            if (error instanceof TaskVersionConflict) void reconcile(key);
+            throw error;
+          }
+        });
+        const settled: Promise<void> = run.then(
+          (): void => undefined,
+          (): void => undefined,
+        );
+        lanes.set(key, settled);
+        void settled.then((): void => {
+          if (lanes.get(key) === settled) lanes.delete(key);
+        });
+        return run;
+      };
+
+      const acceptVersion: (version: number, changes: Partial<TaskSummary>, key: string) => void = (
+        version: number,
+        changes: Partial<TaskSummary>,
+        key: string,
+      ): void => {
+        const known: number | undefined = knownVersion(key);
+        if (known === undefined || version <= known) return;
+        if (version !== known + 1) {
+          void reconcile(key);
+          return;
+        }
+        record(key, version);
+        const detail: TaskDetail | null = store.detail();
+        if (current(key) && detail?.task.key === key) {
+          patchState(store, {
+            detail: { ...detail, task: { ...detail.task, ...changes, version } },
           });
         }
       };
@@ -1186,40 +1355,30 @@ function createTaskDetailStore(): Type<TaskDetailStoreInstance> {
         const fields: TaskDetailField[] = (Object.keys(patch) as TaskDetailField[]).filter(
           (field: TaskDetailField): boolean => patch[field] !== undefined,
         );
-        if (fields.length === 0 || !store.detail() || !current(key)) return false;
-        const write: number = ++writeCount;
-        const pending: Partial<Record<TaskDetailField, PendingValue>> = { ...store._pending() };
-        for (const field of fields) pending[field] = { value: patch[field], write };
-        patchState(store, { _pending: pending });
-        const run: Promise<boolean> = writes.then(async (): Promise<boolean> => {
-          const detail: TaskDetail | null = store.detail();
-          if (!detail || !current(key)) {
-            clearPending(fields, write);
-            return false;
+        if (fields.length === 0) return false;
+        const shown: boolean = current(key) && store.detail()?.task.key === key;
+        if (!shown && knownVersion(key) === undefined) return false;
+        const id: number = ++writeCount;
+        if (shown) {
+          const pending: Partial<Record<TaskDetailField, PendingValue>> = { ...store._pending() };
+          for (const field of fields) pending[field] = { value: patch[field], write: id };
+          patchState(store, { _pending: pending });
+        }
+        try {
+          await write(key, async (version: number): Promise<void> => {
+            confirm(await store._api.update(key, version, patch));
+          });
+          clearPending(fields, id);
+          if (current(key) && (fields.includes('parentKey') || fields.includes('listId'))) {
+            void readDetail(key, false);
           }
-          try {
-            const saved: TaskDetailTask = await store._api.update(key, detail.task.version, patch);
-            if (!current(key)) return true;
-            confirm(saved);
-            clearPending(fields, write);
-            if (fields.includes('parentKey') || fields.includes('listId')) {
-              void readDetail(key, false);
-            }
-            return true;
-          } catch (error: unknown) {
-            if (!current(key)) return false;
-            clearPending(fields, write);
-            if (error instanceof TaskVersionConflict) {
-              conflicted(key);
-              void readDetail(key, false);
-            } else {
-              failed(undefined, refusalText(error));
-            }
-            return false;
-          }
-        });
-        writes = run.catch((): void => undefined);
-        return run;
+          return true;
+        } catch (error: unknown) {
+          clearPending(fields, id);
+          if (error instanceof TaskVersionConflict) conflicted(key);
+          else failed(undefined, refusalText(error));
+          return false;
+        }
       };
 
       return {
@@ -1270,14 +1429,15 @@ function createTaskDetailStore(): Type<TaskDetailStoreInstance> {
           return key === null ? Promise.resolve(false) : send(key, patch);
         },
 
+        write,
+
         accept(task: TaskDetailTask): void {
           confirm(task);
         },
 
-        acceptVersion(version: number): void {
-          const detail: TaskDetail | null = store.detail();
-          if (!detail || version <= detail.task.version) return;
-          patchState(store, { detail: { ...detail, task: { ...detail.task, version } } });
+        acceptVersion(version: number, changes?: Partial<TaskSummary>, key?: string): void {
+          const target: string | null = key ?? keyOf();
+          if (target !== null) acceptVersion(version, changes ?? {}, target);
         },
 
         async toggleWatch(): Promise<void> {
@@ -1290,21 +1450,24 @@ function createTaskDetailStore(): Type<TaskDetailStoreInstance> {
             watchers: { following, total: Math.max(0, before.total + (following ? 1 : -1)) },
           });
           try {
-            const version: number | null = await store._api.follow(
+            await write(
               key,
-              store._workspace.user().id,
-              following,
+              async (): Promise<void> => {
+                const version: number | null = await store._api.follow(
+                  key,
+                  store._workspace.user().id,
+                  following,
+                );
+                if (version !== null) acceptVersion(version, {}, key);
+                else void reconcile(key);
+              },
+              0,
             );
             if (!current(key)) return;
-            patchState(store, { watchPending: false });
-            if (version !== null) {
-              const detail: TaskDetail | null = store.detail();
-              if (detail && version > detail.task.version) {
-                patchState(store, { detail: { ...detail, task: { ...detail.task, version } } });
-              }
-            } else {
-              void readDetail(key, false);
-            }
+            patchState(store, {
+              watchPending: false,
+              watchersRevision: store.watchersRevision() + 1,
+            });
             if (following) {
               store._toasts.show($localize`:@@task.detail.watching:You follow ${key}:key:`, {
                 description: $localize`:@@task.detail.watching-text:Comments and changes will reach your inbox.`,
@@ -1387,12 +1550,18 @@ function createTaskDetailStore(): Type<TaskDetailStoreInstance> {
           const task: TaskDetailTask | null = store.confirmedTask();
           if (key === null || !task || store.action() !== null) return;
           patchState(store, { action: 'duplicate' });
+          const attempt: { key: string; version: number; idempotencyKey: string } =
+            duplication?.key === key && duplication.version === task.version
+              ? duplication
+              : { key, version: task.version, idempotencyKey: crypto.randomUUID() };
+          duplication = attempt;
           try {
             const copy: TaskDetailTask = await store._api.duplicate(
-              key,
-              task.version,
-              crypto.randomUUID(),
+              attempt.key,
+              attempt.version,
+              attempt.idempotencyKey,
             );
+            if (duplication === attempt) duplication = null;
             store._toasts.show($localize`:@@task.detail.duplicated:Task duplicated`, {
               description: $localize`:@@task.detail.duplicated-text:${copy.key}:key: · ${copy.name}:name:`,
               action: {
@@ -1529,7 +1698,7 @@ function createTaskDetailStore(): Type<TaskDetailStoreInstance> {
               {
                 description: $localize`:@@task.detail.attached-text:It is now a subtask of “${parent.name}:name:”.`,
                 undo: (): void => {
-                  if (current(key)) void send(key, { parentKey: previous });
+                  void send(key, { parentKey: previous });
                 },
               },
             );
@@ -1547,7 +1716,7 @@ function createTaskDetailStore(): Type<TaskDetailStoreInstance> {
             store._toasts.show($localize`:@@task.detail.detached:${key}:key: detached`, {
               description: $localize`:@@task.detail.detached-text:It is a top-level task again.`,
               undo: (): void => {
-                if (current(key)) void send(key, { parentKey: previous });
+                void send(key, { parentKey: previous });
               },
             });
           }
@@ -1606,8 +1775,12 @@ function createTaskDetailStore(): Type<TaskDetailStoreInstance> {
  * The open task of the detail dialog, provided by the dialog so its state dies with it. It reads
  * the detail aggregate (the skeleton shows while none is shown; a failure is the typed route
  * error the dialog renders), the watchers and the caller's reminder; keeps the confirmed task and
- * its version; shows pending local values over it (`update`, one write after the other, rolled
- * back on failure, `412` reads again and warns); and watches the task's realtime room while a
+ * its version; shows pending local values over it (`update`, rolled back on failure, `412` reads
+ * again and warns); is the one write path of each task (`write`: the writes of one task go one
+ * after the other, each against its newest confirmed version, after a `412` or a version that
+ * skipped one only once the task was read again; a write queued when another task opens is still
+ * sent with its own key and version; `TASK_WRITE_LANE` hands it to the status changes); and
+ * watches the task's realtime room while a
  * task is open: a task update or status change reads the detail again, a new comment reads the
  * first comment page, a Git link change counts `gitRevision`; each part at most once per
  * `NOTICE_WINDOW_MS`, never over a pending local value. The socket names no task key and hands

@@ -218,4 +218,30 @@ describe('TaskDetailHeader', () => {
     ).toBe(true);
     expect(popover().textContent).toContain('Delete the reminder');
   });
+
+  it('shows the failed reads of the followers and of the reminder with Retry', async () => {
+    const retried: string[] = [];
+    fixture.componentInstance.watchersRetried.subscribe(() => retried.push('watchers'));
+    fixture.componentInstance.reminderRetried.subscribe(() => retried.push('reminder'));
+    fixture.componentRef.setInput('watchers', null);
+    fixture.componentRef.setInput('watchersFailed', true);
+    fixture.componentRef.setInput('reminderFailed', true);
+    await fixture.whenStable();
+
+    const alerts: string[] = Array.from(
+      (fixture.nativeElement as HTMLElement).querySelectorAll<HTMLElement>('[role="alert"]'),
+    ).map((alert: HTMLElement) => alert.textContent.replace(/\s+/gu, ' ').trim());
+    expect(alerts).toEqual([
+      'The followers could not be loaded.Retry',
+      'The reminder could not be loaded.Retry',
+    ]);
+    button('[data-testid="task-detail-watchers-retry"]').click();
+    button('[data-testid="task-detail-reminder-retry"]').click();
+    expect(retried).toEqual(['watchers', 'reminder']);
+
+    fixture.componentRef.setInput('watchersFailed', false);
+    fixture.componentRef.setInput('reminderFailed', false);
+    await fixture.whenStable();
+    expect((fixture.nativeElement as HTMLElement).querySelector('[role="alert"]')).toBeNull();
+  });
 });

@@ -45,6 +45,50 @@
     [readOnly]="!ready() || !canEdit()"
     (change)="rename(title)"
   />
+  @if (watchersFailed()) {
+    <p role="alert" class="flex items-center gap-2 text-xs text-muted-foreground">
+      <ng-icon
+        name="phosphorWarningCircleBold"
+        class="size-3.5 shrink-0 text-destructive"
+        aria-hidden="true"
+      />
+      <span class="min-w-0 flex-1" i18n="@@task.detail.watchers-read-failed"
+        >The followers could not be loaded.</span
+      >
+      <button
+        cwButton
+        variant="outline"
+        size="xs"
+        type="button"
+        data-testid="task-detail-watchers-retry"
+        (click)="watchersRetried.emit()"
+      >
+        <ng-container i18n="@@task.retry">Retry</ng-container>
+      </button>
+    </p>
+  }
+  @if (reminderFailed()) {
+    <p role="alert" class="flex items-center gap-2 text-xs text-muted-foreground">
+      <ng-icon
+        name="phosphorWarningCircleBold"
+        class="size-3.5 shrink-0 text-destructive"
+        aria-hidden="true"
+      />
+      <span class="min-w-0 flex-1" i18n="@@task.detail.reminder-read-failed"
+        >The reminder could not be loaded.</span
+      >
+      <button
+        cwButton
+        variant="outline"
+        size="xs"
+        type="button"
+        data-testid="task-detail-reminder-retry"
+        (click)="reminderRetried.emit()"
+      >
+        <ng-container i18n="@@task.retry">Retry</ng-container>
+      </button>
+    </p>
+  }
 </div>
 
 <div class="flex shrink-0 items-center">

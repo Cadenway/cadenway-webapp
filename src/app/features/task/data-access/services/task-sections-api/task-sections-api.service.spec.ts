@@ -1,6 +1,8 @@
 import {
   type HttpEvent,
   HttpErrorResponse,
+  HttpHeaders,
+  HttpResponse,
   provideHttpClient,
   withInterceptors,
 } from '@angular/common/http';
@@ -20,6 +22,7 @@ import { type Observable, of, throwError } from 'rxjs';
 import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 
 import type { TaskAttachment } from '../../../models/task-detail-sections/task-detail-sections.interface';
+import { TaskVersionConflict } from '../../../models/task-write-error/task-write-error.model';
 import { TaskSectionsApi } from './task-sections-api.service';
 
 /**
@@ -183,5 +186,87 @@ describe('TaskSectionsApi upload refused before sending', () => {
       status: 0,
     });
     expect(complete).not.toHaveBeenCalled();
+  });
+});
+
+describe('TaskSectionsApi approval votes', () => {
+  let tasks: Record<string, Mock>;
+  let api: TaskSectionsApi;
+
+  beforeEach(() => {
+    const state: object = {
+      taskKey: 'CAD-482',
+      taskVersion: 8,
+      taskStatus: 'review',
+      current: {
+        roundId: 'r1',
+        requesterUserId: 'u1',
+        requestedAt: '2026-11-06T09:00:00Z',
+        status: 'pending',
+        reviewers: [
+          { reviewerUserId: 'u2', decision: 'approved', decidedAt: null, commentId: null },
+        ],
+      },
+    };
+    tasks = {
+      voteOnTaskApproval: vi.fn(() => of(state)),
+      withdrawTaskApprovalVote: vi.fn(() =>
+        of(new HttpResponse({ status: 204, headers: new HttpHeaders({ ETag: '"9"' }) })),
+      ),
+    };
+    TestBed.configureTestingModule({
+      providers: [
+        provideHttpClient(),
+        { provide: TasksService, useValue: tasks },
+        { provide: AttachmentsService, useValue: {} },
+        { provide: TaskActivityService, useValue: {} },
+        { provide: MembersService, useValue: {} },
+      ],
+    });
+    api = TestBed.inject(TaskSectionsApi);
+  });
+
+  it('sends each vote and the withdrawal with If-Match set to the task version', async () => {
+    await expect(api.approve('CAD-482', 'r1', 7)).resolves.toMatchObject({ taskVersion: 8 });
+    await api.requestChanges('CAD-482', 'r1', 'Use a semicolon', 7);
+    await expect(api.withdrawVote('CAD-482', 'r1', 8)).resolves.toBe(9);
+
+    expect(tasks['voteOnTaskApproval']).toHaveBeenNthCalledWith(
+      1,
+      'CAD-482',
+      'r1',
+      { decision: 'approved' },
+      { headers: { 'If-Match': '"7"' } },
+    );
+    expect(tasks['voteOnTaskApproval']).toHaveBeenNthCalledWith(
+      2,
+      'CAD-482',
+      'r1',
+      { decision: 'changes-requested', reason: 'Use a semicolon' },
+      { headers: { 'If-Match': '"7"' } },
+    );
+    expect(tasks['withdrawTaskApprovalVote']).toHaveBeenCalledWith('CAD-482', 'r1', {
+      observe: 'response',
+      headers: { 'If-Match': '"8"' },
+    });
+  });
+
+  it('turns a 412 into a version conflict, other refusals staying as they are', async () => {
+    tasks['voteOnTaskApproval'].mockReturnValueOnce(
+      throwError(() => new HttpErrorResponse({ status: 412 })),
+    );
+    await expect(api.approve('CAD-482', 'r1', 7)).rejects.toBeInstanceOf(TaskVersionConflict);
+
+    tasks['withdrawTaskApprovalVote'].mockReturnValueOnce(
+      throwError(() => new HttpErrorResponse({ status: 412 })),
+    );
+    await expect(api.withdrawVote('CAD-482', 'r1', 7)).rejects.toBeInstanceOf(TaskVersionConflict);
+
+    tasks['voteOnTaskApproval'].mockReturnValueOnce(
+      throwError(() => new HttpErrorResponse({ status: 409 })),
+    );
+    await expect(api.requestChanges('CAD-482', 'r1', 'Again', 7)).rejects.toBeInstanceOf(
+      HttpErrorResponse,
+    );
   });
 });

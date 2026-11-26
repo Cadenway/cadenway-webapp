@@ -62,7 +62,10 @@ import {
   type TaskDetailStoreInstance,
 } from '../../../state/task-detail/task-detail.store';
 import type { TaskParentContext } from '../../../state/task-parent-picker/task-parent-picker.store';
-import { TaskStatusChangesStore } from '../../../state/task-status-changes/task-status-changes.store';
+import {
+  TASK_WRITE_LANE,
+  TaskStatusChangesStore,
+} from '../../../state/task-status-changes/task-status-changes.store';
 import { statusLabel } from '../../../utils/task-status/task-status.util';
 import { TaskDetailHeader } from '../../components/task-detail-header/task-detail-header.component';
 import { TaskDetailSkeleton } from '../../components/task-detail-skeleton/task-detail-skeleton.component';
@@ -91,8 +94,10 @@ import { TaskParentPickerDialog } from '../task-parent-picker-dialog/task-parent
  * the focus return come from the brick.
  *
  * It acts as a page: it provides and drives `TaskDetailStore`, provides Task's
- * `TaskStatusChangesStore` for the properties panel (a completed status write reads the detail
- * again), and owns the header's dialogs: the delete confirmation, the list picker (the lists of
+ * `TaskStatusChangesStore` for the properties panel and the subtasks, writing through the
+ * detail's per-task write path (`TASK_WRITE_LANE`), so a status write never overlaps another
+ * write of the task and goes against its newest version (the saved version is adopted at once,
+ * then a completed status write reads the detail again), and owns the header's dialogs: the delete confirmation, the list picker (the lists of
  * Spaces' `LIST_DIRECTORY`) and the parent picker.
  */
 @Component({
@@ -124,6 +129,7 @@ import { TaskParentPickerDialog } from '../task-parent-picker-dialog/task-parent
   providers: [
     TaskDetailStore,
     TaskStatusChangesStore,
+    { provide: TASK_WRITE_LANE, useExisting: TaskDetailStore },
     provideCwDialogLabels(() => ({ close: $localize`:@@task.detail.dialog-close:Close` })),
     provideCwAlertDialogLabels(() => ({
       confirm: $localize`:@@task.detail.confirm-type:To confirm, type`,

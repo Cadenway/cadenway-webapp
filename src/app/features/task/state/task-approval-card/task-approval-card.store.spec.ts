@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 
 import { TaskSectionsApi } from '../../data-access/services/task-sections-api/task-sections-api.service';
 import type { TaskApprovalSnapshot } from '../../models/task-detail-sections/task-detail-sections.interface';
+import { TaskVersionConflict } from '../../models/task-write-error/task-write-error.model';
 import { TaskDetailStore } from '../task-detail/task-detail.store';
 import {
   TaskApprovalCardStore,
@@ -59,6 +60,7 @@ describe('TaskApprovalCardStore', () => {
       reload: vi.fn(() => Promise.resolve()),
       reloadComments: vi.fn(() => Promise.resolve()),
       acceptVersion: vi.fn(),
+      write: vi.fn((_key: string, send: (latest: number) => Promise<unknown>) => send(version())),
     };
     api = {
       approval: vi.fn(() => Promise.resolve(snapshot(4, null, null))),
@@ -108,8 +110,9 @@ describe('TaskApprovalCardStore', () => {
 
     await expect(store.approve()).resolves.toBe(true);
 
-    expect(api['approve']).toHaveBeenCalledWith('CAD-482', 'r1');
-    expect(detail['acceptVersion']).toHaveBeenCalledWith(5);
+    expect(detail['write']).toHaveBeenCalledWith('CAD-482', expect.any(Function));
+    expect(api['approve']).toHaveBeenCalledWith('CAD-482', 'r1', 4);
+    expect(detail['acceptVersion']).toHaveBeenCalledWith(5, { status: 'review' }, 'CAD-482');
     expect(toasts.success).toHaveBeenCalledWith('Approval recorded', {
       description: '1 review(s) still expected.',
     });
@@ -142,6 +145,41 @@ describe('TaskApprovalCardStore', () => {
     expect(store.pending()).toBeNull();
     expect(store.round()?.reviews[0].decision).toBeNull();
     expect(toasts.error).toHaveBeenCalled();
+  });
+
+  it('sends a change request and a withdrawal against the newest confirmed version', async () => {
+    TestBed.tick();
+    await vi.waitFor(() => {
+      expect(store.round()).not.toBeNull();
+    });
+    version.set(6);
+    api['approval'].mockResolvedValue(snapshot(6, null, null));
+    api['requestChanges'].mockResolvedValue({ ...snapshot(7, null, null), taskStatus: 'progress' });
+    api['withdrawVote'].mockResolvedValue(8);
+
+    await expect(store.requestChanges('Use a semicolon')).resolves.toBe(true);
+    await expect(store.withdraw()).resolves.toBe(true);
+
+    expect(api['requestChanges']).toHaveBeenCalledWith('CAD-482', 'r1', 'Use a semicolon', 6);
+    expect(api['withdrawVote']).toHaveBeenCalledWith('CAD-482', 'r1', 6);
+    expect(detail['acceptVersion']).toHaveBeenCalledWith(8, {}, 'CAD-482');
+  });
+
+  it('reads the approval again and says the task changed when a vote meets a 412', async () => {
+    TestBed.tick();
+    await vi.waitFor(() => {
+      expect(store.round()).not.toBeNull();
+    });
+    api['approve'].mockRejectedValue(new TaskVersionConflict('CAD-482'));
+
+    await expect(store.approve()).resolves.toBe(false);
+
+    expect(toasts.error).toHaveBeenCalledWith('Could not record your review', {
+      description: 'The task changed in the meantime; its latest version is shown.',
+    });
+    await vi.waitFor(() => {
+      expect(api['approval']).toHaveBeenCalledTimes(2);
+    });
   });
 
   it('reads the approval again when the task version moves past it', async () => {

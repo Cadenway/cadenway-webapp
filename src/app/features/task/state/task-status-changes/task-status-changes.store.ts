@@ -1,4 +1,4 @@
-import { DestroyRef, inject, type Signal, type Type } from '@angular/core';
+import { DestroyRef, inject, InjectionToken, type Signal, type Type } from '@angular/core';
 import type { CancelReason, StatusKey } from '@cadenway/contracts';
 import { CwToastService } from '@cadenway/ui/components/toast';
 import { tapResponse } from '@ngrx/operators';
@@ -8,8 +8,10 @@ import {
   catchError,
   concatMap,
   debounce,
+  defer,
   EMPTY,
   finalize,
+  firstValueFrom,
   groupBy,
   map,
   mergeMap,
@@ -43,6 +45,58 @@ import { statusLabel } from '../../utils/task-status/task-status.util';
  * @type {number}
  */
 export const STATUS_SETTLE_MS: number = 460;
+
+/**
+ * Interface TaskWriteLane
+ *
+ * @description
+ * The one write path of the tasks of a screen that already writes them (the task detail): the
+ * status changes send through it, so a status write never overlaps another write of the same task
+ * and goes against that task's newest confirmed version, not the one captured at click time.
+ */
+export interface TaskWriteLane {
+  // #region Methods
+  /**
+   * Method write
+   *
+   * @description
+   * Runs a write of a task after its earlier writes, with its newest confirmed version (or
+   * `fallback` when none is known); a `TaskVersionConflict` makes the next write wait for a read.
+   *
+   * @param {string} key - Key of the task.
+   * @param {(version: number) => Promise<T>} send - Sends the write against a version.
+   * @param {number} [fallback] - Version to use when the lane knows none.
+   * @returns {Promise<T>} What `send` resolved with.
+   */
+  write<T>(key: string, send: (version: number) => Promise<T>, fallback?: number): Promise<T>;
+
+  /**
+   * Method acceptVersion
+   *
+   * @description
+   * Takes the version a write returned with the fields it set; a version that does not follow
+   * the confirmed one reads the task again instead.
+   *
+   * @param {number} version - The new version.
+   * @param {Partial<TaskSummary>} [changes] - Fields the write set.
+   * @param {string} [key] - Key of the task.
+   */
+  acceptVersion(version: number, changes?: Partial<TaskSummary>, key?: string): void;
+  // #endregion
+}
+
+/**
+ * Constant TASK_WRITE_LANE
+ *
+ * @description
+ * Optional write path the status changes use instead of writing on their own; the task detail
+ * dialog provides it with its `TaskDetailStore`.
+ *
+ * @type {InjectionToken<TaskWriteLane>}
+ */
+export const TASK_WRITE_LANE: InjectionToken<TaskWriteLane> = new InjectionToken<TaskWriteLane>(
+  'TASK_WRITE_LANE',
+);
 
 /**
  * Constant TOAST_MS
@@ -656,6 +710,7 @@ function createTaskStatusChanges(): Type<TaskStatusChangesInstance> {
       (store, api: TaskApi = inject(TaskApi), toasts: CwToastService = inject(CwToastService)) => {
         const destroyRef: DestroyRef = inject(DestroyRef);
         const organizationPin: OrganizationPin = inject(OrganizationPin);
+        const lane: TaskWriteLane | null = inject(TASK_WRITE_LANE, { optional: true });
         const inFlight: Map<string, Observable<unknown>> = new Map<string, Observable<unknown>>();
         const batches: Map<
           string,
@@ -776,89 +831,106 @@ function createTaskStatusChanges(): Type<TaskStatusChangesInstance> {
             store._changes.next({ taskId: id, from: status, to: from, reason: fromReason });
           };
 
-          const write: Observable<unknown> = api
-            .changeStatus(task.key, version, status, pending.cancellation)
-            .pipe(
-              map((saved: TaskSummary): WriteOutcome => ({ conflict: false, task: saved })),
-              catchError((error: unknown) =>
-                error instanceof TaskVersionConflict
-                  ? api.read(task.key).pipe(
-                      map((fresh: TaskSummary): WriteOutcome => ({
-                        conflict: true,
-                        task: fresh,
-                      })),
-                    )
-                  : throwError(() => error),
-              ),
-              tapResponse({
-                next: ({ conflict, task: saved }: WriteOutcome): void => {
-                  patchState(store, (state: TaskStatusChangesState) => ({
-                    _settled: {
-                      ...state._settled,
-                      [id]: {
-                        status: saved.status,
-                        cancelReason: saved.cancelReason,
-                        version: saved.version,
-                        writing: false,
-                      },
-                    },
-                    _undo:
-                      conflict || isUndo
-                        ? omit(state._undo, id)
-                        : {
-                            ...state._undo,
-                            [id]: {
-                              status: from,
-                              cancelReason: fromReason,
-                              changedTo: saved.status,
-                            },
-                          },
-                  }));
-                  if (destroyRef.destroyed) return;
-                  store._completions.next({ task, organizationId: pending.organizationId });
-                  const batch: boolean =
-                    status === 'cancelled' &&
-                    !isUndo &&
-                    finishBatch(id, conflict ? undefined : store._undo()[id]);
-                  if (conflict) {
-                    if (saved.status !== status) {
-                      store._changes.next({
-                        taskId: id,
-                        from: status,
-                        to: saved.status,
-                        reason: saved.cancelReason,
-                      });
-                    }
-                    if (!batch)
-                      toasts.warning(
-                        $localize`:@@task.status-change.conflict:${task.key}:key: changed elsewhere`,
-                        {
-                          description: $localize`:@@task.status-change.conflict-text:Its latest status is shown: ${labelOf(task, saved.status)}:status:.`,
-                        },
-                      );
-                  } else if (!isUndo && !batch && !pending.quiet) {
-                    confirmedToast(task, from, saved.status);
-                  }
-                },
-                error: (error: unknown): void => {
-                  restore();
-                  if (!destroyRef.destroyed)
-                    store._completions.next({ task, organizationId: pending.organizationId });
-                  const batch: boolean = status === 'cancelled' && !isUndo && finishBatch(id);
-                  if (
-                    !batch &&
-                    !destroyRef.destroyed &&
-                    !(error instanceof OrganizationSwitchPendingError) &&
-                    !hasProblemCode(error, 'organization.context-changed')
+          const sent: Observable<TaskSummary> = lane
+            ? defer((): Promise<TaskSummary> =>
+                lane.write(
+                  task.key,
+                  async (latest: number): Promise<TaskSummary> => {
+                    const saved: TaskSummary = await firstValueFrom(
+                      api.changeStatus(task.key, latest, status, pending.cancellation),
+                    );
+                    lane.acceptVersion(
+                      saved.version,
+                      { status: saved.status, cancelReason: saved.cancelReason },
+                      task.key,
+                    );
+                    return saved;
+                  },
+                  version,
+                ),
+              )
+            : api.changeStatus(task.key, version, status, pending.cancellation);
+          const write: Observable<unknown> = sent.pipe(
+            map((saved: TaskSummary): WriteOutcome => ({ conflict: false, task: saved })),
+            catchError((error: unknown) =>
+              error instanceof TaskVersionConflict
+                ? api.read(task.key).pipe(
+                    map((fresh: TaskSummary): WriteOutcome => ({
+                      conflict: true,
+                      task: fresh,
+                    })),
                   )
-                    failed();
-                },
-              }),
-              finalize((): void => {
-                inFlight.delete(id);
-              }),
-              shareReplay({ bufferSize: 1, refCount: false }),
-            );
+                : throwError(() => error),
+            ),
+            tapResponse({
+              next: ({ conflict, task: saved }: WriteOutcome): void => {
+                patchState(store, (state: TaskStatusChangesState) => ({
+                  _settled: {
+                    ...state._settled,
+                    [id]: {
+                      status: saved.status,
+                      cancelReason: saved.cancelReason,
+                      version: saved.version,
+                      writing: false,
+                    },
+                  },
+                  _undo:
+                    conflict || isUndo
+                      ? omit(state._undo, id)
+                      : {
+                          ...state._undo,
+                          [id]: {
+                            status: from,
+                            cancelReason: fromReason,
+                            changedTo: saved.status,
+                          },
+                        },
+                }));
+                if (destroyRef.destroyed) return;
+                store._completions.next({ task, organizationId: pending.organizationId });
+                const batch: boolean =
+                  status === 'cancelled' &&
+                  !isUndo &&
+                  finishBatch(id, conflict ? undefined : store._undo()[id]);
+                if (conflict) {
+                  if (saved.status !== status) {
+                    store._changes.next({
+                      taskId: id,
+                      from: status,
+                      to: saved.status,
+                      reason: saved.cancelReason,
+                    });
+                  }
+                  if (!batch)
+                    toasts.warning(
+                      $localize`:@@task.status-change.conflict:${task.key}:key: changed elsewhere`,
+                      {
+                        description: $localize`:@@task.status-change.conflict-text:Its latest status is shown: ${labelOf(task, saved.status)}:status:.`,
+                      },
+                    );
+                } else if (!isUndo && !batch && !pending.quiet) {
+                  confirmedToast(task, from, saved.status);
+                }
+              },
+              error: (error: unknown): void => {
+                restore();
+                if (!destroyRef.destroyed)
+                  store._completions.next({ task, organizationId: pending.organizationId });
+                const batch: boolean = status === 'cancelled' && !isUndo && finishBatch(id);
+                if (
+                  !batch &&
+                  !destroyRef.destroyed &&
+                  !(error instanceof OrganizationSwitchPendingError) &&
+                  !hasProblemCode(error, 'organization.context-changed')
+                )
+                  failed();
+              },
+            }),
+            finalize((): void => {
+              inFlight.delete(id);
+            }),
+            shareReplay({ bufferSize: 1, refCount: false }),
+          );
           inFlight.set(id, write);
           return write;
         };
@@ -1058,7 +1130,10 @@ function createTaskStatusChanges(): Type<TaskStatusChangesInstance> {
  * The status change interaction (`cw-status-interactions`), provided by the route whose lists,
  * boards and pickers change statuses, so it dies with it. The icon and the label change at once;
  * one pending change per task settles 460 ms after the last click with one `updateTask` write
- * against its version (`If-Match`), and the writes of one task never overlap. A `412` reads the
+ * against its version (`If-Match`), and the writes of one task never overlap. Where a
+ * `TASK_WRITE_LANE` is provided (the task detail), the write goes through it instead: after the
+ * other writes of that task, against its newest confirmed version, the saved version adopted
+ * before the next write. A `412` reads the
  * task again and warns; any other failure puts the confirmed status back with a failure toast. A
  * confirmed change shows a 6 s toast whose `Undo` restores the previous status, unless the
  * request was `quiet` (a status picked from a menu).

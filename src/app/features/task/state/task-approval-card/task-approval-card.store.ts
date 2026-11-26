@@ -19,6 +19,7 @@ import type {
   TaskApprovalSnapshot,
 } from '../../models/task-detail-sections/task-detail-sections.interface';
 import type { TaskDetailTask } from '../../models/task-detail/task-detail.interface';
+import { TaskVersionConflict } from '../../models/task-write-error/task-write-error.model';
 import { TaskDetailStore } from '../task-detail/task-detail.store';
 
 /**
@@ -213,18 +214,34 @@ function createTaskApprovalCardStore(): Type<TaskApprovalCardStoreInstance> {
       _version: computed((): number | null => store._detail.confirmedTask()?.version ?? null),
     })),
     withMethods((store) => {
-      const failedVote: () => void = (): void => {
+      const failedVote: (error: unknown) => void = (error: unknown): void => {
+        const conflict: boolean = error instanceof TaskVersionConflict;
         store._toasts.error($localize`:@@task.approval.failed:Could not record your review`, {
-          description: $localize`:@@task.detail.failed-text:The server did not answer. Try again in a moment.`,
+          description: conflict
+            ? $localize`:@@task.properties.conflict-text:The task changed in the meantime; its latest version is shown.`
+            : $localize`:@@task.detail.failed-text:The server did not answer. Try again in a moment.`,
         });
+        if (conflict) void read();
       };
+      const vote: (
+        key: string,
+        send: (version: number) => Promise<TaskApprovalSnapshot>,
+      ) => Promise<TaskApprovalSnapshot> = (
+        key: string,
+        send: (version: number) => Promise<TaskApprovalSnapshot>,
+      ): Promise<TaskApprovalSnapshot> =>
+        store._detail.write(key, async (version: number): Promise<TaskApprovalSnapshot> => {
+          const snapshot: TaskApprovalSnapshot = await send(version);
+          const task: TaskDetailTask | null = store._detail.confirmedTask();
+          const moved: boolean = task?.key === key && task.status !== snapshot.taskStatus;
+          store._detail.acceptVersion(snapshot.taskVersion, { status: snapshot.taskStatus }, key);
+          if (moved) void store._detail.reload();
+          return snapshot;
+        });
       const settle: (snapshot: TaskApprovalSnapshot) => void = (
         snapshot: TaskApprovalSnapshot,
       ): void => {
         patchState(store, { snapshot, pending: null });
-        const task: TaskDetailTask | null = store._detail.confirmedTask();
-        if (task && task.status !== snapshot.taskStatus) void store._detail.reload();
-        else store._detail.acceptVersion(snapshot.taskVersion);
       };
       const read: () => Promise<void> = async (): Promise<void> => {
         const key: string | null = store._detail.taskKey();
@@ -248,7 +265,11 @@ function createTaskApprovalCardStore(): Type<TaskApprovalCardStoreInstance> {
           if (key === null || round === null || store.pending()) return false;
           patchState(store, { pending: 'approve' });
           try {
-            const snapshot: TaskApprovalSnapshot = await store._api.approve(key, round.id);
+            const snapshot: TaskApprovalSnapshot = await vote(
+              key,
+              (version: number): Promise<TaskApprovalSnapshot> =>
+                store._api.approve(key, round.id, version),
+            );
             settle(snapshot);
             const reviews: readonly TaskApprovalReview[] = snapshot.round?.reviews ?? [];
             if (snapshot.round?.status === 'approved') {
@@ -264,9 +285,9 @@ function createTaskApprovalCardStore(): Type<TaskApprovalCardStoreInstance> {
               });
             }
             return true;
-          } catch {
+          } catch (error: unknown) {
             patchState(store, { pending: null });
-            failedVote();
+            failedVote(error);
             return false;
           }
         },
@@ -279,10 +300,10 @@ function createTaskApprovalCardStore(): Type<TaskApprovalCardStoreInstance> {
           }
           patchState(store, { pending: 'changes' });
           try {
-            const snapshot: TaskApprovalSnapshot = await store._api.requestChanges(
+            const snapshot: TaskApprovalSnapshot = await vote(
               key,
-              round.id,
-              reason.trim(),
+              (version: number): Promise<TaskApprovalSnapshot> =>
+                store._api.requestChanges(key, round.id, reason.trim(), version),
             );
             settle(snapshot);
             void store._detail.reloadComments();
@@ -290,9 +311,9 @@ function createTaskApprovalCardStore(): Type<TaskApprovalCardStoreInstance> {
               description: $localize`:@@task.approval.changes-sent-text:${key}:key: goes back to In progress; your message is in a comment.`,
             });
             return true;
-          } catch {
+          } catch (error: unknown) {
             patchState(store, { pending: null });
-            failedVote();
+            failedVote(error);
             return false;
           }
         },
@@ -303,15 +324,24 @@ function createTaskApprovalCardStore(): Type<TaskApprovalCardStoreInstance> {
           if (key === null || round === null || store.pending()) return false;
           patchState(store, { pending: 'withdraw' });
           try {
-            await store._api.withdrawVote(key, round.id);
+            const version: number | null = await store._detail.write(
+              key,
+              async (latest: number): Promise<number | null> => {
+                const tagged: number | null = await store._api.withdrawVote(key, round.id, latest);
+                if (tagged !== null) store._detail.acceptVersion(tagged, {}, key);
+                return tagged;
+              },
+            );
             patchState(store, { pending: null });
             await read();
             const snapshot: TaskApprovalSnapshot | null = store.snapshot();
-            if (snapshot) store._detail.acceptVersion(snapshot.taskVersion);
+            if (version === null && snapshot) {
+              store._detail.acceptVersion(snapshot.taskVersion, { status: snapshot.taskStatus });
+            }
             return true;
-          } catch {
+          } catch (error: unknown) {
             patchState(store, { pending: null });
-            failedVote();
+            failedVote(error);
             return false;
           }
         },
@@ -346,11 +376,15 @@ function createTaskApprovalCardStore(): Type<TaskApprovalCardStoreInstance> {
  * The approval of the open task (`App.dc.html` lines 2122-2134, 5065-5106), provided by
  * `cw-task-detail-tabs`. It reads the current round when the detail is shown and again whenever
  * the confirmed task version moves past the version the approval was answered at (a request from
- * the properties panel, a pushed change), but not while a vote is being sent. A vote answers the
- * new approval: when it moved the task's status (the last approval to `done`, a change request to
- * `progress`) the detail is read again, otherwise the detail takes the new version. A change
- * request also reads the first comment page, which carries its comment. Failures keep the card as
- * it was with the failure toast; a failed read is the card's inline error with `Retry`.
+ * the properties panel, a pushed change), but not while a vote is being sent. A vote (approve,
+ * request changes, withdraw) goes through the detail's per-task write path
+ * (`TaskDetailStore.write`) with `If-Match` set to the newest confirmed task version, and the
+ * detail takes the version it answers (only when it follows the confirmed one, else it reads the
+ * task again); when the vote moved the task's status (the last approval to `done`, a change
+ * request to `progress`) the detail is read again. A change request also reads the first comment
+ * page, which carries its comment. Failures keep the card as it was with the failure toast; a
+ * `412` also reads the approval again (and the lane the task); a failed read is the card's inline
+ * error with `Retry`.
  *
  * @type {Type<TaskApprovalCardStoreInstance>}
  */

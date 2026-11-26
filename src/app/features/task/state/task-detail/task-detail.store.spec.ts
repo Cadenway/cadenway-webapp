@@ -1,8 +1,9 @@
 import { HttpErrorResponse } from '@angular/common/http';
-import { signal } from '@angular/core';
+import { type Provider, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
+import type { StatusKey } from '@cadenway/contracts';
 import { CwToastService, type CwToastOptions } from '@cadenway/ui/components/toast';
-import { Subject } from 'rxjs';
+import { of, Subject } from 'rxjs';
 import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 
 import { type RealtimeChange, RealtimeConnection } from '@core/realtime';
@@ -12,6 +13,7 @@ import {
 } from '@features/workspace/ports/workspace-context';
 import { DeletedTaskRouteError } from '@shared/route-errors';
 
+import { TaskApi } from '../../data-access/services/task-api/task-api.service';
 import { TaskDetailApi } from '../../data-access/services/task-detail-api/task-detail-api.service';
 import type {
   TaskCommentPage,
@@ -24,6 +26,12 @@ import type {
 import { TaskVersionConflict } from '../../models/task-write-error/task-write-error.model';
 import { TaskDetailOpener } from '../../services/task-detail-opener/task-detail-opener.service';
 import { defaultStatusOptions } from '../../utils/task-status/task-status.util';
+import {
+  STATUS_SETTLE_MS,
+  TASK_WRITE_LANE,
+  type TaskStatusChangesInstance,
+  TaskStatusChangesStore,
+} from '../task-status-changes/task-status-changes.store';
 import {
   NOTICE_WINDOW_MS,
   TaskDetailStore,
@@ -183,11 +191,13 @@ describe('TaskDetailStore', () => {
    * @description
    * Provides the store with the faked data access, realtime and toasts, and opens CAD-482.
    *
+   * @param {Provider[]} [extra] - More providers (the status changes on the detail's lane).
    * @returns {Promise<TaskDetailStoreInstance>} The store, once the first read settled.
    */
-  async function setup(): Promise<TaskDetailStoreInstance> {
+  async function setup(extra: Provider[] = []): Promise<TaskDetailStoreInstance> {
     TestBed.configureTestingModule({
       providers: [
+        ...extra,
         TaskDetailStore,
         {
           provide: TaskDetailApi,
@@ -209,7 +219,7 @@ describe('TaskDetailStore', () => {
         { provide: RealtimeConnection, useValue: { watch } },
         { provide: TaskDetailOpener, useValue: { open: openTask } },
         { provide: WORKSPACE_CONTEXT, useValue: workspace },
-        { provide: CwToastService, useValue: { show, error, warning } },
+        { provide: CwToastService, useValue: { show, error, warning, dismiss: vi.fn() } },
       ],
     });
     const store: TaskDetailStoreInstance = TestBed.inject(TaskDetailStore);
@@ -630,5 +640,217 @@ describe('TaskDetailStore', () => {
 
     expect(store.taskKey()).toBeNull();
     expect(store.ready()).toBe(false);
+  });
+
+  it('adopts a version reported alone only when it follows the confirmed one', async () => {
+    const store: TaskDetailStoreInstance = await setup();
+
+    store.acceptVersion(5, { status: 'review' });
+
+    expect(store.confirmedTask()?.version).toBe(5);
+    expect(store.task()?.status).toBe('review');
+    expect(read).toHaveBeenCalledOnce();
+  });
+
+  it('reads the task again for a version that skipped one, and writes once the read landed', async () => {
+    let land: (detail: TaskDetail) => void = () => undefined;
+    read.mockResolvedValueOnce(detailAt(4)).mockReturnValueOnce(
+      new Promise<TaskDetail>((done: (detail: TaskDetail) => void) => {
+        land = done;
+      }),
+    );
+    const store: TaskDetailStoreInstance = await setup();
+
+    store.acceptVersion(7);
+    const saved: Promise<boolean> = store.update({ priority: 'basse' });
+    await new Promise<void>((done: () => void) => setTimeout(done, 0));
+
+    expect(store.confirmedTask()?.version).toBe(4);
+    expect(read).toHaveBeenCalledTimes(2);
+    expect(update).not.toHaveBeenCalled();
+    land(detailAt(7, { task: taskAt(7, { name: 'Renamed elsewhere' }) }));
+
+    await expect(saved).resolves.toBe(true);
+    expect(update).toHaveBeenCalledExactlyOnceWith('CAD-482', 7, { priority: 'basse' });
+  });
+
+  it('reads the task again when a follow reports a version that skipped one', async () => {
+    read.mockResolvedValueOnce(detailAt(4)).mockResolvedValueOnce(detailAt(9));
+    follow.mockResolvedValueOnce(9);
+    const store: TaskDetailStoreInstance = await setup();
+    await vi.waitFor(() => {
+      expect(store.watchers()).not.toBeNull();
+    });
+
+    await store.toggleWatch();
+
+    await vi.waitFor(() => {
+      expect(store.confirmedTask()?.version).toBe(9);
+    });
+    expect(read).toHaveBeenCalledTimes(2);
+    expect(store.watchersRevision()).toBe(1);
+  });
+
+  it('sends the edits queued behind a 412 against the version read again', async () => {
+    update.mockRejectedValueOnce(new TaskVersionConflict('CAD-482'));
+    read.mockResolvedValueOnce(detailAt(4)).mockResolvedValueOnce(detailAt(7));
+    const store: TaskDetailStoreInstance = await setup();
+
+    const first: Promise<boolean> = store.update({ priority: 'urgente' });
+    const second: Promise<boolean> = store.update({ name: 'Redesign the SSO screen' });
+
+    await expect(first).resolves.toBe(false);
+    await expect(second).resolves.toBe(true);
+    expect(update.mock.calls.map((call: unknown[]) => call[1])).toEqual([4, 7]);
+    expect(store.task()?.name).toBe('Redesign the SSO screen');
+    expect(warning).toHaveBeenCalledOnce();
+  });
+
+  describe('once another task opens', () => {
+    beforeEach(() => {
+      read.mockImplementation((key: string) =>
+        Promise.resolve(
+          key === 'CAD-490'
+            ? detailAt(2, { task: taskAt(2, { id: 'CAD-490', key: 'CAD-490', name: 'Audit' }) })
+            : detailAt(4),
+        ),
+      );
+    });
+
+    it('still sends a queued write with its own task key and version', async () => {
+      let resolve: (task: TaskDetailTask) => void = () => undefined;
+      update.mockReturnValueOnce(
+        new Promise<TaskDetailTask>((done: (task: TaskDetailTask) => void) => {
+          resolve = done;
+        }),
+      );
+      const store: TaskDetailStoreInstance = await setup();
+      void store.update({ priority: 'urgente' });
+      const second: Promise<boolean> = store.update({ name: 'Renamed' });
+
+      store.open('CAD-490', null);
+      await vi.waitFor(() => {
+        expect(store.task()?.key).toBe('CAD-490');
+      });
+      resolve(taskAt(5, { priority: 'urgente' }));
+
+      await expect(second).resolves.toBe(true);
+      expect(update).toHaveBeenLastCalledWith('CAD-482', 5, { name: 'Renamed' });
+      expect(store.task()?.name).toBe('Audit');
+    });
+
+    it('reverses a parent change from its Undo on the original task', async () => {
+      const store: TaskDetailStoreInstance = await setup();
+      await store.attachTo({ key: 'CAD-470', name: 'Sign-in' });
+      const [, options]: [string, CwToastOptions?] = show.mock.calls[0];
+
+      store.open('CAD-490', null);
+      await vi.waitFor(() => {
+        expect(store.task()?.key).toBe('CAD-490');
+      });
+      options?.undo?.();
+
+      await vi.waitFor(() => {
+        expect(update).toHaveBeenLastCalledWith('CAD-482', 5, { parentKey: null });
+      });
+      expect(store.task()?.key).toBe('CAD-490');
+      expect(store.task()?.parentKey).toBeNull();
+      expect(error).not.toHaveBeenCalled();
+    });
+  });
+
+  it('keeps the idempotency key of a failed duplication until a copy succeeds', async () => {
+    duplicate.mockRejectedValueOnce(new HttpErrorResponse({ status: 503 }));
+    const store: TaskDetailStoreInstance = await setup();
+
+    await store.duplicate();
+    await store.duplicate();
+    await store.duplicate();
+
+    const keys: unknown[] = duplicate.mock.calls.map((call: unknown[]) => call[2]);
+    expect(keys[1]).toBe(keys[0]);
+    expect(keys[2]).not.toBe(keys[0]);
+  });
+
+  describe('with the status changes on its write path', () => {
+    /**
+     * Function shownTask
+     *
+     * @description
+     * The confirmed task of the detail, which the properties panel hands to the status changes.
+     *
+     * @param {TaskDetailStoreInstance} store - The detail.
+     * @returns {TaskDetailTask} The task.
+     */
+    function shownTask(store: TaskDetailStoreInstance): TaskDetailTask {
+      const task: TaskDetailTask | null = store.confirmedTask();
+      if (!task) throw new Error('No task shown');
+      return task;
+    }
+
+    /**
+     * Function setupLane
+     *
+     * @description
+     * Opens CAD-482 with the status changes writing through the detail (`TASK_WRITE_LANE`).
+     *
+     * @param {TaskApi['changeStatus']} changeStatus - The faked status write.
+     * @returns {Promise<[TaskDetailStoreInstance, TaskStatusChangesInstance]>} Both stores.
+     */
+    async function setupLane(
+      changeStatus: TaskApi['changeStatus'],
+    ): Promise<[TaskDetailStoreInstance, TaskStatusChangesInstance]> {
+      const store: TaskDetailStoreInstance = await setup([
+        TaskStatusChangesStore,
+        { provide: TASK_WRITE_LANE, useExisting: TaskDetailStore },
+        { provide: TaskApi, useValue: { changeStatus, read: vi.fn() } },
+      ]);
+      return [store, TestBed.inject(TaskStatusChangesStore)];
+    }
+
+    it('sends a status click against the version a field write confirmed before it settled', async () => {
+      vi.useFakeTimers();
+      const changeStatus: Mock<TaskApi['changeStatus']> = vi.fn<TaskApi['changeStatus']>(
+        (_key: string, version: number, status: StatusKey) => of(taskAt(version + 1, { status })),
+      );
+      const [store, statuses]: [TaskDetailStoreInstance, TaskStatusChangesInstance] =
+        await setupLane(changeStatus);
+
+      statuses.request(shownTask(store), 'review', undefined, { quiet: true });
+      await expect(store.update({ priority: 'urgente' })).resolves.toBe(true);
+      await vi.advanceTimersByTimeAsync(STATUS_SETTLE_MS);
+
+      expect(update).toHaveBeenCalledWith('CAD-482', 4, { priority: 'urgente' });
+      expect(changeStatus).toHaveBeenCalledExactlyOnceWith('CAD-482', 5, 'review', null);
+      expect(store.confirmedTask()?.version).toBe(6);
+      expect(store.confirmedTask()?.status).toBe('review');
+      await store.update({ name: 'Redesign the SSO screen' });
+      expect(update).toHaveBeenLastCalledWith('CAD-482', 6, { name: 'Redesign the SSO screen' });
+      expect(warning).not.toHaveBeenCalled();
+    });
+
+    it('sends a field picked during a status write after it, against its saved version', async () => {
+      vi.useFakeTimers();
+      const answer: Subject<TaskDetailTask> = new Subject<TaskDetailTask>();
+      const changeStatus: Mock<TaskApi['changeStatus']> = vi.fn<TaskApi['changeStatus']>(
+        () => answer,
+      );
+      const [store, statuses]: [TaskDetailStoreInstance, TaskStatusChangesInstance] =
+        await setupLane(changeStatus);
+
+      statuses.request(shownTask(store), 'review', undefined, { quiet: true });
+      await vi.advanceTimersByTimeAsync(STATUS_SETTLE_MS);
+      expect(changeStatus).toHaveBeenCalledExactlyOnceWith('CAD-482', 4, 'review', null);
+      const picked: Promise<boolean> = store.update({ priority: 'basse' });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(update).not.toHaveBeenCalled();
+
+      answer.next(taskAt(5, { status: 'review' }));
+      answer.complete();
+
+      await expect(picked).resolves.toBe(true);
+      expect(update).toHaveBeenCalledExactlyOnceWith('CAD-482', 5, { priority: 'basse' });
+      expect(warning).not.toHaveBeenCalled();
+    });
   });
 });
