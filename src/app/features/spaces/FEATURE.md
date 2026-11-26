@@ -435,3 +435,81 @@ gateway checks them and `ORGANIZATION_PIN_OPERATIONS` lists them.
 | `spaces.list-dialog.date-*`, `spaces.list-dialog.pick-date`, `spaces.footer.*`                                                 | The date picker's texts and the footer rows' names.                        |
 | `spaces.look.*`                                                                                                                | `LOOK_COLORS` names and the default choices of `lookPicker`.               |
 | `spaces.view-stub.text`                                                                                                        | The stub of a view not built yet, which the mockup does not have.          |
+
+## Automations dialog
+
+`AutomationsDialog` (`ui/dialogs/automations-dialog/`, `App.dc.html` lines 3246-3301, logic lines
+8532-8585) shows the organization's "when… then…" rules, which apply to every task of the workspace.
+
+- `AutomationsStore` (`state/automations/`), component-scoped on the dialog, reads nothing until
+  the dialog opens. Each opening reads the rules (every page) and the last runs again; it reads the
+  members once, through `ListsApi.organizationMembers`. Another organization reads all of them
+  again. A failed rules read shows an inline error with Retry (`No automation yet.` is kept for a
+  successful empty read). A failed runs or members read shows its own inline error with Retry.
+- Writes go through `AutomationsApi` (`data-access/services/automations-api/`,
+  `AutomationsService`: `listAutomationRules`, `createAutomationRule`, `updateAutomationRule`,
+  `deleteAutomationRule`, `listRecentAutomationRuns`), mapped by
+  `data-access/adapters/automation-rule/` to `models/automation-rule/`.
+  - The confirmed rules (`confirmedRules`) are kept apart from the read in flight. They are the
+    newest read, with the results of this dialog's writes that settled after that read started
+    applied over it: a newer version, a created rule, a deleted rule. They keep their value while
+    an opening reads again, so a write always uses the newest known version and is always sent.
+  - A switch changes at once. The writes of a rule are serialized, each sent with the version the
+    previous one left (`If-Match`). Only the last state asked is sent, and coming back to the
+    recorded state sends nothing. A definite refusal (`4xx`) restores the recorded state and shows
+    an error toast. A `412 request.version-mismatch` or `404 automation.rule-not-found` also reads
+    the rules again.
+  - A lost answer (no response, `408`, `5xx`) may still be applied, so it is not a refusal: the
+    original write may still be running when a read happens. The store resends the same write
+    with the same `If-Match` version, after the waits of `AUTOMATION_RETRY_DELAYS` (three
+    resends over about 6.5 s by default). A resent switch that succeeds applies. One refused on
+    its version (`412`) means the version moved, so a read of the rules tells whether the wanted
+    state holds (`applied`), or not (`not-applied`, `The automation was not changed`).
+  - When the resends do not settle it, the outcome is `unknown` and the dialog warns. The wanted
+    state stays shown (a deleted rule stays hidden), and the rule's controls are disabled
+    (`unresolvedRuleIds`): the rule takes no other write. The store reads the rules again; the
+    first read started after the resends gave up settles the rule.
+  - A deletion is confirmed by `cw-alert-dialog` (`Delete this automation?`), then hides the rule
+    at once. It succeeds only once the gateway deletes the rule or reports it absent. A refusal
+    brings it back with an error toast. A lost answer is resent with the same version: a `404`
+    (already gone) means it applied, a `412` that the rule is still there.
+  - A creation sends one `Idempotency-Key` per draft and organization. A definite refusal
+    (`4xx`), a recorded rule, another draft or a closed builder renews it. The created rule is
+    added last and shows `Automation created`. A refusal keeps the builder and its values.
+  - A lost creation answer (no response, `408`, `5xx`, `409 idempotency.request-in-progress`) is
+    resent with the same key, which the gateway replays, after the same waits. When the resends
+    do not settle it, the store reads the rules again and keeps the draft and its key, even when
+    the builder closes (`creationUnknown`). The builder then warns that the rule may already
+    exist. Submitting again sends the same key, so the rule is never created twice. Submitting
+    another draft first resends the kept one with its key.
+    A comment over 5,000 characters (the contract's limit) blocks `Create the rule` and shows
+    `spaces.automations.comment-too-long`. The field also carries the native `maxlength` that
+    Signal Forms derives from the rule.
+- Statuses use their default words: a rule is not tied to a space, so the `space` input does not
+  rename them.
+- Extension point for gap B6: the mockup's `Git automations` section (lines 3274-3296) is not
+  rendered. Its place is between the builder and `Last runs`. It needs a contract first (e.g.
+  `getSpaceGitAutomations` / `updateSpaceGitAutomations` with `If-Match`), then its producer and
+  gateway route, then new `AutomationsApi` methods and store state, and a product decision on
+  its scope: per space as planned, or global as in the mockup.
+- Known gaps:
+  - `automation.executed.v1` is not relayed by the realtime gateway, so `Last runs` refreshes
+    only when the dialog opens.
+  - `cw-toggle-group` (`@cadenway/ui` 0.8.0) reads its items' required `value` before every
+    `@for` item has received it. The fixed chips are written out statically. The person chips
+    show the first member until they have rendered once (`personValue`). The lasting fix belongs
+    in the design system.
+  - The mockup shows no member's view: the opener is disabled for members (list header).
+- Copy not taken word for word from the mockup:
+
+  | Unit                                                                                              | Reason                                                   |
+  | ------------------------------------------------------------------------------------------------- | -------------------------------------------------------- |
+  | `spaces.automations.load-failed`, `runs-failed`, `members-failed`                                 | The mockup draws no failed read.                         |
+  | `spaces.automations.create-failed`, `toggle-failed`, `delete-failed`                              | The mockup draws no refused write.                       |
+  | `spaces.automations.toggle-not-applied`, `toggle-unknown`, `delete-not-applied`, `delete-unknown` | The mockup draws no lost answer.                         |
+  | `spaces.automations.create-unknown`, `create-unknown-toast`                                       | The mockup draws no lost answer.                         |
+  | `spaces.automations.comment-too-long`                                                             | The mockup has no wording for a comment over the limit.  |
+  | `spaces.automations.former-member`                                                                | A rule or run naming someone no longer in the directory. |
+  | `spaces.automations.loading`                                                                      | Accessible name of the skeleton rows.                    |
+  | `spaces.automations.text-one`                                                                     | Singular form the mockup writes in the plural.           |
+  | `spaces.automations.run-minutes`, `run-hours`                                                     | The mockup only shows `just now`.                        |
