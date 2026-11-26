@@ -1430,7 +1430,6 @@
     "spaces.undo.conflict-many-text": "Annulation ignorée pour elles : leurs dernières valeurs sont affichées.",
     "spaces.undo.conflict-one": "{$key} modifiée depuis",
     "spaces.undo.conflict-one-text": "Annulation ignorée pour elle : ses dernières valeurs sont affichées.",
-    "spaces.view-stub.text": "Cette vue n’est pas encore disponible.",
     "spaces.views.add": "Ajouter une vue",
     "spaces.views.added": "Ajoutée",
     "spaces.views.label": "Vues",

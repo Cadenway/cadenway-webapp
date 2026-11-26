@@ -10,10 +10,9 @@ space overview, the frame of a list page (header, view tabs and saved views, vie
 filters, the selection bar, the hosts of the header's dialogs) with its view configuration, and
 the `List` view: its grouped, virtualized task rows, read page by page. The cells, pickers, status
 interaction and create dialog belong to Task, which the rows compose, as the task detail opened
-from a row does; the trash and archives screens belong to their features. The eight other views
+from a row does; the trash and archives screens belong to their features. It also owns the eight other views
 (`Board`, `Calendar`, `Gantt`, `Workload`, `Sheet`, `Form`, `Activity`, `Timesheet`) and the
-`Share`, `Sprint report`, `Space statuses` and `Automations` dialogs have their routes, hosts and
-stubs; their content comes in step 4b, one package each.
+`Share`, `Sprint report`, `Space statuses` and `Automations` dialogs.
 
 ## Routes
 
@@ -45,16 +44,15 @@ breadcrumb, dialog, inline edit, toolbar).
 
   Each provides its view's store (`<View>ViewStore`, `state/<view>-view/<view>-view.store.ts`),
   and the five task views (board, calendar, gantt, workload, sheet) Task's
-  `TaskStatusChangesStore`. Until its package lands, each page is a stub that says the view is
-  not available yet and each store is empty.
+  `TaskStatusChangesStore`.
 
 - `RELEASED_LAYOUTS` (`constants/released-views/released-views.constants.ts`, read through the
-  `RELEASED_VIEWS` token) decides which layouts users reach. Today it holds `list` only. A layout
+  `RELEASED_VIEWS` token) decides which layouts users reach. Today it holds all nine layouts. A layout
   outside it has no tab, and `releasedLayoutGuard(layout)` (`http/guards/released-layout/`)
   replaces its address with `list`, keeping the query parameters, so a saved view of that layout
   opens on `list`. The lead adds a layout when its package merges; view builders never edit the
-  file. `RELEASED_LIST_DIALOGS`, beside it, does the same for the header dialogs' openers (empty
-  today).
+  file. `RELEASED_LIST_DIALOGS`, beside it, does the same for the header dialogs' openers (all
+  four today).
 - Failed primary reads render the router's default error component, `RouteErrorBoundary`, in the
   failing route's outlet: a failed view keeps the list header. Every view's `data`
   (`RouteErrorData`) titles its unavailable state with the mockup's single title, `Could not load
@@ -1000,8 +998,8 @@ computed from the navigation's reads, for the command palette's `Lists` and the 
     workload and sheet views, so pending changes die with the view.
   - `BoardViewStore`, `CalendarViewStore`, `GanttViewStore`, `WorkloadViewStore`,
     `SheetViewStore`, `FormViewStore`, `ActivityViewStore` and `TimesheetViewStore`, each
-    route-scoped on its view through its `<VIEW>_VIEW_PROVIDERS`; empty until its package fills
-    it (`CalendarViewStore`: see the Calendar view).
+    route-scoped on its view through its `<VIEW>_VIEW_PROVIDERS` (each described in its view's
+    section).
   - `SpaceOverviewStore`, page-scoped on `SpaceOverviewPage`. Its lists come from the sidebar's
     overview of the same space, shown at once even while the sidebar reads again, and follow it
     once it changes. The page reads on its own only when the sidebar has no value for the space,
@@ -1178,8 +1176,7 @@ gateway checks them and `ORGANIZATION_PIN_OPERATIONS` lists them.
   `Favorite` carries no icon.
 - A favorite saved view's menu holds `Open` only: renaming, duplicating and deleting a view
   live on its list page.
-- `Sprint report`, `Space statuses` and `Automations` are stub dialogs; their openers and
-  `Share`'s (built, see "Share dialog") stay hidden until `RELEASED_LIST_DIALOGS` lists them; the Git section of `Automations` stays hidden until B6 is decided. The Slack and
+- The Git section of `Automations` stays hidden until B6 is decided. The Slack and
   Figma suggestions need integrations no service provides.
 - The tabs show every released layout: the mockup's views added per list (`Added` / `Add`,
   `App.dc.html` lines 6187, 8792-8795) have no list setting in the contract (G12) and are not
@@ -1225,7 +1222,6 @@ gateway checks them and `ORGANIZATION_PIN_OPERATIONS` lists them.
 | `spaces.space-dialog.name-required`, `spaces.list-dialog.name-required`                                                        | The mockup disables the submit button rather than showing an error.        |
 | `spaces.list-dialog.date-*`, `spaces.list-dialog.pick-date`, `spaces.footer.*`                                                 | The date picker's texts and the footer rows' names.                        |
 | `spaces.look.*`                                                                                                                | `LOOK_COLORS` names and the default choices of `lookPicker`.               |
-| `spaces.view-stub.text`                                                                                                        | The stub of a view not built yet, which the mockup does not have.          |
 | `spaces.share.*-failed`, `spaces.share.read-failed`                                                                            | The mockup draws no failed read or refused write.                          |
 | `spaces.share.not-member`                                                                                                      | The contract's `access.grantee-invalid` title (G10).                       |
 | `spaces.share.already-owner`                                                                                                   | The mockup does not draw the owner's address.                              |
