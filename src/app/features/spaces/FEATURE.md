@@ -146,11 +146,16 @@ column menu lines 7314-7323) files the list's tasks into status columns with `cw
   `TaskActionsApi.bulk` (root-provided, so it outlives the view; `BoardViewStore.leave`), each
   after the board's write of the same task still in flight has settled and at the version it
   left: `VIEW_TASK_WRITER` is `BoardViewStore.writerOver(ListTasksStore)`, the reader's writes
-  with each task's write in flight followed. A move written after leaving shows no toast, only
-  `The task could not be changed` when refused or uncertain. The written move's toast offers
-  `Undo` and a refusal puts the card back. A drop on `Cancelled` forgets a waiting move and asks
-  the reason first, the card staying in its column until it is given; `Cancelled` is never
-  written on leaving. A status picked in the task menu also replaces a waiting move. A drop in
+  with each task's write in flight followed. A move written after leaving reads the list's
+  counts again (`ListPageStore.refreshCounts`, inert once the list page is left too, since its
+  resources are destroyed) and shows the same status toast, whose `Undo` writes the confirmed
+  status back with `TaskActionsApi` at the version the move left (a refusal warns
+  `CAD-482 changed since`); a refused, uncertain or unsent move (the organization changed) shows
+  `The task could not be changed`. In the view, the written move's toast offers `Undo` and a
+  refusal puts the card back. A drop on `Cancelled`, or `Cancelled` in the task menu, asks the
+  reason first and holds the waiting move meanwhile (the card keeps its column): confirming
+  replaces it with the cancellation, dismissing lets it settle 460 ms later. `Cancelled` is never
+  written on leaving. Another status picked in the task menu replaces a waiting move at once. A drop in
   the card's own column, or in a column whose status the task cannot take (a milestone's four
   statuses, a status the space stopped using), puts the card back: no order is written.
 - Click or Enter opens the task's detail (`?task=<KEY>`). A right click, Shift F10 or the Menu key

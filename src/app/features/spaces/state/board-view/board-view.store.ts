@@ -19,8 +19,10 @@ import {
   personOf,
   pickableStatuses,
   STATUS_SETTLE_MS,
+  statusLabel,
   type StatusOption,
   TaskActionsApi,
+  type TaskBulkAction,
   type TaskBulkOutcome,
   type TaskSummary,
 } from '@features/task';
@@ -29,6 +31,7 @@ import {
   type WorkspaceContextPort,
 } from '@features/workspace/ports/workspace-context';
 
+import { undoConflictText, undoConflictTitle } from '../../constants/bulk-copy/bulk-copy.constants';
 import { BOARD_ORDER } from '../../constants/statuses/statuses.constants';
 import type {
   BoardCard,
@@ -294,6 +297,28 @@ export interface BoardViewStoreInstance {
   discard(taskKeys: readonly string[]): void;
 
   /**
+   * Method hold
+   *
+   * @description
+   * Keeps the waiting moves of tasks from settling while the cancellation reason of those tasks
+   * is asked (a drop on `Cancelled`, `Cancelled` in the task menu): the card keeps its waiting
+   * column, and the move is replaced only once the cancellation is confirmed (`discard`).
+   *
+   * @param {readonly string[]} taskKeys - The tasks whose reason is asked.
+   */
+  hold(taskKeys: readonly string[]): void;
+
+  /**
+   * Method release
+   *
+   * @description
+   * The cancellation was dismissed: the held moves settle again, `STATUS_SETTLE_MS` from now.
+   *
+   * @param {readonly string[]} taskKeys - The tasks whose reason was asked.
+   */
+  release(taskKeys: readonly string[]): void;
+
+  /**
    * Method flush
    *
    * @description
@@ -306,11 +331,14 @@ export interface BoardViewStoreInstance {
    * Method leave
    *
    * @description
-   * The view is left: every waiting move is written with `TaskActionsApi.bulk`, which outlives
-   * the view, each after the board's write of the same task still in flight has settled and at
-   * the version it left, so the last move lands last. `Cancelled` is never sent from here (it
-   * always waits for its reason in the view); a refused or uncertain write shows `The task could
-   * not be changed`.
+   * The view is left: every waiting move (a held one included) is written with
+   * `TaskActionsApi.bulk`, which outlives the view, each after the board's write of the same task
+   * still in flight has settled and at the version it left, so the last move lands last.
+   * `Cancelled` is never sent from here (it always waits for its reason in the view). An applied
+   * move reads the list's counts again (`ListPageStore.refreshCounts`, inert once the list page
+   * is left too) and shows the status toast, whose `Undo` writes the confirmed status back at the
+   * version the move left (a refusal warns that the task changed since); a refused, uncertain or
+   * unsent move (the organization changed) shows `The task could not be changed`.
    */
   leave(): void;
 
@@ -422,6 +450,7 @@ function createBoardViewStore(): Type<BoardViewStoreInstance> {
         for (const key of keys) {
           clearTimeout(timers.get(key));
           timers.delete(key);
+          held.delete(key);
         }
         patchState(store, {
           _pending: Object.fromEntries(
@@ -431,21 +460,32 @@ function createBoardViewStore(): Type<BoardViewStoreInstance> {
           ),
         });
       };
-      const due: (key: string) => { task: TaskSummary; status: StatusKey } | null = (
+      const held: Set<string> = new Set<string>();
+      const due: (key: string) => BoardPendingMove | null = (
         key: string,
-      ): { task: TaskSummary; status: StatusKey } | null => {
+      ): BoardPendingMove | null => {
         const move: BoardPendingMove | undefined = store._pending()[key];
         if (!move) return null;
         const item: ListTaskItem | undefined = itemOf(key);
         const confirmed: StatusKey = item?.status ?? move.from;
         return confirmed === move.status
           ? null
-          : { task: item?.task ?? move.task, status: move.status };
+          : { task: item?.task ?? move.task, status: move.status, from: confirmed };
       };
       const write: (key: string) => void = (key: string): void => {
-        const move: { task: TaskSummary; status: StatusKey } | null = due(key);
+        const move: BoardPendingMove | null = due(key);
         if (move) send?.(move.task, move.status);
         forget([key]);
+      };
+      const schedule: (key: string) => void = (key: string): void => {
+        clearTimeout(timers.get(key));
+        timers.set(
+          key,
+          setTimeout((): void => {
+            timers.delete(key);
+            write(key);
+          }, STATUS_SETTLE_MS),
+        );
       };
       const follow: (keys: readonly string[], answer: Promise<ViewTaskOutcome>) => void = (
         keys: readonly string[],
@@ -460,33 +500,78 @@ function createBoardViewStore(): Type<BoardViewStoreInstance> {
           }
         });
       };
-      const sendAfter: (
+      const failed: () => void = (): void => {
+        store._toasts.error(
+          $localize`:@@spaces.task-writes.field-failed:The task could not be changed`,
+        );
+      };
+      const undoLeft: (
         key: string,
-        task: TaskSummary,
-        status: StatusKey,
+        version: number,
+        action: TaskBulkAction,
+        organizationId: string,
       ) => Promise<void> = async (
         key: string,
-        task: TaskSummary,
-        status: StatusKey,
+        version: number,
+        action: TaskBulkAction,
+        organizationId: string,
+      ): Promise<void> => {
+        const answer: TaskBulkOutcome = await store._actions.bulk(
+          [{ taskKey: key, version }],
+          action,
+          (): boolean => store._workspace.organization().id === organizationId,
+        );
+        if (answer.done.length > 0) {
+          store._page.refreshCounts();
+        } else if (answer.failed.length > 0) {
+          store._toasts.warning(undoConflictTitle([key]), { description: undoConflictText(1) });
+        } else {
+          failed();
+        }
+      };
+      const sendAfter: (key: string, move: BoardPendingMove) => Promise<void> = async (
+        key: string,
+        move: BoardPendingMove,
       ): Promise<void> => {
         const organizationId: string = store._workspace.organization().id;
         const outcome: ViewTaskOutcome | undefined = await inflight.get(key);
         const version: number = Math.max(
-          task.version,
+          move.task.version,
           store._tasks.taskOf(key)?.version ?? 0,
           versions.get(key) ?? 0,
           outcome?.after[key] ?? 0,
         );
         const answer: TaskBulkOutcome = await store._actions.bulk(
           [{ taskKey: key, version }],
-          { type: 'status', status },
+          { type: 'status', status: move.status },
           (): boolean => store._workspace.organization().id === organizationId,
         );
-        if (answer.failed.length > 0 || answer.unknown.length > 0) {
-          store._toasts.error(
-            $localize`:@@spaces.task-writes.field-failed:The task could not be changed`,
-          );
+        const left: number | null | undefined = answer.done.find(
+          (entry: { readonly taskKey: string }): boolean => entry.taskKey === key,
+        )?.version;
+        if (left === undefined) {
+          failed();
+          return;
         }
+        store._page.refreshCounts();
+        const reason: TaskSummary['cancelReason'] = move.task.cancelReason;
+        const back: TaskBulkAction | null =
+          move.from !== 'cancelled'
+            ? { type: 'status', status: move.from }
+            : reason
+              ? { type: 'status', status: move.from, cancelReason: reason }
+              : null;
+        const word: string = statusLabel(move.status, store.statusOptions(), move.task.milestone);
+        store._toasts.show($localize`:@@spaces.rows.status-toast:${key}:label: · ${word}:status:`, {
+          description: $localize`:@@spaces.rows.status-changed:Status changed.`,
+          ...(back && left !== null
+            ? {
+                undo: (): void => {
+                  void undoLeft(key, left, back, organizationId);
+                },
+              }
+            : {}),
+        });
       };
       return {
         setCollapsed(columns: readonly string[]): void {
@@ -540,32 +625,40 @@ function createBoardViewStore(): Type<BoardViewStoreInstance> {
             forget([key]);
             return;
           }
-          clearTimeout(timers.get(key));
+          held.delete(key);
           patchState(store, {
             _pending: {
               ...store._pending(),
               [key]: { status, from: waiting?.from ?? confirmed, task: waiting?.task ?? card.task },
             },
           });
-          timers.set(
-            key,
-            setTimeout((): void => {
-              timers.delete(key);
-              write(key);
-            }, STATUS_SETTLE_MS),
-          );
+          schedule(key);
         },
         discard(taskKeys: readonly string[]): void {
           forget(taskKeys);
+        },
+        hold(taskKeys: readonly string[]): void {
+          for (const key of taskKeys) {
+            if (!store._pending()[key]) continue;
+            clearTimeout(timers.get(key));
+            timers.delete(key);
+            held.add(key);
+          }
+        },
+        release(taskKeys: readonly string[]): void {
+          for (const key of taskKeys) {
+            if (!held.delete(key) || !store._pending()[key]) continue;
+            schedule(key);
+          }
         },
         flush(): void {
           for (const key of Object.keys(store._pending())) write(key);
         },
         leave(): void {
           for (const key of Object.keys(store._pending())) {
-            const move: { task: TaskSummary; status: StatusKey } | null = due(key);
+            const move: BoardPendingMove | null = due(key);
             forget([key]);
-            if (move && move.status !== 'cancelled') void sendAfter(key, move.task, move.status);
+            if (move && move.status !== 'cancelled') void sendAfter(key, move);
           }
           send = null;
         },

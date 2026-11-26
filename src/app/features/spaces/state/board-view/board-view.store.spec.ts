@@ -82,6 +82,9 @@ describe('BoardViewStore', () => {
   let statuses: readonly SpaceStatusOption[];
   let show: Mock;
   let error: Mock;
+  let warning: Mock;
+  let refreshCounts: Mock;
+  let organization: WritableSignal<{ id: string; slug: string }>;
   let taskQuery: WritableSignal<ListTaskQuery>;
   let bulk: Mock<TaskActionsApi['bulk']>;
 
@@ -129,6 +132,7 @@ describe('BoardViewStore', () => {
           provide: ListPageStore,
           useValue: {
             space: ready({ id: 'product', statuses }),
+            refreshCounts,
             organizationMembers: ready([
               { userId: 'u-ines', name: 'Inès Robert' },
               { userId: 'u-hugo', name: null },
@@ -145,11 +149,11 @@ describe('BoardViewStore', () => {
             },
           },
         },
-        { provide: CwToastService, useValue: { show, error } },
+        { provide: CwToastService, useValue: { show, error, warning } },
         { provide: TaskActionsApi, useValue: { bulk } },
         {
           provide: WORKSPACE_CONTEXT,
-          useValue: { organization: signal({ id: 'org-atelier-nord', slug: 'atelier-nord' }) },
+          useValue: { organization },
         },
       ],
     });
@@ -191,6 +195,9 @@ describe('BoardViewStore', () => {
     ];
     show = vi.fn(() => 'toast-1');
     error = vi.fn();
+    warning = vi.fn();
+    refreshCounts = vi.fn();
+    organization = signal({ id: 'org-atelier-nord', slug: 'atelier-nord' });
     taskQuery = signal<ListTaskQuery>({ level: 'roots', sort: 'manual' });
     bulk = vi.fn<TaskActionsApi['bulk']>(() => Promise.resolve(applied('CAD-461', 4)));
   });
@@ -460,6 +467,124 @@ describe('BoardViewStore', () => {
         { type: 'status', status: 'review' },
         expect.any(Function),
       );
+    });
+
+    it('reports a move left unsent when the organization changes before it goes', async () => {
+      bulk.mockImplementation((selection, _action, current): Promise<TaskBulkOutcome> =>
+        Promise.resolve(
+          current()
+            ? applied('CAD-461', 5)
+            : { affected: 0, done: [], failed: [], unknown: [], notSent: [...selection] },
+        ),
+      );
+      const store: InstanceType<typeof BoardViewStore> = setup();
+      let settleFirst: (outcome: ViewTaskOutcome) => void = (): void => undefined;
+      const reader: ViewTaskWriter = {
+        act: vi.fn(
+          () =>
+            new Promise<ViewTaskOutcome>((resolve: (outcome: ViewTaskOutcome) => void): void => {
+              settleFirst = resolve;
+            }),
+        ),
+        update: vi.fn(),
+        remind: vi.fn(),
+        restore: vi.fn(),
+        reload: vi.fn(),
+        shownStatus: (task: TaskSummary) => task.status,
+      };
+      void store
+        .writerOver(reader)
+        .act([cardOf(store, 'CAD-461').task], { type: 'status', status: 'progress' });
+
+      store.stage(cardOf(store, 'CAD-461'), 'review');
+      store.leave();
+      organization.set({ id: 'org-other', slug: 'other' });
+      settleFirst({ ...applied('CAD-461', 4), before: {}, after: { 'CAD-461': 4 }, changed: [] });
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(bulk).toHaveBeenCalledTimes(1);
+      expect(error).toHaveBeenCalledWith('The task could not be changed');
+      expect(show).not.toHaveBeenCalled();
+      expect(refreshCounts).not.toHaveBeenCalled();
+    });
+
+    it('shows the status toast of a move written on leaving, and its Undo writes it back', async () => {
+      const store: InstanceType<typeof BoardViewStore> = setup();
+
+      store.stage(cardOf(store, 'CAD-461'), 'review');
+      store.leave();
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(refreshCounts).toHaveBeenCalledTimes(1);
+      expect(show).toHaveBeenCalledWith('CAD-461 · In review', {
+        description: 'Status changed.',
+        undo: expect.any(Function) as () => void,
+      });
+      const undo: () => void = (show.mock.calls[0][1] as { undo: () => void }).undo;
+      undo();
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(bulk).toHaveBeenLastCalledWith(
+        [{ taskKey: 'CAD-461', version: 4 }],
+        { type: 'status', status: 'todo' },
+        expect.any(Function),
+      );
+      expect(refreshCounts).toHaveBeenCalledTimes(2);
+    });
+
+    it('warns when the Undo of a move written on leaving is refused', async () => {
+      const store: InstanceType<typeof BoardViewStore> = setup();
+      store.stage(cardOf(store, 'CAD-461'), 'review');
+      store.leave();
+      await vi.advanceTimersByTimeAsync(0);
+      bulk.mockResolvedValueOnce({
+        affected: 0,
+        done: [],
+        failed: [{ taskKey: 'CAD-461', version: 4 }],
+        unknown: [],
+        notSent: [],
+      });
+
+      (show.mock.calls[0][1] as { undo: () => void }).undo();
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(warning).toHaveBeenCalledWith('CAD-461 changed since', {
+        description: 'Undo skipped it: its latest values are shown.',
+      });
+    });
+
+    it('holds a waiting move while its cancellation is asked, then settles it when dismissed', () => {
+      const store: InstanceType<typeof BoardViewStore> = setup();
+      store.settleWith(send);
+
+      store.stage(cardOf(store, 'CAD-461'), 'progress');
+      store.hold(['CAD-461']);
+      vi.advanceTimersByTime(STATUS_SETTLE_MS * 3);
+      expect(send).not.toHaveBeenCalled();
+      expect(cardOf(store, 'CAD-461').status).toBe('progress');
+
+      store.release(['CAD-461']);
+      vi.advanceTimersByTime(STATUS_SETTLE_MS);
+
+      expect(send).toHaveBeenCalledTimes(1);
+      expect(send).toHaveBeenCalledWith(
+        expect.objectContaining({ key: 'CAD-461' }) as TaskSummary,
+        'progress',
+      );
+    });
+
+    it('replaces a held move once its cancellation is confirmed', () => {
+      const store: InstanceType<typeof BoardViewStore> = setup();
+      store.settleWith(send);
+
+      store.stage(cardOf(store, 'CAD-461'), 'progress');
+      store.hold(['CAD-461']);
+      store.discard(['CAD-461']);
+      store.release(['CAD-461']);
+      vi.advanceTimersByTime(STATUS_SETTLE_MS * 2);
+
+      expect(send).not.toHaveBeenCalled();
+      expect(cardOf(store, 'CAD-461').status).toBe('todo');
     });
 
     it('says so when the write sent on leaving is refused', async () => {

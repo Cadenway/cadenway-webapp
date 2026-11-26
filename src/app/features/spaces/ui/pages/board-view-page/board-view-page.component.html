@@ -144,8 +144,8 @@
 
 <cw-task-cancel-dialog
   [taskKeys]="writes.cancelKeys()"
-  (confirmed)="writes.confirmCancel($event)"
-  (kept)="writes.keepCancel()"
+  (confirmed)="confirmCancel($event)"
+  (kept)="keepCancel()"
 />
 
 <cw-alert-dialog

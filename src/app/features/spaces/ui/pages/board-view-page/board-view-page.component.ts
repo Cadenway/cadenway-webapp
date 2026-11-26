@@ -38,6 +38,7 @@ import { NgIcon } from '@ng-icons/core';
 import {
   PRIORITY_LABELS,
   TaskCancelDialog,
+  type TaskCancellation,
   TaskCreate,
   TaskDueDate,
   TaskLabelChips,
@@ -534,8 +535,8 @@ export class BoardViewPage {
    * @description
    * A card dropped elsewhere: in another column whose status the task may take, the card shows
    * that status at once and the board writes it 460 ms after the task's last move
-   * (`BoardViewStore.stage`); `Cancelled` forgets a waiting move and asks the reason first, the
-   * card staying in its column until it is given. Anything else puts the card back.
+   * (`BoardViewStore.stage`); `Cancelled` asks the reason first, the card and its waiting move
+   * staying as they are until it is given. Anything else puts the card back.
    *
    * @param {CwKanbanMove<BoardCard>} move - The drop.
    */
@@ -544,8 +545,7 @@ export class BoardViewPage {
     const column: string = move.to.column;
     if (this.board.accepts(card, column)) {
       if (column === 'cancelled') {
-        this.board.discard([card.task.key]);
-        this.writes.setStatus([card.task], column, card.task.milestone);
+        this.askCancel([card.task], card.task.milestone);
       } else {
         this.board.stage(card, column);
       }
@@ -557,15 +557,60 @@ export class BoardViewPage {
    * Method pickStatus
    *
    * @description
-   * `Status` of the task menu: forgets the waiting moves of its tasks, then writes the status at
-   * once.
+   * `Status` of the task menu: replaces the waiting moves of its tasks and writes the status at
+   * once; `Cancelled` asks the reason first and keeps the waiting moves until it is given.
    *
    * @param {StatusKey} status - The status picked.
    */
   protected pickStatus(status: StatusKey): void {
     const tasks: readonly TaskSummary[] = this.menuTasks();
+    if (status === 'cancelled') {
+      this.askCancel(tasks, this.menuMilestone());
+      return;
+    }
     this.board.discard(tasks.map((task: TaskSummary): string => task.key));
     this.writes.setStatus(tasks, status, this.menuMilestone());
+  }
+
+  /**
+   * Method confirmCancel
+   *
+   * @description
+   * The cancellation reason was given: the waiting moves of the cancelled tasks give way to the
+   * cancellation, which is written at once.
+   *
+   * @param {TaskCancellation} cancellation - The reason and optional note.
+   */
+  protected confirmCancel(cancellation: TaskCancellation): void {
+    this.board.discard(this.writes.cancelKeys() ?? []);
+    this.writes.confirmCancel(cancellation);
+  }
+
+  /**
+   * Method keepCancel
+   *
+   * @description
+   * The cancellation was dismissed: nothing is written for it, and the waiting moves of its tasks
+   * settle again.
+   */
+  protected keepCancel(): void {
+    const keys: readonly string[] = this.writes.cancelKeys() ?? [];
+    this.writes.keepCancel();
+    this.board.release(keys);
+  }
+
+  /**
+   * Method askCancel
+   *
+   * @description
+   * Asks the shared cancellation reason of tasks and holds their waiting moves meanwhile.
+   *
+   * @param {readonly TaskSummary[]} tasks - The tasks to cancel.
+   * @param {boolean} milestone - Whether every task is a milestone.
+   */
+  private askCancel(tasks: readonly TaskSummary[], milestone: boolean): void {
+    this.writes.setStatus(tasks, 'cancelled', milestone);
+    this.board.hold(this.writes.cancelKeys() ?? []);
   }
 
   /**

@@ -132,6 +132,7 @@ describe('BoardViewPage', () => {
   let bulk: Mock<TaskActionsApi['bulk']>;
   let toasts: Record<string, Mock>;
   let create: Mock<TaskCreate['open']>;
+  let refreshCounts: Mock<() => void>;
 
   /**
    * Function settle
@@ -295,6 +296,7 @@ describe('BoardViewPage', () => {
       toasts: vi.fn(() => []),
     };
     create = vi.fn<TaskCreate['open']>(() => true);
+    refreshCounts = vi.fn();
     TestBed.configureTestingModule({
       providers: [
         provideCadenwayIcons(),
@@ -311,7 +313,7 @@ describe('BoardViewPage', () => {
             list: ready({ id: 'sprint-14', name: 'Sprint 14', spaceId: 'product', canEdit: true }),
             space: ready({ id: 'product', statuses: [] }),
             organizationMembers: ready([{ userId: 'u-ines', name: 'Inès Robert' }]),
-            refreshCounts: vi.fn(),
+            refreshCounts,
           },
         },
         { provide: TaskActionsApi, useValue: { bulk, restore: vi.fn(), remind: vi.fn() } },
@@ -491,6 +493,45 @@ describe('BoardViewPage', () => {
     fixture.destroy();
 
     await expect.poll(() => bulk.mock.calls.length).toBe(1);
+    expect(bulk).toHaveBeenCalledWith(
+      [{ taskKey: 'CAD-482', version: 3 }],
+      { type: 'status', status: 'progress' },
+      expect.any(Function),
+    );
+    await expect.poll(() => toasts['show'].mock.calls.length).toBe(1);
+    expect(toasts['show']).toHaveBeenCalledWith('CAD-482 · In progress', {
+      description: 'Status changed.',
+      undo: expect.any(Function) as () => void,
+    });
+    expect(refreshCounts).toHaveBeenCalled();
+  });
+
+  it('keeps a waiting move while the reason of a drop on Cancelled is asked, then writes it', async () => {
+    const fixture: ComponentFixture<BoardViewPage> = await render();
+    const name: string = 'CAD-482 — Redesign the SSO sign-in screen';
+
+    await move(fixture, name, ['ArrowRight']);
+    await move(fixture, name, [
+      'ArrowRight',
+      'ArrowRight',
+      'ArrowRight',
+      'ArrowRight',
+      'ArrowRight',
+      'ArrowRight',
+    ]);
+    await waitSettle(fixture);
+    expect(bulk).not.toHaveBeenCalled();
+    expect(columnOf('In progress').textContent).toContain('Redesign the SSO sign-in screen');
+
+    required(
+      [...document.querySelectorAll('button')].find(
+        (button: HTMLButtonElement): boolean => button.textContent.trim() === 'Keep the task',
+      ),
+    ).click();
+    await settle(fixture);
+    await waitSettle(fixture);
+
+    expect(bulk).toHaveBeenCalledTimes(1);
     expect(bulk).toHaveBeenCalledWith(
       [{ taskKey: 'CAD-482', version: 3 }],
       { type: 'status', status: 'progress' },
