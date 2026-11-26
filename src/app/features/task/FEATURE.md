@@ -99,6 +99,17 @@ options?)`, `requestCancel(tasks, options?)`, `pendingStatus(taskId)`, `displaye
   `MILESTONE_STATUS_KEYS`, `PRIORITY_KEYS`, `CANCEL_REASONS`, `RECURRENCES`.
 - `@core/api` (`hasProblemCode`, `readProblem`, `OrganizationPin`), `@shared/route-errors`, `@core/shortcuts` (`N`, Ctrl Enter), `@shared/layout-slot`
   (`ShellOverlay`, slot contribution), Workspace's `ports/workspace-context`.
+- For the tabs (`TaskSectionsApi`): `TasksService.getTaskApproval`, `voteOnTaskApproval`,
+  `withdrawTaskApprovalVote` and `requestTaskApproval`; `listTaskComments` (later pages),
+  `createTaskComment` (mention spans, `Idempotency-Key`), `deleteTaskComment` (`If-Match`),
+  `listTaskParticipants` (a `403` reads as no comment right); `addChecklistItem` and
+  `updateChecklistItem` (without `If-Match`); `createSubtask` (`Idempotency-Key`) and `getTask`
+  (the parent's parent, for the depth); `TaskActivityService.listTaskActivity`;
+  `AttachmentsService.listTaskAttachments`, `startTaskAttachmentUpload` (`Idempotency-Key`), the
+  signed form post to object storage (`HttpClient`, never to the API), `completeTaskAttachmentUpload`,
+  `deleteTaskAttachment` (`If-Match`) and `getTaskAttachmentDownload`; `MembersService.listMembers`
+  (every role, guests included). `@cadenway/ui` `tabs`, `block-editor`, `comment-composer`,
+  `markdown`, `attachment`, `dropzone`, `checkbox`, `progress`, `avatar`, `context-menu`.
 - `@core/realtime` (`watch({ kind: 'task' })`) for the open detail; Errors' `.` entry
   (`RouteErrorPanel`) for the detail's not-found, deleted-task and unavailable states; Spaces'
   `ports/list-directory` (`LIST_DIRECTORY`) for `Move to…`.
@@ -193,6 +204,42 @@ the task` with `Retry`; otherwise Errors' `RouteErrorPanel` renders the typed ro
     25 subtasks or one too deep for the three levels (what the read shows; the gateway refuses the
     rest and the toast says which limit), the list first, 12 at most; attach and detach toasts
     offer `Undo`.
+  - Tabs (`cw-task-detail-tabs`, `App.dc.html` lines 2111-2366): the tab list `Task sections`
+    (`Details`, `Subtasks` and `Comments` with their counts, `Activity`), `Details` at each
+    opening since the dialog renders the column anew per task; the composer is pinned under
+    `Comments`. The container provides `TaskDetailSectionsStore` (description, checklist, subtask
+    creation, member directory), `TaskApprovalCardStore`, `TaskAttachmentsStore`,
+    `TaskCommentsStore` and `TaskActivityStore`, so they die with the open task, and the bricks'
+    English texts (`TASK_SECTIONS_BRICK_LABELS`); the sections are presentational. `Details`:
+    the approval card while a round has reviewers (title, counts, segment bar, reviewer states;
+    `Approve`, `Request changes` with `What needs to change`, `Withdraw my review`; a vote that
+    moved the status reads the detail again, otherwise the detail takes the answer's version;
+    the round is read again when the confirmed version moves past it), the description
+    (`cw-block-editor` with its toolbar; saved 800 ms after the last change and on blur through
+    `update({ description })`, an empty text clears it; a confirmed text never replaces what is
+    being typed), the checklist (`<done> / <n>`, ticks shown at once and rolled back with the
+    failure toast, `Add an item` with Enter and Escape; no deletion, as in the mockup), the
+    attachments (`cw-attachment` tiles, `Add` and the drop zone, 25 MB refused with `File too
+large`, a name already attached skipped, `Remove “<name>”?` confirmed then toasted, the
+    preview dialog with previous and next, arrow keys and `Download`, raster images drawn from
+    their signed address) and `cw-task-development`, the placeholder of the Git panel (empty
+    state and the key hint, no action yet). `Subtasks`: progress, rows that open the subtask
+    through `TaskDetailOpener` (click, Enter, Space) with a status button that advances through
+    `TaskStatusChangesStore`, the add field (`createSubtask`, toast, detail read again) and the
+    3-level and 25-subtask messages instead of it. `Comments`: the detail's first page, later
+    pages with `Show more comments` (read again to the same depth on `commentsRevision`),
+    `cw-markdown` bodies, the caller's own in the secondary bubble, the menu (right click, Shift
+    F10 or the `More actions` button: `Copy the text`, `Reply` prefilling `@<first name> ` and
+    answering that comment, `Delete` for the caller's own, shown at once, rolled back on refusal,
+    `Undo` posting it again); the composer (`cw-comment-composer`: marks, link, list, code, `@`
+    mentions of the participants sent as spans, files uploaded to the task's attachments and
+    named on a last line `Attachments: …`, `<n> / 5,000`, Ctrl or Cmd Enter, the brick's error
+    with `Retry` keeping the text and its `Idempotency-Key`). Posting and deleting a comment read
+    the detail again (they change the task's version). `Activity`: read each time the tab opens,
+    again while shown when the version moves; actor (member, automation, `GitHub` or `GitLab`, a
+    service by name), what changed and when, `Show more`. Every list has its loading, inline
+    error with `Retry` and empty state. Writing needs `edit`; commenting needs `comment` or
+    `edit`, which the participants read tells for a caller without `edit`.
   - Extension points: `TaskDetailStoreInstance` (`task`, `confirmedTask`, `space`, `statuses`,
     `list`, `canEdit`, `parent`, `subtasks`, `comments`, `commentsFailed`, `partial`,
     `pendingFields`, `commentsRevision`, `gitRevision`; `update`, `accept(task)`,
@@ -258,6 +305,19 @@ people`), and the due trigger shows the short date without `Tomorrow ·` or the
   `{d} / {n} done` without the singular. Members outside the people list (guests, former
   members) read `Unknown member`.
 
+- Tabs gaps: `TaskDetailOpener.open` takes no tab, so a subtask request from a row cannot open
+  `Subtasks` (the column always starts on `Details`). `TaskDetailPatch` has no
+  `descriptionMentions`, so the description offers no `@` menu and sends no mention spans. The
+  comment composer sends only with text (the mockup also sends files alone), its toolbar is the
+  brick's (bold, italic, link, bulleted list, code, mention, attach), and its files are uploaded
+  to the task as soon as they are chosen (the brick's contract), staying attached when taken off
+  the comment. A deleted comment's `Undo` posts it again as a new comment at the end (the API has
+  no restore). `cw-attachment` draws no uploader nor time on its tile (the preview does) and
+  no thumbnail without a signed address per tile; `cw-checklist` has no tick-and-add-only mode,
+  so the checklist composes `cw-checkbox`, `cw-progress` and `cw-input`; the attachment preview
+  is a full-size `cw-dialog`, not the mockup's dark viewer. The approval card and the properties
+  panel each read the approval. The Git panel waits for the read of a task's Git links.
+
 ## Copy not taken word for word from the mockup
 
 | Unit                                                                                        | Reason                                                             |
@@ -278,6 +338,14 @@ people`), and the due trigger shows the short date without `Tomorrow ·` or the
 | `task.detail.trashed-with-one`, `task.detail.reminder.hour`, `task.detail.reminder.*-at`    | Singular form and time formats the mockup writes inline.           |
 | `task.detail.confirm-*`, `task.detail.dialog-close`, `task.detail.copy-failed`              | Texts of the bricks and of a refused clipboard.                    |
 | `task.detail.reminder.note-placeholder`                                                     | The English source names no person; the French keeps the mockup's. |
+| `task.editor.*`, `task.composer.*` but their mockup words, `task.comments.mention`          | Texts of the block editor and composer bricks, their defaults.     |
+| `task.attachments.kind-*`, `*-of`, `processing*`, `uploading`, `failed`, `sending`          | Texts of the attachment brick, its defaults.                       |
+| `task.attachments.working`, `done`, `remove`, `max`, `reject`, `limit`, `file*`             | Texts of the attachment and drop zone bricks, their defaults.      |
+| `task.sections.avatar-*`, `task.sections.time.*`, `task.sections.size.*`                    | Avatar brick texts, time and size formats the mockup inlines.      |
+| `task.*.read-failed`, `task.*.loading`, `task.*.more-failed`, `task.activity.empty`         | The mockup draws no failed, loading or empty read of these parts.  |
+| `task.comments.load-more`, `task.activity.show-more`                                        | The mockup's lists are not paged.                                  |
+| `task.approval.failed`, `task.attachments.upload-failed`, `task.attachments.remove-failed`  | The mockup draws no refused write.                                 |
+| `task.comments.*-failed`, `task.subtasks.create-failed`                                     | The mockup draws no refused write.                                 |
 | `task.properties.*-failed`, `task.properties.failed-text`                                   | The mockup draws no refused write.                                 |
 | `task.properties.conflict-text`                                                             | The mockup draws no conflicting write.                             |
 | `task.properties.approvers-invalid`, `task.properties.dependency-cycle`                     | Refusals the mockup does not draw.                                 |

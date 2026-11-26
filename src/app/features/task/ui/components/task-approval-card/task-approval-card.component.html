@@ -1,0 +1,189 @@
+@if (failed()) {
+  <div
+    role="alert"
+    class="mx-2 flex items-center gap-2 rounded-xl border border-border bg-card px-3 py-2 text-sm"
+  >
+    <ng-icon
+      name="phosphorWarningCircleBold"
+      class="shrink-0 text-destructive"
+      aria-hidden="true"
+    />
+    <span class="min-w-0 flex-1" i18n="@@task.approval.read-failed"
+      >The approval could not be loaded.</span
+    >
+    <button cwButton variant="outline" size="xs" type="button" (click)="retried.emit()">
+      <ng-container i18n="@@task.retry">Retry</ng-container>
+    </button>
+  </div>
+} @else if (round(); as round) {
+  <section
+    aria-label="Approval"
+    i18n-aria-label="@@task.approval.label"
+    class="mx-2 flex flex-col gap-3 rounded-xl border border-border bg-card p-3 shadow-[inset_0_1px_0_0_var(--shadow-edge)]"
+    data-testid="task-approval"
+  >
+    <div class="flex items-start gap-2.5">
+      <span
+        class="flex size-8 shrink-0 items-center justify-center rounded-lg border border-border bg-background"
+        aria-hidden="true"
+      >
+        @switch (round.status) {
+          @case ('approved') {
+            <ng-icon name="phosphorSealCheckFill" class="text-jade" />
+          }
+          @case ('changes-requested') {
+            <ng-icon name="phosphorArrowCounterClockwiseBold" class="text-balise" />
+          }
+          @default {
+            <ng-icon name="phosphorSealQuestionBold" class="text-muted-foreground" />
+          }
+        }
+      </span>
+      <div class="flex min-w-0 flex-1 flex-col gap-0.5">
+        <p class="text-sm font-medium">{{ title() }}</p>
+        <p class="text-xs text-muted-foreground">{{ subtitle() }}</p>
+      </div>
+      <span
+        class="shrink-0 pt-0.5 text-xs font-medium whitespace-nowrap text-muted-foreground tabular-nums"
+        i18n="@@task.approval.summary"
+        >{{ approvedCount() }} of {{ rows().length }}</span
+      >
+    </div>
+    <div
+      class="flex gap-1"
+      role="img"
+      data-testid="task-approval-bar"
+      [attr.aria-label]="barLabel()"
+    >
+      @for (row of rows(); track row.id) {
+        <span
+          class="h-1 flex-1 rounded-full transition-colors duration-300 motion-reduce:transition-none"
+          [class.bg-jade]="row.decision === 'approved'"
+          [class.bg-balise]="row.decision === 'changes-requested'"
+          [class.bg-track]="row.decision === null"
+        ></span>
+      }
+    </div>
+    <ul class="flex flex-col gap-1.5 border-t border-border pt-3">
+      @for (row of rows(); track row.id) {
+        <li class="flex items-center gap-2 text-sm">
+          <cw-avatar size="xs" [name]="row.person" />
+          <span class="min-w-0 flex-1 truncate">{{ row.name }}</span>
+          <span
+            class="inline-flex h-6 shrink-0 items-center gap-1 rounded-md border border-border bg-background px-1.5 text-xs font-medium whitespace-nowrap text-foreground"
+          >
+            @switch (row.decision) {
+              @case ('approved') {
+                <ng-icon name="phosphorCheckBold" class="text-jade" aria-hidden="true" />
+              }
+              @case ('changes-requested') {
+                <ng-icon
+                  name="phosphorArrowCounterClockwiseBold"
+                  class="text-balise"
+                  aria-hidden="true"
+                />
+              }
+              @default {
+                <ng-icon
+                  name="phosphorClockBold"
+                  class="text-muted-foreground"
+                  aria-hidden="true"
+                />
+              }
+            }
+            {{ stateLabel(row.decision) }}
+          </span>
+        </li>
+      }
+    </ul>
+    @if (canEdit() && mine() === null && !asking()) {
+      <div class="flex flex-wrap gap-2">
+        <button
+          cwButton
+          size="sm"
+          type="button"
+          [loading]="pending() === 'approve'"
+          [disabled]="pending() !== null"
+          (click)="approved.emit()"
+        >
+          <ng-icon name="phosphorSealCheckBold" aria-hidden="true" />
+          <ng-container i18n="@@task.approval.approve">Approve</ng-container>
+        </button>
+        <button
+          cwButton
+          variant="outline"
+          size="sm"
+          type="button"
+          [disabled]="pending() !== null"
+          (click)="ask()"
+          i18n="@@task.approval.ask"
+        >
+          Request changes
+        </button>
+      </div>
+    }
+    @if (asking()) {
+      <div class="flex flex-col gap-2">
+        <label for="task-approval-reason" class="text-sm font-medium" i18n="@@task.approval.reason"
+          >What needs to change</label
+        >
+        <textarea
+          cwTextarea
+          id="task-approval-reason"
+          rows="3"
+          maxlength="5000"
+          placeholder="The separator must be a semicolon for Excel in French."
+          i18n-placeholder="@@task.approval.reason-placeholder"
+          [value]="reason()"
+          (input)="typed($event)"
+        ></textarea>
+        <div class="flex flex-wrap gap-2">
+          <button
+            cwButton
+            size="sm"
+            type="button"
+            [disabled]="reason().trim() === '' || pending() !== null"
+            [loading]="pending() === 'changes'"
+            (click)="send()"
+            i18n="@@task.approval.send"
+          >
+            Send the request
+          </button>
+          <button
+            cwButton
+            variant="ghost"
+            size="sm"
+            type="button"
+            (click)="asking.set(false)"
+            i18n="@@task.approval.cancel"
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+    }
+    @if (mine(); as mine) {
+      <div class="flex items-center justify-between gap-2 text-xs text-muted-foreground">
+        @if (mine === 'approved') {
+          <span i18n="@@task.approval.mine-approved">You approved this task.</span>
+        } @else {
+          <span i18n="@@task.approval.mine-changes">You requested changes.</span>
+        }
+        @if (canEdit()) {
+          <button
+            cwButton
+            variant="outline"
+            size="xs"
+            type="button"
+            [loading]="pending() === 'withdraw'"
+            [disabled]="pending() !== null"
+            (click)="withdrawn.emit()"
+            i18n="@@task.approval.withdraw"
+          >
+            Withdraw my review
+          </button>
+        }
+      </div>
+    }
+  </section>
+}

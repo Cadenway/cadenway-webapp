@@ -1,0 +1,133 @@
+<div class="flex h-8 items-center gap-2">
+  <span class="text-sm font-medium" i18n="@@task.subtasks.title">Subtasks</span>
+  @if (rows().length > 0) {
+    <span class="text-xs whitespace-nowrap text-muted-foreground tabular-nums">{{
+      progress()
+    }}</span>
+    <cw-progress
+      class="w-10"
+      size="sm"
+      variant="success"
+      ariaLabel="Subtasks"
+      i18n-ariaLabel="@@task.subtasks.title"
+      [value]="done()"
+      [max]="rows().length"
+      [valueText]="progress()"
+    />
+  }
+</div>
+
+@if (rows().length > 0) {
+  <ul class="overflow-hidden rounded-lg border border-border">
+    @for (row of rows(); track row.task.id) {
+      <li
+        tabindex="0"
+        class="flex h-10 cursor-pointer items-center gap-2 border-t border-border pr-3 pl-2 transition-colors first:border-t-0 hover:bg-muted focus-visible:bg-muted focus-visible:outline-none"
+        data-testid="task-subtask"
+        [attr.aria-label]="openLabel(row.task)"
+        (click)="opened.emit(row.task)"
+        (keydown)="rowKey($event, row.task)"
+      >
+        @if (canEdit() && row.canAdvance) {
+          <button
+            type="button"
+            class="inline-flex size-6 shrink-0 items-center justify-center rounded-md transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+            [attr.aria-label]="row.advanceLabel"
+            [title]="row.advanceLabel"
+            (click)="advance($event, row.task)"
+          >
+            <cw-status-icon [status]="row.status" [milestone]="row.task.milestone" size="4" />
+          </button>
+        } @else {
+          <span
+            class="inline-flex size-6 shrink-0 items-center justify-center"
+            role="img"
+            [attr.aria-label]="row.advanceLabel"
+            [title]="row.advanceLabel"
+          >
+            <cw-status-icon [status]="row.status" [milestone]="row.task.milestone" size="4" />
+          </span>
+        }
+        <span
+          class="min-w-0 flex-1 truncate text-sm font-medium"
+          [class.text-muted-foreground]="row.status === 'done' || row.status === 'cancelled'"
+          [class.line-through]="row.status === 'cancelled'"
+          >{{ row.task.name }}</span
+        >
+        @if (row.task.subtasks.total > 0) {
+          <span
+            class="inline-flex shrink-0 items-center gap-1 text-xs text-muted-foreground tabular-nums"
+            [title]="countTitle(row.task.subtasks.total)"
+          >
+            <ng-icon name="phosphorTreeStructureBold" size="0.875rem" aria-hidden="true" />{{
+              row.task.subtasks.total
+            }}
+          </span>
+        }
+        <span class="shrink-0 font-mono text-xs text-muted-foreground">{{ row.task.key }}</span>
+        @if (row.people.length > 0) {
+          <cw-avatar-group size="xs" [max]="3">
+            @for (person of row.people; track person.id) {
+              <cw-avatar [name]="person.name" />
+            }
+          </cw-avatar-group>
+        }
+        <span class="w-14 shrink-0 text-right text-xs whitespace-nowrap">
+          @if (row.task.due) {
+            <cw-task-due-date [due]="row.task.due" [status]="row.status" />
+          }
+        </span>
+        <span class="shrink-0" [title]="priorities[row.task.priority]">
+          <cw-priority-icon [priority]="row.task.priority" size="3.5" />
+        </span>
+      </li>
+    }
+  </ul>
+} @else {
+  <p class="px-1 py-2 text-sm text-pretty text-muted-foreground" i18n="@@task.subtasks.empty">
+    No subtasks. A subtask is a real task: status, assignees, due date, time spent and comments.
+  </p>
+}
+
+@if (canEdit()) {
+  @if (limit(); as limit) {
+    <p
+      class="flex items-start gap-2 rounded-lg bg-muted px-3 py-2 text-xs leading-5 text-muted-foreground"
+      data-testid="task-subtask-limit"
+    >
+      <ng-icon name="phosphorInfoBold" size="0.875rem" class="mt-0.5 shrink-0" aria-hidden="true" />
+      @if (limit === 'depth') {
+        <span i18n="@@task.detail.limit-depth"
+          >Maximum level reached: 3 levels (task, subtask, sub-subtask). Use the checklist to go
+          into more detail.</span
+        >
+      } @else {
+        <span i18n="@@task.detail.limit-count"
+          >25 subtasks at most: split into several tasks instead.</span
+        >
+      }
+    </p>
+  } @else {
+    <div
+      class="flex h-9 items-center gap-2 rounded-lg border border-dashed border-input px-2.5 focus-within:border-solid focus-within:border-ring"
+    >
+      <ng-icon
+        name="phosphorPlusBold"
+        size="0.875rem"
+        class="shrink-0 text-muted-foreground"
+        aria-hidden="true"
+      />
+      <label for="task-subtask-new" class="sr-only" i18n="@@task.subtasks.new">New subtask</label>
+      <input
+        id="task-subtask-new"
+        type="text"
+        autocomplete="off"
+        maxlength="200"
+        class="h-full min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+        placeholder="Add a subtask (Enter)"
+        i18n-placeholder="@@task.subtasks.placeholder"
+        (keydown)="key($event)"
+      />
+    </div>
+  }
+}

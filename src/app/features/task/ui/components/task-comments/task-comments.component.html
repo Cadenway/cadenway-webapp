@@ -1,0 +1,119 @@
+@if (failed()) {
+  <div
+    role="alert"
+    class="flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm"
+  >
+    <ng-icon
+      name="phosphorWarningCircleBold"
+      class="shrink-0 text-destructive"
+      aria-hidden="true"
+    />
+    <span class="min-w-0 flex-1" i18n="@@task.comments.read-failed"
+      >The comments could not be loaded.</span
+    >
+    <button cwButton variant="outline" size="xs" type="button" (click)="retried.emit()">
+      <ng-container i18n="@@task.retry">Retry</ng-container>
+    </button>
+  </div>
+} @else if (loading()) {
+  <div role="status" aria-busy="true" class="flex flex-col gap-4">
+    <span class="sr-only" i18n="@@task.comments.loading">Loading the comments</span>
+    @for (line of [1, 2]; track line) {
+      <div class="flex items-start gap-2.5" aria-hidden="true">
+        <div
+          class="size-8 shrink-0 animate-pulse rounded-full bg-muted motion-reduce:animate-none"
+        ></div>
+        <div class="h-14 flex-1 animate-pulse rounded-xl bg-muted motion-reduce:animate-none"></div>
+      </div>
+    }
+  </div>
+} @else {
+  @for (row of rows(); track row.comment.id) {
+    <article
+      class="group/comment flex items-start gap-2.5 animate-item-in motion-reduce:animate-none"
+      data-testid="task-comment"
+      [attr.aria-label]="menuLabel(row)"
+    >
+      <cw-avatar [name]="row.person" />
+      <div class="flex min-w-0 flex-1 flex-col gap-1">
+        <p class="flex items-baseline gap-2 text-sm">
+          <span class="truncate font-medium">{{ row.name }}</span>
+          <span class="text-xs text-muted-foreground">{{ row.time }}</span>
+          <button
+            cwButton
+            variant="ghost"
+            size="icon-xs"
+            type="button"
+            class="ml-auto self-center opacity-0 transition-opacity group-focus-within/comment:opacity-100 group-hover/comment:opacity-100 focus-visible:opacity-100 max-md:opacity-100"
+            [attr.aria-label]="menuLabel(row)"
+            [cwMenuTriggerFor]="menu"
+          >
+            <ng-icon name="phosphorDotsThreeBold" aria-hidden="true" />
+          </button>
+        </p>
+        <div
+          tabindex="0"
+          class="w-fit max-w-full rounded-xl px-3 py-2 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none data-[state=open]:ring-2 data-[state=open]:ring-ring"
+          [class.bg-secondary]="row.mine"
+          [class.bg-muted]="!row.mine"
+          [cwContextMenuTriggerFor]="menu"
+          [cwContextMenuData]="row"
+        >
+          <cw-markdown [source]="row.comment.body" />
+        </div>
+      </div>
+      <cw-menu #menu [ariaLabel]="menuLabel(row)">
+        <button cwMenuItem (triggered)="copied.emit(row)">
+          <ng-icon name="phosphorCopyBold" aria-hidden="true" />
+          <ng-container i18n="@@task.comments.copy">Copy the text</ng-container>
+        </button>
+        @if (canComment()) {
+          <button cwMenuItem (triggered)="replied.emit(row)">
+            <ng-icon name="phosphorArrowBendUpLeftBold" aria-hidden="true" />
+            <ng-container i18n="@@task.comments.reply">Reply</ng-container>
+          </button>
+        }
+        @if (row.mine && canComment()) {
+          <cw-menu-separator />
+          <button cwMenuItem variant="destructive" (triggered)="deleted.emit(row.comment)">
+            <ng-icon name="phosphorTrashBold" aria-hidden="true" />
+            <ng-container i18n="@@task.comments.delete">Delete</ng-container>
+          </button>
+        }
+      </cw-menu>
+    </article>
+  } @empty {
+    <div class="flex flex-col items-center gap-3 p-4 text-center">
+      <div class="flex size-8 items-center justify-center rounded-lg bg-muted">
+        <ng-icon name="phosphorChatCircleBold" class="text-muted-foreground" aria-hidden="true" />
+      </div>
+      <p class="text-sm font-medium" i18n="@@task.comments.empty">No comments</p>
+      <p class="text-sm/relaxed text-muted-foreground" i18n="@@task.comments.empty-text">
+        Mention someone with &#64; to send them a notification.
+      </p>
+    </div>
+  }
+  @if (hasMore() || moreFailed()) {
+    <div class="flex items-center justify-center gap-2 text-sm">
+      @if (moreFailed()) {
+        <span class="text-muted-foreground" role="alert" i18n="@@task.comments.more-failed"
+          >More comments could not be loaded.</span
+        >
+      }
+      <button
+        cwButton
+        variant="ghost"
+        size="sm"
+        type="button"
+        [loading]="loadingMore()"
+        (click)="moreLoaded.emit()"
+      >
+        @if (moreFailed()) {
+          <ng-container i18n="@@task.retry">Retry</ng-container>
+        } @else {
+          <ng-container i18n="@@task.comments.load-more">Show more comments</ng-container>
+        }
+      </button>
+    </div>
+  }
+}

@@ -1,0 +1,190 @@
+import { signal, type WritableSignal } from '@angular/core';
+import { TestBed } from '@angular/core/testing';
+import { CwToastService } from '@cadenway/ui/components/toast';
+import { HttpErrorResponse } from '@angular/common/http';
+import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
+
+import { TaskSectionsApi } from '../../data-access/services/task-sections-api/task-sections-api.service';
+import type { TaskDetailTask } from '../../models/task-detail/task-detail.interface';
+import { TaskDetailStore } from '../task-detail/task-detail.store';
+import {
+  DESCRIPTION_SAVE_MS,
+  TaskDetailSectionsStore,
+  type TaskDetailSectionsStoreInstance,
+} from './task-detail-sections.store';
+
+/**
+ * Constant TASK
+ *
+ * @description
+ * CAD-482 of Sprint 14, with a two-item checklist.
+ *
+ * @type {TaskDetailTask}
+ */
+const TASK: TaskDetailTask = {
+  id: 'CAD-482',
+  key: 'CAD-482',
+  name: 'Redesign the SSO sign-in screen',
+  status: 'progress',
+  cancelReason: null,
+  priority: 'haute',
+  assigneeIds: ['u1'],
+  due: null,
+  start: null,
+  labels: [],
+  subtasks: { closed: 0, total: 0 },
+  checklist: { closed: 1, total: 2 },
+  comments: null,
+  parentKey: 'CAD-470',
+  milestone: false,
+  recurrence: 'none',
+  listId: 'sprint-14',
+  spaceId: 'product',
+  version: 4,
+  description: 'Old',
+  cancelNote: null,
+  estimateMinutes: null,
+  checklistItems: [
+    { id: 'i1', text: 'Mockup approved', done: true },
+    { id: 'i2', text: 'Test on Safari', done: false },
+  ],
+  createdAt: '2026-11-02T09:00:00Z',
+  createdBy: { type: 'user', id: 'u1' },
+  updatedAt: '2026-11-06T09:00:00Z',
+  archivedAt: null,
+};
+
+describe('TaskDetailSectionsStore', () => {
+  let task: WritableSignal<TaskDetailTask>;
+  let detail: Record<string, unknown>;
+  let api: Record<string, Mock>;
+  let toasts: { success: Mock; error: Mock };
+  let store: TaskDetailSectionsStoreInstance;
+
+  beforeEach(() => {
+    task = signal(TASK);
+    detail = {
+      taskKey: signal('CAD-482'),
+      task,
+      confirmedTask: task,
+      subtasks: signal([]),
+      update: vi.fn(() => Promise.resolve(true)),
+      accept: vi.fn((saved: TaskDetailTask) => {
+        task.set(saved);
+      }),
+      reload: vi.fn(() => Promise.resolve()),
+    };
+    api = {
+      people: vi.fn(() =>
+        Promise.resolve([{ id: 'u1', name: 'Camille Martin', initials: 'CM', avatar: null }]),
+      ),
+      parentOf: vi.fn(() => Promise.resolve('CAD-400')),
+      setChecklistItem: vi.fn(),
+      addChecklistItem: vi.fn(),
+      createSubtask: vi.fn(),
+    };
+    toasts = { success: vi.fn(), error: vi.fn() };
+    TestBed.configureTestingModule({
+      providers: [
+        TaskDetailSectionsStore,
+        { provide: TaskDetailStore, useValue: detail },
+        { provide: TaskSectionsApi, useValue: api },
+        { provide: CwToastService, useValue: toasts },
+      ],
+    });
+    store = TestBed.inject(TaskDetailSectionsStore);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('names people from the member directory and reads the depth from the parent', async () => {
+    await vi.waitFor(() => {
+      expect(store.peopleById().get('u1')?.name).toBe('Camille Martin');
+    });
+    await vi.waitFor(() => {
+      expect(store.subtaskLimit()).toBe('depth');
+    });
+    expect(api['parentOf']).toHaveBeenCalledWith('CAD-470');
+  });
+
+  it('ticks an item at once, then puts the confirmed tick back with a toast when refused', async () => {
+    let refuse: (error: unknown) => void = () => undefined;
+    api['setChecklistItem'].mockReturnValue(
+      new Promise((_resolve: unknown, reject: (error: unknown) => void) => {
+        refuse = reject;
+      }),
+    );
+
+    const toggled: Promise<void> = store.toggleItem(TASK.checklistItems[1]);
+
+    expect(store.checklist()[1].done).toBe(true);
+    refuse(new HttpErrorResponse({ status: 500 }));
+    await toggled;
+    expect(store.checklist()[1].done).toBe(false);
+    expect(toasts.error).toHaveBeenCalled();
+  });
+
+  it('confirms the task a tick answers', async () => {
+    const saved: TaskDetailTask = {
+      ...TASK,
+      version: 5,
+      checklistItems: [TASK.checklistItems[0], { ...TASK.checklistItems[1], done: true }],
+    };
+    api['setChecklistItem'].mockResolvedValue(saved);
+
+    await store.toggleItem(TASK.checklistItems[1]);
+
+    expect(api['setChecklistItem']).toHaveBeenCalledWith('CAD-482', 'i2', true);
+    expect(detail['accept']).toHaveBeenCalledWith(saved);
+    expect(store.checklist()[1].done).toBe(true);
+  });
+
+  it('saves the description once after the pause, with its last text', async () => {
+    vi.useFakeTimers();
+    store.editDescription('New');
+    store.editDescription('Newer');
+
+    await vi.advanceTimersByTimeAsync(DESCRIPTION_SAVE_MS);
+
+    expect(detail['update']).toHaveBeenCalledTimes(1);
+    expect(detail['update']).toHaveBeenCalledWith({ description: 'Newer' });
+  });
+
+  it('saves a waiting description when flushed, and clears an emptied one', () => {
+    store.editDescription('   ');
+    store.flushDescription();
+
+    expect(detail['update']).toHaveBeenCalledWith({ description: null });
+  });
+
+  it('shows the limit a refused creation names', async () => {
+    api['createSubtask'].mockRejectedValue(
+      new HttpErrorResponse({
+        status: 422,
+        error: { code: 'task.subtask-limit-reached' },
+      }),
+    );
+
+    await expect(store.createSubtask('Write the tests')).resolves.toBe(false);
+
+    expect(store.subtaskLimit()).toBe('count');
+  });
+
+  it('creates a subtask, toasts it and reads the detail again', async () => {
+    api['createSubtask'].mockResolvedValue({ key: 'CAD-733', name: 'Write the tests' });
+
+    await expect(store.createSubtask(' Write the tests ')).resolves.toBe(true);
+
+    expect(api['createSubtask']).toHaveBeenCalledWith(
+      'CAD-482',
+      'Write the tests',
+      expect.any(String),
+    );
+    expect(toasts.success).toHaveBeenCalledWith('Subtask CAD-733 created', {
+      description: 'In CAD-482 · Redesign the SSO sign-in screen',
+    });
+    expect(detail['reload']).toHaveBeenCalled();
+  });
+});

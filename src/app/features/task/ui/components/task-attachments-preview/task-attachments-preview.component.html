@@ -1,0 +1,92 @@
+<cw-dialog
+  size="full"
+  closeLabel="Close the preview"
+  i18n-closeLabel="@@task.attachments.preview-close"
+  [open]="shown() !== null"
+  (openChange)="openChanged($event)"
+>
+  @if (shown(); as file) {
+    <cw-dialog-header>
+      <div class="flex min-w-0 items-center gap-3 pr-10">
+        <ng-icon
+          [name]="image() ? 'phosphorImageBold' : 'phosphorFileBold'"
+          size="1.25rem"
+          class="shrink-0"
+          aria-hidden="true"
+        />
+        <div class="flex min-w-0 flex-1 flex-col">
+          <h2 cwDialogTitle class="truncate text-sm font-medium">{{ file.name }}</h2>
+          <span class="truncate text-xs text-muted-foreground">{{ meta() }}</span>
+        </div>
+        <span class="hidden text-xs text-muted-foreground tabular-nums sm:inline"
+          >{{ (index() ?? 0) + 1 }} / {{ items().length }}</span
+        >
+        <button cwButton variant="ghost" size="sm" type="button" (click)="downloaded.emit(file)">
+          <ng-icon name="phosphorDownloadSimpleBold" aria-hidden="true" />
+          <span class="hidden sm:inline" i18n="@@task.attachments.download">Download</span>
+        </button>
+      </div>
+    </cw-dialog-header>
+  }
+  @if (shown(); as file) {
+    <div
+      class="relative flex min-h-0 flex-1 items-center justify-center gap-2 py-4 sm:gap-4"
+      role="group"
+      [attr.aria-label]="file.name"
+      data-testid="task-attachment-preview"
+    >
+      <button
+        cwButton
+        variant="secondary"
+        size="icon"
+        type="button"
+        class="shrink-0 rounded-full"
+        aria-label="Previous file"
+        i18n-aria-label="@@task.attachments.previous"
+        [disabled]="index() === 0"
+        (click)="step(-1)"
+      >
+        <ng-icon name="phosphorCaretLeftBold" aria-hidden="true" />
+      </button>
+      <div
+        class="flex aspect-[4/3] max-h-full w-full max-w-3xl items-center justify-center overflow-hidden rounded-xl bg-muted"
+      >
+        @if (image() && imageUrl(); as url) {
+          <img [src]="url" [alt]="file.name" class="max-h-full max-w-full object-contain" />
+        } @else if (image()) {
+          <div
+            class="size-full animate-pulse bg-muted motion-reduce:animate-none"
+            aria-hidden="true"
+          ></div>
+        } @else {
+          <div class="flex flex-col items-center justify-center gap-3 p-6 text-center">
+            <ng-icon name="phosphorFileBold" size="3.5rem" aria-hidden="true" />
+            <p class="text-sm font-medium">{{ file.name }}</p>
+            <p class="text-sm text-muted-foreground" i18n="@@task.attachments.no-preview">
+              Preview unavailable for this type of file.
+            </p>
+            <button cwButton size="sm" type="button" (click)="downloaded.emit(file)">
+              <ng-icon name="phosphorDownloadSimpleBold" aria-hidden="true" />
+              <ng-container i18n="@@task.attachments.download-size"
+                >Download · {{ size() }}</ng-container
+              >
+            </button>
+          </div>
+        }
+      </div>
+      <button
+        cwButton
+        variant="secondary"
+        size="icon"
+        type="button"
+        class="shrink-0 rounded-full"
+        aria-label="Next file"
+        i18n-aria-label="@@task.attachments.next"
+        [disabled]="index() === items().length - 1"
+        (click)="step(1)"
+      >
+        <ng-icon name="phosphorCaretRightBold" aria-hidden="true" />
+      </button>
+    </div>
+  }
+</cw-dialog>

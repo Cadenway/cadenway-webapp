@@ -1,0 +1,150 @@
+<cw-tabs
+  variant="bar"
+  class="flex min-h-0 flex-1 flex-col gap-0!"
+  [value]="tab()"
+  (valueChange)="select($event)"
+>
+  <cw-tabs-list
+    ariaLabel="Task sections"
+    i18n-ariaLabel="@@task.tabs.label"
+    class="shrink-0 overflow-x-auto border-b border-border px-4"
+  >
+    <button cwTab value="details" i18n="@@task.tabs.details">Details</button>
+    <button cwTab value="subtasks" [count]="subtaskCount()" i18n="@@task.tabs.subtasks">
+      Subtasks
+    </button>
+    <button cwTab value="comments" [count]="commentCount()" i18n="@@task.tabs.comments">
+      Comments
+    </button>
+    <button cwTab value="activity" i18n="@@task.tabs.activity">Activity</button>
+  </cw-tabs-list>
+
+  <div
+    class="min-h-0 flex-1 overflow-y-auto px-4 py-4 max-md:flex-none max-md:overflow-visible"
+    data-testid="task-detail-tabs-body"
+  >
+    <cw-tab-panel value="details">
+      @if (tab() === 'details') {
+        <div class="flex flex-col gap-4">
+          <cw-task-approval-card
+            [round]="approval.round()"
+            [failed]="approval.failed()"
+            [people]="sections.peopleById()"
+            [meId]="meId()"
+            [canEdit]="store.canEdit()"
+            [pending]="approval.pending()"
+            (approved)="approval.approve()"
+            (changesRequested)="approval.requestChanges($event)"
+            (withdrawn)="approval.withdraw()"
+            (retried)="approval.load()"
+          />
+          <cw-task-description
+            [markdown]="description()"
+            [canEdit]="store.canEdit()"
+            (edited)="sections.editDescription($event)"
+            (committed)="sections.flushDescription()"
+          />
+          <div class="mx-2 h-px bg-border" role="separator"></div>
+          <cw-task-checklist
+            [items]="sections.checklist()"
+            [canEdit]="store.canEdit()"
+            (toggled)="toggleItem($event)"
+            (added)="addItem($event)"
+          />
+          <cw-task-attachments
+            [items]="attachments.items()"
+            [uploads]="attachments.uploads()"
+            [loading]="attachments.loading()"
+            [failed]="attachments.failed()"
+            [canEdit]="store.canEdit()"
+            [removing]="attachments.removing()"
+            [(confirming)]="removal"
+            (filesAdded)="addFiles($event)"
+            (previewed)="previewIndex.set($event)"
+            (removed)="removeAttachment($event)"
+            (retried)="attachments.load()"
+          />
+          @if (store.task(); as task) {
+            <cw-task-development [taskKey]="task.key" (keyCopied)="copyKey()" />
+          }
+        </div>
+      }
+    </cw-tab-panel>
+
+    <cw-tab-panel value="subtasks">
+      @if (tab() === 'subtasks') {
+        <cw-task-subtasks
+          [rows]="subtaskRows()"
+          [canEdit]="store.canEdit()"
+          [limit]="sections.subtaskLimit()"
+          [creating]="sections.creating()"
+          (opened)="openSubtask($event)"
+          (advanced)="advance($event)"
+          (created)="createSubtask($event)"
+        />
+      }
+    </cw-tab-panel>
+
+    <cw-tab-panel value="comments">
+      @if (tab() === 'comments') {
+        <cw-task-comments
+          [rows]="commentRows()"
+          [loading]="commentsLoading()"
+          [failed]="store.commentsFailed()"
+          [hasMore]="comments.hasMore()"
+          [loadingMore]="comments.loadingMore()"
+          [moreFailed]="comments.moreFailed()"
+          [canComment]="comments.canComment()"
+          (retried)="store.reloadComments()"
+          (moreLoaded)="comments.loadMore()"
+          (copied)="copyComment($event)"
+          (replied)="reply($event)"
+          (deleted)="deleteComment($event)"
+        />
+      }
+    </cw-tab-panel>
+
+    <cw-tab-panel value="activity">
+      @if (tab() === 'activity') {
+        <cw-task-activity
+          [entries]="activity.items()"
+          [people]="sections.peopleById()"
+          [statuses]="store.statuses()"
+          [milestone]="store.task()?.milestone ?? false"
+          [loading]="activity.loading()"
+          [failed]="activity.failed()"
+          [hasMore]="activity.hasMore()"
+          [loadingMore]="activity.loadingMore()"
+          [moreFailed]="activity.moreFailed()"
+          (retried)="activity.load()"
+          (moreLoaded)="activity.loadMore()"
+        />
+      }
+    </cw-tab-panel>
+  </div>
+
+  @if (tab() === 'comments') {
+    <cw-task-comments-composer
+      [author]="author()"
+      [mentionSearch]="mentionSearch"
+      [disabled]="!comments.canComment()"
+      [sending]="comments.sending()"
+      [error]="sendError()"
+      [value]="draft()"
+      (valueChange)="draftChanged($event)"
+      [(attachments)]="drafts"
+      (submitted)="send($event)"
+      (filesAdded)="attachToComment($event)"
+      (attachmentRemoved)="detachFromComment($event)"
+      (retried)="resend()"
+    />
+  }
+</cw-tabs>
+
+<cw-task-attachments-preview
+  [items]="attachments.items()"
+  [people]="sections.peopleById()"
+  [imageUrl]="previewImage.value() ?? null"
+  [(index)]="previewIndex"
+  (downloaded)="download($event)"
+/>

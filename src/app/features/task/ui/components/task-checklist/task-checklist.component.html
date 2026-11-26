@@ -1,0 +1,72 @@
+<div class="flex h-8 items-center gap-2">
+  <h3 class="text-base font-semibold" i18n="@@task.checklist.title">Checklist</h3>
+  @if (items().length > 0) {
+    <span class="text-xs whitespace-nowrap text-muted-foreground tabular-nums"
+      >{{ done() }} / {{ items().length }}</span
+    >
+    <cw-progress
+      class="w-10"
+      size="sm"
+      variant="success"
+      ariaLabel="Checklist"
+      i18n-ariaLabel="@@task.checklist.title"
+      [value]="done()"
+      [max]="items().length"
+      valueText="{{ done() }} / {{ items().length }}"
+    />
+  }
+</div>
+@for (item of items(); track item.id) {
+  <div
+    class="flex min-h-8 items-center gap-2 rounded-md pr-1 pl-0.5 text-sm hover:bg-accent"
+    data-testid="task-checklist-item"
+  >
+    <cw-checkbox
+      [checked]="item.done"
+      [disabled]="!canEdit()"
+      [ariaLabel]="itemLabel(item)"
+      (checkedChange)="toggled.emit(item)"
+    />
+    <span
+      class="flex-1"
+      [class.line-through]="item.done"
+      [class.text-muted-foreground]="item.done"
+      >{{ item.text }}</span
+    >
+  </div>
+} @empty {
+  <p class="px-2 py-3 text-sm text-muted-foreground" i18n="@@task.checklist.empty">
+    No items. A checklist is for small steps without a status or an assignee.
+  </p>
+}
+@if (canEdit()) {
+  @if (adding()) {
+    <div class="flex items-center gap-2 pl-6">
+      <label for="task-checklist-new" class="sr-only" i18n="@@task.checklist.new"
+        >New checklist item</label
+      >
+      <input
+        #field
+        cwInput
+        id="task-checklist-new"
+        type="text"
+        autocomplete="off"
+        maxlength="300"
+        class="h-7"
+        placeholder="Checklist item (Enter to add, Escape to finish)"
+        i18n-placeholder="@@task.checklist.placeholder"
+        (keydown)="key($event)"
+        (blur)="blurred($event)"
+      />
+    </div>
+  } @else {
+    <button
+      type="button"
+      class="flex h-8 w-full items-center gap-2 rounded-md px-1 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none focus-visible:ring-inset"
+      (click)="open()"
+    >
+      <ng-icon name="phosphorPlusBold" aria-hidden="true" />
+      <ng-container i18n="@@task.checklist.add">Add an item</ng-container>
+    </button>
+  }
+}
