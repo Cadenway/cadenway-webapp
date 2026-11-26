@@ -192,6 +192,19 @@ the task` with `Retry`; otherwise Errors' `RouteErrorPanel` renders the typed ro
     (the confirmed ones come back) with the failure toast; a `412` reads the detail again and warns
     (`CAD-482 changed elsewhere`). A read never replaces a newer confirmed task, and pending values
     stay over what it reads. A parent or list change reads the detail again (parent, list).
+  - One write path per task: `write(key, send, fallback?)` queues every write of a task (field
+    patches, statuses, assignees, labels, followers, approvers, votes, dependencies, checklist)
+    behind the earlier ones and calls `send(version)` with that task's newest confirmed version
+    (`fallback` for a task the detail never confirmed, or for a write without `If-Match`, such as
+    the checklist's `0`). `send` adopts its answer inside the callback, `accept(task)` for a
+    returned task or `acceptVersion(version, changes, key)` for an `ETag` or `taskVersion` only, so
+    the next write goes against it. `acceptVersion` adopts a version only at confirmed + 1; any
+    other newer version reads the task again. A `412` (`TaskVersionConflict`) reads the task again
+    and the next write of that task waits for that read; the error goes back to the caller. A write
+    queued when another task opens is still sent with its own key and version.
+  - `TASK_WRITE_LANE` (Task's `TaskStatusChangesStore` file): the optional write path the status
+    changes use instead of writing on their own; the dialog provides it with its
+    `TaskDetailStore` (`useExisting`), so a status write never overlaps another write of the task.
   - Realtime: while a task is open the store watches its `task:` room; `task.updated.v1` and
     `task.status-changed.v1` read the detail again, `comment.created.v1` the first comment page
     (`commentsRevision`), `git.links-changed.v1` counts `gitRevision`; each part at most once
@@ -264,8 +277,8 @@ large` and an empty file with `Empty file`, a name already attached skipped, fil
     not comment.
   - Extension points: `TaskDetailStoreInstance` (`task`, `confirmedTask`, `space`, `statuses`,
     `list`, `canEdit`, `canComment`, `parent`, `subtasks`, `comments`, `commentsFailed`,
-    `partial`, `pendingFields`, `commentsRevision`, `gitRevision`; `update`, `accept(task)`,
-    `acceptVersion(version)`, `reload`, `reloadComments`), which `cw-task-properties-panel` and
+    `partial`, `pendingFields`, `commentsRevision`, `gitRevision`; `update`, `write`, `accept(task)`,
+    `acceptVersion(version, changes?, key?)`, `reload`, `reloadComments`), which `cw-task-properties-panel` and
     `cw-task-detail-tabs`, containers of the dialog, inject; each provides its own stores. The
     dialog also provides `TaskStatusChangesStore` for the panel's status and the subtasks' status
     buttons; a completed status write reads the detail again.
