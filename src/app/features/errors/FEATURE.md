@@ -14,10 +14,10 @@ renders inside the shell. The page keeps the unknown address in the browser.
 
 ## Public entry points
 
-| Entry point     | Consumers      |
-| --------------- | -------------- |
-| `errors.routes` | app, workspace |
-| `.`             | app, spaces    |
+| Entry point     | Consumers              |
+| --------------- | ---------------------- |
+| `errors.routes` | app, workspace         |
+| `.`             | app, spaces, workspace |
 
 `.` publishes `RouteErrorBoundary`, the `defaultErrorComponent` of `withErrorBoundaries` in
 `app.config.ts`, a component under `ui/components/route-error-boundary`. A route that needs its

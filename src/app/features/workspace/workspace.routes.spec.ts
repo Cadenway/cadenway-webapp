@@ -15,6 +15,7 @@ import {
   Router,
   withAutoCleanupInjectors,
   withComponentInputBinding,
+  withErrorBoundaries,
   withRouterConfig,
 } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
@@ -42,6 +43,7 @@ import {
 } from '@core/api';
 import { RuntimeConfigStore } from '@core/config';
 import { REALTIME_TERMINAL_FAILURE, RealtimeConnection } from '@core/realtime';
+import { RouteErrorBoundary } from '@features/errors';
 
 import { WorkspaceSession } from './data-access/services/workspace-session/workspace-session.service';
 import type {
@@ -251,6 +253,7 @@ describe('WORKSPACE_ROUTES', () => {
           withAutoCleanupInjectors(),
           withComponentInputBinding(),
           withRouterConfig({ paramsInheritanceStrategy: 'always' }),
+          withErrorBoundaries({ defaultErrorComponent: RouteErrorBoundary }),
         ),
         { provide: WorkspaceSession, useValue: session },
         { provide: RuntimeConfigStore, useValue: { config: () => ({}) } },
@@ -1445,7 +1448,7 @@ describe('WORKSPACE_ROUTES', () => {
     expect(TestBed.inject(Router).url).toBe('/atelier-nord/missing/page');
   });
 
-  it('mounts the task deep link inside the shell and renders its 404 for an unreadable task', async () => {
+  it('mounts the task deep link inside the shell and renders not found for a missing task', async () => {
     const getTask: Mock<() => Observable<never>> = vi.fn(() =>
       throwError(() => new HttpErrorResponse({ status: 404, url: '/tasks/CAD-482' })),
     );

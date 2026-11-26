@@ -1240,10 +1240,12 @@ describe('ListRowsStore', () => {
   it('restores at most four trash entries at a time', async () => {
     const store: InstanceType<typeof ListRowsStore> = setup(flat);
     await settle();
-    const actions: TaskActionsApi = TestBed.inject(TaskActionsApi);
+    const { restore }: { restore: Mock<TaskActionsApi['restore']> } = TestBed.inject(
+      TaskActionsApi,
+    ) as unknown as { restore: Mock<TaskActionsApi['restore']> };
     let inFlight: number = 0;
     let peak: number = 0;
-    vi.mocked(actions.restore).mockImplementation(async (): Promise<void> => {
+    restore.mockImplementation(async (): Promise<void> => {
       inFlight++;
       peak = Math.max(peak, inFlight);
       await Promise.resolve();
@@ -1252,6 +1254,6 @@ describe('ListRowsStore', () => {
 
     await expect(store.restore(['t-1', 't-2', 't-3', 't-4', 't-5', 't-6'])).resolves.toBe(true);
     expect(peak).toBe(4);
-    expect(actions.restore).toHaveBeenCalledTimes(6);
+    expect(restore).toHaveBeenCalledTimes(6);
   });
 });
