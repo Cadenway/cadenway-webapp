@@ -381,7 +381,8 @@ their hours. A chip or a popover line opens the task's detail (`ViewTaskWritesSt
 context menu is `cw-task-menu`. The total column shows the hours, the note, the meter and
 `Spent: …` / `No time logged`.
 
-- Providers: `WORKLOAD_VIEW_PROVIDERS` holds Task's `TaskStatusChangesStore`, `ListTasksStore`
+- Providers: `WORKLOAD_VIEW_PROVIDERS` holds Task's `TaskStatusChangesStore`, `ListTasksApi`
+  (so it reads the workspace-scoped user), `ListTasksStore`
   (the list's tasks with the view's `taskQuery`, no due window: the menu's tasks and writes, the
   chips' shown status and milestone flag, and `followRows`) and `WorkloadViewStore`. The page
   provides `ViewTaskWritesStore` with `VIEW_TASK_WRITER` set to `ListTasksStore`, and the
