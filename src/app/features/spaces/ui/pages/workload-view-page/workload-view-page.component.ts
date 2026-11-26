@@ -46,6 +46,7 @@ import type {
 } from '../../../models/workload/workload.interface';
 import { ListPageStore } from '../../../state/list-page/list-page.store';
 import {
+  LIST_TASKS_CAP,
   ListTasksStore,
   type ListTasksStoreInstance,
 } from '../../../state/list-tasks/list-tasks.store';
@@ -212,7 +213,8 @@ function capitalized(text: string): string {
  * view's query (for the menu and the tools' count) and the workload; a first read that fails
  * reaches the route's error boundary, a failed refresh offers `Retry` in place, and so does a
  * failed read of the time spent. Without any task matching the view, the mockup's filter text
- * shows under the grid.
+ * shows under the grid. When the task reader stops at its cap (`LIST_TASKS_CAP`), a notice says
+ * the tasks past it cannot be reassigned here, and their chips (no menu, no drag) say why.
  */
 @Component({
   selector: 'cw-workload-view-page',
@@ -662,6 +664,29 @@ export class WorkloadViewPage {
   );
 
   /**
+   * Property capCount
+   *
+   * @description
+   * The task reader's cap (`LIST_TASKS_CAP`), written in the application locale.
+   *
+   * @type {string}
+   * @readonly
+   */
+  private readonly capCount: string = new Intl.NumberFormat(this.locale).format(LIST_TASKS_CAP);
+
+  /**
+   * Property truncatedText
+   *
+   * @description
+   * The notice shown when the task reader stopped at its cap: the tasks past it have no menu and
+   * no drag.
+   *
+   * @type {string}
+   * @readonly
+   */
+  protected readonly truncatedText: string = $localize`:@@spaces.workload.truncated:Tasks past the first ${this.capCount}:count: cannot be reassigned from this view.`;
+
+  /**
    * Property suppressClick
    *
    * @description
@@ -716,7 +741,8 @@ export class WorkloadViewPage {
    * Method chipTitle
    *
    * @description
-   * The tooltip of a chip: its key, name, hours that day and the drag hint.
+   * The tooltip of a chip: its key, name, hours that day and the drag hint; for a task past the
+   * task reader's cap (not read, so without menu or drag), why it cannot be reassigned here.
    *
    * @param {WorkloadEntry} entry - The task of the cell.
    * @returns {string} The tooltip.
@@ -725,6 +751,10 @@ export class WorkloadViewPage {
     const key: string = entry.taskKey;
     const name: string = entry.name;
     const hours: string = this.hours(entry.minutes / 60);
+    if (!entry.task) {
+      const count: string = this.capCount;
+      return $localize`:@@spaces.workload.chip-title-unread:${key}:key: · ${name}:name: · ${hours}:hours: that day · past the first ${count}:count: tasks, it cannot be reassigned from this view`;
+    }
     return $localize`:@@spaces.workload.chip-title:${key}:key: · ${name}:name: · ${hours}:hours: that day · drag to another person to reassign`;
   }
 

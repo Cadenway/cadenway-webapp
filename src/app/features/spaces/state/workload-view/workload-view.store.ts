@@ -471,8 +471,10 @@ export interface WorkloadViewStoreInstance {
    * shown when its turn comes: assignments first, then removals. A drag made meanwhile changes
    * what is meant, so a task dragged back before the first write answers is never left without
    * the person it came back to. Once settled, the toast `CAD-482 reassigned` / `From X to Y.`
-   * (the latest drag's rows) offers `Undo`, which brings back the assignees of before, from the
-   * version the reassignment left; a task brought back to where it started shows no toast. A
+   * (the latest drag's rows) offers `Undo`, which waits for a reassignment of the task still
+   * running to settle, then brings back the assignees of before, sent with the version the
+   * reassignment left: a task changed since (by a later drag or elsewhere) is left as it is, with
+   * `CAD-482 changed since`. A task brought back to where it started shows no toast. A
    * refused or unanswered first write sends nothing more; a refusal after an applied write
    * warns `CAD-482 was assigned to Y but stays assigned to X.` with an `Undo` of what was
    * applied. The promise never rejects.
@@ -695,7 +697,7 @@ function createWorkloadViewStore(): Type<WorkloadViewStoreInstance> {
         if (sameAssignees(shownTask(key)?.assigneeIds ?? [], start)) return;
         const after: Readonly<Partial<Record<string, number>>> = last.after;
         const restore: () => void = (): void => {
-          void drive(key, start, after);
+          void undo(key, start, after);
         };
         if (stopped === 'refused') {
           keepToast(
@@ -732,6 +734,26 @@ function createWorkloadViewStore(): Type<WorkloadViewStoreInstance> {
         });
         workers.set(key, worker);
         return worker;
+      };
+
+      const undo: (
+        key: string,
+        start: readonly string[],
+        after: Readonly<Partial<Record<string, number>>>,
+      ) => Promise<void> = async (
+        key: string,
+        start: readonly string[],
+        after: Readonly<Partial<Record<string, number>>>,
+      ): Promise<void> => {
+        for (
+          let running: Promise<void> | undefined = workers.get(key);
+          running;
+          running = workers.get(key)
+        ) {
+          await running;
+        }
+        if (store._destroyRef.destroyed) return;
+        await drive(key, start, after);
       };
 
       return {

@@ -1312,6 +1312,8 @@
     "spaces.workload.former-member": "Former member",
     "spaces.workload.unassigned": "Unassigned",
     "spaces.workload.grid": "Workload from {$start} to {$end}, capacity {$capacity} a day",
+    "spaces.workload.truncated": "Tasks past the first {$count} cannot be reassigned from this view.",
+    "spaces.workload.chip-title-unread": "{$key} · {$name} · {$hours} that day · past the first {$count} tasks, it cannot be reassigned from this view",
     "spaces.workload.chip-title": "{$key} · {$name} · {$hours} that day · drag to another person to reassign",
     "spaces.workload.no-time": "No time logged",
     "spaces.workload.minutes": "{$minutes} min",

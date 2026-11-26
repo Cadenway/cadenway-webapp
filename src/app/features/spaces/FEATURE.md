@@ -156,10 +156,11 @@ context menu is `cw-task-menu`. The total column shows the hours, the note, the 
   while the worker runs only changes what is meant, so a task dragged from A to B and back to A
   before the first write answers is assigned to B, then B is removed: A is never unassigned.
   Once settled:
-  - `CAD-482 reassigned` / `From X to Y.` (the latest drag's rows) offers `Undo`, which brings
-    back the assignees of before through the same worker, from the version the reassignment
-    left (a task changed since is skipped with `CAD-482 changed since`); a task that ends where
-    it started shows no toast;
+  - `CAD-482 reassigned` / `From X to Y.` (the latest drag's rows) offers `Undo`, a separate
+    operation: it waits for a reassignment of the task still running to settle, then brings back
+    the assignees of before, sent with the version the reassignment left. A task changed since
+    (by a later drag or elsewhere) is left as it is with `CAD-482 changed since`, and nothing
+    is written. A task that ends where it started shows no toast;
   - a refused or unanswered first write sends nothing more (`The task could not be reassigned`,
     or the unknown outcome warning, and the tasks are read again);
   - a refusal after an applied write (the removal, typically) warns
@@ -181,8 +182,11 @@ context menu is `cw-task-menu`. The total column shows the hours, the note, the 
     keyboard reassignment takes two steps (add, then remove).
   - The popover of a cell cannot be closed by the page: opening a task from it relies on the
     popover closing as the detail takes the focus.
-  - Workload rows carry no milestone flag (G15): the flag comes from `ListTasksStore`, so a task
-    beyond its 2,000 tasks shows as an ordinary task and has no menu or drag.
+  - Workload rows carry no milestone flag (G15) and no version: both come from `ListTasksStore`,
+    which stops at 2,000 tasks (`LIST_TASKS_CAP`). A task past it shows as an ordinary task, with
+    no menu and no drag; its chip's title says it cannot be reassigned from this view, and the
+    view shows `Tasks past the first 2,000 cannot be reassigned from this view.` while the
+    reader is truncated.
   - `Spent` covers the two weeks shown (the timesheet's weeks); the mockup sums every entry of
     the list. The popover's per-task `on <estimate>` hint is not shown: task summaries carry no
     estimate. Time entries have no realtime notice (G13).
@@ -196,6 +200,7 @@ context menu is `cw-task-menu`. The total column shows the hours, the note, the 
   | `spaces.workload.former-member`                                                                            | An assignee no longer in the directory.                 |
   | `spaces.workload.hours-minutes`, `spaces.workload.minutes`, `spaces.workload.hours`                        | The mockup's `fmtMin` and `fmtH` formats as units.      |
   | `spaces.workload.cell*`, `spaces.workload.of-capacity`, `spaces.workload.tasks-*`                          | The mockup's cell label, split into composable units.   |
+  | `spaces.workload.truncated`, `spaces.workload.chip-title-unread`                                           | The mockup reads every task; the view reads 2,000.      |
 
 ## Activity view
 

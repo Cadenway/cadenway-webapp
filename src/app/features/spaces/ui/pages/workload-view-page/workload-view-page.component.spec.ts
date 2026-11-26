@@ -375,6 +375,34 @@ describe('WorkloadViewPage', () => {
     );
     expect(rowOf(host, 'Inès Robert')?.textContent).toContain('No time logged');
     expect(host.textContent).not.toContain('No task matches the search or the filters.');
+    expect(host.querySelector('[data-testid="workload-truncated"]')).toBeNull();
+  });
+
+  it('says when tasks past the reader cap cannot be reassigned, and why on their chips', async () => {
+    page.mockImplementation(
+      (_listId: string, _query, _group, cursor: string | null): Promise<ListTaskPage> => {
+        const index: number = cursor === null ? 0 : Number(cursor);
+        return Promise.resolve({
+          items: Array.from({ length: 100 }, (_: unknown, offset: number) =>
+            task(`OPS-${String(index * 100 + offset)}`),
+          ),
+          nextCursor: String(index + 1),
+          total: 5000,
+        });
+      },
+    );
+    const host: HTMLElement = hostOf(await open());
+
+    expect(host.querySelector('[data-testid="workload-truncated"]')?.textContent.trim()).toBe(
+      'Tasks past the first 2,000 cannot be reassigned from this view.',
+    );
+    expect(
+      rowOf(host, 'Camille Martin')
+        ?.querySelector('[data-testid="workload-chip"]')
+        ?.getAttribute('title'),
+    ).toBe(
+      'CAD-482 · Redesign the SSO sign-in screen · 2 h that day · past the first 2,000 tasks, it cannot be reassigned from this view',
+    );
   });
 
   it('shows the filter text when no task matches, never a failure', async () => {

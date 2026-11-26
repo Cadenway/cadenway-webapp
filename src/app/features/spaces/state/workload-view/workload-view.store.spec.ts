@@ -313,7 +313,8 @@ describe('WorkloadViewStore', () => {
    *
    * @description
    * Makes the faked task reader's `act` behave as `ListTasksStore`: the shown assignees of
-   * CAD-482 change at once, a refusal puts them back, and each applied write bumps the version.
+   * CAD-482 change at once, a refusal puts them back, and each applied write bumps the version;
+   * a write expecting another version than the newest is not sent and reported as changed.
    * Each answer is taken in order: `done`, `refused`, or `held` (applied once `release` runs).
    *
    * @param {readonly ('done' | 'refused' | 'held')[]} answers - The answers, in order.
@@ -324,7 +325,18 @@ describe('WorkloadViewStore', () => {
     const control: { release: () => void } = { release: () => undefined };
     let version: number = 3;
     act.mockImplementation(
-      async (_tasks: readonly TaskSummary[], action: TaskBulkAction): Promise<ViewTaskOutcome> => {
+      async (
+        _tasks: readonly TaskSummary[],
+        action: TaskBulkAction,
+        expected?: Readonly<Partial<Record<string, number>>>,
+      ): Promise<ViewTaskOutcome> => {
+        if (expected && expected['CAD-482'] !== version) {
+          return {
+            ...outcome(null),
+            failed: [],
+            changed: [{ taskKey: 'CAD-482', version }],
+          };
+        }
         const before: readonly ListTaskItem[] = items();
         const shown: readonly string[] = before[0]?.task.assigneeIds ?? [];
         if (action.type === 'assign') show([...new Set([...shown, action.userId])]);
@@ -479,6 +491,39 @@ describe('WorkloadViewStore', () => {
       [{ type: 'unassign', userId: 'u-ines' }, { 'CAD-482': 4 }],
     ]);
     expect(items()[0]?.task.assigneeIds).toEqual(['u-camille']);
+  });
+
+  it('lets an Undo wait for a running drag and leaves a task changed since as it is', async () => {
+    const store: WorkloadViewStoreInstance = await setup();
+    show(['u-camille']);
+    const control: { release: () => void } = writer(['done', 'done', 'held', 'done']);
+
+    await store.reassign(camilleToInes);
+    const undo: () => void = (toasts.show.mock.calls[0][1] as { undo: () => void }).undo;
+    const second: Promise<void> = store.reassign({
+      task: task('CAD-482', { assigneeIds: ['u-ines'] }),
+      from: 'u-ines',
+      to: 'u-hugo',
+      fromName: 'Inès Robert',
+      toName: 'Hugo Durand',
+    });
+    undo();
+    await settle();
+
+    expect(act).toHaveBeenCalledTimes(3);
+    control.release();
+    await second;
+    await settle();
+
+    expect(actions().slice(2)).toEqual([
+      [{ type: 'assign', userId: 'u-hugo' }, undefined],
+      [{ type: 'unassign', userId: 'u-ines' }, undefined],
+      [{ type: 'assign', userId: 'u-camille' }, { 'CAD-482': 5 }],
+    ]);
+    expect(items()[0]?.task.assigneeIds).toEqual(['u-hugo']);
+    expect(toasts.warning).toHaveBeenCalledWith('CAD-482 changed since', {
+      description: 'Undo skipped it: its latest values are shown.',
+    });
   });
 
   it('only removes the person when the task goes to the unassigned row', async () => {
