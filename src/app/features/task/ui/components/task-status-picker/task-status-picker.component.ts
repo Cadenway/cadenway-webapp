@@ -112,8 +112,10 @@ interface StatusMenuGroup {
  * (`NEXT_STATUS`, `Reached` for a milestone); without a next status it opens the menu. The
  * caret opens the menu of the space's visible statuses, grouped under `Not started`, `Active`
  * and `Closed`, each with its hint; the current status is marked even when the space hides it. A
- * milestone offers its four statuses only. It emits `statusChanged` with the chosen key and never
- * changes the shown status itself: the owner passes the displayed status back.
+ * milestone offers its four statuses only. The main part emits `statusChanged` with the next
+ * status and a menu option emits `statusPicked` with the chosen one, so the owner can confirm an
+ * advance with a toast and apply a pick silently (`App.dc.html` lines 8645-8651 and 8717). It
+ * never changes the shown status itself: the owner passes the displayed status back.
  */
 @Component({
   selector: 'cw-task-status-picker',
@@ -209,12 +211,23 @@ export class TaskStatusPicker {
    * Property statusChanged
    *
    * @description
-   * Emits the status the person chose, from either part of the button.
+   * Emits the next status when the main part advances the task.
    *
    * @type {OutputEmitterRef<StatusKey>}
    * @readonly
    */
   public readonly statusChanged: OutputEmitterRef<StatusKey> = output<StatusKey>();
+
+  /**
+   * Property statusPicked
+   *
+   * @description
+   * Emits the status chosen in the menu, unless it is the shown one.
+   *
+   * @type {OutputEmitterRef<StatusKey>}
+   * @readonly
+   */
+  public readonly statusPicked: OutputEmitterRef<StatusKey> = output<StatusKey>();
 
   /**
    * Property label
@@ -330,12 +343,12 @@ export class TaskStatusPicker {
    * Method choose
    *
    * @description
-   * A menu option: emits it unless it is the shown status.
+   * A menu option: emits it through `statusPicked` unless it is the shown status.
    *
    * @param {StatusKey} status - Chosen status.
    */
   protected choose(status: StatusKey): void {
-    if (status !== this.status()) this.statusChanged.emit(status);
+    if (status !== this.status()) this.statusPicked.emit(status);
   }
   // #endregion
 }

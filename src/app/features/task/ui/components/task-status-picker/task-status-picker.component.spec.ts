@@ -29,12 +29,23 @@ interface Rendered {
    * Property emitted
    *
    * @description
-   * Statuses emitted so far.
+   * Statuses the main part emitted so far (`statusChanged`).
    *
    * @type {StatusKey[]}
    * @readonly
    */
   readonly emitted: StatusKey[];
+
+  /**
+   * Property picked
+   *
+   * @description
+   * Statuses the menu emitted so far (`statusPicked`).
+   *
+   * @type {StatusKey[]}
+   * @readonly
+   */
+  readonly picked: StatusKey[];
   // #endregion
 }
 
@@ -47,7 +58,7 @@ interface Rendered {
  * @param {StatusKey} status - Shown status.
  * @param {boolean} [milestone] - Whether the task is a milestone.
  * @param {readonly StatusOption[]} [options] - Statuses of the space.
- * @returns {Promise<Rendered>} The fixture and the emitted statuses.
+ * @returns {Promise<Rendered>} The fixture and the statuses each part emitted.
  */
 async function render(
   status: StatusKey,
@@ -56,12 +67,14 @@ async function render(
 ): Promise<Rendered> {
   const fixture: ComponentFixture<TaskStatusPicker> = TestBed.createComponent(TaskStatusPicker);
   const emitted: StatusKey[] = [];
+  const picked: StatusKey[] = [];
   fixture.componentInstance.statusChanged.subscribe((value: StatusKey) => emitted.push(value));
+  fixture.componentInstance.statusPicked.subscribe((value: StatusKey) => picked.push(value));
   fixture.componentRef.setInput('status', status);
   fixture.componentRef.setInput('milestone', milestone);
   fixture.componentRef.setInput('options', options);
   await fixture.whenStable();
-  return { fixture, emitted };
+  return { fixture, emitted, picked };
 }
 
 /**
@@ -86,7 +99,7 @@ describe('TaskStatusPicker', () => {
   });
 
   it('moves to the next status from its main part', async () => {
-    const { fixture, emitted }: Rendered = await render('todo');
+    const { fixture, emitted, picked }: Rendered = await render('todo');
     const main: HTMLButtonElement | null = (fixture.nativeElement as HTMLElement).querySelector(
       'button',
     );
@@ -95,13 +108,14 @@ describe('TaskStatusPicker', () => {
     main?.click();
 
     expect(emitted).toEqual(['progress']);
+    expect(picked).toEqual([]);
   });
 
-  it('groups the visible statuses by category and emits the chosen one', async () => {
+  it('groups the visible statuses by category and emits the chosen one as a pick', async () => {
     const options: readonly StatusOption[] = defaultStatusOptions().map((option: StatusOption) =>
       option.key === 'waiting' ? { ...option, hidden: true } : option,
     );
-    const { fixture, emitted }: Rendered = await render('todo', false, options);
+    const { fixture, emitted, picked }: Rendered = await render('todo', false, options);
     const caret: HTMLButtonElement | null = (
       fixture.nativeElement as HTMLElement
     ).querySelector<HTMLButtonElement>('button[aria-haspopup="menu"]:last-of-type');
@@ -115,7 +129,8 @@ describe('TaskStatusPicker', () => {
       .find((item: HTMLElement) => item.textContent.trim().startsWith('Blocked'))
       ?.click();
 
-    expect(emitted).toEqual(['blocked']);
+    expect(picked).toEqual(['blocked']);
+    expect(emitted).toEqual([]);
   });
 
   it('offers a milestone its four statuses only', async () => {

@@ -128,6 +128,14 @@ describe('toTaskDetail', () => {
     expect(toTaskDetail(dto(undefined)).list.canEdit).toBe(true);
     expect(toTaskDetail(dto('view')).list.canEdit).toBe(false);
   });
+
+  it('lets an editor and a commenter comment, not a viewer or an unknown role', () => {
+    expect(toTaskDetail(dto(undefined)).list.canComment).toBe(true);
+    expect(toTaskDetail(dto('edit')).list.canComment).toBe(true);
+    expect(toTaskDetail(dto('comment')).list).toMatchObject({ canEdit: false, canComment: true });
+    expect(toTaskDetail(dto('view')).list.canComment).toBe(false);
+    expect(toTaskDetail(dto('review')).list.canComment).toBe(false);
+  });
 });
 
 describe('toTaskPatch', () => {
@@ -137,6 +145,18 @@ describe('toTaskPatch', () => {
       startDate: null,
       cancelNote: null,
       name: 'New',
+    });
+  });
+
+  it('sends the description with its mention spans', () => {
+    expect(
+      toTaskPatch({
+        description: 'Ask @[Hugo Dubois](u2)',
+        descriptionMentions: [{ userId: 'u2', start: 4, end: 22 }],
+      }),
+    ).toEqual({
+      description: 'Ask @[Hugo Dubois](u2)',
+      descriptionMentions: [{ userId: 'u2', start: 4, end: 22 }],
     });
   });
 });

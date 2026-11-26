@@ -16,7 +16,11 @@ export type {
 } from './models/task-bulk/task-bulk.interface';
 export { TaskActionsApi } from './data-access/services/task-actions-api/task-actions-api.service';
 export type { CreatedTask, TaskCreateOptions } from './models/task-create/task-create.interface';
-export type { TaskDetailPreview } from './models/task-detail/task-detail.interface';
+export type {
+  TaskDetailOpenOptions,
+  TaskDetailPreview,
+  TaskDetailTab,
+} from './models/task-detail/task-detail.interface';
 export type {
   TaskCancellation,
   TaskStatusChange,
@@ -27,7 +31,9 @@ export { TaskDetailOpener } from './services/task-detail-opener/task-detail-open
 export {
   STATUS_SETTLE_MS,
   type TaskCancelRequest,
+  type TaskStatusChangesInstance,
   TaskStatusChangesStore,
+  type TaskStatusRequestOptions,
 } from './state/task-status-changes/task-status-changes.store';
 export { TaskDueDate } from './ui/components/task-due-date/task-due-date.component';
 export { TaskLabelChips } from './ui/components/task-label-chips/task-label-chips.component';

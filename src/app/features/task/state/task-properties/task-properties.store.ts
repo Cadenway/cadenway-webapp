@@ -954,7 +954,16 @@ function createTaskPropertiesStore(): Type<TaskPropertiesStoreInstance> {
         }
       };
 
+      let approverWrites: number = 0;
+
       return {
+        _refreshApproval(version: number | null): void {
+          const key: string | null = store.key();
+          const approval: TaskApproval | null = store.approval();
+          if (key === null || version === null || approval === null || approverWrites > 0) return;
+          if (approval.taskVersion < version) void readApproval(key);
+        },
+
         _load(key: string | null): void {
           if (key === store.key()) return;
           patchState(store, {
@@ -1124,6 +1133,7 @@ function createTaskPropertiesStore(): Type<TaskPropertiesStoreInstance> {
               reviewers: ids.map((id: string) => ({ userId: id, decision: null })),
             },
           });
+          approverWrites++;
           try {
             const approval: TaskApproval = await store._api.requestApproval(key, task.version, ids);
             if (!current(key)) return;
@@ -1146,6 +1156,8 @@ function createTaskPropertiesStore(): Type<TaskPropertiesStoreInstance> {
               void store._detail.reload();
               void readApproval(key);
             }
+          } finally {
+            approverWrites--;
           }
         },
 
@@ -1199,6 +1211,9 @@ function createTaskPropertiesStore(): Type<TaskPropertiesStoreInstance> {
       _followAssignees: signalMethod<string | null>((signature: string | null): void => {
         if (signature !== null && store.watcherIds() !== null) void store.reloadWatchers();
       }),
+      _followVersion: signalMethod<number | null>((version: number | null): void => {
+        store._refreshApproval(version);
+      }),
     })),
     withHooks({
       onInit(store): void {
@@ -1217,6 +1232,9 @@ function createTaskPropertiesStore(): Type<TaskPropertiesStoreInstance> {
             return task ? `${task.key}:${task.assigneeIds.join(',')}` : null;
           }),
         );
+        store._followVersion(
+          computed((): number | null => store._detail.confirmedTask()?.version ?? null),
+        );
       },
     }),
   );
@@ -1231,7 +1249,8 @@ function createTaskPropertiesStore(): Type<TaskPropertiesStoreInstance> {
  * round, the dependencies and their candidates, the time per status and the sprint end. It
  * follows the open task of `TaskDetailStore` (reading everything again for another key, the
  * time per status again after a confirmed status or milestone change, the watchers after a
- * confirmed assignee change), and writes the collections the task patch does not carry:
+ * confirmed assignee change, the approval once the confirmed version moves past the one it was
+ * read at, as the tabs' approval card does, so a vote there shows here too), and writes the collections the task patch does not carry:
  * assignees and labels (shown at once, written one after the other, confirmed through
  * `accept`), watchers, approvers and dependencies (their new task version through
  * `acceptVersion`, so the detail's next `If-Match` matches). A refusal restores what it

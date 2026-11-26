@@ -95,7 +95,13 @@ describe('TaskPropertiesPanel', () => {
             confirmedTask: task,
             canEdit,
             statuses: signal(defaultStatusOptions()),
-            list: signal({ id: 'sprint-14', name: 'Sprint 14', spaceId: 'product', canEdit: true }),
+            list: signal({
+              id: 'sprint-14',
+              name: 'Sprint 14',
+              spaceId: 'product',
+              canEdit: true,
+              canComment: true,
+            }),
             space: signal({ id: 'product', name: 'Product', statuses: defaultStatusOptions() }),
             update,
             moveTo: vi.fn(),
@@ -198,7 +204,26 @@ describe('TaskPropertiesPanel', () => {
     advance?.click();
     await fixture.whenStable();
 
-    expect(request).toHaveBeenCalledWith(task(), 'review', defaultStatusOptions());
+    expect(request).toHaveBeenCalledWith(task(), 'review', defaultStatusOptions(), {
+      quiet: false,
+    });
+  });
+
+  it('applies a status picked from the menu without the change toast', async () => {
+    document
+      .querySelector<HTMLButtonElement>(
+        '[data-testid="task-property-status"] button[aria-haspopup="menu"]:last-of-type',
+      )
+      ?.click();
+    await fixture.whenStable();
+    Array.from(document.querySelectorAll<HTMLElement>('[role="menuitem"]'))
+      .find((item: HTMLElement) => item.textContent.trim().startsWith('Blocked'))
+      ?.click();
+    await fixture.whenStable();
+
+    expect(request).toHaveBeenCalledWith(task(), 'blocked', defaultStatusOptions(), {
+      quiet: true,
+    });
   });
 
   it('turns the task into a milestone and confirms it with a toast', async () => {

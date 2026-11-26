@@ -83,6 +83,7 @@ import {
   TaskDetailOpener,
   TaskDueDate,
   TaskLabelChips,
+  type TaskStatusChangesInstance,
   TaskStatusChangesStore,
   type TaskSummary,
   TaskTitleCell,
@@ -532,11 +533,10 @@ export class ListViewPage {
    * @description
    * The status changes of the rows and their cancel reason dialog.
    *
-   * @type {InstanceType<typeof TaskStatusChangesStore>}
+   * @type {TaskStatusChangesInstance}
    * @readonly
    */
-  protected readonly statusChanges: InstanceType<typeof TaskStatusChangesStore> =
-    inject(TaskStatusChangesStore);
+  protected readonly statusChanges: TaskStatusChangesInstance = inject(TaskStatusChangesStore);
 
   /**
    * Property navigation
@@ -2091,12 +2091,18 @@ export class ListViewPage {
    * Method addSubtask
    *
    * @description
-   * Opens creation with the parent and destination list.
+   * Opens the parent's detail on its `Subtasks` tab with the new-subtask field focused, as the
+   * mockup's `addKidHere` does (`App.dc.html` lines 6291-6294); the subtask is created there.
    *
    * @param {ListRow} row - The parent row.
    */
   protected addSubtask(row: ListRow): void {
-    this.taskCreate.open({ parentKey: row.task.key, listId: row.task.listId });
+    const task: TaskSummary = row.task;
+    void this.taskDetail.open(
+      task.key,
+      { key: task.key, name: task.name, status: row.status, milestone: task.milestone },
+      { tab: 'subtasks' },
+    );
   }
 
   /**

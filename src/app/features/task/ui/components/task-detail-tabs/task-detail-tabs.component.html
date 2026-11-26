@@ -41,6 +41,7 @@
           <cw-task-description
             [markdown]="description()"
             [canEdit]="store.canEdit()"
+            [mentionSearch]="mentionSearch"
             (edited)="sections.editDescription($event)"
             (committed)="sections.flushDescription()"
           />
@@ -94,7 +95,7 @@
           [hasMore]="comments.hasMore()"
           [loadingMore]="comments.loadingMore()"
           [moreFailed]="comments.moreFailed()"
-          [canComment]="comments.canComment()"
+          [canComment]="store.canComment()"
           (retried)="store.reloadComments()"
           (moreLoaded)="comments.loadMore()"
           (copied)="copyComment($event)"
@@ -127,7 +128,7 @@
     <cw-task-comments-composer
       [author]="author()"
       [mentionSearch]="mentionSearch"
-      [disabled]="!comments.canComment()"
+      [disabled]="!store.canComment()"
       [sending]="comments.sending()"
       [error]="sendError()"
       [value]="draft()"

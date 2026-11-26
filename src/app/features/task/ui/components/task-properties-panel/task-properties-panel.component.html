@@ -15,6 +15,7 @@
         [milestone]="task.milestone"
         [disabled]="!store.canEdit()"
         (statusChanged)="changeStatus($event)"
+        (statusPicked)="changeStatus($event, true)"
       />
     </dd>
 

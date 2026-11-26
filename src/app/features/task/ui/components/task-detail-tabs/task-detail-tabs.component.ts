@@ -1,5 +1,6 @@
 import { DOCUMENT } from '@angular/common';
 import {
+  afterNextRender,
   Component,
   computed,
   inject,
@@ -20,7 +21,7 @@ import type {
 } from '@cadenway/ui/components/comment-composer';
 import { CwTab, CwTabPanel, CwTabs, CwTabsList } from '@cadenway/ui/components/tabs';
 import { CwToastService } from '@cadenway/ui/components/toast';
-import { type Observable, of } from 'rxjs';
+import { from, map, type Observable } from 'rxjs';
 
 import {
   WORKSPACE_CONTEXT,
@@ -33,6 +34,7 @@ import type { TaskAttachment } from '../../../models/task-detail-sections/task-d
 import type {
   TaskChecklistItem,
   TaskComment,
+  TaskDetailTab,
   TaskDetailTask,
 } from '../../../models/task-detail/task-detail.interface';
 import type { TaskSummary } from '../../../models/task-summary/task-summary.interface';
@@ -61,7 +63,10 @@ import {
   TaskDetailStore,
   type TaskDetailStoreInstance,
 } from '../../../state/task-detail/task-detail.store';
-import { TaskStatusChangesStore } from '../../../state/task-status-changes/task-status-changes.store';
+import {
+  type TaskStatusChangesInstance,
+  TaskStatusChangesStore,
+} from '../../../state/task-status-changes/task-status-changes.store';
 import {
   fileSize,
   firstName,
@@ -82,26 +87,6 @@ import { TaskDevelopment } from '../task-development/task-development.component'
 import { type TaskSubtaskRow, TaskSubtasks } from '../task-subtasks/task-subtasks.component';
 
 /**
- * Type TaskDetailTab
- *
- * @description
- * A tab of the detail's left column.
- *
- * @type {'details' | 'subtasks' | 'comments' | 'activity'}
- */
-export type TaskDetailTab = 'details' | 'subtasks' | 'comments' | 'activity';
-
-/**
- * Type TaskStatusChanges
- *
- * @description
- * The status changes store the detail dialog provides (its instance type is not exported).
- *
- * @type {InstanceType<typeof TaskStatusChangesStore>}
- */
-type TaskStatusChanges = InstanceType<typeof TaskStatusChangesStore>;
-
-/**
  * Constant MENTION_OPTIONS
  *
  * @description
@@ -117,9 +102,11 @@ const MENTION_OPTIONS: number = 8;
  * @description
  * The left column of the task detail (`App.dc.html` lines 2111-2366): the tab list `Task
  * sections` (`Details`, `Subtasks` and `Comments` with their counts, `Activity`; `Details` at each
- * opening, since the dialog renders the column anew for each task) over the scrolling area
- * (`px-4 py-4`), and, on `Comments`, the composer pinned at the bottom. The detail dialog renders
- * it in a column that fills the height on desktop and flows in the page scroll under 768 px.
+ * opening, since the dialog renders the column anew for each task, unless the opening asked for
+ * a tab through `TaskDetailOpener`: `Subtasks` then also focuses the new-subtask field) over the
+ * scrolling area (`px-4 py-4`), and, on `Comments`, the composer pinned at the bottom. The detail
+ * dialog renders it in a column that fills the height on desktop and flows in the page scroll
+ * under 768 px.
  *
  * It is a container of the detail dialog, which acts as a page and provides `TaskDetailStore` and
  * `TaskStatusChangesStore`; it provides the section stores (`TaskDetailSectionsStore`,
@@ -129,8 +116,9 @@ const MENTION_OPTIONS: number = 8;
  * the development placeholder), `Subtasks` (status advance through the status changes, opening
  * through `TaskDetailOpener`, creation), `Comments` (list, menu actions, composer with mentions of
  * the task's participants and files attached to the task too) and `Activity` (the log, read each
- * time the tab is shown). Writing needs the list's `edit` role; commenting needs `comment` or
- * `edit`, which the participants read tells for a caller without `edit`.
+ * time the tab is shown). The description's `@` menu offers the same participants as the
+ * composer, read the first time either menu searches. Writing needs the list's `edit` role;
+ * commenting needs `comment` or `edit` (`TaskDetailStore.canComment`).
  */
 @Component({
   selector: 'cw-task-detail-tabs',
@@ -454,8 +442,9 @@ export class TaskDetailTabs {
    * Property mentionSearch
    *
    * @description
-   * The `@` menu's lookup: the task's participants named by the member directory, matched on
-   * the typed text.
+   * The `@` menu's lookup of the composer and the description: the task's participants named by
+   * the member directory, matched on the typed text. The first search reads the participants
+   * when the `Comments` tab has not read them yet.
    *
    * @type {CwMentionSearch}
    * @readonly
@@ -463,18 +452,20 @@ export class TaskDetailTabs {
   protected readonly mentionSearch: CwMentionSearch = (
     query: string,
   ): Observable<readonly CwMentionPerson[]> => {
-    const people: ReadonlyMap<string, Person> = this.sections.peopleById();
     const text: string = query.trim().toLocaleLowerCase();
-    return of(
-      this.comments
-        .participants()
-        .map((id: string): Person | undefined => people.get(id))
-        .filter(
-          (person: Person | undefined): person is Person =>
-            person?.name.toLocaleLowerCase().includes(text) === true,
-        )
-        .slice(0, MENTION_OPTIONS)
-        .map((person: Person): CwMentionPerson => ({ id: person.id, name: person.name })),
+    return from(this.comments.start()).pipe(
+      map((): readonly CwMentionPerson[] => {
+        const people: ReadonlyMap<string, Person> = this.sections.peopleById();
+        return this.comments
+          .participants()
+          .map((id: string): Person | undefined => people.get(id))
+          .filter(
+            (person: Person | undefined): person is Person =>
+              person?.name.toLocaleLowerCase().includes(text) === true,
+          )
+          .slice(0, MENTION_OPTIONS)
+          .map((person: Person): CwMentionPerson => ({ id: person.id, name: person.name }));
+      }),
     );
   };
 
@@ -504,10 +495,10 @@ export class TaskDetailTabs {
    * @description
    * The status changes of the detail dialog, for the subtasks' status buttons.
    *
-   * @type {TaskStatusChanges}
+   * @type {TaskStatusChangesInstance}
    * @readonly
    */
-  private readonly statusChanges: TaskStatusChanges = inject(TaskStatusChangesStore);
+  private readonly statusChanges: TaskStatusChangesInstance = inject(TaskStatusChangesStore);
 
   /**
    * Property opener
@@ -595,6 +586,40 @@ export class TaskDetailTabs {
    */
   private readonly composer: Signal<TaskCommentsComposer | undefined> =
     viewChild(TaskCommentsComposer);
+
+  /**
+   * Property subtasksSection
+   *
+   * @description
+   * The `Subtasks` section, to focus its add field when the opening asked for that tab.
+   *
+   * @type {Signal<TaskSubtasks | undefined>}
+   * @readonly
+   */
+  private readonly subtasksSection: Signal<TaskSubtasks | undefined> = viewChild(TaskSubtasks);
+  // #endregion
+
+  // #region Constructor
+  /**
+   * Constructor
+   *
+   * @description
+   * Opens the tab the opening asked for (`TaskDetailOpener.takeTab`), `Details` otherwise; on
+   * `Subtasks`, the new-subtask field takes the focus once rendered.
+   *
+   * @constructor
+   */
+  public constructor() {
+    const key: string | null = this.store.taskKey();
+    const requested: TaskDetailTab | null = key === null ? null : this.opener.takeTab(key);
+    if (requested === null || requested === 'details') return;
+    this.select(requested);
+    if (requested === 'subtasks') {
+      afterNextRender((): void => {
+        this.subtasksSection()?.focusNew();
+      });
+    }
+  }
   // #endregion
 
   // #region Methods
@@ -609,7 +634,7 @@ export class TaskDetailTabs {
   protected select(tab: string): void {
     this.tab.set(tab);
     this.activity.show(tab === 'activity');
-    if (tab === 'comments') this.comments.start();
+    if (tab === 'comments') void this.comments.start();
   }
 
   /**

@@ -7,9 +7,10 @@ create dialog and the task detail (step 5). It owns the task display models and 
 the status change interaction of `cw-status-interactions`, the cancel reason dialog, the status,
 priority, people and label pickers, the due date, the label chips and the name cell of a row, the
 create dialog with its `N` shortcut, and the task detail: a dialog over the current page driven by
-`?task=<KEY>`, its store, header, layout, list and parent pickers. Lists, boards and their grouping
-belong to Spaces, which composes these blocks; the typed route error states belong to Errors. The
-detail's properties panel and tabs are placeholders filled by the next step-5 changes.
+`?task=<KEY>`, its store, header, layout, properties panel (`cw-task-properties-panel`), tabs
+(`cw-task-detail-tabs`: details, subtasks, comments, activity) and their stores, list and parent
+pickers. Lists, boards and their grouping belong to Spaces, which composes these blocks and opens
+the detail through `TaskDetailOpener`; the typed route error states belong to Errors.
 
 ## Routes
 
@@ -53,8 +54,10 @@ detail's properties panel and tabs are placeholders filled by the next step-5 ch
   `STATUS_LABELS`, `STATUS_HINTS`, `MILESTONE_STATUS_HINTS`, `STATUS_CATEGORY_LABELS`,
   `CANCEL_REASON_LABELS` and `PRIORITY_LABELS`; the rules `nextStatus`, `isClosedStatus`,
   `isMilestoneStatus`, `statusLabel`, `pickableStatuses` and `defaultStatusOptions`; `initialsOf` and `personOf(userId, name)` for members another feature read.
-- `TaskStatusChangesStore`, a SignalStore the consumer provides on its route: `request(task, status,
-options?)`, `requestCancel(tasks, options?)`, `pendingStatus(taskId)`, `displayedStatus(task)`,
+- `TaskStatusChangesStore`, a SignalStore the consumer provides on its route, typed
+  `TaskStatusChangesInstance`: `request(task, status, options?, behavior?)` (`behavior` is
+  `TaskStatusRequestOptions`, whose `quiet` confirms without the change toast),
+  `requestCancel(tasks, options?)`, `pendingStatus(taskId)`, `displayedStatus(task)`,
   `settledStatus(task)`, `settledTask(task)`, `undo(taskId)`, `cancelRequest` with
   `confirmCancel(cancellation)` and `keepTask()`, the `changed` stream, and the `completed` stream
   after each write succeeds or fails; `STATUS_SETTLE_MS` (460).
@@ -64,11 +67,15 @@ options?)`, `requestCancel(tasks, options?)`, `pendingStatus(taskId)`, `displaye
   `restore(entryId)`, for the stores of the screens that act on several tasks.
 - `TaskCreate` (root): `open(options?)`, `useDefaults(defaults, destroyRef)`, `close()`, `isOpen`,
   `options`, `created`.
-- `TaskDetailOpener` (root): `open(taskKey, preview?)` merges `?task=<KEY>` into the current
-  address (the list view, the command palette, the inbox, a toast's `Open`), `close()` removes it,
-  `taskKey`, `isOpen` and `preview`; `TaskDetailPreview` (key, name, status, milestone), what the
-  opening screen shows of the task while the detail is read.
-- Presentational components, inputs and outputs only: `cw-task-status-picker`,
+- `TaskDetailOpener` (root): `open(taskKey, preview?, options?)` merges `?task=<KEY>` into the
+  current address (the list view, the command palette, the inbox, a toast's `Open`), `close()`
+  removes it, `taskKey`, `isOpen` and `preview`; `TaskDetailPreview` (key, name, status,
+  milestone), what the opening screen shows of the task while the detail is read;
+  `TaskDetailOpenOptions` (`tab`, a `TaskDetailTab`: `details`, `subtasks`, `comments` or
+  `activity`) opens the column on that tab, kept out of the address, which the tabs take once
+  (`takeTab(taskKey)`); `subtasks` also focuses the new-subtask field (a row's `Add a subtask`).
+- Presentational components, inputs and outputs only: `cw-task-status-picker` (`statusChanged`
+  for the split button's advance, `statusPicked` for a menu option),
   `cw-task-priority-picker`, `cw-task-people-picker`, `cw-task-label-picker`, `cw-task-due-date`,
   `cw-task-label-chips`, `cw-task-title-cell` and `cw-task-cancel-dialog`.
 
@@ -102,7 +109,8 @@ options?)`, `requestCancel(tasks, options?)`, `pendingStatus(taskId)`, `displaye
 - For the tabs (`TaskSectionsApi`): `TasksService.getTaskApproval`, `voteOnTaskApproval`,
   `withdrawTaskApprovalVote` and `requestTaskApproval`; `listTaskComments` (later pages),
   `createTaskComment` (mention spans, `Idempotency-Key`), `deleteTaskComment` (`If-Match`),
-  `listTaskParticipants` (a `403` reads as no comment right); `addChecklistItem` and
+  `listTaskParticipants` (the `@` menus of the composer and the description), `updateTask`
+  (`description` with `descriptionMentions`, `If-Match`); `addChecklistItem` and
   `updateChecklistItem` (without `If-Match`); `createSubtask` (`Idempotency-Key`) and `getTask`
   (the parent's parent, for the depth); `TaskActivityService.listTaskActivity`;
   `AttachmentsService.listTaskAttachments`, `startTaskAttachmentUpload` (`Idempotency-Key`), the
@@ -129,7 +137,9 @@ options?)`, `requestCancel(tasks, options?)`, `pendingStatus(taskId)`, `displaye
   back. A `412` other than `organization.context-changed` reads the task again, shows its status
   and warns; any other failure restores the confirmed status, clears the pending change and shows
   the failure toast. A confirmed change shows a 6 s toast whose `Undo` sends the previous
-  status at once, only while the task still has the status that change gave it. Undoing a change
+  status at once, only while the task still has the status that change gave it; a `quiet`
+  request (a status picked from the detail's menu) shows none, the last click deciding, while a
+  failure still toasts and a cancellation still toasts after its dialog. Undoing a change
   away from `Cancelled` sends its reason again without its note, which task summaries do not carry.
   A pending write flushed after destruction is dropped if its queued organization is no longer
   the committed organization.
@@ -197,7 +207,8 @@ the task` with `Retry`; otherwise Errors' `RouteErrorPanel` renders the typed ro
     `Duplicate` with `Open`, `Move to…`, `Archive` with `Undo`, `Save as a template`,
     `Convert to a subtask of…` or `Move to another task…`, `Detach from <key>`, `Delete`
     confirmed, then `Undo` restores the trash entry) and `Close`. Writing actions need the list's
-    `edit` role (`callerRole`, absent reads as `edit`).
+    `edit` role (`callerRole`, absent reads as `edit`); commenting needs `edit` or `comment`
+    (`canComment`; an unknown role reads as `view`).
   - Pickers: `Move to…` lists Spaces' `LIST_DIRECTORY` (the sidebar's lists) filtered by name; the
     parent picker reads one page of the task's list (`listTasks`, `level: all`) and, once text is
     typed, the search hits of other lists, without the task, its subtree, its parent, a task with
@@ -206,19 +217,22 @@ the task` with `Retry`; otherwise Errors' `RouteErrorPanel` renders the typed ro
     offer `Undo`.
   - Tabs (`cw-task-detail-tabs`, `App.dc.html` lines 2111-2366): the tab list `Task sections`
     (`Details`, `Subtasks` and `Comments` with their counts, `Activity`), `Details` at each
-    opening since the dialog renders the column anew per task; the composer is pinned under
-    `Comments`. The container provides `TaskDetailSectionsStore` (description, checklist, subtask
-    creation, member directory), `TaskApprovalCardStore`, `TaskAttachmentsStore`,
+    opening since the dialog renders the column anew per task, unless the opening asked for a tab
+    (`TaskDetailOpener.open(key, preview, { tab })`; `Subtasks` focuses the new-subtask field);
+    the composer is pinned under `Comments`. The container provides `TaskDetailSectionsStore`
+    (description, checklist, subtask creation, member directory), `TaskApprovalCardStore`,
+    `TaskAttachmentsStore`,
     `TaskCommentsStore` and `TaskActivityStore`, so they die with the open task, and the bricks'
     English texts (`TASK_SECTIONS_BRICK_LABELS`); the sections are presentational. `Details`:
     the approval card while a round has reviewers (title, counts, segment bar, reviewer states;
     `Approve`, `Request changes` with `What needs to change`, `Withdraw my review`; a vote that
     moved the status reads the detail again, otherwise the detail takes the answer's version;
     the round is read again when the confirmed version moves past it), the description
-    (`cw-block-editor` with its toolbar; saved 800 ms after the last change and on blur through
-    `update({ description })`, an empty text clears it; a confirmed text never replaces what is
-    being typed), the checklist (`<done> / <n>`, ticks shown at once and rolled back with the
-    failure toast, `Add an item` with Enter and Escape; no deletion, as in the mockup), the
+    (`cw-block-editor` with its toolbar and the `@` menu of the participants, the composer's;
+    saved 800 ms after the last change and on blur through `update` with `description` and
+    `descriptionMentions`, the spans of its `@[Name](id)` tokens, under `If-Match`; an empty
+    text clears it; a confirmed text never replaces what is being typed), the checklist
+    (`<done> / <n>`, ticks shown at once and rolled back with the failure toast, `Add an item` with Enter and Escape; no deletion, as in the mockup), the
     attachments (`cw-attachment` tiles, `Add` and the drop zone, 25 MB refused with `File too
 large`, a name already attached skipped, `Remove “<name>”?` confirmed then toasted, the
     preview dialog with previous and next, arrow keys and `Download`, raster images drawn from
@@ -239,19 +253,22 @@ large`, a name already attached skipped, `Remove “<name>”?` confirmed then t
     again while shown when the version moves; actor (member, automation, `GitHub` or `GitLab`, a
     service by name), what changed and when, `Show more`. Every list has its loading, inline
     error with `Retry` and empty state. Writing needs `edit`; commenting needs `comment` or
-    `edit`, which the participants read tells for a caller without `edit`.
+    `edit` (`TaskDetailStore.canComment`, from the list's `callerRole`). The participants are
+    read once, when `Comments` opens or a `@` menu first searches, and not for a caller who may
+    not comment.
   - Extension points: `TaskDetailStoreInstance` (`task`, `confirmedTask`, `space`, `statuses`,
-    `list`, `canEdit`, `parent`, `subtasks`, `comments`, `commentsFailed`, `partial`,
-    `pendingFields`, `commentsRevision`, `gitRevision`; `update`, `accept(task)`,
-    `acceptVersion(version)`, `reload`, `reloadComments`), and the placeholders
-    `cw-task-properties-panel` and `cw-task-detail-tabs`, containers of the dialog that inject the
-    store. The dialog also provides `TaskStatusChangesStore` for the panel's status; a completed
-    status write reads the detail again.
+    `list`, `canEdit`, `canComment`, `parent`, `subtasks`, `comments`, `commentsFailed`,
+    `partial`, `pendingFields`, `commentsRevision`, `gitRevision`; `update`, `accept(task)`,
+    `acceptVersion(version)`, `reload`, `reloadComments`), which `cw-task-properties-panel` and
+    `cw-task-detail-tabs`, containers of the dialog, inject; each provides its own stores. The
+    dialog also provides `TaskStatusChangesStore` for the panel's status and the subtasks' status
+    buttons; a completed status write reads the detail again.
   - Properties panel (`cw-task-properties-panel`, `App.dc.html` lines 2368-2610): `Status`
     (`cw-task-status-picker` through the dialog's `TaskStatusChangesStore`: the split button
-    advances, the menu groups by category with hints, fast clicks settle once, the icon morphs
-    from the previous status; `Cancelled` opens `cw-task-cancel-dialog`, rendered by the panel),
-    `Assignees` (five initials and `+N`, checkbox menu, `(me)`), `Due date` (`Today`,
+    advances with the change toast and `Undo`, the menu groups by category with hints and applies
+    a pick without a toast (`quiet`, `App.dc.html` line 8717), fast clicks settle once, the icon
+    morphs from the previous status; `Cancelled` opens `cw-task-cancel-dialog`, rendered by the
+    panel), `Assignees` (five initials and `+N`, checkbox menu, `(me)`), `Due date` (`Today`,
     `Tomorrow`, `Yesterday` or the short date, late warning; dialog with `Today`, `Tomorrow`,
     `Friday`, `End of the sprint` for a sprint list, `No due date` and the calendar), `Priority`,
     `Estimate` (not for a milestone: steppers, suggestions, `parseDuration` with a bare number in
@@ -268,7 +285,9 @@ large`, a name already attached skipped, `Remove “<name>”?` confirmed then t
     collections at once one after the other and confirms them with `accept` or `acceptVersion`,
     restoring them with a toast on a refusal; `TaskTimeStore` (provided by the panel) holds the
     entries and the timer. Both follow the open task's key; the time per status is read again
-    after a confirmed status or milestone change, the watchers after a confirmed assignee change.
+    after a confirmed status or milestone change, the watchers after a confirmed assignee change,
+    the approval once the confirmed version moves past the one it was read at (as the tabs'
+    approval card, so a vote cast there shows in the row), unless its own approvers write runs.
     Without the list's `edit` role every row is read-only (no timer, no dependency buttons).
 - Known gaps: the comment count of a row is null (task summaries carry none); the Git chip is left
   out (B4, no API yet); the dialog's file drop is not built (attachments need the task first); the
@@ -282,12 +301,12 @@ people`), and the due trigger shows the short date without `Tomorrow ·` or the
 - Detail gaps: `cw-dialog` has no size for the mockup's panel (`top-[6vh] h-[88vh] max-w-5xl`):
   the detail uses `size="full"` (the viewport less 2 rem) with `scrollable`, so the header has the
   brick's `px-6 py-4` and the body cancels its padding; a `sheet`-like size is a design-system
-  need. The properties panel and the tabs are placeholders (step 5 continues). The reminder button
-  does not mark which preset the pending reminder came from unless its instant matches one; the
+  need. The reminder button does not mark which preset the pending reminder came from unless its
+  instant matches one; the
   afternoon preset is left out after 15 h (the mockup always shows it). The parent picker cannot
-  check the depth and size of a search hit from another list. Watchers show the count only (the
-  list of people and the `Followers` row belong to the panel). Realtime presence (who is viewing)
-  has no contract yet.
+  check the depth and size of a search hit from another list. The header's follow button shows
+  the watcher count only; the people are in the panel's `Followers` row. Realtime presence (who
+  is viewing) has no contract yet.
 - Properties gaps: the API keeps no running timer, so its start lives in the device storage per
   organization and task (`cadenway-task-timer.<organizationId>.<taskKey>`) and is lost with it;
   stopping records the elapsed minutes (1 to 1,440) for today. A deleted time entry's `Undo`
@@ -295,28 +314,27 @@ people`), and the due trigger shows the short date without `Tomorrow ·` or the
   (`requestTaskApproval`), which clears every vote, not only the removed reviewer's; a round keeps
   one reviewer, so the last one cannot be removed and a round cannot be withdrawn. Another
   person than the caller can be followed or unfollowed only with `edit` (the panel is read-only
-  without it, the header's follow stays). Picking a status in the menu shows the status change
-  toast too (the mockup toasts the advance only), since `TaskStatusChangesStore` always toasts.
-  The estimate field opens from a trigger in a `cw-popover` rather than being the mockup's inline
-  combobox (`cw-combobox` has no free duration with steppers: a design-system need). Durations
-  use `formatDuration` (`1 h 30`) in both languages. Dependencies, approval and the time per
-  status are not read again on another person's change (realtime notices read the detail only).
+  without it, the header's follow stays). The estimate field opens from a trigger in a
+  `cw-popover` rather than being the mockup's inline combobox (`cw-combobox` has no free duration with steppers: a design-system need). Durations
+  use `formatDuration` (`1 h 30`) in both languages. Dependencies and the time per status (but
+  after a status or milestone change) are not read again on another person's change (realtime
+  notices read the detail only); the approval is, once that read moves the version.
   `Since creation` shows only when the history is complete. The subtask count reads
   `{d} / {n} done` without the singular. Members outside the people list (guests, former
   members) read `Unknown member`.
 
-- Tabs gaps: `TaskDetailOpener.open` takes no tab, so a subtask request from a row cannot open
-  `Subtasks` (the column always starts on `Details`). `TaskDetailPatch` has no
-  `descriptionMentions`, so the description offers no `@` menu and sends no mention spans. The
-  comment composer sends only with text (the mockup also sends files alone), its toolbar is the
-  brick's (bold, italic, link, bulleted list, code, mention, attach), and its files are uploaded
+- Tabs gaps: the description's `@` menu offers the task's participants (`listTaskParticipants`),
+  like the composer, not every member who could read the list. The comment composer sends only
+  with text (the mockup also sends files alone), its toolbar is the brick's (bold, italic, link, bulleted list, code, mention, attach), and its files are uploaded
   to the task as soon as they are chosen (the brick's contract), staying attached when taken off
   the comment. A deleted comment's `Undo` posts it again as a new comment at the end (the API has
   no restore). `cw-attachment` draws no uploader nor time on its tile (the preview does) and
   no thumbnail without a signed address per tile; `cw-checklist` has no tick-and-add-only mode,
   so the checklist composes `cw-checkbox`, `cw-progress` and `cw-input`; the attachment preview
   is a full-size `cw-dialog`, not the mockup's dark viewer. The approval card and the properties
-  panel each read the approval. The Git panel waits for the read of a task's Git links.
+  panel each read the approval (`getTaskApproval` into their own models); both read it again
+  once the confirmed version moves past the one they read, so they agree after any write. The
+  Git panel waits for the read of a task's Git links.
 
 ## Copy not taken word for word from the mockup
 

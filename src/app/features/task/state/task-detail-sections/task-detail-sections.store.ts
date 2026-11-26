@@ -18,6 +18,7 @@ import type {
   TaskChecklistItem,
   TaskDetailTask,
 } from '../../models/task-detail/task-detail.interface';
+import { mentionSpans } from '../../utils/task-detail-sections/task-detail-sections.util';
 import { TaskDetailStore } from '../task-detail/task-detail.store';
 
 /**
@@ -196,8 +197,8 @@ export interface TaskDetailSectionsStoreInstance {
    *
    * @description
    * Saves the description `DESCRIPTION_SAVE_MS` after the last change, through
-   * `TaskDetailStore.update` (pending value at once, `If-Match`, rolled back on refusal); an
-   * empty text clears it.
+   * `TaskDetailStore.update` (pending value at once, `If-Match`, rolled back on refusal) with
+   * the spans of its `@` mentions (`descriptionMentions`); an empty text clears it.
    *
    * @param {string} markdown - The edited description.
    */
@@ -306,7 +307,11 @@ function createTaskDetailSectionsStore(): Type<TaskDetailSectionsStoreInstance> 
         if (markdown === null) return;
         const current: string = store._detail.confirmedTask()?.description ?? '';
         if (markdown.trim() === current.trim()) return;
-        void store._detail.update({ description: markdown.trim() === '' ? null : markdown });
+        void store._detail.update(
+          markdown.trim() === ''
+            ? { description: null }
+            : { description: markdown, descriptionMentions: mentionSpans(markdown) },
+        );
       };
       return {
         editDescription(markdown: string): void {

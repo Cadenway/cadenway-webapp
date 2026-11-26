@@ -206,7 +206,10 @@ computed from the navigation's reads, for the command palette's `Lists` and the 
   has the person, picking them again removes them), `Move to`, `Remind me tomorrow morning`
   (9 h tomorrow, `setTaskReminder`), `Duplicate`, `Copy the link` (`/<slug>/t/<KEY>`),
   `Copy the identifier` and `Delete` (confirmed). `…` and the add-subtask button show on
-  row hover or focus. A right click elsewhere in the view opens the list menu: `New task`,
+  row hover or focus. The add-subtask button (`Add a subtask to <key>`, offered while the depth
+  and the 25-subtask limits allow) opens the task's detail on its `Subtasks` tab with the
+  new-subtask field focused (`TaskDetailOpener.open(key, preview, { tab: 'subtasks' })`,
+  `App.dc.html` lines 6291-6294). A right click elsewhere in the view opens the list menu: `New task`,
   `Group by`, `Sort by`, `Select all`, `Export as CSV` and `Edit the list` (`Edit the sprint` for a sprint, `App.dc.html` line 7310), which opens the list
   dialog through `SpacesNavigationStore.openDialog`. `Name` sorts by name,
   ascending then descending. The row's icon animates from its previous status.

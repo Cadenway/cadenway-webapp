@@ -140,7 +140,13 @@ function detailAt(version: number, changes: Partial<TaskDetail> = {}): TaskDetai
   return {
     task: taskAt(version),
     space: { id: 'product', name: 'Product', statuses: defaultStatusOptions() },
-    list: { id: 'sprint-14', name: 'Sprint 14', spaceId: 'product', canEdit: true },
+    list: {
+      id: 'sprint-14',
+      name: 'Sprint 14',
+      spaceId: 'product',
+      canEdit: true,
+      canComment: true,
+    },
     parent: null,
     subtasks: [],
     comments,

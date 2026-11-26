@@ -28,12 +28,11 @@ import { TaskDetailStore } from '../task-detail/task-detail.store';
  * Type TaskParticipantsState
  *
  * @description
- * The read of who a comment may mention, which also tells the comment right: `denied` for a
- * viewer (`403`).
+ * The read of who a comment or the description may mention.
  *
- * @type {'idle' | 'loading' | 'ready' | 'denied' | 'failed'}
+ * @type {'idle' | 'loading' | 'ready' | 'failed'}
  */
-export type TaskParticipantsState = 'idle' | 'loading' | 'ready' | 'denied' | 'failed';
+export type TaskParticipantsState = 'idle' | 'loading' | 'ready' | 'failed';
 
 /**
  * Interface TaskCommentsState
@@ -268,24 +267,13 @@ export interface TaskCommentsStoreInstance {
    * Property participants
    *
    * @description
-   * Accounts a comment may mention.
+   * Accounts a comment or the description may mention, empty until read (or when the read
+   * failed).
    *
    * @type {Signal<readonly string[]>}
    * @readonly
    */
   readonly participants: Signal<readonly string[]>;
-
-  /**
-   * Property canComment
-   *
-   * @description
-   * Whether the caller may post: an editor, or a caller the participants read answered (the
-   * `comment` role). A failed read lets the gateway decide; a viewer may not.
-   *
-   * @type {Signal<boolean>}
-   * @readonly
-   */
-  readonly canComment: Signal<boolean>;
   // #endregion
 
   // #region Methods
@@ -293,9 +281,13 @@ export interface TaskCommentsStoreInstance {
    * Method start
    *
    * @description
-   * Reads the participants once, when the tab opens.
+   * Reads the participants once, when the tab opens or a `@` menu first searches; later calls
+   * share that read. A caller without the comment right (`TaskDetailStore.canComment`) reads
+   * nothing.
+   *
+   * @returns {Promise<void>} Resolves once the participants are read or the read failed.
    */
-  start(): void;
+  start(): Promise<void>;
 
   /**
    * Method loadMore
@@ -418,27 +410,19 @@ function createTaskCommentsStore(): Type<TaskCommentsStoreInstance> {
         const cursor: string | null | undefined = store.laterCursor();
         return cursor === undefined ? (store._detail.comments()?.nextCursor ?? null) : cursor;
       }),
-      canComment: computed(
-        (): boolean =>
-          store._detail.canEdit() ||
-          store.participantsState() === 'ready' ||
-          store.participantsState() === 'failed',
-      ),
     })),
     withComputed((store) => ({
       hasMore: computed((): boolean => store._cursor() !== null),
     })),
     withMethods((store) => {
+      let participantsRead: Promise<void> | null = null;
       const readParticipants: () => Promise<void> = async (): Promise<void> => {
         const key: string | null = store._detail.taskKey();
         if (key === null) return;
         patchState(store, { participantsState: 'loading' });
         try {
-          const ids: readonly string[] | null = await store._api.participants(key);
-          patchState(store, {
-            participants: ids ?? [],
-            participantsState: ids === null ? 'denied' : 'ready',
-          });
+          const ids: readonly string[] = await store._api.participants(key);
+          patchState(store, { participants: ids, participantsState: 'ready' });
         } catch {
           patchState(store, { participantsState: 'failed' });
         }
@@ -476,8 +460,11 @@ function createTaskCommentsStore(): Type<TaskCommentsStoreInstance> {
         }
       };
       return {
-        start(): void {
-          if (store.participantsState() === 'idle') void readParticipants();
+        start(): Promise<void> {
+          if (participantsRead === null && store._detail.canComment()) {
+            participantsRead = readParticipants();
+          }
+          return participantsRead ?? Promise.resolve();
         },
 
         async loadMore(): Promise<void> {
@@ -579,7 +566,8 @@ function createTaskCommentsStore(): Type<TaskCommentsStoreInstance> {
  * to the same depth when a comment notice arrives (`commentsRevision`). Posting and deleting
  * change the task's version, so both read the detail again. Deletion is shown at once and put
  * back on refusal; its `Undo` posts the comment again. The participants read, made when the tab
- * first opens, gives the mention menu and the comment right of a caller without `edit`.
+ * first opens or a `@` menu first searches, gives the mention menus of the composer and the
+ * description; the comment right is the detail's (`TaskDetailStore.canComment`).
  *
  * @type {Type<TaskCommentsStoreInstance>}
  */

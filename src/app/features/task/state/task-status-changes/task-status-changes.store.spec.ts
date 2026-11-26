@@ -14,7 +14,11 @@ import type {
 } from '../../models/task-status-change/task-status-change.interface';
 import type { TaskSummary } from '../../models/task-summary/task-summary.interface';
 import { TaskVersionConflict } from '../../models/task-write-error/task-write-error.model';
-import { STATUS_SETTLE_MS, TaskStatusChangesStore } from './task-status-changes.store';
+import {
+  STATUS_SETTLE_MS,
+  type TaskStatusChangesInstance,
+  TaskStatusChangesStore,
+} from './task-status-changes.store';
 
 /**
  * Constant task
@@ -83,9 +87,9 @@ describe('TaskStatusChangesStore', () => {
    * @description
    * Provides the store with the faked task data access and toasts.
    *
-   * @returns {InstanceType<typeof TaskStatusChangesStore>} The store.
+   * @returns {TaskStatusChangesInstance} The store.
    */
-  function setup(): InstanceType<typeof TaskStatusChangesStore> {
+  function setup(): TaskStatusChangesInstance {
     TestBed.configureTestingModule({
       providers: [
         TaskStatusChangesStore,
@@ -112,7 +116,7 @@ describe('TaskStatusChangesStore', () => {
   });
 
   it('shows each click at once and sends only the last one, 460 ms after it', async () => {
-    const store: InstanceType<typeof TaskStatusChangesStore> = setup();
+    const store: TaskStatusChangesInstance = setup();
 
     store.request(task, 'progress');
     await vi.advanceTimersByTimeAsync(200);
@@ -137,7 +141,7 @@ describe('TaskStatusChangesStore', () => {
   });
 
   it('cancels the pending change when the saved status is clicked again', async () => {
-    const store: InstanceType<typeof TaskStatusChangesStore> = setup();
+    const store: TaskStatusChangesInstance = setup();
 
     store.request(task, 'done');
     store.request(task, 'todo');
@@ -148,7 +152,7 @@ describe('TaskStatusChangesStore', () => {
   });
 
   it('emits the change when it settles, so a grouped view moves the task then', async () => {
-    const store: InstanceType<typeof TaskStatusChangesStore> = setup();
+    const store: TaskStatusChangesInstance = setup();
     const changes: TaskStatusChange[] = [];
     store.changed.subscribe((change: TaskStatusChange) => changes.push(change));
 
@@ -163,7 +167,7 @@ describe('TaskStatusChangesStore', () => {
   it('never overlaps two writes of one task and sends the next one against the new version', async () => {
     const answer: Subject<TaskSummary> = new Subject<TaskSummary>();
     changeStatus.mockReturnValueOnce(answer);
-    const store: InstanceType<typeof TaskStatusChangesStore> = setup();
+    const store: TaskStatusChangesInstance = setup();
 
     store.request(task, 'progress');
     await vi.advanceTimersByTimeAsync(STATUS_SETTLE_MS);
@@ -180,7 +184,7 @@ describe('TaskStatusChangesStore', () => {
   });
 
   it('asks a reason before cancelling and sends it with the note', async () => {
-    const store: InstanceType<typeof TaskStatusChangesStore> = setup();
+    const store: TaskStatusChangesInstance = setup();
 
     store.request(task, 'cancelled');
     expect(store.cancelRequest()).toEqual({ taskKeys: ['CAD-482'] });
@@ -198,7 +202,7 @@ describe('TaskStatusChangesStore', () => {
   });
 
   it('keeps the task when `Keep the task` closes the dialog', async () => {
-    const store: InstanceType<typeof TaskStatusChangesStore> = setup();
+    const store: TaskStatusChangesInstance = setup();
 
     store.request(task, 'cancelled');
     store.keepTask();
@@ -209,9 +213,56 @@ describe('TaskStatusChangesStore', () => {
     expect(store.displayedStatus(task)).toBe('todo');
   });
 
+  it('confirms a quiet change without the change toast', async () => {
+    const store: TaskStatusChangesInstance = setup();
+
+    store.request(task, 'blocked', undefined, { quiet: true });
+    await vi.runAllTimersAsync();
+
+    expect(changeStatus).toHaveBeenCalledExactlyOnceWith('CAD-482', 3, 'blocked', null);
+    expect(store.displayedStatus(task)).toBe('blocked');
+    expect(show).not.toHaveBeenCalled();
+  });
+
+  it('lets the last click decide whether the change toasts', async () => {
+    const store: TaskStatusChangesInstance = setup();
+
+    store.request(task, 'blocked', undefined, { quiet: true });
+    store.request(task, 'progress');
+    await vi.runAllTimersAsync();
+
+    expect(changeStatus).toHaveBeenCalledExactlyOnceWith('CAD-482', 3, 'progress', null);
+    expect(show).toHaveBeenCalledOnce();
+  });
+
+  it('rolls a refused quiet change back with the failure toast', async () => {
+    changeStatus.mockReturnValueOnce(throwError(() => new Error('503')));
+    const store: TaskStatusChangesInstance = setup();
+
+    store.request(task, 'blocked', undefined, { quiet: true });
+    expect(store.displayedStatus(task)).toBe('blocked');
+    await vi.runAllTimersAsync();
+
+    expect(store.displayedStatus(task)).toBe('todo');
+    expect(store.pendingStatus(task.id)).toBeNull();
+    expect(error).toHaveBeenCalledOnce();
+    expect(show).not.toHaveBeenCalled();
+  });
+
+  it('still toasts a cancellation confirmed after a quiet request', async () => {
+    const store: TaskStatusChangesInstance = setup();
+
+    store.request(task, 'cancelled', undefined, { quiet: true });
+    store.confirmCancel({ reason: 'duplicate', note: '' });
+    await vi.runAllTimersAsync();
+
+    expect(show).toHaveBeenCalledOnce();
+    expect(show.mock.calls[0][0]).toContain('CAD-482');
+  });
+
   it('restores the confirmed status and shows the failure toast when the write fails', async () => {
     changeStatus.mockReturnValueOnce(throwError(() => new Error('503')));
-    const store: InstanceType<typeof TaskStatusChangesStore> = setup();
+    const store: TaskStatusChangesInstance = setup();
     const changes: TaskStatusChange[] = [];
     store.changed.subscribe((change: TaskStatusChange) => changes.push(change));
 
@@ -231,7 +282,7 @@ describe('TaskStatusChangesStore', () => {
 
   it('reads the task again and warns after a 412', async () => {
     changeStatus.mockReturnValueOnce(throwError(() => new TaskVersionConflict('CAD-482')));
-    const store: InstanceType<typeof TaskStatusChangesStore> = setup();
+    const store: TaskStatusChangesInstance = setup();
 
     store.request(task, 'done');
     await vi.runAllTimersAsync();
@@ -249,7 +300,7 @@ describe('TaskStatusChangesStore', () => {
   });
 
   it('undoes a confirmed change at once from the toast', async () => {
-    const store: InstanceType<typeof TaskStatusChangesStore> = setup();
+    const store: TaskStatusChangesInstance = setup();
     store.request(task, 'progress');
     await vi.runAllTimersAsync();
     const options: CwToastOptions | undefined = show.mock.calls[0][1];
@@ -264,7 +315,7 @@ describe('TaskStatusChangesStore', () => {
   });
 
   it('ignores an undo once another change moved the task on', async () => {
-    const store: InstanceType<typeof TaskStatusChangesStore> = setup();
+    const store: TaskStatusChangesInstance = setup();
     store.request(task, 'progress');
     await vi.runAllTimersAsync();
     const first: CwToastOptions | undefined = show.mock.calls[0][1];
@@ -283,7 +334,7 @@ describe('TaskStatusChangesStore', () => {
   });
 
   it('holds a pending click while asking for cancellation and discards it when kept', async () => {
-    const store: InstanceType<typeof TaskStatusChangesStore> = setup();
+    const store: TaskStatusChangesInstance = setup();
     store.request(task, 'progress');
     store.request(task, 'cancelled');
     await vi.runAllTimersAsync();
@@ -293,7 +344,7 @@ describe('TaskStatusChangesStore', () => {
   });
 
   it('replaces a pending click with the confirmed cancellation', async () => {
-    const store: InstanceType<typeof TaskStatusChangesStore> = setup();
+    const store: TaskStatusChangesInstance = setup();
     store.request(task, 'progress');
     store.request(task, 'cancelled');
     store.confirmCancel({ reason: 'duplicate', note: '' });
@@ -320,7 +371,7 @@ describe('TaskStatusChangesStore', () => {
         cancelReason: status === 'cancelled' ? 'duplicate' : null,
       }),
     );
-    const store: InstanceType<typeof TaskStatusChangesStore> = setup();
+    const store: TaskStatusChangesInstance = setup();
     store.requestCancel([task, other]);
     expect(store.cancelRequest()?.taskKeys).toEqual(['CAD-482', 'CAD-483']);
     store.confirmCancel({ reason: 'duplicate', note: '' });
@@ -334,7 +385,7 @@ describe('TaskStatusChangesStore', () => {
   });
 
   it('merges cancellation requests made while the dialog is open', () => {
-    const store: InstanceType<typeof TaskStatusChangesStore> = setup();
+    const store: TaskStatusChangesInstance = setup();
     const other: TaskSummary = { ...task, id: 'CAD-483', key: 'CAD-483' };
     store.requestCancel([task]);
     store.requestCancel([other, task]);
@@ -346,7 +397,7 @@ describe('TaskStatusChangesStore', () => {
     changeStatus.mockImplementation((key: string, version: number, status: StatusKey) =>
       key === other.key ? throwError(() => new Error('offline')) : of(saved(status, version + 1)),
     );
-    const store: InstanceType<typeof TaskStatusChangesStore> = setup();
+    const store: TaskStatusChangesInstance = setup();
     store.requestCancel([task, other]);
     store.confirmCancel({ reason: 'duplicate', note: '' });
     await vi.runAllTimersAsync();
@@ -358,7 +409,7 @@ describe('TaskStatusChangesStore', () => {
   });
 
   it('sends a pending click when the store is destroyed', () => {
-    const store: InstanceType<typeof TaskStatusChangesStore> = setup();
+    const store: TaskStatusChangesInstance = setup();
     store.request(task, 'progress');
     TestBed.resetTestingModule();
     expect(changeStatus).toHaveBeenCalledExactlyOnceWith('CAD-482', 3, 'progress', null);
@@ -367,7 +418,7 @@ describe('TaskStatusChangesStore', () => {
   it('sends a newer pending click after the in-flight write when destroyed', async () => {
     const response: Subject<TaskSummary> = new Subject<TaskSummary>();
     changeStatus.mockReturnValueOnce(response);
-    const store: InstanceType<typeof TaskStatusChangesStore> = setup();
+    const store: TaskStatusChangesInstance = setup();
     store.request(task, 'progress');
     await vi.advanceTimersByTimeAsync(STATUS_SETTLE_MS);
     store.request(task, 'review');
@@ -383,7 +434,7 @@ describe('TaskStatusChangesStore', () => {
   it('drops the deferred write if the organization changes after destruction', async () => {
     const response: Subject<TaskSummary> = new Subject<TaskSummary>();
     changeStatus.mockReturnValueOnce(response);
-    const store: InstanceType<typeof TaskStatusChangesStore> = setup();
+    const store: TaskStatusChangesInstance = setup();
     const pin: OrganizationPin = TestBed.inject(OrganizationPin);
     pin.set('atelier-nord');
     store.request(task, 'progress');
@@ -400,7 +451,7 @@ describe('TaskStatusChangesStore', () => {
   });
 
   it('allows retrying a failed undo from the same toast', async () => {
-    const store: InstanceType<typeof TaskStatusChangesStore> = setup();
+    const store: TaskStatusChangesInstance = setup();
     store.request(task, 'progress');
     await vi.runAllTimersAsync();
     const toast: CwToastOptions | undefined = show.mock.calls[0][1];
@@ -419,7 +470,7 @@ describe('TaskStatusChangesStore', () => {
     new HttpErrorResponse({ status: 412, error: { code: 'organization.context-changed' } }),
   ])('rolls back without a toast during an organization switch', async (failure: unknown) => {
     changeStatus.mockReturnValueOnce(throwError(() => failure));
-    const store: InstanceType<typeof TaskStatusChangesStore> = setup();
+    const store: TaskStatusChangesInstance = setup();
     store.request(task, 'progress');
     await vi.runAllTimersAsync();
     expect(store.displayedStatus(task)).toBe('todo');
@@ -427,7 +478,7 @@ describe('TaskStatusChangesStore', () => {
   });
 
   it('lets the task of the caller win once it caught up with the confirmed version', async () => {
-    const store: InstanceType<typeof TaskStatusChangesStore> = setup();
+    const store: TaskStatusChangesInstance = setup();
     store.request(task, 'progress');
     await vi.runAllTimersAsync();
 

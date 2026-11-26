@@ -551,6 +551,18 @@ export interface TaskDetailStoreInstance {
   readonly canEdit: Signal<boolean>;
 
   /**
+   * Property canComment
+   *
+   * @description
+   * Whether the caller may comment (`edit` or `comment` on the list, `callerRole` of the
+   * detail); false while the detail is not read.
+   *
+   * @type {Signal<boolean>}
+   * @readonly
+   */
+  readonly canComment: Signal<boolean>;
+
+  /**
    * Property parent
    *
    * @description
@@ -1031,6 +1043,7 @@ function createTaskDetailStore(): Type<TaskDetailStoreInstance> {
         ),
         list: computed((): TaskDetailList | null => store.detail()?.list ?? null),
         canEdit: computed((): boolean => store.detail()?.list.canEdit ?? false),
+        canComment: computed((): boolean => store.detail()?.list.canComment ?? false),
         parent: computed((): TaskReference | null => store.detail()?.parent ?? null),
         subtasks: computed((): readonly TaskSummary[] => store.detail()?.subtasks ?? []),
         comments: computed((): TaskCommentPage | null => store.detail()?.comments ?? null),

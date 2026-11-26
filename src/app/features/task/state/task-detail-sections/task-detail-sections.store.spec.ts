@@ -149,7 +149,20 @@ describe('TaskDetailSectionsStore', () => {
     await vi.advanceTimersByTimeAsync(DESCRIPTION_SAVE_MS);
 
     expect(detail['update']).toHaveBeenCalledTimes(1);
-    expect(detail['update']).toHaveBeenCalledWith({ description: 'Newer' });
+    expect(detail['update']).toHaveBeenCalledWith({
+      description: 'Newer',
+      descriptionMentions: [],
+    });
+  });
+
+  it('sends the mention spans of the description with it', () => {
+    store.editDescription('Ask @[Hugo Dubois](u2) to review');
+    store.flushDescription();
+
+    expect(detail['update']).toHaveBeenCalledWith({
+      description: 'Ask @[Hugo Dubois](u2) to review',
+      descriptionMentions: [{ userId: 'u2', start: 4, end: 22 }],
+    });
   });
 
   it('saves a waiting description when flushed, and clears an emptied one', () => {

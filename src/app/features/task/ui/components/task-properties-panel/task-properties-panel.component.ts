@@ -33,7 +33,10 @@ import {
   TaskPropertiesStore,
   type TaskPropertiesStoreInstance,
 } from '../../../state/task-properties/task-properties.store';
-import { TaskStatusChangesStore } from '../../../state/task-status-changes/task-status-changes.store';
+import {
+  type TaskStatusChangesInstance,
+  TaskStatusChangesStore,
+} from '../../../state/task-status-changes/task-status-changes.store';
 import {
   TaskTimeStore,
   type TaskTimeStoreInstance,
@@ -131,11 +134,10 @@ export class TaskPropertiesPanel {
    * The status interaction, provided by the detail dialog (whose completed writes read the
    * detail again).
    *
-   * @type {InstanceType<typeof TaskStatusChangesStore>}
+   * @type {TaskStatusChangesInstance}
    * @readonly
    */
-  protected readonly statusChanges: InstanceType<typeof TaskStatusChangesStore> =
-    inject(TaskStatusChangesStore);
+  protected readonly statusChanges: TaskStatusChangesInstance = inject(TaskStatusChangesStore);
 
   /**
    * Property properties
@@ -312,13 +314,18 @@ export class TaskPropertiesPanel {
    * Method changeStatus
    *
    * @description
-   * Requests a status through the status interaction (shown at once, settled once).
+   * Requests a status through the status interaction (shown at once, settled once). An advance
+   * of the split button confirms with the change toast and `Undo`; a status picked from the menu
+   * applies without it (`App.dc.html` line 8717), a failure still toasting.
    *
    * @param {StatusKey} status - The clicked status.
+   * @param {boolean} [picked] - Whether the status was picked from the menu.
    */
-  protected changeStatus(status: StatusKey): void {
+  protected changeStatus(status: StatusKey, picked: boolean = false): void {
     const task: TaskDetailTask | null = this.store.task();
-    if (task) this.statusChanges.request(task, status, this.store.statuses());
+    if (task) {
+      this.statusChanges.request(task, status, this.store.statuses(), { quiet: picked });
+    }
   }
 
   /**

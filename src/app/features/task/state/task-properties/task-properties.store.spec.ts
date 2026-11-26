@@ -307,6 +307,48 @@ describe('TaskPropertiesStore', () => {
     expect(detail.acceptVersion).toHaveBeenCalledWith(8);
   });
 
+  it('reads the approval again once the confirmed version moves past it', async () => {
+    await settle();
+    expect(api['approval']).toHaveBeenCalledTimes(1);
+    const voted: TaskApproval = {
+      taskVersion: 9,
+      reviewers: [
+        { userId: 'u2', decision: 'approved' },
+        { userId: 'u3', decision: 'approved' },
+      ],
+    };
+    api['approval'].mockResolvedValueOnce(voted);
+
+    task.set(taskAt(9));
+    await settle();
+
+    expect(api['approval']).toHaveBeenCalledTimes(2);
+    expect(store.approval()).toEqual(voted);
+
+    task.set(taskAt(9, { name: 'Same version' }));
+    await settle();
+    expect(api['approval']).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not read the approval again while its own round is being written', async () => {
+    await settle();
+    let answer: (approval: TaskApproval) => void = (): void => undefined;
+    api['requestApproval'].mockReturnValueOnce(
+      new Promise<TaskApproval>((resolve: (approval: TaskApproval) => void) => {
+        answer = resolve;
+      }),
+    );
+    const write: Promise<void> = store.toggleApprover('u3');
+
+    task.set(taskAt(8));
+    await settle();
+    expect(api['approval']).toHaveBeenCalledTimes(1);
+
+    answer({ taskVersion: 8, reviewers: [{ userId: 'u2', decision: null }] });
+    await write;
+    expect(store.approval()?.taskVersion).toBe(8);
+  });
+
   it('never removes the last reviewer', async () => {
     api['approval'].mockResolvedValueOnce({
       taskVersion: 7,

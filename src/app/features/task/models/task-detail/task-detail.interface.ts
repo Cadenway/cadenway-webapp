@@ -1,6 +1,7 @@
 import type { CancelReason, PriorityKey, Recurrence, StatusKey } from '@cadenway/contracts';
 
 import type { StatusOption } from '../status-option/status-option.interface';
+import type { TaskMentionSpan } from '../task-detail-sections/task-detail-sections.interface';
 import type { TaskSummary } from '../task-summary/task-summary.interface';
 
 /**
@@ -273,6 +274,18 @@ export interface TaskDetailList {
    * @readonly
    */
   readonly canEdit: boolean;
+
+  /**
+   * Property canComment
+   *
+   * @description
+   * Whether the caller may comment on the task: `edit` or `comment` on the list, or no role
+   * reported; `view` and a role this version does not know may not.
+   *
+   * @type {boolean}
+   * @readonly
+   */
+  readonly canComment: boolean;
   // #endregion
 }
 
@@ -567,6 +580,18 @@ export interface TaskDetailPatch {
    * @type {string | null | undefined}
    */
   description?: string | null;
+
+  /**
+   * Property descriptionMentions
+   *
+   * @description
+   * Mention spans of the new description (`@[Name](id)` tokens, code-point offsets, 20 at most),
+   * sent with it: a new text without them clears the previous spans. The write carries
+   * `If-Match` like any other.
+   *
+   * @type {readonly TaskMentionSpan[] | undefined}
+   */
+  descriptionMentions?: readonly TaskMentionSpan[];
 
   /**
    * Property status
@@ -936,5 +961,38 @@ export interface TaskParentCandidate {
    * @readonly
    */
   readonly children?: number;
+  // #endregion
+}
+
+/**
+ * Type TaskDetailTab
+ *
+ * @description
+ * A tab of the detail's left column.
+ *
+ * @type {'details' | 'subtasks' | 'comments' | 'activity'}
+ */
+export type TaskDetailTab = 'details' | 'subtasks' | 'comments' | 'activity';
+
+/**
+ * Interface TaskDetailOpenOptions
+ *
+ * @description
+ * How `TaskDetailOpener.open` opens a task beyond its key and preview. The address carries none
+ * of it, as in the mockup, where the tab is screen state (`sheetTab`).
+ */
+export interface TaskDetailOpenOptions {
+  // #region Properties
+  /**
+   * Property tab
+   *
+   * @description
+   * Tab the column opens on instead of `Details`; `subtasks` also gives the new-subtask field
+   * the focus (`App.dc.html` lines 6291-6294, a row's `Add a subtask`).
+   *
+   * @type {TaskDetailTab | undefined}
+   * @readonly
+   */
+  readonly tab?: TaskDetailTab;
   // #endregion
 }

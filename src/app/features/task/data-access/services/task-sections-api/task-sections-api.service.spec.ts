@@ -74,7 +74,7 @@ describe('TaskSectionsApi', () => {
     http.verify();
   });
 
-  it('reads the participants to the last page, and a 403 as no comment right', async () => {
+  it('reads the participants to the last page and lets a refusal fail the read', async () => {
     tasks['listTaskParticipants']
       .mockReturnValueOnce(of({ items: [{ userId: 'u1', memberId: 'm1' }], nextCursor: 'c2' }))
       .mockReturnValueOnce(of({ items: [{ userId: 'u2', memberId: 'm2' }], nextCursor: null }));
@@ -84,7 +84,7 @@ describe('TaskSectionsApi', () => {
     tasks['listTaskParticipants'].mockReturnValueOnce(
       throwError(() => new HttpErrorResponse({ status: 403 })),
     );
-    await expect(api.participants('CAD-482')).resolves.toBeNull();
+    await expect(api.participants('CAD-482')).rejects.toBeInstanceOf(HttpErrorResponse);
   });
 
   it('posts a comment with its spans under an idempotency key', async () => {

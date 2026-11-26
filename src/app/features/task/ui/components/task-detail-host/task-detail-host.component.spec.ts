@@ -99,7 +99,7 @@ const detail: TaskDetail = {
     archivedAt: null,
   },
   space: { id: 'product', name: 'Product', statuses: defaultStatusOptions() },
-  list: { id: 'sprint-14', name: 'Sprint 14', spaceId: 'product', canEdit: true },
+  list: { id: 'sprint-14', name: 'Sprint 14', spaceId: 'product', canEdit: true, canComment: true },
   parent: { key: 'CAD-470', name: 'Sign-in', status: 'todo' },
   subtasks: [],
   comments: { items: [], total: 0, nextCursor: null },

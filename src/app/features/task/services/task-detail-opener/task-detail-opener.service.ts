@@ -3,7 +3,11 @@ import { toSignal } from '@angular/core/rxjs-interop';
 import { type Event, NavigationEnd, Router } from '@angular/router';
 import { filter, map } from 'rxjs';
 
-import type { TaskDetailPreview } from '../../models/task-detail/task-detail.interface';
+import type {
+  TaskDetailOpenOptions,
+  TaskDetailPreview,
+  TaskDetailTab,
+} from '../../models/task-detail/task-detail.interface';
 
 /**
  * Constant TASK_DETAIL_PARAM
@@ -23,8 +27,9 @@ export const TASK_DETAIL_PARAM: string = 'task';
  * (the shareable link stays `/:org/t/<KEY>`). `open` merges the parameter into the current
  * address, keeping the path and the other parameters; `close` removes it the same way. The detail
  * host (`withTaskDetail()`) reads `taskKey`. A screen that already shows the task (a list row)
- * gives a preview, shown in the header while the detail is read. It holds no user or organization
- * data: the preview is forgotten once another task opens.
+ * gives a preview, shown in the header while the detail is read, and may ask for a tab
+ * (`{ tab: 'subtasks' }`), which the column takes once; neither goes into the address. It holds
+ * no user or organization data: the preview and the tab are forgotten once another task opens.
  */
 @Service()
 export class TaskDetailOpener {
@@ -51,6 +56,16 @@ export class TaskDetailOpener {
    */
   private readonly previews: WritableSignal<TaskDetailPreview | null> =
     signal<TaskDetailPreview | null>(null);
+
+  /**
+   * Property tabRequest
+   *
+   * @description
+   * The tab the last `open` asked for, with the key it was asked for, until the column takes it.
+   *
+   * @type {{ readonly key: string; readonly tab: TaskDetailTab } | null}
+   */
+  private tabRequest: { readonly key: string; readonly tab: TaskDetailTab } | null = null;
 
   /**
    * Property taskKey
@@ -102,14 +117,21 @@ export class TaskDetailOpener {
    * Method open
    *
    * @description
-   * Opens a task's detail over the current page: merges `?task=<KEY>` into the address.
+   * Opens a task's detail over the current page: merges `?task=<KEY>` into the address. A
+   * requested tab stays out of the address; the column takes it once (`takeTab`).
    *
    * @param {string} taskKey - Key of the task.
    * @param {TaskDetailPreview} [preview] - What the opening screen shows of it.
+   * @param {TaskDetailOpenOptions} [options] - The tab to open on.
    * @returns {Promise<boolean>} Whether the navigation succeeded.
    */
-  public open(taskKey: string, preview?: TaskDetailPreview): Promise<boolean> {
+  public open(
+    taskKey: string,
+    preview?: TaskDetailPreview,
+    options?: TaskDetailOpenOptions,
+  ): Promise<boolean> {
     this.previews.set(preview?.key === taskKey ? preview : null);
+    this.tabRequest = options?.tab ? { key: taskKey, tab: options.tab } : null;
     return this.router.navigate([], {
       queryParams: { [TASK_DETAIL_PARAM]: taskKey },
       queryParamsHandling: 'merge',
@@ -126,11 +148,29 @@ export class TaskDetailOpener {
    */
   public close(): Promise<boolean> {
     this.previews.set(null);
+    this.tabRequest = null;
     if (this.readKey() === null) return Promise.resolve(true);
     return this.router.navigate([], {
       queryParams: { [TASK_DETAIL_PARAM]: null },
       queryParamsHandling: 'merge',
     });
+  }
+
+  /**
+   * Method takeTab
+   *
+   * @description
+   * The tab the last `open` asked for this task, once: a later rendering of the column (another
+   * opening, Back to the same address) starts on `Details` again.
+   *
+   * @param {string} taskKey - Key of the task the column shows.
+   * @returns {TaskDetailTab | null} The requested tab, or null.
+   */
+  public takeTab(taskKey: string): TaskDetailTab | null {
+    const request: { readonly key: string; readonly tab: TaskDetailTab } | null = this.tabRequest;
+    if (request?.key !== taskKey) return null;
+    this.tabRequest = null;
+    return request.tab;
   }
 
   /**

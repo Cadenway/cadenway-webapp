@@ -7,7 +7,7 @@ import {
   type OutputEmitterRef,
   type WritableSignal,
 } from '@angular/core';
-import { CwBlockEditor } from '@cadenway/ui/components/block-editor';
+import { CwBlockEditor, type CwMentionSearch } from '@cadenway/ui/components/block-editor';
 
 /**
  * Component TaskDescription
@@ -18,8 +18,10 @@ import { CwBlockEditor } from '@cadenway/ui/components/block-editor';
  * value the description's Markdown. While the focus is inside, the text is the caller's: each
  * change emits `edited` (the tabs save it after a pause) and a newer confirmed description does
  * not replace it; leaving the editor emits `committed` (saved at once), and the next confirmed
- * text shows again. A normalization the editor makes without the focus is never emitted. Without edit
- * rights the editor is disabled.
+ * text shows again. A normalization the editor makes without the focus is never emitted. Typing
+ * `@` opens the people menu of `mentionSearch` (the task's participants), which writes
+ * `@[Name](id)` tokens the owner sends as mention spans. Without edit rights the editor is
+ * disabled.
  */
 @Component({
   selector: 'cw-task-description',
@@ -37,6 +39,7 @@ import { CwBlockEditor } from '@cadenway/ui/components/block-editor';
       ariaLabel="Description"
       i18n-ariaLabel="@@task.description.title"
       [disabled]="!canEdit()"
+      [mentionSearch]="mentionSearch()"
       [value]="draft()"
       (valueChange)="changed($event)"
     />
@@ -65,6 +68,18 @@ export class TaskDescription {
    * @readonly
    */
   public readonly canEdit: InputSignal<boolean> = input<boolean>(true);
+
+  /**
+   * Property mentionSearch
+   *
+   * @description
+   * Looks up the people the description may mention; no `@` menu without it.
+   *
+   * @type {InputSignal<CwMentionSearch | null>}
+   * @readonly
+   */
+  public readonly mentionSearch: InputSignal<CwMentionSearch | null> =
+    input<CwMentionSearch | null>(null);
 
   /**
    * Property edited

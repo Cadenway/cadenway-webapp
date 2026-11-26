@@ -15,6 +15,7 @@ import {
   TaskActionsApi,
   type TaskBulkOutcome,
   TaskCreate,
+  TaskDetailOpener,
   TaskStatusChangesStore,
   type TaskSummary,
 } from '@features/task';
@@ -507,7 +508,7 @@ describe('ListViewPage', () => {
     expect(page.mock.calls.map((call) => call[2]?.value)).toEqual(['todo']);
   });
 
-  it('opens the task from its status icon and creates a subtask with its parent', async () => {
+  it('opens the task from its status icon, and its Subtasks tab to add a subtask', async () => {
     const fixture: ComponentFixture<ListViewPage> = await render();
     const navigate: MockInstance = vi.spyOn(TestBed.inject(Router), 'navigate');
     const create: MockInstance = vi.spyOn(TestBed.inject(TaskCreate), 'open');
@@ -522,8 +523,14 @@ describe('ListViewPage', () => {
       [],
       expect.objectContaining({ queryParams: { task: 'CAD-482' } }),
     );
+    navigate.mockClear();
     required(button('Add a subtask to CAD-482')).click();
-    expect(create).toHaveBeenCalledWith({ parentKey: 'CAD-482', listId: 'sprint-14' });
+    expect(navigate).toHaveBeenCalledWith(
+      [],
+      expect.objectContaining({ queryParams: { task: 'CAD-482' } }),
+    );
+    expect(TestBed.inject(TaskDetailOpener).takeTab('CAD-482')).toBe('subtasks');
+    expect(create).not.toHaveBeenCalled();
   });
 
   it('keeps focus on the task after its status group changes', async () => {

@@ -2,11 +2,13 @@ import type { StatusKey } from '@cadenway/contracts';
 import {
   Component,
   computed,
+  type ElementRef,
   input,
   type InputSignal,
   output,
   type OutputEmitterRef,
   type Signal,
+  viewChild,
 } from '@angular/core';
 import { CwAvatar, CwAvatarGroup } from '@cadenway/ui/components/avatar';
 import { CwPriorityIcon } from '@cadenway/ui/components/priority-icon';
@@ -225,9 +227,32 @@ export class TaskSubtasks {
    * @readonly
    */
   protected readonly priorities: typeof PRIORITY_LABELS = PRIORITY_LABELS;
+
+  /**
+   * Property newSubtask
+   *
+   * @description
+   * The add field, absent without edit rights or at a limit.
+   *
+   * @type {Signal<ElementRef<HTMLInputElement> | undefined>}
+   * @readonly
+   */
+  private readonly newSubtask: Signal<ElementRef<HTMLInputElement> | undefined> =
+    viewChild<ElementRef<HTMLInputElement>>('newSubtask');
   // #endregion
 
   // #region Methods
+  /**
+   * Method focusNew
+   *
+   * @description
+   * Gives the add field the focus (a row's `Add a subtask` opens the tab this way); does nothing
+   * when the field is not shown.
+   */
+  public focusNew(): void {
+    this.newSubtask()?.nativeElement.focus();
+  }
+
   /**
    * Method openLabel
    *

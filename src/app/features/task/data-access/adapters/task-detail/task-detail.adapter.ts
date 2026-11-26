@@ -6,6 +6,7 @@ import type {
   UpdateTaskClientResult,
 } from '@cadenway/api-client';
 
+import type { TaskMentionSpan } from '../../../models/task-detail-sections/task-detail-sections.interface';
 import type {
   TaskChecklistItem,
   TaskComment,
@@ -112,8 +113,9 @@ export function toTaskCommentPage(page: ListTaskCommentsClientResult): TaskComme
  *
  * @description
  * Maps the detail aggregate. The list's `callerRole` decides whether the caller may change the
- * task: `edit`, or no role reported, which reads as `edit` (the rule before grants existed).
- * Comments missing from the aggregate are null and named in `partial`.
+ * task (`edit`) and comment on it (`edit` or `comment`); no role reported reads as `edit` (the
+ * rule before grants existed) and an unknown one as `view`. Comments missing from the aggregate
+ * are null and named in `partial`.
  *
  * @param {GetTaskDetailClientResult} detail - The gateway aggregate.
  * @returns {TaskDetail} The detail model.
@@ -132,6 +134,7 @@ export function toTaskDetail(detail: GetTaskDetailClientResult): TaskDetail {
       name: detail.list.name,
       spaceId: detail.list.spaceId,
       canEdit: role === undefined || role === 'edit',
+      canComment: role === undefined || role === 'edit' || role === 'comment',
     },
     parent: detail.parent
       ? { key: detail.parent.key, name: detail.parent.name, status: detail.parent.status }
@@ -147,7 +150,8 @@ export function toTaskDetail(detail: GetTaskDetailClientResult): TaskDetail {
  *
  * @description
  * Maps a detail patch to the gateway's JSON Merge Patch: `due` and `start` become `dueDate` and
- * `startDate`, a blank cancellation note becomes null, and absent members stay absent.
+ * `startDate`, a blank cancellation note becomes null, the description's mention spans become
+ * `descriptionMentions`, and absent members stay absent.
  *
  * @param {TaskDetailPatch} patch - The detail patch.
  * @returns {TaskPatchDto} The gateway patch.
@@ -159,7 +163,11 @@ export function toTaskPatch(patch: TaskDetailPatch): TaskPatchDto {
     if (field === 'due') body['dueDate'] = value;
     else if (field === 'start') body['startDate'] = value;
     else if (field === 'cancelNote') body['cancelNote'] = value === '' ? null : value;
-    else body[field] = value;
+    else if (field === 'descriptionMentions') {
+      body['descriptionMentions'] = (value as readonly TaskMentionSpan[]).map(
+        (span: TaskMentionSpan) => ({ userId: span.userId, start: span.start, end: span.end }),
+      );
+    } else body[field] = value;
   }
   return body;
 }

@@ -33,7 +33,7 @@ function comment(id: string, authorId: string, body: string): TaskComment {
 
 describe('TaskCommentsStore', () => {
   let first: WritableSignal<TaskCommentPage | null>;
-  let canEdit: WritableSignal<boolean>;
+  let canComment: WritableSignal<boolean>;
   let detail: Record<string, unknown>;
   let api: Record<string, Mock>;
   let toasts: { success: Mock; error: Mock };
@@ -45,11 +45,12 @@ describe('TaskCommentsStore', () => {
       total: 2,
       nextCursor: 'p2',
     });
-    canEdit = signal(true);
+    canComment = signal(true);
     detail = {
       taskKey: signal('CAD-482'),
       comments: first,
-      canEdit,
+      canEdit: signal(true),
+      canComment,
       commentsRevision: signal(0),
       reload: vi.fn(() => Promise.resolve()),
     };
@@ -166,24 +167,28 @@ describe('TaskCommentsStore', () => {
     );
   });
 
-  it('lets a commenter without edit post', async () => {
-    canEdit.set(false);
-    store.start();
-    await vi.waitFor(() => {
-      expect(store.canComment()).toBe(true);
-    });
+  it('reads the participants once, however many menus ask', async () => {
+    await Promise.all([store.start(), store.start()]);
+    await store.start();
+
+    expect(api['participants']).toHaveBeenCalledOnce();
     expect(store.participants()).toEqual(['u1', 'u2']);
   });
 
-  it('reads a viewer as unable to comment', async () => {
-    canEdit.set(false);
-    api['participants'].mockResolvedValue(null);
-    store.start();
+  it('reads no participants for a caller without the comment right', async () => {
+    canComment.set(false);
 
-    await vi.waitFor(() => {
-      expect(api['participants']).toHaveBeenCalled();
-    });
-    await Promise.resolve();
-    expect(store.canComment()).toBe(false);
+    await store.start();
+
+    expect(api['participants']).not.toHaveBeenCalled();
+    expect(store.participants()).toEqual([]);
+  });
+
+  it('offers no one to mention after a failed participants read', async () => {
+    api['participants'].mockRejectedValueOnce(new Error('offline'));
+
+    await store.start();
+
+    expect(store.participants()).toEqual([]);
   });
 });

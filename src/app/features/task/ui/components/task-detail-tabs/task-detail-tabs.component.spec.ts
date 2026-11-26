@@ -1,7 +1,10 @@
 import { signal, type WritableSignal } from '@angular/core';
 import { type ComponentFixture, TestBed } from '@angular/core/testing';
+import { By } from '@angular/platform-browser';
 import { provideCadenwayIcons } from '@cadenway/icons';
 import { CwToastService } from '@cadenway/ui/components/toast';
+import type { CwMentionPerson, CwMentionSearch } from '@cadenway/ui/components/block-editor';
+import { firstValueFrom } from 'rxjs';
 import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 
 import {
@@ -19,6 +22,7 @@ import { TaskDetailOpener } from '../../../services/task-detail-opener/task-deta
 import { TaskDetailStore } from '../../../state/task-detail/task-detail.store';
 import { TaskStatusChangesStore } from '../../../state/task-status-changes/task-status-changes.store';
 import { defaultStatusOptions } from '../../../utils/task-status/task-status.util';
+import { TaskDescription } from '../task-description/task-description.component';
 import { TaskDetailTabs } from './task-detail-tabs.component';
 
 /**
@@ -108,10 +112,12 @@ const workspace: WorkspaceContextPort = {
 describe('TaskDetailTabs', () => {
   let comments: WritableSignal<TaskCommentPage | null>;
   let commentsFailed: WritableSignal<boolean>;
+  let canComment: WritableSignal<boolean>;
   let detail: Record<string, unknown>;
   let api: Record<string, Mock>;
   let request: Mock;
   let open: Mock;
+  let takeTab: Mock;
   let fixture: ComponentFixture<TaskDetailTabs>;
 
   /**
@@ -162,11 +168,13 @@ describe('TaskDetailTabs', () => {
       nextCursor: null,
     });
     commentsFailed = signal(false);
+    canComment = signal(true);
     detail = {
       taskKey: signal('CAD-482'),
       task: signal(TASK),
       confirmedTask: signal(TASK),
       canEdit: signal(true),
+      canComment,
       statuses: signal(defaultStatusOptions()),
       subtasks: signal([SUBTASK]),
       comments,
@@ -209,6 +217,7 @@ describe('TaskDetailTabs', () => {
     };
     request = vi.fn();
     open = vi.fn(() => Promise.resolve(true));
+    takeTab = vi.fn(() => null);
     TestBed.configureTestingModule({
       providers: [
         provideCadenwayIcons(),
@@ -218,7 +227,7 @@ describe('TaskDetailTabs', () => {
           useValue: { displayedStatus: (task: TaskSummary) => task.status, request },
         },
         { provide: TaskSectionsApi, useValue: api },
-        { provide: TaskDetailOpener, useValue: { open } },
+        { provide: TaskDetailOpener, useValue: { open, takeTab } },
         { provide: WORKSPACE_CONTEXT, useValue: workspace },
         {
           provide: CwToastService,
@@ -247,6 +256,42 @@ describe('TaskDetailTabs', () => {
       'No branch or pull request',
     );
     expect(document.querySelector('[data-testid="task-approval"]')).toBeNull();
+    expect(takeTab).toHaveBeenCalledWith('CAD-482');
+  });
+
+  it('opens on the tab the opening asked for and focuses the new-subtask field', async () => {
+    fixture.destroy();
+    takeTab.mockReturnValue('subtasks');
+    fixture = TestBed.createComponent(TaskDetailTabs);
+    document.body.appendChild(fixture.nativeElement as HTMLElement);
+    await fixture.whenStable();
+
+    expect(tab('Subtasks').getAttribute('aria-selected')).toBe('true');
+    await vi.waitFor(() => {
+      expect(document.activeElement?.getAttribute('id')).toBe('task-subtask-new');
+    });
+  });
+
+  it('offers the participants to the description mention menu', async () => {
+    const description: TaskDescription = fixture.debugElement.query(By.directive(TaskDescription))
+      .componentInstance as TaskDescription;
+    const search: CwMentionSearch | null = description.mentionSearch();
+    await vi.waitFor(() => {
+      expect(api['people']).toHaveBeenCalled();
+    });
+
+    const people: readonly CwMentionPerson[] = search ? await firstValueFrom(search('hu')) : [];
+
+    expect(api['participants']).toHaveBeenCalledExactlyOnceWith('CAD-482');
+    expect(people).toEqual([{ id: 'u2', name: 'Hugo Dubois' }]);
+  });
+
+  it('disables the composer and reads no participants without the comment right', async () => {
+    canComment.set(false);
+    await show('Comments');
+
+    expect(document.querySelector('[data-testid="task-comment-count"]')).toBeNull();
+    expect(api['participants']).not.toHaveBeenCalled();
   });
 
   it('ticks a checklist item through its box', async () => {

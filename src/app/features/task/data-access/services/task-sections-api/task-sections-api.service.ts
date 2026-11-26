@@ -360,35 +360,28 @@ export class TaskSectionsApi {
    * Method participants
    *
    * @description
-   * The accounts a comment may mention, or null when the caller may not comment (a viewer gets
-   * `403`, which is how the comment right of a `view` role reads).
+   * The accounts a comment or the description may mention, read to the last page. The comment
+   * right comes from the detail's `callerRole`, not from this read.
    *
    * @param {string} taskKey - Key of the task.
-   * @returns {Promise<readonly string[] | null>} The accounts, or null without the comment role.
+   * @returns {Promise<readonly string[]>} The accounts.
    */
-  public async participants(taskKey: string): Promise<readonly string[] | null> {
+  public async participants(taskKey: string): Promise<readonly string[]> {
     const ids: string[] = [];
     let cursor: string | undefined;
-    try {
-      do {
-        const page: ListTaskParticipantsClientResult = await firstValueFrom(
-          this.tasks.listTaskParticipants(
-            taskKey,
-            { limit: PAGE_SIZE, ...(cursor ? { cursor } : {}) },
-            { cache: 'no-store' },
-          ),
-        );
-        ids.push(
-          ...page.items.map(
-            (item: ListTaskParticipantsClientResult['items'][number]) => item.userId,
-          ),
-        );
-        cursor = page.nextCursor ?? undefined;
-      } while (cursor);
-    } catch (error: unknown) {
-      if (error instanceof HttpErrorResponse && error.status === 403) return null;
-      throw error;
-    }
+    do {
+      const page: ListTaskParticipantsClientResult = await firstValueFrom(
+        this.tasks.listTaskParticipants(
+          taskKey,
+          { limit: PAGE_SIZE, ...(cursor ? { cursor } : {}) },
+          { cache: 'no-store' },
+        ),
+      );
+      ids.push(
+        ...page.items.map((item: ListTaskParticipantsClientResult['items'][number]) => item.userId),
+      );
+      cursor = page.nextCursor ?? undefined;
+    } while (cursor);
     return ids;
   }
 
