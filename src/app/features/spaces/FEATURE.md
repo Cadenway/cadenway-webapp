@@ -381,7 +381,9 @@ grid keeps 720 px and scrolls across).
   (and their `Undo`) until a read reaches their version. A failed first grid read fails to the route's error boundary; a
   failed refresh shows `The tasks could not be refreshed.` with `Retry`. The panel is a secondary
   read: skeleton, inline error with `Retry`, `All tasks have a due date.` when it has no task,
-  `No task` when the list has none. A read stopped at 2,000 tasks says so under the grid.
+  `No task` when the list has none. A grid read stopped at 2,000 tasks says so under the grid;
+  an unwindowed read stopped there says in the panel that undated tasks may be missing, instead of
+  `All tasks have a due date.`.
 - Rescheduling: a task of the grid dropped on another day (`itemMove`: pointer, or Space, the
   arrows and Space) and a task of the panel dropped on a day (`itemSchedule`: its drop list
   connects to the grid's days, and Space on it calls `scheduleWithKeyboard`) go through
@@ -391,14 +393,20 @@ grid keeps 720 px and scrolls across).
   `Due: <long day>.` offers `Undo`; a refusal puts the task back with the failure toast.
 - A task's click or Enter opens its detail (`TaskDetailOpener`). A right click, the Menu key or
   Shift F10 on a task opens `cw-task-menu`: on the panel through `[cwContextMenuTriggerFor]`, on
-  the grid through a capture-phase handler that opens the menu on the frame the brick draws, so the
-  day menu does not open. A day's `+`, `N`, the popover's `Add a task on …` and the day menu's
+  the grid and in the `+N others` popover (a CDK overlay, whose rows render the view's item
+  template) through a capture-phase handler on the page and the CDK overlay container that opens the menu on the frame the brick
+  draws, so the day menu does not open; from the popover, which the menu closes, the focus goes
+  back to the day's `+N others` button. A day's `+`, `N`, the popover's `Add a task on …` and the day menu's
   `New task on that day` open Task's create dialog in the list, due that day; the day menu's
   `Go to today` shows today's month. `N` elsewhere creates in the list (`useDefaults`).
 - Known gaps:
   - Both reads hold every dated task of the grid: the unwindowed one already reads the whole list
     (capped at 2,000), so the windowed read only guarantees the grid of a list over that cap. A
     "no due date" filter (G4) would let the panel read the undated tasks alone.
+  - The panel comes from that capped read: in a list over 2,000 tasks it may miss undated tasks of
+    the pages left out, and shows a notice instead of claiming every task has a due date. Listing
+    every undated task needs a "no due date" filter on `queryListTasks` (G4: contracts, then
+    task-service, then the gateway).
   - A write patches the read that shows the task; the other read shows it after the reads that
     follow the write. An `Undo` that takes a due date away hides the task from the grid at once,
     and the panel shows it once the unwindowed read answers.
@@ -411,7 +419,7 @@ grid keeps 720 px and scrolls across).
   | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
   | `spaces.calendar.previous-week`, `next-week`, `views`, `month`, `week`, `unscheduled`, `all-day`, `hour`, `more-one`, `count-one`, `count-other`, `add-on`, `close`, `week-grid`, `range`, `grabbed`, `moved`, `cancelled`, `scheduled` | The brick's own texts (its French defaults), which the mockup does not show. |
   | `spaces.calendar.undated-failed`                                                                                                                                                                                                        | The mockup draws no failed read.                                             |
-  | `spaces.calendar.truncated`                                                                                                                                                                                                             | The mockup has no list over the read's cap.                                  |
+  | `spaces.calendar.truncated`, `spaces.calendar.undated-truncated`                                                                                                                                                                        | The mockup has no list over the read's cap.                                  |
 
 ### Sprint report
 

@@ -1162,6 +1162,7 @@
     "spaces.calendar.loading": "Loading the calendar",
     "spaces.calendar.scheduled": "{$item} rescheduled. Due: {$date}.",
     "spaces.calendar.truncated": "Only the first {$count} tasks are shown.",
+    "spaces.calendar.undated-truncated": "Only the first {$count} tasks of the list were read: tasks without a due date may be missing.",
     "spaces.calendar.rescheduled": "{$key} rescheduled",
     "spaces.calendar.rescheduled-due": "Due: {$date}.",
     "spaces.form.title": "Request form",

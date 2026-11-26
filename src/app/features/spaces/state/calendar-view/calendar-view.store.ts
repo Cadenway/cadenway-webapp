@@ -262,12 +262,25 @@ export interface CalendarViewStoreInstance extends ViewTaskWriter {
    * Property truncated
    *
    * @description
-   * Whether a read stopped at `LIST_TASKS_CAP` with tasks left out.
+   * Whether the grid's read stopped at `LIST_TASKS_CAP` with tasks of the window left out.
    *
    * @type {Signal<boolean>}
    * @readonly
    */
   readonly truncated: Signal<boolean>;
+
+  /**
+   * Property undatedTruncated
+   *
+   * @description
+   * Whether the unwindowed read stopped at `LIST_TASKS_CAP`: the panel may miss undated tasks
+   * of the pages left out (no "no due date" filter, gap G4), so it never says that every task
+   * has a due date.
+   *
+   * @type {Signal<boolean>}
+   * @readonly
+   */
+  readonly undatedTruncated: Signal<boolean>;
 
   /**
    * Property summary
@@ -398,7 +411,8 @@ function createCalendarViewStore(): Type<CalendarViewStoreInstance> {
         undatedFailed: (): boolean => store._unwindowed.primary.error() !== undefined,
         undatedReady: (): boolean => !store._unwindowed.initialLoading(),
         empty: (): boolean => store._unwindowed.empty(),
-        truncated: (): boolean => store._windowed.truncated() || store._unwindowed.truncated(),
+        truncated: (): boolean => store._windowed.truncated(),
+        undatedTruncated: (): boolean => store._unwindowed.truncated(),
         summary: (): ListRowsSummary => store._unwindowed.summary(),
       };
     }),

@@ -574,6 +574,66 @@ describe('CalendarViewPage', () => {
     expect(hostOf(harness).querySelector('[role="grid"]')).not.toBeNull();
   });
 
+  it('says undated tasks may be missing when the unwindowed read stops at the cap', async () => {
+    let served: number = 0;
+    page.mockImplementation(
+      (_listId, _query, _group, _cursor, _limit, _signal, due): Promise<ListTaskPage> => {
+        if (due) return Promise.resolve({ items: [sprintTasks[0]], nextCursor: null, total: 1 });
+        const items: TaskSummary[] = Array.from({ length: 100 }, (_: unknown, index: number) =>
+          task(`CAD-${String(1000 + served + index)}`, 'Dated task', '2027-03-01'),
+        );
+        served += items.length;
+        return Promise.resolve({ items, nextCursor: `page-${String(served)}`, total: 2500 });
+      },
+    );
+    const harness: RouterTestingHarness = await open();
+    await expect
+      .poll(() => {
+        harness.detectChanges();
+        return hostOf(harness).querySelector('[data-testid="calendar-undated-truncated"]');
+      })
+      .not.toBeNull();
+
+    const panel: HTMLElement = panelOf(harness);
+    expect(
+      panel.querySelector('[data-testid="calendar-undated-truncated"]')?.textContent.trim(),
+    ).toBe(
+      'Only the first 2,000 tasks of the list were read: tasks without a due date may be missing.',
+    );
+    expect(panel.textContent).not.toContain('All tasks have a due date.');
+  });
+
+  it('opens the task menu on a task of the +N others popover', async () => {
+    page.mockImplementation(
+      answer([
+        task('CAD-482', 'Redesign the SSO sign-in screen', '2026-11-27'),
+        task('CAD-483', 'Organization quotas page', '2026-11-27'),
+        task('CAD-484', 'Invite flow copy', '2026-11-27'),
+        task('CAD-485', 'Audit log export', '2026-11-27'),
+      ]),
+    );
+    const harness: RouterTestingHarness = await open();
+    const more: HTMLButtonElement = required(
+      hostOf(harness).querySelector<HTMLButtonElement>('[data-more]'),
+    );
+    more.click();
+    await settle(harness);
+    const row: HTMLElement = required(
+      [...document.querySelectorAll<HTMLElement>('[data-calendar-task="CAD-485"]')]
+        .find((element: HTMLElement): boolean => !hostOf(harness).contains(element))
+        ?.closest<HTMLElement>('button'),
+    );
+
+    row.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'F10', shiftKey: true, bubbles: true, cancelable: true }),
+    );
+    await settle(harness);
+
+    expect(menuItem('Status')).toBeDefined();
+    expect(document.body.textContent).toContain('CAD-485');
+    expect(menuItem('New task on that day')).toBeUndefined();
+  });
+
   it('renders the route boundary on a failed first read, and reads again on Retry', async () => {
     page.mockImplementationOnce(() => Promise.reject(new UnavailableRouteError(503, 'req-7')));
     page.mockImplementationOnce(() => Promise.reject(new UnavailableRouteError(503, 'req-7')));

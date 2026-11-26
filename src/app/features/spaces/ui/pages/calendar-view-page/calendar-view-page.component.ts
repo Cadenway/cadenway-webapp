@@ -1,4 +1,5 @@
 import { CdkDrag, CdkDropList } from '@angular/cdk/drag-drop';
+import { OverlayContainer } from '@angular/cdk/overlay';
 import {
   Component,
   computed,
@@ -305,12 +306,24 @@ export class CalendarViewPage {
    * Property truncatedText
    *
    * @description
-   * The notice of a read stopped at `LIST_TASKS_CAP`.
+   * The notice of a grid read stopped at `LIST_TASKS_CAP`.
    *
    * @type {string}
    * @readonly
    */
   protected readonly truncatedText: string;
+
+  /**
+   * Property undatedTruncatedText
+   *
+   * @description
+   * The panel's notice when the unwindowed read stopped at `LIST_TASKS_CAP`: undated tasks may
+   * be missing, so it replaces `All tasks have a due date.`.
+   *
+   * @type {string}
+   * @readonly
+   */
+  protected readonly undatedTruncatedText: string;
 
   /**
    * Property maxPerDay
@@ -498,6 +511,19 @@ export class CalendarViewPage {
   private readonly host: ElementRef<HTMLElement> = inject<ElementRef<HTMLElement>>(ElementRef);
 
   /**
+   * Property overlays
+   *
+   * @description
+   * The CDK overlay container, where the `+N others` popover renders its tasks outside the page:
+   * it hands their context-menu gestures to the task menu too. Its capture phase runs after the
+   * body's, so the overlay's outside-click handling does not close the menu it opens.
+   *
+   * @type {OverlayContainer}
+   * @readonly
+   */
+  private readonly overlays: OverlayContainer = inject(OverlayContainer);
+
+  /**
    * Property destroyRef
    *
    * @description
@@ -516,7 +542,9 @@ export class CalendarViewPage {
    * @description
    * Reads the tasks of the list with the view's query, publishes their summary to the tools and
    * makes `N` create in this list while the view lives. A failed first read is retried when the
-   * error boundary runs the route again. Hands the grid's context-menu gestures to the task menu.
+   * error boundary runs the route again. Hands the context-menu gestures of the grid's tasks, in
+   * the page or in the `+N others` popover, to the task menu, from the capture phase of the page
+   * and of the CDK overlay container.
    *
    * @constructor
    */
@@ -527,10 +555,13 @@ export class CalendarViewPage {
     );
     this.view.followRows(this.calendar.summary);
     this.taskCreate.useDefaults(() => ({ listId: this.listId() }), this.destroyRef);
-    this.truncatedText = $localize`:@@spaces.calendar.truncated:Only the first ${new Intl.NumberFormat(
-      this.locale,
-    ).format(LIST_TASKS_CAP)}:count: tasks are shown.`;
-    const element: HTMLElement = this.host.nativeElement;
+    const cap: string = new Intl.NumberFormat(this.locale).format(LIST_TASKS_CAP);
+    this.truncatedText = $localize`:@@spaces.calendar.truncated:Only the first ${cap}:count: tasks are shown.`;
+    this.undatedTruncatedText = $localize`:@@spaces.calendar.undated-truncated:Only the first ${cap}:count: tasks of the list were read: tasks without a due date may be missing.`;
+    const targets: readonly HTMLElement[] = [
+      this.host.nativeElement,
+      this.overlays.getContainerElement(),
+    ];
     let swallowUntil: number = 0;
     const delegate: (event: Event) => void = (event: Event): void => {
       if (event.type === 'contextmenu' && performance.now() < swallowUntil) {
@@ -542,11 +573,15 @@ export class CalendarViewPage {
         swallowUntil = performance.now() + SWALLOW_MS;
       }
     };
-    element.addEventListener('contextmenu', delegate, true);
-    element.addEventListener('keydown', delegate, true);
+    for (const element of targets) {
+      element.addEventListener('contextmenu', delegate, true);
+      element.addEventListener('keydown', delegate, true);
+    }
     this.destroyRef.onDestroy((): void => {
-      element.removeEventListener('contextmenu', delegate, true);
-      element.removeEventListener('keydown', delegate, true);
+      for (const element of targets) {
+        element.removeEventListener('contextmenu', delegate, true);
+        element.removeEventListener('keydown', delegate, true);
+      }
     });
   }
   // #endregion
@@ -686,11 +721,14 @@ export class CalendarViewPage {
    *
    * @description
    * Opens the task menu for a context-menu gesture on a task of the grid, whose frame
-   * `cw-calendar-view` draws: at the pointer for a right click, on the task (first item focused)
-   * for the Menu key or Shift F10. The day menu then does not open. Runs in the capture phase,
-   * since the frame takes no menu of its own; the panel's tasks have their own triggers.
+   * `cw-calendar-view` draws (a pill of a day, or a row of the `+N others` popover, which renders
+   * in a CDK overlay): at the pointer for a right click, on the task (first item focused) for the
+   * Menu key or Shift F10. The day menu then does not open. Runs in the capture phase of the page and of the overlay container,
+   * since the frame takes no menu of its own; the panel's tasks have their own triggers. A task
+   * of the popover gives the focus back to the day's `+N others` button, since opening the menu
+   * closes the popover.
    *
-   * @param {Event} event - A `contextmenu` or `keydown` event inside the view.
+   * @param {Event} event - A `contextmenu` or `keydown` event in the page or an overlay.
    * @returns {boolean} Whether the menu opened.
    */
   private openItemMenu(event: Event): boolean {
@@ -702,14 +740,20 @@ export class CalendarViewPage {
       ?.querySelector('[data-calendar-task]')
       ?.getAttribute('data-calendar-task');
     if (!frame || !key) return false;
+    const host: HTMLElement = this.host.nativeElement;
+    const inPage: boolean = host.contains(frame);
+    if (!inPage && !this.overlays.getContainerElement().contains(frame)) return false;
     event.preventDefault();
+    const trigger: HTMLElement = inPage
+      ? frame
+      : (host.querySelector<HTMLElement>('[data-more][aria-expanded="true"]') ?? frame);
     this.menuKey.set(key);
     this.taskMenu()
       .menu()
       .open(
         event instanceof MouseEvent
-          ? { origin: { x: event.clientX, y: event.clientY }, trigger: frame }
-          : { origin: frame, trigger: frame, focus: 'first' },
+          ? { origin: { x: event.clientX, y: event.clientY }, trigger }
+          : { origin: frame, trigger, focus: 'first' },
       );
     return true;
   }
@@ -735,7 +779,8 @@ export class CalendarViewPage {
       event.altKey ||
       event.metaKey ||
       event.shiftKey ||
-      !(event.target instanceof Element)
+      !(event.target instanceof Element) ||
+      !this.host.nativeElement.contains(event.target)
     ) {
       return false;
     }

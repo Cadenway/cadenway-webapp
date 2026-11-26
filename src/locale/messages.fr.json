@@ -669,6 +669,7 @@
     "spaces.calendar.undated-empty": "Toutes les tâches ont une échéance.",
     "spaces.calendar.undated-failed": "Les tâches sans échéance n’ont pas pu être chargées.",
     "spaces.calendar.undated-hint": " Glissez une tâche sur un jour pour la planifier. ",
+    "spaces.calendar.undated-truncated": "Seules les {$count} premières tâches de la liste ont été lues : des tâches sans échéance peuvent manquer.",
     "spaces.calendar.unscheduled": "Sans date",
     "spaces.calendar.views": "Vue",
     "spaces.calendar.week": "Semaine",
