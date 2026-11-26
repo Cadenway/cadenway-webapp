@@ -113,6 +113,92 @@ constants belong to the lead):
   sprint's goal line, `Space statuses` (enabled when the space is editable) and `Automations`
   (enabled for organization admins and owners) in the list menu after `Edit the space`.
 
+## Sheet view
+
+The `Sheet` view (`ui/pages/sheet-view-page`, `App.dc.html` lines 1031-1100, 3768-3786,
+7538-7680 and 7924-7933) edits the list's tasks in a grid. The title counts the tasks, sums
+their estimates in hours and, when the space has a sprint points field, its points
+(`12 tasks · 18 h · 34 points`); the `Columns` menu (`Columns · 2 hidden`) shows or hides every
+column but the name, the custom fields marked `Custom`, and `Show all`. A virtual
+`cw-data-table` shows one row per task: the name (the status icon before it, the key, an open
+button), status, priority, assignees, due date, estimate, time spent, labels, list, then the
+space's custom fields in their position order. The contract's `points` and `client` sheet
+columns name the mockup's seed fields: the sheet draws the space's real custom fields instead.
+
+- `SHEET_VIEW_PROVIDERS` (`state/sheet-view`) provides `TaskStatusChangesStore`,
+  `SheetTasksApi` (`data-access/services/sheet-tasks-api`), also in place of `ListTasksApi`, the
+  shared `ListTasksStore`, `SheetViewStore` and the task views' table texts. `SheetTasksApi` reads
+  each ungrouped page as `ListTasksApi.page` does and publishes the estimate and custom field
+  values of its tasks (`facts`), which `TaskSummary` does not carry (`sheet-task.adapter`); the
+  list is read once. It also reads `listListCustomFields` and `getTaskTimeSummary`.
+- `SheetViewStore` (route-scoped) keeps those facts by task (a read never replaces a newer
+  version), the custom fields (a secondary read: a failure keeps the built-in columns with an
+  inline Retry; once read, they go to `ListViewStore.followCustomFields`) and the time spent of
+  the rendered rows. It builds the rows in the presentation's order (`customFieldSort` while the
+  space has the field, else `sheetSort`; statuses in workflow order, priorities from urgent, empty
+  cells last; a header cycles ascending, descending, none; `Time spent` does not sort, and a saved
+  `sheetSort` on it shows the read order) and the footer's totals, and writes the sort and the
+  hidden columns to the presentation (`setPresentation`).
+- `Group by` files the sorted rows into the view's groups as the `List` view does
+  (`groupSheetRows`): statuses in workflow order, priorities from urgent, assignees with the most
+  tasks first and `Unassigned` last, a task with several assignees under each of them (row id
+  `<group>/<key>`). `Cancelled` is folded by default under the status grouping; the folded groups
+  of each grouping are kept while the view lives (`setCollapsed`). The `List` view's grouping
+  helpers live in `ListRowsStore` (server group reads), so the sheet has its own in
+  `utils/sheet-view`.
+- Selection: the rows are selectable (`Select CAD-482`); the shared `cw-bulk-bar` acts on the
+  ticked tasks (once each) through `ViewTaskWritesStore` (`Mark done`, `Assign`, `Move to…`,
+  `Delete`), a refused chunk stays ticked (`onRefused`), and the task menu of a ticked row acts on
+  the whole selection.
+- Inline edits: Enter or F2 (double click too) on the name, due date, estimate (a bare number is
+  hours, `parseDuration`) and custom fields (`Points` refuses a negative number and stays open
+  with `aria-invalid`); Enter validates, Escape cancels, Tab goes to the next editable cell. Each
+  goes through `ViewTaskWritesStore.updateFields` (`If-Match`) with a toast and `Undo`; the
+  reader shows the name and the due date at once, `SheetViewStore.editFacts` the estimate and the
+  custom fields until a read reaches the version the write returned (dropped at once when a read
+  answered before the write already reached it). Their `Undo` puts back the confirmed value the
+  write replaced, read once the earlier edits of the task settle (never a pending or refused
+  edit). An unchanged value writes nothing. A click or
+  Enter on the name opens the task.
+- A right click, Shift + F10 or the row's `…` button opens `cw-task-menu`
+  (`rowContextMenu`): status, priority, assignees, `Move to`, reminder, copies, deletion.
+- The footer counts the tasks and those done, and sums the estimates, the numeric custom fields
+  and the time spent once every row's is read; until then the time spent's footer stays blank and
+  tells assistive technologies `Total once every row is read`.
+- States: the table's loading state (`Loading the sheet`) until the first read answers; a failed
+  first read reaches the route's error boundary; a failed refresh shows inline with Retry; an
+  empty read shows the mockup's `No task matches the search or the filters.`; a read stopped at
+  2,000 tasks says so.
+- `cw-data-table` 0.10.0 reads a new column child's required `key` in its virtual window before
+  that column's first binding, which a custom field column (bound key) hits: the page opens the
+  virtual window and gives the rows one rendering after the custom field columns change
+  (`virtualReady`). The lasting fix is in `@cadenway/ui`.
+- Known gaps:
+  - G6: `TaskSummary` has no `spentMinutes`. The sheet reads `getTaskTimeSummary` for each row the
+    virtual table renders (`SheetSpentCell.shown`), four at a time, again when a task detail
+    closes or changes; a failed read shows a `Retry` button in its cell and keeps the footer
+    pending until it succeeds. Until a list-level aggregate exists, `Time spent` does not sort and its
+    footer sum shows only once every row's summary is read (rows never rendered are never read).
+    `spentMinutes` on `TaskSummary` (contracts, then task-service from time entries) is the fix.
+  - Status, priority, assignees, labels and list are not edited in their cells (the mockup's
+    popovers): the task menu changes the first four and `Move to` the list; labels change in the
+    task detail.
+  - The due date edits with the browser's date field, without the mockup's `Today` and `Clear`
+    popover; emptying it clears the due date.
+  - The headers have no `Sort by …` or `Custom field ·` title (the table's headers take no title),
+    and a custom field header has no type icon.
+  - Under 768 px the table shows its phone grid (name, due date, estimate) instead of the
+    mockup's horizontal scroll.
+  - No realtime notice covers custom field definitions or time entries (G13).
+
+| Unit                                                                                 | Reason                                                   |
+| ------------------------------------------------------------------------------------ | -------------------------------------------------------- |
+| `spaces.sheet.hint`                                                                  | The mockup's hint, with the table's double click and F2. |
+| `spaces.sheet.updated`, `spaces.sheet.updated-value`, `spaces.sheet.updated-cleared` | The mockup shows no toast for a sheet edit.              |
+| `spaces.sheet.fields-failed`, `spaces.sheet.truncated`                               | The mockup draws no failed read or capped list.          |
+| `spaces.sheet.spent-pending`                                                         | The mockup reads every time entry (G6).                  |
+| `spaces.sheet.title-no-points`                                                       | The mockup's space always has points.                    |
+
 ## Workload view
 
 The `Workload` view (`ui/pages/workload-view-page`, `App.dc.html` lines 958-1029, skeleton

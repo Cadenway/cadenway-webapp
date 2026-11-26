@@ -16,6 +16,7 @@ export const RELEASED_LAYOUTS: readonly ViewLayout[] = [
   'list',
   'calendar',
   'workload',
+  'table',
   'form',
   'activity',
   'timesheet',
