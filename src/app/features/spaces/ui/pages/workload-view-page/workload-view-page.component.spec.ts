@@ -223,7 +223,14 @@ describe('WorkloadViewPage', () => {
           [
             {
               path: 'l/:listId/workload',
-              providers: [ListViewStore, ...WORKLOAD_VIEW_PROVIDERS],
+              providers: [
+                ListViewStore,
+                ...WORKLOAD_VIEW_PROVIDERS,
+                {
+                  provide: ListTasksApi,
+                  useValue: { page, groups: vi.fn(), subtasks: vi.fn(), update: vi.fn() },
+                },
+              ],
               component: WorkloadViewPage,
             },
           ],
@@ -248,10 +255,6 @@ describe('WorkloadViewPage', () => {
           useValue: { spaces: ready([]), overviews: ready({}), openDialog: vi.fn() },
         },
         { provide: WorkloadApi, useValue: { workload, spent } },
-        {
-          provide: ListTasksApi,
-          useValue: { page, groups: vi.fn(), subtasks: vi.fn(), update: vi.fn() },
-        },
         { provide: TaskActionsApi, useValue: { bulk, restore: vi.fn(), remind: vi.fn() } },
         { provide: TaskApi, useValue: { changeStatus: vi.fn(() => of()), read: vi.fn() } },
         { provide: CwToastService, useValue: toasts },
