@@ -54,4 +54,17 @@ describe('TaskDetailOpener', () => {
     expect(opener.takeTab('CAD-482')).toBeNull();
     expect(router.url).toBe('/atelier-nord/l/sprint-14/list?group=status');
   });
+
+  it('opens nothing for a value that is not a task key, and removes it on close', async () => {
+    for (const value of ['cad-482', 'CAD-0', 'C-1', 'CAD-482/../x', '%3Cscript%3E', ' ']) {
+      await router.navigateByUrl(`/atelier-nord/l/sprint-14/list?task=${value}`);
+      expect(opener.taskKey()).toBeNull();
+    }
+
+    await opener.close();
+    expect(router.url).toBe('/atelier-nord/l/sprint-14/list');
+
+    await router.navigateByUrl('/atelier-nord/l/sprint-14/list?task=OPS-12');
+    expect(opener.taskKey()).toBe('OPS-12');
+  });
 });

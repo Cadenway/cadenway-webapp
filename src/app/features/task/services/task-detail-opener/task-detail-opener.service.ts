@@ -20,6 +20,17 @@ import type {
 export const TASK_DETAIL_PARAM: string = 'task';
 
 /**
+ * Constant TASK_KEY_PATTERN
+ *
+ * @description
+ * A task key as the contracts define it (`TaskKey` in `@cadenway/contracts`: a 2 to 5 letter
+ * prefix, a dash and a number from 1): the only values of `?task=` the detail opens.
+ *
+ * @type {RegExp}
+ */
+const TASK_KEY_PATTERN: RegExp = /^[A-Z]{2,5}-[1-9][0-9]{0,8}$/u;
+
+/**
  * Service TaskDetailOpener
  *
  * @description
@@ -142,14 +153,15 @@ export class TaskDetailOpener {
    * Method close
    *
    * @description
-   * Closes the detail: removes `?task=` from the address, keeping the other parameters.
+   * Closes the detail: removes `?task=` from the address, an invalid value included, keeping the
+   * other parameters.
    *
    * @returns {Promise<boolean>} Whether the navigation succeeded.
    */
   public close(): Promise<boolean> {
     this.previews.set(null);
     this.tabRequest = null;
-    if (this.readKey() === null) return Promise.resolve(true);
+    if (this.readParam() === null) return Promise.resolve(true);
     return this.router.navigate([], {
       queryParams: { [TASK_DETAIL_PARAM]: null },
       queryParamsHandling: 'merge',
@@ -177,14 +189,26 @@ export class TaskDetailOpener {
    * Method readKey
    *
    * @description
-   * Reads the parameter from the current address; a blank value opens nothing.
+   * Reads the task key from the current address; a blank value or one that is not a task key
+   * (`TASK_KEY_PATTERN`) opens nothing.
    *
    * @returns {string | null} The key, or null.
    */
   private readKey(): string | null {
-    const key: string | null =
-      this.router.parseUrl(this.router.url).queryParamMap.get(TASK_DETAIL_PARAM) ?? null;
-    return key && key.trim() !== '' ? key.trim() : null;
+    const key: string | undefined = this.readParam()?.trim();
+    return key !== undefined && TASK_KEY_PATTERN.test(key) ? key : null;
+  }
+
+  /**
+   * Method readParam
+   *
+   * @description
+   * Reads the raw `?task=` value of the current address.
+   *
+   * @returns {string | null} The value, or null without the parameter.
+   */
+  private readParam(): string | null {
+    return this.router.parseUrl(this.router.url).queryParamMap.get(TASK_DETAIL_PARAM) ?? null;
   }
   // #endregion
 }
