@@ -1,0 +1,187 @@
+<cw-dialog [(open)]="open" size="lg" scrollable data-testid="sprint-report-dialog">
+  <cw-dialog-header>
+    <h2 cwDialogTitle>{{ title() }}</h2>
+    @if (subtitle()) {
+      <p cwDialogDescription>{{ subtitle() }}</p>
+    }
+  </cw-dialog-header>
+
+  @if (failed()) {
+    <cw-empty size="sm" data-testid="sprint-report-failed">
+      <cw-empty-header>
+        <cw-empty-media tone="destructive">
+          <ng-icon name="phosphorWarningCircleBold" aria-hidden="true" />
+        </cw-empty-media>
+        <cw-empty-title i18n="@@spaces.sprint-report.failed"
+          >The sprint report could not be loaded</cw-empty-title
+        >
+      </cw-empty-header>
+      <cw-empty-content>
+        <button cwButton type="button" variant="outline" size="sm" (click)="store.retry()">
+          {{ retryLabel }}
+        </button>
+      </cw-empty-content>
+    </cw-empty>
+  } @else if (view(); as report) {
+    @if (report.empty) {
+      <cw-empty size="sm" data-testid="sprint-report-empty">
+        <cw-empty-header>
+          <cw-empty-media>
+            <ng-icon name="phosphorChartLineDownBold" aria-hidden="true" />
+          </cw-empty-media>
+          <cw-empty-title i18n="@@spaces.sprint-report.empty"
+            >No task in this sprint</cw-empty-title
+          >
+        </cw-empty-header>
+      </cw-empty>
+    } @else {
+      <div class="flex flex-col gap-5 py-2">
+        <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          @for (figure of report.figures; track figure.key) {
+            <cw-stat
+              [label]="figure.label"
+              [value]="figure.value"
+              [comparison]="figure.hint"
+              [attr.data-testid]="'sprint-report-' + figure.key"
+            />
+          }
+        </div>
+
+        <section
+          class="flex flex-col gap-3 rounded-xl border border-border bg-card p-4"
+          aria-labelledby="sprint-report-burndown"
+        >
+          <h3
+            id="sprint-report-burndown"
+            class="text-sm font-semibold"
+            i18n="@@spaces.sprint-report.burndown"
+          >
+            Burndown
+          </h3>
+          <cw-chart
+            type="line"
+            x="day"
+            legend
+            [data]="report.burndown"
+            [series]="burndownSeries"
+            [markers]="report.markers"
+            [ariaLabel]="burndownLabel"
+          />
+        </section>
+
+        <section
+          class="flex flex-col gap-3 rounded-xl border border-border bg-card p-4"
+          aria-labelledby="sprint-report-velocity"
+        >
+          <h3
+            id="sprint-report-velocity"
+            class="text-sm font-semibold"
+            i18n="@@spaces.sprint-report.velocity"
+          >
+            Velocity
+          </h3>
+          <cw-chart
+            type="bar"
+            x="sprint"
+            [legend]="false"
+            [data]="report.velocity"
+            [series]="velocitySeries"
+            [ariaLabel]="report.velocityLabel"
+            [categoryFormat]="velocityCategory"
+            [categoryHeader]="sprintHeader"
+          />
+          <p class="text-xs text-muted-foreground">{{ report.velocityNote }}</p>
+        </section>
+
+        <section
+          class="flex flex-col gap-3 rounded-xl border border-border bg-card p-4"
+          aria-label="Sprint summary"
+          i18n-aria-label="@@spaces.sprint-report.summary"
+        >
+          <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div class="flex min-w-0 flex-col gap-2" data-testid="sprint-report-delivered-tasks">
+              <h3 class="flex items-center gap-2 text-sm font-semibold">
+                <ng-icon
+                  name="phosphorCheckCircleFill"
+                  class="size-4 text-jade"
+                  aria-hidden="true"
+                />
+                <ng-container i18n="@@spaces.sprint-report.delivered-title">Delivered</ng-container>
+                <span class="text-xs font-normal text-muted-foreground tabular-nums">{{
+                  report.delivered.count
+                }}</span>
+              </h3>
+              <ul class="flex flex-col">
+                @for (task of report.delivered.tasks; track task.key) {
+                  <li>
+                    <button
+                      type="button"
+                      class="flex w-full min-w-0 items-center gap-2 rounded-md px-1.5 py-1 text-left text-sm transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background focus-visible:outline-none"
+                      (click)="openTask(task)"
+                    >
+                      <span class="min-w-0 flex-1 truncate">{{ task.name }}</span>
+                      <span class="shrink-0 text-xs text-muted-foreground tabular-nums">{{
+                        points(task.points)
+                      }}</span>
+                    </button>
+                  </li>
+                }
+              </ul>
+              @if (report.delivered.more) {
+                <p class="px-1.5 text-xs text-muted-foreground">{{ report.delivered.more }}</p>
+              }
+            </div>
+            <div class="flex min-w-0 flex-col gap-2" data-testid="sprint-report-remaining-tasks">
+              <h3 class="flex items-center gap-2 text-sm font-semibold">
+                <ng-icon
+                  name="phosphorArrowBendDownRightBold"
+                  class="size-4 text-balise"
+                  aria-hidden="true"
+                />
+                <ng-container i18n="@@spaces.sprint-report.carry-over">To carry over</ng-container>
+                <span class="text-xs font-normal text-muted-foreground tabular-nums">{{
+                  report.remaining.count
+                }}</span>
+              </h3>
+              <ul class="flex flex-col">
+                @for (task of report.remaining.tasks; track task.key) {
+                  <li>
+                    <button
+                      type="button"
+                      class="flex w-full min-w-0 items-center gap-2 rounded-md px-1.5 py-1 text-left text-sm transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background focus-visible:outline-none"
+                      (click)="openTask(task)"
+                    >
+                      <cw-status-icon [status]="task.status" size="3.5" />
+                      <span class="min-w-0 flex-1 truncate">{{ task.name }}</span>
+                      <span class="shrink-0 text-xs text-muted-foreground tabular-nums">{{
+                        points(task.points)
+                      }}</span>
+                    </button>
+                  </li>
+                }
+              </ul>
+              @if (report.remaining.more) {
+                <p class="px-1.5 text-xs text-muted-foreground">{{ report.remaining.more }}</p>
+              }
+            </div>
+          </div>
+        </section>
+
+        <p class="text-xs text-muted-foreground" i18n="@@spaces.sprint-report.foot">
+          Points: the task's “Points” field, otherwise estimated from its duration. Subtasks and
+          milestones are not counted.
+        </p>
+      </div>
+    }
+  } @else {
+    <div class="flex flex-col gap-5 py-2" aria-busy="true" data-testid="sprint-report-loading">
+      <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        @for (figure of skeletonFigures; track figure) {
+          <cw-stat label="" value="" loading />
+        }
+      </div>
+      <div cwSkeleton class="h-48 w-full rounded-xl"></div>
+      <div cwSkeleton class="h-40 w-full rounded-xl"></div>
+    </div>
+  }
+</cw-dialog>

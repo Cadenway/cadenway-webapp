@@ -95,6 +95,39 @@ constants belong to the lead):
   sprint's goal line, `Space statuses` (enabled when the space is editable) and `Automations`
   (enabled for organization admins and owners) in the list menu after `Edit the space`.
 
+### Sprint report
+
+`SprintReportDialog` (`ui/dialogs/sprint-report-dialog/`, `App.dc.html` lines 2729-2776 and
+5512-5561) shows the report of the sprint it is given:
+
+- Store: `SprintReportStore` (`state/sprint-report/`), component-scoped on the dialog. Each
+  opening reads `ListsService.getSprintReport` again through `SprintReportApi`
+  (`data-access/services/sprint-report-api/`), with the caller's `today` and browser time zone,
+  every burndown page joined (100 days a page, 10 pages at most), bypassing the HTTP cache.
+  Closing keeps the shown report for the closing animation; the next opening starts from
+  skeletons. A failed read shows an inline error whose `Retry` reads again; a sprint without
+  tasks shows `No task in this sprint`.
+- Header: `<sprint> report` and `<start> – <end> · day n of m`, from the list until the report
+  answers; the day is held within the sprint.
+- Figures (`cw-stat`): `Points committed` (the opening commitment, with the tasks of the current
+  scope), `Points delivered` (with their share of the delivered and remaining points),
+  `Points remaining` (with the open tasks) and `Projected end`: `On track` when at most 0.5
+  point would remain, else `≈ n pts` and `would remain on <end>`, from the gateway's forecast,
+  or what remains once the sprint is over. A figure the gateway cannot establish shows a dash.
+- `Burndown` (`cw-chart` lines): `Actual`, dashed `Ideal` and `Projection`, one category per day,
+  and a `Today` marker while the caller's day is in the sprint.
+- `Velocity` (`cw-chart` grouped bars): the earlier sprints the gateway returns (four at most),
+  then this one, named `S13` (the mockup's `Sprint ` to `S`, made unique), gray committed and
+  jade delivered, with the average delivered by the earlier sprints that have history.
+- `Delivered` and `To carry over`: the counts, the first six tasks with their points and
+  `+ n others`; a task closes the report and opens its detail (`TaskDetailOpener`).
+- `cw-dialog` `lg`, scrollable, filling the screen under 768 px.
+- Known gaps: `cw-dialog` has no width between `lg` (`max-w-2xl`) and full screen, so the report
+  is narrower than the mockup's `max-w-4xl` and stacks `Velocity` above the summary. `cw-chart`
+  colors a series, not a bar: the current sprint's bar is jade like the others (violet in the
+  mockup), and the `done / committed` line under each bar is in the tooltip and the chart's data
+  table only. The backdrop has no accessible name (`Fermer le rapport` in the mockup).
+
 ## Public entry points
 
 | Entry point            | Consumers    |
@@ -400,3 +433,8 @@ gateway checks them and `ORGANIZATION_PIN_OPERATIONS` lists them.
 | `spaces.list-dialog.date-*`, `spaces.list-dialog.pick-date`, `spaces.footer.*`                                                 | The date picker's texts and the footer rows' names.                        |
 | `spaces.look.*`                                                                                                                | `LOOK_COLORS` names and the default choices of `lookPicker`.               |
 | `spaces.view-stub.text`                                                                                                        | The stub of a view not built yet, which the mockup does not have.          |
+| `spaces.sprint-report.failed`, `spaces.sprint-report.empty`, `spaces.sprint-report.chart-empty`                                | The mockup draws no failed read or empty sprint.                           |
+| `spaces.sprint-report.projected-unknown`                                                                                       | The mockup always has a projection.                                        |
+| `spaces.sprint-report.chart-*` (except `chart-empty`), `spaces.sprint-report.stat-*`                                           | The bricks' own texts, which the mockup does not show as copy.             |
+| `spaces.sprint-report.today`                                                                                                   | The today marker's label; the mockup's line has none.                      |
+| `spaces.sprint-report.tasks-one`, `spaces.sprint-report.open-tasks-one`                                                        | Singular forms the mockup writes in the plural.                            |
