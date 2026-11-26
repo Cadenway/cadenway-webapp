@@ -13,48 +13,36 @@ import { TaskApi } from '../../../data-access/services/task-api/task-api.service
 import type { TaskSummary } from '../../../models/task-summary/task-summary.interface';
 
 /**
- * Constant NOT_FOUND_SEGMENT
- *
- * @description
- * A segment no screen below `/:org` declares, so the workspace's `**` renders its 404 inside the
- * shell. The redirect skips the location change: the browser keeps the task address.
- *
- * @type {string}
- */
-const NOT_FOUND_SEGMENT: string = 'not-found';
-
-/**
  * Function taskLinkResolver
  *
  * @description
  * The deep link of a task (`/:org/t/:taskKey`): reads the task by key once the workspace resolver
  * committed the organization, then redirects to its list with `?task=<KEY>`
- * (`/:org/l/<listId>/list?task=<KEY>`), where the list opens it. A task the caller cannot read (a
- * missing, deleted or private task, a malformed key, an unavailable gateway) renders the
- * workspace's 404 at the same address. It never resolves a value: it always redirects with a
- * `RedirectCommand`, so it never reaches the route's error boundary.
+ * (`/:org/l/<listId>/list?task=<KEY>`, replacing the address), where the list opens it. A task it
+ * cannot read resolves the typed route error of `TaskApi.readLink`: not found, deleted (with its
+ * trash entry) or unavailable. `TaskLinkPage` hands it to the error boundary, which renders it at
+ * the task's address; the route runs its resolver again on `Retry` and after `Restore the task`.
  *
  * @param {ActivatedRouteSnapshot} route - The task route, whose `taskKey` names the task.
- * @returns {Promise<RedirectCommand>} The redirect to the list or to the 404.
+ * @returns {Promise<Error | RedirectCommand>} The redirect to the list, or why the task could not
+ * be read.
  */
-export const taskLinkResolver: ResolveFn<never> = async (
+export const taskLinkResolver: ResolveFn<Error> = async (
   route: ActivatedRouteSnapshot,
-): Promise<RedirectCommand> => {
+): Promise<Error | RedirectCommand> => {
   const router: Router = inject(Router);
   const slug: string = inject(WORKSPACE_CONTEXT).organization().slug;
   const api: TaskApi = inject(TaskApi);
   const key: string = route.paramMap.get('taskKey') ?? '';
   try {
-    const task: TaskSummary = await firstValueFrom(api.read(key));
+    const task: TaskSummary = await firstValueFrom(api.readLink(key));
     return new RedirectCommand(
       router.createUrlTree(['/', slug, 'l', task.listId, 'list'], {
         queryParams: { task: task.key },
       }),
       { replaceUrl: true },
     );
-  } catch {
-    return new RedirectCommand(router.createUrlTree(['/', slug, NOT_FOUND_SEGMENT]), {
-      skipLocationChange: true,
-    });
+  } catch (error: unknown) {
+    return error instanceof Error ? error : new Error(String(error));
   }
 };

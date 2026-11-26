@@ -14,10 +14,15 @@ composes these blocks; the task detail page comes in step 5.
 `TASK_ROUTES` (`task.routes.ts`), mounted by Workspace below `/:org`:
 
 - `t/:taskKey`, the shareable deep link of a task (the create toast's `Open`, `Copy the link`):
-  `taskLinkResolver` reads the task by key (`TaskApi.read`) once the workspace context is committed
-  and redirects with a `RedirectCommand` to `/<slug>/l/<listId>/list?task=<KEY>`; a task it cannot
-  read renders the workspace's 404 at the same address (`skipLocationChange`). The route has no
-  component; the task detail comes in step 5.
+  `taskLinkResolver` reads the task by key (`TaskApi.readLink`) once the workspace context is committed
+  and redirects with a `RedirectCommand` to `/<slug>/l/<listId>/list?task=<KEY>`, replacing the
+  address. A task it cannot read resolves the typed route error the read fails with (`toTaskRouteError`):
+  `404 task.trashed` is the deleted task (`Restore the task`), another `404` or a `400` is not found,
+  anything else (offline included) is unavailable (`Retry`). `TaskLinkPage` throws it to the
+  router's error boundary, which renders it at the task's address inside the shell; the route runs
+  its resolver on every navigation (`runGuardsAndResolvers: 'always'`), so `Retry` and the restore
+  read the task again. The gateway answers `task.not-found` for a task the caller does not see, so
+  the link has no access-denied state. The task detail comes in step 5.
 
 ## Public entry points
 
@@ -61,7 +66,7 @@ options?)`, `requestCancel(tasks, options?)`, `pendingStatus(taskId)`, `displaye
   collection is read to its last cursor page.
 - `@cadenway/contracts` enums: `STATUS_KEYS`, `STATUS_CATEGORIES`, `STATUS_CATEGORY_BY_KEY`,
   `MILESTONE_STATUS_KEYS`, `PRIORITY_KEYS`, `CANCEL_REASONS`, `RECURRENCES`.
-- `@core/api` (`hasProblemCode`, `OrganizationPin`), `@core/shortcuts` (`N`, Ctrl Enter), `@shared/layout-slot`
+- `@core/api` (`hasProblemCode`, `readProblem`, `OrganizationPin`), `@shared/route-errors`, `@core/shortcuts` (`N`, Ctrl Enter), `@shared/layout-slot`
   (`ShellOverlay`, slot contribution), Workspace's `ports/workspace-context`.
 - `@cadenway/ui` (`badge`, `button`, `combobox`, `date-picker`, `dialog`, `input`, `kbd`, `menu`,
   `priority-icon`, `radio-group`, `split-button`, `status-icon`, `switch`, `textarea`, `toast`) and
