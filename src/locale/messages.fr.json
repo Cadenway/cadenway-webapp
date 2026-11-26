@@ -1128,6 +1128,7 @@
     "spaces.table.sort-rank": ", tri {$rank} {$order}",
     "spaces.table.sort-removed": "Tri retiré",
     "spaces.table.sorted": "Trié par {$criteria}",
+    "spaces.task-writes.field-failed": "Impossible de modifier la tâche",
     "spaces.tips.dismiss": "Masquer les suggestions",
     "spaces.tips.github-cta": "Connecter",
     "spaces.tips.github-text": "Liez commits et pull requests aux tâches : citez CAD-482 dans une branche et le statut avance tout seul.",

@@ -86,6 +86,22 @@ constants belong to the lead):
   on the board (which shows `Columns shown`, writing `hiddenBoardStatusKeys`); none on `form` and
   `activity`, which hides the toolbar (`App.dc.html` line 7811); all of them elsewhere,
   `timesheet` included, as in the mockup, although its time entries ignore the filters.
+- The task views (board, calendar, Gantt, workload, sheet) share the task plumbing of the `List`
+  view, which they compose and do not edit:
+  - `cw-task-menu` (`ui/components/task-menu`): the task menu, presentational (`tasks`, `status`,
+    `statuses`, `people`, `userId`, `lists`; one output per item). The view opens `menu()` from its
+    own `[cwContextMenuTriggerFor]` triggers.
+  - `withViewTaskWrites()` (`state/view-task-writes/view-task-writes.feature.ts`): the per-task
+    serialized writes, composed by the view's reader store (`act`, `update`, `remind`,
+    `restore`; the host connects its reads in `onInit` with `_connectWrites` and calls
+    `_resetWrites`, `_settleWrites` and `_appliedWrite`).
+  - `ViewTaskWritesStore` (page-scoped, with `VIEW_TASK_WRITER` set to the view's reader store):
+    the menu's and the selection bar's writes with their toasts, `Undo`, refusals, the shared
+    cancellation reason and the deletion confirmation, and `updateFields` for single-field writes.
+  - `ListTasksStore` (`state/list-tasks`): the flat reader of the calendar, Gantt and sheet, which
+    each provides through its `<VIEW>_VIEW_PROVIDERS`.
+  - `cw-task-card` (`ui/components/task-card`): the board card (`card`) and the calendar side
+    panel's line (`item`).
 - A dialog package owns `ui/dialogs/<dialog>/*` (`share-dialog`, `sprint-report-dialog`,
   `space-statuses-dialog`, `automations-dialog`) and its `state/` and `data-access/` files. The list
   page hosts it in a `@defer` block loaded on first opening and binds `open` (a two-way model the
@@ -244,8 +260,10 @@ computed from the navigation's reads, for the command palette's `Lists` and the 
   `BillingService.getBillingSubscription` (the free seats of `Invite your team`),
   `AccessService.listListGrants`,
   `MembersService.listMembers`, `TasksService` (`listLabels`, `executeBulkTaskAction`,
-  `listSubtasks`) and `TaskQueriesService` (`queryListTasks` for the rows and the milestone count,
-  `countTaskGroups` for the groups). Every rows read bypasses the HTTP cache.
+  `listSubtasks`, `updateTask` with `If-Match` for the task views' single-field writes) and
+  `TaskQueriesService` (`queryListTasks` for the rows, the flat reads with an optional
+  `dueFrom`/`dueTo` window and the milestone count, `countTaskGroups` for the groups). Every rows
+  read bypasses the HTTP cache.
 - Task (`@features/task`): `TaskSummary`, `TaskStatusChangesStore`, `TaskActionsApi` and the
   `TaskBulk*` models (the rows' writes), the status words, hints and categories,
   `TaskCreate`, `TaskDetailOpener` (`open`, `closed`, `changed`), `cw-task-title-cell`,
@@ -348,6 +366,17 @@ computed from the navigation's reads, for the command palette's `Lists` and the 
     and a task its `Undo` restored (`TaskDetailOpener.changed`; the detail's writes would
     otherwise reach the rows only through realtime) read the rows again,
     through the same 1 s refresh window.
+  - `ListTasksStore`, route-scoped on the calendar, Gantt and sheet views once their packages
+    provide it: the tasks of the list with the view's `taskQuery` and an optional due window, read
+    page after page to the last one and stopping at 2,000 tasks (`truncated`). A superseded read
+    is aborted; another list or organization empties the tasks at once and drops late answers; a
+    failed first read fails to the route's error boundary. The same realtime window as the rows
+    (1 s; for a read of more than three pages 1 s more per three pages, and 5 s for a truncated
+    one or from fifteen pages), a completed status write, `TaskDetailOpener.closed` and `changed`
+    read again; a task created in the list reads at once. Its `summary` feeds
+    `ListViewStore.followRows`, with an unknown count while a due window applies.
+  - `ViewTaskWritesStore`, page-scoped on each task view's page (`ListViewPage` today), over its
+    reader store (`VIEW_TASK_WRITER`): what follows for the row menu and the selection bar.
   - `TaskStatusChangesStore` (Task), route-scoped on `list` and on the board, calendar, gantt,
     workload and sheet views, so pending changes die with the view.
   - `BoardViewStore`, `CalendarViewStore`, `GanttViewStore`, `WorkloadViewStore`,
@@ -411,8 +440,9 @@ computed from the navigation's reads, for the command palette's `Lists` and the 
   `Group by`, `Sort by`, `Select all`, `Export as CSV` and `Edit the list` (`Edit the sprint` for a sprint, `App.dc.html` line 7310), which opens the list
   dialog through `SpacesNavigationStore.openDialog`. `Name` sorts by name,
   ascending then descending. The row's icon animates from its previous status.
-- `ListViewPage` holds the table's selection. The row menu and the selection bar write through
-  `ListRowsStore.act`, which sends Task's `TaskActionsApi.bulk`: chunks
+- `ListViewPage` holds the table's selection. The row menu (`cw-task-menu`) and the selection bar
+  write through `ViewTaskWritesStore` and `ListRowsStore.act` (`withViewTaskWrites`), which sends
+  Task's `TaskActionsApi.bulk`: chunks
   of 50 `executeBulkTaskAction` calls one after the other, each with an idempotency key reused for
   one retry after an uncertain response; each send and retry checks the starting organization and
   the store's lifetime, and the remaining tasks are reported as not sent when either changes.
@@ -436,7 +466,14 @@ computed from the navigation's reads, for the command palette's `Lists` and the 
   reports tasks not sent, uncertain or refused like the action and reads the rows again after a
   refusal. Leaving the view
   dismisses its `Undo` toasts, as `TaskStatusChangesStore` does for the status toasts. A copy's
-  toast offers `Open`.
+  toast offers `Open`. A single-field write (`update`: dates, estimate, name, custom fields) is
+  serialized with the actions and sent with `updateTask` and `If-Match`; the name and the dates
+  show at once (without a start in the write, a new due date moves the start by the same days and
+  a removed due date removes it, as the task service does), the estimate and custom fields once
+  read, since task summaries do not carry them. A refusal that may come from a version the view
+  has not read (a `412` of a single-field write, any refused chunk of a bulk action, whose answer
+  gives no reason) reads the tasks again; a refused single-field write shows
+  `The task could not be changed`.
 - The table declares gateway groups in order, omitting hidden and empty groups except the five default empty status groups in an unfiltered view. Filtered empty results show the empty state. `nearEnd` requests further pages with a threshold accounting for unread group lines. Under 768 px the grid keeps selection, name and due date.
 
 ## Organization pin
@@ -512,11 +549,13 @@ gateway checks them and `ORGANIZATION_PIN_OPERATIONS` lists them.
 | `spaces.list-dialog.date-*`, `spaces.list-dialog.pick-date`, `spaces.footer.*`                                                 | The date picker's texts and the footer rows' names.                        |
 | `spaces.look.*`                                                                                                                | `LOOK_COLORS` names and the default choices of `lookPicker`.               |
 | `spaces.view-stub.text`                                                                                                        | The stub of a view not built yet, which the mockup does not have.          |
-| `spaces.sprint-report.failed`, `spaces.sprint-report.empty`, `spaces.sprint-report.chart-empty`                                | The mockup draws no failed read or empty sprint.                           |
-| `spaces.sprint-report.projected-unknown`                                                                                       | The mockup always has a projection.                                        |
-| `spaces.sprint-report.chart-*` (except `chart-empty`), `spaces.sprint-report.stat-*`                                           | The bricks' own texts, which the mockup does not show as copy.             |
-| `spaces.sprint-report.today`                                                                                                   | The today marker's label; the mockup's line has none.                      |
-| `spaces.sprint-report.tasks-one`, `spaces.sprint-report.open-tasks-one`                                                        | Singular forms the mockup writes in the plural.                            |
+| `spaces.task-writes.field-failed`                                                                                              | The mockup draws no refused single-field write.                            |
+
+| `spaces.sprint-report.failed`, `spaces.sprint-report.empty`, `spaces.sprint-report.chart-empty` | The mockup draws no failed read or empty sprint. |
+| `spaces.sprint-report.projected-unknown` | The mockup always has a projection. |
+| `spaces.sprint-report.chart-*` (except `chart-empty`), `spaces.sprint-report.stat-*` | The bricks' own texts, which the mockup does not show as copy. |
+| `spaces.sprint-report.today` | The today marker's label; the mockup's line has none. |
+| `spaces.sprint-report.tasks-one`, `spaces.sprint-report.open-tasks-one` | Singular forms the mockup writes in the plural. |
 
 ## Automations dialog
 

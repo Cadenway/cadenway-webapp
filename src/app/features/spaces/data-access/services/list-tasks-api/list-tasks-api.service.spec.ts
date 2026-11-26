@@ -66,16 +66,18 @@ describe('ListTasksApi', () => {
   let countTaskGroups: Mock;
   let queryListTasks: Mock;
   let listSubtasks: Mock;
+  let updateTask: Mock;
   let api: ListTasksApi;
 
   beforeEach(() => {
     countTaskGroups = vi.fn();
     queryListTasks = vi.fn();
     listSubtasks = vi.fn(() => of({ items: [], nextCursor: null, total: 0 }));
+    updateTask = vi.fn(() => of({ ...task('CAD-482', []), version: 5 }));
     TestBed.configureTestingModule({
       providers: [
         { provide: TaskQueriesService, useValue: { countTaskGroups, queryListTasks } },
-        { provide: TasksService, useValue: { listSubtasks } },
+        { provide: TasksService, useValue: { listSubtasks, updateTask } },
         {
           provide: WORKSPACE_CONTEXT,
           useValue: { user: () => ({ id: 'a' }), organization: () => ({ id: 'org-a' }) },
@@ -132,6 +134,80 @@ describe('ListTasksApi', () => {
     await expect(api.page('sprint-14', query, null, null, 50)).rejects.toBeInstanceOf(
       UnavailableRouteError,
     );
+  });
+
+  it('keeps the tasks due within a window, both dates included', async () => {
+    queryListTasks.mockReturnValueOnce(of({ items: [], nextCursor: null, total: 0 }));
+    await api.page('sprint-14', query, null, null, 100, undefined, {
+      from: '2026-10-26',
+      to: '2026-12-06',
+    });
+    expect(queryListTasks).toHaveBeenCalledWith(
+      'sprint-14',
+      {
+        dueFrom: '2026-10-26',
+        dueTo: '2026-12-06',
+        level: 'roots',
+        sort: 'manual',
+        limit: 100,
+      },
+      { cache: 'no-store' },
+    );
+  });
+
+  it('writes only the given fields against the shown version and returns the saved one', async () => {
+    await expect(
+      api.update('CAD-482', 4, { dueDate: '2026-11-27', startDate: null }),
+    ).resolves.toEqual({ kind: 'done', version: 5 });
+    expect(updateTask).toHaveBeenCalledWith(
+      'CAD-482',
+      { dueDate: '2026-11-27', startDate: null },
+      { headers: { 'If-Match': '"4"' } },
+    );
+  });
+
+  it('tells a stale refusal from another refusal and from an uncertain outcome', async () => {
+    updateTask.mockReturnValueOnce(
+      throwError(() => new HttpErrorResponse({ status: 412, error: { code: 'task.version' } })),
+    );
+    await expect(api.update('CAD-482', 4, { name: 'Sign-in' })).resolves.toEqual({
+      kind: 'refused',
+      stale: true,
+    });
+    updateTask.mockReturnValueOnce(
+      throwError(
+        () =>
+          new HttpErrorResponse({
+            status: 412,
+            error: { status: 412, code: 'organization.context-changed' },
+          }),
+      ),
+    );
+    await expect(api.update('CAD-482', 4, { name: 'Sign-in' })).resolves.toEqual({
+      kind: 'refused',
+      stale: false,
+    });
+    updateTask.mockReturnValueOnce(
+      throwError(
+        () =>
+          new HttpErrorResponse({
+            status: 422,
+            error: { status: 422, code: 'task.start-date-invalid' },
+          }),
+      ),
+    );
+    await expect(api.update('CAD-482', 4, { dueDate: '2026-11-01' })).resolves.toEqual({
+      kind: 'refused',
+      stale: false,
+    });
+    updateTask.mockReturnValueOnce(throwError(() => new HttpErrorResponse({ status: 0 })));
+    await expect(api.update('CAD-482', 4, { name: 'Sign-in' })).resolves.toEqual({
+      kind: 'unknown',
+    });
+    updateTask.mockReturnValueOnce(throwError(() => new HttpErrorResponse({ status: 503 })));
+    await expect(api.update('CAD-482', 4, { estimateMinutes: 90 })).resolves.toEqual({
+      kind: 'unknown',
+    });
   });
 
   it('reads the subtasks of a task', async () => {
