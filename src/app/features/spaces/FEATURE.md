@@ -1041,7 +1041,9 @@ computed from the navigation's reads, for the command palette's `Lists` and the 
     shows.
   - What stays uncertain once the resends are spent is reported in `unknown` and warns. From 2 s
     later (`RECONCILE_DELAY_MS`, doubling up to 30 s) each such task is read back on its own
-    until a read settles it, and only then do its patch and its hold go: a `versioned` write
+    until a read settles it, and only then do its patch and its hold go. Each task settles as its
+    own read answers; a read unanswered after 10 s (`READ_BACK_TIMEOUT_MS`) is aborted and counts
+    as failed, and leaving the view or changing its scope aborts the reads in flight: a `versioned` write
     (above) by any read of the task, applied when it is past the version sent and holds the
     written values; a deletion once the task reads in the trash (`404 task.trashed`, applied) or
     past the version sent (the deletion can no longer commit), or once a read after the 30 s
@@ -1083,6 +1085,9 @@ gateway checks them and `ORGANIZATION_PIN_OPERATIONS` lists them.
 - A write released by a read at the version sent whose original request commits after the last
   follow-up read (30 s) shows its old values until a realtime notice or the view's next read
   reconciles it; the next write on the task is refused (`412`) and reads it again.
+- An uncertain deletion that commits after its bounded read schedule, and an uncertain copy that
+  commits after its single delayed read of the view, show on the view's next read or realtime
+  notice: the gateway has no operation-status endpoint to ask about a lost request.
 
 - `cw-sidebar-space` has no slot next to the name: the private lock of a space shows on its
   overview, not in the sidebar, until the design system adds one.
