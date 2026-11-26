@@ -558,8 +558,10 @@ grid keeps 720 px and scrolls across).
   at once. Every answered or uncertain write then reads both again, keeping the pending patches
   (and their `Undo`) until a read reaches their version. A failed first grid read fails to the route's error boundary; a
   failed refresh shows `The tasks could not be refreshed.` with `Retry`. The panel is a secondary
-  read: skeleton, inline error with `Retry`, `All tasks have a due date.` when it has no task,
-  `No task` when the list has none. A grid read stopped at 2,000 tasks says so under the grid;
+  read, shown only once it answered the current list and query: skeleton while it reads (after a
+  filter change too, without the previous query's tasks), inline error with `Retry` (alone when
+  the new query failed), `All tasks have a due date.` when it has no task, `No task` when the
+  list has none. A grid read stopped at 2,000 tasks says so under the grid;
   an unwindowed read stopped there says in the panel that undated tasks may be missing, instead of
   `All tasks have a due date.`.
 - Rescheduling: a task of the grid dropped on another day (`itemMove`: pointer, or Space, the
