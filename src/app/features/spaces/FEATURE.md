@@ -113,7 +113,8 @@ constants belong to the lead):
   scope), `Points delivered` (with their share of the delivered and remaining points),
   `Points remaining` (with the open tasks) and `Projected end`: `On track` when at most 0.5
   point would remain, else `≈ n pts` and `would remain on <end>`, from the gateway's forecast,
-  or what remains once the sprint is over. A figure the gateway cannot establish shows a dash.
+  or, once the sprint has closed (after its last day), what remains; without a forecast it is
+  unknown until then, the last day included. A figure the gateway cannot establish shows a dash.
 - `Burndown` (`cw-chart` lines): `Actual`, dashed `Ideal` and `Projection`, one category per day,
   and a `Today` marker while the caller's day is in the sprint.
 - `Velocity` (`cw-chart` grouped bars): the earlier sprints the gateway returns (four at most),

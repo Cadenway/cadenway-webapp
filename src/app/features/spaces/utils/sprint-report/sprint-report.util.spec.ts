@@ -45,10 +45,11 @@ describe('sprint report helpers', () => {
     expect(sprintDayOf('2026-12-01', '2026-11-03', '2026-11-17')).toEqual({ day: 15, days: 15 });
   });
 
-  it('takes the forecast, then what remains once the sprint is over', () => {
+  it('takes the forecast, then what remains only once the sprint has closed', () => {
     expect(projectedEnd({ ...sprint14, projected: 4 }, '2026-11-08')).toBe(4);
     expect(projectedEnd(sprint14, '2026-11-08')).toBe(null);
-    expect(projectedEnd(sprint14, '2026-11-17')).toBe(27);
+    expect(projectedEnd(sprint14, '2026-11-17')).toBe(null);
+    expect(projectedEnd(sprint14, '2026-11-18')).toBe(27);
     expect(isOnTrack(0.5)).toBe(true);
     expect(isOnTrack(0.6)).toBe(false);
   });

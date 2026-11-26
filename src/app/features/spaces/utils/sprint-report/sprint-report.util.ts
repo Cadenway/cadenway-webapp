@@ -156,8 +156,10 @@ export function sprintDayOf(today: string, start: string, end: string): SprintDa
  * Function projectedEnd
  *
  * @description
- * Points left at the sprint's end: the gateway's forecast, or, once the sprint is over, what
- * remains (the mockup's projection on its last day); null when neither is known.
+ * Points left at the sprint's end: the gateway's forecast, or, once the sprint has closed (the
+ * caller's day is after its last day, both read in the time zone the report was asked in), what
+ * remains as the final result. Until then, without a forecast, null: on the last day the
+ * remaining points can still fall.
  *
  * @param {SprintReport} report - The report.
  * @param {string} today - The caller's date.
@@ -165,7 +167,7 @@ export function sprintDayOf(today: string, start: string, end: string): SprintDa
  */
 export function projectedEnd(report: SprintReport, today: string): number | null {
   if (report.projected !== null) return report.projected;
-  if (today >= report.endDate && report.remaining !== null) return report.remaining.points;
+  if (today > report.endDate && report.remaining !== null) return report.remaining.points;
   return null;
 }
 
