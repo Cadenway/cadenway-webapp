@@ -198,7 +198,7 @@ describe('AutomationsDialog', () => {
   let shownRules: WritableSignal<readonly AutomationRule[]>;
   let store: Record<string, unknown> &
     Record<'load' | 'toggle' | 'remove' | 'create' | 'discardDraft', Mock>;
-  let toasts: Record<'show' | 'error', Mock>;
+  let toasts: Record<'show' | 'error' | 'warning', Mock>;
 
   beforeEach(async () => {
     rules = fakeResource(RULES);
@@ -214,12 +214,12 @@ describe('AutomationsDialog', () => {
       activeCount: signal(2),
       creating: signal(false),
       load: vi.fn(),
-      toggle: vi.fn(() => Promise.resolve(true)),
-      remove: vi.fn(() => Promise.resolve(true)),
+      toggle: vi.fn(() => Promise.resolve('applied')),
+      remove: vi.fn(() => Promise.resolve('applied')),
       create: vi.fn(),
       discardDraft: vi.fn(),
     };
-    toasts = { show: vi.fn(), error: vi.fn() };
+    toasts = { show: vi.fn(), error: vi.fn(), warning: vi.fn() };
     TestBed.configureTestingModule({
       providers: [provideCadenwayIcons(), { provide: CwToastService, useValue: toasts }],
     });
@@ -269,7 +269,7 @@ describe('AutomationsDialog', () => {
   });
 
   it('switches a rule and shows a toast when the gateway refuses', async () => {
-    store.toggle.mockResolvedValueOnce(false);
+    store.toggle.mockResolvedValueOnce('refused');
 
     buttonNamed('Disable: When the status becomes “Done”, notify Hugo Dubois')?.click();
     await fixture.whenStable();
@@ -277,6 +277,29 @@ describe('AutomationsDialog', () => {
     expect(store.toggle).toHaveBeenCalledWith(RULES[0]);
     expect(toasts.error).toHaveBeenCalledWith('The automation could not be changed');
     expect(buttonNamed('Enable: When a task is created, assign to Camille Martin')).toBeDefined();
+  });
+
+  it('warns when a switch or a deletion with a lost answer did not apply', async () => {
+    store.toggle.mockResolvedValueOnce('not-applied').mockResolvedValueOnce('unknown');
+    store.remove.mockResolvedValueOnce('not-applied');
+
+    buttonNamed('Disable: When the status becomes “Done”, notify Hugo Dubois')?.click();
+    await fixture.whenStable();
+    expect(toasts.warning).toHaveBeenLastCalledWith('The automation was not changed');
+
+    buttonNamed('Disable: When the status becomes “Done”, notify Hugo Dubois')?.click();
+    await fixture.whenStable();
+    expect(toasts.warning).toHaveBeenLastCalledWith(
+      'The change to the automation could not be confirmed',
+    );
+
+    buttonNamed('Delete: When the status becomes “Blocked”, set the priority to urgent')?.click();
+    fixture.detectChanges();
+    await fixture.whenStable();
+    byTestId('automation-delete-confirm')?.click();
+    await fixture.whenStable();
+    expect(toasts.warning).toHaveBeenLastCalledWith('The automation was not deleted');
+    expect(toasts.error).not.toHaveBeenCalled();
   });
 
   it('confirms a deletion before deleting the rule', async () => {

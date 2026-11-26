@@ -256,6 +256,20 @@ export interface AutomationRule extends AutomationDraft {
 }
 
 /**
+ * Type AutomationWriteOutcome
+ *
+ * @description
+ * What became of a switch or a deletion:
+ * - `applied`: the gateway confirmed it, or nothing had to be sent;
+ * - `refused`: the gateway refused it (a definite 4xx), so the recorded state is shown again;
+ * - `not-applied`: the answer was lost, and the rules read again show it did not apply;
+ * - `unknown`: the answer was lost and the rules could not be read again.
+ *
+ * @type {'applied' | 'refused' | 'not-applied' | 'unknown'}
+ */
+export type AutomationWriteOutcome = 'applied' | 'refused' | 'not-applied' | 'unknown';
+
+/**
  * Interface AutomationCommentRunAction
  *
  * @description

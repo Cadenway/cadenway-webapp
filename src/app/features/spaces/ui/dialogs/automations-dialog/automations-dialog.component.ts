@@ -49,6 +49,7 @@ import type {
   AutomationRule,
   AutomationRun,
   AutomationTrigger,
+  AutomationWriteOutcome,
 } from '../../../models/automation-rule/automation-rule.interface';
 import type { ListMember } from '../../../models/list-member/list-member.interface';
 import type {
@@ -917,15 +918,27 @@ export class AutomationsDialog {
    * Method toggle
    *
    * @description
-   * Turns a rule on or off; a refusal shows its recorded state again and a toast.
+   * Turns a rule on or off. A refusal shows its recorded state again with an error toast; a
+   * lost answer shows the state the gateway confirms, with a warning when the change did not
+   * apply or could not be confirmed.
    *
    * @param {AutomationRule} rule - The rule.
    */
   protected async toggle(rule: AutomationRule): Promise<void> {
-    if (await this.store.toggle(rule)) return;
-    this.toasts.error(
-      $localize`:@@spaces.automations.toggle-failed:The automation could not be changed`,
-    );
+    const outcome: AutomationWriteOutcome = await this.store.toggle(rule);
+    if (outcome === 'refused') {
+      this.toasts.error(
+        $localize`:@@spaces.automations.toggle-failed:The automation could not be changed`,
+      );
+    } else if (outcome === 'not-applied') {
+      this.toasts.warning(
+        $localize`:@@spaces.automations.toggle-not-applied:The automation was not changed`,
+      );
+    } else if (outcome === 'unknown') {
+      this.toasts.warning(
+        $localize`:@@spaces.automations.toggle-unknown:The change to the automation could not be confirmed`,
+      );
+    }
   }
 
   /**
@@ -945,17 +958,28 @@ export class AutomationsDialog {
    * Method confirmRemove
    *
    * @description
-   * Closes the confirmation and deletes the rule, which leaves at once; a refusal brings it back
-   * with a toast.
+   * Closes the confirmation and deletes the rule, which leaves at once. A refusal brings it back
+   * with an error toast; a lost answer shows what the gateway confirms, with a warning when the
+   * rule is still there or its deletion could not be confirmed.
    */
   protected async confirmRemove(): Promise<void> {
     const row: AutomationRuleRow | null = this.removal();
     this.removeOpen.set(false);
     if (!row) return;
-    if (await this.store.remove(row.rule)) return;
-    this.toasts.error(
-      $localize`:@@spaces.automations.delete-failed:The automation could not be deleted`,
-    );
+    const outcome: AutomationWriteOutcome = await this.store.remove(row.rule);
+    if (outcome === 'refused') {
+      this.toasts.error(
+        $localize`:@@spaces.automations.delete-failed:The automation could not be deleted`,
+      );
+    } else if (outcome === 'not-applied') {
+      this.toasts.warning(
+        $localize`:@@spaces.automations.delete-not-applied:The automation was not deleted`,
+      );
+    } else if (outcome === 'unknown') {
+      this.toasts.warning(
+        $localize`:@@spaces.automations.delete-unknown:The deletion of the automation could not be confirmed`,
+      );
+    }
   }
 
   /**

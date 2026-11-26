@@ -23,12 +23,14 @@ import {
 import {
   AutomationsApi,
   isStaleAutomationRule,
+  isUncertainAutomationWrite,
 } from '../../data-access/services/automations-api/automations-api.service';
 import { ListsApi } from '../../data-access/services/lists-api/lists-api.service';
 import type {
   AutomationDraft,
   AutomationRule,
   AutomationRun,
+  AutomationWriteOutcome,
 } from '../../models/automation-rule/automation-rule.interface';
 import type { ListMember } from '../../models/list-member/list-member.interface';
 
@@ -444,26 +446,30 @@ export interface AutomationsStoreInstance {
    * Turns a rule on or off at once and records it. The writes of a rule are sent one after the
    * other, each from the version the previous one left; only the last state asked is sent, and
    * coming back to the recorded state sends nothing. Each write uses the newest version known,
-   * from the reads and from the earlier writes. A refusal shows the recorded state again and
-   * reads the rules again when they were out of date.
+   * from the reads and from the earlier writes. A definite refusal (`4xx`) shows the recorded
+   * state again and reads the rules again when they were out of date. A lost answer (network,
+   * timeout, `5xx`) may have been applied: the rules are read again and show the state the
+   * gateway confirms.
    *
    * @param {AutomationRule} rule - The rule, as shown.
-   * @returns {Promise<boolean>} Whether the gateway recorded the change (or nothing had to be sent).
+   * @returns {Promise<AutomationWriteOutcome>} What became of the change.
    */
-  toggle(rule: AutomationRule): Promise<boolean>;
+  toggle(rule: AutomationRule): Promise<AutomationWriteOutcome>;
 
   /**
    * Method remove
    *
    * @description
    * Hides a rule at once and deletes it, after the pending writes of the same rule, from the
-   * newest version known. It is always sent, even while the rules are read again. A refusal
-   * shows it again.
+   * newest version known. It is always sent, even while the rules are read again. A definite
+   * refusal shows it again; after a lost answer, the rules are read again to learn whether it
+   * is gone.
    *
    * @param {AutomationRule} rule - The rule.
-   * @returns {Promise<boolean>} Whether the gateway deleted the rule or reported it absent.
+   * @returns {Promise<AutomationWriteOutcome>} `applied` once the gateway deleted the rule or
+   * reported it absent.
    */
-  remove(rule: AutomationRule): Promise<boolean>;
+  remove(rule: AutomationRule): Promise<AutomationWriteOutcome>;
 
   /**
    * Method create
@@ -580,6 +586,7 @@ function createAutomationsStore(): Type<AutomationsStoreInstance> {
         _api: api,
         _organizationId: organizationId,
         _chains: new Map<string, Promise<unknown>>(),
+        _record: record,
         rules: resource({
           params: byOpening,
           loader: async ({
@@ -704,27 +711,51 @@ function createAutomationsStore(): Type<AutomationsStoreInstance> {
         store._chains.set(id, next);
         return next;
       };
+      const readAgain: (organizationId: string) => Promise<void> = async (
+        organizationId: string,
+      ): Promise<void> => {
+        const epoch: number = store._writes();
+        const items: readonly AutomationRule[] = await store._api.rules();
+        store._record({ organizationId, items, epoch });
+      };
+      const uncertain: (
+        organizationId: string,
+        applied: () => boolean,
+      ) => Promise<AutomationWriteOutcome> = async (
+        organizationId: string,
+        applied: () => boolean,
+      ): Promise<AutomationWriteOutcome> => {
+        tick();
+        try {
+          await readAgain(organizationId);
+          if (store._organizationId() !== organizationId) return 'unknown';
+          return applied() ? 'applied' : 'not-applied';
+        } catch {
+          store.rules.reload();
+          return 'unknown';
+        }
+      };
       return {
         load(): void {
           patchState(store, { _opening: store._opening() + 1 });
         },
-        toggle(rule: AutomationRule): Promise<boolean> {
+        toggle(rule: AutomationRule): Promise<AutomationWriteOutcome> {
           const organizationId: string = store._organizationId();
           const shown: AutomationRule | undefined = store
             .shownRules()
             .find((item: AutomationRule): boolean => item.id === rule.id);
           const enabled: boolean = !(shown ?? rule).enabled;
           patchState(store, { _desired: { ...store._desired(), [rule.id]: enabled } });
-          return serialize(rule.id, async (): Promise<boolean> => {
-            if (store._desired()[rule.id] !== enabled) return true;
+          return serialize(rule.id, async (): Promise<AutomationWriteOutcome> => {
+            if (store._desired()[rule.id] !== enabled) return 'applied';
             if (store._organizationId() !== organizationId) {
               settle(rule.id, enabled);
-              return false;
+              return 'refused';
             }
             const known: AutomationRule = latest(rule, confirmedRule(rule.id));
             if (known.enabled === enabled) {
               settle(rule.id, enabled);
-              return true;
+              return 'applied';
             }
             try {
               const updated: AutomationRule = await store._api.setEnabled(known, enabled);
@@ -732,32 +763,48 @@ function createAutomationsStore(): Type<AutomationsStoreInstance> {
                 confirm(updated, organizationId, false);
               }
               settle(rule.id, enabled);
-              return true;
+              return 'applied';
             } catch (error: unknown) {
+              if (isUncertainAutomationWrite(error)) {
+                const outcome: AutomationWriteOutcome = await uncertain(
+                  organizationId,
+                  (): boolean => confirmedRule(rule.id)?.enabled === enabled,
+                );
+                settle(rule.id, enabled);
+                return outcome;
+              }
               settle(rule.id, enabled);
               if (isStaleAutomationRule(error)) store.rules.reload();
-              return false;
+              return 'refused';
             }
           });
         },
-        remove(rule: AutomationRule): Promise<boolean> {
+        remove(rule: AutomationRule): Promise<AutomationWriteOutcome> {
           const organizationId: string = store._organizationId();
           patchState(store, { _removed: [...store._removed(), rule.id] });
-          return serialize(rule.id, async (): Promise<boolean> => {
+          return serialize(rule.id, async (): Promise<AutomationWriteOutcome> => {
             if (store._organizationId() !== organizationId) {
               unhide(rule.id);
-              return false;
+              return 'refused';
             }
             const known: AutomationRule = latest(rule, confirmedRule(rule.id));
             try {
               await store._api.delete(known);
               markDeleted(rule.id, organizationId);
               unhide(rule.id);
-              return true;
+              return 'applied';
             } catch (error: unknown) {
+              if (isUncertainAutomationWrite(error)) {
+                const outcome: AutomationWriteOutcome = await uncertain(
+                  organizationId,
+                  (): boolean => confirmedRule(rule.id) === undefined,
+                );
+                unhide(rule.id);
+                return outcome;
+              }
               unhide(rule.id);
               if (isStaleAutomationRule(error)) store.rules.reload();
-              return false;
+              return 'refused';
             }
           });
         },
@@ -798,7 +845,8 @@ function createAutomationsStore(): Type<AutomationsStoreInstance> {
  * so its state dies with it. Nothing is read until the dialog opens (`load`); each opening reads
  * the rules and the last runs again, the members once, and another organization reads them
  * all again. Switches and deletions are optimistic and restore the recorded state when refused.
- * The rules confirmed by the gateway live apart from the read in flight: the writes keep using
+ * A lost answer (network, timeout, `5xx`) is not a refusal: the rules are read again and show
+ * what the gateway confirms. The rules confirmed by the gateway live apart from the read in flight: the writes keep using
  * the newest version while the dialog reads again, and a read started before a write settled
  * gets that write's result applied over it.
  *

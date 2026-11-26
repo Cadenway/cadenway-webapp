@@ -421,11 +421,17 @@ gateway checks them and `ORGANIZATION_PIN_OPERATIONS` lists them.
     an opening reads again, so a write always uses the newest known version and is always sent.
   - A switch changes at once. The writes of a rule are serialized, each sent with the version the
     previous one left (`If-Match`). Only the last state asked is sent, and coming back to the
-    recorded state sends nothing. A refusal restores the recorded state and shows a toast. A
-    `412 request.version-mismatch` or `404 automation.rule-not-found` also reads the rules again.
+    recorded state sends nothing. A definite refusal (`4xx`) restores the recorded state and shows
+    an error toast. A `412 request.version-mismatch` or `404 automation.rule-not-found` also reads
+    the rules again.
+  - A lost answer (no response, `408`, `5xx`) may have been applied, so it is not a refusal. The
+    store reads the rules again and shows the state the gateway confirms. It warns when the
+    change did not apply (`The automation was not changed`). When that read fails too, it warns
+    that the change could not be confirmed and reads the rules again through the resource.
   - A deletion is confirmed by `cw-alert-dialog` (`Delete this automation?`), then hides the rule
     at once. It succeeds only once the gateway deletes the rule or reports it absent. A refusal
-    brings it back with a toast.
+    brings it back with an error toast. A lost answer is settled by reading the rules again, the
+    same way as a switch.
   - A creation sends one `Idempotency-Key` per draft and organization. A retry of the same draft
     reuses it; another draft, a closed builder or a recorded rule renews it. The created rule
     is added last and shows `Automation created`. A refusal keeps the builder and its values.
@@ -446,11 +452,12 @@ gateway checks them and `ORGANIZATION_PIN_OPERATIONS` lists them.
   - The mockup shows no member's view: the opener is disabled for members (list header).
 - Copy not taken word for word from the mockup:
 
-  | Unit                                                                 | Reason                                                   |
-  | -------------------------------------------------------------------- | -------------------------------------------------------- |
-  | `spaces.automations.load-failed`, `runs-failed`, `members-failed`    | The mockup draws no failed read.                         |
-  | `spaces.automations.create-failed`, `toggle-failed`, `delete-failed` | The mockup draws no refused write.                       |
-  | `spaces.automations.former-member`                                   | A rule or run naming someone no longer in the directory. |
-  | `spaces.automations.loading`                                         | Accessible name of the skeleton rows.                    |
-  | `spaces.automations.text-one`                                        | Singular form the mockup writes in the plural.           |
-  | `spaces.automations.run-minutes`, `run-hours`                        | The mockup only shows `just now`.                        |
+  | Unit                                                                                              | Reason                                                   |
+  | ------------------------------------------------------------------------------------------------- | -------------------------------------------------------- |
+  | `spaces.automations.load-failed`, `runs-failed`, `members-failed`                                 | The mockup draws no failed read.                         |
+  | `spaces.automations.create-failed`, `toggle-failed`, `delete-failed`                              | The mockup draws no refused write.                       |
+  | `spaces.automations.toggle-not-applied`, `toggle-unknown`, `delete-not-applied`, `delete-unknown` | The mockup draws no lost answer.                         |
+  | `spaces.automations.former-member`                                                                | A rule or run naming someone no longer in the directory. |
+  | `spaces.automations.loading`                                                                      | Accessible name of the skeleton rows.                    |
+  | `spaces.automations.text-one`                                                                     | Singular form the mockup writes in the plural.           |
+  | `spaces.automations.run-minutes`, `run-hours`                                                     | The mockup only shows `just now`.                        |

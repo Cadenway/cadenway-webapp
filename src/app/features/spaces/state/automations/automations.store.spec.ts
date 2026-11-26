@@ -10,6 +10,7 @@ import { ListsApi } from '../../data-access/services/lists-api/lists-api.service
 import type {
   AutomationDraft,
   AutomationRule,
+  AutomationWriteOutcome,
 } from '../../models/automation-rule/automation-rule.interface';
 import { AutomationsStore } from './automations.store';
 
@@ -197,12 +198,12 @@ describe('AutomationsStore', () => {
     const write: ReturnType<typeof deferred<AutomationRule>> = deferred<AutomationRule>();
     api['setEnabled'].mockReturnValueOnce(write.promise);
 
-    const recorded: Promise<boolean> = store.toggle(NOTIFY_ON_DONE);
+    const recorded: Promise<AutomationWriteOutcome> = store.toggle(NOTIFY_ON_DONE);
     expect(shownEnabled('a1')).toBe(false);
     expect(store.activeCount()).toBe(1);
 
     write.resolve({ ...NOTIFY_ON_DONE, enabled: false, version: 2 });
-    expect(await recorded).toBe(true);
+    expect(await recorded).toBe('applied');
     expect(api['setEnabled']).toHaveBeenCalledWith(NOTIFY_ON_DONE, false);
     expect(store.confirmedRules()?.[0]).toMatchObject({ enabled: false, version: 2 });
     expect(shownEnabled('a1')).toBe(false);
@@ -210,32 +211,67 @@ describe('AutomationsStore', () => {
 
   it('restores the recorded state when the gateway refuses the switch', async () => {
     await loaded();
-    api['setEnabled'].mockRejectedValueOnce(refusal(503, 'upstream.unavailable'));
+    api['setEnabled'].mockRejectedValueOnce(refusal(403, 'organization.role-forbidden'));
 
-    const recorded: Promise<boolean> = store.toggle(NOTIFY_ON_DONE);
+    const recorded: Promise<AutomationWriteOutcome> = store.toggle(NOTIFY_ON_DONE);
     expect(shownEnabled('a1')).toBe(false);
 
-    expect(await recorded).toBe(false);
+    expect(await recorded).toBe('refused');
     expect(shownEnabled('a1')).toBe(true);
     expect(api['rules']).toHaveBeenCalledTimes(1);
+  });
+
+  it('reads the rules again after a lost switch answer and shows what applied', async () => {
+    await loaded();
+    api['setEnabled'].mockRejectedValueOnce(refusal(503, 'upstream.unavailable'));
+    const reread: ReturnType<typeof deferred<readonly AutomationRule[]>> =
+      deferred<readonly AutomationRule[]>();
+    api['rules'].mockReturnValueOnce(reread.promise);
+
+    const recorded: Promise<AutomationWriteOutcome> = store.toggle(NOTIFY_ON_DONE);
+    await expect.poll(() => api['rules'].mock.calls.length).toBe(2);
+    expect(shownEnabled('a1')).toBe(false);
+
+    reread.resolve([{ ...NOTIFY_ON_DONE, enabled: false, version: 2 }, URGENT_ON_BLOCKED]);
+    expect(await recorded).toBe('applied');
+    expect(shownEnabled('a1')).toBe(false);
+    expect(store.confirmedRules()?.[0]?.version).toBe(2);
+  });
+
+  it('shows the rule still enabled when the rules read again after a timeout say so', async () => {
+    await loaded();
+    api['setEnabled'].mockRejectedValueOnce(new HttpErrorResponse({ status: 0 }));
+
+    expect(await store.toggle(NOTIFY_ON_DONE)).toBe('not-applied');
+    expect(shownEnabled('a1')).toBe(true);
+    expect(store.activeCount()).toBe(2);
+  });
+
+  it('reports an unknown outcome when the rules cannot be read again either', async () => {
+    await loaded();
+    api['setEnabled'].mockRejectedValueOnce(refusal(504, 'upstream.timeout'));
+    api['rules'].mockRejectedValueOnce(refusal(503, 'upstream.unavailable'));
+
+    expect(await store.toggle(NOTIFY_ON_DONE)).toBe('unknown');
+    await expect.poll(() => api['rules'].mock.calls.length).toBe(3);
   });
 
   it('reads the rules again when a switch was refused on an older version', async () => {
     await loaded();
     api['setEnabled'].mockRejectedValueOnce(refusal(412, 'request.version-mismatch'));
 
-    expect(await store.toggle(NOTIFY_ON_DONE)).toBe(false);
+    expect(await store.toggle(NOTIFY_ON_DONE)).toBe('refused');
     await expect.poll(() => api['rules'].mock.calls.length).toBe(2);
   });
 
   it('sends nothing when two quick clicks come back to the recorded state', async () => {
     await loaded();
 
-    const first: Promise<boolean> = store.toggle(NOTIFY_ON_DONE);
-    const second: Promise<boolean> = store.toggle(NOTIFY_ON_DONE);
+    const first: Promise<AutomationWriteOutcome> = store.toggle(NOTIFY_ON_DONE);
+    const second: Promise<AutomationWriteOutcome> = store.toggle(NOTIFY_ON_DONE);
     expect(shownEnabled('a1')).toBe(true);
 
-    expect(await Promise.all([first, second])).toEqual([true, true]);
+    expect(await Promise.all([first, second])).toEqual(['applied', 'applied']);
     expect(api['setEnabled']).not.toHaveBeenCalled();
   });
 
@@ -246,12 +282,12 @@ describe('AutomationsStore', () => {
       .mockReturnValueOnce(write.promise)
       .mockResolvedValueOnce({ ...NOTIFY_ON_DONE, enabled: true, version: 3 });
 
-    const first: Promise<boolean> = store.toggle(NOTIFY_ON_DONE);
+    const first: Promise<AutomationWriteOutcome> = store.toggle(NOTIFY_ON_DONE);
     await Promise.resolve();
-    const second: Promise<boolean> = store.toggle(NOTIFY_ON_DONE);
+    const second: Promise<AutomationWriteOutcome> = store.toggle(NOTIFY_ON_DONE);
     write.resolve({ ...NOTIFY_ON_DONE, enabled: false, version: 2 });
 
-    expect(await Promise.all([first, second])).toEqual([true, true]);
+    expect(await Promise.all([first, second])).toEqual(['applied', 'applied']);
     expect(api['setEnabled']).toHaveBeenLastCalledWith(
       { ...NOTIFY_ON_DONE, enabled: false, version: 2 },
       true,
@@ -264,15 +300,30 @@ describe('AutomationsStore', () => {
     const removal: ReturnType<typeof deferred<undefined>> = deferred<undefined>();
     api['delete'].mockReturnValueOnce(removal.promise);
 
-    const gone: Promise<boolean> = store.remove(URGENT_ON_BLOCKED);
+    const gone: Promise<AutomationWriteOutcome> = store.remove(URGENT_ON_BLOCKED);
     expect(shownEnabled('a2')).toBeUndefined();
 
-    removal.reject(refusal(503, 'upstream.unavailable'));
-    expect(await gone).toBe(false);
+    removal.reject(refusal(403, 'organization.role-forbidden'));
+    expect(await gone).toBe('refused');
     expect(shownEnabled('a2')).toBe(true);
 
-    expect(await store.remove(URGENT_ON_BLOCKED)).toBe(true);
+    expect(await store.remove(URGENT_ON_BLOCKED)).toBe('applied');
     expect(store.confirmedRules()?.map((rule: AutomationRule): string => rule.id)).toEqual(['a1']);
+  });
+
+  it('learns from the rules read again whether a deletion with a lost answer applied', async () => {
+    await loaded();
+    api['delete']
+      .mockRejectedValueOnce(refusal(502, 'upstream.failed'))
+      .mockRejectedValueOnce(refusal(502, 'upstream.failed'));
+    api['rules']
+      .mockResolvedValueOnce([NOTIFY_ON_DONE, URGENT_ON_BLOCKED])
+      .mockResolvedValueOnce([NOTIFY_ON_DONE]);
+
+    expect(await store.remove(URGENT_ON_BLOCKED)).toBe('not-applied');
+    expect(shownEnabled('a2')).toBe(true);
+    expect(await store.remove(URGENT_ON_BLOCKED)).toBe('applied');
+    expect(shownEnabled('a2')).toBeUndefined();
   });
 
   it('adds a created rule last and reuses the key for a retry of the same draft', async () => {
@@ -335,8 +386,8 @@ describe('AutomationsStore', () => {
     const removal: ReturnType<typeof deferred<undefined>> = deferred<undefined>();
     api['delete'].mockReturnValueOnce(removal.promise);
 
-    let settled: boolean | undefined;
-    void store.remove(URGENT_ON_BLOCKED).then((gone: boolean): void => {
+    let settled: AutomationWriteOutcome | undefined;
+    void store.remove(URGENT_ON_BLOCKED).then((gone: AutomationWriteOutcome): void => {
       settled = gone;
     });
     await expect.poll(() => api['delete'].mock.calls.length).toBe(1);
@@ -344,7 +395,7 @@ describe('AutomationsStore', () => {
     expect(settled).toBeUndefined();
 
     removal.resolve(undefined);
-    await expect.poll(() => settled).toBe(true);
+    await expect.poll(() => settled).toBe('applied');
     reread.resolve([NOTIFY_ON_DONE]);
     await expect.poll(() => store.rules.hasValue()).toBe(true);
     expect(store.confirmedRules()?.map((rule: AutomationRule): string => rule.id)).toEqual(['a1']);
@@ -367,8 +418,8 @@ describe('AutomationsStore', () => {
     api['setEnabled'].mockResolvedValueOnce({ ...NOTIFY_ON_DONE, enabled: false, version: 2 });
     api['create'].mockResolvedValueOnce(created);
 
-    expect(await store.toggle(NOTIFY_ON_DONE)).toBe(true);
-    expect(await store.remove(URGENT_ON_BLOCKED)).toBe(true);
+    expect(await store.toggle(NOTIFY_ON_DONE)).toBe('applied');
+    expect(await store.remove(URGENT_ON_BLOCKED)).toBe('applied');
     await store.create(COMMENT_DRAFT);
     reread.resolve([NOTIFY_ON_DONE, URGENT_ON_BLOCKED]);
     await expect.poll(() => store.rules.hasValue()).toBe(true);

@@ -75,6 +75,21 @@ export function isStaleAutomationRule(error: unknown): boolean {
 }
 
 /**
+ * Function isUncertainAutomationWrite
+ *
+ * @description
+ * Whether a failed write may still have been applied: no answer (network failure, abort), a
+ * timeout (`408`) or a server failure (`5xx`). Any other `4xx` is a definite refusal.
+ *
+ * @param {unknown} error - The failed write.
+ * @returns {boolean} Whether the outcome is unknown.
+ */
+export function isUncertainAutomationWrite(error: unknown): boolean {
+  if (!(error instanceof HttpErrorResponse)) return true;
+  return error.status === 0 || error.status === 408 || error.status >= 500;
+}
+
+/**
  * Service AutomationsApi
  *
  * @description

@@ -5,7 +5,11 @@ import { of, throwError } from 'rxjs';
 import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 
 import type { AutomationRule } from '../../../models/automation-rule/automation-rule.interface';
-import { AutomationsApi, isStaleAutomationRule } from './automations-api.service';
+import {
+  AutomationsApi,
+  isStaleAutomationRule,
+  isUncertainAutomationWrite,
+} from './automations-api.service';
 
 /**
  * Constant CAMILLE
@@ -154,5 +158,14 @@ describe('AutomationsApi', () => {
     expect(isStaleAutomationRule(problem(404, 'automation.rule-not-found'))).toBe(true);
     expect(isStaleAutomationRule(problem(503, 'upstream.unavailable'))).toBe(false);
     expect(isStaleAutomationRule(new Error('offline'))).toBe(false);
+  });
+
+  it('tells a lost answer from a definite refusal', () => {
+    expect(isUncertainAutomationWrite(new HttpErrorResponse({ status: 0 }))).toBe(true);
+    expect(isUncertainAutomationWrite(new HttpErrorResponse({ status: 408 }))).toBe(true);
+    expect(isUncertainAutomationWrite(problem(503, 'upstream.unavailable'))).toBe(true);
+    expect(isUncertainAutomationWrite(new Error('aborted'))).toBe(true);
+    expect(isUncertainAutomationWrite(problem(403, 'organization.role-forbidden'))).toBe(false);
+    expect(isUncertainAutomationWrite(problem(412, 'request.version-mismatch'))).toBe(false);
   });
 });
