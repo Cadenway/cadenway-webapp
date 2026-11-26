@@ -6,14 +6,14 @@ import type { ViewLayout } from '../../models/saved-view/saved-view.interface';
  *
  * @description
  * The layouts users can reach: each has a tab and its route opens. Another layout, in a saved
- * view or typed in the address, falls back to `list`. Its route and stub page exist so that its
- * package fills them without touching the frame. The lead adds a layout here when its package
- * merges; view builders never edit this file.
+ * view or typed in the address, falls back to `list`. The lead adds a layout here when its
+ * package merges; view builders never edit this file.
  *
  * @type {readonly ViewLayout[]}
  */
 export const RELEASED_LAYOUTS: readonly ViewLayout[] = [
   'list',
+  'board',
   'calendar',
   'gantt',
   'workload',
