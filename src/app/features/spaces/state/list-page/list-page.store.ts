@@ -632,15 +632,7 @@ function createListPageStore(): Type<ListPageStoreInstance> {
           }
         },
         async restoreView(view: SavedView, index: number): Promise<SavedView | null> {
-          const created: SavedView | null = await attempt(() =>
-            store._api.createSavedView(view.listId, {
-              name: view.name,
-              icon: view.icon,
-              layout: view.layout,
-              config: view.config,
-              unknownPresentation: view.unknownPresentation,
-            }),
-          );
+          const created: SavedView | null = await attempt(() => store._api.restoreSavedView(view));
           if (created && store.listId() === view.listId && store.savedViews.hasValue()) {
             const list: readonly SavedView[] = views();
             const at: number = Math.min(Math.max(index, 0), list.length);

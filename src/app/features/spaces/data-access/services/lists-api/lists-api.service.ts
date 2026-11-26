@@ -43,6 +43,7 @@ import {
   toBulkTaskAction,
   toExportParams,
   toSavedView,
+  toRestoredSavedViewConfiguration,
   toSavedViewConfiguration,
   toSavedViewConfigurationPatch,
 } from '../../adapters/saved-view/saved-view.adapter';
@@ -524,8 +525,7 @@ export class ListsApi {
    * Method createSavedView
    *
    * @description
-   * Saves the current view under a name and an icon; a restored view keeps the presentation
-   * values this client did not read (`unknownPresentation`).
+   * Saves the current view under a name and an icon, with its layout's presentation.
    *
    * @param {string} listId - The list.
    * @param {SavedViewCreationDraft} view - What to save.
@@ -537,11 +537,29 @@ export class ListsApi {
         this.lists.createSavedView(listId, {
           name: view.name,
           icon: view.icon,
-          configuration: toSavedViewConfiguration(
-            view.layout,
-            view.config,
-            view.unknownPresentation,
-          ),
+          configuration: toSavedViewConfiguration(view.layout, view.config),
+        }),
+      ),
+    );
+  }
+
+  /**
+   * Method restoreSavedView
+   *
+   * @description
+   * Creates a deleted view again (a new id) with its name, icon and everything it stored: its
+   * whole presentation, every layout's members and the values this client did not read.
+   *
+   * @param {SavedView} view - The deleted view.
+   * @returns {Promise<SavedView>} The view created again.
+   */
+  public async restoreSavedView(view: SavedView): Promise<SavedView> {
+    return toSavedView(
+      await firstValueFrom(
+        this.lists.createSavedView(view.listId, {
+          name: view.name,
+          icon: view.icon,
+          configuration: toRestoredSavedViewConfiguration(view),
         }),
       ),
     );

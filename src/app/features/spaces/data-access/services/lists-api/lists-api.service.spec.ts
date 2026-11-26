@@ -305,4 +305,53 @@ describe('ListsApi', () => {
       headers: { 'If-Match': '"4"' },
     });
   });
+
+  it('restores a deleted board view with its sheet settings and the values it did not read', async () => {
+    const presentation: NonNullable<SavedViewDto['configuration']['presentation']> = {
+      hiddenBoardStatusKeys: ['waiting', 'archived' as never],
+      hiddenSheetColumns: ['client', 'future-column'],
+      hiddenCustomFieldIds: ['cf-points'],
+      sheetSort: { column: 'future-column', direction: 'asc' },
+    };
+    lists['listSavedViews'].mockReturnValue(
+      of({
+        items: [
+          {
+            id: 'sv-board',
+            listId: 'l-bugs',
+            name: 'Board without waiting',
+            icon: 'flag',
+            configuration: {
+              layout: 'board',
+              filters: { label: ['Bug'] },
+              sort: '-priority',
+              groupBy: null,
+              presentation,
+            },
+            createdAt: '',
+            updatedAt: '',
+            version: 3,
+          },
+        ],
+        nextCursor: null,
+      }),
+    );
+    const views: readonly SavedView[] = await api.savedViews('l-bugs');
+
+    const restored: SavedView = await api.restoreSavedView(views[0]);
+
+    expect(lists['createSavedView']).toHaveBeenCalledExactlyOnceWith('l-bugs', {
+      name: 'Board without waiting',
+      icon: 'flag',
+      configuration: {
+        layout: 'board',
+        filters: { status: [], priority: [], assignee: [], label: ['Bug'] },
+        sort: '-priority',
+        groupBy: null,
+        presentation,
+      },
+    });
+    expect(restored.id).toBe('sv-1');
+    expect(restored.config.presentation.hiddenSheetColumns).toEqual(['client']);
+  });
 });

@@ -123,8 +123,8 @@ export interface SavedView {
  * Interface SavedViewCreationDraft
  *
  * @description
- * What a new saved view stores: its name and icon, the layout and the configuration, and, for a
- * view restored after its deletion, the presentation values its read did not understand.
+ * What a new saved view stores: its name and icon, the layout and the configuration. A deleted
+ * view is created again from the `SavedView` itself (`ListsApi.restoreSavedView`).
  */
 export interface SavedViewCreationDraft {
   // #region Properties
@@ -171,17 +171,6 @@ export interface SavedViewCreationDraft {
    * @readonly
    */
   readonly config: ListViewConfig;
-
-  /**
-   * Property unknownPresentation
-   *
-   * @description
-   * Unknown presentation values to keep, absent for a new view.
-   *
-   * @type {UnknownPresentation | undefined}
-   * @readonly
-   */
-  readonly unknownPresentation?: UnknownPresentation;
   // #endregion
 }
 

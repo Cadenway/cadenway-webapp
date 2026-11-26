@@ -195,7 +195,9 @@ computed from the navigation's reads, for the command palette's `Lists` and the 
     and an applied view `Modified`, and are the only part written (a `Save` leaves the other
     layouts' stored members untouched). Presentation values a newer client stored (unknown
     statuses, columns or sorts) are kept beside the view (`SavedView.unknownPresentation`) and
-    merged back on `Save` and on the `Undo` of a deletion, so this client never erases them.
+    merged back on `Save`, so this client never erases them. The `Undo` of a deletion creates the
+    view again with everything it stored (`ListsApi.restoreSavedView`): the whole presentation,
+    every layout's members, known and unknown.
     The export follows the sheet sort on the sheet (`sheetExportSort`, the custom field's
     first while the list has it). The sheet publishes the list's custom fields
     (`followCustomFields`); until then (`customFields` null) every stored field id counts.

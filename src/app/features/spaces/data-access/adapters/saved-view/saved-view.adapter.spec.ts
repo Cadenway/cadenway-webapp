@@ -13,6 +13,7 @@ import {
   toCountTaskGroupsParams,
   toExportParams,
   toListTasksQuery,
+  toRestoredSavedViewConfiguration,
   toSavedView,
   toSavedViewConfiguration,
   toSavedViewConfigurationPatch,
@@ -177,8 +178,10 @@ describe('saved view adapter', () => {
       toSavedViewConfigurationPatch('board', view.config, view.unknownPresentation).presentation,
     ).toEqual({ hiddenBoardStatusKeys: ['backlog', 'archived'] });
     expect(
-      toSavedViewConfiguration('table', view.config, view.unknownPresentation).presentation,
+      toSavedViewConfigurationPatch('table', view.config, view.unknownPresentation).presentation,
     ).toEqual({
+      hiddenSheetColumns: null,
+      hiddenCustomFieldIds: null,
       sheetSort: { column: 'future', direction: 'asc' },
       customFieldSort: { fieldId: 'cf-points', direction: 'random' },
     });
@@ -195,6 +198,35 @@ describe('saved view adapter', () => {
         view.unknownPresentation,
       ).presentation?.sheetSort,
     ).toEqual({ column: 'due', direction: 'desc' });
+  });
+
+  it("restores a deleted view with every layout's presentation, known and unknown", () => {
+    const settings: NonNullable<SavedViewDto['configuration']['presentation']> = {
+      hiddenBoardStatusKeys: ['backlog', 'archived' as never],
+      hiddenSheetColumns: ['spent', 'future-column'],
+      hiddenCustomFieldIds: ['cf-points'],
+      sheetSort: { column: 'due', direction: 'desc' },
+      customFieldSort: { fieldId: 'cf-client', direction: 'random' as never },
+    };
+    for (const layout of ['board', 'list', 'table'] as const) {
+      const view: SavedView = toSavedView({
+        ...criticalBugs,
+        configuration: { ...criticalBugs.configuration, layout, presentation: settings },
+      });
+      expect(toSavedViewConfiguration(layout, view.config).presentation, layout).not.toEqual(
+        settings,
+      );
+      expect(toRestoredSavedViewConfiguration(view), layout).toEqual({
+        layout,
+        filters: { status: ['todo'], priority: ['urgente', 'haute'], assignee: [], label: [] },
+        sort: 'dueDate',
+        groupBy: 'status',
+        presentation: settings,
+      });
+    }
+    expect(toRestoredSavedViewConfiguration(toSavedView(criticalBugs))).not.toHaveProperty(
+      'presentation',
+    );
   });
 
   it('stores layout, filters, signed sort and grouping, never the subtask display', () => {
