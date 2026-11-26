@@ -113,6 +113,94 @@ constants belong to the lead):
   sprint's goal line, `Space statuses` (enabled when the space is editable) and `Automations`
   (enabled for organization admins and owners) in the list menu after `Edit the space`.
 
+## Gantt view
+
+The `Gantt` view (`ui/pages/gantt-view-page`, `App.dc.html` lines 830-956, 6417-6600 and
+9223-9280) draws every task of the list with the view's `taskQuery` on `cw-timeline`, subtasks
+included: it reads every level (`level: 'all'`) whatever the subtask display.
+
+- Providers: `GANTT_VIEW_PROVIDERS` adds `ListTasksApi`, `ListTasksStore` (no due window, so the
+  undated tasks are read too) and `GanttViewStore` to Task's `TaskStatusChangesStore`. The page
+  provides `ViewTaskWritesStore` over `ListTasksStore` and the English texts of `cw-timeline`
+  (`GANTT_TIMELINE_LABELS`, `constants/gantt-labels`). It publishes `ListTasksStore.summary` with
+  `followRows` (its count includes the subtasks read), and `N` creates in the list.
+- `GanttViewStore` (`state/gantt-view`, route-scoped) keeps the scale, the zoom on the mockup's
+  ladder (`GANTT_ZOOM_LADDER`), the period (null for the scale's period around `today`), the
+  folded groups of each grouping (`Cancelled` by status) and the subtasks the user folded or
+  unfolded. `today` is the current local day read again by `Today`, the scale radios and the
+  brick's scale changes, so a view left open past midnight moves on; the page gives it to
+  `cw-timeline`'s `today`. Nothing is saved, as in the mockup.
+- Rows: `ganttTimelineOf` (`utils/gantt-timeline`) groups the tasks by the view's `groupBy` (one
+  `All tasks` group without it; a task shows under each assignee). The subtask hierarchy is built
+  inside each group: with the subtasks folded or unfolded under their parent (`nested`,
+  `expanded`), a subtask follows its parent, then its own subtasks, indented up to two levels
+  (`GANTT_SUBTASK_DEPTH`), only when it is in the same group as its parent; otherwise (another
+  status, assignee or priority, or a parent not read) it is a top-level row of its own group,
+  which no fold of another group hides. A parent with subtasks in its group shows the `List`
+  view's chevron (`Show the n subtasks of CAD-482`); its subtasks are folded by default
+  (`Folded under their parent`) and unfolded with `Unfolded under their parent`, and what the user
+  folds or unfolds is kept while the view lives, for the task in every group. A folded subtask, its
+  bar and its milestone line are not drawn. With subtasks apart (`separate`), the rows follow the
+  read's order, not indented, without chevrons. Within a group, `cw-timeline` lists the dated rows
+  before the undated ones, so a subtask follows its parent when both are dated or both undated. A
+  row shows the status, name, key and duration. Its bar runs from the start date (when it is not
+  after the due date) to the due date; a milestone holds its due date. A task without a due date offers `Schedule`. The bar
+  fill is `taskProgress`: done 100 %, cancelled 0, then the closed share of the subtasks, then of
+  the checklist, else 80 % in review and 40 % in progress. The dated milestones are also drawn as
+  full-height lines (`milestoneDisplay="lines"`). The off-window chips reveal a bar outside the
+  period.
+- Toolbar: the period, the hint (from 1280 px), the scale radios, zoom out and in with
+  `<scale> · <n>%`, `Fit` (`cw-timeline`'s `fit()`; `Nothing to fit` without a dated task),
+  `Today` and the previous and next periods (a week by day, four weeks by week, three months by
+  month, a month end staying a month end). Ctrl + wheel, Ctrl +/−, T, J/S/M and Page Up/Down
+  come from the brick.
+- Writes go through `ViewTaskWritesStore.updateFields`, with `<key> rescheduled` /
+  `From 3 to 7 November.` and `Undo`, and send only what changed. `updateTask` moves an existing
+  start by as many days as a new due date unless the patch sets `startDate` too
+  (`openapi/public/tasks.yaml`, `updateTask`):
+  - a move (drag, arrow keys) sends `dueDate` alone, so the gateway moves an existing start and a
+    task without one gets none;
+  - a milestone holds one day: the edge that moved becomes its `dueDate`, alone;
+  - a resized start (its edge, Alt and the arrows) sends `startDate` alone;
+  - a resized end (its edge, Shift and the arrows) sends `dueDate` with the start shown, so the
+    start stays; a task without a start gets the day its bar started from;
+  - the `Schedule` button of an undated task sends both, three days from the day under the
+    pointer or today (a milestone: `dueDate` alone); `Schedule` in the undated row's menu (the
+    keyboard's way, since the button is not a tab stop) does the same from today. Enter on an undated row opens the task, as on
+    any row, and writes nothing: the page stops the key in the capture phase, where `cw-timeline`
+    would schedule.
+- Menus: a right click, the Menu key or Shift F10 on a task row or its bar opens the shared
+  `cw-task-menu` (handed to the row's name in the capture phase). On a parent row or an undated
+  task's row, it opens the row menu instead: `Schedule` for an undated task, `Show` / `Hide the n
+subtasks of CAD-482` for a parent (the chevron's toggle, so the keyboard reaches it) and
+  `Task actions`, the shared task menu as a submenu. Elsewhere, the chart
+  menu opens with `Go to today`, `Scale` and `New task`.
+- States: the first read shows the timeline's skeleton. A failed one reaches the route's error
+  boundary, whose `Retry` reads again. A failed refresh keeps the chart under the inline error
+  `The tasks could not be refreshed.` whose `Retry` reads the current query again. A read without
+  a task shows `No task matches the search or the filters.` A read stopped at `LIST_TASKS_CAP`
+  says `Only the first 2,000 tasks are shown.`; `Fit` then fits the dated tasks shown, and
+  `Nothing to fit` says no dated task is among the tasks shown.
+- Known gaps:
+  - Dependencies are not drawn (G5). They can only be read task by task (`listTaskDependencies`,
+    up to 2,000 calls a read), and their facts are not relayed. The `Dependencies` toggle, the
+    menu's `Hide dependencies`, the conflict labels and the toast warnings wait for a list-level
+    read.
+  - The assignees' avatars beside a bar are not drawn: `cw-timeline` has no label template.
+  - The duration column shows `1 d` for a milestone (`Jalon` in the mockup). An undated task
+    shows nothing (`—` in the mockup).
+  - The bars' accessible names come from the brick, not the mockup's wording.
+  - `cw-timeline` has no row level for a subtask: its indent and chevron are in the name cell
+    only. The chevron is not a tab stop (the treegrid keeps one); the row menu toggles it from
+    the keyboard. `cw-task-menu` takes no extra item, so the task actions of a parent or an undated row are one level
+    down.
+  - The brick's T key and Page Up/Down derive the period from the day `today` last read.
+
+| Unit                                                                                                                                                                                                                                                                          | Reason                                                         |
+| ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- |
+| `spaces.gantt.truncated`, `spaces.gantt.fit-title-truncated`, `spaces.gantt.nothing-to-fit-truncated`                                                                                                                                                                         | The mockup reads every task; it draws no capped read.          |
+| `spaces.gantt.undated`, `spaces.gantt.week`, `spaces.gantt.late*`, `spaces.gantt.conflict*`, `spaces.gantt.moved`, `spaces.gantt.scale-announce`, `spaces.gantt.zoom-announce`, `spaces.gantt.percent`, `spaces.gantt.move`, `spaces.gantt.fitted*`, `spaces.gantt.milestone` | The brick's own texts, which the mockup does not show as copy. |
+
 ## Sheet view
 
 The `Sheet` view (`ui/pages/sheet-view-page`, `App.dc.html` lines 1031-1100, 3768-3786,

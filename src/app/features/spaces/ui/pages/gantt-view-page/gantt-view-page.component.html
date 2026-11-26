@@ -1,16 +1,306 @@
-<div
-  class="flex min-h-0 flex-1 items-center justify-center px-4 pb-6 sm:px-6"
+@let snapshot = tasks.hasCurrentSnapshot() ? undefined : tasks.primary.value();
+<section
+  class="flex min-h-0 flex-1 flex-col gap-2 px-4 pb-6 sm:px-6"
+  aria-label="Gantt chart"
+  i18n-aria-label="@@spaces.gantt.region"
   data-testid="gantt-view"
 >
-  <cw-empty role="status">
-    <cw-empty-header>
-      <cw-empty-media>
-        <ng-icon [name]="icon" aria-hidden="true" />
-      </cw-empty-media>
-      <cw-empty-title>{{ name }}</cw-empty-title>
-      <cw-empty-description i18n="@@spaces.view-stub.text"
-        >This view is not available yet.</cw-empty-description
+  <div class="flex flex-wrap items-center gap-2">
+    <h2 class="text-base font-semibold whitespace-nowrap tabular-nums">{{ periodTitle() }}</h2>
+    <p class="hidden text-xs text-muted-foreground xl:block" i18n="@@spaces.gantt.hint">
+      Drag a bar to move it, its edges to change the dates.
+    </p>
+    <div class="ml-auto flex flex-wrap items-center gap-2">
+      <cw-toggle-group
+        type="single"
+        size="sm"
+        ariaLabel="Time scale"
+        i18n-ariaLabel="@@spaces.gantt.scale"
+        [value]="gantt.scale()"
+        (valueChange)="pickScale($event)"
       >
-    </cw-empty-header>
-  </cw-empty>
-</div>
+        @for (option of scales; track option.value) {
+          <button cwToggleGroupItem type="button" [value]="option.value">
+            {{ option.label }}
+          </button>
+        }
+      </cw-toggle-group>
+      <div
+        role="group"
+        aria-label="Zoom"
+        i18n-aria-label="@@spaces.gantt.zoom"
+        class="flex items-center gap-0.5"
+      >
+        <button
+          cwButton
+          type="button"
+          variant="ghost"
+          size="icon-sm"
+          [disabled]="!gantt.canZoomOut()"
+          [attr.aria-label]="zoomOutLabel"
+          [title]="zoomOutLabel"
+          (click)="gantt.zoomOut()"
+        >
+          <ng-icon name="phosphorMagnifyingGlassMinusBold" aria-hidden="true" />
+        </button>
+        <span
+          class="hidden min-w-24 text-center text-xs text-muted-foreground tabular-nums sm:inline"
+          aria-live="polite"
+          >{{ zoomLevel() }}</span
+        >
+        <button
+          cwButton
+          type="button"
+          variant="ghost"
+          size="icon-sm"
+          [disabled]="!gantt.canZoomIn()"
+          [attr.aria-label]="zoomInLabel"
+          [title]="zoomInLabel"
+          (click)="gantt.zoomIn()"
+        >
+          <ng-icon name="phosphorMagnifyingGlassPlusBold" aria-hidden="true" />
+        </button>
+        <button
+          cwButton
+          type="button"
+          variant="ghost"
+          size="sm"
+          [title]="fitLabel()"
+          (click)="fit()"
+        >
+          <ng-icon name="phosphorArrowsOutLineHorizontalBold" aria-hidden="true" />
+          <ng-container i18n="@@spaces.gantt.fit">Fit</ng-container>
+        </button>
+      </div>
+      <div
+        role="group"
+        aria-label="Time navigation"
+        i18n-aria-label="@@spaces.gantt.navigation"
+        class="flex items-center gap-1"
+      >
+        <button
+          cwButton
+          type="button"
+          variant="outline"
+          size="sm"
+          i18n="@@spaces.gantt.today"
+          (click)="gantt.goToday()"
+        >
+          Today
+        </button>
+        <button
+          cwButton
+          type="button"
+          variant="ghost"
+          size="icon-sm"
+          [attr.aria-label]="previousLabel()"
+          [title]="previousLabel()"
+          (click)="gantt.shift(-1)"
+        >
+          <ng-icon name="phosphorCaretLeftBold" aria-hidden="true" />
+        </button>
+        <button
+          cwButton
+          type="button"
+          variant="ghost"
+          size="icon-sm"
+          [attr.aria-label]="nextLabel()"
+          [title]="nextLabel()"
+          (click)="gantt.shift(1)"
+        >
+          <ng-icon name="phosphorCaretRightBold" aria-hidden="true" />
+        </button>
+      </div>
+    </div>
+  </div>
+
+  @if (tasks.truncated()) {
+    <p class="text-xs text-muted-foreground" role="status">{{ truncatedText }}</p>
+  }
+  @if (tasks.hasCurrentSnapshot() && tasks.primary.error()) {
+    <div class="flex items-center gap-2 text-sm" role="alert">
+      <span i18n="@@spaces.rows.reload-failed">The tasks could not be refreshed.</span>
+      <button cwButton type="button" variant="outline" size="xs" (click)="tasks.reload()">
+        {{ retryLabel }}
+      </button>
+    </div>
+  }
+
+  <div class="flex min-h-0 flex-1 flex-col" [cwContextMenuTriggerFor]="chartMenu">
+    <cw-timeline
+      class="flex-1"
+      showDuration
+      showOffWindow
+      milestoneDisplay="lines"
+      ariaLabel="Gantt timeline: Ctrl + wheel or Ctrl +/− to zoom"
+      i18n-ariaLabel="@@spaces.gantt.timeline"
+      [items]="chart().items"
+      [groups]="chart().groups"
+      [milestones]="chart().milestones"
+      [nameColumnWidth]="nameWidth()"
+      [today]="gantt.today()"
+      [loading]="!snapshot && tasks.initialLoading()"
+      [scale]="gantt.scale()"
+      (scaleChange)="gantt.followScale($event)"
+      [zoom]="gantt.zoom()"
+      (zoomChange)="gantt.followZoom($event)"
+      [range]="gantt.range()"
+      (rangeChange)="gantt.followRange($event)"
+      [collapsedGroups]="collapsed()"
+      (collapsedGroupsChange)="gantt.setCollapsed(grouping(), $event)"
+      (itemChange)="reschedule($event)"
+      (schedule)="schedule($event)"
+      (open)="open($event)"
+    >
+      <ng-template cwTimelineName let-item>
+        @let shown = itemOf(item.id);
+        @let depth = depthOf(item.id);
+        @let parent = parentOf(item.id);
+        @if (nesting()) {
+          @if (parent) {
+            <button
+              type="button"
+              tabindex="-1"
+              class="inline-flex size-5 shrink-0 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+              [class.ml-5]="depth === 1"
+              [class.ml-10]="depth >= 2"
+              [attr.aria-expanded]="parent.open"
+              [attr.aria-label]="subtasksLabel(item.id)"
+              [title]="subtasksLabel(item.id)"
+              (click)="toggleSubtasks(item.id)"
+            >
+              <ng-icon
+                name="phosphorCaretRightBold"
+                size="0.75rem"
+                class="transition-transform duration-200 motion-reduce:transition-none"
+                [class.rotate-90]="parent.open"
+                aria-hidden="true"
+              />
+            </button>
+          } @else {
+            <span
+              aria-hidden="true"
+              class="size-5 shrink-0"
+              [class.ml-5]="depth === 1"
+              [class.ml-10]="depth >= 2"
+            ></span>
+          }
+        }
+        <button
+          type="button"
+          tabindex="-1"
+          data-row-menu
+          class="flex min-w-0 flex-1 items-center gap-2 rounded-md px-1 py-1 text-left text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none focus-visible:ring-inset"
+          [attr.data-task-row]="shown?.task?.key ?? null"
+          [attr.data-depth]="depth"
+          [attr.data-undated]="item.end ? null : ''"
+          [cwContextMenuTriggerFor]="parent || !item.end ? rowMenu : taskMenu.menu()"
+          (opened)="menuItem.set(item.id)"
+          (click)="open(item)"
+        >
+          @if (item.status) {
+            <cw-status-icon [status]="item.status" [milestone]="shown?.task?.milestone ?? false" />
+          }
+          <span class="truncate font-medium">{{ item.name }}</span>
+          <span class="shrink-0 font-mono text-xs text-muted-foreground">{{
+            shown?.task?.key
+          }}</span>
+        </button>
+      </ng-template>
+    </cw-timeline>
+  </div>
+</section>
+
+<cw-menu #chartMenu ariaLabel="Gantt chart" i18n-ariaLabel="@@spaces.gantt.region">
+  <cw-menu-label i18n="@@spaces.gantt.region">Gantt chart</cw-menu-label>
+  <button cwMenuItem type="button" (triggered)="gantt.goToday()">
+    <ng-icon name="phosphorCalendarCheckBold" aria-hidden="true" />
+    <ng-container i18n="@@spaces.gantt.go-today">Go to today</ng-container>
+  </button>
+  <button cwMenuItem type="button" [cwMenuTriggerFor]="scaleMenu">
+    <ng-icon name="phosphorMagnifyingGlassPlusBold" aria-hidden="true" />
+    <ng-container i18n="@@spaces.gantt.scale-menu">Scale</ng-container>
+  </button>
+  <cw-menu-separator />
+  <button cwMenuItem type="button" (triggered)="create()">
+    <ng-icon name="phosphorPlusBold" aria-hidden="true" />
+    <ng-container i18n="@@spaces.rows.new-task">New task</ng-container>
+  </button>
+</cw-menu>
+
+<cw-menu #scaleMenu side="right" ariaLabel="Scale" i18n-ariaLabel="@@spaces.gantt.scale-menu">
+  <cw-menu-radio-group [value]="gantt.scale()" (valueChange)="pickScale($event)">
+    @for (option of scales; track option.value) {
+      <button cwMenuItemRadio type="button" [value]="option.value">{{ option.label }}</button>
+    }
+  </cw-menu-radio-group>
+</cw-menu>
+
+<cw-menu #rowMenu ariaLabel="Task actions" i18n-ariaLabel="@@spaces.rows.menu">
+  <cw-menu-label>{{ menuTitle() }}</cw-menu-label>
+  @if (menuItem(); as id) {
+    @if (itemOf(id)?.task?.due === null) {
+      <button cwMenuItem type="button" (triggered)="scheduleFromMenu()">
+        <ng-icon name="phosphorCalendarPlusBold" aria-hidden="true" />
+        {{ scheduleLabel }}
+      </button>
+    }
+    @if (parentOf(id); as parent) {
+      <button cwMenuItem type="button" (triggered)="toggleMenuSubtasks()">
+        <ng-icon
+          [name]="parent.open ? 'phosphorCaretDownBold' : 'phosphorCaretRightBold'"
+          aria-hidden="true"
+        />
+        {{ subtasksLabel(id) }}
+      </button>
+    }
+  }
+  <cw-menu-separator />
+  <button cwMenuItem type="button" [cwMenuTriggerFor]="taskMenu.menu()">
+    <ng-icon name="phosphorDotsThreeBold" aria-hidden="true" />
+    <ng-container i18n="@@spaces.rows.menu">Task actions</ng-container>
+  </button>
+</cw-menu>
+
+<cw-task-menu
+  #taskMenu
+  [tasks]="menuTasks()"
+  [status]="menuStatus()"
+  [statuses]="writes.statusOptions()"
+  [people]="writes.people()"
+  [userId]="writes.userId()"
+  [lists]="writes.targets()"
+  (openRequested)="writes.open($event.key, $event)"
+  (statusPicked)="writes.setStatus(menuTasks(), $event, menuMilestone())"
+  (priorityPicked)="writes.setPriority(menuTasks(), $event)"
+  (assigneeToggled)="writes.toggleAssignee(menuTasks(), $event)"
+  (moved)="writes.moveTo(menuTasks(), $event)"
+  (remindRequested)="writes.remind(menuTasks())"
+  (duplicateRequested)="writes.duplicate(menuTasks())"
+  (copyLinkRequested)="writes.copyLinks(menuTasks())"
+  (copyKeyRequested)="writes.copyKeys(menuTasks())"
+  (deleteRequested)="writes.askDelete(menuTasks(), true)"
+/>
+
+<cw-task-cancel-dialog
+  [taskKeys]="writes.cancelKeys()"
+  (confirmed)="writes.confirmCancel($event)"
+  (kept)="writes.keepCancel()"
+/>
+
+<cw-alert-dialog
+  variant="destructive"
+  size="sm"
+  [open]="writes.deleteOpen()"
+  (openChange)="writes.setDeleteOpen($event)"
+  [items]="writes.deleteItems()"
+  [pending]="writes.deleting()"
+  (confirm)="writes.trash()"
+>
+  <h2 cwAlertDialogTitle>{{ writes.deleteTitle() }}</h2>
+  <p cwAlertDialogDescription>{{ writes.deleteText() }}</p>
+  <button cwButton cwAlertDialogCancel variant="outline" i18n="@@spaces.cancel">Cancel</button>
+  <button cwButton cwAlertDialogAction variant="destructive" [loading]="writes.deleting()">
+    {{ writes.deleteAction() }}
+  </button>
+</cw-alert-dialog>
