@@ -1260,6 +1260,16 @@ export class ListViewPage {
       ),
     );
     this.taskCreate.useDefaults(() => ({ listId: this.listId() }), this.destroyRef);
+    const element: HTMLElement = this.host.nativeElement;
+    const delegate: (event: Event) => void = (event: Event): void => {
+      this.delegateRowMenu(event);
+    };
+    element.addEventListener('contextmenu', delegate, true);
+    element.addEventListener('keydown', delegate, true);
+    this.destroyRef.onDestroy((): void => {
+      element.removeEventListener('contextmenu', delegate, true);
+      element.removeEventListener('keydown', delegate, true);
+    });
 
     let previousGroups: Map<string, string> = new Map<string, string>();
     let previousStatuses: Map<string, StatusKey> = new Map<string, StatusKey>();
@@ -2192,6 +2202,57 @@ export class ListViewPage {
    */
   protected moveSelection(listId: string): void {
     this.moveTo(this.selectedTasks(), listId, true);
+  }
+
+  /**
+   * Method delegateRowMenu
+   *
+   * @description
+   * Makes the whole task row open its menu, as the mockup's `role="row"` does (`App.dc.html`
+   * line 659): a right click, the Menu key or Shift F10 anywhere in a task row that no row
+   * trigger handles (a cell's padding, the selection cell, a focused cell) is handed to the row's
+   * `…` trigger, at the pointer or on the button, and the list menu does not open. Elsewhere,
+   * and in an editable field, the event goes on. Runs in the capture phase, since
+   * `cw-data-table` offers no row-level menu.
+   *
+   * @param {Event} event - A `contextmenu` or `keydown` event inside the view.
+   */
+  private delegateRowMenu(event: Event): void {
+    if (event.defaultPrevented) return;
+    if (
+      event instanceof KeyboardEvent &&
+      !(event.key === 'ContextMenu' || (event.key === 'F10' && event.shiftKey))
+    ) {
+      return;
+    }
+    const target: EventTarget | null = event.target;
+    if (
+      !(target instanceof Element) ||
+      target.closest('[data-row-menu]') ||
+      target.closest('input, textarea, select, [contenteditable]:not([contenteditable="false"])')
+    ) {
+      return;
+    }
+    const actions: HTMLElement | null | undefined = target
+      .closest('[role="row"]')
+      ?.querySelector<HTMLElement>('[data-row-actions]');
+    if (!actions) return;
+    event.preventDefault();
+    actions.dispatchEvent(
+      event instanceof KeyboardEvent
+        ? new KeyboardEvent('keydown', {
+            key: event.key,
+            shiftKey: event.shiftKey,
+            bubbles: true,
+            cancelable: true,
+          })
+        : new MouseEvent('contextmenu', {
+            bubbles: true,
+            cancelable: true,
+            clientX: event instanceof MouseEvent ? event.clientX : 0,
+            clientY: event instanceof MouseEvent ? event.clientY : 0,
+          }),
+    );
   }
 
   /**

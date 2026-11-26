@@ -1104,4 +1104,65 @@ describe('ListViewPage', () => {
       expect.any(Function),
     );
   });
+  /**
+   * Function menuLabels
+   *
+   * @description
+   * The items of the open menus.
+   *
+   * @returns {readonly string[]} Their texts.
+   */
+  function menuLabels(): readonly string[] {
+    return [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].map(
+      (element: HTMLElement): string => element.textContent.trim(),
+    );
+  }
+
+  it('opens the row menu with a right click on a cell no row trigger covers', async () => {
+    const fixture: ComponentFixture<ListViewPage> = await render();
+    const cell: Element = required(checkbox('Select CAD-482')?.closest('[role="gridcell"]'));
+
+    cell.dispatchEvent(
+      new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 40, clientY: 80 }),
+    );
+    fixture.detectChanges();
+    await settle(fixture);
+    fixture.detectChanges();
+
+    expect(menuLabels()).toContain('Duplicate');
+    expect(menuLabels()).not.toContain('Edit the sprint');
+  });
+
+  it('opens the row menu with Shift F10 on a focused cell', async () => {
+    const fixture: ComponentFixture<ListViewPage> = await render();
+    const cell: Element = required(
+      checkbox('Select CAD-482')
+        ?.closest('[role="row"]')
+        ?.querySelector('[role="gridcell"]:last-child'),
+    );
+
+    cell.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'F10', shiftKey: true, bubbles: true, cancelable: true }),
+    );
+    fixture.detectChanges();
+    await settle(fixture);
+    fixture.detectChanges();
+
+    expect(menuLabels()).toContain('Duplicate');
+    expect(menuLabels()).not.toContain('Edit the sprint');
+  });
+
+  it('opens the list menu with a right click outside the task rows', async () => {
+    const fixture: ComponentFixture<ListViewPage> = await render();
+    const host: HTMLElement = fixture.nativeElement as HTMLElement;
+    const header: Element = required(host.querySelector('[role="columnheader"]'));
+
+    header.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
+    fixture.detectChanges();
+    await settle(fixture);
+    fixture.detectChanges();
+
+    expect(menuLabels()).toContain('Edit the sprint');
+    expect(menuLabels()).not.toContain('Duplicate');
+  });
 });

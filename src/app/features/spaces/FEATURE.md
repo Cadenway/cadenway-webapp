@@ -196,7 +196,9 @@ computed from the navigation's reads, for the command palette's `Lists`.
   open list.
 - A row: a click on the name, Enter or the `…` button opens `?task=<KEY>` with
   `queryParamsHandling: 'merge'` (`App.dc.html` line 695); the right click, the Menu key, Shift F10
-  or a long press on a cell open the menu of the task, or of the selection when the row belongs to
+  or a long press anywhere in the task row (`App.dc.html` line 659; the view hands a right click
+  or a key the cells' triggers do not handle to the row's `…` trigger, in the capture phase) open
+  the menu of the task, or of the selection when the row belongs to
   a selection of several tasks: `Open`, `Status` (by category, with hints; `Cancelled` asks one
   reason for the tasks not cancelled already), `Priority`, `Assign` (ticked when every task
   has the person, picking them again removes them), `Move to`, `Remind me tomorrow morning`
@@ -238,6 +240,9 @@ gateway checks them and `ORGANIZATION_PIN_OPERATIONS` lists them.
 
 ## Known gaps
 
+- `cw-data-table` has no row-level context menu input: the `List` view delegates row clicks and
+  keys outside the cells' triggers to the row's `…` trigger. A row context-menu input in
+  `@cadenway/ui` is the lasting fix.
 - Task summaries (`queryListTasks`) carry no cancellation note: the `Undo` of a change from
   `Cancelled` puts back the note only when this view recorded it (a cancellation made here);
   otherwise it restores the reason without a note.

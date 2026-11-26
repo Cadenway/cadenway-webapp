@@ -78,6 +78,7 @@
           [class.pl-6]="row.depth === 1"
           [class.pl-12]="row.depth === 2"
           [attr.data-task-row]="row.task.key"
+          data-row-menu
           [cwContextMenuTriggerFor]="rowMenu"
           (opened)="menuRow.set(row)"
           (pointerdown)="$event.stopPropagation()"
@@ -150,6 +151,7 @@
       <ng-template cwCell [cwCellOf]="rows.rows()" let-row>
         <span
           class="flex -space-x-1"
+          data-row-menu
           [cwContextMenuTriggerFor]="rowMenu"
           (opened)="menuRow.set(row)"
           (pointerdown)="$event.stopPropagation()"
@@ -183,6 +185,7 @@
         <cw-task-due-date
           [due]="row.task.due"
           [status]="row.status"
+          data-row-menu
           [cwContextMenuTriggerFor]="rowMenu"
           (opened)="menuRow.set(row)"
           (pointerdown)="$event.stopPropagation()"
@@ -200,6 +203,7 @@
         <span
           class="flex items-center gap-1.5 text-xs"
           [class.text-destructive]="row.task.priority === 'urgente'"
+          data-row-menu
           [cwContextMenuTriggerFor]="rowMenu"
           (opened)="menuRow.set(row)"
           (pointerdown)="$event.stopPropagation()"
@@ -219,6 +223,7 @@
       <ng-template cwCell [cwCellOf]="rows.rows()" let-row>
         <cw-task-label-chips
           [labels]="row.task.labels"
+          data-row-menu
           [cwContextMenuTriggerFor]="rowMenu"
           (opened)="menuRow.set(row)"
           (pointerdown)="$event.stopPropagation()"
@@ -237,7 +242,9 @@
         <button
           type="button"
           class="relative isolate inline-flex size-7 items-center justify-center overflow-hidden rounded-md whitespace-nowrap text-muted-foreground opacity-0 transition-all group-hover/row:opacity-100 hover:bg-accent hover:text-foreground focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background focus-visible:outline-none motion-reduce:transition-none"
+          data-row-actions
           [attr.aria-label]="actionsLabel(row)"
+          data-row-menu
           [cwContextMenuTriggerFor]="rowMenu"
           (opened)="menuRow.set(row)"
           (pointerdown)="$event.stopPropagation()"
