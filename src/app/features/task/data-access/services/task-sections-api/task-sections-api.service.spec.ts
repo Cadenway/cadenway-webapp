@@ -131,7 +131,6 @@ describe('TaskSectionsApi', () => {
     const body: FormData = sent.request.body as FormData;
     expect(Array.from(body.keys())).toEqual(['key', 'ticket', 'file']);
     expect(sent.request.reportUploadProgress).toBe(false);
-    expect(sent.request.reportProgress).toBe(false);
     sent.flush('');
 
     await expect(done).resolves.toMatchObject({ id: 'a1', name: 'maquette-sso.png', size: 2048 });

@@ -23,7 +23,10 @@ describe('TaskChecklist', () => {
     );
     add?.click();
     await fixture.whenStable();
-    field = host.querySelector('#task-checklist-new') as HTMLInputElement;
+    const found: HTMLInputElement | null =
+      host.querySelector<HTMLInputElement>('#task-checklist-new');
+    if (!found) throw new Error('The add field is not open.');
+    field = found;
     field.value = 'Test on Safari';
     field.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', cancelable: true }));
   });

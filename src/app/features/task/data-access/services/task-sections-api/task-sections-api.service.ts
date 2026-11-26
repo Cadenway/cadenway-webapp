@@ -503,17 +503,19 @@ export class TaskSectionsApi {
     const body: FormData = new FormData();
     for (const [name, value] of Object.entries(upload.fields)) body.append(name, value);
     body.append('file', file);
-    let sent: boolean = false;
+    const transfer: { sent: boolean } = { sent: false };
     try {
       await lastValueFrom(
         this.http.post(upload.url, body, { observe: 'events', responseType: 'text' }).pipe(
           tap((event: HttpEvent<string>): void => {
-            if (event.type === HttpEventType.Sent) sent = true;
+            if (event.type === HttpEventType.Sent) transfer.sent = true;
           }),
         ),
       );
     } catch (error: unknown) {
-      if (!sent || !(error instanceof HttpErrorResponse) || error.status !== 0) throw error;
+      if (!transfer.sent || !(error instanceof HttpErrorResponse) || error.status !== 0) {
+        throw error;
+      }
     }
     const ready: CompleteTaskAttachmentUploadClientResult = await firstValueFrom(
       this.attachments.completeTaskAttachmentUpload(taskKey, upload.id),

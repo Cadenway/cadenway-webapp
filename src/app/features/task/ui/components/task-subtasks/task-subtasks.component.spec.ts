@@ -31,9 +31,11 @@ describe('TaskSubtasks', () => {
       requests.push(request);
     });
     await fixture.whenStable();
-    field = (fixture.nativeElement as HTMLElement).querySelector(
-      'input[placeholder="Add a subtask (Enter)"]',
-    ) as HTMLInputElement;
+    const found: HTMLInputElement | null = (
+      fixture.nativeElement as HTMLElement
+    ).querySelector<HTMLInputElement>('input[placeholder="Add a subtask (Enter)"]');
+    if (!found) throw new Error('The add field is missing.');
+    field = found;
   });
 
   it('keeps the typed name when the creation is refused', () => {
