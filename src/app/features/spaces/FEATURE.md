@@ -701,14 +701,23 @@ computed from the navigation's reads, for the command palette's `Lists` and the 
     takes an `Idempotency-Key` that replays a recorded answer for 24 hours, but
     `TaskActionsApi.bulk` (owned by Task) draws a key per chunk and keeps it for its own single
     retry, so a send from the view would carry a new key and could copy a task twice.
+  - A copy without a certain outcome never holds its source, which it does not change: the source
+    is released at once, the warning shows, and the view is read once 2 s later so a created copy
+    shows.
   - What stays uncertain once the resends are spent is reported in `unknown` and warns. From 2 s
     later (`RECONCILE_DELAY_MS`, doubling up to 30 s) each such task is read back on its own
     until a read settles it, and only then do its patch and its hold go: a `versioned` write
     (above) by any read of the task, applied when it is past the version sent and holds the
     written values; a deletion once the task reads in the trash (`404 task.trashed`, applied) or
-    past the version sent (the deletion can no longer commit); a copy once the task reads past
-    the version sent or in the trash. A copy that a read cannot show stays held until the view is
-    left or reloaded.
+    past the version sent (the deletion can no longer commit).
+  - A `versioned` task released by a read still at the version sent is read again 10 s and 30 s
+    after its release (`FOLLOW_UP_READS_MS`), without holding its writes, until the view or its
+    scope changes: a read past that version that holds the written values shows them again, and
+    the view is read again.
+  - A write that only a read back of its task settled is applied without an `Undo`: a matching
+    value at a later version does not prove this request wrote it, so the task is absent from
+    the outcome's `before` and `after`, and the toast offers no `Undo`. An `Undo` is offered only
+    for tasks whose version comes from the write's own successful answer.
   - A released task's next write is sent at the version the view read (or one a write returned),
     not at a version only a read back showed (except one version past the one sent and holding
     the written values, which was this write). Every write carries that version, so an original
