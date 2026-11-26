@@ -116,6 +116,60 @@ constants belong to the lead):
   sprint's goal line, `Space statuses` (enabled when the space is editable) and `Automations`
   (enabled for organization admins and owners) in the list menu after `Edit the space`.
 
+### Share dialog
+
+`ui/dialogs/share-dialog` (`ShareDialog`, `App.dc.html` lines 2980-3016, 5448, 6871, 8830-8855)
+provides its own `ListShareStore` (`state/list-share/`, component-scoped), which reaches the
+gateway through `ListAccessApi` (`data-access/services/list-access-api/`, adapter
+`data-access/adapters/list-access/`, models `models/list-share/`). The list page keeps the dialog
+once it was opened, so the store lives with the list page, across closings and reopenings.
+
+- Each opening on a list reads, at once, `ListsService.getList` (the `Organization access` switch,
+  `organizationAccess`, and `callerRole`), `SpacesService.getSpace` (the owner and the
+  visibility) and every page of `AccessService.listListGrants`; a failure is the dialog's inline
+  error with `Retry`, distinct from its skeleton. Every page of `MembersService.listMembers`
+  (names, addresses, guests) is read apart: a `403` leaves the names unknown and hides
+  `Invite by email`; any other failure (network, 5xx) is its own inline error with `Retry`
+  (`spaces.secondary.members-failed`) above the people, who stay listed without names.
+- `People with access`: the space's owner first (`Owner`, no select: `Grant` has no owner, who
+  is `Space.owner`), then the grants in the order access was given, then the people invited from
+  the dialog. Grants of the space, which also open the list, are not listed. Guests carry
+  `Guest`, and the guest sum follows. Without `edit` on the list, the roles read as words, the
+  switch is disabled and the invitation hidden.
+- Writes are optimistic: a role (`setListGrant`), a removal (`removeListGrant`), the switch
+  (`updateList` with `organizationAccess` only). The writes of one list and subject (a person, or
+  the switch) are sent one after the other, whether the dialog is open, closed, reopened or shows
+  another list: a reopened dialog shows the changes still on their way over its read, and its new
+  changes wait behind them. No accepted change is dropped. A refusal puts back the last confirmed
+  value, unless a newer change of the same subject is still on its way, and always shows its
+  failure toast. Once the last change of a list ends, its access is read again if the dialog shows
+  it (once more after a read already in flight), and that read replaces the changes it covers.
+- None sends `If-Match`, which the contract makes optional on all three: each write sets one
+  absolute value, so two people sharing at once never overwrite each other. Every change raises
+  the list's version: each recorded write, even after the dialog closed, hands the version the
+  gateway answered (`ETag`, or the patched list) to `ListPageStore.followListEdits` while the list
+  page shows that list, so the header's later writes send the current `If-Match`; a grant change
+  also reads the header's members again.
+- Removing a grant asks `Remove X's access?` in a `cw-alert-dialog`, with the mockup's text. When
+  the `Organization access` switch is on outside a private space, the confirmation of a member
+  (never a guest) adds `They can still see it through the organization access.`: removing the
+  grant leaves them what the rule of the organization gives. A grant of the space, which also
+  keeps the list visible, is not checked, so the text can promise more than the removal does for
+  such a person.
+- `Invite by email` (G10): the contract has no invitation by email carrying a list role, and no
+  feature publishes an organization invitation entry. The address therefore resolves, without
+  regard to case, against the member directory: a member or guest gets the chosen role
+  (`setListGrant`) at once, then `Invitation sent` / `<email> can now edit the list.`; an address
+  outside the organization gets `This person is not in the organization: invite them first.` and
+  nothing is sent; the owner's gets a note that they already have access. The mockup's external
+  invitation (`Adresse externe : …` note and `Invité ajouté` toast) is not built.
+- `Organization access` is hidden in a private space, where it changes nothing
+  (`openapi/public/lists.yaml`).
+- `Copy the link` copies `/<slug>/l/<listId>` with `List link copied` (`navigator.clipboard`).
+- Gaps: no presence on the avatars (Account's `PRESENCE` publishes the person's own presence
+  only); no realtime follow of `list.access-changed.v1` while the dialog is open; `cw-dialog`
+  has no `max-w-lg` size, so the dialog uses `default` (`max-w-md`).
+
 ## Timesheet view
 
 `TimesheetViewPage` (`ui/pages/timesheet-view-page/`) and `TimesheetViewStore`
@@ -343,7 +397,9 @@ computed from the navigation's reads, for the command palette's `Lists` and the 
   `ArchivesService` (`archiveList`, `unarchiveList`, `listArchivedLists` and `listArchivedTasks`
   for the footer count), `TrashService.listTrash` (the footer count),
   `BillingService.getBillingSubscription` (the free seats of `Invite your team`),
-  `AccessService.listListGrants`,
+  `AccessService.listListGrants`, and for the `Share` dialog (`ListAccessApi`) `setListGrant`,
+  `removeListGrant`, `ListsService.getList` and `updateList` (`organizationAccess`),
+  `SpacesService.getSpace` and `MembersService.listMembers`,
   `MembersService.listMembers`, `TasksService` (`listLabels`, `executeBulkTaskAction`,
   `listSubtasks`, `updateTask` with `If-Match` for the task views' single-field writes) and
   `TaskQueriesService` (`queryListTasks` for the rows, the flat reads with an optional
@@ -585,9 +641,8 @@ gateway checks them and `ORGANIZATION_PIN_OPERATIONS` lists them.
   `Favorite` carries no icon.
 - A favorite saved view's menu holds `Open` only: renaming, duplicating and deleting a view
   live on its list page.
-- `Share` (no grant write in the gateway yet), `Sprint report`, `Space statuses`
-  and `Automations` are stub dialogs whose openers stay hidden until `RELEASED_LIST_DIALOGS`
-  lists them; the Git section of `Automations` stays hidden until B6 is decided. The Slack and
+- `Sprint report`, `Space statuses` and `Automations` are stub dialogs; their openers and
+  `Share`'s (built, see "Share dialog") stay hidden until `RELEASED_LIST_DIALOGS` lists them; the Git section of `Automations` stays hidden until B6 is decided. The Slack and
   Figma suggestions need integrations no service provides.
 - The tabs show every released layout: the mockup's views added per list (`Added` / `Add`,
   `App.dc.html` lines 6187, 8792-8795) have no list setting in the contract (G12) and are not
@@ -634,7 +689,15 @@ gateway checks them and `ORGANIZATION_PIN_OPERATIONS` lists them.
 | `spaces.list-dialog.date-*`, `spaces.list-dialog.pick-date`, `spaces.footer.*`                                                 | The date picker's texts and the footer rows' names.                        |
 | `spaces.look.*`                                                                                                                | `LOOK_COLORS` names and the default choices of `lookPicker`.               |
 | `spaces.view-stub.text`                                                                                                        | The stub of a view not built yet, which the mockup does not have.          |
-| `spaces.task-writes.field-failed`                                                                                              | The mockup draws no refused single-field write.                            |
+| `spaces.share.*-failed`, `spaces.share.read-failed`                                                                            | The mockup draws no failed read or refused write.                          |
+| `spaces.share.not-member`                                                                                                      | The contract's `access.grantee-invalid` title (G10).                       |
+| `spaces.share.already-owner`                                                                                                   | The mockup does not draw the owner's address.                              |
+| `spaces.share.remove-inherited`                                                                                                | The mockup has no wording for access kept through the organization.        |
+| `spaces.share.email-placeholder`                                                                                               | The mockup's address names its own organization.                           |
+| `spaces.share.guests-one`                                                                                                      | Singular form the mockup builds in its script.                             |
+| `spaces.share.access-of`, `spaces.share.remove-label`                                                                          | Accessible names, from the mockup's `aria-label`s.                         |
+
+| `spaces.task-writes.field-failed` | The mockup draws no refused single-field write. |
 
 | `spaces.sprint-report.failed`, `spaces.sprint-report.empty`, `spaces.sprint-report.chart-empty` | The mockup draws no failed read or empty sprint. |
 | `spaces.sprint-report.projected-unknown` | The mockup always has a projection. |

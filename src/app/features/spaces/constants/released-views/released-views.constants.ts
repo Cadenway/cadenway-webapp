@@ -28,4 +28,5 @@ export const RELEASED_LIST_DIALOGS: readonly ListDialog[] = [
   'space-statuses',
   'automations',
   'sprint-report',
+  'share',
 ];
