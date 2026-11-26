@@ -745,6 +745,7 @@ describe('ListPage', () => {
   });
 
   it('shows no dialog opener while no dialog is released', async () => {
+    TestBed.overrideProvider(RELEASED_VIEWS, { useValue: { layouts: ['list'], dialogs: [] } });
     const harness: RouterTestingHarness = await open('/atelier-nord/l/l-bugs');
     expect(find('list-share')).toBeNull();
     find('list-more')?.click();

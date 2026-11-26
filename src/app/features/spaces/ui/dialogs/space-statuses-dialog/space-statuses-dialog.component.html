@@ -1,0 +1,75 @@
+<cw-dialog [(open)]="open" data-testid="space-statuses-dialog">
+  <cw-dialog-header>
+    <h2 cwDialogTitle>{{ title() }}</h2>
+    <p cwDialogDescription data-testid="space-statuses-description">{{ description() }}</p>
+  </cw-dialog-header>
+  <div class="flex max-h-[55vh] flex-col overflow-y-auto pr-1">
+    @if (loaded()) {
+      @for (row of rows(); track row.key) {
+        @if (row.heading) {
+          <p class="px-1 pt-3 pb-1 text-xs font-medium text-muted-foreground first:pt-0">
+            {{ row.heading }}
+          </p>
+        }
+        <div
+          class="flex items-center gap-2.5 rounded-md px-1 py-1 transition-opacity"
+          [class.opacity-50]="!row.used"
+          [attr.data-testid]="'space-status-' + row.key"
+        >
+          <cw-status-icon [status]="row.key" size="4" />
+          <label [for]="'space-status-name-' + row.key" class="sr-only">{{ row.nameLabel }}</label>
+          <input
+            #nameField
+            cwInput
+            type="text"
+            autocomplete="off"
+            class="h-8 min-w-0 flex-1 placeholder:text-foreground"
+            [id]="'space-status-name-' + row.key"
+            [value]="row.name"
+            [placeholder]="row.base"
+            [attr.maxlength]="nameMax"
+            [disabled]="!store.canEdit()"
+            (change)="rename(row.key, nameField)"
+          />
+          <span class="hidden w-44 shrink-0 truncate text-xs text-muted-foreground sm:block">{{
+            row.hint
+          }}</span>
+          <cw-switch
+            #usedSwitch
+            class="shrink-0"
+            [ariaLabel]="row.switchLabel"
+            [attr.title]="row.switchLabel"
+            [checked]="row.used"
+            [disabled]="row.required || !store.canEdit()"
+            (checkedChange)="setUsed(row.key, $event, usedSwitch)"
+          />
+        </div>
+      }
+    } @else {
+      @for (placeholder of placeholders; track placeholder) {
+        <div class="flex items-center gap-2.5 px-1 py-1">
+          <div cwSkeleton class="size-4 rounded-full"></div>
+          <div cwSkeleton class="h-8 flex-1"></div>
+          <div cwSkeleton class="h-5 w-9 rounded-full"></div>
+        </div>
+      }
+    }
+  </div>
+  <cw-dialog-footer>
+    <button
+      cwButton
+      type="button"
+      variant="outline"
+      class="mr-auto"
+      [disabled]="!loaded() || !store.canEdit()"
+      data-testid="space-statuses-reset"
+      (click)="reset()"
+    >
+      <ng-icon name="phosphorArrowCounterClockwiseBold" aria-hidden="true" />
+      <ng-container i18n="@@spaces.statuses.reset">Reset to defaults</ng-container>
+    </button>
+    <button cwButton type="button" data-testid="space-statuses-done" (click)="close()">
+      <ng-container i18n="@@spaces.statuses.done">Done</ng-container>
+    </button>
+  </cw-dialog-footer>
+</cw-dialog>
