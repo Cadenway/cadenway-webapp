@@ -98,6 +98,8 @@ import {
   bulkMovedText,
   bulkPartialText,
   bulkUpdatedText,
+  undoConflictText,
+  undoConflictTitle,
 } from '../../../constants/bulk-copy/bulk-copy.constants';
 import { SPACES_RETRY } from '../../../constants/data-table-texts/data-table-texts.constants';
 import { groupLabels, sortLabels } from '../../../constants/view-labels/view-labels.constants';
@@ -1721,6 +1723,7 @@ export class ListViewPage {
                 action: { type: 'priority', priority: group[0].priority },
               }),
             ),
+            outcome.after,
           );
         },
       }),
@@ -1762,12 +1765,15 @@ export class ListViewPage {
           : $localize`:@@spaces.bulk.assigned:${name}:name: assigned`,
         description: bar ? bulkUpdatedText(done.length) : label,
         undo: (): void => {
-          void this.reverse([
-            {
-              tasks: confirmedOf(outcome),
-              action: { type: all ? 'assign' : 'unassign', userId },
-            },
-          ]);
+          void this.reverse(
+            [
+              {
+                tasks: confirmedOf(outcome),
+                action: { type: all ? 'assign' : 'unassign', userId },
+              },
+            ],
+            outcome.after,
+          );
         },
       }),
     );
@@ -1809,6 +1815,7 @@ export class ListViewPage {
                 action: { type: 'move', listId: group[0].listId },
               }),
             ),
+            outcome.after,
           );
         },
       }),
@@ -2407,21 +2414,37 @@ export class ListViewPage {
    *
    * @description
    * The `Undo` of an action: sends each reverse write with the values confirmed before the
-   * action; `ListRowsStore.act` sends each task at the version the gateway last returned. Reports
-   * like the action does (tasks not sent, without a certain outcome, refused in part or in full)
-   * and reads the rows again after a refusal, even when the view was left meanwhile.
+   * action, bound to the version the action left each task at. `ListRowsStore.act` skips a task
+   * that changed since (by this view, another view or another person, once read) and sends the
+   * others at that version, so a change not read yet makes the gateway refuse them; an `Undo`
+   * never writes old values over a newer change. A warning names the skipped tasks. Reports the
+   * rest like the action does (tasks not sent, without a certain outcome, refused in part or in
+   * full) and reads the rows again after a refusal, even when the view was left meanwhile.
    *
    * @param {readonly ReverseWrite[]} writes - The reverse writes.
+   * @param {Readonly<Partial<Record<string, number>>>} after - The version the undone action left
+   * each task at.
    * @returns {Promise<void>} Resolves once reported.
    */
-  private async reverse(writes: readonly ReverseWrite[]): Promise<void> {
+  private async reverse(
+    writes: readonly ReverseWrite[],
+    after: Readonly<Partial<Record<string, number>>>,
+  ): Promise<void> {
     const sent: readonly ReverseWrite[] = writes.filter(
       (write: ReverseWrite): boolean => write.tasks.length > 0,
     );
     if (sent.length === 0) return;
     const outcomes: readonly ListActOutcome[] = await Promise.all(
-      sent.map((write: ReverseWrite) => this.rows.act(write.tasks, write.action)),
+      sent.map((write: ReverseWrite) => this.rows.act(write.tasks, write.action, after)),
     );
+    const changed: readonly string[] = outcomes.flatMap((item: ListActOutcome) =>
+      item.changed.map((selection: TaskBulkSelection): string => selection.taskKey),
+    );
+    if (changed.length > 0) {
+      this.toasts.warning(undoConflictTitle(changed), {
+        description: undoConflictText(changed.length),
+      });
+    }
     const outcome: TaskBulkOutcome = {
       affected: outcomes.reduce((sum: number, item: ListActOutcome) => sum + item.affected, 0),
       done: outcomes.flatMap((item: ListActOutcome) => item.done),
@@ -2433,10 +2456,9 @@ export class ListViewPage {
       if (outcome.done.length > 0 || outcome.unknown.length > 0) this.store.refreshCounts();
       if (outcome.failed.length > 0) this.rows.reload();
     }
-    const total: number = sent.reduce(
-      (sum: number, write: ReverseWrite): number => sum + write.tasks.length,
-      0,
-    );
+    const total: number =
+      sent.reduce((sum: number, write: ReverseWrite): number => sum + write.tasks.length, 0) -
+      changed.length;
     if (this.reportProblems(outcome) && outcome.failed.length > 0) {
       this.toasts.error(bulkPartialText(outcome.failed.length, total));
     }
@@ -2467,6 +2489,7 @@ export class ListViewPage {
               : { type: 'status', status },
         };
       }),
+      outcome.after,
     );
   }
 

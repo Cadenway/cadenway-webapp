@@ -1,6 +1,6 @@
 import type { StatusKey } from '@cadenway/contracts';
 
-import type { TaskBulkOutcome, TaskSummary } from '@features/task';
+import type { TaskBulkOutcome, TaskBulkSelection, TaskSummary } from '@features/task';
 
 import type { ListGroupQuery, ListTaskQuery } from '../list-view-config/list-view-config.interface';
 
@@ -420,5 +420,29 @@ export interface ListActOutcome extends TaskBulkOutcome {
    * @readonly
    */
   readonly before: Readonly<Partial<Record<string, ConfirmedTask>>>;
+
+  /**
+   * Property after
+   *
+   * @description
+   * The version each applied task stood at once the action was answered, by key: the version an
+   * `Undo` of this action expects the task to still be at.
+   *
+   * @type {Readonly<Partial<Record<string, number>>>}
+   * @readonly
+   */
+  readonly after: Readonly<Partial<Record<string, number>>>;
+
+  /**
+   * Property changed
+   *
+   * @description
+   * Tasks not sent because they changed since the version the action expected, each at its
+   * newest known version; empty for an action sent without expected versions.
+   *
+   * @type {readonly TaskBulkSelection[]}
+   * @readonly
+   */
+  readonly changed: readonly TaskBulkSelection[];
   // #endregion
 }

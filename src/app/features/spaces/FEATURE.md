@@ -226,8 +226,12 @@ computed from the navigation's reads, for the command palette's `Lists`.
   counts again (`ListPageStore.refreshCounts`) and shows a toast whose `Undo` writes back the
   values confirmed before the action (statuses with their reasons and the cancellation notes
   recorded by the view, priorities, assignees, lists) or restores the trash entries of a deletion
-  (`restoreTrashEntry`, four at a time, like the reminders); an `Undo` reports tasks not sent,
-  uncertain or refused like the action and reads the rows again after a refusal. Leaving the view
+  (`restoreTrashEntry`, four at a time, like the reminders). An `Undo` is bound to the version its
+  action left each task at (`ListActOutcome.after`): a task known to have changed since, through
+  this view or a read, is skipped and a warning names it (`CAD-482 changed since`), and the others
+  are sent at that version, so a change not read yet makes the gateway refuse them; an `Undo`
+  reports tasks not sent, uncertain or refused like the action and reads the rows again after a
+  refusal. Leaving the view
   dismisses its `Undo` toasts, as `TaskStatusChangesStore` does for the status toasts. A copy's
   toast offers `Open`.
 - The table declares gateway groups in order, omitting hidden and empty groups except the five default empty status groups in an unfiltered view. Filtered empty results show the empty state. `nearEnd` requests further pages with a threshold accounting for unread group lines. Under 768 px the grid keeps selection, name and due date.

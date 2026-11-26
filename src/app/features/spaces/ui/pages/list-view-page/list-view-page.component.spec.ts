@@ -859,6 +859,46 @@ describe('ListViewPage', () => {
     );
   });
 
+  it('skips the Undo of a priority a newer priority replaced and says so', async () => {
+    const changed: TaskBulkOutcome = outcome(['CAD-482']);
+    bulk.mockResolvedValueOnce(changed).mockResolvedValueOnce({
+      ...changed,
+      done: [{ taskKey: 'CAD-482', version: 5, newTaskKey: null, trashEntryId: null }],
+    });
+    const fixture: ComponentFixture<ListViewPage> = await render();
+    await openRowMenu(fixture, 'CAD-482');
+    await openSubmenu(fixture, 'Priority');
+    required(menuItem('Urgent')).click();
+    await settle(fixture);
+    await openRowMenu(fixture, 'CAD-482');
+    await openSubmenu(fixture, 'Priority');
+    required(menuItem('Low')).click();
+    await settle(fixture);
+    expect(bulk).toHaveBeenLastCalledWith(
+      [{ taskKey: 'CAD-482', version: 4 }],
+      { type: 'priority', priority: 'basse' },
+      expect.any(Function),
+    );
+    const calls: number = bulk.mock.calls.length;
+
+    (toasts['show'].mock.calls[0][1] as { undo: () => void }).undo();
+    await settle(fixture);
+
+    expect(bulk).toHaveBeenCalledTimes(calls);
+    expect(toasts['warning']).toHaveBeenCalledWith('CAD-482 changed since', {
+      description: 'Undo skipped it: its latest values are shown.',
+    });
+    expect(toasts['error']).not.toHaveBeenCalled();
+
+    (toasts['show'].mock.calls[1][1] as { undo: () => void }).undo();
+    await settle(fixture);
+    expect(bulk).toHaveBeenLastCalledWith(
+      [{ taskKey: 'CAD-482', version: 5 }],
+      { type: 'priority', priority: 'urgente' },
+      expect.any(Function),
+    );
+  });
+
   it('deletes a task after its confirmation and restores it from the toast', async () => {
     bulk.mockResolvedValueOnce({
       affected: 3,

@@ -73,3 +73,36 @@ export function bulkPartialText(failed: number, total: number): string {
     ? $localize`:@@spaces.bulk.partial-one:${failed}:failed: of ${total}:total: tasks could not be changed`
     : $localize`:@@spaces.bulk.partial-many:${failed}:failed: of ${total}:total: tasks could not be changed`;
 }
+
+/**
+ * Function undoConflictTitle
+ *
+ * @description
+ * Names the tasks an `Undo` skipped because they changed after the undone action: the key of a
+ * single task, or their count.
+ *
+ * @param {readonly string[]} keys - Keys of the skipped tasks, at least one.
+ * @returns {string} The localized warning title.
+ */
+export function undoConflictTitle(keys: readonly string[]): string {
+  const count: number = keys.length;
+  const key: string = keys[0] ?? '';
+  return count === 1
+    ? $localize`:@@spaces.undo.conflict-one:${key}:key: changed since`
+    : $localize`:@@spaces.undo.conflict-many:${count}:count: tasks changed since`;
+}
+
+/**
+ * Function undoConflictText
+ *
+ * @description
+ * Says that an `Undo` left the tasks that changed since as they are now.
+ *
+ * @param {number} count - Number of skipped tasks.
+ * @returns {string} The localized warning description.
+ */
+export function undoConflictText(count: number): string {
+  return count === 1
+    ? $localize`:@@spaces.undo.conflict-one-text:Undo skipped it: its latest values are shown.`
+    : $localize`:@@spaces.undo.conflict-many-text:Undo skipped them: their latest values are shown.`;
+}

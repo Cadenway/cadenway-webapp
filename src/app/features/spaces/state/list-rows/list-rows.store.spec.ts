@@ -1237,6 +1237,113 @@ describe('ListRowsStore', () => {
     });
   });
 
+  it('skips an Undo of a change a newer change of the task followed', async () => {
+    const store: InstanceType<typeof ListRowsStore> = setup(flat);
+    await settle();
+    bulk.mockResolvedValueOnce(applied(4)).mockResolvedValueOnce(applied(5));
+
+    const first: ListActOutcome = await store.act([cad482], {
+      type: 'priority',
+      priority: 'urgente',
+    });
+    await store.act([cad482], { type: 'priority', priority: 'basse' });
+    await settle();
+    const calls: number = bulk.mock.calls.length;
+    const undone: ListActOutcome = await store.act(
+      [first.before['CAD-482'] ?? cad482],
+      { type: 'priority', priority: 'haute' },
+      first.after,
+    );
+    await settle();
+
+    expect(first.after).toEqual({ 'CAD-482': 4 });
+    expect(bulk.mock.calls.length).toBe(calls);
+    expect(undone.changed).toEqual([{ taskKey: 'CAD-482', version: 5 }]);
+    expect(undone.done).toEqual([]);
+    expect(rowOf(store, 'CAD-482')?.task.priority).toBe('basse');
+  });
+
+  it('skips an Undo once a read shows a newer version of the task', async () => {
+    const store: InstanceType<typeof ListRowsStore> = setup(flat);
+    await settle();
+    bulk.mockResolvedValueOnce(applied(4));
+    const first: ListActOutcome = await store.act([cad482], {
+      type: 'priority',
+      priority: 'urgente',
+    });
+    page.mockResolvedValue(pageOf([{ ...cad482, priority: 'moyenne', version: 5 }]));
+    store.reload();
+    await settle();
+    const calls: number = bulk.mock.calls.length;
+
+    const undone: ListActOutcome = await store.act(
+      [first.before['CAD-482'] ?? cad482],
+      { type: 'priority', priority: 'haute' },
+      first.after,
+    );
+
+    expect(bulk.mock.calls.length).toBe(calls);
+    expect(undone.changed).toEqual([{ taskKey: 'CAD-482', version: 5 }]);
+    expect(rowOf(store, 'CAD-482')?.task.priority).toBe('moyenne');
+  });
+
+  it('sends an Undo at the version its action produced while the task kept it', async () => {
+    const store: InstanceType<typeof ListRowsStore> = setup(flat);
+    await settle();
+    bulk.mockResolvedValueOnce(applied(4)).mockResolvedValueOnce(applied(5));
+    const first: ListActOutcome = await store.act([cad482], {
+      type: 'priority',
+      priority: 'urgente',
+    });
+
+    const undone: ListActOutcome = await store.act(
+      [first.before['CAD-482'] ?? cad482],
+      { type: 'priority', priority: 'haute' },
+      first.after,
+    );
+
+    expect(bulk).toHaveBeenLastCalledWith(
+      [{ taskKey: 'CAD-482', version: 4 }],
+      { type: 'priority', priority: 'haute' },
+      expect.any(Function),
+    );
+    expect(undone.changed).toEqual([]);
+    expect(undone.after).toEqual({ 'CAD-482': 5 });
+  });
+
+  it('skips an Undo when the change it follows is answered after the click', async () => {
+    const store: InstanceType<typeof ListRowsStore> = setup(flat);
+    await settle();
+    bulk.mockResolvedValueOnce(applied(4));
+    const first: ListActOutcome = await store.act([cad482], {
+      type: 'priority',
+      priority: 'urgente',
+    });
+    let answer: (outcome: TaskBulkOutcome) => void = () => undefined;
+    bulk.mockReturnValueOnce(
+      new Promise<TaskBulkOutcome>((resolve) => {
+        answer = resolve;
+      }),
+    );
+    const second: Promise<ListActOutcome> = store.act([cad482], {
+      type: 'priority',
+      priority: 'basse',
+    });
+    const undone: Promise<ListActOutcome> = store.act(
+      [first.before['CAD-482'] ?? cad482],
+      { type: 'priority', priority: 'haute' },
+      first.after,
+    );
+    await settle();
+    const calls: number = bulk.mock.calls.length;
+    answer(applied(5));
+    await second;
+
+    expect((await undone).changed).toEqual([{ taskKey: 'CAD-482', version: 5 }]);
+    expect(bulk.mock.calls.length).toBe(calls);
+    expect(rowOf(store, 'CAD-482')?.task.priority).toBe('basse');
+  });
+
   it('restores at most four trash entries at a time', async () => {
     const store: InstanceType<typeof ListRowsStore> = setup(flat);
     await settle();

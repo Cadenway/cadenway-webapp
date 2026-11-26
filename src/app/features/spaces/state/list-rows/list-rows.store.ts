@@ -370,6 +370,8 @@ const NO_OUTCOME: ListActOutcome = {
   unknown: [],
   notSent: [],
   before: {},
+  after: {},
+  changed: [],
 };
 
 /**
@@ -1130,12 +1132,23 @@ export interface ListRowsStoreInstance {
    * unsent task loses only this action's change. The rows are read again when something may have
    * changed. The promise never rejects.
    *
+   * With `expected` (an `Undo`, from the `after` of the action it undoes), a task is sent only
+   * while its newest known version is still the expected one, and at that version, so a change
+   * the view has not read yet makes the gateway refuse it (`412`). A task known to have changed
+   * since, by this view or a read, is not sent and is reported in `changed`.
+   *
    * @param {readonly TaskSummary[]} tasks - The tasks, as shown.
    * @param {TaskBulkAction} action - The action.
-   * @returns {Promise<ListActOutcome>} What was applied, refused, uncertain or not sent, and the
-   * sent tasks as confirmed before the action.
+   * @param {Readonly<Partial<Record<string, number>>>} [expected] - The version each task must
+   * still be at; a task without one counts as changed.
+   * @returns {Promise<ListActOutcome>} What was applied, refused, uncertain, not sent or changed,
+   * the sent tasks as confirmed before the action and the versions it left them at.
    */
-  act(tasks: readonly TaskSummary[], action: TaskBulkAction): Promise<ListActOutcome>;
+  act(
+    tasks: readonly TaskSummary[],
+    action: TaskBulkAction,
+    expected?: Readonly<Partial<Record<string, number>>>,
+  ): Promise<ListActOutcome>;
 
   /**
    * Method remind
@@ -1648,11 +1661,13 @@ function createListRowsStore(): Type<ListRowsStoreInstance> {
         seq: number,
         outcome: TaskBulkOutcome,
         before: Readonly<Partial<Record<string, ConfirmedTask>>>,
+        skipped: readonly string[],
       ) => void = (
         action: TaskBulkAction,
         seq: number,
         outcome: TaskBulkOutcome,
         before: Readonly<Partial<Record<string, ConfirmedTask>>>,
+        skipped: readonly string[],
       ): void => {
         const returned: Map<string, number | null> = new Map<string, number | null>(
           outcome.done.map((entry: TaskBulkEntry): [string, number | null] => [
@@ -1683,9 +1698,12 @@ function createListRowsStore(): Type<ListRowsStoreInstance> {
           ),
         );
         editPatches(
-          [...outcome.failed, ...outcome.unknown, ...outcome.notSent].map(
-            (item: TaskBulkSelection): string => item.taskKey,
-          ),
+          [
+            ...[...outcome.failed, ...outcome.unknown, ...outcome.notSent].map(
+              (item: TaskBulkSelection): string => item.taskKey,
+            ),
+            ...skipped,
+          ],
           (patches: readonly RowPatch[]) =>
             patches.filter((patch: RowPatch): boolean => patch.seq !== seq),
         );
@@ -1879,14 +1897,37 @@ function createListRowsStore(): Type<ListRowsStoreInstance> {
           readChildren(taskKey);
         },
         reload,
-        act(tasks: readonly TaskSummary[], action: TaskBulkAction): Promise<ListActOutcome> {
+        act(
+          tasks: readonly TaskSummary[],
+          action: TaskBulkAction,
+          expected?: Readonly<Partial<Record<string, number>>>,
+        ): Promise<ListActOutcome> {
           const organizationId: string | undefined = store._params()?.organizationId;
           const current: () => boolean = (): boolean =>
             !store._destroyRef.destroyed && store._params()?.organizationId === organizationId;
           const seq: number = ++actions;
-          const targets: readonly TaskSummary[] = [
+          const changedSince: (task: TaskSummary) => boolean = (task: TaskSummary): boolean => {
+            if (!expected) return false;
+            const at: number | undefined = expected[task.key];
+            return at === undefined || versionOf(task) > at;
+          };
+          const unique: readonly TaskSummary[] = [
             ...new Map(tasks.map((task: TaskSummary) => [task.key, task])).values(),
           ];
+          const early: readonly TaskSummary[] = unique.filter(changedSince);
+          const targets: readonly TaskSummary[] = unique.filter(
+            (task: TaskSummary): boolean => !changedSince(task),
+          );
+          const changedOf: (stale: readonly TaskSummary[]) => TaskBulkSelection[] = (
+            stale: readonly TaskSummary[],
+          ): TaskBulkSelection[] =>
+            [...early, ...stale].map((task: TaskSummary): TaskBulkSelection => ({
+              taskKey: task.key,
+              version: versionOf(task),
+            }));
+          if (targets.length === 0) {
+            return Promise.resolve({ ...NO_OUTCOME, changed: changedOf([]) });
+          }
           const keys: readonly string[] = targets.map((task: TaskSummary): string => task.key);
           const entry: QueuedAct = {
             seq,
@@ -1941,10 +1982,19 @@ function createListRowsStore(): Type<ListRowsStoreInstance> {
 
           const send: () => Promise<ListActOutcome> = async (): Promise<ListActOutcome> => {
             for (const key of keys) if (queued.get(key) === entry) queued.delete(key);
-            const live: readonly TaskSummary[] = targets.filter(
+            const unsuperseded: readonly TaskSummary[] = targets.filter(
               (task: TaskSummary): boolean => !entry.superseded.has(task.key),
             );
-            if (live.length === 0) return NO_OUTCOME;
+            const late: readonly TaskSummary[] = unsuperseded.filter(changedSince);
+            const live: readonly TaskSummary[] = unsuperseded.filter(
+              (task: TaskSummary): boolean => !changedSince(task),
+            );
+            const skipped: readonly string[] = late.map((task: TaskSummary): string => task.key);
+            const changed: readonly TaskBulkSelection[] = changedOf(late);
+            if (live.length === 0) {
+              record(action, seq, NO_OUTCOME, {}, skipped);
+              return { ...NO_OUTCOME, changed };
+            }
             const before: Readonly<Partial<Record<string, ConfirmedTask>>> = Object.fromEntries(
               live.map((task: TaskSummary): [string, ConfirmedTask] => [
                 task.key,
@@ -1954,14 +2004,23 @@ function createListRowsStore(): Type<ListRowsStoreInstance> {
             const selection: TaskBulkSelection[] = live.map(
               (task: TaskSummary): TaskBulkSelection => ({
                 taskKey: task.key,
-                version: before[task.key]?.version ?? task.version,
+                version: expected?.[task.key] ?? before[task.key]?.version ?? task.version,
               }),
             );
             const outcome: TaskBulkOutcome = await store._actions.bulk(selection, action, current);
-            if (store._destroyRef.destroyed) return { ...outcome, before };
-            record(action, seq, outcome, before);
+            const afterOf: () => Readonly<Partial<Record<string, number>>> = () =>
+              Object.fromEntries(
+                outcome.done.map((done: TaskBulkEntry): [string, number] => {
+                  const sent: ConfirmedTask | undefined = before[done.taskKey];
+                  return [done.taskKey, done.version ?? (sent ? versionOf(sent) : 0)];
+                }),
+              );
+            if (store._destroyRef.destroyed) {
+              return { ...outcome, before, after: afterOf(), changed };
+            }
+            record(action, seq, outcome, before, skipped);
             if (current() && (outcome.done.length > 0 || outcome.unknown.length > 0)) reload();
-            return { ...outcome, before };
+            return { ...outcome, before, after: afterOf(), changed };
           };
           const earlier: readonly Promise<void>[] = keys.flatMap((key: string): Promise<void>[] => {
             const tail: Promise<void> | undefined = tails.get(key);
