@@ -113,6 +113,95 @@ constants belong to the lead):
   sprint's goal line, `Space statuses` (enabled when the space is editable) and `Automations`
   (enabled for organization admins and owners) in the list menu after `Edit the space`.
 
+## Workload view
+
+The `Workload` view (`ui/pages/workload-view-page`, `App.dc.html` lines 958-1029, skeleton
+572-582, day popover 3437-3453, logic 7435-7535 and 7903-7922) shows the load of each person over
+two weeks of weekdays (10 columns) against 6 h a day (`cw-heat-grid`, 360 min per weekday as the
+contract's `dailyCapacityMinutes`, 60 h per person). Rows: every member of the organization
+(`ListPageStore.organizationMembers`, the signed-in member first, as the task menu orders them),
+then any other assignee holding a task (`Former member`), then `Unassigned`. The heading names the
+weeks; `Today`, `Previous week` and `Next week` move them by a week. A cell shows its hours, bar
+and first two chips (status and key); the cell or `+n` opens the popover of the day's tasks with
+their hours. A chip or a popover line opens the task's detail (`ViewTaskWritesStore.open`); its
+context menu is `cw-task-menu`. The total column shows the hours, the note, the meter and
+`Spent: …` / `No time logged`.
+
+- Providers: `WORKLOAD_VIEW_PROVIDERS` holds Task's `TaskStatusChangesStore`, `ListTasksStore`
+  (the list's tasks with the view's `taskQuery`, no due window: the menu's tasks and writes, the
+  chips' shown status and milestone flag, and `followRows`) and `WorkloadViewStore`. The page
+  provides `ViewTaskWritesStore` with `VIEW_TASK_WRITER` set to `ListTasksStore`, and the
+  English texts of `cw-heat-grid`.
+- `WorkloadViewStore` (`state/workload-view`, route-scoped) reads `queryGetListWorkload` through
+  `WorkloadApi` (`data-access/services/workload-api`, mapped by `data-access/adapters/workload`)
+  with the view's filters and the Monday of the first week, every page joined (a repeated or
+  endless cursor fails the read), and `getListTimesheet` for both weeks (`spent`, a secondary
+  read with its inline error and `Retry`). A first read that fails, of the workload or of the
+  tasks, reaches the route's error boundary; a failed refresh keeps the grid and offers `Retry`.
+  Another week shows the skeleton; another query keeps the grid until it answers; another list or
+  organization empties it at once. Each time `ListTasksStore` reads the same query again in
+  place (realtime, a completed status write, a closed detail, a write of the view), the workload
+  and the time spent are read again.
+- `loads` (`utils/workload/workload.util.ts`) files each task under the people the view shows it
+  with: when they differ from the read ones (a write of the menu, a reassignment in flight, a
+  newer read of the task), the task's minutes of each day are split evenly between them until
+  the next read; a task shown cancelled, moved or deleted leaves the grid.
+- Reassignment: a chip is a CDK drag (`cdkDrag`, at once with a mouse, after 300 ms on a touch
+  screen). Dropped on another row (found under the pointer by the grid's `data-cw-row`), it
+  calls `WorkloadViewStore.reassign`, which records the assignees the task is meant to have (the
+  target joins unless it is `Unassigned`, the source leaves), over those of the drags still
+  running, and shows them at once. One worker per task then sends one write at a time through
+  `ListTasksStore.act`, each computed from the assignees as shown when its turn comes:
+  assignments first, then removals, until the shown assignees are the meant ones. A drag made
+  while the worker runs only changes what is meant, so a task dragged from A to B and back to A
+  before the first write answers is assigned to B, then B is removed: A is never unassigned.
+  Once settled:
+  - `CAD-482 reassigned` / `From X to Y.` (the latest drag's rows) offers `Undo`, a separate
+    operation: it waits for a reassignment of the task still running to settle, then brings back
+    the assignees of before, sent with the version the reassignment left. A task changed since
+    (by a later drag or elsewhere) is left as it is with `CAD-482 changed since`, and nothing
+    is written. A task that ends where it started shows no toast;
+  - a refused or unanswered first write sends nothing more (`The task could not be reassigned`,
+    or the unknown outcome warning, and the tasks are read again);
+  - a refusal after an applied write (the removal, typically) warns
+    `CAD-482 was assigned to Y but stays assigned to X.` with an `Undo` of what was applied
+    (removing the target at the version it left).
+
+  Leaving the view dismisses the `Undo` toasts. From the keyboard, the chip's menu (`Assign`)
+  reassigns.
+
+- `N` creates a task in the list while the view lives. Without any task matching the view, the
+  mockup's filter text shows under the grid.
+- Dependencies added: `ListsService.queryGetListWorkload`, `TaskTimeService.getListTimesheet`,
+  `@cadenway/ui` `heat-grid` and `status-icon`, `@angular/cdk/drag-drop`.
+- Known gaps:
+  - `cw-heat-grid` has no drag hooks: the drop target is found with `document.elementFromPoint`
+    and the brick's `data-cw-row` attribute, and the hovered row is tinted by a page style on
+    `tbody tr:hover`. A drop target and a row highlight in the brick are the lasting fix.
+  - The drag is pointer only; the task menu's `Assign` toggles one person at a time, so the
+    keyboard reassignment takes two steps (add, then remove).
+  - The popover of a cell cannot be closed by the page: opening a task from it relies on the
+    popover closing as the detail takes the focus.
+  - Workload rows carry no milestone flag (G15) and no version: both come from `ListTasksStore`,
+    which stops at 2,000 tasks (`LIST_TASKS_CAP`). A task past it shows as an ordinary task, with
+    no menu and no drag; its chip's title says it cannot be reassigned from this view, and the
+    view shows `Tasks past the first 2,000 cannot be reassigned from this view.` while the
+    reader is truncated.
+  - `Spent` covers the two weeks shown (the timesheet's weeks); the mockup sums every entry of
+    the list. The popover's per-task `on <estimate>` hint is not shown: task summaries carry no
+    estimate. Time entries have no realtime notice (G13).
+  - The capacity is fixed (no per-person capacity in the contract).
+- Copy not taken word for word from the mockup:
+
+  | Unit                                                                                                       | Reason                                                  |
+  | ---------------------------------------------------------------------------------------------------------- | ------------------------------------------------------- |
+  | `spaces.workload.reassign-failed`, `spaces.workload.reassign-unknown`, `spaces.workload.reassigned-partly` | The mockup draws no refused or unanswered reassignment. |
+  | `spaces.workload.reload-failed`, `spaces.workload.spent-failed`                                            | The mockup draws no failed read.                        |
+  | `spaces.workload.former-member`                                                                            | An assignee no longer in the directory.                 |
+  | `spaces.workload.hours-minutes`, `spaces.workload.minutes`, `spaces.workload.hours`                        | The mockup's `fmtMin` and `fmtH` formats as units.      |
+  | `spaces.workload.cell*`, `spaces.workload.of-capacity`, `spaces.workload.tasks-*`                          | The mockup's cell label, split into composable units.   |
+  | `spaces.workload.truncated`, `spaces.workload.chip-title-unread`                                           | The mockup reads every task; the view reads 2,000.      |
+
 ## Activity view
 
 `ActivityViewPage` (`ui/pages/activity-view-page/`, `App.dc.html` lines 1299-1361, 7676-7720,

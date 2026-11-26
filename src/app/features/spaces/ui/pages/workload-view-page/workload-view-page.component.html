@@ -1,16 +1,214 @@
-<div
-  class="flex min-h-0 flex-1 items-center justify-center px-4 pb-6 sm:px-6"
+<section
+  class="flex min-h-0 flex-1 flex-col gap-2 px-4 pb-6 sm:px-6 data-[dragging]:[&_tbody_tr:hover>*]:bg-primary/5"
+  aria-label="Workload"
+  i18n-aria-label="@@spaces.workload.region"
   data-testid="workload-view"
+  [attr.data-dragging]="dragging() === null ? null : ''"
 >
-  <cw-empty role="status">
-    <cw-empty-header>
-      <cw-empty-media>
-        <ng-icon [name]="icon" aria-hidden="true" />
-      </cw-empty-media>
-      <cw-empty-title>{{ name }}</cw-empty-title>
-      <cw-empty-description i18n="@@spaces.view-stub.text"
-        >This view is not available yet.</cw-empty-description
+  <div class="flex flex-wrap items-center gap-2">
+    <h2 class="text-base font-semibold whitespace-nowrap tabular-nums">{{ rangeLabel() }}</h2>
+    <p class="hidden text-xs text-muted-foreground xl:block" i18n="@@spaces.workload.hint">
+      Capacity of 6 h a day per person. Drag a task onto another row to reassign it.
+    </p>
+    <div class="ml-auto flex items-center gap-3">
+      <ul
+        class="hidden items-center gap-3 text-xs text-muted-foreground lg:flex"
+        aria-label="Legend"
+        i18n-aria-label="@@spaces.workload.legend"
       >
-    </cw-empty-header>
-  </cw-empty>
-</div>
+        <li class="flex items-center gap-1.5 whitespace-nowrap">
+          <span class="h-1.5 w-3 rounded-full bg-jade" aria-hidden="true"></span>
+          <span i18n="@@spaces.workload.legend-available">Available</span>
+        </li>
+        <li class="flex items-center gap-1.5 whitespace-nowrap">
+          <span class="h-1.5 w-3 rounded-full bg-balise" aria-hidden="true"></span>
+          <span i18n="@@spaces.workload.legend-high">Over 85 %</span>
+        </li>
+        <li class="flex items-center gap-1.5 whitespace-nowrap">
+          <span class="h-1.5 w-3 rounded-full bg-grenat" aria-hidden="true"></span>
+          <span i18n="@@spaces.workload.legend-over">Overload</span>
+        </li>
+      </ul>
+      <div
+        role="group"
+        aria-label="Time navigation"
+        i18n-aria-label="@@spaces.workload.navigation"
+        class="flex items-center gap-1"
+      >
+        <button
+          cwButton
+          type="button"
+          variant="outline"
+          size="sm"
+          i18n="@@spaces.workload.today"
+          (click)="workload.thisWeek()"
+        >
+          Today
+        </button>
+        <button
+          cwButton
+          type="button"
+          variant="ghost"
+          size="icon-sm"
+          aria-label="Previous week"
+          i18n-aria-label="@@spaces.workload.previous-week"
+          (click)="workload.previousWeek()"
+        >
+          <ng-icon name="phosphorCaretLeftBold" aria-hidden="true" />
+        </button>
+        <button
+          cwButton
+          type="button"
+          variant="ghost"
+          size="icon-sm"
+          aria-label="Next week"
+          i18n-aria-label="@@spaces.workload.next-week"
+          (click)="workload.nextWeek()"
+        >
+          <ng-icon name="phosphorCaretRightBold" aria-hidden="true" />
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <cw-heat-grid
+    class="flex min-h-0 flex-1 flex-col"
+    [rows]="rows()"
+    [columns]="columns()"
+    [ariaLabel]="gridLabel()"
+    [capacity]="capacity"
+    [valueFormat]="hours"
+    [loading]="loading()"
+  >
+    <ng-template
+      cwHeatGridChip
+      [cwHeatGridChipOf]="rows()"
+      let-entry
+      let-row="row"
+      let-placement="placement"
+    >
+      @if (placement === 'cell') {
+        <button
+          type="button"
+          data-testid="workload-chip"
+          cdkDrag
+          [cdkDragDisabled]="!entry.task"
+          [cdkDragStartDelay]="dragDelay"
+          [cwContextMenuTriggerFor]="taskMenu.menu()"
+          [cwContextMenuDisabled]="!entry.task"
+          [title]="chipTitle(entry)"
+          class="flex w-full min-w-0 cursor-grab items-center gap-1 rounded-md border border-border bg-card px-1.5 py-0.5 text-left text-[11px] transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none focus-visible:ring-inset active:cursor-grabbing"
+          [class.pointer-events-none]="dragging() === entry.taskKey"
+          [class.relative]="dragging() === entry.taskKey"
+          [class.z-40]="dragging() === entry.taskKey"
+          [class.shadow-md]="dragging() === entry.taskKey"
+          (opened)="openMenu(entry)"
+          (cdkDragStarted)="dragStarted(entry)"
+          (cdkDragEnded)="dragEnded($event, entry, row)"
+          (click)="open(entry)"
+        >
+          <cw-status-icon [status]="entry.status" [milestone]="entry.milestone" size="3" />
+          <span class="min-w-0 truncate font-mono">{{ entry.taskKey }}</span>
+        </button>
+      } @else {
+        <button
+          type="button"
+          class="flex w-full min-w-0 items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none focus-visible:ring-inset"
+          [cwContextMenuTriggerFor]="taskMenu.menu()"
+          [cwContextMenuDisabled]="!entry.task"
+          (opened)="openMenu(entry)"
+          (click)="open(entry)"
+        >
+          <cw-status-icon [status]="entry.status" [milestone]="entry.milestone" size="4" />
+          <span class="min-w-0 flex-1 truncate">{{ entry.name }}</span>
+          <span class="shrink-0 font-mono text-xs text-muted-foreground">{{ entry.taskKey }}</span>
+          <span class="shrink-0 text-xs whitespace-nowrap tabular-nums">{{
+            hours(entry.minutes / 60)
+          }}</span>
+        </button>
+      }
+    </ng-template>
+    <ng-template cwHeatGridTotal [cwHeatGridTotalOf]="rows()" let-row>
+      @if (!row.placeholder && workload.spent.hasValue()) {
+        <span
+          class="flex items-center gap-1 text-xs whitespace-nowrap text-muted-foreground tabular-nums"
+        >
+          <ng-icon
+            name="phosphorClockCountdownBold"
+            class="[--ng-icon__size:0.875rem]"
+            aria-hidden="true"
+          />
+          {{ spentLabel(row.key) }}
+        </span>
+      }
+    </ng-template>
+  </cw-heat-grid>
+
+  @if (!loading() && tasks.empty()) {
+    <p class="px-3 py-2 text-sm text-muted-foreground" role="status">{{ emptyText }}</p>
+  }
+  @if (tasks.truncated()) {
+    <p class="text-xs text-muted-foreground" role="status" data-testid="workload-truncated">
+      {{ truncatedText }}
+    </p>
+  }
+  @if (refreshFailed()) {
+    <div class="flex items-center gap-2 text-sm" role="alert">
+      <span i18n="@@spaces.workload.reload-failed">The workload could not be refreshed.</span>
+      <button cwButton type="button" variant="outline" size="xs" (click)="retry()">
+        {{ retryLabel }}
+      </button>
+    </div>
+  }
+  @if (workload.spent.error()) {
+    <div class="flex items-center gap-2 text-sm" role="alert">
+      <span i18n="@@spaces.workload.spent-failed">The time spent could not be loaded.</span>
+      <button cwButton type="button" variant="outline" size="xs" (click)="workload.spent.reload()">
+        {{ retryLabel }}
+      </button>
+    </div>
+  }
+</section>
+
+<cw-task-menu
+  #taskMenu
+  [tasks]="menuTasks()"
+  [status]="menuStatus()"
+  [statuses]="writes.statusOptions()"
+  [people]="writes.people()"
+  [userId]="writes.userId()"
+  [lists]="writes.targets()"
+  (openRequested)="writes.open($event.key, $event)"
+  (statusPicked)="writes.setStatus(menuTasks(), $event, menuMilestone())"
+  (priorityPicked)="writes.setPriority(menuTasks(), $event)"
+  (assigneeToggled)="writes.toggleAssignee(menuTasks(), $event)"
+  (moved)="writes.moveTo(menuTasks(), $event)"
+  (remindRequested)="writes.remind(menuTasks())"
+  (duplicateRequested)="writes.duplicate(menuTasks())"
+  (copyLinkRequested)="writes.copyLinks(menuTasks())"
+  (copyKeyRequested)="writes.copyKeys(menuTasks())"
+  (deleteRequested)="writes.askDelete(menuTasks(), true)"
+/>
+
+<cw-task-cancel-dialog
+  [taskKeys]="writes.cancelKeys()"
+  (confirmed)="writes.confirmCancel($event)"
+  (kept)="writes.keepCancel()"
+/>
+
+<cw-alert-dialog
+  variant="destructive"
+  size="sm"
+  [open]="writes.deleteOpen()"
+  (openChange)="writes.setDeleteOpen($event)"
+  [items]="writes.deleteItems()"
+  [pending]="writes.deleting()"
+  (confirm)="writes.trash()"
+>
+  <h2 cwAlertDialogTitle>{{ writes.deleteTitle() }}</h2>
+  <p cwAlertDialogDescription>{{ writes.deleteText() }}</p>
+  <button cwButton cwAlertDialogCancel variant="outline" i18n="@@spaces.cancel">Cancel</button>
+  <button cwButton cwAlertDialogAction variant="destructive" [loading]="writes.deleting()">
+    {{ writes.deleteAction() }}
+  </button>
+</cw-alert-dialog>
