@@ -80,6 +80,7 @@ describe('ListTasksApi', () => {
         ...task('CAD-482', ['u-camille']),
         name: 'Sign-in',
         estimateMinutes: 90,
+        cancelNote: null,
         customFieldValues: { 'cf-points': 3 },
         version: 6,
       }),
@@ -220,8 +221,8 @@ describe('ListTasksApi', () => {
     });
   });
 
-  it('reads one task back without the HTTP cache, and null when it cannot', async () => {
-    const read: TaskReadBack | null = await api.readBack('CAD-482');
+  it('reads one task back without the HTTP cache, says when it is in the trash, and null otherwise', async () => {
+    const read: TaskReadBack | null = (await api.readBack('CAD-482')) as TaskReadBack | null;
     expect(read?.task).toMatchObject({
       key: 'CAD-482',
       name: 'Sign-in',
@@ -229,10 +230,22 @@ describe('ListTasksApi', () => {
       version: 6,
     });
     expect(read?.estimateMinutes).toBe(90);
+    expect(read?.cancelNote).toBeNull();
     expect(read?.customFieldValues).toEqual({ 'cf-points': 3 });
     expect(getTask).toHaveBeenCalledWith('CAD-482', { cache: 'no-store' });
 
-    getTask.mockReturnValueOnce(throwError(() => new HttpErrorResponse({ status: 404 })));
+    getTask.mockReturnValueOnce(
+      throwError(
+        () => new HttpErrorResponse({ status: 404, error: { status: 404, code: 'task.trashed' } }),
+      ),
+    );
+    await expect(api.readBack('CAD-482')).resolves.toBe('trashed');
+    getTask.mockReturnValueOnce(
+      throwError(
+        () =>
+          new HttpErrorResponse({ status: 404, error: { status: 404, code: 'task.not-found' } }),
+      ),
+    );
     await expect(api.readBack('CAD-482')).resolves.toBeNull();
     getTask.mockReturnValueOnce(throwError(() => new HttpErrorResponse({ status: 0 })));
     await expect(api.readBack('CAD-482')).resolves.toBeNull();

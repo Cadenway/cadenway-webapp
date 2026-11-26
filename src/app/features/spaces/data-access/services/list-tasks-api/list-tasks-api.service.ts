@@ -85,6 +85,17 @@ export interface TaskReadBack {
   readonly estimateMinutes: number | null;
 
   /**
+   * Property cancelNote
+   *
+   * @description
+   * The note of its cancellation, null when it has none (task summaries do not carry it).
+   *
+   * @type {string | null}
+   * @readonly
+   */
+  readonly cancelNote: string | null;
+
+  /**
    * Property customFieldValues
    *
    * @description
@@ -292,13 +303,14 @@ export class ListTasksApi {
    *
    * @description
    * Reads one task without the HTTP cache (`getTask`), to tell whether a write whose answer was
-   * lost or refused on a resend left the task with the written values. It never rejects: null
-   * when the task could not be read (no answer, an error, a deleted or moved-away task).
+   * lost or refused on a resend left the task with the written values. It never rejects:
+   * `trashed` when the task is in the trash (`404 task.trashed`), null when it could not be read
+   * otherwise (no answer, another error, a task the caller no longer sees).
    *
    * @param {string} taskKey - Key of the task.
-   * @returns {Promise<TaskReadBack | null>} The task, or null.
+   * @returns {Promise<TaskReadBack | 'trashed' | null>} The task, `trashed`, or null.
    */
-  public async readBack(taskKey: string): Promise<TaskReadBack | null> {
+  public async readBack(taskKey: string): Promise<TaskReadBack | 'trashed' | null> {
     try {
       const task: GetTaskClientResult = await firstValueFrom(
         this.tasks.getTask(taskKey, { cache: 'no-store' }),
@@ -306,10 +318,15 @@ export class ListTasksApi {
       return {
         task: toListTask(task),
         estimateMinutes: task.estimateMinutes,
+        cancelNote: task.cancelNote,
         customFieldValues: { ...task.customFieldValues },
       };
-    } catch {
-      return null;
+    } catch (error: unknown) {
+      return error instanceof HttpErrorResponse &&
+        error.status === 404 &&
+        hasProblemCode(error, 'task.trashed')
+        ? 'trashed'
+        : null;
     }
   }
 

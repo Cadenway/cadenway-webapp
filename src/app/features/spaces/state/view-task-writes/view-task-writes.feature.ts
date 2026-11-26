@@ -231,39 +231,33 @@ interface QueuedWrite {
 }
 
 /**
- * Interface ReadWaiter
+ * Type WriteKind
  *
  * @description
- * A write whose outcome stays unknown, waiting for a read of the view begun after it gave up.
+ * How a write without a certain outcome settles. `versioned`: a single-field write (`If-Match`)
+ * or a bulk status, priority, assignee or move, which sets a target state at the version sent; it
+ * is sent again unchanged, and once a read of the task answered, a later write carries a version
+ * the original request would move past. `trash` and `copy` (bulk `trash` and `duplicate`): never
+ * sent again from the view, since `TaskActionsApi.bulk` keeps their `Idempotency-Key` to itself,
+ * so a new send could not replay the first one; the task stays held until a read of it shows the
+ * outcome.
+ *
+ * @type {'versioned' | 'trash' | 'copy'}
  */
-interface ReadWaiter {
-  // #region Properties
-  /**
-   * Property after
-   *
-   * @description
-   * Reads of the view begun when it started waiting (`source.reads()`); a read of a higher rank
-   * settles it.
-   *
-   * @type {number}
-   * @readonly
-   */
-  readonly after: number;
-  // #endregion
+type WriteKind = 'versioned' | 'trash' | 'copy';
 
-  // #region Methods
-  /**
-   * Method settle
-   *
-   * @description
-   * Called once, synchronously: with true when such a read answered, with false when the view
-   * went or its scope changed first.
-   *
-   * @param {boolean} read - Whether a read settled it.
-   */
-  settle(read: boolean): void;
-  // #endregion
-}
+/**
+ * Type HeldSettlement
+ *
+ * @description
+ * What one read of a task held by a write without a certain outcome settles: `applied` (the task
+ * holds what the write sets and the original request can no longer change it), `released` (the
+ * task may write again: a later write cannot be overwritten silently by the original request),
+ * or `open` (read again later).
+ *
+ * @type {'applied' | 'released' | 'open'}
+ */
+type HeldSettlement = 'applied' | 'released' | 'open';
 
 /**
  * Interface WritePlan
@@ -286,16 +280,16 @@ interface WritePlan {
   readonly action: TaskBulkAction | null;
 
   /**
-   * Property resend
+   * Property kind
    *
    * @description
-   * Whether a task without a certain outcome is sent again as it was: the write sets a target
-   * state at the version it was decided on, so sending it twice cannot apply it twice.
+   * How a task of the write without a certain outcome settles: resent (`versioned`), or held
+   * until a read of it shows the outcome (`trash`, `copy`).
    *
-   * @type {boolean}
+   * @type {WriteKind}
    * @readonly
    */
-  readonly resend: boolean;
+  readonly kind: WriteKind;
   // #endregion
 
   // #region Methods
@@ -314,8 +308,8 @@ interface WritePlan {
    * Method shows
    *
    * @description
-   * Whether a task read back after a refused resend holds what the write sets: the write (or one
-   * with the same effect) was applied.
+   * Whether a task read back holds what the write sets, cancellation note included: read at a
+   * version past the one sent, the write (or one with the same effect) was applied.
    *
    * @param {TaskReadBack} read - The task as read back.
    * @returns {boolean} Whether it shows the written values.
@@ -462,9 +456,8 @@ export interface ViewTaskWritesMethods extends Pick<
    *
    * @description
    * Drops the confirmed patches a read replaced: those it read the returned version of, and
-   * those without a returned version once a read begun after their confirmation answered. Also
-   * settles the writes without a certain outcome that wait for a read begun after they gave up:
-   * their patches go and their tasks' next writes may leave.
+   * those without a returned version once a read begun after their confirmation answered. A
+   * pending patch stays: a read of the view never settles a write without a certain outcome.
    *
    * @param {number} generation - Rank of the read that answered, as `source.reads()` counted it.
    */
@@ -508,8 +501,9 @@ const WRITE_CALLS: number = 4;
  * Constant RESEND_DELAYS_MS
  *
  * @description
- * Waits before each resend of a write without a certain outcome (a lost answer, a timeout, a
- * `5xx`), in milliseconds; once they are spent, the outcome stays unknown.
+ * Waits before each resend of a `versioned` write without a certain outcome (a lost answer, a
+ * timeout, a `5xx`, a refusal that does not prove the version moved), in milliseconds; once they
+ * are spent, the outcome is unknown.
  *
  * @type {readonly number[]}
  */
@@ -519,12 +513,26 @@ export const RESEND_DELAYS_MS: readonly number[] = [1_000, 2_000, 4_000];
  * Constant RECONCILE_DELAY_MS
  *
  * @description
- * Wait, in milliseconds, between the end of a write whose outcome stays unknown and the read of
- * the view that settles it, so a request still running on the server has time to commit first.
+ * Wait, in milliseconds, between the end of a write whose outcome is unknown and the first read
+ * of each of its tasks (`ListTasksApi.readBack`), so a request still running on the server has
+ * time to commit first. Each read that settles nothing doubles the wait, up to
+ * `HELD_READ_MAX_MS`.
  *
  * @type {number}
  */
 export const RECONCILE_DELAY_MS: number = 2_000;
+
+/**
+ * Constant HELD_READ_MAX_MS
+ *
+ * @description
+ * Longest wait, in milliseconds, between two reads of a task a write without a certain outcome
+ * still holds. Time alone never releases a task: only a read of it, leaving the view or a change
+ * of its scope.
+ *
+ * @type {number}
+ */
+const HELD_READ_MAX_MS: number = 30_000;
 
 /**
  * Constant NO_OUTCOME
@@ -636,20 +644,72 @@ function actionChangesOf(
 }
 
 /**
- * Function resendsAction
+ * Function kindOf
  *
  * @description
- * Whether a bulk action without a certain outcome is sent again: a status, a priority, an
- * assignee added or removed and a destination list set a target state at the version sent, so a
- * second send changes nothing more. A deletion is not (its trash entry, which its `Undo` needs,
- * comes only with the answer of the send that applied it, and a deleted task cannot be read
- * back), nor a copy (each send creates one): both settle by a read of the view.
+ * How a bulk action without a certain outcome settles: a status, a priority, an assignee added
+ * or removed and a destination list set a target state at the version sent, so a second send
+ * changes nothing more (`versioned`). A deletion (`trash`) and a copy (`copy`, each send of which
+ * creates one) are not sent again: `TaskActionsApi.bulk` already retried each once with its own
+ * `Idempotency-Key`, which it does not expose, and a send under a new key would not replay it.
  *
  * @param {TaskBulkAction} action - The action.
- * @returns {boolean} Whether it is sent again.
+ * @returns {WriteKind} How it settles.
  */
-function resendsAction(action: TaskBulkAction): boolean {
-  return action.type !== 'trash' && action.type !== 'duplicate';
+function kindOf(action: TaskBulkAction): WriteKind {
+  switch (action.type) {
+    case 'trash':
+      return 'trash';
+    case 'duplicate':
+      return 'copy';
+    default:
+      return 'versioned';
+  }
+}
+
+/**
+ * Function movedPast
+ *
+ * @description
+ * Whether a read of a task is at a version past the one a write was sent at: the original
+ * request, checked against that version, can no longer commit, so the read is its outcome.
+ *
+ * @param {TaskReadBack | 'trashed' | null} read - The read, `trashed` or null when it failed.
+ * @param {number} sent - The version the write was sent at.
+ * @returns {read is TaskReadBack} Whether the read settles the write.
+ */
+function movedPast(read: TaskReadBack | 'trashed' | null, sent: number): read is TaskReadBack {
+  return read !== null && read !== 'trashed' && read.task.version > sent;
+}
+
+/**
+ * Function heldSettlement
+ *
+ * @description
+ * What a read of a task settles once its write's resends are spent. A `versioned` write is
+ * released by any read of the task: applied when the read is past the version sent and holds
+ * what the write sets, released otherwise (a later write carries the version the view read, so
+ * an original request committing afterwards makes it refused, never silently overwritten). A
+ * `trash` is applied once the task reads in the trash and released once it reads past the
+ * version sent (the deletion, checked against that version, can no longer commit). A `copy` is
+ * released once the task reads past the version sent or in the trash. Anything else stays open.
+ *
+ * @param {WriteKind} kind - How the write settles.
+ * @param {TaskReadBack | 'trashed' | null} read - The read, `trashed` or null when it failed.
+ * @param {number} sent - The version the write was sent at.
+ * @param {(read: TaskReadBack) => boolean} shows - Whether a read holds what the write sets.
+ * @returns {HeldSettlement} What the read settles.
+ */
+function heldSettlement(
+  kind: WriteKind,
+  read: TaskReadBack | 'trashed' | null,
+  sent: number,
+  shows: (read: TaskReadBack) => boolean,
+): HeldSettlement {
+  if (read === null) return 'open';
+  if (read === 'trashed') return kind === 'trash' ? 'applied' : 'released';
+  if (movedPast(read, sent)) return kind === 'versioned' && shows(read) ? 'applied' : 'released';
+  return kind === 'versioned' ? 'released' : 'open';
 }
 
 /**
@@ -668,7 +728,10 @@ function actionShown(read: TaskReadBack, action: TaskBulkAction): boolean {
     case 'status':
       return (
         task.status === action.status &&
-        (action.cancelReason === undefined || task.cancelReason === action.cancelReason)
+        (action.cancelReason === undefined || task.cancelReason === action.cancelReason) &&
+        (action.status !== 'cancelled' ||
+          !action.cancelNote ||
+          read.cancelNote === action.cancelNote)
       );
     case 'priority':
       return task.priority === action.priority;
@@ -820,15 +883,23 @@ function fieldOutcomeOf(sent: TaskBulkSelection, result: TaskFieldWriteResult): 
  * scope and its organization: once one changed, the rest is reported as not sent.
  *
  * A task without a certain outcome (no answer, a timeout, a `5xx`) keeps its pending patch and
- * holds the next writes of that task until its outcome is settled. A single-field write and a
- * bulk status, priority, assignee or move is sent again unchanged, at the same version, after
- * each wait of `RESEND_DELAYS_MS`: a success applied it; a refusal means the version moved or the
- * request cannot pass, so the task is read back (`ListTasksApi.readBack`) and the write counts as
- * applied (at the version read) when the task holds what it sets, refused otherwise, and stays
- * uncertain when the task cannot be read. A deletion and a copy are never sent again. Whatever
- * stays uncertain is reported in `unknown`; `RECONCILE_DELAY_MS` later the view reads its tasks
- * again, and the patch goes and the task's next write leaves only once that read, begun after
- * the write gave up, answered (`_settleWrites`), or the view or its scope changed.
+ * holds the next writes of that task until its outcome is settled; a read of the view never
+ * settles it. A `versioned` write (a single-field write, a bulk status, priority, assignee or
+ * move) is sent again unchanged, at the same version, after each wait of `RESEND_DELAYS_MS`. A
+ * success applied it. A refusal reads the task back (`ListTasksApi.readBack`): read at a version
+ * past the one sent, the original request can no longer commit, so the write is applied when the
+ * task holds what it sets (cancellation note included) and refused otherwise; any other answer
+ * (a `408`, another refusal, no answer, a read at the version sent) leaves it uncertain and the
+ * resends go on. A deletion and a copy are never sent again. Whatever stays uncertain is reported
+ * in `unknown`; from `RECONCILE_DELAY_MS` on, each such task is read back until a read settles it
+ * (`heldSettlement`), and only then do its patch and its hold go.
+ *
+ * Guarantee of a released `versioned` task: its next write is sent at the version the view read
+ * (or the one a write returned), never at a version only a read back showed (except one version
+ * past the one sent, holding the written values, which was this write). Every write carries that
+ * version (`If-Match`, or the bulk selection's version), so an original request committing after
+ * the release moves the task past it and the next write is refused (`412`) and reads the tasks
+ * again, instead of overwriting what the original wrote.
  *
  * The host connects its reads in `onInit` (`_connectWrites`), forgets every write when its scope
  * changes (`_resetWrites`) and prunes the patches a read replaced (`_settleWrites`).
@@ -859,14 +930,8 @@ export function withViewTaskWrites(): SignalStoreFeature<
       // Waits of the resends and reconciliations, ended early when the view goes or its scope
       // changes, so no write stays blocked behind a wait that no longer leads anywhere.
       const wakers: Set<() => void> = new Set<() => void>();
-      // Writes without a certain outcome waiting for a read of the view begun after they gave up.
-      const readWaiters: Set<ReadWaiter> = new Set<ReadWaiter>();
       const wakeAll: () => void = (): void => {
         for (const wake of [...wakers]) wake();
-        for (const waiter of [...readWaiters]) {
-          readWaiters.delete(waiter);
-          waiter.settle(false);
-        }
       };
       store._writeDestroyRef.onDestroy((): void => {
         for (const timer of timers) clearTimeout(timer);
@@ -1006,18 +1071,23 @@ export function withViewTaskWrites(): SignalStoreFeature<
               : null,
         };
       };
+      // `read`: keys whose applied version comes from a read of the task rather than from the
+      // write's answer, and may include changes by others: shown until a read reaches it, never a
+      // version the next write is sent at.
       const record: (
         action: TaskBulkAction | null,
         seq: number,
         outcome: TaskBulkOutcome,
         before: Readonly<Partial<Record<string, ConfirmedTask>>>,
         skipped: readonly string[],
+        read?: ReadonlySet<string>,
       ) => void = (
         action: TaskBulkAction | null,
         seq: number,
         outcome: TaskBulkOutcome,
         before: Readonly<Partial<Record<string, ConfirmedTask>>>,
         skipped: readonly string[],
+        read: ReadonlySet<string> = new Set<string>(),
       ): void => {
         const returned: Map<string, number | null> = new Map<string, number | null>(
           outcome.done.map((entry: TaskBulkEntry): [string, number | null] => [
@@ -1026,7 +1096,7 @@ export function withViewTaskWrites(): SignalStoreFeature<
           ]),
         );
         for (const [key, version] of returned) {
-          if (version !== null) {
+          if (version !== null && !read.has(key)) {
             confirmedVersions.set(key, Math.max(confirmedVersions.get(key) ?? 0, version));
           }
           if (action?.type !== 'status') continue;
@@ -1047,8 +1117,8 @@ export function withViewTaskWrites(): SignalStoreFeature<
               : patch,
           ),
         );
-        // A task without a certain outcome keeps its pending patch: `reconcile` drops it once a
-        // read of the view begun after the write gave up answered.
+        // A task without a certain outcome keeps its pending patch: `hold` settles it from a
+        // read of that task.
         dropPatches(seq, [
           ...[...outcome.failed, ...outcome.notSent].map(
             (item: TaskBulkSelection): string => item.taskKey,
@@ -1056,27 +1126,46 @@ export function withViewTaskWrites(): SignalStoreFeature<
           ...skipped,
         ]);
       };
-      const readBack: (key: string) => Promise<TaskReadBack | null> = async (
+      const readBack: (key: string) => Promise<TaskReadBack | 'trashed' | null> = async (
         key: string,
-      ): Promise<TaskReadBack | null> => {
+      ): Promise<TaskReadBack | 'trashed' | null> => {
         try {
           return await store._writeFields.readBack(key);
         } catch {
           return null;
         }
       };
+      const readAll: (
+        items: readonly TaskBulkSelection[],
+      ) => Promise<(TaskReadBack | 'trashed' | null)[]> = async (
+        items: readonly TaskBulkSelection[],
+      ): Promise<(TaskReadBack | 'trashed' | null)[]> =>
+        (
+          await settleLimited(
+            items,
+            WRITE_CALLS,
+            (item: TaskBulkSelection): Promise<TaskReadBack | 'trashed' | null> =>
+              readBack(item.taskKey),
+          )
+        ).map((settled: PromiseSettledResult<TaskReadBack | 'trashed' | null>) =>
+          settled.status === 'fulfilled' ? settled.value : null,
+        );
+      // Only a version past the one sent proves the original request can no longer commit; any
+      // other refusal of a resend (a `408`, another `4xx`, a `5xx`, no answer) leaves it open and
+      // the write is sent again on schedule.
       const resolveUncertain: (
         plan: WritePlan,
         sent: { readonly outcome: TaskBulkOutcome; readonly stale: boolean },
         current: () => boolean,
-      ) => Promise<{ outcome: TaskBulkOutcome; stale: boolean }> = async (
+      ) => Promise<{ outcome: TaskBulkOutcome; stale: boolean; read: Set<string> }> = async (
         plan: WritePlan,
         sent: { readonly outcome: TaskBulkOutcome; readonly stale: boolean },
         current: () => boolean,
-      ): Promise<{ outcome: TaskBulkOutcome; stale: boolean }> => {
+      ): Promise<{ outcome: TaskBulkOutcome; stale: boolean; read: Set<string> }> => {
         let affected: number = sent.outcome.affected;
         const done: TaskBulkEntry[] = [...sent.outcome.done];
         const failed: TaskBulkSelection[] = [...sent.outcome.failed];
+        const read: Set<string> = new Set<string>();
         let unknown: readonly TaskBulkSelection[] = sent.outcome.unknown;
         let stale: boolean = sent.stale;
         for (const delay of RESEND_DELAYS_MS) {
@@ -1091,25 +1180,25 @@ export function withViewTaskWrites(): SignalStoreFeature<
           unknown = [...resent.unknown, ...resent.notSent];
           if (resent.failed.length > 0) {
             stale = true;
-            const reads: readonly PromiseSettledResult<TaskReadBack | null>[] = await settleLimited(
+            const reads: readonly (TaskReadBack | 'trashed' | null)[] = await readAll(
               resent.failed,
-              WRITE_CALLS,
-              (item: TaskBulkSelection): Promise<TaskReadBack | null> => readBack(item.taskKey),
             );
             resent.failed.forEach((item: TaskBulkSelection, index: number): void => {
-              const settled: PromiseSettledResult<TaskReadBack | null> = reads[index];
-              const read: TaskReadBack | null =
-                settled.status === 'fulfilled' ? settled.value : null;
-              if (read === null) {
+              const answer: TaskReadBack | 'trashed' | null = reads[index];
+              const at: number = item.version ?? 0;
+              if (!movedPast(answer, at)) {
                 unknown = [...unknown, item];
-              } else if (plan.shows(read)) {
+              } else if (plan.shows(answer)) {
                 affected++;
                 done.push({
                   taskKey: item.taskKey,
-                  version: read.task.version,
+                  version: answer.task.version,
                   newTaskKey: null,
                   trashEntryId: null,
                 });
+                // One version past the one sent, holding the written values: that change was
+                // this write, as if the gateway had returned the version.
+                if (answer.task.version !== at + 1) read.add(item.taskKey);
               } else {
                 failed.push(item);
               }
@@ -1120,31 +1209,69 @@ export function withViewTaskWrites(): SignalStoreFeature<
         return {
           outcome: { affected, done, failed, unknown, notSent: sent.outcome.notSent },
           stale,
+          read,
         };
       };
-      const reconcile: (
+      // Settles the tasks a write left without a certain outcome, each from a read of that very
+      // task (`ListTasksApi.readBack`), never from a read of the view, which may not contain it
+      // (a subtask, a task past the first page), nor from elapsed time. A read that settles
+      // nothing is retried later; leaving the view or changing its scope ends the wait.
+      const hold: (
         seq: number,
-        keys: readonly string[],
+        items: readonly TaskBulkSelection[],
+        plan: WritePlan,
         current: () => boolean,
         release: (keys: readonly string[]) => void,
-      ) => void = (
+      ) => Promise<void> = async (
         seq: number,
-        keys: readonly string[],
+        items: readonly TaskBulkSelection[],
+        plan: WritePlan,
         current: () => boolean,
         release: (keys: readonly string[]) => void,
-      ): void => {
-        const settle: (read: boolean) => void = (read: boolean): void => {
-          if (read && current()) dropPatches(seq, keys);
-          release(keys);
-        };
-        void pause(RECONCILE_DELAY_MS).then((): void => {
-          if (!current()) {
-            settle(false);
-            return;
-          }
-          readWaiters.add({ after: source?.reads() ?? 0, settle });
-          source?.reload();
-        });
+      ): Promise<void> => {
+        let open: readonly TaskBulkSelection[] = items;
+        for (let round: number = 0; open.length > 0; round++) {
+          await pause(Math.min(RECONCILE_DELAY_MS * 2 ** round, HELD_READ_MAX_MS));
+          if (!current()) break;
+          const reads: readonly (TaskReadBack | 'trashed' | null)[] = await readAll(open);
+          if (!current()) break;
+          const still: TaskBulkSelection[] = [];
+          open.forEach((item: TaskBulkSelection, index: number): void => {
+            const answer: TaskReadBack | 'trashed' | null = reads[index];
+            const at: number = item.version ?? 0;
+            const settlement: HeldSettlement = heldSettlement(
+              plan.kind,
+              answer,
+              at,
+              (read: TaskReadBack): boolean => plan.shows(read),
+            );
+            if (settlement === 'open') {
+              still.push(item);
+              return;
+            }
+            if (settlement === 'applied') {
+              const until: number | null = movedPast(answer, at) ? answer.task.version : null;
+              if (until === at + 1) {
+                confirmedVersions.set(
+                  item.taskKey,
+                  Math.max(confirmedVersions.get(item.taskKey) ?? 0, until),
+                );
+              }
+              const begun: number = source?.reads() ?? 0;
+              editPatches([item.taskKey], (patches: readonly TaskWritePatch[]) =>
+                patches.map((patch: TaskWritePatch): TaskWritePatch =>
+                  patch.seq === seq ? { ...patch, pending: false, until, reads: begun } : patch,
+                ),
+              );
+            } else {
+              dropPatches(seq, [item.taskKey]);
+            }
+            release([item.taskKey]);
+          });
+          if (still.length < open.length) source?.reload();
+          open = still;
+        }
+        release(open.map((item: TaskBulkSelection): string => item.taskKey));
       };
       const run: (
         tasks: readonly TaskSummary[],
@@ -1294,8 +1421,16 @@ export function withViewTaskWrites(): SignalStoreFeature<
               selection,
               current,
             );
-            if (sent.outcome.unknown.length > 0 && plan.resend && generation === scoped) {
-              sent = await resolveUncertain(plan, sent, current);
+            let read: ReadonlySet<string> = new Set<string>();
+            if (
+              sent.outcome.unknown.length > 0 &&
+              plan.kind === 'versioned' &&
+              generation === scoped
+            ) {
+              const resolved: { outcome: TaskBulkOutcome; stale: boolean; read: Set<string> } =
+                await resolveUncertain(plan, sent, current);
+              sent = resolved;
+              read = resolved.read;
             }
             const { outcome, stale }: { outcome: TaskBulkOutcome; stale: boolean } = sent;
             const after: Readonly<Partial<Record<string, number>>> = Object.fromEntries(
@@ -1305,14 +1440,14 @@ export function withViewTaskWrites(): SignalStoreFeature<
               }),
             );
             if (store._writeDestroyRef.destroyed) return { ...outcome, before, after, changed };
-            if (generation === scoped) record(plan.action, seq, outcome, before, skipped);
+            if (generation === scoped) record(plan.action, seq, outcome, before, skipped, read);
             if (current() && (outcome.done.length > 0 || stale)) source?.reload();
             const uncertain: readonly string[] = outcome.unknown.map(
               (item: TaskBulkSelection): string => item.taskKey,
             );
             if (uncertain.length > 0 && current()) {
               held = uncertain;
-              reconcile(seq, uncertain, current, release);
+              void hold(seq, outcome.unknown, plan, current, release);
             } else if (generation === scoped) {
               dropPatches(seq, uncertain);
             }
@@ -1358,11 +1493,6 @@ export function withViewTaskWrites(): SignalStoreFeature<
               confirmedVersions.delete(key);
             }
           }
-          for (const waiter of [...readWaiters]) {
-            if (generationRead <= waiter.after) continue;
-            readWaiters.delete(waiter);
-            waiter.settle(true);
-          }
         },
         _appliedWrite(task: TaskSummary): AppliedTaskWrite | null {
           return appliedOf(
@@ -1379,7 +1509,7 @@ export function withViewTaskWrites(): SignalStoreFeature<
             tasks,
             {
               action,
-              resend: resendsAction(action),
+              kind: kindOf(action),
               changesOf: (task: TaskSummary) => actionChangesOf(task, action),
               shows: (read: TaskReadBack): boolean => actionShown(read, action),
               send: async (
@@ -1408,7 +1538,7 @@ export function withViewTaskWrites(): SignalStoreFeature<
             [task],
             {
               action: null,
-              resend: true,
+              kind: 'versioned',
               changesOf: (shown: TaskSummary) => fieldChangesOf(shown, changes),
               shows: (read: TaskReadBack): boolean => fieldsShown(read, changes),
               send: async (
