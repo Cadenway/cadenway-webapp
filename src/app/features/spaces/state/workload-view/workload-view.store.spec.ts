@@ -493,6 +493,34 @@ describe('WorkloadViewStore', () => {
     expect(items()[0]?.task.assigneeIds).toEqual(['u-camille']);
   });
 
+  it('leaves a person assigned elsewhere while the first write runs, and its Undo too', async () => {
+    const store: WorkloadViewStoreInstance = await setup();
+    show(['u-camille']);
+    const control: { release: () => void } = writer(['held', 'done', 'done', 'done']);
+
+    const done: Promise<void> = store.reassign(camilleToInes);
+    show([...(items()[0]?.task.assigneeIds ?? []), 'u-hugo']);
+    expect(rowOf(store, 'u-hugo')).toEqual(['CAD-482']);
+    control.release();
+    await done;
+
+    expect(actions()).toEqual([
+      [{ type: 'assign', userId: 'u-ines' }, undefined],
+      [{ type: 'unassign', userId: 'u-camille' }, undefined],
+    ]);
+    expect(items()[0]?.task.assigneeIds).toEqual(['u-ines', 'u-hugo']);
+
+    const undo: () => void = (toasts.show.mock.calls[0][1] as { undo: () => void }).undo;
+    undo();
+    await settle();
+
+    expect(actions().slice(2)).toEqual([
+      [{ type: 'assign', userId: 'u-camille' }, { 'CAD-482': 5 }],
+      [{ type: 'unassign', userId: 'u-ines' }, { 'CAD-482': 6 }],
+    ]);
+    expect([...(items()[0]?.task.assigneeIds ?? [])].sort()).toEqual(['u-camille', 'u-hugo']);
+  });
+
   it('lets an Undo wait for a running drag and leaves a task changed since as it is', async () => {
     const store: WorkloadViewStoreInstance = await setup();
     show(['u-camille']);

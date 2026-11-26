@@ -148,19 +148,22 @@ context menu is `cw-task-menu`. The total column shows the hours, the note, the 
   the next read; a task shown cancelled, moved or deleted leaves the grid.
 - Reassignment: a chip is a CDK drag (`cdkDrag`, at once with a mouse, after 300 ms on a touch
   screen). Dropped on another row (found under the pointer by the grid's `data-cw-row`), it
-  calls `WorkloadViewStore.reassign`, which records the assignees the task is meant to have (the
-  target joins unless it is `Unassigned`, the source leaves), over those of the drags still
-  running, and shows them at once. One worker per task then sends one write at a time through
-  `ListTasksStore.act`, each computed from the assignees as shown when its turn comes:
-  assignments first, then removals, until the shown assignees are the meant ones. A drag made
-  while the worker runs only changes what is meant, so a task dragged from A to B and back to A
+  calls `WorkloadViewStore.reassign`, which records a targeted change of the task's assignees:
+  the target to assign (unless it is `Unassigned`) and the source to unassign, merged into the
+  change of the drags still running (a later drag overrides an earlier one for the same person),
+  and shows it at once. One worker per task then sends one write at a time through
+  `ListTasksStore.act`, each computed for the change's own people from the assignees as shown
+  when its turn comes: assignments first, then removals. Anyone the change does not name is never
+  touched, so a person assigned meanwhile (the menu, another user, a refresh) stays. A drag made
+  while the worker runs only adjusts the change, so a task dragged from A to B and back to A
   before the first write answers is assigned to B, then B is removed: A is never unassigned.
   Once settled:
   - `CAD-482 reassigned` / `From X to Y.` (the latest drag's rows) offers `Undo`, a separate
-    operation: it waits for a reassignment of the task still running to settle, then brings back
-    the assignees of before, sent with the version the reassignment left. A task changed since
-    (by a later drag or elsewhere) is left as it is with `CAD-482 changed since`, and nothing
-    is written. A task that ends where it started shows no toast;
+    operation: it waits for a reassignment of the task still running to settle, then reverses
+    the net effect on the people that reassignment wrote only (anyone else stays), sent with the
+    version it left. A task changed since (by a later drag or elsewhere) is left as it is with
+    `CAD-482 changed since`, and nothing is written. A reassignment whose writes cancel out shows
+    no toast;
   - a refused or unanswered first write sends nothing more (`The task could not be reassigned`,
     or the unknown outcome warning, and the tasks are read again);
   - a refusal after an applied write (the removal, typically) warns
