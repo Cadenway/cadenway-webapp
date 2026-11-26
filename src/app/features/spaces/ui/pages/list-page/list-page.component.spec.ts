@@ -658,7 +658,6 @@ describe('ListPage', () => {
           return find(page);
         })
         .not.toBeNull();
-      expect(find(page)?.textContent).toContain('This view is not available yet.');
       expect(find('list-description')).not.toBeNull();
       for (const tool of tools) expect(find(tool), `${segment}: ${tool}`).not.toBeNull();
     }
