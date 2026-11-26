@@ -137,6 +137,41 @@ gateway through `ListAccessApi` (`data-access/services/list-access-api/`, adapte
   only); no realtime follow of `list.access-changed.v1` while the dialog is open; `cw-dialog`
   has no `max-w-lg` size, so the dialog uses `default` (`max-w-md`).
 
+## Space statuses dialog
+
+`SpaceStatusesDialog` (`ui/dialogs/space-statuses-dialog/`, `App.dc.html` lines 3302-3317 and
+8587-8608) provides `SpaceStatusesStore` (`state/space-statuses/`, component-scoped), which writes
+through `SpaceStatusesApi` (`data-access/services/space-statuses-api/`, `updateSpace` with the
+`statuses` member only and `If-Match`).
+
+- The ten statuses in workflow order under their category headings: icon, name field (the default
+  label as placeholder, 24 characters at most once trimmed; empty puts back the default), hint
+  (from 640 px) and a switch `Stop using …` / `Use …`. `To do` and `Done` stay used
+  (`… (required)`, disabled). The text counts the statuses used out of 10. Every control is
+  disabled without `SpaceDetails.canEdit`; skeleton rows show while `space` is null.
+- A switch and `Reset to defaults` (`statuses: null`) write at once; a name is written when its
+  field changes (blur or Enter), not on every keystroke as in the mockup. An unchanged value sends
+  nothing. Each change shows at once; the writes run one after the other, each from the version the
+  previous one recorded, and an accepted change is sent even once the dialog or the page is
+  destroyed. A refusal (a 4xx with a problem code) takes back its own change only, with the failure
+  toast (one shown at a time). Without an answer (network, timeout, 5xx) the space is read again
+  (`getSpace`) before the next change: the change counts as saved when that read holds it, else it
+  is taken back with the failure toast, and the next changes are sent from the version read; when
+  that read fails too, the change is taken back with `The change could not be confirmed…`. A field
+  or switch whose change ends unsaved shows the recorded value again. `Done` closes the dialog;
+  writes in flight go on.
+- Once the last write ends, `ListPageStore.space.reload()` (once more after a read in flight) and
+  `SpacesNavigationStore.refresh()` read the space again, even after the dialog is destroyed, so
+  the status words, the hidden groups and the version `Edit the space` sends follow. A list page
+  opened on the same space before the last write ends reads the space on its own and may show the
+  previous statuses until it reads again. A newer read of the space replaces the statuses only while no change is pending.
+- Copy not taken from the mockup: `spaces.statuses.save-failed` and `spaces.statuses.save-unknown`
+  (the mockup draws no refused or unanswered write).
+- Known gaps: `space.updated.v1` is not relayed by the realtime gateway, so another tab sees the
+  change only after it reads the space again; a write refused with `412` (the space changed
+  elsewhere) is taken back and the reads that follow bring the newer version. `cw-dialog` has no
+  `max-w-lg` size: the dialog uses `default` (`max-w-md`) where the mockup uses `max-w-lg`.
+
 ## Public entry points
 
 | Entry point            | Consumers    |
