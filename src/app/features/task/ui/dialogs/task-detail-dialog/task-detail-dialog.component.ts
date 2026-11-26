@@ -62,10 +62,8 @@ import {
   type TaskDetailStoreInstance,
 } from '../../../state/task-detail/task-detail.store';
 import type { TaskParentContext } from '../../../state/task-parent-picker/task-parent-picker.store';
-import {
-  TASK_WRITE_LANE,
-  TaskStatusChangesStore,
-} from '../../../state/task-status-changes/task-status-changes.store';
+import { TASK_WRITE_LANE } from '../../../ports/task-write-lane';
+import { TaskStatusChangesStore } from '../../../state/task-status-changes/task-status-changes.store';
 import { statusLabel } from '../../../utils/task-status/task-status.util';
 import { TaskDetailHeader } from '../../components/task-detail-header/task-detail-header.component';
 import { TaskDetailSkeleton } from '../../components/task-detail-skeleton/task-detail-skeleton.component';

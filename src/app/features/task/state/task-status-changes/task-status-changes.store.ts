@@ -1,4 +1,4 @@
-import { DestroyRef, inject, InjectionToken, type Signal, type Type } from '@angular/core';
+import { DestroyRef, inject, type Signal, type Type } from '@angular/core';
 import type { CancelReason, StatusKey } from '@cadenway/contracts';
 import { CwToastService } from '@cadenway/ui/components/toast';
 import { tapResponse } from '@ngrx/operators';
@@ -33,6 +33,7 @@ import type {
 } from '../../models/task-status-change/task-status-change.interface';
 import type { TaskSummary } from '../../models/task-summary/task-summary.interface';
 import { TaskVersionConflict } from '../../models/task-write-error/task-write-error.model';
+import { TASK_WRITE_LANE, type TaskWriteLane } from '../../ports/task-write-lane';
 import { statusLabel } from '../../utils/task-status/task-status.util';
 
 /**
@@ -45,58 +46,6 @@ import { statusLabel } from '../../utils/task-status/task-status.util';
  * @type {number}
  */
 export const STATUS_SETTLE_MS: number = 460;
-
-/**
- * Interface TaskWriteLane
- *
- * @description
- * The one write path of the tasks of a screen that already writes them (the task detail): the
- * status changes send through it, so a status write never overlaps another write of the same task
- * and goes against that task's newest confirmed version, not the one captured at click time.
- */
-export interface TaskWriteLane {
-  // #region Methods
-  /**
-   * Method write
-   *
-   * @description
-   * Runs a write of a task after its earlier writes, with its newest confirmed version (or
-   * `fallback` when none is known); a `TaskVersionConflict` makes the next write wait for a read.
-   *
-   * @param {string} key - Key of the task.
-   * @param {(version: number) => Promise<T>} send - Sends the write against a version.
-   * @param {number} [fallback] - Version to use when the lane knows none.
-   * @returns {Promise<T>} What `send` resolved with.
-   */
-  write<T>(key: string, send: (version: number) => Promise<T>, fallback?: number): Promise<T>;
-
-  /**
-   * Method acceptVersion
-   *
-   * @description
-   * Takes the version a write returned with the fields it set; a version that does not follow
-   * the confirmed one reads the task again instead.
-   *
-   * @param {number} version - The new version.
-   * @param {Partial<TaskSummary>} [changes] - Fields the write set.
-   * @param {string} [key] - Key of the task.
-   */
-  acceptVersion(version: number, changes?: Partial<TaskSummary>, key?: string): void;
-  // #endregion
-}
-
-/**
- * Constant TASK_WRITE_LANE
- *
- * @description
- * Optional write path the status changes use instead of writing on their own; the task detail
- * dialog provides it with its `TaskDetailStore`.
- *
- * @type {InjectionToken<TaskWriteLane>}
- */
-export const TASK_WRITE_LANE: InjectionToken<TaskWriteLane> = new InjectionToken<TaskWriteLane>(
-  'TASK_WRITE_LANE',
-);
 
 /**
  * Constant TOAST_MS

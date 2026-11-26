@@ -26,9 +26,9 @@ import type {
 import { TaskVersionConflict } from '../../models/task-write-error/task-write-error.model';
 import { TaskDetailOpener } from '../../services/task-detail-opener/task-detail-opener.service';
 import { defaultStatusOptions } from '../../utils/task-status/task-status.util';
+import { TASK_WRITE_LANE } from '../../ports/task-write-lane';
 import {
   STATUS_SETTLE_MS,
-  TASK_WRITE_LANE,
   type TaskStatusChangesInstance,
   TaskStatusChangesStore,
 } from '../task-status-changes/task-status-changes.store';

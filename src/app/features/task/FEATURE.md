@@ -202,7 +202,7 @@ the task` with `Retry`; otherwise Errors' `RouteErrorPanel` renders the typed ro
     other newer version reads the task again. A `412` (`TaskVersionConflict`) reads the task again
     and the next write of that task waits for that read; the error goes back to the caller. A write
     queued when another task opens is still sent with its own key and version.
-  - `TASK_WRITE_LANE` (Task's `TaskStatusChangesStore` file): the optional write path the status
+  - `TASK_WRITE_LANE` (`ports/task-write-lane`): the optional write path the status
     changes use instead of writing on their own; the dialog provides it with its
     `TaskDetailStore` (`useExisting`), so a status write never overlaps another write of the task.
   - Realtime: while a task is open the store watches its `task:` room; `task.updated.v1` and
