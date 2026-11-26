@@ -137,16 +137,22 @@ column menu lines 7314-7323) files the list's tasks into status columns with `cw
   are the page's card template, not `cw-task-card` (a button with its own frame, which cannot sit
   in the board's focusable card).
 - A drop in another column, with the mouse or the brick's keyboard move (Space, arrows, Space;
-  Escape cancels), moves the card at once (`BoardViewStore.stage`, a status waiting per task that
-  a read of the tasks never replaces) and writes it through `ViewTaskWritesStore.setStatus` (with
-  `VIEW_TASK_WRITER` set to `ListTasksStore`) `STATUS_SETTLE_MS` (460 ms) after the task's last
-  move: quick moves write only the last status, a move back to the confirmed status writes
-  nothing, and leaving the view writes the waiting moves at once. The written move's toast
-  offers `Undo` and a refusal puts the card back. A drop on `Cancelled` forgets a waiting move
-  and asks the reason first, the card staying in its column until it is given; a status picked in
-  the task menu also replaces a waiting move. A drop in the card's own column, or in a column
-  whose status the task cannot take (a milestone's four statuses, a status the space stopped
-  using), puts the card back: no order is written.
+  Escape cancels), moves the card at once (`BoardViewStore.stage`: a waiting move per task, kept
+  with the task it started from, which a read of the tasks never replaces) and writes it through
+  `ViewTaskWritesStore.setStatus` `STATUS_SETTLE_MS` (460 ms) after the task's last move: quick
+  moves write only the last status and a move back to the confirmed status writes nothing.
+  Another query (a filter, the search) writes the waiting moves at once, from the task each
+  started from when the new read no longer holds it. Leaving the view writes them with
+  `TaskActionsApi.bulk` (root-provided, so it outlives the view; `BoardViewStore.leave`), each
+  after the board's write of the same task still in flight has settled and at the version it
+  left: `VIEW_TASK_WRITER` is `BoardViewStore.writerOver(ListTasksStore)`, the reader's writes
+  with each task's write in flight followed. A move written after leaving shows no toast, only
+  `The task could not be changed` when refused or uncertain. The written move's toast offers
+  `Undo` and a refusal puts the card back. A drop on `Cancelled` forgets a waiting move and asks
+  the reason first, the card staying in its column until it is given; `Cancelled` is never
+  written on leaving. A status picked in the task menu also replaces a waiting move. A drop in
+  the card's own column, or in a column whose status the task cannot take (a milestone's four
+  statuses, a status the space stopped using), puts the card back: no order is written.
 - Click or Enter opens the task's detail (`?task=<KEY>`). A right click, Shift F10 or the Menu key
   opens `cw-task-menu` on the card (`cardMenu`), or on the selection (Ctrl click, Ctrl Space)
   holding it, with the menu's writes, cancellation reason and deletion confirmation. In a column

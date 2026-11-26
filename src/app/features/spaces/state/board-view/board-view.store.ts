@@ -3,6 +3,7 @@ import type { StatusKey } from '@cadenway/contracts';
 import { CwToastService } from '@cadenway/ui/components/toast';
 import {
   patchState,
+  signalMethod,
   signalStore,
   withComputed,
   withHooks,
@@ -19,18 +20,30 @@ import {
   pickableStatuses,
   STATUS_SETTLE_MS,
   type StatusOption,
+  TaskActionsApi,
+  type TaskBulkOutcome,
   type TaskSummary,
 } from '@features/task';
+import {
+  WORKSPACE_CONTEXT,
+  type WorkspaceContextPort,
+} from '@features/workspace/ports/workspace-context';
 
 import { BOARD_ORDER } from '../../constants/statuses/statuses.constants';
 import type {
   BoardCard,
   BoardCardProgress,
   BoardColumn,
+  BoardPendingMove,
 } from '../../models/board-view/board-view.interface';
 import type { ListMember } from '../../models/list-member/list-member.interface';
 import type { ListTaskItem } from '../../models/list-tasks/list-tasks.interface';
+import type { ListTaskQuery } from '../../models/list-view-config/list-view-config.interface';
 import type { Space, SpaceStatusOption } from '../../models/space/space.interface';
+import type {
+  ViewTaskOutcome,
+  ViewTaskWriter,
+} from '../../models/view-task-write/view-task-write.interface';
 import { ListPageStore } from '../list-page/list-page.store';
 import { ListTasksStore } from '../list-tasks/list-tasks.store';
 import { ListViewStore } from '../list-view/list-view.store';
@@ -59,13 +72,13 @@ interface BoardViewState {
    * Property _pending
    *
    * @description
-   * The status each moved card shows until its move is written, by task key: a drop settles
-   * `STATUS_SETTLE_MS` after the last move of its task.
+   * The moves waiting to be written, by task key: the status each moved card shows, settled
+   * `STATUS_SETTLE_MS` after the last move of its task, with the task it started from.
    *
-   * @type {Readonly<Record<string, StatusKey>>}
+   * @type {Readonly<Partial<Record<string, BoardPendingMove>>>}
    * @readonly
    */
-  readonly _pending: Readonly<Record<string, StatusKey>>;
+  readonly _pending: Readonly<Partial<Record<string, BoardPendingMove>>>;
 
   /**
    * Property _revision
@@ -284,9 +297,34 @@ export interface BoardViewStoreInstance {
    * Method flush
    *
    * @description
-   * Writes every waiting move at once, when the view is left.
+   * Writes every waiting move at once through `settleWith`'s write, from the task it started
+   * from when the current read no longer holds it; the view's query changing does it on its own.
    */
   flush(): void;
+
+  /**
+   * Method leave
+   *
+   * @description
+   * The view is left: every waiting move is written with `TaskActionsApi.bulk`, which outlives
+   * the view, each after the board's write of the same task still in flight has settled and at
+   * the version it left, so the last move lands last. `Cancelled` is never sent from here (it
+   * always waits for its reason in the view); a refused or uncertain write shows `The task could
+   * not be changed`.
+   */
+  leave(): void;
+
+  /**
+   * Method writerOver
+   *
+   * @description
+   * The view's writer (`VIEW_TASK_WRITER`) over the reader's writes, which records each task's
+   * write in flight and the version its answer left, for `leave`.
+   *
+   * @param {ViewTaskWriter} writer - The reader's writes (`ListTasksStore`).
+   * @returns {ViewTaskWriter} The same writes, followed.
+   */
+  writerOver(writer: ViewTaskWriter): ViewTaskWriter;
   // #endregion
 }
 
@@ -306,6 +344,8 @@ function createBoardViewStore(): Type<BoardViewStoreInstance> {
       _page: inject(ListPageStore),
       _view: inject(ListViewStore),
       _toasts: inject(CwToastService),
+      _actions: inject(TaskActionsApi),
+      _workspace: inject<WorkspaceContextPort>(WORKSPACE_CONTEXT),
     })),
     withComputed((store) => ({
       statusOptions: (): readonly StatusOption[] => {
@@ -328,14 +368,14 @@ function createBoardViewStore(): Type<BoardViewStoreInstance> {
     withComputed((store) => ({
       cards: (): readonly BoardCard[] => {
         store._revision();
-        const pending: Readonly<Record<string, StatusKey>> = store._pending();
+        const pending: Readonly<Partial<Record<string, BoardPendingMove>>> = store._pending();
         const people: ReadonlyMap<string, Person> = new Map(
           store.people().map((person: Person): [string, Person] => [person.id, person]),
         );
         return store._tasks.items().map((item: ListTaskItem): BoardCard => ({
           task: item.task,
-          status: pending[item.task.key] ?? item.status,
-          closed: isClosedStatus(pending[item.task.key] ?? item.status),
+          status: pending[item.task.key]?.status ?? item.status,
+          closed: isClosedStatus(pending[item.task.key]?.status ?? item.status),
           progress: progressOf(item.task),
           assignees: item.task.assigneeIds.flatMap((id: string): Person[] => {
             const person: Person | undefined = people.get(id);
@@ -368,6 +408,16 @@ function createBoardViewStore(): Type<BoardViewStoreInstance> {
         string,
         ReturnType<typeof setTimeout>
       >();
+      const inflight: Map<string, Promise<ViewTaskOutcome>> = new Map<
+        string,
+        Promise<ViewTaskOutcome>
+      >();
+      const versions: Map<string, number> = new Map<string, number>();
+      let query: string | null = null;
+      const itemOf: (key: string) => ListTaskItem | undefined = (
+        key: string,
+      ): ListTaskItem | undefined =>
+        store._tasks.items().find((item: ListTaskItem): boolean => item.task.key === key);
       const forget: (keys: readonly string[]) => void = (keys: readonly string[]): void => {
         for (const key of keys) {
           clearTimeout(timers.get(key));
@@ -376,20 +426,67 @@ function createBoardViewStore(): Type<BoardViewStoreInstance> {
         patchState(store, {
           _pending: Object.fromEntries(
             Object.entries(store._pending()).filter(
-              ([key]: [string, StatusKey]): boolean => !keys.includes(key),
+              ([key]: [string, BoardPendingMove | undefined]): boolean => !keys.includes(key),
             ),
           ),
         });
       };
+      const due: (key: string) => { task: TaskSummary; status: StatusKey } | null = (
+        key: string,
+      ): { task: TaskSummary; status: StatusKey } | null => {
+        const move: BoardPendingMove | undefined = store._pending()[key];
+        if (!move) return null;
+        const item: ListTaskItem | undefined = itemOf(key);
+        const confirmed: StatusKey = item?.status ?? move.from;
+        return confirmed === move.status
+          ? null
+          : { task: item?.task ?? move.task, status: move.status };
+      };
       const write: (key: string) => void = (key: string): void => {
-        const pending: Readonly<Record<string, StatusKey>> = store._pending();
-        if (!Object.hasOwn(pending, key)) return;
-        const status: StatusKey = pending[key];
-        const item: ListTaskItem | undefined = store._tasks
-          .items()
-          .find((shown: ListTaskItem): boolean => shown.task.key === key);
-        if (item && item.status !== status) send?.(item.task, status);
+        const move: { task: TaskSummary; status: StatusKey } | null = due(key);
+        if (move) send?.(move.task, move.status);
         forget([key]);
+      };
+      const follow: (keys: readonly string[], answer: Promise<ViewTaskOutcome>) => void = (
+        keys: readonly string[],
+        answer: Promise<ViewTaskOutcome>,
+      ): void => {
+        for (const key of keys) inflight.set(key, answer);
+        void answer.then((outcome: ViewTaskOutcome): void => {
+          for (const key of keys) {
+            const version: number | undefined = outcome.after[key];
+            if (version !== undefined) versions.set(key, Math.max(versions.get(key) ?? 0, version));
+            if (inflight.get(key) === answer) inflight.delete(key);
+          }
+        });
+      };
+      const sendAfter: (
+        key: string,
+        task: TaskSummary,
+        status: StatusKey,
+      ) => Promise<void> = async (
+        key: string,
+        task: TaskSummary,
+        status: StatusKey,
+      ): Promise<void> => {
+        const organizationId: string = store._workspace.organization().id;
+        const outcome: ViewTaskOutcome | undefined = await inflight.get(key);
+        const version: number = Math.max(
+          task.version,
+          store._tasks.taskOf(key)?.version ?? 0,
+          versions.get(key) ?? 0,
+          outcome?.after[key] ?? 0,
+        );
+        const answer: TaskBulkOutcome = await store._actions.bulk(
+          [{ taskKey: key, version }],
+          { type: 'status', status },
+          (): boolean => store._workspace.organization().id === organizationId,
+        );
+        if (answer.failed.length > 0 || answer.unknown.length > 0) {
+          store._toasts.error(
+            $localize`:@@spaces.task-writes.field-failed:The task could not be changed`,
+          );
+        }
       };
       return {
         setCollapsed(columns: readonly string[]): void {
@@ -437,15 +534,19 @@ function createBoardViewStore(): Type<BoardViewStoreInstance> {
         },
         stage(card: BoardCard, status: StatusKey): void {
           const key: string = card.task.key;
-          const confirmed: StatusKey | undefined = store._tasks
-            .items()
-            .find((item: ListTaskItem): boolean => item.task.key === key)?.status;
-          if (confirmed === undefined || confirmed === status) {
+          const waiting: BoardPendingMove | undefined = store._pending()[key];
+          const confirmed: StatusKey = itemOf(key)?.status ?? waiting?.from ?? card.task.status;
+          if (confirmed === status) {
             forget([key]);
             return;
           }
           clearTimeout(timers.get(key));
-          patchState(store, { _pending: { ...store._pending(), [key]: status } });
+          patchState(store, {
+            _pending: {
+              ...store._pending(),
+              [key]: { status, from: waiting?.from ?? confirmed, task: waiting?.task ?? card.task },
+            },
+          });
           timers.set(
             key,
             setTimeout((): void => {
@@ -460,11 +561,61 @@ function createBoardViewStore(): Type<BoardViewStoreInstance> {
         flush(): void {
           for (const key of Object.keys(store._pending())) write(key);
         },
+        leave(): void {
+          for (const key of Object.keys(store._pending())) {
+            const move: { task: TaskSummary; status: StatusKey } | null = due(key);
+            forget([key]);
+            if (move && move.status !== 'cancelled') void sendAfter(key, move.task, move.status);
+          }
+          send = null;
+        },
+        writerOver(writer: ViewTaskWriter): ViewTaskWriter {
+          return {
+            act: (
+              tasks: readonly TaskSummary[],
+              action: Parameters<ViewTaskWriter['act']>[1],
+              expected?: Readonly<Partial<Record<string, number>>>,
+            ): Promise<ViewTaskOutcome> => {
+              const answer: Promise<ViewTaskOutcome> = writer.act(tasks, action, expected);
+              follow(
+                tasks.map((task: TaskSummary): string => task.key),
+                answer,
+              );
+              return answer;
+            },
+            update: (
+              task: TaskSummary,
+              changes: Parameters<ViewTaskWriter['update']>[1],
+              expected?: Readonly<Partial<Record<string, number>>>,
+            ): Promise<ViewTaskOutcome> => {
+              const answer: Promise<ViewTaskOutcome> = writer.update(task, changes, expected);
+              follow([task.key], answer);
+              return answer;
+            },
+            remind: (taskKeys: readonly string[], at: Date): Promise<readonly string[]> =>
+              writer.remind(taskKeys, at),
+            restore: (entryIds: readonly string[]): Promise<boolean> => writer.restore(entryIds),
+            reload: (): void => {
+              writer.reload();
+            },
+            shownStatus: (task: TaskSummary): StatusKey => writer.shownStatus(task),
+          };
+        },
+        _followQuery: signalMethod<ListTaskQuery>((next: ListTaskQuery): void => {
+          const key: string = JSON.stringify(next);
+          if (query !== null && key !== query) {
+            for (const pending of Object.keys(store._pending())) write(pending);
+          }
+          query = key;
+        }),
       };
     }),
     withHooks({
+      onInit(store): void {
+        store._followQuery(store._view.taskQuery);
+      },
       onDestroy(store): void {
-        store.flush();
+        store.leave();
       },
     }),
   );
@@ -481,8 +632,10 @@ function createBoardViewStore(): Type<BoardViewStoreInstance> {
  * folded columns (kept while the view lives) and `Hide the column` with its `Undo`. A moved
  * card shows its new status at once (`stage`); the move is written through the page's
  * `ViewTaskWritesStore` (`settleWith`) `STATUS_SETTLE_MS` after the last move of its task, a move
- * back to the confirmed status writes nothing, and leaving the view writes the waiting moves
- * (`flush`); a read of the tasks never replaces a waiting move. A drop that writes nothing hands
+ * back to the confirmed status writes nothing, another query writes the waiting moves at once
+ * (`flush`, from the task each started from when the new read no longer holds it), and leaving
+ * the view writes them with `TaskActionsApi` after the board's writes in flight (`leave`, over
+ * the writer `writerOver` follows); a read of the tasks never replaces a waiting move. A drop that writes nothing hands
  * the cards back (`restoreCards`) so the card returns to its column.
  *
  * @type {Type<BoardViewStoreInstance>}

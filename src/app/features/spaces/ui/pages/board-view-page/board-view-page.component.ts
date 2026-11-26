@@ -49,6 +49,7 @@ import { SPACES_RETRY } from '../../../constants/data-table-texts/data-table-tex
 import type { BoardCard, BoardColumn } from '../../../models/board-view/board-view.interface';
 import type { TaskList } from '../../../models/task-list/task-list.interface';
 import type { ListTasksRead } from '../../../models/list-tasks/list-tasks.interface';
+import type { ViewTaskWriter } from '../../../models/view-task-write/view-task-write.interface';
 import {
   BoardViewStore,
   type BoardViewStoreInstance,
@@ -136,7 +137,10 @@ function isBoardCard(data: unknown): data is BoardCard {
   providers: [
     BOARD_KANBAN_LABELS,
     ViewTaskWritesStore,
-    { provide: VIEW_TASK_WRITER, useExisting: ListTasksStore },
+    {
+      provide: VIEW_TASK_WRITER,
+      useFactory: (): ViewTaskWriter => inject(BoardViewStore).writerOver(inject(ListTasksStore)),
+    },
   ],
   templateUrl: './board-view-page.component.html',
 })
@@ -482,7 +486,8 @@ export class BoardViewPage {
    * @description
    * Reads the tasks of the list with the view's query, publishes their summary to the view
    * tools, makes `N` create in this list while the view lives, writes the board's settled moves
-   * through `ViewTaskWritesStore.setStatus` (the waiting ones at once when the view is left) and
+   * through `ViewTaskWritesStore.setStatus` (the waiting ones, when the view is left, through
+   * `BoardViewStore.leave` after the writes in flight) and
    * keeps the refused cards of a menu action selected. A failed first read is read again when the
    * error boundary runs the route again.
    *
@@ -505,8 +510,7 @@ export class BoardViewPage {
       this.writes.setStatus([task], status, task.milestone);
     });
     destroyRef.onDestroy((): void => {
-      this.board.flush();
-      this.board.settleWith(null);
+      this.board.leave();
     });
   }
   // #endregion

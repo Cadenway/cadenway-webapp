@@ -3,12 +3,25 @@ import { TestBed } from '@angular/core/testing';
 import { CwToastService } from '@cadenway/ui/components/toast';
 import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 
-import { STATUS_SETTLE_MS, type TaskSummary } from '@features/task';
+import {
+  STATUS_SETTLE_MS,
+  TaskActionsApi,
+  type TaskBulkOutcome,
+  type TaskSummary,
+} from '@features/task';
+import { WORKSPACE_CONTEXT } from '@features/workspace/ports/workspace-context';
 
 import type { BoardCard, BoardColumn } from '../../models/board-view/board-view.interface';
 import type { ListTaskItem } from '../../models/list-tasks/list-tasks.interface';
-import type { ListViewPresentation } from '../../models/list-view-config/list-view-config.interface';
+import type {
+  ListTaskQuery,
+  ListViewPresentation,
+} from '../../models/list-view-config/list-view-config.interface';
 import type { SpaceStatusOption } from '../../models/space/space.interface';
+import type {
+  ViewTaskOutcome,
+  ViewTaskWriter,
+} from '../../models/view-task-write/view-task-write.interface';
 import { DEFAULT_PRESENTATION } from '../../utils/list-view-query/list-view-query.util';
 import { ListPageStore } from '../list-page/list-page.store';
 import { ListTasksStore } from '../list-tasks/list-tasks.store';
@@ -68,6 +81,29 @@ describe('BoardViewStore', () => {
   let presentation: WritableSignal<ListViewPresentation>;
   let statuses: readonly SpaceStatusOption[];
   let show: Mock;
+  let error: Mock;
+  let taskQuery: WritableSignal<ListTaskQuery>;
+  let bulk: Mock<TaskActionsApi['bulk']>;
+
+  /**
+   * Function applied
+   *
+   * @description
+   * A bulk answer that applied one task at a version.
+   *
+   * @param {string} taskKey - The task.
+   * @param {number} version - The version it was left at.
+   * @returns {TaskBulkOutcome} The answer.
+   */
+  function applied(taskKey: string, version: number): TaskBulkOutcome {
+    return {
+      affected: 1,
+      done: [{ taskKey, version, newTaskKey: null, trashEntryId: null }],
+      failed: [],
+      unknown: [],
+      notSent: [],
+    };
+  }
 
   /**
    * Function setup
@@ -81,7 +117,14 @@ describe('BoardViewStore', () => {
     TestBed.configureTestingModule({
       providers: [
         BoardViewStore,
-        { provide: ListTasksStore, useValue: { items } },
+        {
+          provide: ListTasksStore,
+          useValue: {
+            items,
+            taskOf: (key: string): TaskSummary | undefined =>
+              items().find((item: ListTaskItem): boolean => item.task.key === key)?.task,
+          },
+        },
         {
           provide: ListPageStore,
           useValue: {
@@ -96,12 +139,18 @@ describe('BoardViewStore', () => {
           provide: ListViewStore,
           useValue: {
             presentation,
+            taskQuery,
             setPresentation: (change: Partial<ListViewPresentation>): void => {
               presentation.update((current: ListViewPresentation) => ({ ...current, ...change }));
             },
           },
         },
-        { provide: CwToastService, useValue: { show } },
+        { provide: CwToastService, useValue: { show, error } },
+        { provide: TaskActionsApi, useValue: { bulk } },
+        {
+          provide: WORKSPACE_CONTEXT,
+          useValue: { organization: signal({ id: 'org-atelier-nord', slug: 'atelier-nord' }) },
+        },
       ],
     });
     return TestBed.inject(BoardViewStore);
@@ -141,6 +190,9 @@ describe('BoardViewStore', () => {
       { key: 'testing', name: null, hidden: true },
     ];
     show = vi.fn(() => 'toast-1');
+    error = vi.fn();
+    taskQuery = signal<ListTaskQuery>({ level: 'roots', sort: 'manual' });
+    bulk = vi.fn<TaskActionsApi['bulk']>(() => Promise.resolve(applied('CAD-461', 4)));
   });
 
   it('draws the columns in board order with the space names, without its unused statuses', () => {
@@ -318,25 +370,113 @@ describe('BoardViewStore', () => {
       expect(cardOf(store, 'CAD-461').status).toBe('todo');
     });
 
-    it('writes the waiting moves at once on a flush and when destroyed', () => {
+    it('writes the waiting moves at once on a flush', () => {
       const store: InstanceType<typeof BoardViewStore> = setup();
       store.settleWith(send);
 
       store.stage(cardOf(store, 'CAD-461'), 'review');
       store.flush();
+      vi.advanceTimersByTime(STATUS_SETTLE_MS);
+
+      expect(send).toHaveBeenCalledTimes(1);
       expect(send).toHaveBeenCalledWith(
         expect.objectContaining({ key: 'CAD-461' }) as TaskSummary,
         'review',
       );
+    });
 
-      store.stage(cardOf(store, 'CAD-482'), 'blocked');
-      TestBed.resetTestingModule();
-      expect(send).toHaveBeenLastCalledWith(
-        expect.objectContaining({ key: 'CAD-482' }) as TaskSummary,
-        'blocked',
-      );
+    it('writes the last move from its task when another query leaves the task out', () => {
+      const store: InstanceType<typeof BoardViewStore> = setup();
+      store.settleWith(send);
+      TestBed.tick();
+
+      store.stage(cardOf(store, 'CAD-461'), 'progress');
+      store.stage(cardOf(store, 'CAD-461'), 'review');
+      items.set([]);
+      taskQuery.set({ level: 'roots', sort: 'manual', search: 'quotas' });
+      TestBed.tick();
       vi.advanceTimersByTime(STATUS_SETTLE_MS);
-      expect(send).toHaveBeenCalledTimes(2);
+
+      expect(send).toHaveBeenCalledTimes(1);
+      expect(send).toHaveBeenCalledWith(
+        expect.objectContaining({ key: 'CAD-461', version: 3 }) as TaskSummary,
+        'review',
+      );
+    });
+
+    it('writes the waiting moves with the task API when destroyed, never Cancelled', async () => {
+      const store: InstanceType<typeof BoardViewStore> = setup();
+      store.settleWith(send);
+
+      store.stage(cardOf(store, 'CAD-461'), 'review');
+      store.stage(cardOf(store, 'CAD-482'), 'cancelled');
+      TestBed.resetTestingModule();
+      await vi.advanceTimersByTimeAsync(STATUS_SETTLE_MS);
+
+      expect(send).not.toHaveBeenCalled();
+      expect(bulk).toHaveBeenCalledTimes(1);
+      expect(bulk).toHaveBeenCalledWith(
+        [{ taskKey: 'CAD-461', version: 3 }],
+        { type: 'status', status: 'review' },
+        expect.any(Function),
+      );
+    });
+
+    it('writes the last move after the write in flight when the view is left', async () => {
+      const store: InstanceType<typeof BoardViewStore> = setup();
+      let settleFirst: (outcome: ViewTaskOutcome) => void = (): void => undefined;
+      const first: Promise<ViewTaskOutcome> = new Promise<ViewTaskOutcome>(
+        (resolve: (outcome: ViewTaskOutcome) => void): void => {
+          settleFirst = resolve;
+        },
+      );
+      const reader: ViewTaskWriter = {
+        act: vi.fn(() => first),
+        update: vi.fn(),
+        remind: vi.fn(),
+        restore: vi.fn(),
+        reload: vi.fn(),
+        shownStatus: (task: TaskSummary) => task.status,
+      };
+      const writer: ViewTaskWriter = store.writerOver(reader);
+      const task: TaskSummary = cardOf(store, 'CAD-461').task;
+      void writer.act([task], { type: 'status', status: 'progress' });
+
+      store.stage(cardOf(store, 'CAD-461'), 'review');
+      store.leave();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(bulk).not.toHaveBeenCalled();
+
+      settleFirst({
+        ...applied('CAD-461', 4),
+        before: {},
+        after: { 'CAD-461': 4 },
+        changed: [],
+      });
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(bulk).toHaveBeenCalledWith(
+        [{ taskKey: 'CAD-461', version: 4 }],
+        { type: 'status', status: 'review' },
+        expect.any(Function),
+      );
+    });
+
+    it('says so when the write sent on leaving is refused', async () => {
+      bulk.mockResolvedValue({
+        affected: 0,
+        done: [],
+        failed: [{ taskKey: 'CAD-461', version: 3 }],
+        unknown: [],
+        notSent: [],
+      });
+      const store: InstanceType<typeof BoardViewStore> = setup();
+
+      store.stage(cardOf(store, 'CAD-461'), 'review');
+      store.leave();
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(error).toHaveBeenCalledWith('The task could not be changed');
     });
   });
 

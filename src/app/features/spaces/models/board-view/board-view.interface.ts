@@ -155,3 +155,48 @@ export interface BoardCard {
   readonly assignees: readonly Person[];
   // #endregion
 }
+
+/**
+ * Interface BoardPendingMove
+ *
+ * @description
+ * A card's move waiting to be written: the status it was dropped on, the status the view had
+ * confirmed when the first of its quick moves began, and the task as it showed then, so the move
+ * is written even once the current read no longer holds the task (a filter, a search).
+ */
+export interface BoardPendingMove {
+  // #region Properties
+  /**
+   * Property status
+   *
+   * @description
+   * The status of the column the card was last dropped in.
+   *
+   * @type {StatusKey}
+   * @readonly
+   */
+  readonly status: StatusKey;
+
+  /**
+   * Property from
+   *
+   * @description
+   * The status the view had confirmed when the move began: a move back to it writes nothing.
+   *
+   * @type {StatusKey}
+   * @readonly
+   */
+  readonly from: StatusKey;
+
+  /**
+   * Property task
+   *
+   * @description
+   * The task as shown when the move began.
+   *
+   * @type {TaskSummary}
+   * @readonly
+   */
+  readonly task: TaskSummary;
+  // #endregion
+}

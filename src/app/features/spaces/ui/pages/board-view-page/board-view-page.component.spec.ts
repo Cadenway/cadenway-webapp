@@ -490,9 +490,66 @@ describe('BoardViewPage', () => {
     expect(bulk).not.toHaveBeenCalled();
     fixture.destroy();
 
+    await expect.poll(() => bulk.mock.calls.length).toBe(1);
     expect(bulk).toHaveBeenCalledWith(
       [{ taskKey: 'CAD-482', version: 3 }],
       { type: 'status', status: 'progress' },
+      expect.any(Function),
+    );
+  });
+
+  it('writes the last move once when the search leaves its card out before it settles', async () => {
+    page.mockImplementation(
+      (_listId: string, query: { readonly search?: string }): Promise<ListTaskPage> => {
+        const items: readonly TaskSummary[] = query.search
+          ? sprintTasks.filter((item: TaskSummary): boolean => item.key === 'CAD-483')
+          : sprintTasks;
+        return Promise.resolve({ items, nextCursor: null, total: items.length });
+      },
+    );
+    const fixture: ComponentFixture<BoardViewPage> = await render();
+
+    await move(fixture, 'CAD-482 — Redesign the SSO sign-in screen', ['ArrowRight']);
+    await move(fixture, 'CAD-482 — Redesign the SSO sign-in screen', ['ArrowRight']);
+    TestBed.inject(ListViewStore).setSearch('quotas');
+    await settle(fixture);
+    await waitSettle(fixture);
+
+    expect(named('CAD-482 — Redesign the SSO sign-in screen')).toBeNull();
+    expect(bulk).toHaveBeenCalledTimes(1);
+    expect(bulk).toHaveBeenCalledWith(
+      [{ taskKey: 'CAD-482', version: 3 }],
+      { type: 'status', status: 'review' },
+      expect.any(Function),
+    );
+  });
+
+  it('writes the last move after the write in flight when the view is left', async () => {
+    let answerFirst: (outcome: TaskBulkOutcome) => void = (): void => undefined;
+    bulk.mockImplementationOnce(
+      () =>
+        new Promise<TaskBulkOutcome>((resolve: (outcome: TaskBulkOutcome) => void): void => {
+          answerFirst = resolve;
+        }),
+    );
+    const fixture: ComponentFixture<BoardViewPage> = await render();
+
+    await move(fixture, 'CAD-482 — Redesign the SSO sign-in screen', ['ArrowRight']);
+    await new Promise<void>((resolve: () => void): void => {
+      setTimeout(resolve, STATUS_SETTLE_MS + 40);
+    });
+    expect(bulk).toHaveBeenCalledTimes(1);
+    await move(fixture, 'CAD-482 — Redesign the SSO sign-in screen', ['ArrowRight']);
+    fixture.destroy();
+    for (let tick: number = 0; tick < 10; tick++) await Promise.resolve();
+    expect(bulk).toHaveBeenCalledTimes(1);
+
+    answerFirst(outcome(['CAD-482']));
+
+    await expect.poll(() => bulk.mock.calls.length).toBe(2);
+    expect(bulk).toHaveBeenLastCalledWith(
+      [{ taskKey: 'CAD-482', version: 4 }],
+      { type: 'status', status: 'review' },
       expect.any(Function),
     );
   });
