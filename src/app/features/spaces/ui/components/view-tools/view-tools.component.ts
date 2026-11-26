@@ -17,6 +17,7 @@ import { CwInput } from '@cadenway/ui/components/input';
 import {
   CwMenu,
   CwMenuItem,
+  CwMenuItemCheckbox,
   CwMenuItemRadio,
   CwMenuLabel,
   CwMenuRadioGroup,
@@ -28,7 +29,8 @@ import { CwStatusIcon } from '@cadenway/ui/components/status-icon';
 import { CwToolbar, CwToolbarItem, CwToolbarSpacer } from '@cadenway/ui/components/toolbar';
 import { NgIcon } from '@ng-icons/core';
 
-import { PRIORITY_ORDER } from '../../../constants/statuses/statuses.constants';
+import { BOARD_ORDER, PRIORITY_ORDER } from '../../../constants/statuses/statuses.constants';
+import { LAYOUT_TOOLS } from '../../../constants/view-layouts/view-layouts.constants';
 import {
   filterFieldLabels,
   groupLabels,
@@ -46,6 +48,7 @@ import type {
 } from '../../../models/list-view-config/list-view-config.interface';
 import type { SavedView } from '../../../models/saved-view/saved-view.interface';
 import type { FilterChip, ViewOption } from '../../../models/view-option/view-option.interface';
+import type { ViewTool } from '../../../models/view-tool/view-tool.type';
 import { SORT_FIELDS } from '../../../utils/list-view-query/list-view-query.util';
 
 /**
@@ -127,7 +130,9 @@ const FIELDS: readonly FilterField[] = ['status', 'priority', 'assignee', 'label
  * task`; then the `Active filters` row: a chip per field with its removal, `+ Filter` (which
  * opens the same dialog), `Clear all` or `No filter · n tasks`, the applied saved view's
  * `Modified` with `Revert` and `Save`, the subtask display menu and `Save the
- * view`. Presentational: it renders the configuration it receives and emits each change;
+ * view`. A layout shows only its `tools`: on the board, `Columns` (`Columns shown`, a
+ * checkbox per status column) replaces `Group by` (`App.dc.html` lines 424-433, 9217-9218).
+ * Presentational: it renders the configuration it receives and emits each change;
  * `taskCreated` is left for the task feature's creation dialog.
  */
 @Component({
@@ -138,6 +143,7 @@ const FIELDS: readonly FilterField[] = ['status', 'priority', 'assignee', 'label
     CwInput,
     CwMenu,
     CwMenuItem,
+    CwMenuItemCheckbox,
     CwMenuItemRadio,
     CwMenuLabel,
     CwMenuRadioGroup,
@@ -323,6 +329,44 @@ export class ViewTools {
    * @readonly
    */
   public readonly saveDisabled: InputSignal<boolean> = input(false);
+
+  /**
+   * Property tools
+   *
+   * @description
+   * The tools the layout shows (`ListViewStore.tools`); the others are left out.
+   *
+   * @type {InputSignal<readonly ViewTool[]>}
+   * @readonly
+   */
+  public readonly tools: InputSignal<readonly ViewTool[]> = input<readonly ViewTool[]>(
+    LAYOUT_TOOLS.list,
+  );
+
+  /**
+   * Property hiddenStatuses
+   *
+   * @description
+   * Status columns the board hides, unticked in `Columns shown`.
+   *
+   * @type {InputSignal<readonly StatusKey[]>}
+   * @readonly
+   */
+  public readonly hiddenStatuses: InputSignal<readonly StatusKey[]> = input<readonly StatusKey[]>(
+    [],
+  );
+
+  /**
+   * Property hiddenStatusesChanged
+   *
+   * @description
+   * Emits the board's hidden status columns after a column is ticked or unticked.
+   *
+   * @type {OutputEmitterRef<readonly StatusKey[]>}
+   * @readonly
+   */
+  public readonly hiddenStatusesChanged: OutputEmitterRef<readonly StatusKey[]> =
+    output<readonly StatusKey[]>();
 
   /**
    * Property milestonesToggled
@@ -702,9 +746,56 @@ export class ViewTools {
   protected readonly subtaskShort: Signal<string> = computed(
     (): string => subtaskModeLabels()[this.config().subtasks].short,
   );
+
+  /**
+   * Property columnOptions
+   *
+   * @description
+   * The board's columns in `Columns shown`: the statuses the space shows, in the board's order
+   * (`BOARD_ORDER`).
+   *
+   * @type {Signal<readonly ViewOption<StatusKey>[]>}
+   * @readonly
+   */
+  protected readonly columnOptions: Signal<readonly ViewOption<StatusKey>[]> = computed(
+    (): readonly ViewOption<StatusKey>[] =>
+      BOARD_ORDER.flatMap((key: StatusKey): ViewOption<StatusKey>[] =>
+        this.statuses().filter((status: ViewOption<StatusKey>): boolean => status.value === key),
+      ),
+  );
   // #endregion
 
   // #region Methods
+  /**
+   * Method has
+   *
+   * @description
+   * Whether the layout shows a tool.
+   *
+   * @param {ViewTool} tool - Tool.
+   * @returns {boolean} Whether it shows.
+   */
+  protected has(tool: ViewTool): boolean {
+    return this.tools().includes(tool);
+  }
+
+  /**
+   * Method toggleColumn
+   *
+   * @description
+   * Hides a shown board column or shows a hidden one.
+   *
+   * @param {StatusKey} key - Status of the column.
+   */
+  protected toggleColumn(key: StatusKey): void {
+    const hidden: readonly StatusKey[] = this.hiddenStatuses();
+    this.hiddenStatusesChanged.emit(
+      hidden.includes(key)
+        ? hidden.filter((item: StatusKey): boolean => item !== key)
+        : [...hidden, key],
+    );
+  }
+
   /**
    * Method isChecked
    *

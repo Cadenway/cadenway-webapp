@@ -24,6 +24,7 @@ import {
 import { CwSkeleton } from '@cadenway/ui/components/skeleton';
 import { NgIcon } from '@ng-icons/core';
 
+import type { ListDialog } from '../../../models/list-dialog/list-dialog.type';
 import type { ListMembers } from '../../../models/list-member/list-member.interface';
 import type { Space } from '../../../models/space/space.interface';
 import type { ListCounts, TaskList } from '../../../models/task-list/task-list.interface';
@@ -38,8 +39,9 @@ import { listIconName, lookIconName, lookTone } from '../../../utils/look/look.u
  * list's icon in its color, a button that opens the list dialog, its title, the favorite toggle,
  * the description line (`Sprint of Nov 3 – 17 · 98 tasks · 25% done`), the sprint goal,
  * the members' avatars from 768 px and the `…` menu: edit the list or sprint, edit the space,
- * duplicate with tasks, export CSV, copy link, archive and delete. `Share`, `Sprint report`,
- * `Space statuses` and `Automations` come in step 4b.
+ * duplicate with tasks, export CSV, copy link, archive and delete. The openers of `Share`,
+ * `Sprint report`, `Space statuses` and `Automations` show only for the released dialogs
+ * (`dialogs`) and emit `dialogRequested`, in the mockup's places (lines 309, 317, 324-325).
  * Presentational: every action is an output; the page confirms the deletion.
  */
 @Component({
@@ -195,6 +197,40 @@ export class ListHeader {
    * @readonly
    */
   public readonly spaceEditable: InputSignal<boolean> = input(false);
+
+  /**
+   * Property dialogs
+   *
+   * @description
+   * The released header dialogs whose openers show: `Share` beside the `…` menu, `Sprint
+   * report` on a sprint's goal line, `Space statuses` and `Automations` in the menu.
+   *
+   * @type {InputSignal<readonly ListDialog[]>}
+   * @readonly
+   */
+  public readonly dialogs: InputSignal<readonly ListDialog[]> = input<readonly ListDialog[]>([]);
+
+  /**
+   * Property automationsEditable
+   *
+   * @description
+   * Whether `Automations` is enabled: the organization's rules are for its admins and owners.
+   *
+   * @type {InputSignal<boolean>}
+   * @readonly
+   */
+  public readonly automationsEditable: InputSignal<boolean> = input(false);
+
+  /**
+   * Property dialogRequested
+   *
+   * @description
+   * Emits the dialog an opener asks for; the page hosts it.
+   *
+   * @type {OutputEmitterRef<ListDialog>}
+   * @readonly
+   */
+  public readonly dialogRequested: OutputEmitterRef<ListDialog> = output<ListDialog>();
 
   /**
    * Property sidebarToggled

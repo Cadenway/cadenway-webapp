@@ -25,6 +25,7 @@ import type { ListMember, ListMembers } from '../../../models/list-member/list-m
 import type {
   ListTaskQuery,
   ListViewConfig,
+  SheetExportSort,
 } from '../../../models/list-view-config/list-view-config.interface';
 import type { LookIcon } from '../../../models/look/look.type';
 import type { SavedView, ViewLayout } from '../../../models/saved-view/saved-view.interface';
@@ -40,6 +41,7 @@ import {
   toExportParams,
   toSavedView,
   toSavedViewConfiguration,
+  toSavedViewConfigurationPatch,
 } from '../../adapters/saved-view/saved-view.adapter';
 import { toListSummary, toTaskList } from '../../adapters/space/space.adapter';
 
@@ -426,15 +428,23 @@ export class ListsApi {
    * Method exportCsv
    *
    * @description
-   * Downloads the tasks the view shows as CSV, with the gateway's file name.
+   * Downloads the tasks the view shows as CSV, with the gateway's file name, in the sheet's
+   * own order when it has one.
    *
    * @param {TaskList} list - The list.
    * @param {ListTaskQuery} query - The view's task query.
+   * @param {SheetExportSort | null} sheetSort - The sheet's sort, or null.
    * @returns {Promise<ListExport>} The file.
    */
-  public async exportCsv(list: TaskList, query: ListTaskQuery): Promise<ListExport> {
+  public async exportCsv(
+    list: TaskList,
+    query: ListTaskQuery,
+    sheetSort: SheetExportSort | null = null,
+  ): Promise<ListExport> {
     const response: HttpResponse<string> = await firstValueFrom(
-      this.lists.exportListTasks(list.id, toExportParams(query), { observe: 'response' }),
+      this.lists.exportListTasks(list.id, toExportParams(query, sheetSort), {
+        observe: 'response',
+      }),
     );
     return {
       fileName:
@@ -550,7 +560,7 @@ export class ListsApi {
       ...(change.name !== undefined ? { name: change.name } : {}),
       ...(change.icon !== undefined ? { icon: change.icon } : {}),
       ...(change.config
-        ? { configuration: toSavedViewConfiguration(view.layout, change.config) }
+        ? { configuration: toSavedViewConfigurationPatch(view.layout, change.config) }
         : {}),
     };
     return toSavedView(

@@ -5,7 +5,10 @@ import type {
   ListTaskQuery,
   ListViewConfig,
   ListViewFilters,
+  ListViewPresentation,
+  SheetExportSort,
 } from '../../models/list-view-config/list-view-config.interface';
+import type { ViewLayout } from '../../models/saved-view/saved-view.interface';
 
 /**
  * Constant EMPTY_FILTERS
@@ -18,11 +21,27 @@ import type {
 export const EMPTY_FILTERS: ListViewFilters = { status: [], priority: [], assignee: [], label: [] };
 
 /**
+ * Constant DEFAULT_PRESENTATION
+ *
+ * @description
+ * Every column shown and no sheet sort.
+ *
+ * @type {ListViewPresentation}
+ */
+export const DEFAULT_PRESENTATION: ListViewPresentation = {
+  hiddenBoardStatusKeys: [],
+  hiddenSheetColumns: [],
+  hiddenCustomFieldIds: [],
+  sheetSort: null,
+  customFieldSort: null,
+};
+
+/**
  * Constant DEFAULT_VIEW_CONFIG
  *
  * @description
  * What a list shows when nothing was chosen (`SV_DEFAULT` of `App.dc.html`): no filter, manual
- * order, grouped by status, subtasks folded under their parent.
+ * order, grouped by status, subtasks folded under their parent, every column shown.
  *
  * @type {ListViewConfig}
  */
@@ -31,6 +50,7 @@ export const DEFAULT_VIEW_CONFIG: ListViewConfig = {
   sort: { field: 'manual', direction: 'asc' },
   groupBy: 'status',
   subtasks: 'nested',
+  presentation: DEFAULT_PRESENTATION,
 };
 
 /**
@@ -140,6 +160,117 @@ export function toGroupQuery(config: ListViewConfig, query: ListTaskQuery): List
 }
 
 /**
+ * Function sameValues
+ *
+ * @description
+ * Whether two lists hold the same values, in any order.
+ *
+ * @param {readonly string[]} first - A list.
+ * @param {readonly string[]} second - Another list.
+ * @returns {boolean} Whether they match.
+ */
+function sameValues(first: readonly string[], second: readonly string[]): boolean {
+  return (
+    first.length === second.length &&
+    [...first].sort().join('\u0000') === [...second].sort().join('\u0000')
+  );
+}
+
+/**
+ * Function presentationFor
+ *
+ * @description
+ * The part of a presentation a layout uses: the hidden status columns on the board, the hidden
+ * columns and the sheet sort on the sheet, nothing elsewhere. Only that part makes a standard tab
+ * savable, makes a saved view `Modified`, counts in the summary and is stored with a saved view.
+ *
+ * @param {ViewLayout} layout - Layout shown or saved.
+ * @param {ListViewPresentation} presentation - Whole presentation.
+ * @returns {ListViewPresentation} The layout's part, the rest at its default.
+ */
+export function presentationFor(
+  layout: ViewLayout,
+  presentation: ListViewPresentation,
+): ListViewPresentation {
+  if (layout === 'board') {
+    return { ...DEFAULT_PRESENTATION, hiddenBoardStatusKeys: presentation.hiddenBoardStatusKeys };
+  }
+  if (layout === 'table') return { ...presentation, hiddenBoardStatusKeys: [] };
+  return DEFAULT_PRESENTATION;
+}
+
+/**
+ * Function samePresentation
+ *
+ * @description
+ * Whether two presentations hide the same columns (in any order) and sort the sheet alike.
+ *
+ * @param {ListViewPresentation} first - A presentation.
+ * @param {ListViewPresentation} second - Another presentation.
+ * @returns {boolean} Whether they match.
+ */
+export function samePresentation(
+  first: ListViewPresentation,
+  second: ListViewPresentation,
+): boolean {
+  return (
+    sameValues(first.hiddenBoardStatusKeys, second.hiddenBoardStatusKeys) &&
+    sameValues(first.hiddenSheetColumns, second.hiddenSheetColumns) &&
+    sameValues(first.hiddenCustomFieldIds, second.hiddenCustomFieldIds) &&
+    first.sheetSort?.column === second.sheetSort?.column &&
+    first.sheetSort?.direction === second.sheetSort?.direction &&
+    first.customFieldSort?.fieldId === second.customFieldSort?.fieldId &&
+    first.customFieldSort?.direction === second.customFieldSort?.direction
+  );
+}
+
+/**
+ * Function hiddenColumnCount
+ *
+ * @description
+ * Columns a layout hides, as the saved-view summary counts them (`cfgSummary`): the board's
+ * status columns, or the sheet's built-in and custom columns.
+ *
+ * @param {ViewLayout} layout - Layout.
+ * @param {ListViewPresentation} presentation - Presentation.
+ * @returns {number} The count.
+ */
+export function hiddenColumnCount(layout: ViewLayout, presentation: ListViewPresentation): number {
+  const used: ListViewPresentation = presentationFor(layout, presentation);
+  return (
+    used.hiddenBoardStatusKeys.length +
+    used.hiddenSheetColumns.length +
+    used.hiddenCustomFieldIds.length
+  );
+}
+
+/**
+ * Function sheetExportSort
+ *
+ * @description
+ * The sheet's sort for the CSV export: the custom field's when set, else the built-in column's;
+ * null outside the sheet or without a sheet sort.
+ *
+ * @param {ViewLayout} layout - Layout shown.
+ * @param {ListViewPresentation} presentation - Presentation.
+ * @returns {SheetExportSort | null} The export sort.
+ */
+export function sheetExportSort(
+  layout: ViewLayout,
+  presentation: ListViewPresentation,
+): SheetExportSort | null {
+  if (layout !== 'table') return null;
+  const sort: { readonly column: string; readonly direction: 'asc' | 'desc' } | null =
+    presentation.customFieldSort
+      ? {
+          column: presentation.customFieldSort.fieldId,
+          direction: presentation.customFieldSort.direction,
+        }
+      : presentation.sheetSort;
+  return sort ? { column: sort.column, direction: sort.direction } : null;
+}
+
+/**
  * Function sameSavedSettings
  *
  * @description
@@ -151,8 +282,6 @@ export function toGroupQuery(config: ListViewConfig, query: ListTaskQuery): List
  * @returns {boolean} Whether they match.
  */
 export function sameSavedSettings(first: ListViewConfig, second: ListViewConfig): boolean {
-  const sameValues: (a: readonly string[], b: readonly string[]) => boolean = (a, b) =>
-    a.length === b.length && [...a].sort().join('\u0000') === [...b].sort().join('\u0000');
   return (
     sameValues(first.filters.status, second.filters.status) &&
     sameValues(first.filters.priority, second.filters.priority) &&

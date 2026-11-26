@@ -8,6 +8,7 @@ import {
   withState,
 } from '@ngrx/signals';
 
+import { LAYOUT_TOOLS } from '../../constants/view-layouts/view-layouts.constants';
 import type {
   FilterField,
   ListGroupBy,
@@ -16,15 +17,22 @@ import type {
   ListTaskQuery,
   ListViewConfig,
   ListViewFilters,
+  ListViewPresentation,
+  SheetExportSort,
   SubtaskMode,
 } from '../../models/list-view-config/list-view-config.interface';
 import type { ListRowsSummary } from '../../models/list-rows/list-rows.interface';
 import type { SavedView, ViewLayout } from '../../models/saved-view/saved-view.interface';
+import type { ViewTool } from '../../models/view-tool/view-tool.type';
 import {
+  DEFAULT_PRESENTATION,
   DEFAULT_VIEW_CONFIG,
   EMPTY_FILTERS,
   filterCount,
+  presentationFor,
+  samePresentation,
   sameSavedSettings,
+  sheetExportSort,
   toGroupQuery,
   toTaskQuery,
 } from '../../utils/list-view-query/list-view-query.util';
@@ -80,6 +88,17 @@ interface ListViewState {
    * @readonly
    */
   readonly savedView: SavedView | null;
+
+  /**
+   * Property layout
+   *
+   * @description
+   * Layout of the routed view, which the list page publishes (`showLayout`).
+   *
+   * @type {ViewLayout}
+   * @readonly
+   */
+  readonly layout: ViewLayout;
 
   /**
    * Property rows
@@ -162,12 +181,47 @@ export interface ListViewStoreInstance {
    * Property layout
    *
    * @description
-   * Layout shown: the saved view's, else `list` (the only one of step 4a).
+   * Layout of the routed view: the one a saved view opened, the standard tab picked, or `list`
+   * when either is not released.
    *
    * @type {Signal<ViewLayout>}
    * @readonly
    */
   readonly layout: Signal<ViewLayout>;
+
+  /**
+   * Property tools
+   *
+   * @description
+   * The view tools the layout shows (`LAYOUT_TOOLS`); empty hides the toolbar and the chips.
+   *
+   * @type {Signal<readonly ViewTool[]>}
+   * @readonly
+   */
+  readonly tools: Signal<readonly ViewTool[]>;
+
+  /**
+   * Property presentation
+   *
+   * @description
+   * Hidden columns and the sheet's own sort, shared by the board and the sheet with the saved
+   * view applied.
+   *
+   * @type {Signal<ListViewPresentation>}
+   * @readonly
+   */
+  readonly presentation: Signal<ListViewPresentation>;
+
+  /**
+   * Property sheetExportSort
+   *
+   * @description
+   * The sheet's sort the CSV export follows, or null outside the sheet or without one.
+   *
+   * @type {Signal<SheetExportSort | null>}
+   * @readonly
+   */
+  readonly sheetExportSort: Signal<SheetExportSort | null>;
 
   /**
    * Property filterCount
@@ -184,7 +238,8 @@ export interface ListViewStoreInstance {
    * Property modified
    *
    * @description
-   * Whether the applied saved view differs from what it saved (`Modified`).
+   * Whether the applied saved view differs from what it saved (`Modified`): its filters, sort,
+   * grouping or the presentation of the layout shown.
    *
    * @type {Signal<boolean>}
    * @readonly
@@ -195,7 +250,8 @@ export interface ListViewStoreInstance {
    * Property canSave
    *
    * @description
-   * Whether a standard tab differs from the default, so `Save the view` shows.
+   * Whether a standard tab differs from the default, so `Save the view` shows: its filters,
+   * sort or grouping, or hidden columns on the board or the sheet (`App.dc.html` line 7883).
    *
    * @type {Signal<boolean>}
    * @readonly
@@ -247,6 +303,27 @@ export interface ListViewStoreInstance {
    * @param {Signal<ListRowsSummary> | ListRowsSummary} summary - The rows' summary.
    */
   followRows(summary: Signal<ListRowsSummary> | ListRowsSummary): void;
+
+  /**
+   * Method showLayout
+   *
+   * @description
+   * Records the layout of the routed view, which the list page follows; another layout forgets
+   * the rows' summary until its view publishes one.
+   *
+   * @param {Signal<ViewLayout> | ViewLayout} layout - The routed layout.
+   */
+  showLayout(layout: Signal<ViewLayout> | ViewLayout): void;
+
+  /**
+   * Method setPresentation
+   *
+   * @description
+   * Changes members of the presentation (hidden columns, sheet sort), keeping the others.
+   *
+   * @param {Partial<ListViewPresentation>} change - Members to change.
+   */
+  setPresentation(change: Partial<ListViewPresentation>): void;
 
   /**
    * Method toggleFilter
@@ -375,7 +452,7 @@ export interface ListViewStoreInstance {
    * Method reset
    *
    * @description
-   * Starts over with the default configuration, for another list.
+   * Starts over with the default configuration, for another list; the routed layout stays.
    */
   reset(): void;
   // #endregion
@@ -394,6 +471,7 @@ const initialState: ListViewState = {
   search: '',
   milestonesOnly: false,
   savedView: null,
+  layout: 'list',
   rows: { visibleCount: null, hasSubtasks: null },
   _before: null,
 };
@@ -410,14 +488,29 @@ function createListViewStore(): Type<ListViewStoreInstance> {
   return signalStore(
     withState(initialState),
     withComputed((store) => ({
-      layout: (): ViewLayout => store.savedView()?.layout ?? 'list',
+      tools: (): readonly ViewTool[] => LAYOUT_TOOLS[store.layout()],
+      presentation: (): ListViewPresentation => store.config().presentation,
+      sheetExportSort: (): SheetExportSort | null =>
+        sheetExportSort(store.layout(), store.config().presentation),
       filterCount: (): number => filterCount(store.config().filters),
       modified: (): boolean => {
         const saved: SavedView | null = store.savedView();
-        return saved !== null && !sameSavedSettings(store.config(), saved.config);
+        return (
+          saved !== null &&
+          (!sameSavedSettings(store.config(), saved.config) ||
+            !samePresentation(
+              presentationFor(store.layout(), store.config().presentation),
+              presentationFor(store.layout(), saved.config.presentation),
+            ))
+        );
       },
       canSave: (): boolean =>
-        store.savedView() === null && !sameSavedSettings(store.config(), DEFAULT_VIEW_CONFIG),
+        store.savedView() === null &&
+        (!sameSavedSettings(store.config(), DEFAULT_VIEW_CONFIG) ||
+          !samePresentation(
+            presentationFor(store.layout(), store.config().presentation),
+            DEFAULT_PRESENTATION,
+          )),
       taskQuery: (): ListTaskQuery =>
         toTaskQuery(store.config(), store.search(), store.milestonesOnly()),
     })),
@@ -497,11 +590,23 @@ function createListViewStore(): Type<ListViewStoreInstance> {
             savedView: view,
           });
         },
+        setPresentation(change: Partial<ListViewPresentation>): void {
+          patchState(store, {
+            config: {
+              ...store.config(),
+              presentation: { ...store.config().presentation, ...change },
+            },
+          });
+        },
         reset(): void {
-          patchState(store, initialState);
+          patchState(store, { ...initialState, layout: store.layout() });
         },
         followRows: signalMethod<ListRowsSummary>((rows: ListRowsSummary): void => {
           patchState(store, { rows });
+        }),
+        showLayout: signalMethod<ViewLayout>((layout: ViewLayout): void => {
+          if (layout === store.layout()) return;
+          patchState(store, { layout, rows: initialState.rows });
         }),
       };
     }),
@@ -517,7 +622,10 @@ function createListViewStore(): Type<ListViewStoreInstance> {
  * `queryListTasks` body (`taskQuery`) and the `countTaskGroups` parameters (`groupQuery`) for the
  * rows. A saved view is applied over the standard tab, which gets its configuration back when the
  * view is left; the subtask display, the search and `Milestones` stay local and never make a saved
- * view `Modified`.
+ * view `Modified`. It also holds the routed layout (`showLayout`, published by the list page),
+ * the tools that layout shows (`tools`) and the presentation (`setPresentation`: the board's
+ * hidden columns, the sheet's hidden columns and sort), of which only the shown layout's part
+ * counts for `canSave` and `modified`.
  *
  * @type {ReturnType<typeof createListViewStore>}
  */

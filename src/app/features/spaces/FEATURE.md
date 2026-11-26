@@ -7,11 +7,13 @@ and the favorite spaces of the rail, the sidebar's favorites, spaces accordion, 
 suggestions, the sprint progress and the `Trash` and `Archives` rows of its footer), the
 space and list dialogs (create, edit, delete a space; create a list or a sprint, edit it), the
 space overview, the frame of a list page (header, view tabs and saved views, view tools and active
-filters, the selection bar) with its view configuration, and the `List` view: its grouped,
-virtualized task rows, read page by page. The cells, pickers, status interaction and create dialog
-belong to Task, which the rows compose, as the task detail opened from a row does; the
-trash and archives screens belong to their features; the eight other views and the share, status
-and automation dialogs come in step 4b.
+filters, the selection bar, the hosts of the header's dialogs) with its view configuration, and
+the `List` view: its grouped, virtualized task rows, read page by page. The cells, pickers, status
+interaction and create dialog belong to Task, which the rows compose, as the task detail opened
+from a row does; the trash and archives screens belong to their features. The eight other views
+(`Board`, `Calendar`, `Gantt`, `Workload`, `Sheet`, `Form`, `Activity`, `Timesheet`) and the
+`Share`, `Sprint report`, `Space statuses` and `Automations` dialogs have their routes, hosts and
+stubs; their content comes in step 4b, one package each.
 
 ## Routes
 
@@ -26,10 +28,69 @@ breadcrumb, dialog, inline edit, toolbar).
   and the English texts of `cw-data-table`.
   `?savedView=<id>` applies a saved view of the list; `?task=<KEY>`, set when a row opens, opens
   Task's detail over the view.
+- One child per other layout, at its `LAYOUT_SEGMENTS` segment
+  (`constants/view-layouts/view-layouts.constants.ts`): the segment is the layout key, except
+  the saved views' `table`, whose segment is `sheet`.
+
+  | Segment     | Layout      | Page (`ui/pages/…`)                         | Providers (`state/…`)                                                     |
+  | ----------- | ----------- | ------------------------------------------- | ------------------------------------------------------------------------- |
+  | `board`     | `board`     | `board-view-page` (`BoardViewPage`)         | `board-view/board-view.providers.ts` (`BOARD_VIEW_PROVIDERS`)             |
+  | `calendar`  | `calendar`  | `calendar-view-page` (`CalendarViewPage`)   | `calendar-view/calendar-view.providers.ts` (`CALENDAR_VIEW_PROVIDERS`)    |
+  | `gantt`     | `gantt`     | `gantt-view-page` (`GanttViewPage`)         | `gantt-view/gantt-view.providers.ts` (`GANTT_VIEW_PROVIDERS`)             |
+  | `workload`  | `workload`  | `workload-view-page` (`WorkloadViewPage`)   | `workload-view/workload-view.providers.ts` (`WORKLOAD_VIEW_PROVIDERS`)    |
+  | `sheet`     | `table`     | `sheet-view-page` (`SheetViewPage`)         | `sheet-view/sheet-view.providers.ts` (`SHEET_VIEW_PROVIDERS`)             |
+  | `form`      | `form`      | `form-view-page` (`FormViewPage`)           | `form-view/form-view.providers.ts` (`FORM_VIEW_PROVIDERS`)                |
+  | `activity`  | `activity`  | `activity-view-page` (`ActivityViewPage`)   | `activity-view/activity-view.providers.ts` (`ACTIVITY_VIEW_PROVIDERS`)    |
+  | `timesheet` | `timesheet` | `timesheet-view-page` (`TimesheetViewPage`) | `timesheet-view/timesheet-view.providers.ts` (`TIMESHEET_VIEW_PROVIDERS`) |
+
+  Each provides its view's store (`<View>ViewStore`, `state/<view>-view/<view>-view.store.ts`),
+  and the five task views (board, calendar, gantt, workload, sheet) Task's
+  `TaskStatusChangesStore`. Until its package lands, each page is a stub that says the view is
+  not available yet and each store is empty.
+
+- `RELEASED_LAYOUTS` (`constants/released-views/released-views.constants.ts`, read through the
+  `RELEASED_VIEWS` token) decides which layouts users reach. Today it holds `list` only. A layout
+  outside it has no tab, and `releasedLayoutGuard(layout)` (`http/guards/released-layout/`)
+  replaces its address with `list`, keeping the query parameters, so a saved view of that layout
+  opens on `list`. The lead adds a layout when its package merges; view builders never edit the
+  file. `RELEASED_LIST_DIALOGS`, beside it, does the same for the header dialogs' openers (empty
+  today).
 - Failed primary reads render the router's default error component, `RouteErrorBoundary`, in the
-  failing route's outlet: a failed view keeps the list header. The `list` view's `data`
-  (`RouteErrorData`) titles its unavailable state `Could not load the tasks`
-  (`App.dc.html` lines 487-499, 4816-4821).
+  failing route's outlet: a failed view keeps the list header. Each view's `data`
+  (`RouteErrorData`) titles its unavailable state: `Could not load the tasks` for `list` and the
+  task views (`App.dc.html` lines 487-499, 4816-4821), `Could not load the workload`, `the form`,
+  `the activity` or `the timesheet` for the others.
+
+## View and dialog packages
+
+Each step 4b package fills its own files and uses these extension points of the frame, which it
+does not edit (`spaces.routes.ts`, `list-page.*`, `list-header.*`, `view-tabs.*`, `view-tools.*`,
+`list-view.store.ts`, `list-view-config.interface.ts`, `saved-view.adapter.ts`,
+`list-view-query.util.ts`, `view-summary.util.ts`, `view-layouts.constants.ts`; the released
+constants belong to the lead):
+
+- A view package owns `ui/pages/<view>-view-page/*` and `state/<view>-view/*`. It adds what its
+  route subtree shares (stores, data-access services) to its `<VIEW>_VIEW_PROVIDERS`; it provides
+  its bricks' label providers in its page's `providers`.
+- The page injects `ListPageStore` (the list, its space, members, labels, counts) and
+  `ListViewStore`: `taskQuery` and `groupQuery` (the filters, search, milestones, level and sort to
+  read), `layout`, `tools`, `presentation` and `setPresentation(change)` (the board's
+  `hiddenBoardStatusKeys`; the sheet's `hiddenSheetColumns`, `hiddenCustomFieldIds`, `sheetSort`,
+  `customFieldSort`), and `followRows(summary)` to publish its visible count and subtask flag to
+  the tools. `Save the view`, `Modified`, the saved-view summary (`N columns hidden`) and the CSV
+  export (`sheetExportSort`) follow the presentation of the shown layout on their own.
+- `LAYOUT_TOOLS` gives the tools of each layout: all of them with `Columns` instead of `Group by`
+  on the board (which shows `Columns shown`, writing `hiddenBoardStatusKeys`); none on `form` and
+  `activity`, which hides the toolbar; `Create a task` only on `timesheet`, whose time entries the
+  filters, sort, grouping and search do not change.
+- A dialog package owns `ui/dialogs/<dialog>/*` (`share-dialog`, `sprint-report-dialog`,
+  `space-statuses-dialog`, `automations-dialog`) and its `state/` and `data-access/` files. The list
+  page hosts it in a `@defer` block loaded on first opening and binds `open` (a two-way model the
+  dialog sets to false on closing) and `list` (`ShareDialog`, `SprintReportDialog`) or `space`
+  (`SpaceStatusesDialog`, `AutomationsDialog`: the sidebar's `SpaceDetails`, with its version and
+  rights, or null). The openers: `Share` beside the header's `…` menu, `Sprint report` on a
+  sprint's goal line, `Space statuses` (enabled when the space is editable) and `Automations`
+  (enabled for organization admins and owners) in the list menu after `Edit the space`.
 
 ## Public entry points
 
@@ -78,7 +139,8 @@ computed from the navigation's reads, for the command palette's `Lists` and the 
 - `@core/api` (problem readers), `@core/realtime` (`watch({ kind: 'list' })`), `@shared/layout-slot`
   (`SlotFeature`, `SHELL_SIDEBAR`) and `@shared/route-errors`.
 - Errors' `.` entry: the `RouteErrorData` type of the `list` route's `data`.
-- Workspace's `ports/workspace-context` (the signed-in member, `Me` in the assignee filter).
+- Workspace's `ports/workspace-context` (the signed-in member, `Me` in the assignee filter, and
+  the role that enables `Automations`).
 - `@cadenway/ui` (`alert-dialog`, `app-rail`, `avatar`, `breadcrumb`, `button`, `checkbox`,
   `context-menu`, `data-table`, `date-picker`, `dialog`, `empty`, `priority-icon`, `inline-edit`,
   `input`, `menu`, `popover`, `progress`, `radio-group`, `sidebar`, `skeleton`, `status-icon`,
@@ -122,6 +184,14 @@ computed from the navigation's reads, for the command palette's `Lists` and the 
     grouped) for the rows. A saved view applies over the standard tab, which gets its configuration
     back when the view is left; the search, `Milestones` and the subtask display stay local and never
     make a saved view `Modified`. Another list starts over from the default configuration.
+    It holds the routed layout, which the list page publishes from its child route
+    (`showLayout`, which forgets the rows' summary when the layout changes), and the tools that
+    layout shows (`tools`, `LAYOUT_TOOLS`). The presentation (`setPresentation`) is saved with a
+    view, but only the shown layout's part counts (`presentationFor`): hidden board columns on
+    the board, hidden sheet columns and the sheet sort on the sheet make a standard tab savable
+    and an applied view `Modified`, and are the only part stored (a `Save` patches the others to
+    null). The export follows the sheet sort on the sheet (`sheetExportSort`, the custom field's
+    first).
     The shown view publishes its rows' summary to it (`followRows`, until the view is destroyed),
     so the list page's tools read `rows`: the tasks shown with the filters and whether the tasks
     read have subtasks.
@@ -157,8 +227,12 @@ computed from the navigation's reads, for the command palette's `Lists` and the 
     and a task its `Undo` restored (`TaskDetailOpener.changed`; the detail's writes would
     otherwise reach the rows only through realtime) read the rows again,
     through the same 1 s refresh window.
-  - `TaskStatusChangesStore` (Task), route-scoped on `list`, so pending
-    changes die with the view.
+  - `TaskStatusChangesStore` (Task), route-scoped on `list` and on the board, calendar, gantt,
+    workload and sheet views, so pending changes die with the view.
+  - `BoardViewStore`, `CalendarViewStore`, `GanttViewStore`, `WorkloadViewStore`,
+    `SheetViewStore`, `FormViewStore`, `ActivityViewStore` and `TimesheetViewStore`, each
+    route-scoped on its view through its `<VIEW>_VIEW_PROVIDERS`; empty until its package fills
+    it.
   - `SpaceOverviewStore`, page-scoped on `SpaceOverviewPage`. Its lists come from the sidebar's
     overview of the same space, shown at once even while the sidebar reads again, and follow it
     once it changes. The page reads on its own only when the sidebar has no value for the space,
@@ -269,8 +343,14 @@ gateway checks them and `ORGANIZATION_PIN_OPERATIONS` lists them.
 - A favorite saved view's menu holds `Open` only: renaming, duplicating and deleting a view
   live on its list page.
 - `Share` (no grant write in the gateway yet), `Sprint report`, `Space statuses`
-  and `Automations` come in step 4b. The Slack and Figma suggestions need integrations no
-  service provides.
+  and `Automations` are stub dialogs whose openers stay hidden until `RELEASED_LIST_DIALOGS`
+  lists them; the Git section of `Automations` stays hidden until B6 is decided. The Slack and
+  Figma suggestions need integrations no service provides.
+- The tabs show every released layout: the mockup's views added per list (`Added` / `Add`,
+  `App.dc.html` lines 6187, 8792-8795) have no list setting in the contract (G12) and are not
+  kept.
+- The CSV export sends a sheet's custom-field sort by its field id, even when the list no longer
+  has that field: the frame does not read the custom fields.
 - `View deleted` restores the saved configuration, not unsaved changes of the applied view.
 - The trash and archives screens are not built: the footer rows link to their future addresses.
 - The plan names of `Invite your team` are spaces units (`spaces.tips.plan-*`): Organization
@@ -291,24 +371,26 @@ gateway checks them and `ORGANIZATION_PIN_OPERATIONS` lists them.
 
 ## Copy not taken word for word from the mockup
 
-| Unit                                                                                                                           | Reason                                                                     |
-| ------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------- |
-| `spaces.retry`, `spaces.sidebar.failed`, `spaces.overview.milestones-failed`, `spaces.secondary.*`, `spaces.saved.read-failed` | The mockup draws no failed read.                                           |
-| `spaces.favorite.failed`, `spaces.list.*-failed`, `spaces.saved.failed`, `spaces.saved.delete-failed`, `spaces.bulk.failed`    | The mockup draws no refused write.                                         |
-| `spaces.saved-view.missing`                                                                                                    | The mockup does not show a missing saved-view address.                     |
-| `spaces.save-view.name-required`                                                                                               | The mockup disables the save button rather than showing an error.          |
-| `spaces.list.export-failed`                                                                                                    | Taken from the mockup's `Export not possible here` title only.             |
-| `spaces.labels.*`, `spaces.table.*`                                                                                            | The bricks' own default texts, which the mockup does not show as copy.     |
-| `spaces.rows.more-failed`, `spaces.rows.subtasks-failed`                                                                       | The mockup draws no failed read.                                           |
-| `spaces.bulk.partial*`                                                                                                         | The mockup draws no refused chunk of a bulk action.                        |
-| `spaces.rows.remind-failed`, `spaces.rows.copy-failed`, `spaces.bulk.restore-failed`                                           | The mockup draws no refused reminder, copy or restore.                     |
-| `spaces.rows.empty`, `spaces.rows.add`                                                                                         | The empty list without filters, from the board's `No task`.                |
-| `spaces.sidebar.overview`                                                                                                      | The mockup's `Overview of …`, with the space name.                         |
-| `spaces.list-view.region`, `spaces.sprint-progress.label`, `spaces.saved.modified-group`                                       | Accessible names of regions the mockup names differently or does not name. |
-| `spaces.route.overview`, `spaces.route.list`                                                                                   | Route titles.                                                              |
-| `spaces.tips.*`                                                                                                                | Three of the five suggestions: the others need integrations.               |
-| `spaces.tips.invite-text-one`, `spaces.list.*-one`, `spaces.space.delete-*-one`                                                | Singular forms the mockup writes in the plural.                            |
-| `spaces.space.save-failed`, `spaces.space.delete-failed`, `spaces.list.save-failed`, `spaces.list.unarchive-failed`            | The mockup draws no refused write.                                         |
-| `spaces.space-dialog.name-required`, `spaces.list-dialog.name-required`                                                        | The mockup disables the submit button rather than showing an error.        |
-| `spaces.list-dialog.date-*`, `spaces.list-dialog.pick-date`, `spaces.footer.*`                                                 | The date picker's texts and the footer rows' names.                        |
-| `spaces.look.*`                                                                                                                | `LOOK_COLORS` names and the default choices of `lookPicker`.               |
+| Unit                                                                                                                                        | Reason                                                                                                  |
+| ------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| `spaces.retry`, `spaces.sidebar.failed`, `spaces.overview.milestones-failed`, `spaces.secondary.*`, `spaces.saved.read-failed`              | The mockup draws no failed read.                                                                        |
+| `spaces.favorite.failed`, `spaces.list.*-failed`, `spaces.saved.failed`, `spaces.saved.delete-failed`, `spaces.bulk.failed`                 | The mockup draws no refused write.                                                                      |
+| `spaces.saved-view.missing`                                                                                                                 | The mockup does not show a missing saved-view address.                                                  |
+| `spaces.save-view.name-required`                                                                                                            | The mockup disables the save button rather than showing an error.                                       |
+| `spaces.list.export-failed`                                                                                                                 | Taken from the mockup's `Export not possible here` title only.                                          |
+| `spaces.labels.*`, `spaces.table.*`                                                                                                         | The bricks' own default texts, which the mockup does not show as copy.                                  |
+| `spaces.rows.more-failed`, `spaces.rows.subtasks-failed`                                                                                    | The mockup draws no failed read.                                                                        |
+| `spaces.bulk.partial*`                                                                                                                      | The mockup draws no refused chunk of a bulk action.                                                     |
+| `spaces.rows.remind-failed`, `spaces.rows.copy-failed`, `spaces.bulk.restore-failed`                                                        | The mockup draws no refused reminder, copy or restore.                                                  |
+| `spaces.rows.empty`, `spaces.rows.add`                                                                                                      | The empty list without filters, from the board's `No task`.                                             |
+| `spaces.sidebar.overview`                                                                                                                   | The mockup's `Overview of …`, with the space name.                                                      |
+| `spaces.list-view.region`, `spaces.sprint-progress.label`, `spaces.saved.modified-group`                                                    | Accessible names of regions the mockup names differently or does not name.                              |
+| `spaces.route.overview`, `spaces.route.list`                                                                                                | Route titles.                                                                                           |
+| `spaces.tips.*`                                                                                                                             | Three of the five suggestions: the others need integrations.                                            |
+| `spaces.tips.invite-text-one`, `spaces.list.*-one`, `spaces.space.delete-*-one`                                                             | Singular forms the mockup writes in the plural.                                                         |
+| `spaces.space.save-failed`, `spaces.space.delete-failed`, `spaces.list.save-failed`, `spaces.list.unarchive-failed`                         | The mockup draws no refused write.                                                                      |
+| `spaces.space-dialog.name-required`, `spaces.list-dialog.name-required`                                                                     | The mockup disables the submit button rather than showing an error.                                     |
+| `spaces.list-dialog.date-*`, `spaces.list-dialog.pick-date`, `spaces.footer.*`                                                              | The date picker's texts and the footer rows' names.                                                     |
+| `spaces.look.*`                                                                                                                             | `LOOK_COLORS` names and the default choices of `lookPicker`.                                            |
+| `spaces.view-stub.text`                                                                                                                     | The stub of a view not built yet, which the mockup does not have.                                       |
+| `spaces.workload-view.load-failed`, `spaces.form-view.load-failed`, `spaces.activity-view.load-failed`, `spaces.timesheet-view.load-failed` | The mockup titles every failed view `Impossible de charger les tâches`; these name what the view reads. |

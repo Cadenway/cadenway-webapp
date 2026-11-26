@@ -2,6 +2,7 @@ import { TestBed } from '@angular/core/testing';
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import type { SavedView } from '../../models/saved-view/saved-view.interface';
+import { DEFAULT_PRESENTATION } from '../../utils/list-view-query/list-view-query.util';
 import { ListViewStore } from './list-view.store';
 
 /**
@@ -23,6 +24,7 @@ const criticalBugs: SavedView = {
     sort: { field: 'dueDate', direction: 'asc' },
     groupBy: 'status',
     subtasks: 'nested',
+    presentation: DEFAULT_PRESENTATION,
   },
   version: 1,
 };
@@ -109,5 +111,61 @@ describe('ListViewStore', () => {
     store.reset();
     expect(store.savedView()).toBeNull();
     expect(store.filterCount()).toBe(0);
+  });
+
+  it('follows the routed layout and its tools, keeping it on reset', () => {
+    store.followRows({ visibleCount: 3, hasSubtasks: false });
+    TestBed.tick();
+    store.showLayout('board');
+    TestBed.tick();
+
+    expect(store.layout()).toBe('board');
+    expect(store.tools()).toContain('columns');
+    expect(store.tools()).not.toContain('group');
+    expect(store.rows()).toEqual({ visibleCount: null, hasSubtasks: null });
+
+    store.showLayout('timesheet');
+    TestBed.tick();
+    expect(store.tools()).toEqual(['create']);
+    store.showLayout('form');
+    TestBed.tick();
+    expect(store.tools()).toEqual([]);
+    store.showLayout('activity');
+    TestBed.tick();
+    expect(store.tools()).toEqual([]);
+
+    store.reset();
+    expect(store.layout()).toBe('activity');
+  });
+
+  it("counts only the shown layout's presentation for saving and Modified", () => {
+    store.setPresentation({ hiddenBoardStatusKeys: ['backlog'] });
+    expect(store.canSave()).toBe(false);
+    store.showLayout('board');
+    TestBed.tick();
+    expect(store.canSave()).toBe(true);
+    expect(store.presentation().hiddenBoardStatusKeys).toEqual(['backlog']);
+
+    store.applySaved({ ...criticalBugs, layout: 'board' });
+    expect(store.presentation().hiddenBoardStatusKeys).toEqual([]);
+    expect(store.modified()).toBe(false);
+    store.setPresentation({ hiddenBoardStatusKeys: ['waiting'] });
+    expect(store.modified()).toBe(true);
+    store.revert();
+    expect(store.modified()).toBe(false);
+
+    store.leaveSaved();
+    expect(store.presentation().hiddenBoardStatusKeys).toEqual(['backlog']);
+  });
+
+  it('gives the export the sheet sort on the sheet only, the custom field first', () => {
+    store.setPresentation({ sheetSort: { column: 'due', direction: 'desc' } });
+    expect(store.sheetExportSort()).toBeNull();
+    store.showLayout('table');
+    TestBed.tick();
+    expect(store.sheetExportSort()).toEqual({ column: 'due', direction: 'desc' });
+    expect(store.canSave()).toBe(true);
+    store.setPresentation({ customFieldSort: { fieldId: 'cf-points', direction: 'asc' } });
+    expect(store.sheetExportSort()).toEqual({ column: 'cf-points', direction: 'asc' });
   });
 });

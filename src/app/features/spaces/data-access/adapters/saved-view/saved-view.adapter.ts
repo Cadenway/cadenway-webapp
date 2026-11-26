@@ -7,43 +7,150 @@ import type {
   PriorityKey as PriorityKeyDto,
   SavedView as SavedViewDto,
   SavedViewConfigurationInput,
+  SavedViewConfigurationPatch,
   SavedViewFilters,
+  SavedViewPresentation,
+  SavedViewPresentationPatch,
+  SavedViewPresentationValue,
   StatusKey as StatusKeyDto,
 } from '@cadenway/api-client';
 
+import { SHEET_COLUMNS } from '../../../constants/sheet-columns/sheet-columns.constants';
 import { PRIORITY_ORDER } from '../../../constants/statuses/statuses.constants';
+import { VIEW_LAYOUTS } from '../../../constants/view-layouts/view-layouts.constants';
 import type { BulkAction, BulkSelection } from '../../../models/bulk-action/bulk-action.interface';
 import type {
   ListGroupBy,
   ListGroupQuery,
   ListTaskQuery,
   ListViewConfig,
+  ListViewPresentation,
   PriorityKey,
+  SheetColumn,
+  SheetExportSort,
+  SortDirection,
   StatusKey,
 } from '../../../models/list-view-config/list-view-config.interface';
 import type { SavedView, ViewLayout } from '../../../models/saved-view/saved-view.interface';
-import { fromSortKey, toSortKey } from '../../../utils/list-view-query/list-view-query.util';
+import {
+  fromSortKey,
+  presentationFor,
+  toSortKey,
+} from '../../../utils/list-view-query/list-view-query.util';
 import { isStatusKey, toLookIcon } from '../space/space.adapter';
 
 /**
- * Constant LAYOUTS
+ * Function isSheetColumn
  *
  * @description
- * Layouts the contract declares.
+ * Whether a stored column key is one of the sheet's built-in columns.
  *
- * @type {readonly ViewLayout[]}
+ * @param {string} key - Stored key.
+ * @returns {boolean} Whether it is known.
  */
-const LAYOUTS: readonly ViewLayout[] = [
-  'list',
-  'board',
-  'calendar',
-  'gantt',
-  'workload',
-  'table',
-  'form',
-  'activity',
-  'timesheet',
-];
+function isSheetColumn(key: string): key is SheetColumn {
+  return (SHEET_COLUMNS as readonly string[]).includes(key);
+}
+
+/**
+ * Function isDirection
+ *
+ * @description
+ * Whether a stored direction is `asc` or `desc`.
+ *
+ * @param {string} value - Stored direction.
+ * @returns {boolean} Whether it is known.
+ */
+function isDirection(value: string): value is SortDirection {
+  return value === 'asc' || value === 'desc';
+}
+
+/**
+ * Function toPresentation
+ *
+ * @description
+ * Reads a stored presentation; unknown statuses, columns and directions, which the contract lets
+ * future clients write, are dropped.
+ *
+ * @param {SavedViewPresentationValue | undefined} dto - Stored presentation, absent for none.
+ * @returns {ListViewPresentation} The presentation.
+ */
+function toPresentation(dto: SavedViewPresentationValue | undefined): ListViewPresentation {
+  const sheet: SavedViewPresentationValue['sheetSort'] = dto?.sheetSort;
+  const custom: SavedViewPresentationValue['customFieldSort'] = dto?.customFieldSort;
+  return {
+    hiddenBoardStatusKeys: (dto?.hiddenBoardStatusKeys ?? []).filter(
+      (key: string): key is StatusKey => isStatusKey(key),
+    ),
+    hiddenSheetColumns: (dto?.hiddenSheetColumns ?? []).filter(isSheetColumn),
+    hiddenCustomFieldIds: [...(dto?.hiddenCustomFieldIds ?? [])],
+    sheetSort:
+      sheet && isSheetColumn(sheet.column) && isDirection(sheet.direction)
+        ? { column: sheet.column, direction: sheet.direction }
+        : null,
+    customFieldSort:
+      custom && isDirection(custom.direction)
+        ? { fieldId: custom.fieldId, direction: custom.direction }
+        : null,
+  };
+}
+
+/**
+ * Function toPresentationInput
+ *
+ * @description
+ * The stored presentation of a new view: the layout's part only (`presentationFor`), without its
+ * empty members; undefined when nothing is hidden or sorted.
+ *
+ * @param {ViewLayout} layout - Layout of the view.
+ * @param {ListViewPresentation} presentation - Current presentation.
+ * @returns {SavedViewPresentation | undefined} The gateway presentation.
+ */
+function toPresentationInput(
+  layout: ViewLayout,
+  presentation: ListViewPresentation,
+): SavedViewPresentation | undefined {
+  const used: ListViewPresentation = presentationFor(layout, presentation);
+  const stored: SavedViewPresentation = {
+    ...(used.hiddenBoardStatusKeys.length
+      ? { hiddenBoardStatusKeys: [...used.hiddenBoardStatusKeys] as StatusKeyDto[] }
+      : {}),
+    ...(used.hiddenSheetColumns.length ? { hiddenSheetColumns: [...used.hiddenSheetColumns] } : {}),
+    ...(used.hiddenCustomFieldIds.length
+      ? { hiddenCustomFieldIds: [...used.hiddenCustomFieldIds] }
+      : {}),
+    ...(used.sheetSort ? { sheetSort: { ...used.sheetSort } } : {}),
+    ...(used.customFieldSort ? { customFieldSort: { ...used.customFieldSort } } : {}),
+  };
+  return Object.keys(stored).length > 0 ? stored : undefined;
+}
+
+/**
+ * Function toPresentationPatch
+ *
+ * @description
+ * The merge patch of a view's presentation: the layout's part, every empty or unused member sent
+ * as null so the gateway removes what the view stored before.
+ *
+ * @param {ViewLayout} layout - Layout of the view.
+ * @param {ListViewPresentation} presentation - Current presentation.
+ * @returns {SavedViewPresentationPatch} The gateway patch.
+ */
+function toPresentationPatch(
+  layout: ViewLayout,
+  presentation: ListViewPresentation,
+): SavedViewPresentationPatch {
+  const used: ListViewPresentation = presentationFor(layout, presentation);
+  return {
+    hiddenBoardStatusKeys: used.hiddenBoardStatusKeys.length
+      ? ([...used.hiddenBoardStatusKeys] as StatusKeyDto[])
+      : null,
+    hiddenSheetColumns: used.hiddenSheetColumns.length ? [...used.hiddenSheetColumns] : null,
+    hiddenCustomFieldIds: used.hiddenCustomFieldIds.length ? [...used.hiddenCustomFieldIds] : null,
+    sheetSort: used.sheetSort ? { ...used.sheetSort } : null,
+    customFieldSort: used.customFieldSort ? { ...used.customFieldSort } : null,
+  };
+}
 
 /**
  * Function toGroupBy
@@ -74,7 +181,7 @@ export function toSavedView(dto: SavedViewDto): SavedView {
     listId: dto.listId,
     name: dto.name,
     icon: toLookIcon(dto.icon),
-    layout: (LAYOUTS as readonly string[]).includes(dto.configuration.layout)
+    layout: (VIEW_LAYOUTS as readonly string[]).includes(dto.configuration.layout)
       ? (dto.configuration.layout as ViewLayout)
       : 'list',
     config: {
@@ -89,6 +196,7 @@ export function toSavedView(dto: SavedViewDto): SavedView {
       sort: fromSortKey(dto.configuration.sort),
       groupBy: toGroupBy(dto.configuration.groupBy),
       subtasks: 'nested',
+      presentation: toPresentation(dto.configuration.presentation),
     },
     version: dto.version,
   };
@@ -98,8 +206,9 @@ export function toSavedView(dto: SavedViewDto): SavedView {
  * Function toSavedViewConfiguration
  *
  * @description
- * The stored configuration of a view: layout, filters, sort and grouping. The search, the
- * milestones switch and the subtask display stay local, as the contract requires.
+ * The stored configuration of a new view: layout, filters, sort, grouping and the layout's
+ * presentation (absent when nothing is hidden or sorted). The search, the milestones switch and
+ * the subtask display stay local, as the contract requires.
  *
  * @param {ViewLayout} layout - Layout of the view.
  * @param {ListViewConfig} config - Current configuration.
@@ -109,6 +218,10 @@ export function toSavedViewConfiguration(
   layout: ViewLayout,
   config: ListViewConfig,
 ): SavedViewConfigurationInput {
+  const presentation: SavedViewPresentation | undefined = toPresentationInput(
+    layout,
+    config.presentation,
+  );
   return {
     layout,
     filters: {
@@ -119,6 +232,33 @@ export function toSavedViewConfiguration(
     },
     sort: toSortKey(config.sort) as SavedViewConfigurationInput['sort'],
     groupBy: config.groupBy,
+    ...(presentation ? { presentation } : {}),
+  };
+}
+
+/**
+ * Function toSavedViewConfigurationPatch
+ *
+ * @description
+ * The configuration patch of `Save` on an applied view: the same members as a new view, the
+ * presentation as a merge patch whose empty members are null, so a column shown again or a sort
+ * removed is removed from the stored view too.
+ *
+ * @param {ViewLayout} layout - Layout of the view.
+ * @param {ListViewConfig} config - Current configuration.
+ * @returns {SavedViewConfigurationPatch} The gateway patch.
+ */
+export function toSavedViewConfigurationPatch(
+  layout: ViewLayout,
+  config: ListViewConfig,
+): SavedViewConfigurationPatch {
+  const created: SavedViewConfigurationInput = toSavedViewConfiguration(layout, config);
+  return {
+    layout: created.layout,
+    filters: created.filters,
+    sort: created.sort,
+    groupBy: created.groupBy,
+    presentation: toPresentationPatch(layout, config.presentation),
   };
 }
 
@@ -180,13 +320,23 @@ export function toCountTaskGroupsParams(group: ListGroupQuery): CountTaskGroupsP
  *
  * @description
  * The parameters of `exportListTasks`: the same filters, sort and level as the view, so the file
- * holds what the list shows.
+ * holds what the list shows, and the sheet's own sort when the sheet has one.
  *
  * @param {ListTaskQuery} query - Task query.
+ * @param {SheetExportSort | null} sheetSort - The sheet's sort, or null.
  * @returns {ExportListTasksParams} The gateway parameters.
  */
-export function toExportParams(query: ListTaskQuery): ExportListTasksParams {
+export function toExportParams(
+  query: ListTaskQuery,
+  sheetSort: SheetExportSort | null = null,
+): ExportListTasksParams {
   return {
+    ...(sheetSort
+      ? {
+          sheetSortColumn: sheetSort.column,
+          sheetSortDirection: sheetSort.direction,
+        }
+      : {}),
     ...(query.status ? { status: [...query.status] as StatusKeyDto[] } : {}),
     ...(query.priority ? { priority: [...query.priority] as PriorityKeyDto[] } : {}),
     ...(query.assignee ? { assignee: [...query.assignee] } : {}),

@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 
 import type { ListViewConfig } from '../../../models/list-view-config/list-view-config.interface';
 import {
+  DEFAULT_PRESENTATION,
   DEFAULT_VIEW_CONFIG,
   toTaskQuery,
 } from '../../../utils/list-view-query/list-view-query.util';
@@ -13,6 +14,7 @@ import {
   toListTasksQuery,
   toSavedView,
   toSavedViewConfiguration,
+  toSavedViewConfigurationPatch,
 } from './saved-view.adapter';
 
 /**
@@ -52,6 +54,26 @@ const filtered: ListViewConfig = {
   sort: { field: 'dueDate', direction: 'desc' },
   groupBy: 'priority',
   subtasks: 'separate',
+  presentation: DEFAULT_PRESENTATION,
+};
+
+/**
+ * Constant hiddenColumns
+ *
+ * @description
+ * The default configuration with hidden board and sheet columns and a sheet sort.
+ *
+ * @type {ListViewConfig}
+ */
+const hiddenColumns: ListViewConfig = {
+  ...DEFAULT_VIEW_CONFIG,
+  presentation: {
+    hiddenBoardStatusKeys: ['backlog'],
+    hiddenSheetColumns: ['spent', 'client'],
+    hiddenCustomFieldIds: ['cf-points'],
+    sheetSort: { column: 'due', direction: 'desc' },
+    customFieldSort: null,
+  },
 };
 
 describe('saved view adapter', () => {
@@ -67,8 +89,59 @@ describe('saved view adapter', () => {
         sort: { field: 'dueDate', direction: 'asc' },
         groupBy: 'status',
         subtasks: 'nested',
+        presentation: DEFAULT_PRESENTATION,
       },
       version: 2,
+    });
+  });
+
+  it('reads a stored presentation, dropping unknown statuses, columns and directions', () => {
+    const board: SavedViewDto = {
+      ...criticalBugs,
+      configuration: {
+        ...criticalBugs.configuration,
+        layout: 'board',
+        presentation: {
+          hiddenBoardStatusKeys: ['backlog', 'archived' as never],
+          hiddenSheetColumns: ['spent', 'future'],
+          hiddenCustomFieldIds: ['cf-points'],
+          sheetSort: { column: 'future', direction: 'asc' },
+          customFieldSort: { fieldId: 'cf-points', direction: 'desc' },
+        },
+      },
+    };
+    expect(toSavedView(board).config.presentation).toEqual({
+      hiddenBoardStatusKeys: ['backlog'],
+      hiddenSheetColumns: ['spent'],
+      hiddenCustomFieldIds: ['cf-points'],
+      sheetSort: null,
+      customFieldSort: { fieldId: 'cf-points', direction: 'desc' },
+    });
+    expect(toSavedView(board).layout).toBe('board');
+  });
+
+  it("stores only the layout's presentation, and patches the rest to null", () => {
+    expect(toSavedViewConfiguration('board', hiddenColumns).presentation).toEqual({
+      hiddenBoardStatusKeys: ['backlog'],
+    });
+    expect(toSavedViewConfiguration('table', hiddenColumns).presentation).toEqual({
+      hiddenSheetColumns: ['spent', 'client'],
+      hiddenCustomFieldIds: ['cf-points'],
+      sheetSort: { column: 'due', direction: 'desc' },
+    });
+    expect(toSavedViewConfiguration('list', hiddenColumns)).not.toHaveProperty('presentation');
+    expect(toSavedViewConfigurationPatch('board', hiddenColumns)).toEqual({
+      layout: 'board',
+      filters: { status: [], priority: [], assignee: [], label: [] },
+      sort: 'manual',
+      groupBy: 'status',
+      presentation: {
+        hiddenBoardStatusKeys: ['backlog'],
+        hiddenSheetColumns: null,
+        hiddenCustomFieldIds: null,
+        sheetSort: null,
+        customFieldSort: null,
+      },
     });
   });
 
@@ -109,6 +182,17 @@ describe('saved view adapter', () => {
     expect(toExportParams(toTaskQuery(DEFAULT_VIEW_CONFIG, '', false))).toEqual({
       level: 'roots',
       sort: 'manual',
+    });
+    expect(
+      toExportParams(toTaskQuery(DEFAULT_VIEW_CONFIG, '', false), {
+        column: 'due',
+        direction: 'desc',
+      }),
+    ).toEqual({
+      level: 'roots',
+      sort: 'manual',
+      sheetSortColumn: 'due',
+      sheetSortDirection: 'desc',
     });
   });
 

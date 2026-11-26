@@ -25,6 +25,28 @@ export const STATUS_ORDER: readonly StatusKey[] = [
 ];
 
 /**
+ * Constant BOARD_ORDER
+ *
+ * @description
+ * The board's status columns, left to right (`BOARD_ORDER` of `App.dc.html` line 3548), which
+ * the board's `Columns shown` menu lists: `blocked` comes before `waiting`.
+ *
+ * @type {readonly StatusKey[]}
+ */
+export const BOARD_ORDER: readonly StatusKey[] = [
+  'triage',
+  'backlog',
+  'todo',
+  'progress',
+  'review',
+  'testing',
+  'blocked',
+  'waiting',
+  'done',
+  'cancelled',
+];
+
+/**
  * Constant PRIORITY_ORDER
  *
  * @description

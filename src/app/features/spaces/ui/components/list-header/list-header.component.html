@@ -95,6 +95,20 @@
       <p class="flex items-center gap-1.5 text-sm text-muted-foreground" data-testid="list-goal">
         <ng-icon name="phosphorTargetBold" class="size-4 shrink-0" aria-hidden="true" />
         <span class="truncate">{{ goal }}</span>
+        @if (dialogs().includes('sprint-report')) {
+          <button
+            cwButton
+            type="button"
+            variant="ghost"
+            size="xs"
+            class="ml-1 h-6 shrink-0 px-1.5 text-primary hover:bg-primary/10"
+            data-testid="list-sprint-report"
+            (click)="dialogRequested.emit('sprint-report')"
+          >
+            <ng-icon name="phosphorChartLineDownBold" class="size-3.5" aria-hidden="true" />
+            <ng-container i18n="@@spaces.header.sprint-report">Sprint report</ng-container>
+          </button>
+        }
       </p>
     }
   </div>
@@ -113,6 +127,19 @@
           }
         </cw-avatar-group>
       }
+    }
+    @if (dialogs().includes('share')) {
+      <button
+        cwButton
+        type="button"
+        variant="outline"
+        size="sm"
+        data-testid="list-share"
+        (click)="dialogRequested.emit('share')"
+      >
+        <ng-icon name="phosphorUsersBold" aria-hidden="true" />
+        <span class="max-md:sr-only" i18n="@@spaces.header.share">Share</span>
+      </button>
     }
     <button
       cwButton
@@ -143,6 +170,28 @@
     <ng-icon name="phosphorSquaresFourBold" aria-hidden="true" />
     <ng-container i18n="@@spaces.menu.edit-space">Edit the space</ng-container>
   </button>
+  @if (dialogs().includes('space-statuses')) {
+    <button
+      cwMenuItem
+      [disabled]="!spaceEditable()"
+      data-testid="list-space-statuses"
+      (triggered)="dialogRequested.emit('space-statuses')"
+    >
+      <ng-icon name="phosphorCircleHalfBold" aria-hidden="true" />
+      <ng-container i18n="@@spaces.menu.space-statuses">Space statuses</ng-container>
+    </button>
+  }
+  @if (dialogs().includes('automations')) {
+    <button
+      cwMenuItem
+      [disabled]="!automationsEditable()"
+      data-testid="list-automations"
+      (triggered)="dialogRequested.emit('automations')"
+    >
+      <ng-icon name="phosphorLightningBold" aria-hidden="true" />
+      <ng-container i18n="@@spaces.menu.automations">Automations</ng-container>
+    </button>
+  }
   <button cwMenuItem [disabled]="!list().canEdit" (triggered)="duplicated.emit()">
     <ng-icon name="phosphorCopyBold" aria-hidden="true" />
     <ng-container i18n="@@spaces.header.duplicate">Duplicate with the tasks</ng-container>

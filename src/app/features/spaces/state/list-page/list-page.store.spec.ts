@@ -612,6 +612,18 @@ describe('ListPageStore', () => {
     expect((await store.exportCsv({ level: 'roots', sort: 'manual' }))?.fileName).toBe(
       'sprint-14.csv',
     );
-    expect(api['exportCsv']).toHaveBeenCalledWith(sprint14, { level: 'roots', sort: 'manual' });
+    expect(api['exportCsv']).toHaveBeenCalledWith(
+      sprint14,
+      { level: 'roots', sort: 'manual' },
+      null,
+    );
+
+    api['exportCsv'].mockResolvedValueOnce({ fileName: 'sprint-14.csv', content: 'a\nb' });
+    await store.exportCsv({ level: 'roots', sort: 'manual' }, { column: 'due', direction: 'desc' });
+    expect(api['exportCsv']).toHaveBeenLastCalledWith(
+      sprint14,
+      { level: 'roots', sort: 'manual' },
+      { column: 'due', direction: 'desc' },
+    );
   });
 });

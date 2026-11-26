@@ -176,11 +176,168 @@ export interface ListSort {
 }
 
 /**
+ * Type SheetColumn
+ *
+ * @description
+ * The built-in columns of the `Sheet` view (`TBL_COLS` of `App.dc.html`), with the contract's
+ * keys (`SavedViewSheetColumn`): `points` and `client` are the mockup's seed custom fields that
+ * the contract names.
+ *
+ * @type {'name' | 'status' | 'priority' | 'people' | 'due' | 'estimate' | 'spent' | 'labels' | 'list' | 'points' | 'client'}
+ */
+export type SheetColumn =
+  | 'name'
+  | 'status'
+  | 'priority'
+  | 'people'
+  | 'due'
+  | 'estimate'
+  | 'spent'
+  | 'labels'
+  | 'list'
+  | 'points'
+  | 'client';
+
+/**
+ * Interface SheetSort
+ *
+ * @description
+ * The `Sheet` view's own sort by a built-in column, applied to the fully read rows; it never
+ * changes the task query's sort.
+ */
+export interface SheetSort {
+  // #region Properties
+  /**
+   * Property column
+   *
+   * @description
+   * Column sorted.
+   *
+   * @type {SheetColumn}
+   * @readonly
+   */
+  readonly column: SheetColumn;
+
+  /**
+   * Property direction
+   *
+   * @description
+   * Sort direction.
+   *
+   * @type {SortDirection}
+   * @readonly
+   */
+  readonly direction: SortDirection;
+  // #endregion
+}
+
+/**
+ * Interface CustomFieldSort
+ *
+ * @description
+ * The `Sheet` view's sort by a custom field; it takes precedence over `SheetSort` while the list
+ * still has that field.
+ */
+export interface CustomFieldSort {
+  // #region Properties
+  /**
+   * Property fieldId
+   *
+   * @description
+   * Stable id of the custom field.
+   *
+   * @type {string}
+   * @readonly
+   */
+  readonly fieldId: string;
+
+  /**
+   * Property direction
+   *
+   * @description
+   * Sort direction.
+   *
+   * @type {SortDirection}
+   * @readonly
+   */
+  readonly direction: SortDirection;
+  // #endregion
+}
+
+/**
+ * Interface ListViewPresentation
+ *
+ * @description
+ * How a layout presents the tasks, without changing which tasks are read (the contract's
+ * `SavedViewPresentation`): the board's hidden status columns, the sheet's hidden columns and its
+ * own sort. Only the members of the shown layout count for `Save the view`, `Modified` and the
+ * saved-view summary (`presentationFor`).
+ */
+export interface ListViewPresentation {
+  // #region Properties
+  /**
+   * Property hiddenBoardStatusKeys
+   *
+   * @description
+   * Status columns the board hides (`Columns shown`).
+   *
+   * @type {readonly StatusKey[]}
+   * @readonly
+   */
+  readonly hiddenBoardStatusKeys: readonly StatusKey[];
+
+  /**
+   * Property hiddenSheetColumns
+   *
+   * @description
+   * Built-in columns the sheet hides; the name always shows.
+   *
+   * @type {readonly SheetColumn[]}
+   * @readonly
+   */
+  readonly hiddenSheetColumns: readonly SheetColumn[];
+
+  /**
+   * Property hiddenCustomFieldIds
+   *
+   * @description
+   * Custom-field columns the sheet hides, by stable id; unknown or retired ids are ignored.
+   *
+   * @type {readonly string[]}
+   * @readonly
+   */
+  readonly hiddenCustomFieldIds: readonly string[];
+
+  /**
+   * Property sheetSort
+   *
+   * @description
+   * The sheet's sort by a built-in column, or null for the task query's order.
+   *
+   * @type {SheetSort | null}
+   * @readonly
+   */
+  readonly sheetSort: SheetSort | null;
+
+  /**
+   * Property customFieldSort
+   *
+   * @description
+   * The sheet's sort by a custom field, or null.
+   *
+   * @type {CustomFieldSort | null}
+   * @readonly
+   */
+  readonly customFieldSort: CustomFieldSort | null;
+  // #endregion
+}
+
+/**
  * Interface ListViewConfig
  *
  * @description
- * What a list view shows, shared by every layout: filters, sort, grouping and subtask display.
- * Saved views store the first three; the subtask display stays local.
+ * What a list view shows, shared by every layout: filters, sort, grouping, subtask display and
+ * presentation. Saved views store all but the subtask display, which stays local.
  */
 export interface ListViewConfig {
   // #region Properties
@@ -227,6 +384,50 @@ export interface ListViewConfig {
    * @readonly
    */
   readonly subtasks: SubtaskMode;
+
+  /**
+   * Property presentation
+   *
+   * @description
+   * Hidden columns and the sheet's own sort.
+   *
+   * @type {ListViewPresentation}
+   * @readonly
+   */
+  readonly presentation: ListViewPresentation;
+  // #endregion
+}
+
+/**
+ * Interface SheetExportSort
+ *
+ * @description
+ * The sheet's sort as `exportListTasks` takes it (`sheetSortColumn`, `sheetSortDirection`): a
+ * built-in column key or a custom field's id.
+ */
+export interface SheetExportSort {
+  // #region Properties
+  /**
+   * Property column
+   *
+   * @description
+   * Built-in column key or custom field id.
+   *
+   * @type {string}
+   * @readonly
+   */
+  readonly column: string;
+
+  /**
+   * Property direction
+   *
+   * @description
+   * Sort direction.
+   *
+   * @type {SortDirection}
+   * @readonly
+   */
+  readonly direction: SortDirection;
   // #endregion
 }
 
