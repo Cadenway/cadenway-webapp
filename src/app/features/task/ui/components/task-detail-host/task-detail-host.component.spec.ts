@@ -106,6 +106,18 @@ const detail: TaskDetail = {
   partial: [],
 };
 
+/**
+ * Constant FIRST_OPEN_MS
+ *
+ * @description
+ * Time allowed to the first opening of the suite, which loads the dialog's deferred chunk and
+ * renders the whole detail for the first time: well under it alone, it can pass the default 5 s
+ * test timeout when the full suite runs with coverage on a loaded machine.
+ *
+ * @type {number}
+ */
+const FIRST_OPEN_MS: number = 15_000;
+
 describe('TaskDetailHost', () => {
   let read: Mock<(key: string) => Promise<TaskDetail>>;
   let trash: Mock<(key: string, version: number) => Promise<{ id: string; subtaskCount: number }>>;
@@ -180,27 +192,34 @@ describe('TaskDetailHost', () => {
     expect(read).not.toHaveBeenCalled();
   });
 
-  it('opens the detail of `?task=` over the page with its header and body', async () => {
-    await go('/atelier-nord/l/sprint-14/list?task=CAD-482');
+  it(
+    'opens the detail of `?task=` over the page with its header and body',
+    async () => {
+      await go('/atelier-nord/l/sprint-14/list?task=CAD-482');
 
-    await vi.waitFor(() => {
-      expect(document.querySelector('[data-testid="task-detail-parent"]')).not.toBeNull();
-    });
-    expect(read).toHaveBeenCalledWith('CAD-482');
-    expect(document.querySelector('[data-testid="task-detail-key"]')?.textContent).toContain(
-      'CAD-482',
-    );
-    expect(document.querySelector<HTMLInputElement>('#task-detail-title')?.value).toBe(
-      'Redesign the SSO sign-in screen',
-    );
-    expect(document.querySelector('[data-testid="task-detail-parent"]')?.textContent).toContain(
-      'Subtask of CAD-470 · Sign-in',
-    );
-    expect(document.querySelector('[data-testid="task-detail-status"]')?.textContent).toContain(
-      'In progress',
-    );
-    expect(document.querySelector('aside[aria-label="Properties of the task"]')).not.toBeNull();
-  });
+      await vi.waitFor(
+        () => {
+          expect(document.querySelector('[data-testid="task-detail-parent"]')).not.toBeNull();
+        },
+        { timeout: FIRST_OPEN_MS },
+      );
+      expect(read).toHaveBeenCalledWith('CAD-482');
+      expect(document.querySelector('[data-testid="task-detail-key"]')?.textContent).toContain(
+        'CAD-482',
+      );
+      expect(document.querySelector<HTMLInputElement>('#task-detail-title')?.value).toBe(
+        'Redesign the SSO sign-in screen',
+      );
+      expect(document.querySelector('[data-testid="task-detail-parent"]')?.textContent).toContain(
+        'Subtask of CAD-470 · Sign-in',
+      );
+      expect(document.querySelector('[data-testid="task-detail-status"]')?.textContent).toContain(
+        'In progress',
+      );
+      expect(document.querySelector('aside[aria-label="Properties of the task"]')).not.toBeNull();
+    },
+    FIRST_OPEN_MS,
+  );
 
   it('closes on Close and removes `?task=` while keeping the other parameters', async () => {
     await go('/atelier-nord/l/sprint-14/list?view=board&task=CAD-482');
