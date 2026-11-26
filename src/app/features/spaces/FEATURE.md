@@ -84,8 +84,29 @@ constants belong to the lead):
   `sheetColumnLabels()`.
 - `LAYOUT_TOOLS` gives the tools of each layout: all of them with `Columns` instead of `Group by`
   on the board (which shows `Columns shown`, writing `hiddenBoardStatusKeys`); none on `form` and
+  `activity`, which hides the toolbar (`App.dc.html` line 7811); `Filter`, `Search`,
+  `Create a task` and `Save the view` on `timesheet`, whose rows have no milestone, order, group or
+  subtask level (see `Timesheet view`); all of them elsewhere.
+
   `activity`, which hides the toolbar (`App.dc.html` line 7811); all of them elsewhere,
   `timesheet` included, as in the mockup, although its time entries ignore the filters.
+
+- The task views (board, calendar, Gantt, workload, sheet) share the task plumbing of the `List`
+  view, which they compose and do not edit:
+  - `cw-task-menu` (`ui/components/task-menu`): the task menu, presentational (`tasks`, `status`,
+    `statuses`, `people`, `userId`, `lists`; one output per item). The view opens `menu()` from its
+    own `[cwContextMenuTriggerFor]` triggers.
+  - `withViewTaskWrites()` (`state/view-task-writes/view-task-writes.feature.ts`): the per-task
+    serialized writes, composed by the view's reader store (`act`, `update`, `remind`,
+    `restore`; the host connects its reads in `onInit` with `_connectWrites` and calls
+    `_resetWrites`, `_settleWrites` and `_appliedWrite`).
+  - `ViewTaskWritesStore` (page-scoped, with `VIEW_TASK_WRITER` set to the view's reader store):
+    the menu's and the selection bar's writes with their toasts, `Undo`, refusals, the shared
+    cancellation reason and the deletion confirmation, and `updateFields` for single-field writes.
+  - `ListTasksStore` (`state/list-tasks`): the flat reader of the calendar, Gantt and sheet, which
+    each provides through its `<VIEW>_VIEW_PROVIDERS`.
+  - `cw-task-card` (`ui/components/task-card`): the board card (`card`) and the calendar side
+    panel's line (`item`).
 - A dialog package owns `ui/dialogs/<dialog>/*` (`share-dialog`, `sprint-report-dialog`,
   `space-statuses-dialog`, `automations-dialog`) and its `state/` and `data-access/` files. The list
   page hosts it in a `@defer` block loaded on first opening and binds `open` (a two-way model the
@@ -146,6 +167,252 @@ constants belong to the lead):
   and `spaces.activity.select-empty` (the select's own texts), `spaces.activity.count-one` (a
   singular the mockup writes for 0 and 1 alike).
 
+### Share dialog
+
+`ui/dialogs/share-dialog` (`ShareDialog`, `App.dc.html` lines 2980-3016, 5448, 6871, 8830-8855)
+provides its own `ListShareStore` (`state/list-share/`, component-scoped), which reaches the
+gateway through `ListAccessApi` (`data-access/services/list-access-api/`, adapter
+`data-access/adapters/list-access/`, models `models/list-share/`). The list page keeps the dialog
+once it was opened, so the store lives with the list page, across closings and reopenings.
+
+- Each opening on a list reads, at once, `ListsService.getList` (the `Organization access` switch,
+  `organizationAccess`, and `callerRole`), `SpacesService.getSpace` (the owner and the
+  visibility) and every page of `AccessService.listListGrants`; a failure is the dialog's inline
+  error with `Retry`, distinct from its skeleton. Every page of `MembersService.listMembers`
+  (names, addresses, guests) is read apart: a `403` leaves the names unknown and hides
+  `Invite by email`; any other failure (network, 5xx) is its own inline error with `Retry`
+  (`spaces.secondary.members-failed`) above the people, who stay listed without names.
+- `People with access`: the space's owner first (`Owner`, no select: `Grant` has no owner, who
+  is `Space.owner`), then the grants in the order access was given, then the people invited from
+  the dialog. Grants of the space, which also open the list, are not listed. Guests carry
+  `Guest`, and the guest sum follows. Without `edit` on the list, the roles read as words, the
+  switch is disabled and the invitation hidden.
+- Writes are optimistic: a role (`setListGrant`), a removal (`removeListGrant`), the switch
+  (`updateList` with `organizationAccess` only). The writes of one list and subject (a person, or
+  the switch) are sent one after the other, whether the dialog is open, closed, reopened or shows
+  another list: a reopened dialog shows the changes still on their way over its read, and its new
+  changes wait behind them. No accepted change is dropped. A refusal puts back the last confirmed
+  value, unless a newer change of the same subject is still on its way, and always shows its
+  failure toast. Once the last change of a list ends, its access is read again if the dialog shows
+  it (once more after a read already in flight), and that read replaces the changes it covers.
+- None sends `If-Match`, which the contract makes optional on all three: each write sets one
+  absolute value, so two people sharing at once never overwrite each other. Every change raises
+  the list's version: each recorded write, even after the dialog closed, hands the version the
+  gateway answered (`ETag`, or the patched list) to `ListPageStore.followListEdits` while the list
+  page shows that list, so the header's later writes send the current `If-Match`; a grant change
+  also reads the header's members again.
+- Removing a grant asks `Remove X's access?` in a `cw-alert-dialog`, with the mockup's text. When
+  the `Organization access` switch is on outside a private space, the confirmation of a member
+  (never a guest) adds `They can still see it through the organization access.`: removing the
+  grant leaves them what the rule of the organization gives. A grant of the space, which also
+  keeps the list visible, is not checked, so the text can promise more than the removal does for
+  such a person.
+- `Invite by email` (G10): the contract has no invitation by email carrying a list role, and no
+  feature publishes an organization invitation entry. The address therefore resolves, without
+  regard to case, against the member directory: a member or guest gets the chosen role
+  (`setListGrant`) at once, then `Invitation sent` / `<email> can now edit the list.`; an address
+  outside the organization gets `This person is not in the organization: invite them first.` and
+  nothing is sent; the owner's gets a note that they already have access. The mockup's external
+  invitation (`Adresse externe : …` note and `Invité ajouté` toast) is not built.
+- `Organization access` is hidden in a private space, where it changes nothing
+  (`openapi/public/lists.yaml`).
+- `Copy the link` copies `/<slug>/l/<listId>` with `List link copied` (`navigator.clipboard`).
+- Gaps: no presence on the avatars (Account's `PRESENCE` publishes the person's own presence
+  only); no realtime follow of `list.access-changed.v1` while the dialog is open; `cw-dialog`
+  has no `max-w-lg` size, so the dialog uses `default` (`max-w-md`).
+
+## Timesheet view
+
+`TimesheetViewPage` (`ui/pages/timesheet-view-page/`) and `TimesheetViewStore`
+(`state/timesheet-view/`, route-scoped on `timesheet` with `TimesheetApi` through
+`TIMESHEET_VIEW_PROVIDERS`) show the time recorded on the list's tasks over one week, Monday to
+Sunday (`App.dc.html` lines 1363-1449, 7813-7880; skeleton lines 613-624).
+
+- Data: `TaskTimeService.getListTimesheet` (`weekStart`, pages of 100, read to the end, no HTTP
+  cache), mapped by `data-access/adapters/timesheet` to `models/timesheet`. Per-person sums, the
+  figures and the chart series are computed in the client; people are named from
+  `ListPageStore.organizationMembers` (a former member reads `Unknown user`), sorted by name. A
+  failed members read shows `The names of the people could not be loaded.` with `Retry`
+  (`organizationMembers.reload()`).
+- Filters: `getListTimesheet` takes none. The store follows `ListViewStore.taskQuery`
+  (`followQuery`) and keeps, in the client, the rows matching the search (task key or name), the
+  statuses and the assignees, read as the person who recorded the time (`me` is the signed-in
+  user, `Unassigned` keeps nobody); every total, figure, chart and estimate is computed again from
+  the rows kept (`week`). A week with time but none kept shows `No task matches`. Priority and
+  label filters cannot apply, and the view says so (`Priority and label filters do not apply to
+recorded time.`). The toolbar shows `Filter`, `Search`, `Create a task` and `Save the view`
+  (`LAYOUT_TOOLS.timesheet`); the view publishes no rows summary (`followRows`).
+- Week: it opens on the caller's current week; `Previous week` and `Next week` move it, the title
+  (`Week of Nov 2 to Nov 8`) is announced politely, `This week` or `Back to this week` follow.
+  Another list starts over on the current week; another organization reads again.
+- Figures (`cw-stat`): `Week total` (its tasks), `Average per working day` (Monday to Friday
+  divided by the working days with time), `Longest task` (across people) and
+  `Estimated on these tasks` (`p% consumed`, or `No estimate`). The estimates are a secondary read,
+  `getTaskTimeSummary` per task with time, four at a time, read again only when the set of tasks
+  changes or on a refresh (a refresh asked while they are read follows that read); a failure stops
+  the reads and shows `Retry` under the figures.
+- Table (`table[cwTable]`, 760 px wide at least, scrolling below): `Person and task` × the seven
+  days × `Total`; a person row (avatar, name, daily sums tinted by amount), then the person's
+  tasks, whose row-wide button (`Open CAD-482 · …`) opens Task's detail over the view with the row
+  as preview; a `Total` footer. Weekend days are shaded, today ringed. Past 15 body rows
+  (`BOUNDED_ROWS`) the table scrolls in a frame 36 rem high, its header and footer sticky. It is
+  not virtualized: the CDK viewport's transformed wrapper would break the sticky header and footer,
+  and person and task rows differ in height. Measured on 2026-11-26 (Chromium through Playwright,
+  built styles, static markup): 1,000 rows lay out and paint in about 100 ms, 2,000 in about
+  200 ms, 4,000 in about 400 ms, scrolling at 60 frames per second at every size; Angular's
+  rendering of the rows (jsdom unit test) takes about 120 ms for 500, 270 ms for 1,000 and 340 to
+  720 ms for 2,000. Showing a week becomes noticeably slow from about 1,000 rows (one per person and
+  task with time).
+- Charts: `Time per day` (`cw-chart` stacked bars, one series per person, largest first, the fifth
+  and later summed into `Others`) and `Breakdown by person` (a dot in the person's chart color and a
+  `cw-meter` per person); they stack under `lg`.
+- States: the skeleton while a week is read (the header stays); a week without time shows
+  `No time recorded this week`. Until a week of the list was read once (`hasRead`), a failed read
+  reaches the route's error boundary, whose `Retry` renders the page again, which reads again. Later,
+  a failed read of another week shows `The timesheet could not be loaded` with `Retry` in place of
+  the week; a failed refresh keeps the week shown (`sheet`, the last answer for the list and week)
+  with a `Retry` line.
+- Refresh: time entries have no realtime notice (G13). The week (and its estimates) is read again
+  1 s after the first of: a notice of the list's room naming this list or a task update or status
+  change, the task detail closing or giving way (`TaskDetailOpener.closed`, `changed`: time is
+  recorded from the detail), the tab becoming visible again; once per window.
+- Writes: none. The mockup's timesheet only reads; time is recorded from the task detail (Task).
+
+Known gaps:
+
+- G7: `ListTimesheetRow` has no `estimateMinutes`; the estimate figure costs one
+  `getTaskTimeSummary` per task with time. A contract addition of the estimate to the rows removes
+  those reads.
+- `ListTimesheetPage` sums entries per person, task and day and carries no entry count: the
+  `Week total` hint counts tasks (`3 tasks`) instead of the mockup's entries (`n saisies`).
+- G13: no realtime notice for time entries; another tab's or person's entries show on the next
+  refresh cause above.
+- `cw-stat` takes no icon: the figures show without the mockup's label icons.
+- `cw-meter` has one fill color: the person's color is the dot beside the gauge, not the gauge.
+
+Copy not taken word for word from the mockup:
+
+| Unit                                                                                                                                 | Reason                                           |
+| ------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------ |
+| `spaces.timesheet.kpi-tasks`, `spaces.timesheet.kpi-tasks-one`                                                                       | The gateway gives no entry count (see the gaps). |
+| `spaces.timesheet.kpi-days-one`                                                                                                      | Singular form the mockup writes in the plural.   |
+| `spaces.timesheet.failed`, `spaces.timesheet.refresh-failed`, `spaces.timesheet.estimates-failed`, `spaces.timesheet.members-failed` | The mockup draws no failed read.                 |
+| `spaces.timesheet.filters-unapplied`                                                                                                 | The mockup applies no filter to the timesheet.   |
+| `spaces.timesheet.chart-*`, `spaces.timesheet.stat-*`, `spaces.timesheet.meter-*`                                                    | The bricks' own default texts.                   |
+| `spaces.timesheet.share-percent`                                                                                                     | The mockup's `38%`, as a unit for its placement. |
+
+## Form view
+
+The `Form` view (`ui/pages/form-view-page`, `App.dc.html` lines 1102-1297) designs the list's
+request form. The preview is Intake's renderer (`IntakeForm` from `@features/intake`), in a
+browser frame whose address is the public link (`<origin>/f/<publicKey>`, `Not published` until
+published), with the organization badge of `WORKSPACE_CONTEXT`. It follows the settings live and
+is inert: a valid request is not sent, and a toast says so. The settings aside shows from 1024 px:
+the name and description, a `Required` checkbox and a show switch per field (the title is locked),
+the created task's default status (the space's statuses and names) and assignee (`Unassigned`, then
+`ListPageStore.organizationMembers`), the destination note, `Copy the public link` (enabled once
+published), `Open the preview` (which hides the aside until `Close the preview`) and the
+publication (`Publish the form`, `Unpublish the form`). A list the caller cannot edit
+(`TaskList.canEdit`) shows an empty state and reads nothing.
+
+- `FormViewStore` (`state/form-view`, route-scoped through `FORM_VIEW_PROVIDERS`) reads
+  `getIntakeFormConfiguration` through `IntakeFormApi` (`data-access/services/intake-form-api`);
+  that primary read fails to the route boundary, and a view re-entered after a failure reads
+  again. A change shows at once; 500 ms after the last one, what differs from the newest recorded
+  settings is sent with `updateIntakeFormConfiguration` against their version (`If-Match`); a blank
+  title is not sent. Settings changes, `publishIntakeForm` and `disableIntakeForm` (followed by a
+  read, since it answers without a body) share one write queue: they run one after the other, a
+  publication first sends the change waiting before it and is not sent when a settings write
+  before it is refused or unconfirmed (`The form was not published: …`), a withdrawal goes ahead
+  anyway, and an answer older than the version already known is ignored. A change still waiting when the view is left, or when another list is
+  shown, is sent at once and completes after the store is gone. A refused change toasts `The form
+settings could not be saved` (`This status or assignee cannot be used in this list` for
+  `422 intake-form.defaults-invalid`) and reads the settings again: the settings it sent go back
+  to the recorded values unless edited since, and the edits made since are sent against the
+  settings read.
+- The mockup's `on`/`req` pair maps to the contract's mode: a hidden field is `disabled`, a field
+  shown again is `optional`.
+- Known gaps: the destination note gives no next reference (`prochaine référence <id>`), which
+  needs a published next-key read (G14); no realtime notice tells another editor's changes (G13);
+  the preview shows the organization badge that the public page cannot show.
+
+| Unit                                                                                                                                                                                              | Reason                                                     |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
+| `spaces.form.publish`, `spaces.form.unpublish`, `spaces.form.published`, `spaces.form.unpublished`, `spaces.form.unpublished-address`, `spaces.form.publish-failed`, `spaces.form.disable-failed` | The mockup has no publication.                             |
+| `spaces.form.destination`                                                                                                                                                                         | The mockup's note without its next reference (G14).        |
+| `spaces.form.preview-only*`                                                                                                                                                                       | The mockup's preview creates a task; this one never sends. |
+| `spaces.form.read-only`                                                                                                                                                                           | The mockup draws no list the caller cannot edit.           |
+| `spaces.form.save-failed`, `spaces.form.defaults-invalid`, `spaces.form.link-failed`                                                                                                              | The mockup draws no refused write.                         |
+
+### Sprint report
+
+`SprintReportDialog` (`ui/dialogs/sprint-report-dialog/`, `App.dc.html` lines 2729-2776 and
+5512-5561) shows the report of the sprint it is given:
+
+- Store: `SprintReportStore` (`state/sprint-report/`), component-scoped on the dialog. Each
+  opening reads `ListsService.getSprintReport` again through `SprintReportApi`
+  (`data-access/services/sprint-report-api/`), with the caller's `today` and browser time zone,
+  every burndown page joined (100 days a page, 10 pages at most), bypassing the HTTP cache.
+  Closing keeps the shown report for the closing animation; the next opening starts from
+  skeletons. A failed read shows an inline error whose `Retry` reads again; a sprint without
+  tasks shows `No task in this sprint`.
+- Header: `<sprint> report` and `<start> – <end> · day n of m`, from the list until the report
+  answers; the day is held within the sprint.
+- Figures (`cw-stat`): `Points committed` (the opening commitment, with the tasks of the current
+  scope), `Points delivered` (with their share of the delivered and remaining points),
+  `Points remaining` (with the open tasks) and `Projected end`: `On track` when at most 0.5
+  point would remain, else `≈ n pts` and `would remain on <end>`, from the gateway's forecast,
+  or, once the sprint has closed (after its last day), what remains; without a forecast it is
+  unknown until then, the last day included. A figure the gateway cannot establish shows a dash.
+- `Burndown` (`cw-chart` lines): `Actual`, dashed `Ideal` and `Projection`, one category per day,
+  and a `Today` marker while the caller's day is in the sprint.
+- `Velocity` (`cw-chart` grouped bars): the earlier sprints the gateway returns (four at most),
+  then this one, named `S13` (the mockup's `Sprint ` to `S`, made unique), gray committed and
+  jade delivered, with the average delivered by the earlier sprints that have history.
+- `Delivered` and `To carry over`: the counts, the first six tasks with their points and
+  `+ n others`; a task closes the report and opens its detail (`TaskDetailOpener`).
+- `cw-dialog` `lg`, scrollable, filling the screen under 768 px.
+- Known gaps: `cw-dialog` has no width between `lg` (`max-w-2xl`) and full screen, so the report
+  is narrower than the mockup's `max-w-4xl` and stacks `Velocity` above the summary. `cw-chart`
+  colors a series, not a bar: the current sprint's bar is jade like the others (violet in the
+  mockup), and the `done / committed` line under each bar is in the tooltip and the chart's data
+  table only. The backdrop has no accessible name (`Fermer le rapport` in the mockup).
+
+## Space statuses dialog
+
+`SpaceStatusesDialog` (`ui/dialogs/space-statuses-dialog/`, `App.dc.html` lines 3302-3317 and
+8587-8608) provides `SpaceStatusesStore` (`state/space-statuses/`, component-scoped), which writes
+through `SpaceStatusesApi` (`data-access/services/space-statuses-api/`, `updateSpace` with the
+`statuses` member only and `If-Match`).
+
+- The ten statuses in workflow order under their category headings: icon, name field (the default
+  label as placeholder, 24 characters at most once trimmed; empty puts back the default), hint
+  (from 640 px) and a switch `Stop using …` / `Use …`. `To do` and `Done` stay used
+  (`… (required)`, disabled). The text counts the statuses used out of 10. Every control is
+  disabled without `SpaceDetails.canEdit`; skeleton rows show while `space` is null.
+- A switch and `Reset to defaults` (`statuses: null`) write at once; a name is written when its
+  field changes (blur or Enter), not on every keystroke as in the mockup. An unchanged value sends
+  nothing. Each change shows at once; the writes run one after the other, each from the version the
+  previous one recorded, and an accepted change is sent even once the dialog or the page is
+  destroyed. A refusal (a 4xx with a problem code) takes back its own change only, with the failure
+  toast (one shown at a time). Without an answer (network, timeout, 5xx) the space is read again
+  (`getSpace`) before the next change: the change counts as saved when that read holds it, else it
+  is taken back with the failure toast, and the next changes are sent from the version read; when
+  that read fails too, the change is taken back with `The change could not be confirmed…`. A field
+  or switch whose change ends unsaved shows the recorded value again. `Done` closes the dialog;
+  writes in flight go on.
+- Once the last write ends, `ListPageStore.space.reload()` (once more after a read in flight) and
+  `SpacesNavigationStore.refresh()` read the space again, even after the dialog is destroyed, so
+  the status words, the hidden groups and the version `Edit the space` sends follow. A list page
+  opened on the same space before the last write ends reads the space on its own and may show the
+  previous statuses until it reads again. A newer read of the space replaces the statuses only while no change is pending.
+- Copy not taken from the mockup: `spaces.statuses.save-failed` and `spaces.statuses.save-unknown`
+  (the mockup draws no refused or unanswered write).
+- Known gaps: `space.updated.v1` is not relayed by the realtime gateway, so another tab sees the
+  change only after it reads the space again; a write refused with `412` (the space changed
+  elsewhere) is taken back and the reads that follow bring the newer version. `cw-dialog` has no
+  `max-w-lg` size: the dialog uses `default` (`max-w-md`) where the mockup uses `max-w-lg`.
+
 ## Public entry points
 
 | Entry point            | Consumers    |
@@ -181,10 +448,14 @@ computed from the navigation's reads, for the command palette's `Lists` and the 
   `ArchivesService` (`archiveList`, `unarchiveList`, `listArchivedLists` and `listArchivedTasks`
   for the footer count), `TrashService.listTrash` (the footer count),
   `BillingService.getBillingSubscription` (the free seats of `Invite your team`),
-  `AccessService.listListGrants`,
+  `AccessService.listListGrants`, and for the `Share` dialog (`ListAccessApi`) `setListGrant`,
+  `removeListGrant`, `ListsService.getList` and `updateList` (`organizationAccess`),
+  `SpacesService.getSpace` and `MembersService.listMembers`,
   `MembersService.listMembers`, `TasksService` (`listLabels`, `executeBulkTaskAction`,
-  `listSubtasks`) and `TaskQueriesService` (`queryListTasks` for the rows and the milestone count,
-  `countTaskGroups` for the groups). Every rows read bypasses the HTTP cache.
+  `listSubtasks`, `updateTask` with `If-Match` for the task views' single-field writes) and
+  `TaskQueriesService` (`queryListTasks` for the rows, the flat reads with an optional
+  `dueFrom`/`dueTo` window and the milestone count, `countTaskGroups` for the groups). Every rows
+  read bypasses the HTTP cache.
 - Task (`@features/task`): `TaskSummary`, `TaskStatusChangesStore`, `TaskActionsApi` and the
   `TaskBulk*` models (the rows' writes), the status words, hints and categories,
   `TaskCreate`, `TaskDetailOpener` (`open`, `closed`, `changed`), `cw-task-title-cell`,
@@ -287,6 +558,17 @@ computed from the navigation's reads, for the command palette's `Lists` and the 
     and a task its `Undo` restored (`TaskDetailOpener.changed`; the detail's writes would
     otherwise reach the rows only through realtime) read the rows again,
     through the same 1 s refresh window.
+  - `ListTasksStore`, route-scoped on the calendar, Gantt and sheet views once their packages
+    provide it: the tasks of the list with the view's `taskQuery` and an optional due window, read
+    page after page to the last one and stopping at 2,000 tasks (`truncated`). A superseded read
+    is aborted; another list or organization empties the tasks at once and drops late answers; a
+    failed first read fails to the route's error boundary. The same realtime window as the rows
+    (1 s; for a read of more than three pages 1 s more per three pages, and 5 s for a truncated
+    one or from fifteen pages), a completed status write, `TaskDetailOpener.closed` and `changed`
+    read again; a task created in the list reads at once. Its `summary` feeds
+    `ListViewStore.followRows`, with an unknown count while a due window applies.
+  - `ViewTaskWritesStore`, page-scoped on each task view's page (`ListViewPage` today), over its
+    reader store (`VIEW_TASK_WRITER`): what follows for the row menu and the selection bar.
   - `TaskStatusChangesStore` (Task), route-scoped on `list` and on the board, calendar, gantt,
     workload and sheet views, so pending changes die with the view.
   - `BoardViewStore`, `CalendarViewStore`, `GanttViewStore`, `WorkloadViewStore`,
@@ -350,8 +632,9 @@ computed from the navigation's reads, for the command palette's `Lists` and the 
   `Group by`, `Sort by`, `Select all`, `Export as CSV` and `Edit the list` (`Edit the sprint` for a sprint, `App.dc.html` line 7310), which opens the list
   dialog through `SpacesNavigationStore.openDialog`. `Name` sorts by name,
   ascending then descending. The row's icon animates from its previous status.
-- `ListViewPage` holds the table's selection. The row menu and the selection bar write through
-  `ListRowsStore.act`, which sends Task's `TaskActionsApi.bulk`: chunks
+- `ListViewPage` holds the table's selection. The row menu (`cw-task-menu`) and the selection bar
+  write through `ViewTaskWritesStore` and `ListRowsStore.act` (`withViewTaskWrites`), which sends
+  Task's `TaskActionsApi.bulk`: chunks
   of 50 `executeBulkTaskAction` calls one after the other, each with an idempotency key reused for
   one retry after an uncertain response; each send and retry checks the starting organization and
   the store's lifetime, and the remaining tasks are reported as not sent when either changes.
@@ -375,7 +658,14 @@ computed from the navigation's reads, for the command palette's `Lists` and the 
   reports tasks not sent, uncertain or refused like the action and reads the rows again after a
   refusal. Leaving the view
   dismisses its `Undo` toasts, as `TaskStatusChangesStore` does for the status toasts. A copy's
-  toast offers `Open`.
+  toast offers `Open`. A single-field write (`update`: dates, estimate, name, custom fields) is
+  serialized with the actions and sent with `updateTask` and `If-Match`; the name and the dates
+  show at once (without a start in the write, a new due date moves the start by the same days and
+  a removed due date removes it, as the task service does), the estimate and custom fields once
+  read, since task summaries do not carry them. A refusal that may come from a version the view
+  has not read (a `412` of a single-field write, any refused chunk of a bulk action, whose answer
+  gives no reason) reads the tasks again; a refused single-field write shows
+  `The task could not be changed`.
 - The table declares gateway groups in order, omitting hidden and empty groups except the five default empty status groups in an unfiltered view. Filtered empty results show the empty state. `nearEnd` requests further pages with a threshold accounting for unread group lines. Under 768 px the grid keeps selection, name and due date.
 
 ## Organization pin
@@ -402,9 +692,8 @@ gateway checks them and `ORGANIZATION_PIN_OPERATIONS` lists them.
   `Favorite` carries no icon.
 - A favorite saved view's menu holds `Open` only: renaming, duplicating and deleting a view
   live on its list page.
-- `Share` (no grant write in the gateway yet), `Sprint report`, `Space statuses`
-  and `Automations` are stub dialogs whose openers stay hidden until `RELEASED_LIST_DIALOGS`
-  lists them; the Git section of `Automations` stays hidden until B6 is decided. The Slack and
+- `Sprint report`, `Space statuses` and `Automations` are stub dialogs; their openers and
+  `Share`'s (built, see "Share dialog") stay hidden until `RELEASED_LIST_DIALOGS` lists them; the Git section of `Automations` stays hidden until B6 is decided. The Slack and
   Figma suggestions need integrations no service provides.
 - The tabs show every released layout: the mockup's views added per list (`Added` / `Add`,
   `App.dc.html` lines 6187, 8792-8795) have no list setting in the contract (G12) and are not
@@ -451,3 +740,96 @@ gateway checks them and `ORGANIZATION_PIN_OPERATIONS` lists them.
 | `spaces.list-dialog.date-*`, `spaces.list-dialog.pick-date`, `spaces.footer.*`                                                 | The date picker's texts and the footer rows' names.                        |
 | `spaces.look.*`                                                                                                                | `LOOK_COLORS` names and the default choices of `lookPicker`.               |
 | `spaces.view-stub.text`                                                                                                        | The stub of a view not built yet, which the mockup does not have.          |
+| `spaces.share.*-failed`, `spaces.share.read-failed`                                                                            | The mockup draws no failed read or refused write.                          |
+| `spaces.share.not-member`                                                                                                      | The contract's `access.grantee-invalid` title (G10).                       |
+| `spaces.share.already-owner`                                                                                                   | The mockup does not draw the owner's address.                              |
+| `spaces.share.remove-inherited`                                                                                                | The mockup has no wording for access kept through the organization.        |
+| `spaces.share.email-placeholder`                                                                                               | The mockup's address names its own organization.                           |
+| `spaces.share.guests-one`                                                                                                      | Singular form the mockup builds in its script.                             |
+| `spaces.share.access-of`, `spaces.share.remove-label`                                                                          | Accessible names, from the mockup's `aria-label`s.                         |
+
+| `spaces.task-writes.field-failed` | The mockup draws no refused single-field write. |
+
+| `spaces.sprint-report.failed`, `spaces.sprint-report.empty`, `spaces.sprint-report.chart-empty` | The mockup draws no failed read or empty sprint. |
+| `spaces.sprint-report.projected-unknown` | The mockup always has a projection. |
+| `spaces.sprint-report.chart-*` (except `chart-empty`), `spaces.sprint-report.stat-*` | The bricks' own texts, which the mockup does not show as copy. |
+| `spaces.sprint-report.today` | The today marker's label; the mockup's line has none. |
+| `spaces.sprint-report.tasks-one`, `spaces.sprint-report.open-tasks-one` | Singular forms the mockup writes in the plural. |
+
+## Automations dialog
+
+`AutomationsDialog` (`ui/dialogs/automations-dialog/`, `App.dc.html` lines 3246-3301, logic lines
+8532-8585) shows the organization's "when… then…" rules, which apply to every task of the workspace.
+
+- `AutomationsStore` (`state/automations/`), component-scoped on the dialog, reads nothing until
+  the dialog opens. Each opening reads the rules (every page) and the last runs again; it reads the
+  members once, through `ListsApi.organizationMembers`. Another organization reads all of them
+  again. A failed rules read shows an inline error with Retry (`No automation yet.` is kept for a
+  successful empty read). A failed runs or members read shows its own inline error with Retry.
+- Writes go through `AutomationsApi` (`data-access/services/automations-api/`,
+  `AutomationsService`: `listAutomationRules`, `createAutomationRule`, `updateAutomationRule`,
+  `deleteAutomationRule`, `listRecentAutomationRuns`), mapped by
+  `data-access/adapters/automation-rule/` to `models/automation-rule/`.
+  - The confirmed rules (`confirmedRules`) are kept apart from the read in flight. They are the
+    newest read, with the results of this dialog's writes that settled after that read started
+    applied over it: a newer version, a created rule, a deleted rule. They keep their value while
+    an opening reads again, so a write always uses the newest known version and is always sent.
+  - A switch changes at once. The writes of a rule are serialized, each sent with the version the
+    previous one left (`If-Match`). Only the last state asked is sent, and coming back to the
+    recorded state sends nothing. A definite refusal (`4xx`) restores the recorded state and shows
+    an error toast. A `412 request.version-mismatch` or `404 automation.rule-not-found` also reads
+    the rules again.
+  - A lost answer (no response, `408`, `5xx`) may still be applied, so it is not a refusal: the
+    original write may still be running when a read happens. The store resends the same write
+    with the same `If-Match` version, after the waits of `AUTOMATION_RETRY_DELAYS` (three
+    resends over about 6.5 s by default). A resent switch that succeeds applies. One refused on
+    its version (`412`) means the version moved, so a read of the rules tells whether the wanted
+    state holds (`applied`), or not (`not-applied`, `The automation was not changed`).
+  - When the resends do not settle it, the outcome is `unknown` and the dialog warns. The wanted
+    state stays shown (a deleted rule stays hidden), and the rule's controls are disabled
+    (`unresolvedRuleIds`): the rule takes no other write. The store reads the rules again; the
+    first read started after the resends gave up settles the rule.
+  - A deletion is confirmed by `cw-alert-dialog` (`Delete this automation?`), then hides the rule
+    at once. It succeeds only once the gateway deletes the rule or reports it absent. A refusal
+    brings it back with an error toast. A lost answer is resent with the same version: a `404`
+    (already gone) means it applied, a `412` that the rule is still there.
+  - A creation sends one `Idempotency-Key` per draft and organization. A definite refusal
+    (`4xx`), a recorded rule, another draft or a closed builder renews it. The created rule is
+    added last and shows `Automation created`. A refusal keeps the builder and its values.
+  - A lost creation answer (no response, `408`, `5xx`, `409 idempotency.request-in-progress`) is
+    resent with the same key, which the gateway replays, after the same waits. When the resends
+    do not settle it, the store reads the rules again and keeps the draft and its key, even when
+    the builder closes (`creationUnknown`). The builder then warns that the rule may already
+    exist. Submitting again sends the same key, so the rule is never created twice. Submitting
+    another draft first resends the kept one with its key.
+    A comment over 5,000 characters (the contract's limit) blocks `Create the rule` and shows
+    `spaces.automations.comment-too-long`. The field also carries the native `maxlength` that
+    Signal Forms derives from the rule.
+- Statuses use their default words: a rule is not tied to a space, so the `space` input does not
+  rename them.
+- Extension point for gap B6: the mockup's `Git automations` section (lines 3274-3296) is not
+  rendered. Its place is between the builder and `Last runs`. It needs a contract first (e.g.
+  `getSpaceGitAutomations` / `updateSpaceGitAutomations` with `If-Match`), then its producer and
+  gateway route, then new `AutomationsApi` methods and store state, and a product decision on
+  its scope: per space as planned, or global as in the mockup.
+- Known gaps:
+  - `automation.executed.v1` is not relayed by the realtime gateway, so `Last runs` refreshes
+    only when the dialog opens.
+  - `cw-toggle-group` (`@cadenway/ui` 0.8.0) reads its items' required `value` before every
+    `@for` item has received it. The fixed chips are written out statically. The person chips
+    show the first member until they have rendered once (`personValue`). The lasting fix belongs
+    in the design system.
+  - The mockup shows no member's view: the opener is disabled for members (list header).
+- Copy not taken word for word from the mockup:
+
+  | Unit                                                                                              | Reason                                                   |
+  | ------------------------------------------------------------------------------------------------- | -------------------------------------------------------- |
+  | `spaces.automations.load-failed`, `runs-failed`, `members-failed`                                 | The mockup draws no failed read.                         |
+  | `spaces.automations.create-failed`, `toggle-failed`, `delete-failed`                              | The mockup draws no refused write.                       |
+  | `spaces.automations.toggle-not-applied`, `toggle-unknown`, `delete-not-applied`, `delete-unknown` | The mockup draws no lost answer.                         |
+  | `spaces.automations.create-unknown`, `create-unknown-toast`                                       | The mockup draws no lost answer.                         |
+  | `spaces.automations.comment-too-long`                                                             | The mockup has no wording for a comment over the limit.  |
+  | `spaces.automations.former-member`                                                                | A rule or run naming someone no longer in the directory. |
+  | `spaces.automations.loading`                                                                      | Accessible name of the skeleton rows.                    |
+  | `spaces.automations.text-one`                                                                     | Singular form the mockup writes in the plural.           |
+  | `spaces.automations.run-minutes`, `run-hours`                                                     | The mockup only shows `just now`.                        |

@@ -1,0 +1,66 @@
+@if (variant() === 'item') {
+  <button
+    type="button"
+    class="flex w-full items-center gap-2 rounded-lg border border-border bg-card px-2.5 py-2 text-left text-sm transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none focus-visible:ring-inset motion-reduce:transition-none"
+    (click)="opened.emit(task())"
+  >
+    <cw-status-icon [status]="shownStatus()" [milestone]="task().milestone" size="4" />
+    <span class="min-w-0 flex-1 truncate">{{ task().name }}</span>
+    <span class="shrink-0 font-mono text-xs text-muted-foreground">{{ task().key }}</span>
+  </button>
+} @else {
+  <button
+    type="button"
+    class="flex w-full flex-col gap-2 rounded-xl border border-border p-3 text-left transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none focus-visible:ring-inset motion-reduce:transition-none"
+    [class.bg-card]="!closed()"
+    [class.bg-transparent]="closed()"
+    (click)="opened.emit(task())"
+  >
+    <span class="flex items-center gap-2">
+      <span class="font-mono text-xs text-muted-foreground">{{ task().key }}</span>
+      <span
+        class="ml-auto flex items-center gap-1.5 text-xs"
+        [class.text-destructive]="task().priority === 'urgente'"
+        ><cw-priority-icon [priority]="task().priority" size="3.5" />{{ priorityLabel() }}</span
+      >
+    </span>
+    <span class="flex min-w-0 items-start gap-1.5">
+      @if (task().milestone) {
+        <span class="mt-0.5 shrink-0">
+          <cw-status-icon [status]="shownStatus()" [milestone]="true" size="3.5" />
+        </span>
+      }
+      <span
+        class="line-clamp-2 text-sm font-medium"
+        [class.text-muted-foreground]="closed()"
+        [class.line-through]="shownStatus() === 'cancelled'"
+        >{{ task().name }}</span
+      >
+    </span>
+    @if (task().labels.length > 0) {
+      <cw-task-label-chips [labels]="task().labels" />
+    }
+    <span class="flex h-6 items-center gap-3 text-xs text-muted-foreground">
+      <span class="flex items-center gap-1">
+        <ng-icon name="phosphorCalendarBlankBold" size="0.875rem" aria-hidden="true" />
+        <cw-task-due-date [due]="task().due" [status]="shownStatus()" />
+      </span>
+      @if (progress(); as counts) {
+        <span class="flex items-center gap-1 whitespace-nowrap tabular-nums">
+          <ng-icon [name]="counts.icon" size="0.875rem" aria-hidden="true" />{{ counts.closed }}/{{
+            counts.total
+          }}
+        </span>
+      }
+      <span class="ml-auto flex -space-x-1">
+        @for (person of assignees(); track person.id) {
+          <span
+            class="flex size-6 items-center justify-center rounded-full bg-secondary text-[10px] leading-none font-semibold text-secondary-foreground ring-2 ring-card"
+            [title]="person.name"
+            >{{ person.initials }}</span
+          >
+        }
+      </span>
+    </span>
+  </button>
+}

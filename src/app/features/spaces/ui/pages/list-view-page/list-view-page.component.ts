@@ -10,19 +10,13 @@ import {
   inject,
   input,
   type InputSignal,
-  LOCALE_ID,
   type Signal,
   signal,
   untracked,
   type WritableSignal,
 } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
-import {
-  type PriorityKey,
-  STATUS_CATEGORIES,
-  type StatusCategory,
-  type StatusKey,
-} from '@cadenway/contracts';
+import type { PriorityKey, StatusKey } from '@cadenway/contracts';
 import {
   CwAlertDialog,
   CwAlertDialogAction,
@@ -45,9 +39,7 @@ import {
 import { CwEmpty, CwEmptyHeader, CwEmptyMedia, CwEmptyTitle } from '@cadenway/ui/components/empty';
 import {
   CwMenu,
-  CwMenuGroup,
   CwMenuItem,
-  CwMenuItemCheckbox,
   CwMenuLabel,
   CwMenuSeparator,
   CwMenuShortcut,
@@ -60,25 +52,11 @@ import { NgIcon } from '@ng-icons/core';
 import { map } from 'rxjs';
 
 import {
-  CANCEL_REASON_LABELS,
-  defaultStatusOptions,
   initialsOf,
-  isMilestoneStatus,
-  MILESTONE_STATUS_HINTS,
   type Person,
-  personOf,
-  pickableStatuses,
   PRIORITY_LABELS,
-  STATUS_CATEGORY_LABELS,
-  STATUS_HINTS,
-  statusLabel,
   type StatusOption,
-  type TaskBulkAction,
-  type TaskBulkEntry,
-  type TaskBulkOutcome,
-  type TaskBulkSelection,
   TaskCancelDialog,
-  type TaskCancellation,
   TaskCreate,
   TaskDetailOpener,
   TaskDueDate,
@@ -88,52 +66,29 @@ import {
   type TaskSummary,
   TaskTitleCell,
 } from '@features/task';
-import {
-  WORKSPACE_CONTEXT,
-  type WorkspaceContextPort,
-} from '@features/workspace/ports/workspace-context';
 
-import {
-  bulkDeletedText,
-  bulkDoneText,
-  bulkMovedText,
-  bulkPartialText,
-  bulkUpdatedText,
-  undoConflictText,
-  undoConflictTitle,
-} from '../../../constants/bulk-copy/bulk-copy.constants';
 import { SPACES_RETRY } from '../../../constants/data-table-texts/data-table-texts.constants';
 import { groupLabels, sortLabels } from '../../../constants/view-labels/view-labels.constants';
 import type { ListExport } from '../../../data-access/services/lists-api/lists-api.service';
-import type { ListMember } from '../../../models/list-member/list-member.interface';
-import type {
-  ConfirmedTask,
-  ListActOutcome,
-  ListRow,
-  ListRowsQuery,
-} from '../../../models/list-rows/list-rows.interface';
+import type { ListRow, ListRowsQuery } from '../../../models/list-rows/list-rows.interface';
 import type {
   ListGroupBy,
   ListSortField,
 } from '../../../models/list-view-config/list-view-config.interface';
-import type { Space, SpaceStatusOption } from '../../../models/space/space.interface';
-import type {
-  ListSummary,
-  SpaceOverview,
-  TaskList,
-} from '../../../models/task-list/task-list.interface';
+import type { TaskList } from '../../../models/task-list/task-list.interface';
 import { ListPageStore } from '../../../state/list-page/list-page.store';
 import { ListRowsStore } from '../../../state/list-rows/list-rows.store';
 import { ListViewStore } from '../../../state/list-view/list-view.store';
 import { SpacesNavigationStore } from '../../../state/spaces-navigation/spaces-navigation.store';
+import {
+  ViewTaskWritesStore,
+  type ViewTaskWritesStoreInstance,
+} from '../../../state/view-task-writes/view-task-writes.store';
+import { VIEW_TASK_WRITER } from '../../../state/view-task-writes/view-task-writer.token';
 import { saveTextFile } from '../../../utils/file-download/file-download.util';
 import { NO_ASSIGNEE_GROUP } from '../../../utils/list-rows/list-rows.util';
-import { listIconName, lookTone } from '../../../utils/look/look.util';
-import {
-  BulkBar,
-  type BulkPerson,
-  type MoveTarget,
-} from '../../components/bulk-bar/bulk-bar.component';
+import { BulkBar, type BulkPerson } from '../../components/bulk-bar/bulk-bar.component';
+import { TaskMenu } from '../../components/task-menu/task-menu.component';
 
 /**
  * Constant DEFAULT_STATUS_GROUPS
@@ -146,16 +101,6 @@ import {
 const DEFAULT_STATUS_GROUPS: readonly string[] = ['progress', 'review', 'todo', 'blocked', 'done'];
 
 /**
- * Constant PRIORITY_ORDER
- *
- * @description
- * The four priorities of the row menu, from the most urgent.
- *
- * @type {readonly PriorityKey[]}
- */
-const PRIORITY_ORDER: readonly PriorityKey[] = ['urgente', 'haute', 'moyenne', 'basse'];
-
-/**
  * Constant STATUS_FROM_MS
  *
  * @description
@@ -165,103 +110,6 @@ const PRIORITY_ORDER: readonly PriorityKey[] = ['urgente', 'haute', 'moyenne', '
  * @type {number}
  */
 const STATUS_FROM_MS: number = 600;
-
-/**
- * Constant REMINDER_HOUR
- *
- * @description
- * Hour of `Remind me tomorrow morning`, in the caller's time zone (`REM_PRESETS` of `App.dc.html`).
- *
- * @type {number}
- */
-const REMINDER_HOUR: number = 9;
-
-/**
- * Interface StatusMenuGroup
- *
- * @description
- * The statuses of one category of the row menu's `Status`, under its heading, each with its
- * hint; a milestone's menu has one group without a heading.
- */
-interface StatusMenuGroup {
-  // #region Properties
-  /**
-   * Property category
-   *
-   * @description
-   * Category of the statuses, or null for a milestone's single group.
-   *
-   * @type {StatusCategory | null}
-   * @readonly
-   */
-  readonly category: StatusCategory | null;
-
-  /**
-   * Property heading
-   *
-   * @description
-   * `Not started`, `Active` or `Closed`; empty for a milestone.
-   *
-   * @type {string}
-   * @readonly
-   */
-  readonly heading: string;
-
-  /**
-   * Property entries
-   *
-   * @description
-   * The statuses with their hint, in workflow order.
-   *
-   * @type {readonly { option: StatusOption; hint: string }[]}
-   * @readonly
-   */
-  readonly entries: readonly { readonly option: StatusOption; readonly hint: string }[];
-  // #endregion
-}
-
-/**
- * Interface ActionToast
- *
- * @description
- * The toast of an applied action and what its `Undo` sends back.
- */
-interface ActionToast {
-  // #region Properties
-  /**
-   * Property title
-   *
-   * @description
-   * Title of the toast.
-   *
-   * @type {string}
-   * @readonly
-   */
-  readonly title: string;
-
-  /**
-   * Property description
-   *
-   * @description
-   * Second line of the toast.
-   *
-   * @type {string}
-   * @readonly
-   */
-  readonly description: string;
-
-  /**
-   * Property undo
-   *
-   * @description
-   * Puts back what the action changed, or null when it cannot be undone.
-   *
-   * @type {(() => void) | null}
-   * @readonly
-   */
-  readonly undo: (() => void) | null;
-  // #endregion
-}
 
 /**
  * Function csvRecordCount
@@ -290,75 +138,6 @@ function csvRecordCount(content: string): number {
 }
 
 /**
- * Function groupBy
- *
- * @description
- * Splits tasks by a key, in order of first appearance.
- *
- * @param {readonly T[]} items - The items.
- * @param {(item: T) => string} keyOf - The key of an item.
- * @returns {readonly T[][]} The groups.
- */
-function groupBy<T>(items: readonly T[], keyOf: (item: T) => string): readonly T[][] {
-  const groups: Map<string, T[]> = new Map<string, T[]>();
-  for (const item of items) {
-    const key: string = keyOf(item);
-    const group: T[] | undefined = groups.get(key);
-    if (group) group.push(item);
-    else groups.set(key, [item]);
-  }
-  return [...groups.values()];
-}
-
-/**
- * Interface ReverseWrite
- *
- * @description
- * One write of an `Undo`: tasks that get the same values back.
- */
-interface ReverseWrite {
-  // #region Properties
-  /**
-   * Property tasks
-   *
-   * @description
-   * The tasks as confirmed before the undone action.
-   *
-   * @type {readonly ConfirmedTask[]}
-   * @readonly
-   */
-  readonly tasks: readonly ConfirmedTask[];
-
-  /**
-   * Property action
-   *
-   * @description
-   * The write that puts their values back.
-   *
-   * @type {TaskBulkAction}
-   * @readonly
-   */
-  readonly action: TaskBulkAction;
-  // #endregion
-}
-
-/**
- * Function confirmedOf
- *
- * @description
- * The tasks an action applied to, as confirmed before it: what its `Undo` puts back.
- *
- * @param {ListActOutcome} outcome - What the action ended with.
- * @returns {readonly ConfirmedTask[]} The applied tasks, in the order of the outcome.
- */
-function confirmedOf(outcome: ListActOutcome): readonly ConfirmedTask[] {
-  return outcome.done.flatMap((entry: TaskBulkEntry): ConfirmedTask[] => {
-    const task: ConfirmedTask | undefined = outcome.before[entry.taskKey];
-    return task ? [task] : [];
-  });
-}
-
-/**
  * Component ListViewPage
  *
  * @description
@@ -373,10 +152,11 @@ function confirmedOf(outcome: ListActOutcome): readonly ConfirmedTask[] {
  * elsewhere in the view opens the list menu (`New task`, `Group by`, `Sort by`,
  * `Select all`, `Export as CSV`). `name` sorts by name. Each group's add row presets
  * its status, priority or assignee; `N` creates in this list. The selection fills the selection
- * bar. Every write goes through `ListRowsStore.act`: the rows change at once, a refusal puts them
- * back, and the toast's `Undo` sends the reverse write of the values confirmed before the action
- * (a deletion restores the trash entries), reported like the action; leaving the view dismisses
- * those toasts. Under 768 px the rows keep the name and the due date. A failed first read reaches the
+ * bar. The row menu is the shared `cw-task-menu`; its writes and the selection bar's go through
+ * the page-scoped `ViewTaskWritesStore` over `ListRowsStore` (`VIEW_TASK_WRITER`): the rows change
+ * at once, a refusal puts them back, and the toast's `Undo` sends the reverse write of the values
+ * confirmed before the action (a deletion restores the trash entries), reported like the action;
+ * leaving the view dismisses those toasts. Under 768 px the rows keep the name and the due date. A failed first read reaches the
  * route's error boundary; a failed next page or subtask read offers `Retry` in place.
  */
 @Component({
@@ -400,9 +180,7 @@ function confirmedOf(outcome: ListActOutcome): readonly ConfirmedTask[] {
     CwEmptyMedia,
     CwEmptyTitle,
     CwMenu,
-    CwMenuGroup,
     CwMenuItem,
-    CwMenuItemCheckbox,
     CwMenuLabel,
     CwMenuSeparator,
     CwMenuShortcut,
@@ -413,9 +191,11 @@ function confirmedOf(outcome: ListActOutcome): readonly ConfirmedTask[] {
     TaskCancelDialog,
     TaskDueDate,
     TaskLabelChips,
+    TaskMenu,
     TaskTitleCell,
   ],
   host: { class: 'flex min-h-0 flex-1 flex-col' },
+  providers: [ViewTaskWritesStore, { provide: VIEW_TASK_WRITER, useExisting: ListRowsStore }],
   templateUrl: './list-view-page.component.html',
 })
 export class ListViewPage {
@@ -430,17 +210,6 @@ export class ListViewPage {
    * @readonly
    */
   protected readonly retryLabel: string = SPACES_RETRY;
-
-  /**
-   * Property priorities
-   *
-   * @description
-   * The priorities of the row menu, from the most urgent.
-   *
-   * @type {readonly PriorityKey[]}
-   * @readonly
-   */
-  protected readonly priorities: readonly PriorityKey[] = PRIORITY_ORDER;
 
   /**
    * Property groupOptions
@@ -528,6 +297,18 @@ export class ListViewPage {
   protected readonly rows: InstanceType<typeof ListRowsStore> = inject(ListRowsStore);
 
   /**
+   * Property writes
+   *
+   * @description
+   * The writes of the task menu and the selection bar, with their toasts and confirmations,
+   * page-scoped over the rows (`VIEW_TASK_WRITER`).
+   *
+   * @type {ViewTaskWritesStoreInstance}
+   * @readonly
+   */
+  protected readonly writes: ViewTaskWritesStoreInstance = inject(ViewTaskWritesStore);
+
+  /**
    * Property statusChanges
    *
    * @description
@@ -549,17 +330,6 @@ export class ListViewPage {
    */
   private readonly navigation: InstanceType<typeof SpacesNavigationStore> =
     inject(SpacesNavigationStore);
-
-  /**
-   * Property workspace
-   *
-   * @description
-   * The committed organization and the signed-in member.
-   *
-   * @type {WorkspaceContextPort}
-   * @readonly
-   */
-  private readonly workspace: WorkspaceContextPort = inject(WORKSPACE_CONTEXT);
 
   /**
    * Property destroyRef
@@ -617,17 +387,6 @@ export class ListViewPage {
   private readonly document: Document = inject(DOCUMENT);
 
   /**
-   * Property locale
-   *
-   * @description
-   * Locale of the reminder date.
-   *
-   * @type {string}
-   * @readonly
-   */
-  private readonly locale: string = inject(LOCALE_ID);
-
-  /**
    * Property host
    *
    * @description
@@ -637,18 +396,6 @@ export class ListViewPage {
    * @readonly
    */
   private readonly host: ElementRef<HTMLElement> = inject<ElementRef<HTMLElement>>(ElementRef);
-
-  /**
-   * Property undoToasts
-   *
-   * @description
-   * Ids of the shown toasts whose `Undo` writes through this view's rows; leaving the view
-   * dismisses them, as leaving it ends the status toasts of `TaskStatusChangesStore`.
-   *
-   * @type {Set<string>}
-   * @readonly
-   */
-  private readonly undoToasts: Set<string> = new Set<string>();
 
   /**
    * Property dueWidth
@@ -699,67 +446,6 @@ export class ListViewPage {
   );
 
   /**
-   * Property pending
-   *
-   * @description
-   * Whether a deletion is being recorded (its confirmation shows it).
-   *
-   * @type {WritableSignal<boolean>}
-   * @readonly
-   */
-  protected readonly pending: WritableSignal<boolean> = signal(false);
-
-  /**
-   * Property confirmDelete
-   *
-   * @description
-   * Whether the deletion of `deleteTasks` is being confirmed.
-   *
-   * @type {WritableSignal<boolean>}
-   * @readonly
-   */
-  protected readonly confirmDelete: WritableSignal<boolean> = signal(false);
-
-  /**
-   * Property deleteTasks
-   *
-   * @description
-   * The tasks the confirmation deletes, and whether the row menu asked (its wording names the
-   * task) rather than the selection bar.
-   *
-   * @type {WritableSignal<{ tasks: readonly TaskSummary[]; menu: boolean }>}
-   * @readonly
-   */
-  protected readonly deleteTasks: WritableSignal<{
-    tasks: readonly TaskSummary[];
-    menu: boolean;
-  }> = signal({ tasks: [], menu: false });
-
-  /**
-   * Property bulkCancelTasks
-   *
-   * @description
-   * Tasks awaiting a shared cancellation reason, those not cancelled already.
-   *
-   * @type {WritableSignal<readonly TaskSummary[] | null>}
-   * @readonly
-   */
-  protected readonly bulkCancelTasks: WritableSignal<readonly TaskSummary[] | null> = signal(null);
-
-  /**
-   * Property bulkCancelKeys
-   *
-   * @description
-   * Keys named by the cancellation dialog.
-   *
-   * @type {Signal<readonly string[] | null>}
-   * @readonly
-   */
-  protected readonly bulkCancelKeys: Signal<readonly string[] | null> = computed(
-    () => this.bulkCancelTasks()?.map((task: TaskSummary) => task.key) ?? null,
-  );
-
-  /**
    * Property menuRow
    *
    * @description
@@ -792,22 +478,6 @@ export class ListViewPage {
   );
 
   /**
-   * Property menuTitle
-   *
-   * @description
-   * Heading of the row menu: `CAD-482 · name` or `n tasks selected`.
-   *
-   * @type {Signal<string>}
-   * @readonly
-   */
-  protected readonly menuTitle: Signal<string> = computed((): string => {
-    const tasks: readonly TaskSummary[] = this.menuTasks();
-    const count: number = tasks.length;
-    if (count > 1) return $localize`:@@spaces.rows.menu-many:${count}:count: tasks selected`;
-    return count === 1 ? `${tasks[0].key} · ${tasks[0].name}` : '';
-  });
-
-  /**
    * Property menuStatus
    *
    * @description
@@ -818,48 +488,10 @@ export class ListViewPage {
    */
   protected readonly menuStatus: Signal<StatusKey | null> = computed((): StatusKey | null => {
     const statuses: Set<StatusKey> = new Set<StatusKey>(
-      this.menuTasks().map((task: TaskSummary) => this.shownStatus(task)),
+      this.menuTasks().map((task: TaskSummary) => this.rows.shownStatus(task)),
     );
     return statuses.size === 1 ? [...statuses][0] : null;
   });
-
-  /**
-   * Property menuPriority
-   *
-   * @description
-   * The priority every task of the menu has, or null when they differ.
-   *
-   * @type {Signal<PriorityKey | null>}
-   * @readonly
-   */
-  protected readonly menuPriority: Signal<PriorityKey | null> = computed((): PriorityKey | null => {
-    const priorities: Set<PriorityKey> = new Set<PriorityKey>(
-      this.menuTasks().map((task: TaskSummary) => task.priority),
-    );
-    return priorities.size === 1 ? [...priorities][0] : null;
-  });
-
-  /**
-   * Property statusOptions
-   *
-   * @description
-   * The statuses of the list's space: its names, its hidden statuses; the default words until the
-   * space is read.
-   *
-   * @type {Signal<readonly StatusOption[]>}
-   * @readonly
-   */
-  protected readonly statusOptions: Signal<readonly StatusOption[]> = computed(
-    (): readonly StatusOption[] => {
-      const space: Space | null = this.store.space.hasValue() ? this.store.space.value() : null;
-      return defaultStatusOptions().map((option: StatusOption): StatusOption => {
-        const own: SpaceStatusOption | undefined = space?.statuses.find(
-          (status: SpaceStatusOption): boolean => status.key === option.key,
-        );
-        return own ? { ...option, label: own.name ?? option.label, hidden: own.hidden } : option;
-      });
-    },
-  );
 
   /**
    * Property menuMilestone
@@ -876,69 +508,6 @@ export class ListViewPage {
   });
 
   /**
-   * Property menuStatusGroups
-   *
-   * @description
-   * `Status` of the row menu: the statuses under `Not started`, `Active` and `Closed`, each
-   * with its hint (`App.dc.html` near line 3406); a milestone's four in one group.
-   *
-   * @type {Signal<readonly StatusMenuGroup[]>}
-   * @readonly
-   */
-  protected readonly menuStatusGroups: Signal<readonly StatusMenuGroup[]> = computed(
-    (): readonly StatusMenuGroup[] => {
-      const milestone: boolean = this.menuMilestone();
-      const entries: { option: StatusOption; hint: string }[] = pickableStatuses(
-        this.statusOptions(),
-        this.menuStatus() ?? 'todo',
-        milestone,
-      ).map((option: StatusOption) => ({
-        option,
-        hint:
-          milestone && isMilestoneStatus(option.key)
-            ? MILESTONE_STATUS_HINTS[option.key]
-            : STATUS_HINTS[option.key],
-      }));
-      if (milestone) return [{ category: null, heading: '', entries }];
-      return STATUS_CATEGORIES.map((category: StatusCategory): StatusMenuGroup => ({
-        category,
-        heading: STATUS_CATEGORY_LABELS[category],
-        entries: entries.filter((entry) => entry.option.category === category),
-      })).filter((group: StatusMenuGroup) => group.entries.length > 0);
-    },
-  );
-
-  /**
-   * Property people
-   *
-   * @description
-   * The members the assignees are chosen among, the signed-in member first.
-   *
-   * @type {Signal<readonly Person[]>}
-   * @readonly
-   */
-  protected readonly people: Signal<readonly Person[]> = computed((): readonly Person[] => {
-    if (!this.store.organizationMembers.hasValue()) return [];
-    const me: string = this.workspace.user().id;
-    return this.store.organizationMembers
-      .value()
-      .filter((member: ListMember): boolean => member.name !== null)
-      .map((member: ListMember): Person => personOf(member.userId, member.name ?? ''))
-      .sort((a: Person, b: Person): number => Number(b.id === me) - Number(a.id === me));
-  });
-
-  /**
-   * Property userId
-   *
-   * @description
-   * The signed-in member, shown `(me)` in the row menu.
-   *
-   * @type {Signal<string>}
-   * @readonly
-   */
-  protected readonly userId: Signal<string> = computed((): string => this.workspace.user().id);
-
-  /**
    * Property bulkPeople
    *
    * @description
@@ -950,7 +519,7 @@ export class ListViewPage {
   protected readonly bulkPeople: Signal<readonly BulkPerson[]> = computed(
     (): readonly BulkPerson[] => {
       const selected: readonly TaskSummary[] = this.selectedTasks();
-      return this.people().map((person: Person): BulkPerson => ({
+      return this.writes.people().map((person: Person): BulkPerson => ({
         id: person.id,
         name: person.name,
         initials: person.initials,
@@ -958,58 +527,6 @@ export class ListViewPage {
           selected.length > 0 &&
           selected.every((task: TaskSummary): boolean => task.assigneeIds.includes(person.id)),
       }));
-    },
-  );
-
-  /**
-   * Property targets
-   *
-   * @description
-   * The other lists of the sidebar, with their icon, their tone and their space.
-   *
-   * @type {Signal<readonly MoveTarget[]>}
-   * @readonly
-   */
-  protected readonly targets: Signal<readonly MoveTarget[]> = computed(
-    (): readonly MoveTarget[] => {
-      if (!this.navigation.spaces.hasValue() || !this.navigation.overviews.hasValue()) return [];
-      const overviews: Readonly<Record<string, SpaceOverview>> = this.navigation.overviews.value();
-      const current: string | null = this.store.listId();
-      return this.navigation.spaces.value().flatMap((space: Space): MoveTarget[] =>
-        space.id in overviews
-          ? overviews[space.id].lists
-              .filter((summary: ListSummary): boolean => summary.list.id !== current)
-              .map((summary: ListSummary): MoveTarget => ({
-                listId: summary.list.id,
-                name: summary.list.name,
-                spaceName: space.name,
-                icon: listIconName(summary.list),
-                tone:
-                  summary.list.color === 'gris'
-                    ? 'text-muted-foreground'
-                    : lookTone(summary.list.color),
-              }))
-          : [],
-      );
-    },
-  );
-
-  /**
-   * Property menuTargets
-   *
-   * @description
-   * `Move to` of the row menu: the lists not every task of the menu already sits in.
-   *
-   * @type {Signal<readonly MoveTarget[]>}
-   * @readonly
-   */
-  protected readonly menuTargets: Signal<readonly MoveTarget[]> = computed(
-    (): readonly MoveTarget[] => {
-      const tasks: readonly TaskSummary[] = this.menuTasks();
-      return this.targets().filter(
-        (target: MoveTarget): boolean =>
-          !tasks.every((task: TaskSummary): boolean => task.listId === target.listId),
-      );
     },
   );
 
@@ -1143,15 +660,16 @@ export class ListViewPage {
     switch (this.rows.groupBy()) {
       case 'status':
         return (
-          this.statusOptions().find((option: StatusOption): boolean => option.key === key)?.label ??
-          key
+          this.writes.statusOptions().find((option: StatusOption): boolean => option.key === key)
+            ?.label ?? key
         );
       case 'priority':
         return PRIORITY_LABELS[key as PriorityKey];
       case 'assignee':
         return key === NO_ASSIGNEE_GROUP
           ? $localize`:@@spaces.rows.unassigned:Unassigned`
-          : (this.people().find((person: Person): boolean => person.id === key)?.name ?? key);
+          : (this.writes.people().find((person: Person): boolean => person.id === key)?.name ??
+              key);
       case null:
         return $localize`:@@spaces.rows.all:All tasks`;
     }
@@ -1192,7 +710,7 @@ export class ListViewPage {
       .filter((value) => {
         const hidden: boolean =
           grouping === 'status' &&
-          this.statusOptions().some((option) => option.key === value && option.hidden);
+          this.writes.statusOptions().some((option) => option.key === value && option.hidden);
         return (
           !hidden &&
           ((this.rows.groupCount(value) ?? 0) > 0 ||
@@ -1245,7 +763,8 @@ export class ListViewPage {
     this.view.followRows(this.rows.summary);
     this.rows.hideStatuses(
       computed((): readonly string[] =>
-        this.statusOptions()
+        this.writes
+          .statusOptions()
           .filter((option: StatusOption): boolean => option.hidden)
           .map((option: StatusOption): string => option.key),
       ),
@@ -1268,8 +787,14 @@ export class ListViewPage {
     const timers: Set<ReturnType<typeof setTimeout>> = new Set<ReturnType<typeof setTimeout>>();
     this.destroyRef.onDestroy((): void => {
       for (const timer of timers) clearTimeout(timer);
-      for (const id of this.undoToasts) this.toasts.dismiss(id);
-      this.undoToasts.clear();
+    });
+    this.writes.onRefused((taskKeys: readonly string[]): void => {
+      this.tableSelection.set(
+        this.rows
+          .rows()
+          .filter((row: ListRow): boolean => taskKeys.includes(row.task.key))
+          .map((row: ListRow): string => row.id),
+      );
     });
     effect((): void => {
       const current: readonly ListRow[] = this.rows.rows();
@@ -1368,7 +893,7 @@ export class ListViewPage {
    */
   protected groupInitials(key: string): string {
     if (key === NO_ASSIGNEE_GROUP) return '—';
-    const person: Person | undefined = this.people().find((item: Person) => item.id === key);
+    const person: Person | undefined = this.writes.people().find((item: Person) => item.id === key);
     return person ? person.initials : initialsOf(key);
   }
 
@@ -1401,68 +926,6 @@ export class ListViewPage {
   protected actionsLabel(row: ListRow): string {
     const key: string = row.task.key;
     return $localize`:@@spaces.rows.actions:Actions on ${key}:key:`;
-  }
-
-  /**
-   * Method personLabel
-   *
-   * @description
-   * A person of the row menu's `Assign`: the signed-in member reads `Name (me)`.
-   *
-   * @param {Person} person - The person.
-   * @returns {string} The label.
-   */
-  protected personLabel(person: Person): string {
-    const name: string = person.name;
-    return person.id === this.userId()
-      ? $localize`:@@spaces.rows.assign-me:${name}:name: (me)`
-      : name;
-  }
-
-  /**
-   * Method assignedToAll
-   *
-   * @description
-   * Whether every task of the row menu has the person.
-   *
-   * @param {string} userId - The person.
-   * @returns {boolean} Whether all have it.
-   */
-  protected assignedToAll(userId: string): boolean {
-    const tasks: readonly TaskSummary[] = this.menuTasks();
-    return (
-      tasks.length > 0 &&
-      tasks.every((task: TaskSummary): boolean => task.assigneeIds.includes(userId))
-    );
-  }
-
-  /**
-   * Method remindLabel
-   *
-   * @description
-   * `Remind me tomorrow morning`, or `Remind me of these tasks tomorrow morning` for several.
-   *
-   * @returns {string} The label.
-   */
-  protected remindLabel(): string {
-    return this.menuTasks().length > 1
-      ? $localize`:@@spaces.rows.remind-many:Remind me of these tasks tomorrow morning`
-      : $localize`:@@spaces.rows.remind:Remind me tomorrow morning`;
-  }
-
-  /**
-   * Method deleteMenuLabel
-   *
-   * @description
-   * `Delete the task`, or `Delete the N tasks` for several.
-   *
-   * @returns {string} The label.
-   */
-  protected deleteMenuLabel(): string {
-    const count: number = this.menuTasks().length;
-    return count > 1
-      ? $localize`:@@spaces.rows.delete-many:Delete the ${count}:count: tasks`
-      : $localize`:@@spaces.bulk.delete-action-one:Delete the task`;
   }
 
   /**
@@ -1604,451 +1067,6 @@ export class ListViewPage {
   }
 
   /**
-   * Method setStatus
-   *
-   * @description
-   * `Status` of the row menu: sets the status of its tasks at once. `Cancelled` asks the reason
-   * first, for the tasks not cancelled already, and only when there is one.
-   *
-   * @param {readonly TaskSummary[]} tasks - The tasks of the menu.
-   * @param {StatusKey} status - The status.
-   */
-  protected setStatus(tasks: readonly TaskSummary[], status: StatusKey): void {
-    if (status === 'cancelled') {
-      const open: readonly TaskSummary[] = tasks.filter(
-        (task: TaskSummary): boolean => this.shownStatus(task) !== 'cancelled',
-      );
-      if (open.length > 0) this.bulkCancelTasks.set(open);
-      return;
-    }
-    const changed: readonly TaskSummary[] = tasks.filter(
-      (task: TaskSummary): boolean => this.shownStatus(task) !== status,
-    );
-    if (changed.length === 0) return;
-    const word: string = statusLabel(status, this.statusOptions(), this.menuMilestone());
-    const label: string = this.tasksLabel(tasks);
-    void this.perform(
-      changed,
-      { type: 'status', status },
-      (done: readonly TaskBulkEntry[], outcome: ListActOutcome) => ({
-        title: $localize`:@@spaces.rows.status-toast:${label}:label: · ${word}:status:`,
-        description:
-          tasks.length > 1
-            ? bulkUpdatedText(done.length)
-            : $localize`:@@spaces.rows.status-changed:Status changed.`,
-        undo: (): void => {
-          this.undoStatuses(outcome);
-        },
-      }),
-    );
-  }
-
-  /**
-   * Method confirmBulkCancel
-   *
-   * @description
-   * Cancels the tasks of the dialog with their shared reason; the toast names the reason and
-   * offers `Undo`.
-   *
-   * @param {TaskCancellation} cancellation - The reason and optional note.
-   */
-  protected confirmBulkCancel(cancellation: TaskCancellation): void {
-    const tasks: readonly TaskSummary[] = this.bulkCancelTasks() ?? [];
-    this.bulkCancelTasks.set(null);
-    if (tasks.length === 0) return;
-    const reason: string = CANCEL_REASON_LABELS[cancellation.reason];
-    void this.perform(
-      tasks,
-      {
-        type: 'status',
-        status: 'cancelled',
-        cancelReason: cancellation.reason,
-        cancelNote: cancellation.note || null,
-      },
-      (done: readonly TaskBulkEntry[], outcome: ListActOutcome) => {
-        const count: number = done.length;
-        const key: string = done[0]?.taskKey ?? '';
-        return {
-          title:
-            count > 1
-              ? $localize`:@@spaces.rows.cancelled-many:${count}:count: tasks cancelled`
-              : $localize`:@@spaces.rows.cancelled-one:${key}:key: cancelled`,
-          description: $localize`:@@spaces.rows.cancel-reason:Reason: ${reason}:reason:.`,
-          undo: (): void => {
-            this.undoStatuses(outcome);
-          },
-        };
-      },
-    );
-  }
-
-  /**
-   * Method setPriority
-   *
-   * @description
-   * `Priority` of the row menu.
-   *
-   * @param {readonly TaskSummary[]} tasks - The tasks of the menu.
-   * @param {PriorityKey} priority - The priority.
-   */
-  protected setPriority(tasks: readonly TaskSummary[], priority: PriorityKey): void {
-    const changed: readonly TaskSummary[] = tasks.filter(
-      (task: TaskSummary): boolean => task.priority !== priority,
-    );
-    if (changed.length === 0) return;
-    const label: string = this.tasksLabel(tasks);
-    const word: string = PRIORITY_LABELS[priority].toLocaleLowerCase(this.locale);
-    void this.perform(
-      changed,
-      { type: 'priority', priority },
-      (done: readonly TaskBulkEntry[], outcome: ListActOutcome) => ({
-        title: $localize`:@@spaces.rows.priority-toast:${label}:label: · ${word}:priority: priority`,
-        description:
-          tasks.length > 1
-            ? bulkUpdatedText(done.length)
-            : $localize`:@@spaces.rows.priority-changed:Priority changed.`,
-        undo: (): void => {
-          void this.reverse(
-            groupBy(confirmedOf(outcome), (task: ConfirmedTask) => task.priority).map(
-              (group: readonly ConfirmedTask[]): ReverseWrite => ({
-                tasks: group,
-                action: { type: 'priority', priority: group[0].priority },
-              }),
-            ),
-            outcome.after,
-          );
-        },
-      }),
-    );
-  }
-
-  /**
-   * Method toggleAssignee
-   *
-   * @description
-   * `Assign` of the row menu or of the selection bar: assigns the person to every task, or
-   * removes the person when every task has them already.
-   *
-   * @param {readonly TaskSummary[]} tasks - The tasks.
-   * @param {string} userId - The person.
-   * @param {boolean} [bar] - Whether the selection bar asked (its toast counts the tasks).
-   */
-  protected toggleAssignee(
-    tasks: readonly TaskSummary[],
-    userId: string,
-    bar: boolean = false,
-  ): void {
-    if (tasks.length === 0) return;
-    const name: string =
-      this.people().find((person: Person): boolean => person.id === userId)?.name ?? '';
-    const all: boolean = tasks.every((task: TaskSummary): boolean =>
-      task.assigneeIds.includes(userId),
-    );
-    const changed: readonly TaskSummary[] = all
-      ? tasks
-      : tasks.filter((task: TaskSummary): boolean => !task.assigneeIds.includes(userId));
-    const label: string = this.tasksLabel(tasks);
-    void this.perform(
-      changed,
-      { type: all ? 'unassign' : 'assign', userId },
-      (done: readonly TaskBulkEntry[], outcome: ListActOutcome) => ({
-        title: all
-          ? $localize`:@@spaces.bulk.unassigned:${name}:name: removed`
-          : $localize`:@@spaces.bulk.assigned:${name}:name: assigned`,
-        description: bar ? bulkUpdatedText(done.length) : label,
-        undo: (): void => {
-          void this.reverse(
-            [
-              {
-                tasks: confirmedOf(outcome),
-                action: { type: all ? 'assign' : 'unassign', userId },
-              },
-            ],
-            outcome.after,
-          );
-        },
-      }),
-    );
-  }
-
-  /**
-   * Method moveTo
-   *
-   * @description
-   * `Move to` of the row menu or of the selection bar; the rows leave the view at once.
-   *
-   * @param {readonly TaskSummary[]} tasks - The tasks.
-   * @param {string} listId - The destination.
-   * @param {boolean} [bar] - Whether the selection bar asked, which clears the selection.
-   */
-  protected moveTo(tasks: readonly TaskSummary[], listId: string, bar: boolean = false): void {
-    const moved: readonly TaskSummary[] = tasks.filter(
-      (task: TaskSummary): boolean => task.listId !== listId,
-    );
-    if (moved.length === 0) return;
-    if (bar) this.clearSelection();
-    const name: string =
-      this.targets().find((target: MoveTarget): boolean => target.listId === listId)?.name ?? '';
-    const key: string = moved[0].key;
-    void this.perform(
-      moved,
-      { type: 'move', listId },
-      (done: readonly TaskBulkEntry[], outcome: ListActOutcome) => ({
-        title:
-          bar || tasks.length > 1
-            ? bulkMovedText(done.length)
-            : $localize`:@@spaces.rows.moved-one:${key}:key: moved`,
-        description: $localize`:@@spaces.bulk.moved-text:To ${name}:name:.`,
-        undo: (): void => {
-          void this.reverse(
-            groupBy(confirmedOf(outcome), (task: ConfirmedTask) => task.listId).map(
-              (group: readonly ConfirmedTask[]): ReverseWrite => ({
-                tasks: group,
-                action: { type: 'move', listId: group[0].listId },
-              }),
-            ),
-            outcome.after,
-          );
-        },
-      }),
-    );
-  }
-
-  /**
-   * Method remind
-   *
-   * @description
-   * `Remind me tomorrow morning`: a reminder tomorrow at 9 for each task of the menu.
-   *
-   * @param {readonly TaskSummary[]} tasks - The tasks.
-   */
-  protected async remind(tasks: readonly TaskSummary[]): Promise<void> {
-    const at: Date = new Date();
-    at.setDate(at.getDate() + 1);
-    at.setHours(REMINDER_HOUR, 0, 0, 0);
-    const keys: readonly string[] = await this.rows.remind(
-      tasks.map((task: TaskSummary): string => task.key),
-      at,
-    );
-    if (this.destroyRef.destroyed) return;
-    if (keys.length === 0) {
-      this.toasts.error($localize`:@@spaces.rows.remind-failed:The reminder could not be set`);
-      return;
-    }
-    const day: string = new Intl.DateTimeFormat(this.locale, {
-      weekday: 'short',
-      day: 'numeric',
-      month: 'short',
-    }).format(at);
-    const when: string = `${day.charAt(0).toLocaleUpperCase(this.locale)}${day.slice(1)}`;
-    const count: number = keys.length;
-    this.toasts.show(
-      count > 1
-        ? $localize`:@@spaces.rows.reminded-many:${count}:count: reminders set`
-        : $localize`:@@spaces.rows.reminded:Reminder set`,
-      {
-        description: $localize`:@@spaces.rows.reminded-text:${when}:date:, 9 AM · ${keys.join(', ')}:keys:`,
-      },
-    );
-  }
-
-  /**
-   * Method duplicate
-   *
-   * @description
-   * `Duplicate`: copies each task of the menu; the toast names the copies and `Open` opens
-   * a single copy.
-   *
-   * @param {readonly TaskSummary[]} tasks - The tasks.
-   */
-  protected duplicate(tasks: readonly TaskSummary[]): void {
-    void this.perform(tasks, { type: 'duplicate' }, (done: readonly TaskBulkEntry[]) => {
-      const copies: readonly string[] = done
-        .map((entry: TaskBulkEntry) => entry.newTaskKey)
-        .filter((key: string | null): key is string => key !== null);
-      const count: number = copies.length;
-      return {
-        title:
-          tasks.length > 1
-            ? $localize`:@@spaces.rows.duplicated-many:${count}:count: tasks duplicated`
-            : $localize`:@@spaces.rows.duplicated:Task duplicated`,
-        description: copies.join(', '),
-        undo: null,
-        open: count === 1 ? copies[0] : null,
-      };
-    });
-  }
-
-  /**
-   * Method copyLinks
-   *
-   * @description
-   * `Copy the link`: the shareable addresses of the tasks (`/<slug>/t/<KEY>`), one per line.
-   *
-   * @param {readonly TaskSummary[]} tasks - The tasks.
-   */
-  protected copyLinks(tasks: readonly TaskSummary[]): void {
-    const origin: string = this.document.defaultView?.location.origin ?? '';
-    const slug: string = this.workspace.organization().slug;
-    const count: number = tasks.length;
-    void this.copy(
-      tasks.map((task: TaskSummary): string => `${origin}/${slug}/t/${task.key}`).join('\n'),
-      count > 1
-        ? $localize`:@@spaces.rows.links-copied:${count}:count: links copied`
-        : $localize`:@@spaces.rows.link-copied:Link copied`,
-    );
-  }
-
-  /**
-   * Method copyKeys
-   *
-   * @description
-   * `Copy the identifier`: the keys of the tasks, comma-separated.
-   *
-   * @param {readonly TaskSummary[]} tasks - The tasks.
-   */
-  protected copyKeys(tasks: readonly TaskSummary[]): void {
-    void this.copy(
-      tasks.map((task: TaskSummary): string => task.key).join(', '),
-      tasks.length > 1
-        ? $localize`:@@spaces.rows.keys-copied:Identifiers copied`
-        : $localize`:@@spaces.rows.key-copied:Identifier copied`,
-    );
-  }
-
-  /**
-   * Method askDelete
-   *
-   * @description
-   * Opens the deletion confirmation of the row menu or of the selection bar.
-   *
-   * @param {readonly TaskSummary[]} tasks - The tasks.
-   * @param {boolean} menu - Whether the row menu asked.
-   */
-  protected askDelete(tasks: readonly TaskSummary[], menu: boolean): void {
-    if (tasks.length === 0) return;
-    this.deleteTasks.set({ tasks, menu });
-    this.confirmDelete.set(true);
-  }
-
-  /**
-   * Method trash
-   *
-   * @description
-   * Moves the confirmed tasks to the trash; the toast counts their subtasks and `Undo`
-   * restores the trash entries.
-   */
-  protected async trash(): Promise<void> {
-    const { tasks, menu }: { tasks: readonly TaskSummary[]; menu: boolean } = this.deleteTasks();
-    if (tasks.length === 0 || this.pending()) return;
-    this.pending.set(true);
-    const key: string = tasks[0].key;
-    await this.perform(
-      tasks,
-      { type: 'trash' },
-      (done: readonly TaskBulkEntry[], outcome: ListActOutcome) => {
-        const count: number = done.length;
-        const subtasks: number = Math.max(0, outcome.affected - count);
-        const kept: string = $localize`:@@spaces.bulk.deleted-text:Kept 30 days in the trash.`;
-        const entries: readonly string[] = [
-          ...new Set(
-            done
-              .map((entry: TaskBulkEntry) => entry.trashEntryId)
-              .filter((id: string | null): id is string => id !== null),
-          ),
-        ];
-        return {
-          title:
-            menu && tasks.length === 1
-              ? $localize`:@@spaces.rows.deleted-one:${key}:key: deleted`
-              : bulkDeletedText(count),
-          description:
-            subtasks === 0
-              ? kept
-              : subtasks === 1
-                ? $localize`:@@spaces.bulk.deleted-subtask:With ${subtasks}:count: subtask. ${kept}:kept:`
-                : $localize`:@@spaces.bulk.deleted-subtasks:With ${subtasks}:count: subtasks. ${kept}:kept:`,
-          undo:
-            entries.length > 0
-              ? (): void => {
-                  void this.restore(entries);
-                }
-              : null,
-        };
-      },
-    );
-    if (this.destroyRef.destroyed) return;
-    this.pending.set(false);
-    this.confirmDelete.set(false);
-  }
-
-  /**
-   * Method deleteTitle
-   *
-   * @description
-   * Question of the deletion: `Delete “name”?` from the row menu, else `Delete this task?`;
-   * `Delete N tasks?` for several.
-   *
-   * @returns {string} The title.
-   */
-  protected deleteTitle(): string {
-    const { tasks, menu }: { tasks: readonly TaskSummary[]; menu: boolean } = this.deleteTasks();
-    const count: number = tasks.length;
-    if (count > 1) return $localize`:@@spaces.bulk.delete-title:Delete ${count}:count: tasks?`;
-    const name: string = tasks[0]?.name ?? '';
-    return menu
-      ? $localize`:@@spaces.rows.delete-title:Delete “${name}:name:”?`
-      : $localize`:@@spaces.bulk.delete-title-one:Delete this task?`;
-  }
-
-  /**
-   * Method deleteText
-   *
-   * @description
-   * What the deletion does, in the wording of its origin.
-   *
-   * @returns {string} The text.
-   */
-  protected deleteText(): string {
-    const { tasks, menu }: { tasks: readonly TaskSummary[]; menu: boolean } = this.deleteTasks();
-    if (!menu) {
-      return $localize`:@@spaces.bulk.delete-text:The selected tasks go to the trash with their subtasks, where they stay 30 days.`;
-    }
-    return tasks.length > 1
-      ? $localize`:@@spaces.rows.delete-text-many:They go to the trash with their subtasks, where they stay 30 days.`
-      : $localize`:@@spaces.rows.delete-text-one:It goes to the trash with its subtasks, where it stays 30 days.`;
-  }
-
-  /**
-   * Method deleteAction
-   *
-   * @description
-   * Action of the deletion.
-   *
-   * @returns {string} The label.
-   */
-  protected deleteAction(): string {
-    const count: number = this.deleteTasks().tasks.length;
-    return count > 1
-      ? $localize`:@@spaces.bulk.delete-action:Delete ${count}:count: tasks`
-      : $localize`:@@spaces.bulk.delete-action-one:Delete the task`;
-  }
-
-  /**
-   * Method deleteItems
-   *
-   * @description
-   * The tasks the confirmation lists (`CAD-482 · name`).
-   *
-   * @returns {readonly string[]} The items.
-   */
-  protected deleteItems(): readonly string[] {
-    return this.deleteTasks().tasks.map(
-      (task: TaskSummary): string => `${task.key} · ${task.name}`,
-    );
-  }
-
-  /**
    * Method rowPeople
    *
    * @description
@@ -2058,7 +1076,9 @@ export class ListViewPage {
    * @returns {readonly Person[]} Its known assignees.
    */
   protected rowPeople(row: ListRow): readonly Person[] {
-    return this.people().filter((person: Person) => row.task.assigneeIds.includes(person.id));
+    return this.writes
+      .people()
+      .filter((person: Person) => row.task.assigneeIds.includes(person.id));
   }
 
   /**
@@ -2167,34 +1187,9 @@ export class ListViewPage {
    * 460 ms later and the selection empties at once.
    */
   protected markDone(): void {
-    const tasks: readonly TaskSummary[] = this.selectedTasks().filter(
-      (task: TaskSummary): boolean => this.shownStatus(task) !== 'done',
-    );
+    const tasks: readonly TaskSummary[] = this.selectedTasks();
     this.clearSelection();
-    if (tasks.length === 0) return;
-    void this.perform(
-      tasks,
-      { type: 'status', status: 'done' },
-      (done: readonly TaskBulkEntry[], outcome: ListActOutcome) => ({
-        title: bulkDoneText(done.length),
-        description: $localize`:@@spaces.bulk.done-toast-text:Status: Done.`,
-        undo: (): void => {
-          this.undoStatuses(outcome);
-        },
-      }),
-    );
-  }
-
-  /**
-   * Method assignSelection
-   *
-   * @description
-   * `Assign` of the selection bar.
-   *
-   * @param {string} userId - The person.
-   */
-  protected assignSelection(userId: string): void {
-    this.toggleAssignee(this.selectedTasks(), userId, true);
+    this.writes.markDone(tasks);
   }
 
   /**
@@ -2206,7 +1201,10 @@ export class ListViewPage {
    * @param {string} listId - The destination.
    */
   protected moveSelection(listId: string): void {
-    this.moveTo(this.selectedTasks(), listId, true);
+    const tasks: readonly TaskSummary[] = this.selectedTasks();
+    if (tasks.every((task: TaskSummary): boolean => task.listId === listId)) return;
+    this.clearSelection();
+    this.writes.moveTo(tasks, listId, true);
   }
 
   /**
@@ -2258,276 +1256,6 @@ export class ListViewPage {
             clientY: event instanceof MouseEvent ? event.clientY : 0,
           }),
     );
-  }
-
-  /**
-   * Method shownStatus
-   *
-   * @description
-   * The status a task shows in the view, a pending change or an optimistic write included.
-   *
-   * @param {TaskSummary} task - The task.
-   * @returns {StatusKey} The status.
-   */
-  private shownStatus(task: TaskSummary): StatusKey {
-    return (
-      this.rows.rows().find((row: ListRow): boolean => row.task.key === task.key)?.status ??
-      this.statusChanges.displayedStatus(task)
-    );
-  }
-
-  /**
-   * Method tasksLabel
-   *
-   * @description
-   * How a toast names the tasks: `CAD-482` or `3 tasks`.
-   *
-   * @param {readonly TaskSummary[]} tasks - The tasks.
-   * @returns {string} The label.
-   */
-  private tasksLabel(tasks: readonly TaskSummary[]): string {
-    const count: number = tasks.length;
-    return count > 1
-      ? $localize`:@@spaces.rows.count-many:${count}:count: tasks`
-      : (tasks[0]?.key ?? '');
-  }
-
-  /**
-   * Method perform
-   *
-   * @description
-   * Applies an action through `ListRowsStore.act`, then reports it. Tasks of a refused chunk stay
-   * selected and a second toast counts them; a refusal of everything shows the failure toast; an
-   * uncertain answer warns and the rows are read again. The success toast offers `Undo` when
-   * the action can be undone, or `Open` for a single copy. The list's counts are read again.
-   * An action answered after the view was left reports only what failed: no `Undo` is offered
-   * once the view is gone. An action a newer status change replaced reports nothing.
-   *
-   * @param {readonly TaskSummary[]} tasks - The tasks, as shown.
-   * @param {TaskBulkAction} action - The action.
-   * @param {(done: readonly TaskBulkEntry[], outcome: ListActOutcome) => ActionToast & { open?: string | null }} toast - The success toast.
-   * @returns {Promise<void>} Resolves once reported.
-   */
-  private async perform(
-    tasks: readonly TaskSummary[],
-    action: TaskBulkAction,
-    toast: (
-      done: readonly TaskBulkEntry[],
-      outcome: ListActOutcome,
-    ) => ActionToast & { readonly open?: string | null },
-  ): Promise<void> {
-    if (tasks.length === 0) return;
-    const organizationId: string = this.workspace.organization().id;
-    const outcome: ListActOutcome = await this.rows.act(tasks, action);
-    if (this.workspace.organization().id !== organizationId) return;
-    const live: boolean = !this.destroyRef.destroyed;
-    if (live && (outcome.done.length > 0 || outcome.unknown.length > 0)) {
-      this.store.refreshCounts();
-    }
-    if (!this.reportProblems(outcome)) return;
-    const failedKeys: readonly string[] = outcome.failed.map(
-      (item: TaskBulkSelection): string => item.taskKey,
-    );
-    if (live && failedKeys.length > 0) {
-      this.tableSelection.set(
-        this.rows
-          .rows()
-          .filter((row: ListRow): boolean => failedKeys.includes(row.task.key))
-          .map((row: ListRow): string => row.id),
-      );
-    }
-    if (live) {
-      const message: ActionToast & { readonly open?: string | null } = toast(outcome.done, outcome);
-      const copy: string | null = message.open ?? null;
-      const id: string = this.toasts.show(message.title, {
-        description: message.description,
-        ...(copy
-          ? {
-              action: {
-                label: $localize`:@@spaces.rows.open:Open`,
-                run: (): void => {
-                  this.open(copy);
-                },
-              },
-            }
-          : message.undo
-            ? { undo: message.undo }
-            : {}),
-      });
-      if (!copy && message.undo) this.keepUndoToast(id);
-    }
-    if (outcome.failed.length > 0) {
-      this.toasts.error(
-        bulkPartialText(outcome.failed.length, tasks.length),
-        live ? { description: $localize`:@@spaces.bulk.partial-text:They stay selected.` } : {},
-      );
-    }
-  }
-
-  /**
-   * Method reportProblems
-   *
-   * @description
-   * Reports the tasks of an action that were not sent, have no certain outcome, or were all
-   * refused; resolves whether some task was applied.
-   *
-   * @param {TaskBulkOutcome} outcome - What the action ended with.
-   * @returns {boolean} Whether some task was applied.
-   */
-  private reportProblems(outcome: TaskBulkOutcome): boolean {
-    if (outcome.notSent.length > 0) {
-      this.toasts.warning($localize`:@@spaces.bulk.not-sent:Some selected tasks were not sent.`);
-    }
-    if (outcome.unknown.length > 0) {
-      this.toasts.warning(
-        $localize`:@@spaces.bulk.unknown:The outcome is unknown. The tasks are being refreshed.`,
-      );
-    }
-    if (outcome.done.length > 0) return true;
-    if (outcome.failed.length > 0 && outcome.unknown.length === 0 && outcome.notSent.length === 0) {
-      this.toasts.error($localize`:@@spaces.bulk.failed:The selection could not be changed`);
-    }
-    return false;
-  }
-
-  /**
-   * Method keepUndoToast
-   *
-   * @description
-   * Remembers a toast whose `Undo` writes through this view, so leaving the view dismisses it,
-   * and forgets the toasts already closed.
-   *
-   * @param {string} id - The toast.
-   */
-  private keepUndoToast(id: string): void {
-    const shown: ReadonlySet<string> = new Set(
-      this.toasts.toasts().map((item: { readonly id: string }): string => item.id),
-    );
-    for (const kept of this.undoToasts) if (!shown.has(kept)) this.undoToasts.delete(kept);
-    this.undoToasts.add(id);
-  }
-
-  /**
-   * Method reverse
-   *
-   * @description
-   * The `Undo` of an action: sends each reverse write with the values confirmed before the
-   * action, bound to the version the action left each task at. `ListRowsStore.act` skips a task
-   * that changed since (by this view, another view or another person, once read) and sends the
-   * others at that version, so a change not read yet makes the gateway refuse them; an `Undo`
-   * never writes old values over a newer change. A warning names the skipped tasks. Reports the
-   * rest like the action does (tasks not sent, without a certain outcome, refused in part or in
-   * full) and reads the rows again after a refusal, even when the view was left meanwhile.
-   *
-   * @param {readonly ReverseWrite[]} writes - The reverse writes.
-   * @param {Readonly<Partial<Record<string, number>>>} after - The version the undone action left
-   * each task at.
-   * @returns {Promise<void>} Resolves once reported.
-   */
-  private async reverse(
-    writes: readonly ReverseWrite[],
-    after: Readonly<Partial<Record<string, number>>>,
-  ): Promise<void> {
-    const sent: readonly ReverseWrite[] = writes.filter(
-      (write: ReverseWrite): boolean => write.tasks.length > 0,
-    );
-    if (sent.length === 0) return;
-    const outcomes: readonly ListActOutcome[] = await Promise.all(
-      sent.map((write: ReverseWrite) => this.rows.act(write.tasks, write.action, after)),
-    );
-    const changed: readonly string[] = outcomes.flatMap((item: ListActOutcome) =>
-      item.changed.map((selection: TaskBulkSelection): string => selection.taskKey),
-    );
-    if (changed.length > 0) {
-      this.toasts.warning(undoConflictTitle(changed), {
-        description: undoConflictText(changed.length),
-      });
-    }
-    const outcome: TaskBulkOutcome = {
-      affected: outcomes.reduce((sum: number, item: ListActOutcome) => sum + item.affected, 0),
-      done: outcomes.flatMap((item: ListActOutcome) => item.done),
-      failed: outcomes.flatMap((item: ListActOutcome) => item.failed),
-      unknown: outcomes.flatMap((item: ListActOutcome) => item.unknown),
-      notSent: outcomes.flatMap((item: ListActOutcome) => item.notSent),
-    };
-    if (!this.destroyRef.destroyed) {
-      if (outcome.done.length > 0 || outcome.unknown.length > 0) this.store.refreshCounts();
-      if (outcome.failed.length > 0) this.rows.reload();
-    }
-    const total: number =
-      sent.reduce((sum: number, write: ReverseWrite): number => sum + write.tasks.length, 0) -
-      changed.length;
-    if (this.reportProblems(outcome) && outcome.failed.length > 0) {
-      this.toasts.error(bulkPartialText(outcome.failed.length, total));
-    }
-  }
-
-  /**
-   * Method undoStatuses
-   *
-   * @description
-   * Puts back each task's status as confirmed before the change, with its cancellation reason
-   * and note when it was cancelled.
-   *
-   * @param {ListActOutcome} outcome - What the change ended with.
-   */
-  private undoStatuses(outcome: ListActOutcome): void {
-    void this.reverse(
-      groupBy(
-        confirmedOf(outcome),
-        (task: ConfirmedTask) =>
-          `${task.status}\u0000${task.cancelReason ?? ''}\u0000${task.cancelNote ?? ''}`,
-      ).map((group: readonly ConfirmedTask[]): ReverseWrite => {
-        const { status, cancelReason, cancelNote }: ConfirmedTask = group[0];
-        return {
-          tasks: group,
-          action:
-            status === 'cancelled' && cancelReason
-              ? { type: 'status', status, cancelReason, cancelNote }
-              : { type: 'status', status },
-        };
-      }),
-      outcome.after,
-    );
-  }
-
-  /**
-   * Method restore
-   *
-   * @description
-   * `Undo` of a deletion: takes the trash entries back; a refusal is reported even when the view
-   * was left meanwhile.
-   *
-   * @param {readonly string[]} entryIds - The trash entries.
-   * @returns {Promise<void>} Resolves once restored.
-   */
-  private async restore(entryIds: readonly string[]): Promise<void> {
-    const restored: boolean = await this.rows.restore(entryIds);
-    if (!this.destroyRef.destroyed) this.store.refreshCounts();
-    if (!restored) {
-      this.toasts.error($localize`:@@spaces.bulk.restore-failed:The tasks could not be restored`);
-    }
-  }
-
-  /**
-   * Method copy
-   *
-   * @description
-   * Writes text to the clipboard and confirms it.
-   *
-   * @param {string} text - The text.
-   * @param {string} title - The confirmation.
-   * @returns {Promise<void>} Resolves once copied or refused.
-   */
-  private async copy(text: string, title: string): Promise<void> {
-    try {
-      await this.document.defaultView?.navigator.clipboard.writeText(text);
-      this.toasts.show(title, { description: text });
-    } catch {
-      this.toasts.error($localize`:@@spaces.rows.copy-failed:Could not copy`, {
-        description: text,
-      });
-    }
   }
   // #endregion
 }
