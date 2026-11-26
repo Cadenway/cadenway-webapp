@@ -30,6 +30,7 @@ import { ListPageStore } from '../../../state/list-page/list-page.store';
 import { ListRowsStore } from '../../../state/list-rows/list-rows.store';
 import { ListViewStore } from '../../../state/list-view/list-view.store';
 import { SpacesNavigationStore } from '../../../state/spaces-navigation/spaces-navigation.store';
+import { RESEND_DELAYS_MS } from '../../../state/view-task-writes/view-task-writes.feature';
 import { ListViewPage } from './list-view-page.component';
 
 /**
@@ -1068,10 +1069,19 @@ describe('ListViewPage', () => {
     await settle(fixture);
     bulk
       .mockResolvedValueOnce(outcome([], { unknown: [{ taskKey: 'CAD-482', version: 4 }] }))
-      .mockResolvedValueOnce(outcome([], { notSent: [{ taskKey: 'CAD-483', version: 4 }] }));
+      .mockResolvedValueOnce(outcome([], { notSent: [{ taskKey: 'CAD-483', version: 4 }] }))
+      .mockResolvedValue(outcome([], { unknown: [{ taskKey: 'CAD-482', version: 4 }] }));
 
-    (toasts['show'].mock.calls[0][1] as { undo: () => void }).undo();
-    await settle(fixture);
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+      (toasts['show'].mock.calls[0][1] as { undo: () => void }).undo();
+      await vi.advanceTimersByTimeAsync(
+        RESEND_DELAYS_MS.reduce((sum: number, ms: number) => sum + ms, 0),
+      );
+      await settle(fixture);
+    } finally {
+      vi.useRealTimers();
+    }
 
     expect(toasts['warning']).toHaveBeenCalledWith('Some selected tasks were not sent.');
     expect(toasts['warning']).toHaveBeenCalledWith(

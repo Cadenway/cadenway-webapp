@@ -1,16 +1,203 @@
+@let snapshot = calendar.hasCurrentSnapshot() ? undefined : calendar.primary.value();
 <div
-  class="flex min-h-0 flex-1 items-center justify-center px-4 pb-6 sm:px-6"
+  class="flex min-h-0 flex-1 flex-col gap-4 overflow-auto px-4 pb-6 sm:px-6 xl:flex-row"
   data-testid="calendar-view"
 >
-  <cw-empty role="status">
-    <cw-empty-header>
-      <cw-empty-media>
-        <ng-icon [name]="icon" aria-hidden="true" />
-      </cw-empty-media>
-      <cw-empty-title>{{ name }}</cw-empty-title>
-      <cw-empty-description i18n="@@spaces.view-stub.text"
-        >This view is not available yet.</cw-empty-description
+  <section class="flex min-w-[720px] flex-1 flex-col gap-2">
+    <cw-calendar-view
+      #grid
+      [weekStartsOn]="1"
+      [items]="calendar.gridItems()"
+      [trackBy]="trackBy"
+      [itemLabel]="itemLabel"
+      [itemSpan]="itemSpan"
+      [maxPerDay]="maxPerDay"
+      [unscheduledCount]="null"
+      [dayMenu]="dayMenu"
+      [loading]="!snapshot && calendar.gridLoading()"
+      [view]="calendar.mode()"
+      [date]="calendar.shownDate()"
+      (viewChange)="calendar.showMode($event)"
+      (dateChange)="calendar.showDay($event)"
+      (itemMove)="moved($event)"
+      (itemSchedule)="scheduled($event)"
+      (create)="createOn($event.date)"
+      (open)="open($event.task)"
+    >
+      <ng-template cwCalendarItem let-item [cwCalendarItemOf]="calendar.gridItems()">
+        <span
+          class="flex min-w-0 flex-1 items-center gap-1.5"
+          [attr.data-calendar-task]="item.task.key"
+        >
+          <cw-status-icon [status]="item.status" [milestone]="item.task.milestone" size="3" />
+          <span
+            class="truncate"
+            [class.text-muted-foreground]="item.status === 'done' || item.status === 'cancelled'"
+            [class.line-through]="item.status === 'cancelled'"
+            >{{ item.task.name }}</span
+          >
+        </span>
+      </ng-template>
+    </cw-calendar-view>
+
+    @if (calendar.refreshFailed()) {
+      <div class="flex items-center gap-2 text-sm" role="alert">
+        <span i18n="@@spaces.rows.reload-failed">The tasks could not be refreshed.</span>
+        <button cwButton type="button" variant="outline" size="xs" (click)="calendar.reload()">
+          {{ retryLabel }}
+        </button>
+      </div>
+    }
+    @if (calendar.truncated()) {
+      <p class="text-xs text-muted-foreground" role="status">{{ truncatedText }}</p>
+    }
+  </section>
+
+  <aside class="flex w-full shrink-0 flex-col gap-2 xl:w-64" aria-labelledby="calendar-undated">
+    <h2 id="calendar-undated" class="flex items-center gap-2 text-sm font-medium">
+      <ng-container i18n="@@spaces.calendar.undated">No due date</ng-container>
+      @if (calendar.undatedReady()) {
+        <span class="text-xs font-normal whitespace-nowrap text-muted-foreground tabular-nums">{{
+          calendar.undatedItems().length
+        }}</span>
+      }
+    </h2>
+    <p class="text-xs text-muted-foreground" i18n="@@spaces.calendar.undated-hint">
+      Drag a task onto a day to schedule it.
+    </p>
+
+    @if (calendar.undatedFailed()) {
+      <div class="flex items-center gap-2 text-sm" role="alert">
+        <span i18n="@@spaces.calendar.undated-failed"
+          >The tasks without a due date could not be loaded.</span
+        >
+        <button
+          cwButton
+          type="button"
+          variant="outline"
+          size="xs"
+          (click)="calendar.retryUndated()"
+        >
+          {{ retryLabel }}
+        </button>
+      </div>
+    }
+
+    @if (calendar.undatedLoading()) {
+      <div
+        class="flex flex-col gap-1.5"
+        role="status"
+        aria-busy="true"
+        [attr.aria-label]="loadingLabel"
       >
-    </cw-empty-header>
-  </cw-empty>
+        @for (line of [0, 1, 2]; track line) {
+          <div cwSkeleton class="h-9 w-full rounded-lg"></div>
+        }
+      </div>
+    } @else if (calendar.undatedReady()) {
+      <div
+        cdkDropList
+        cdkDropListSortingDisabled
+        class="flex flex-col gap-1.5"
+        data-testid="calendar-undated"
+        [cdkDropListConnectedTo]="grid.dropListIds()"
+      >
+        @for (item of calendar.undatedItems(); track item.task.key) {
+          <div
+            cdkDrag
+            class="rounded-lg"
+            [cdkDragData]="item.task.key"
+            [cwContextMenuTriggerFor]="taskMenu.menu()"
+            [attr.data-undated-task]="item.task.key"
+            (opened)="menuKey.set(item.task.key)"
+          >
+            <cw-task-card
+              variant="item"
+              [task]="item.task"
+              [status]="item.status"
+              (opened)="open($event)"
+            />
+          </div>
+        } @empty {
+          @if (!calendar.undatedTruncated()) {
+            <p
+              class="rounded-lg border border-dashed border-input px-3 py-4 text-center text-xs text-muted-foreground"
+            >
+              @if (calendar.empty()) {
+                <ng-container i18n="@@spaces.rows.empty">No task</ng-container>
+              } @else {
+                <ng-container i18n="@@spaces.calendar.undated-empty"
+                  >All tasks have a due date.</ng-container
+                >
+              }
+            </p>
+          }
+        }
+      </div>
+      @if (calendar.undatedTruncated()) {
+        <p
+          class="rounded-lg border border-dashed border-input px-3 py-4 text-center text-xs text-muted-foreground"
+          role="status"
+          data-testid="calendar-undated-truncated"
+        >
+          {{ undatedTruncatedText }}
+        </p>
+      }
+    }
+  </aside>
 </div>
+
+<cw-menu #dayMenu [ariaLabel]="dayTitle(dayMenu.data())">
+  <cw-menu-label>{{ dayTitle(dayMenu.data()) }}</cw-menu-label>
+  <button cwMenuItem type="button" (triggered)="createOnDay(dayMenu.data())">
+    <ng-icon name="phosphorPlusBold" aria-hidden="true" />
+    <ng-container i18n="@@spaces.calendar.day-new-task">New task on that day</ng-container>
+  </button>
+  <button cwMenuItem type="button" (triggered)="goToday()">
+    <ng-icon name="phosphorCalendarCheckBold" aria-hidden="true" />
+    <ng-container i18n="@@spaces.calendar.day-today">Go to today</ng-container>
+  </button>
+</cw-menu>
+
+<cw-task-menu
+  #taskMenu
+  [tasks]="menuTasks()"
+  [status]="menuStatus()"
+  [statuses]="writes.statusOptions()"
+  [people]="writes.people()"
+  [userId]="writes.userId()"
+  [lists]="writes.targets()"
+  (openRequested)="open($event)"
+  (statusPicked)="writes.setStatus(menuTasks(), $event, menuItem()?.task.milestone ?? false)"
+  (priorityPicked)="writes.setPriority(menuTasks(), $event)"
+  (assigneeToggled)="writes.toggleAssignee(menuTasks(), $event)"
+  (moved)="writes.moveTo(menuTasks(), $event)"
+  (remindRequested)="writes.remind(menuTasks())"
+  (duplicateRequested)="writes.duplicate(menuTasks())"
+  (copyLinkRequested)="writes.copyLinks(menuTasks())"
+  (copyKeyRequested)="writes.copyKeys(menuTasks())"
+  (deleteRequested)="writes.askDelete(menuTasks(), true)"
+/>
+
+<cw-task-cancel-dialog
+  [taskKeys]="writes.cancelKeys()"
+  (confirmed)="writes.confirmCancel($event)"
+  (kept)="writes.keepCancel()"
+/>
+
+<cw-alert-dialog
+  variant="destructive"
+  size="sm"
+  [open]="writes.deleteOpen()"
+  (openChange)="writes.setDeleteOpen($event)"
+  [items]="writes.deleteItems()"
+  [pending]="writes.deleting()"
+  (confirm)="writes.trash()"
+>
+  <h2 cwAlertDialogTitle>{{ writes.deleteTitle() }}</h2>
+  <p cwAlertDialogDescription>{{ writes.deleteText() }}</p>
+  <button cwButton cwAlertDialogCancel variant="outline" i18n="@@spaces.cancel">Cancel</button>
+  <button cwButton cwAlertDialogAction variant="destructive" [loading]="writes.deleting()">
+    {{ writes.deleteAction() }}
+  </button>
+</cw-alert-dialog>

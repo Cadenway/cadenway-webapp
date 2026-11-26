@@ -90,6 +90,29 @@ describe('TaskActionsApi', () => {
     await expect(outcome).resolves.toMatchObject({ done: [{ taskKey: 'CAD-482', version: 5 }] });
   });
 
+  it('retries a chunk first answered 408 instead of reporting it refused', async () => {
+    const outcome: Promise<TaskBulkOutcome> = api.bulk(
+      [{ taskKey: 'CAD-482', version: 3 }],
+      { type: 'status', status: 'done' },
+      () => true,
+    );
+    const first: TestRequest = http.expectOne(BULK_URL);
+    const key: string | null = first.request.headers.get('Idempotency-Key');
+    first.flush(null, { status: 408, statusText: 'Request Timeout' });
+    await settle();
+    const second: TestRequest = http.expectOne(BULK_URL);
+
+    expect(second.request.headers.get('Idempotency-Key')).toBe(key);
+    second.flush(null, { status: 408, statusText: 'Request Timeout' });
+    await expect(outcome).resolves.toEqual({
+      affected: 0,
+      done: [],
+      failed: [],
+      unknown: [{ taskKey: 'CAD-482', version: 3 }],
+      notSent: [],
+    });
+  });
+
   it.each([
     [401, 'auth.unauthenticated'],
     [403, 'access.role-insufficient'],
