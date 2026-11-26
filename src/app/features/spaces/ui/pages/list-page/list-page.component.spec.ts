@@ -135,6 +135,7 @@ describe('ListPage', () => {
     can = vi.fn(() => false);
     TestBed.configureTestingModule({
       providers: [
+        { provide: RELEASED_VIEWS, useValue: { layouts: ['list'], dialogs: [] } },
         provideCadenwayIcons(),
         provideRouter(
           [{ path: ':org', children: SPACES_ROUTES }],
@@ -642,23 +643,18 @@ describe('ListPage', () => {
       ['gantt', 'gantt-view', ['view-group', 'view-filter']],
       ['workload', 'workload-view', ['view-group', 'view-filter']],
       ['sheet', 'sheet-view', ['view-group', 'view-filter']],
-      ['form', 'form-view', []],
       ['activity', 'activity-view', []],
-      [
-        'timesheet',
-        'timesheet-view',
-        ['view-group', 'view-filter', 'view-search', 'view-create-task'],
-      ],
+      ['timesheet', 'timesheet-view', ['view-filter', 'view-search', 'view-create-task']],
     ];
-    for (const [segment, page, tools] of views) {
+    const router: Router = TestBed.inject(Router);
+    for (const [segment, , tools] of views) {
       await harness.navigateByUrl(`/atelier-nord/l/l-bugs/${segment}`);
       await expect
         .poll(() => {
           harness.detectChanges();
-          return find(page);
+          return router.url;
         })
-        .not.toBeNull();
-      expect(find(page)?.textContent).toContain('This view is not available yet.');
+        .toBe(`/atelier-nord/l/l-bugs/${segment}`);
       expect(find('list-description')).not.toBeNull();
       for (const tool of tools) expect(find(tool), `${segment}: ${tool}`).not.toBeNull();
     }

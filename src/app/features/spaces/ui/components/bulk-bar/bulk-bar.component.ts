@@ -10,70 +10,9 @@ import {
 } from '@cadenway/ui/components/menu';
 import { NgIcon } from '@ng-icons/core';
 
-/**
- * Interface MoveTarget
- *
- * @description
- * A list the selection may move to, with its icon, its tone and its space.
- */
-export interface MoveTarget {
-  // #region Properties
-  /**
-   * Property listId
-   *
-   * @description
-   * Destination list.
-   *
-   * @type {string}
-   * @readonly
-   */
-  readonly listId: string;
+import type { MoveTarget } from '../../../models/view-task-write/view-task-write.interface';
 
-  /**
-   * Property name
-   *
-   * @description
-   * List name.
-   *
-   * @type {string}
-   * @readonly
-   */
-  readonly name: string;
-
-  /**
-   * Property spaceName
-   *
-   * @description
-   * Its space's name.
-   *
-   * @type {string}
-   * @readonly
-   */
-  readonly spaceName: string;
-
-  /**
-   * Property icon
-   *
-   * @description
-   * Icon of the list (its own, the sprint's lightning or the bullets).
-   *
-   * @type {string}
-   * @readonly
-   */
-  readonly icon: string;
-
-  /**
-   * Property tone
-   *
-   * @description
-   * Text class of the list's color, `text-muted-foreground` for grey.
-   *
-   * @type {string}
-   * @readonly
-   */
-  readonly tone: string;
-  // #endregion
-}
+export type { MoveTarget } from '../../../models/view-task-write/view-task-write.interface';
 
 /**
  * Interface BulkPerson
