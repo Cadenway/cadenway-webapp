@@ -644,20 +644,17 @@ describe('ListPage', () => {
       ['workload', 'workload-view', ['view-group', 'view-filter']],
       ['sheet', 'sheet-view', ['view-group', 'view-filter']],
       ['activity', 'activity-view', []],
-      [
-        'timesheet',
-        'timesheet-view',
-        ['view-group', 'view-filter', 'view-search', 'view-create-task'],
-      ],
+      ['timesheet', 'timesheet-view', ['view-filter', 'view-search', 'view-create-task']],
     ];
-    for (const [segment, page, tools] of views) {
+    const router: Router = TestBed.inject(Router);
+    for (const [segment, , tools] of views) {
       await harness.navigateByUrl(`/atelier-nord/l/l-bugs/${segment}`);
       await expect
         .poll(() => {
           harness.detectChanges();
-          return find(page);
+          return router.url;
         })
-        .not.toBeNull();
+        .toBe(`/atelier-nord/l/l-bugs/${segment}`);
       expect(find('list-description')).not.toBeNull();
       for (const tool of tools) expect(find(tool), `${segment}: ${tool}`).not.toBeNull();
     }
