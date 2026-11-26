@@ -111,6 +111,56 @@ constants belong to the lead):
   sprint's goal line, `Space statuses` (enabled when the space is editable) and `Automations`
   (enabled for organization admins and owners) in the list menu after `Edit the space`.
 
+## Board view
+
+The `Board` view (`ui/pages/board-view-page`, `App.dc.html` lines 716-773, logic lines 6343-6377,
+column menu lines 7314-7323) files the list's tasks into status columns with `cw-kanban`.
+
+- `BOARD_VIEW_PROVIDERS` provides `TaskStatusChangesStore`, `ListTasksApi`, `ListTasksStore` and
+  `BoardViewStore` (`state/board-view`). The page reads the tasks with `ListTasksStore.load`
+  (the view's `taskQuery`, no due window) and publishes its `summary` with `followRows`. One flat
+  read, rather than `countTaskGroups` and one read per status: `cw-kanban` has no per-column
+  paging, so every card is read anyway. A list over `LIST_TASKS_CAP` tasks shows the first ones
+  and says so. A failed first read reaches the route's error boundary (read again when the route
+  runs again); a failed refresh keeps the cards and offers `Retry` in place.
+- `BoardViewStore`: the columns, in `BOARD_ORDER` with the space's names, without the statuses
+  hidden with `Columns` (`ListViewStore.presentation().hiddenBoardStatusKeys`) and without those
+  the space stopped using, unless a card still sits there; the cards (`models/board-view`), filed
+  under the status they show; the folded columns, kept while the view lives; `Hide the column`
+  with its `Column hidden` toast and `Undo`.
+- A card: key, priority icon and word, milestone icon, name (muted once closed, struck through
+  when cancelled), labels, due date, subtask or checklist progress and assignee initials; a
+  closed card is see-through (`dimmedBy`). The board draws the card frame, so the card's fields
+  are the page's card template, not `cw-task-card` (a button with its own frame, which cannot sit
+  in the board's focusable card).
+- A drop in another column, with the mouse or the brick's keyboard move (Space, arrows, Space;
+  Escape cancels), writes the status through `ViewTaskWritesStore.setStatus` (with
+  `VIEW_TASK_WRITER` set to `ListTasksStore`): the card moves at once, the toast offers `Undo`, a
+  refusal puts it back, `Cancelled` asks the reason first and leaves the card in its column
+  meanwhile. A drop in the card's own column, or in a column whose status the task cannot take
+  (a milestone's four statuses, a status the space stopped using), puts the card back: no order
+  is written.
+- Click or Enter opens the task's detail (`?task=<KEY>`). A right click, Shift F10 or the Menu key
+  opens `cw-task-menu` on the card (`cardMenu`), or on the selection (Ctrl click, Ctrl Space)
+  holding it, with the menu's writes, cancellation reason and deletion confirmation. In a column
+  they open the column menu (`columnMenu`): `New task in “X”`, `Fold the column` or
+  `Unfold the column`, `Hide the column`; each has a visible control (`+`, the fold button,
+  `Columns`). `+`, `Add a task` and N on a card (`addRequest`, the quick add off) open Task's
+  create dialog with the column's status; N elsewhere creates in this list.
+- Known gaps: no manual order within a column (G1: no rank field or reorder operation); no
+  work-in-progress limit (G2: the mockup's `progress` limit of 2 is not kept); no Git chip on the
+  cards (G3); the drop's toast is `ViewTaskWritesStore`'s status toast (`CAD-482 · In progress`,
+  `Status changed.`), not the mockup's `CAD-482 déplacée` / `Statut : En cours.`, since
+  `setStatus` takes no toast wording; no selection bar on the board (the mockup has none); the
+  mockup's folded column says `Déplier la colonne X`, the brick adds the count.
+
+| Unit                                                                                                                                                                                                                               | Reason                                                                              |
+| ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| `spaces.board.column`, `spaces.board.count-*`, `spaces.board.quick-add*`, `spaces.board.selected`, `spaces.board.instructions`, `spaces.board.grabbed`, `spaces.board.position*`, `spaces.board.dropped`, `spaces.board.cancelled` | The brick's own texts (`CW_KANBAN_LABELS`), which the mockup does not show as copy. |
+| `spaces.board.expand`                                                                                                                                                                                                              | The mockup's `Déplier la colonne X`, with the brick's count.                        |
+| `spaces.board.region`                                                                                                                                                                                                              | Accessible name of the board region, which the mockup does not name.                |
+| `spaces.board.truncated`                                                                                                                                                                                                           | The mockup's lists never exceed one read.                                           |
+
 ## Form view
 
 The `Form` view (`ui/pages/form-view-page`, `App.dc.html` lines 1102-1297) designs the list's

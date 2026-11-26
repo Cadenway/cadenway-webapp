@@ -1,16 +1,154 @@
-<div
-  class="flex min-h-0 flex-1 items-center justify-center px-4 pb-6 sm:px-6"
-  data-testid="board-view"
->
-  <cw-empty role="status">
-    <cw-empty-header>
-      <cw-empty-media>
-        <ng-icon [name]="icon" aria-hidden="true" />
-      </cw-empty-media>
-      <cw-empty-title>{{ name }}</cw-empty-title>
-      <cw-empty-description i18n="@@spaces.view-stub.text"
-        >This view is not available yet.</cw-empty-description
-      >
-    </cw-empty-header>
-  </cw-empty>
+@let snapshot = tasks.hasCurrentSnapshot() ? undefined : tasks.primary.value();
+<div class="flex min-h-0 flex-1 flex-col gap-2 px-4 pb-4 sm:px-6" data-testid="board-view">
+  @if (tasks.truncated()) {
+    <p class="text-xs text-muted-foreground" role="status">{{ truncatedText }}</p>
+  }
+  @if (tasks.hasCurrentSnapshot() && tasks.primary.error()) {
+    <div class="flex items-center gap-2 text-sm" role="alert">
+      <span i18n="@@spaces.rows.reload-failed">The tasks could not be refreshed.</span>
+      <button cwButton type="button" variant="outline" size="xs" (click)="tasks.reload()">
+        {{ retryLabel }}
+      </button>
+    </div>
+  }
+  <cw-kanban
+    class="flex min-h-0 flex-1 flex-col"
+    [columns]="board.columns()"
+    [items]="board.cards()"
+    [trackBy]="trackBy"
+    [groupBy]="groupBy"
+    [itemLabel]="itemLabel"
+    [dimmedBy]="dimmedBy"
+    [ariaLabel]="regionLabel()"
+    [quickAdd]="false"
+    [loading]="tasks.initialLoading() && !snapshot"
+    [cardMenu]="taskMenu.menu()"
+    [columnMenu]="columnMenu"
+    [collapsedColumns]="board.collapsedColumns()"
+    (collapsedColumnsChange)="board.setCollapsed($event)"
+    [(selection)]="selection"
+    (moved)="moveCard($event)"
+    (addRequest)="addTask($event)"
+    (open)="open($event)"
+  >
+    <ng-template cwKanbanCard [cwKanbanCardOf]="board.cards()" let-card>
+      <span class="flex items-center gap-2">
+        <span class="font-mono text-xs text-muted-foreground">{{ card.task.key }}</span>
+        <span
+          class="ml-auto flex items-center gap-1.5 text-xs"
+          [class.text-destructive]="card.task.priority === 'urgente'"
+          ><cw-priority-icon [priority]="card.task.priority" size="3.5" />{{
+            priorityLabels[card.task.priority]
+          }}</span
+        >
+      </span>
+      <span class="flex min-w-0 items-start gap-1.5">
+        @if (card.task.milestone) {
+          <span class="mt-0.5 shrink-0">
+            <cw-status-icon [status]="card.status" [milestone]="true" size="3.5" />
+          </span>
+        }
+        <span
+          class="line-clamp-2 text-sm font-medium"
+          [class.text-muted-foreground]="card.closed"
+          [class.line-through]="card.status === 'cancelled'"
+          >{{ card.task.name }}</span
+        >
+      </span>
+      @if (card.task.labels.length > 0) {
+        <cw-task-label-chips [labels]="card.task.labels" />
+      }
+      <span class="flex h-6 items-center gap-3 text-xs text-muted-foreground">
+        <span class="flex items-center gap-1">
+          <ng-icon name="phosphorCalendarBlankBold" size="0.875rem" aria-hidden="true" />
+          <cw-task-due-date [due]="card.task.due" [status]="card.status" />
+        </span>
+        @if (card.progress; as progress) {
+          <span class="flex items-center gap-1 whitespace-nowrap tabular-nums">
+            <ng-icon [name]="progress.icon" size="0.875rem" aria-hidden="true" />{{
+              progress.closed
+            }}/{{ progress.total }}
+          </span>
+        }
+        <span class="ml-auto flex -space-x-1">
+          @for (person of card.assignees; track person.id) {
+            <span
+              class="flex size-6 items-center justify-center rounded-full bg-secondary text-[10px] leading-none font-semibold text-secondary-foreground ring-2 ring-card"
+              [title]="person.name"
+              >{{ person.initials }}</span
+            >
+          }
+        </span>
+      </span>
+    </ng-template>
+  </cw-kanban>
 </div>
+
+<cw-task-menu
+  #taskMenu
+  [tasks]="menuTasks()"
+  [status]="menuStatus()"
+  [statuses]="writes.statusOptions()"
+  [people]="writes.people()"
+  [userId]="writes.userId()"
+  [lists]="writes.targets()"
+  (openRequested)="writes.open($event.key, $event)"
+  (statusPicked)="writes.setStatus(menuTasks(), $event, menuMilestone())"
+  (priorityPicked)="writes.setPriority(menuTasks(), $event)"
+  (assigneeToggled)="writes.toggleAssignee(menuTasks(), $event)"
+  (moved)="writes.moveTo(menuTasks(), $event)"
+  (remindRequested)="writes.remind(menuTasks())"
+  (duplicateRequested)="writes.duplicate(menuTasks())"
+  (copyLinkRequested)="writes.copyLinks(menuTasks())"
+  (copyKeyRequested)="writes.copyKeys(menuTasks())"
+  (deleteRequested)="writes.askDelete(menuTasks(), true)"
+/>
+
+<cw-menu #columnMenu [ariaLabel]="menuColumn()?.label ?? ''">
+  @if (menuColumn(); as column) {
+    <cw-menu-label>{{ column.label }}</cw-menu-label>
+    <button cwMenuItem type="button" (triggered)="createIn(column.id)">
+      <ng-icon name="phosphorPlusBold" aria-hidden="true" />
+      <ng-container i18n="@@spaces.board.new-task-in"
+        >New task in “{{ column.label }}”</ng-container
+      >
+    </button>
+    <cw-menu-separator />
+    <button cwMenuItem type="button" (triggered)="board.toggleCollapsed(column.id)">
+      @if (menuColumnCollapsed()) {
+        <ng-icon name="phosphorArrowsOutLineHorizontalBold" aria-hidden="true" />
+        <ng-container i18n="@@spaces.board.unfold">Unfold the column</ng-container>
+      } @else {
+        <ng-icon name="phosphorArrowsInLineHorizontalBold" aria-hidden="true" />
+        <ng-container i18n="@@spaces.board.fold">Fold the column</ng-container>
+      }
+    </button>
+    <button cwMenuItem type="button" (triggered)="board.hideColumn(column.id)">
+      <ng-icon name="phosphorEyeSlashBold" aria-hidden="true" />
+      <ng-container i18n="@@spaces.board.hide">Hide the column</ng-container>
+    </button>
+  }
+</cw-menu>
+
+<cw-task-cancel-dialog
+  [taskKeys]="writes.cancelKeys()"
+  (confirmed)="writes.confirmCancel($event)"
+  (kept)="writes.keepCancel()"
+/>
+
+<cw-alert-dialog
+  variant="destructive"
+  size="sm"
+  [open]="writes.deleteOpen()"
+  (openChange)="writes.setDeleteOpen($event)"
+  [items]="writes.deleteItems()"
+  [pending]="writes.deleting()"
+  (confirm)="writes.trash()"
+>
+  <h2 cwAlertDialogTitle>{{ writes.deleteTitle() }}</h2>
+  <p cwAlertDialogDescription>{{ writes.deleteText() }}</p>
+  <button cwButton cwAlertDialogCancel variant="outline" i18n="@@spaces.cancel">Cancel</button>
+  <button cwButton cwAlertDialogAction variant="destructive" [loading]="writes.deleting()">
+    {{ writes.deleteAction() }}
+  </button>
+</cw-alert-dialog>
