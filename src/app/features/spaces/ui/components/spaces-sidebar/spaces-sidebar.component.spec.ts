@@ -264,7 +264,7 @@ describe('SpacesSidebar', () => {
     expect(text(harness, 'sidebar-favorites')).not.toContain('Favorite product');
     expect(text(harness, 'sidebar-spaces')).toContain('Product');
     expect(text(harness, 'sidebar-spaces')).toContain('40');
-    expect(text(harness, 'sprint-progress')).toContain('7 / 25 · 28 %');
+    expect(text(harness, 'sprint-progress')).toContain('7 / 25 · 28%');
     expect(text(harness, 'sidebar-tips')).toContain('Connect GitHub');
     const favorite: HTMLAnchorElement | null | undefined =
       harness.routeNativeElement?.querySelector('[data-testid="sidebar-favorites"] a');
