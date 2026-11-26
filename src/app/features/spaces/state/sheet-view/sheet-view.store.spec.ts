@@ -390,6 +390,28 @@ describe('SheetViewStore', () => {
     expect(store.rows()[0].spentMinutes).toBe(75);
   });
 
+  it('keeps the newer time spent when two reads of a task answer in reverse order', async () => {
+    const store: SheetViewStoreInstance = setup();
+    store.requestSpent('CAD-482');
+    await flush();
+    expect(store.rows()[0].spentMinutes).toBe(30);
+    const answers: ((minutes: number) => void)[] = [];
+    spentMinutes.mockImplementation(
+      () => new Promise<number>((resolve: (minutes: number) => void) => answers.push(resolve)),
+    );
+    detailClosed.next('CAD-482');
+    await flush();
+    detailClosed.next('CAD-482');
+    await flush();
+    expect(answers).toHaveLength(2);
+    answers[1](60);
+    await flush();
+    answers[0](45);
+    await flush();
+    expect(store.rows()[0].spentMinutes).toBe(60);
+    expect(store.totals().spentMinutes).toBe(60);
+  });
+
   it('publishes the custom fields to the frame once read', async () => {
     const store: SheetViewStoreInstance = setup();
     await vi.waitFor(() => {

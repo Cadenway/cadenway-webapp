@@ -532,6 +532,7 @@ function createSheetViewStore(): Type<SheetViewStoreInstance> {
         _spentQueue: [] as string[],
         _spentAsked: new Set<string>(),
         _spentRunning: { count: 0, aborts: new AbortController() },
+        _spentReads: new Map<string, number>(),
         _editSeq: { value: 0 },
         _editChains: new Map<string, Promise<void>>(),
         fields,
@@ -622,19 +623,25 @@ function createSheetViewStore(): Type<SheetViewStoreInstance> {
           if (key === undefined) return;
           const listId: string | null = store._listId();
           const aborts: AbortController = running.aborts;
+          const read: number = (store._spentReads.get(key) ?? 0) + 1;
+          store._spentReads.set(key, read);
+          const current: () => boolean = (): boolean =>
+            !aborts.signal.aborted &&
+            store._listId() === listId &&
+            store._spentReads.get(key) === read;
           running.count++;
           store._api
             .spentMinutes(key, aborts.signal)
             .then(
               (minutes: number): void => {
-                if (aborts.signal.aborted || store._listId() !== listId) return;
+                if (!current()) return;
                 patchState(store, (state: SheetViewState) => ({
                   _spent: { ...state._spent, [key]: minutes },
                   _spentFailed: withoutKey(state._spentFailed, key),
                 }));
               },
               (): void => {
-                if (aborts.signal.aborted || store._listId() !== listId) return;
+                if (!current()) return;
                 patchState(store, (state: SheetViewState) => ({
                   _spentFailed: { ...state._spentFailed, [key]: true as const },
                 }));
@@ -658,6 +665,7 @@ function createSheetViewStore(): Type<SheetViewStoreInstance> {
         store._spentRunning.count = 0;
         store._spentQueue.length = 0;
         store._spentAsked.clear();
+        store._spentReads.clear();
         store._editChains.clear();
       };
       const confirmedOf: (
@@ -904,7 +912,8 @@ function createSheetViewStore(): Type<SheetViewStoreInstance> {
  * each page, an older version never replacing a newer one), the list's custom fields (a
  * secondary read, published to the frame with `ListViewStore.followCustomFields` once read), and
  * the time spent of the rows shown (gap G6: one time summary per row, four at a time, read again
- * when a task detail closes or changes; a failed read waits for `retrySpent`). It builds the rows in the presentation's order
+ * when a task detail closes or changes; a failed read waits for `retrySpent`; of two reads of
+ * one task in flight, only the newer one's answer counts). It builds the rows in the presentation's order
  * (`sheetSort`, or `customFieldSort` while the list has the field; empty cells last) and the
  * totals of the footer, files the rows into the view's groups (`Group by`, `Cancelled` folded by
  * default), shows the sheet's estimate and custom field edits at once until a read reaches
