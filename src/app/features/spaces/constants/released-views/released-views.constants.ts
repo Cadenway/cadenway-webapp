@@ -12,7 +12,7 @@ import type { ViewLayout } from '../../models/saved-view/saved-view.interface';
  *
  * @type {readonly ViewLayout[]}
  */
-export const RELEASED_LAYOUTS: readonly ViewLayout[] = ['list'];
+export const RELEASED_LAYOUTS: readonly ViewLayout[] = ['list', 'form'];
 
 /**
  * Constant RELEASED_LIST_DIALOGS

@@ -135,6 +135,7 @@ describe('ListPage', () => {
     can = vi.fn(() => false);
     TestBed.configureTestingModule({
       providers: [
+        { provide: RELEASED_VIEWS, useValue: { layouts: ['list'], dialogs: [] } },
         provideCadenwayIcons(),
         provideRouter(
           [{ path: ':org', children: SPACES_ROUTES }],
