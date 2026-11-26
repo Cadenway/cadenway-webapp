@@ -239,6 +239,35 @@ describe('TaskDetailSectionsStore', () => {
     });
   });
 
+  it('sends a text reverted while a save is in flight after that save', async () => {
+    let answer: (saved: boolean) => void = () => undefined;
+    (detail['update'] as Mock).mockReturnValueOnce(
+      new Promise<boolean>((resolve: (saved: boolean) => void) => {
+        answer = resolve;
+      }),
+    );
+    store.editDescription('Changed');
+    store.flushDescription();
+
+    store.editDescription('Old');
+    store.flushDescription();
+
+    expect(detail['update']).toHaveBeenNthCalledWith(1, {
+      description: 'Changed',
+      descriptionMentions: [],
+    });
+    expect(detail['update']).toHaveBeenNthCalledWith(2, {
+      description: 'Old',
+      descriptionMentions: [],
+    });
+    answer(true);
+    await Promise.resolve();
+
+    store.editDescription('Old');
+    store.flushDescription();
+    expect(detail['update']).toHaveBeenCalledTimes(2);
+  });
+
   it('saves a waiting description when flushed, and clears an emptied one', () => {
     store.editDescription('   ');
     store.flushDescription();

@@ -217,7 +217,9 @@ export interface TaskDetailSectionsStoreInstance {
    * belongs to the task it was typed in: when another task is open by the time it is saved (the
    * address switched before the pause, or the detail closes on another task), it is written to
    * its own task through `TaskDetailStore.write`, against that task's recorded version, and never
-   * to the task now shown.
+   * to the task now shown. A draft is compared with the last description sent for its task while
+   * that write is queued or in flight (not only the confirmed one), so a text reverted during a
+   * save is sent after it rather than dropped.
    *
    * @param {string} markdown - The edited description.
    */
@@ -328,6 +330,10 @@ function createTaskDetailSectionsStore(): Type<TaskDetailSectionsStoreInstance> 
         readonly name: string;
         readonly idempotencyKey: string;
       } | null = null;
+      const sentDescriptions: Map<string, { readonly markdown: string }> = new Map<
+        string,
+        { readonly markdown: string }
+      >();
       const saveElsewhere: (key: string, patch: TaskDetailPatch) => Promise<void> = async (
         key: string,
         patch: TaskDetailPatch,
@@ -349,14 +355,22 @@ function createTaskDetailSectionsStore(): Type<TaskDetailSectionsStoreInstance> 
         const key: string = pending.key;
         const markdown: string = pending.markdown;
         const confirmed: TaskDetailTask | null = store._detail.confirmedTask();
-        const base: string = confirmed?.key === key ? (confirmed.description ?? '') : pending.base;
+        const base: string =
+          sentDescriptions.get(key)?.markdown ??
+          (confirmed?.key === key ? (confirmed.description ?? '') : pending.base);
         if (markdown.trim() === base.trim()) return;
         const patch: TaskDetailPatch =
           markdown.trim() === ''
             ? { description: null }
             : { description: markdown, descriptionMentions: mentionSpans(markdown) };
-        if (store._detail.taskKey() === key) void store._detail.update(patch);
-        else void saveElsewhere(key, patch);
+        const sent: { readonly markdown: string } = { markdown };
+        sentDescriptions.set(key, sent);
+        const settled: () => void = (): void => {
+          if (sentDescriptions.get(key) === sent) sentDescriptions.delete(key);
+        };
+        const saving: Promise<unknown> =
+          store._detail.taskKey() === key ? store._detail.update(patch) : saveElsewhere(key, patch);
+        void saving.finally(settled);
       };
       return {
         editDescription(markdown: string): void {
