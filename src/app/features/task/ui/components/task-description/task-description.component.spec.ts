@@ -40,4 +40,27 @@ describe('TaskDescription', () => {
 
     expect(discarded).toBe(1);
   });
+
+  it('says the task changed since and offers to keep the restored draft', async () => {
+    let kept: number = 0;
+    fixture.componentInstance.kept.subscribe(() => {
+      kept++;
+    });
+    fixture.componentRef.setInput('restored', true);
+    fixture.componentRef.setInput('changedSince', true);
+    await fixture.whenStable();
+    const notice: HTMLElement | null = host.querySelector(
+      '[data-testid="task-description-restored"]',
+    );
+
+    expect(notice?.textContent).toContain(
+      'The task changed since; your unsaved changes are restored from this device.',
+    );
+    const keep: HTMLButtonElement | undefined = Array.from(
+      notice?.querySelectorAll<HTMLButtonElement>('button') ?? [],
+    ).find((button: HTMLButtonElement) => button.textContent.trim() === 'Keep my version');
+    keep?.click();
+
+    expect(kept).toBe(1);
+  });
 });

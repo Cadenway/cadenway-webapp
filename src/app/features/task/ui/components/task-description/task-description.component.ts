@@ -23,7 +23,9 @@ import { CwButton } from '@cadenway/ui/components/button';
  * `@` opens the people menu of `mentionSearch` (the task's participants), which writes
  * `@[Name](id)` tokens the owner sends as mention spans. Without edit rights the editor is
  * disabled. With `restored` (a draft of this task kept on the device after a failed save), a
- * notice says so above the editor and its `Discard` emits `discarded`.
+ * notice says so above the editor and its `Discard` emits `discarded`; with `changedSince` too
+ * (the task's description changed since the draft was typed), the notice says so and offers
+ * `Keep my version`, which emits `kept`.
  */
 @Component({
   selector: 'cw-task-description',
@@ -41,7 +43,16 @@ import { CwButton } from '@cadenway/ui/components/button';
         class="flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground"
         data-testid="task-description-restored"
       >
-        <span i18n="@@task.description.restored">Unsaved changes restored from this device.</span>
+        @if (changedSince()) {
+          <span i18n="@@task.description.restored-changed"
+            >The task changed since; your unsaved changes are restored from this device.</span
+          >
+          <button cwButton type="button" variant="link" size="xs" (click)="kept.emit()">
+            <ng-container i18n="@@task.description.keep">Keep my version</ng-container>
+          </button>
+        } @else {
+          <span i18n="@@task.description.restored">Unsaved changes restored from this device.</span>
+        }
         <button cwButton type="button" variant="link" size="xs" (click)="discarded.emit()">
           <ng-container i18n="@@task.description.discard">Discard</ng-container>
         </button>
@@ -116,6 +127,28 @@ export class TaskDescription {
    * @readonly
    */
   public readonly discarded: OutputEmitterRef<void> = output();
+
+  /**
+   * Property changedSince
+   *
+   * @description
+   * Whether the task's description changed since the restored draft was typed.
+   *
+   * @type {InputSignal<boolean>}
+   * @readonly
+   */
+  public readonly changedSince: InputSignal<boolean> = input<boolean>(false);
+
+  /**
+   * Property kept
+   *
+   * @description
+   * Emits when the caller keeps the restored draft over a description that changed since.
+   *
+   * @type {OutputEmitterRef<void>}
+   * @readonly
+   */
+  public readonly kept: OutputEmitterRef<void> = output();
 
   /**
    * Property edited

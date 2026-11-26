@@ -41,7 +41,7 @@ const UNVERSIONED_WRITE: number = 0;
  *
  * @description
  * Prefix of the device storage key of a description draft not confirmed yet, followed by the
- * organization and the task key: the draft outlives the detail, so a save that failed or
+ * organization, the user and the task key (another account on the device never reads it): the draft outlives the detail, so a save that failed or
  * conflicted after the caller closed the detail or opened another task is offered again.
  *
  * @type {string}
@@ -187,6 +187,18 @@ interface TaskDetailSectionsState {
   readonly restoredDraft: string | null;
 
   /**
+   * Property restoredChanged
+   *
+   * @description
+   * Whether the description changed since the restored draft was typed: the draft is then not
+   * saved by itself, only through `keepDraft`.
+   *
+   * @type {boolean}
+   * @readonly
+   */
+  readonly restoredChanged: boolean;
+
+  /**
    * Property creating
    *
    * @description
@@ -273,6 +285,18 @@ export interface TaskDetailSectionsStoreInstance {
    * @readonly
    */
   readonly restoredDraft: Signal<string | null>;
+
+  /**
+   * Property restoredChanged
+   *
+   * @description
+   * Whether the task's description changed since the restored draft was typed (`Keep my version`
+   * is then offered and nothing is saved by itself).
+   *
+   * @type {Signal<boolean>}
+   * @readonly
+   */
+  readonly restoredChanged: Signal<boolean>;
   // #endregion
 
   // #region Methods
@@ -288,7 +312,10 @@ export interface TaskDetailSectionsStoreInstance {
    * its own task (`update` with that key, against its recorded version), never to the task now
    * shown. Each draft sent waits in the device storage (`DESCRIPTION_DRAFT_PREFIX`) until its write
    * is confirmed: a failed or conflicting save keeps it (the toast says so), and the next opening
-   * of that task restores it in the editor with a `Discard` notice and saves it after the pause. A draft is compared with the last description sent for its task while
+   * of that task restores it in the editor with a `Discard` notice. It is saved after the pause
+   * only when the description is still the one it was typed over; when the description changed
+   * since, nothing is saved by itself and the notice offers `Keep my version` (`keepDraft`).
+   * The draft is stored per organization, user and task. A draft is compared with the last description sent for its task while
    * that write is queued or in flight (not only the confirmed one), so a text reverted during a
    * save is sent after it rather than dropped.
    *
@@ -312,6 +339,15 @@ export interface TaskDetailSectionsStoreInstance {
    * shows the confirmed description again.
    */
   discardDraft(): void;
+
+  /**
+   * Method keepDraft
+   *
+   * @description
+   * Saves the restored description draft of the open task at once, against its current
+   * version, over a description that changed since (`Keep my version`).
+   */
+  keepDraft(): void;
 
   /**
    * Method toggleItem
@@ -365,6 +401,7 @@ function createTaskDetailSectionsStore(): Type<TaskDetailSectionsStoreInstance> 
     depth: null,
     refusedLimit: null,
     restoredDraft: null,
+    restoredChanged: false,
     creating: false,
   };
   return signalStore(
@@ -423,7 +460,7 @@ function createTaskDetailSectionsStore(): Type<TaskDetailSectionsStoreInstance> 
         { readonly markdown: string }
       >();
       const draftKey: (key: string) => string = (key: string): string =>
-        `${DESCRIPTION_DRAFT_PREFIX}.${store._workspace.organization().id}.${key}`;
+        `${DESCRIPTION_DRAFT_PREFIX}.${store._workspace.organization().id}.${store._workspace.user().id}.${key}`;
       const readDraft: (key: string) => StoredDescriptionDraft | null = (
         key: string,
       ): StoredDescriptionDraft | null => {
@@ -494,7 +531,9 @@ function createTaskDetailSectionsStore(): Type<TaskDetailSectionsStoreInstance> 
           const key: string | null = store._detail.taskKey();
           if (key === null) return;
           if (draft !== null && draft.key !== key) flush();
-          if (store.restoredDraft() !== null) patchState(store, { restoredDraft: null });
+          if (store.restoredDraft() !== null) {
+            patchState(store, { restoredDraft: null, restoredChanged: false });
+          }
           draft = {
             key,
             markdown,
@@ -517,20 +556,35 @@ function createTaskDetailSectionsStore(): Type<TaskDetailSectionsStoreInstance> 
             draft = null;
           }
           writeDraft(key, null);
-          patchState(store, { restoredDraft: null });
+          patchState(store, { restoredDraft: null, restoredChanged: false });
+        },
+
+        keepDraft(): void {
+          const key: string | null = store._detail.taskKey();
+          const markdown: string | null = store.restoredDraft();
+          const confirmed: TaskDetailTask | null = store._detail.confirmedTask();
+          if (key === null || markdown === null || confirmed?.key !== key) return;
+          patchState(store, { restoredChanged: false });
+          if (timer !== null) clearTimeout(timer);
+          timer = null;
+          draft = { key, markdown, base: confirmed.description ?? '' };
+          flush();
         },
 
         _restoreDraft(key: string | null): void {
-          patchState(store, { restoredDraft: null });
+          patchState(store, { restoredDraft: null, restoredChanged: false });
           const confirmed: TaskDetailTask | null = store._detail.confirmedTask();
           if (key === null || confirmed?.key !== key) return;
           const stored: StoredDescriptionDraft | null = readDraft(key);
           if (stored === null) return;
-          if (stored.markdown.trim() === (confirmed.description ?? '').trim()) {
+          const current: string = confirmed.description ?? '';
+          if (stored.markdown.trim() === current.trim()) {
             writeDraft(key, null);
             return;
           }
-          patchState(store, { restoredDraft: stored.markdown });
+          const changed: boolean = stored.base.trim() !== current.trim();
+          patchState(store, { restoredDraft: stored.markdown, restoredChanged: changed });
+          if (changed) return;
           draft = { key, markdown: stored.markdown, base: stored.base };
           if (timer !== null) clearTimeout(timer);
           timer = setTimeout(flush, DESCRIPTION_SAVE_MS);

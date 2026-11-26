@@ -68,11 +68,12 @@ describe('TaskDetailSectionsStore', () => {
    * Function create
    *
    * @description
-   * Provides and starts the store over the current fakes.
+   * Provides and starts the store over the current fakes, signed in as a user.
    *
+   * @param {string} [userId] - The signed-in user, Camille Martin by default.
    * @returns {TaskDetailSectionsStoreInstance} The store.
    */
-  function create(): TaskDetailSectionsStoreInstance {
+  function create(userId: string = 'u1'): TaskDetailSectionsStoreInstance {
     TestBed.configureTestingModule({
       providers: [
         TaskDetailSectionsStore,
@@ -80,7 +81,10 @@ describe('TaskDetailSectionsStore', () => {
         { provide: TaskSectionsApi, useValue: api },
         {
           provide: WORKSPACE_CONTEXT,
-          useValue: { organization: signal({ id: 'o1', slug: 'atelier-nord' }) },
+          useValue: {
+            organization: signal({ id: 'o1', slug: 'atelier-nord' }),
+            user: signal({ id: userId }),
+          },
         },
         { provide: CwToastService, useValue: toasts },
       ],
@@ -122,7 +126,10 @@ describe('TaskDetailSectionsStore', () => {
         { provide: TaskSectionsApi, useValue: api },
         {
           provide: WORKSPACE_CONTEXT,
-          useValue: { organization: signal({ id: 'o1', slug: 'atelier-nord' }) },
+          useValue: {
+            organization: signal({ id: 'o1', slug: 'atelier-nord' }),
+            user: signal({ id: 'u1' }),
+          },
         },
         { provide: CwToastService, useValue: toasts },
       ],
@@ -311,7 +318,7 @@ describe('TaskDetailSectionsStore', () => {
     (detail['taskKey'] as WritableSignal<string>).set('CAD-490');
     task.set({ ...TASK, id: 'CAD-490', key: 'CAD-490', version: 9, description: 'Other' });
     await vi.advanceTimersByTimeAsync(DESCRIPTION_SAVE_MS);
-    expect(localStorage.getItem(`${DESCRIPTION_DRAFT_PREFIX}.o1.CAD-482`)).not.toBeNull();
+    expect(localStorage.getItem(`${DESCRIPTION_DRAFT_PREFIX}.o1.u1.CAD-482`)).not.toBeNull();
 
     TestBed.resetTestingModule();
     (detail['taskKey'] as WritableSignal<string>).set('CAD-482');
@@ -327,13 +334,13 @@ describe('TaskDetailSectionsStore', () => {
       { key: 'CAD-482', draftKept: true },
     );
     expect(reopened.restoredDraft()).toBeNull();
-    expect(localStorage.getItem(`${DESCRIPTION_DRAFT_PREFIX}.o1.CAD-482`)).toBeNull();
+    expect(localStorage.getItem(`${DESCRIPTION_DRAFT_PREFIX}.o1.u1.CAD-482`)).toBeNull();
   });
 
   it('discards a restored draft without saving it', async () => {
     vi.useFakeTimers();
     localStorage.setItem(
-      `${DESCRIPTION_DRAFT_PREFIX}.o1.CAD-482`,
+      `${DESCRIPTION_DRAFT_PREFIX}.o1.u1.CAD-482`,
       JSON.stringify({ markdown: 'Kept text', base: 'Old' }),
     );
     TestBed.resetTestingModule();
@@ -346,12 +353,73 @@ describe('TaskDetailSectionsStore', () => {
 
     expect(reopened.restoredDraft()).toBeNull();
     expect(detail['update']).not.toHaveBeenCalled();
-    expect(localStorage.getItem(`${DESCRIPTION_DRAFT_PREFIX}.o1.CAD-482`)).toBeNull();
+    expect(localStorage.getItem(`${DESCRIPTION_DRAFT_PREFIX}.o1.u1.CAD-482`)).toBeNull();
+  });
+
+  it('saves nothing by itself for a draft typed over a description changed since', async () => {
+    vi.useFakeTimers();
+    localStorage.setItem(
+      `${DESCRIPTION_DRAFT_PREFIX}.o1.u1.CAD-482`,
+      JSON.stringify({ markdown: 'Mine', base: 'Old' }),
+    );
+    task.set({ ...TASK, version: 6, description: 'Theirs' });
+    TestBed.resetTestingModule();
+    const reopened: TaskDetailSectionsStoreInstance = create();
+    TestBed.tick();
+
+    expect(reopened.restoredDraft()).toBe('Mine');
+    expect(reopened.restoredChanged()).toBe(true);
+    await vi.advanceTimersByTimeAsync(DESCRIPTION_SAVE_MS * 2);
+    expect(detail['update']).not.toHaveBeenCalled();
+
+    reopened.keepDraft();
+
+    expect(detail['update']).toHaveBeenCalledExactlyOnceWith(
+      { description: 'Mine', descriptionMentions: [] },
+      { key: 'CAD-482', draftKept: true },
+    );
+    await vi.waitFor(() => {
+      expect(reopened.restoredDraft()).toBeNull();
+    });
+    expect(localStorage.getItem(`${DESCRIPTION_DRAFT_PREFIX}.o1.u1.CAD-482`)).toBeNull();
+  });
+
+  it('discards a draft typed over a description changed since', async () => {
+    vi.useFakeTimers();
+    localStorage.setItem(
+      `${DESCRIPTION_DRAFT_PREFIX}.o1.u1.CAD-482`,
+      JSON.stringify({ markdown: 'Mine', base: 'Old' }),
+    );
+    task.set({ ...TASK, version: 6, description: 'Theirs' });
+    TestBed.resetTestingModule();
+    const reopened: TaskDetailSectionsStoreInstance = create();
+    TestBed.tick();
+
+    reopened.discardDraft();
+    await vi.advanceTimersByTimeAsync(DESCRIPTION_SAVE_MS * 2);
+
+    expect(reopened.restoredDraft()).toBeNull();
+    expect(reopened.restoredChanged()).toBe(false);
+    expect(detail['update']).not.toHaveBeenCalled();
+    expect(localStorage.getItem(`${DESCRIPTION_DRAFT_PREFIX}.o1.u1.CAD-482`)).toBeNull();
+  });
+
+  it('never restores the draft of another user of the device', () => {
+    localStorage.setItem(
+      `${DESCRIPTION_DRAFT_PREFIX}.o1.u1.CAD-482`,
+      JSON.stringify({ markdown: 'Kept text', base: 'Old' }),
+    );
+    TestBed.resetTestingModule();
+    const other: TaskDetailSectionsStoreInstance = create('u2');
+    TestBed.tick();
+
+    expect(other.restoredDraft()).toBeNull();
+    expect(localStorage.getItem(`${DESCRIPTION_DRAFT_PREFIX}.o1.u1.CAD-482`)).not.toBeNull();
   });
 
   it('forgets a stored draft the confirmed description already carries', () => {
     localStorage.setItem(
-      `${DESCRIPTION_DRAFT_PREFIX}.o1.CAD-482`,
+      `${DESCRIPTION_DRAFT_PREFIX}.o1.u1.CAD-482`,
       JSON.stringify({ markdown: 'Old', base: '' }),
     );
     TestBed.resetTestingModule();
@@ -359,7 +427,7 @@ describe('TaskDetailSectionsStore', () => {
     TestBed.tick();
 
     expect(reopened.restoredDraft()).toBeNull();
-    expect(localStorage.getItem(`${DESCRIPTION_DRAFT_PREFIX}.o1.CAD-482`)).toBeNull();
+    expect(localStorage.getItem(`${DESCRIPTION_DRAFT_PREFIX}.o1.u1.CAD-482`)).toBeNull();
   });
 
   it('shows a draft whose save failed again in the open task', async () => {
@@ -370,7 +438,7 @@ describe('TaskDetailSectionsStore', () => {
     await vi.waitFor(() => {
       expect(store.restoredDraft()).toBe('Typed again');
     });
-    expect(localStorage.getItem(`${DESCRIPTION_DRAFT_PREFIX}.o1.CAD-482`)).not.toBeNull();
+    expect(localStorage.getItem(`${DESCRIPTION_DRAFT_PREFIX}.o1.u1.CAD-482`)).not.toBeNull();
   });
 
   it('shows the limit a refused creation names', async () => {
