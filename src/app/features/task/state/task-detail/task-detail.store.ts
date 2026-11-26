@@ -1300,9 +1300,15 @@ function createTaskDetailStore(): Type<TaskDetailStoreInstance> {
             shown?.task.key === detail.task.key && shown.task.version > detail.task.version
               ? shown.task
               : detail.task;
+          // A detail whose comments part failed carries no page: it neither replaces the shown
+          // page nor makes a comments read still under way look stale.
+          const usable: boolean = detail.comments !== null;
           const kept: TaskDetail | null =
-            shown?.task.key === detail.task.key && commentsRead < commentsShown ? shown : null;
-          if (!kept) commentsShown = commentsRead;
+            shown?.task.key === detail.task.key &&
+            (commentsRead < commentsShown || (!usable && shown.comments !== null))
+              ? shown
+              : null;
+          if (!kept && usable) commentsShown = commentsRead;
           patchState(store, {
             detail: kept
               ? {
