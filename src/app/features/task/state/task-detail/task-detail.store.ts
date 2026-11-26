@@ -1121,6 +1121,13 @@ function createTaskDetailStore(): Type<TaskDetailStoreInstance> {
       let writeCount: number = 0;
       let detailRead: Promise<void> | null = null;
       let duplication: { key: string; version: number; idempotencyKey: string } | null = null;
+      const noteWrites: {
+        queue: Promise<void>;
+        latest: number;
+        pending: number;
+        reminderId: string | null;
+        confirmed: TaskReminder | null;
+      } = { queue: Promise.resolve(), latest: 0, pending: 0, reminderId: null, confirmed: null };
       const lanes: Map<string, Promise<void>> = new Map<string, Promise<void>>();
       const versions: Map<string, number> = new Map<string, number>();
       const reconciling: Map<string, Promise<void>> = new Map<string, Promise<void>>();
@@ -1506,26 +1513,36 @@ function createTaskDetailStore(): Type<TaskDetailStoreInstance> {
           }
         },
 
-        async saveReminderNote(note: string): Promise<void> {
+        saveReminderNote(note: string): Promise<void> {
           const key: string | null = keyOf();
           const reminder: TaskReminder | null = store.reminder();
-          if (key === null || !reminder || reminder.note === note) return;
-          patchState(store, { reminder: { ...reminder, note } });
-          try {
-            const saved: TaskReminder = await store._api.saveReminderNote(reminder.id, note);
-            if (
-              current(key) &&
-              store.reminder()?.id === saved.id &&
-              store.reminder()?.note === note
-            ) {
-              patchState(store, { reminder: saved });
-            }
-          } catch {
-            if (current(key) && store.reminder()?.id === reminder.id) {
-              patchState(store, { reminder });
-            }
-            failed($localize`:@@task.detail.reminder-note-failed:Could not save the note`);
+          if (key === null || !reminder || reminder.note === note) return Promise.resolve();
+          if (noteWrites.reminderId !== reminder.id || noteWrites.pending === 0) {
+            noteWrites.reminderId = reminder.id;
+            noteWrites.confirmed = reminder;
           }
+          const turn: number = ++noteWrites.latest;
+          noteWrites.pending++;
+          patchState(store, { reminder: { ...reminder, note } });
+          const shownHere: () => boolean = (): boolean =>
+            current(key) && store.reminder()?.id === reminder.id;
+          const run: Promise<void> = noteWrites.queue.then(async (): Promise<void> => {
+            if (turn !== noteWrites.latest) return;
+            try {
+              const saved: TaskReminder = await store._api.saveReminderNote(reminder.id, note);
+              if (noteWrites.reminderId === reminder.id) noteWrites.confirmed = saved;
+              if (turn === noteWrites.latest && shownHere()) patchState(store, { reminder: saved });
+            } catch {
+              if (turn !== noteWrites.latest) return;
+              const confirmed: TaskReminder | null = noteWrites.confirmed;
+              if (confirmed && shownHere()) patchState(store, { reminder: confirmed });
+              failed($localize`:@@task.detail.reminder-note-failed:Could not save the note`);
+            }
+          });
+          noteWrites.queue = run.finally((): void => {
+            noteWrites.pending--;
+          });
+          return run;
         },
 
         async deleteReminder(): Promise<void> {
@@ -1550,18 +1567,24 @@ function createTaskDetailStore(): Type<TaskDetailStoreInstance> {
           const task: TaskDetailTask | null = store.confirmedTask();
           if (key === null || !task || store.action() !== null) return;
           patchState(store, { action: 'duplicate' });
-          const attempt: { key: string; version: number; idempotencyKey: string } =
-            duplication?.key === key && duplication.version === task.version
-              ? duplication
-              : { key, version: task.version, idempotencyKey: crypto.randomUUID() };
-          duplication = attempt;
           try {
-            const copy: TaskDetailTask = await store._api.duplicate(
-              attempt.key,
-              attempt.version,
-              attempt.idempotencyKey,
+            const copy: TaskDetailTask = await write(
+              key,
+              async (version: number): Promise<TaskDetailTask> => {
+                const attempt: { key: string; version: number; idempotencyKey: string } =
+                  duplication?.key === key && duplication.version === version
+                    ? duplication
+                    : { key, version, idempotencyKey: crypto.randomUUID() };
+                duplication = attempt;
+                const made: TaskDetailTask = await store._api.duplicate(
+                  attempt.key,
+                  attempt.version,
+                  attempt.idempotencyKey,
+                );
+                if (duplication === attempt) duplication = null;
+                return made;
+              },
             );
-            if (duplication === attempt) duplication = null;
             store._toasts.show($localize`:@@task.detail.duplicated:Task duplicated`, {
               description: $localize`:@@task.detail.duplicated-text:${copy.key}:key: · ${copy.name}:name:`,
               action: {
@@ -1577,9 +1600,8 @@ function createTaskDetailStore(): Type<TaskDetailStoreInstance> {
               },
             });
           } catch (error: unknown) {
-            if (error instanceof TaskVersionConflict && current(key)) {
-              conflicted(key);
-              void readDetail(key, false);
+            if (error instanceof TaskVersionConflict) {
+              if (current(key)) conflicted(key);
             } else {
               failed(
                 $localize`:@@task.detail.duplicate-failed:Could not duplicate the task`,
@@ -1597,20 +1619,24 @@ function createTaskDetailStore(): Type<TaskDetailStoreInstance> {
           if (key === null || !task || store.action() !== null) return false;
           patchState(store, { action: 'archive' });
           try {
-            await store._api.archive(key, task.version);
+            await write(key, (version: number): Promise<void> => store._api.archive(key, version));
             store._toasts.show($localize`:@@task.detail.archived:${key}:key: archived`, {
               description: $localize`:@@task.detail.archived-text:Find it in the Archives, at the bottom of the sidebar.`,
               undo: (): void => {
-                store._api.unarchive(key).catch((): void => {
-                  failed($localize`:@@task.detail.unarchive-failed:Could not restore the task`);
-                });
+                store._api.unarchive(key).then(
+                  (): void => {
+                    store._opener.notifyChanged(key);
+                  },
+                  (): void => {
+                    failed($localize`:@@task.detail.unarchive-failed:Could not restore the task`);
+                  },
+                );
               },
             });
             return true;
           } catch (error: unknown) {
-            if (error instanceof TaskVersionConflict && current(key)) {
-              conflicted(key);
-              void readDetail(key, false);
+            if (error instanceof TaskVersionConflict) {
+              if (current(key)) conflicted(key);
             } else {
               failed($localize`:@@task.detail.archive-failed:Could not archive the task`);
             }
@@ -1626,7 +1652,10 @@ function createTaskDetailStore(): Type<TaskDetailStoreInstance> {
           if (key === null || !task || store.action() !== null) return false;
           patchState(store, { action: 'trash' });
           try {
-            const entry: TaskTrashEntry = await store._api.trash(key, task.version);
+            const entry: TaskTrashEntry = await write(
+              key,
+              (version: number): Promise<TaskTrashEntry> => store._api.trash(key, version),
+            );
             const kept: string = $localize`:@@task.detail.trashed-kept:Kept 30 days in the trash.`;
             const description: string =
               entry.subtaskCount === 0
@@ -1637,16 +1666,20 @@ function createTaskDetailStore(): Type<TaskDetailStoreInstance> {
             store._toasts.show($localize`:@@task.detail.trashed:${key}:key: deleted`, {
               description,
               undo: (): void => {
-                store._api.restore(entry.id).catch((): void => {
-                  failed($localize`:@@task.detail.restore-failed:Could not restore the task`);
-                });
+                store._api.restore(entry.id).then(
+                  (): void => {
+                    store._opener.notifyChanged(key);
+                  },
+                  (): void => {
+                    failed($localize`:@@task.detail.restore-failed:Could not restore the task`);
+                  },
+                );
               },
             });
             return true;
           } catch (error: unknown) {
-            if (error instanceof TaskVersionConflict && current(key)) {
-              conflicted(key);
-              void readDetail(key, false);
+            if (error instanceof TaskVersionConflict) {
+              if (current(key)) conflicted(key);
             } else {
               failed($localize`:@@task.detail.trash-failed:Could not delete the task`);
             }

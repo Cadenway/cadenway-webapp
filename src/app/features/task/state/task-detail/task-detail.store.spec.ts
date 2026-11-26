@@ -179,6 +179,9 @@ describe('TaskDetailStore', () => {
   let trash: Mock<(key: string, version: number) => Promise<TaskTrashEntry>>;
   let restore: Mock<(entryId: string) => Promise<void>>;
   let setReminder: Mock<(key: string, at: Date, note: string) => Promise<TaskReminder>>;
+  let saveReminderNote: Mock<(reminderId: string, note: string) => Promise<TaskReminder>>;
+  let reminderRead: Mock<() => Promise<TaskReminder | null>>;
+  let notifyChanged: Mock<(key: string) => void>;
   let openTask: Mock<(key: string, preview?: unknown) => Promise<boolean>>;
   let watch: Mock<() => Subject<RealtimeChange>>;
   let show: Mock<(title: string, options?: CwToastOptions) => string>;
@@ -212,12 +215,13 @@ describe('TaskDetailStore', () => {
             trash,
             restore,
             setReminder,
+            saveReminderNote,
             watchers: () => Promise.resolve({ total: 2, following: false }),
-            reminder: () => Promise.resolve(null),
+            reminder: reminderRead,
           },
         },
         { provide: RealtimeConnection, useValue: { watch } },
-        { provide: TaskDetailOpener, useValue: { open: openTask } },
+        { provide: TaskDetailOpener, useValue: { open: openTask, notifyChanged } },
         { provide: WORKSPACE_CONTEXT, useValue: workspace },
         { provide: CwToastService, useValue: { show, error, warning, dismiss: vi.fn() } },
       ],
@@ -248,6 +252,11 @@ describe('TaskDetailStore', () => {
     setReminder = vi.fn((_key: string, at: Date, note: string) =>
       Promise.resolve({ id: 'r1', at: at.toISOString(), note, fired: false }),
     );
+    saveReminderNote = vi.fn((reminderId: string, note: string) =>
+      Promise.resolve({ id: reminderId, at: '2026-11-09T08:00:00Z', note, fired: false }),
+    );
+    reminderRead = vi.fn(() => Promise.resolve(null));
+    notifyChanged = vi.fn();
     openTask = vi.fn(() => Promise.resolve(true));
     watch = vi.fn(() => notices);
     show = vi.fn(() => 't1');
@@ -601,6 +610,113 @@ describe('TaskDetailStore', () => {
     expect(options?.description).toBe('With 3 subtasks. Kept 30 days in the trash.');
     options?.undo?.();
     expect(restore).toHaveBeenCalledWith('entry-1');
+  });
+
+  it('tells the view under the detail once an Undo restored the task', async () => {
+    const store: TaskDetailStoreInstance = await setup();
+    await store.archive();
+    const [, archived]: [string, CwToastOptions?] = show.mock.calls[0];
+    archived?.undo?.();
+    await vi.waitFor(() => {
+      expect(notifyChanged).toHaveBeenCalledWith('CAD-482');
+    });
+
+    notifyChanged.mockClear();
+    await store.trash();
+    const [, trashed]: [string, CwToastOptions?] = show.mock.calls[1];
+    trashed?.undo?.();
+    await vi.waitFor(() => {
+      expect(notifyChanged).toHaveBeenCalledWith('CAD-482');
+    });
+  });
+
+  it('archives, deletes and duplicates against the version an earlier write confirmed', async () => {
+    const store: TaskDetailStoreInstance = await setup();
+
+    const renamed: Promise<boolean> = store.update({ name: 'Redesign the sign-in' });
+    await store.duplicate();
+    await renamed;
+    expect(update).toHaveBeenCalledWith('CAD-482', 4, { name: 'Redesign the sign-in' });
+    expect(duplicate).toHaveBeenCalledWith('CAD-482', 5, expect.any(String));
+
+    void store.update({ name: 'Redesign the SSO sign-in' });
+    await store.archive();
+    expect(archive).toHaveBeenCalledWith('CAD-482', 6);
+
+    void store.update({ name: 'Redesign' });
+    await store.trash();
+    expect(trash).toHaveBeenCalledWith('CAD-482', 7);
+  });
+
+  it('saves the reminder notes one after the other, the last one winning', async () => {
+    reminderRead.mockResolvedValue({
+      id: 'r1',
+      at: '2026-11-09T08:00:00Z',
+      note: '',
+      fired: false,
+    });
+    const store: TaskDetailStoreInstance = await setup();
+    await vi.waitFor(() => {
+      expect(store.reminder()?.id).toBe('r1');
+    });
+    let answer: (saved: TaskReminder) => void = () => undefined;
+    saveReminderNote.mockReturnValueOnce(
+      new Promise<TaskReminder>((resolve: (saved: TaskReminder) => void) => {
+        answer = resolve;
+      }),
+    );
+
+    const first: Promise<void> = store.saveReminderNote('Call');
+    await vi.waitFor(() => {
+      expect(saveReminderNote).toHaveBeenCalledTimes(1);
+    });
+    const second: Promise<void> = store.saveReminderNote('Call Hugo');
+    const third: Promise<void> = store.saveReminderNote('Call Hugo back');
+    expect(store.reminder()?.note).toBe('Call Hugo back');
+    answer({ id: 'r1', at: '2026-11-09T08:00:00Z', note: 'Call', fired: false });
+    await Promise.all([first, second, third]);
+
+    expect(saveReminderNote.mock.calls.map((call: unknown[]) => call[1])).toEqual([
+      'Call',
+      'Call Hugo back',
+    ]);
+    expect(store.reminder()?.note).toBe('Call Hugo back');
+  });
+
+  it('rolls back only the latest reminder note, to the last confirmed one', async () => {
+    reminderRead.mockResolvedValue({
+      id: 'r1',
+      at: '2026-11-09T08:00:00Z',
+      note: 'Call',
+      fired: false,
+    });
+    const store: TaskDetailStoreInstance = await setup();
+    await vi.waitFor(() => {
+      expect(store.reminder()?.id).toBe('r1');
+    });
+    let refuse: (reason: unknown) => void = () => undefined;
+    saveReminderNote.mockReturnValueOnce(
+      new Promise<TaskReminder>((_resolve: unknown, reject: (reason: unknown) => void) => {
+        refuse = reject;
+      }),
+    );
+
+    const older: Promise<void> = store.saveReminderNote('Call Hugo');
+    await vi.waitFor(() => {
+      expect(saveReminderNote).toHaveBeenCalledTimes(1);
+    });
+    const newer: Promise<void> = store.saveReminderNote('Call Hugo back');
+    refuse(new Error('offline'));
+    await Promise.all([older, newer]);
+
+    expect(store.reminder()?.note).toBe('Call Hugo back');
+    expect(error).not.toHaveBeenCalled();
+
+    saveReminderNote.mockRejectedValueOnce(new Error('offline'));
+    await store.saveReminderNote('Call Hugo at 9');
+
+    expect(store.reminder()?.note).toBe('Call Hugo back');
+    expect(error).toHaveBeenCalledWith('Could not save the note', expect.anything());
   });
 
   it('keeps the detail open when the deletion is refused', async () => {
