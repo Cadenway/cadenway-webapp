@@ -33,14 +33,20 @@ export const TASK_BULK_CHUNK_SIZE: number = 50;
  * Function isUncertainFailure
  *
  * @description
- * Distinguishes a missing or server answer, after which the action may have been applied, from a
- * deterministic refusal.
+ * Distinguishes a missing, timed-out or server answer, after which the action may have been
+ * applied, from a deterministic refusal: no answer (status 0 or another error), a `408 Request
+ * Timeout` (the gateway or a proxy gave up waiting while the request may still run) or a `5xx`.
  *
  * @param {unknown} error - The failed request.
  * @returns {boolean} Whether the request may have been applied.
  */
 export function isUncertainFailure(error: unknown): boolean {
-  return !(error instanceof HttpErrorResponse) || error.status === 0 || error.status >= 500;
+  return (
+    !(error instanceof HttpErrorResponse) ||
+    error.status === 0 ||
+    error.status === 408 ||
+    error.status >= 500
+  );
 }
 
 /**
@@ -161,7 +167,8 @@ export class TaskActionsApi {
    *
    * @description
    * Applies an action to the selection in chunks of 50, one call after the other. Each chunk is
-   * atomic and has its own `Idempotency-Key`, reused for one retry after an uncertain answer.
+   * atomic and has its own `Idempotency-Key`, reused for one retry after an uncertain answer (no
+   * answer, a `408` or a `5xx`).
    * Only a success settles that retry: the gateway replays the recorded result of a committed
    * first request, while any refusal of the retry (`401`, `403`, `409
    * idempotency.request-in-progress`, `412`, `422`) leaves open whether the first request

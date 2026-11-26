@@ -221,6 +221,16 @@ describe('ListTasksApi', () => {
     });
   });
 
+  it('leaves a first write answered 408 without a certain outcome, so it is sent again', async () => {
+    updateTask.mockReturnValueOnce(
+      throwError(() => new HttpErrorResponse({ status: 408, statusText: 'Request Timeout' })),
+    );
+
+    await expect(api.update('CAD-482', 4, { name: 'Sign-in' })).resolves.toEqual({
+      kind: 'unknown',
+    });
+  });
+
   it('reads one task back without the HTTP cache, says when it is in the trash, and null otherwise', async () => {
     const read: TaskReadBack | null = (await api.readBack('CAD-482')) as TaskReadBack | null;
     expect(read?.task).toMatchObject({

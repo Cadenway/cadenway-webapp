@@ -338,7 +338,7 @@ export class ListTasksApi {
    * made against, and tells how it ended: applied at the version the gateway saved, refused (a
    * `4xx`: `422` for an invalid date; `stale` for a `412` that is not
    * `organization.context-changed`, the task having changed since that version), or without a
-   * certain outcome (no answer or a `5xx`). It never rejects.
+   * certain outcome (no answer, a `408 Request Timeout` or a `5xx`). It never rejects.
    *
    * @param {string} taskKey - Key of the task.
    * @param {number} version - Version the change was made against.
@@ -358,7 +358,12 @@ export class ListTasksApi {
       );
       return { kind: 'done', version: typeof task.version === 'number' ? task.version : null };
     } catch (error: unknown) {
-      if (!(error instanceof HttpErrorResponse) || error.status < 400 || error.status >= 500) {
+      if (
+        !(error instanceof HttpErrorResponse) ||
+        error.status < 400 ||
+        error.status === 408 ||
+        error.status >= 500
+      ) {
         return { kind: 'unknown' };
       }
       return {
