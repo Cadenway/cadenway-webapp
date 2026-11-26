@@ -1363,4 +1363,28 @@ describe('ListRowsStore', () => {
     expect(peak).toBe(4);
     expect(restore).toHaveBeenCalledTimes(6);
   });
+
+  it('sends no queued restore once the view is gone', async () => {
+    const store: InstanceType<typeof ListRowsStore> = setup(flat);
+    await settle();
+    const { restore }: { restore: Mock<TaskActionsApi['restore']> } = TestBed.inject(
+      TaskActionsApi,
+    ) as unknown as { restore: Mock<TaskActionsApi['restore']> };
+    const releases: (() => void)[] = [];
+    restore.mockImplementation(
+      (): Promise<void> =>
+        new Promise<void>((resolve: () => void) => {
+          releases.push(resolve);
+        }),
+    );
+
+    const restored: Promise<boolean> = store.restore(['t-1', 't-2', 't-3', 't-4', 't-5', 't-6']);
+    await Promise.resolve();
+    expect(restore).toHaveBeenCalledTimes(4);
+    TestBed.resetTestingModule();
+    for (const release of releases) release();
+
+    await expect(restored).resolves.toBe(false);
+    expect(restore).toHaveBeenCalledTimes(4);
+  });
 });

@@ -1613,6 +1613,14 @@ function createListRowsStore(): Type<ListRowsStoreInstance> {
       const tails: Map<string, Promise<void>> = new Map<string, Promise<void>>();
       const queued: Map<string, QueuedAct> = new Map<string, QueuedAct>();
       let actions: number = 0;
+      // A write queued behind others must not start once its view is gone or its organization
+      // changed: the organization pin is read when each request leaves.
+      const notSent: Error = new Error('The list view or its organization changed before sending.');
+      const sameContext: () => () => boolean = (): (() => boolean) => {
+        const organizationId: string | undefined = store._params()?.organizationId;
+        return (): boolean =>
+          !store._destroyRef.destroyed && store._params()?.organizationId === organizationId;
+      };
 
       const loadedTask: (key: string) => TaskSummary | undefined = (
         key: string,
@@ -1902,9 +1910,7 @@ function createListRowsStore(): Type<ListRowsStoreInstance> {
           action: TaskBulkAction,
           expected?: Readonly<Partial<Record<string, number>>>,
         ): Promise<ListActOutcome> {
-          const organizationId: string | undefined = store._params()?.organizationId;
-          const current: () => boolean = (): boolean =>
-            !store._destroyRef.destroyed && store._params()?.organizationId === organizationId;
+          const current: () => boolean = sameContext();
           const seq: number = ++actions;
           const changedSince: (task: TaskSummary) => boolean = (task: TaskSummary): boolean => {
             if (!expected) return false;
@@ -2039,20 +2045,24 @@ function createListRowsStore(): Type<ListRowsStoreInstance> {
           return result;
         },
         async remind(taskKeys: readonly string[], at: Date): Promise<readonly string[]> {
+          const stillCurrent: () => boolean = sameContext();
           const results: PromiseSettledResult<void>[] = await settleLimited(
             taskKeys,
             WRITE_CALLS,
-            (key: string): Promise<void> => store._actions.remind(key, at),
+            (key: string): Promise<void> =>
+              stillCurrent() ? store._actions.remind(key, at) : Promise.reject(notSent),
           );
           return taskKeys.filter(
             (_: string, index: number) => results[index].status === 'fulfilled',
           );
         },
         async restore(entryIds: readonly string[]): Promise<boolean> {
+          const stillCurrent: () => boolean = sameContext();
           const results: PromiseSettledResult<void>[] = await settleLimited(
             entryIds,
             WRITE_CALLS,
-            (id: string): Promise<void> => store._actions.restore(id),
+            (id: string): Promise<void> =>
+              stillCurrent() ? store._actions.restore(id) : Promise.reject(notSent),
           );
           if (!store._destroyRef.destroyed) reload();
           return results.every(
