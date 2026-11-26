@@ -185,6 +185,54 @@ describe('TaskDetailSectionsStore', () => {
     expect(store.subtaskLimit()).toBe('count');
   });
 
+  it('reads the depth again and drops a refused limit when the parent changes', async () => {
+    await vi.waitFor(() => {
+      expect(store.subtaskLimit()).toBe('depth');
+    });
+    api['createSubtask'].mockRejectedValue(
+      new HttpErrorResponse({ status: 422, error: { code: 'task.subtask-depth-exceeded' } }),
+    );
+    await store.createSubtask('Write the tests');
+    api['parentOf'].mockResolvedValue(null);
+
+    task.set({ ...TASK, parentKey: 'CAD-300' });
+    TestBed.tick();
+
+    await vi.waitFor(() => {
+      expect(store.subtaskLimit()).toBeNull();
+    });
+    expect(api['parentOf']).toHaveBeenLastCalledWith('CAD-300');
+  });
+
+  it('drops a refused count limit once the subtask count changes', async () => {
+    api['createSubtask'].mockRejectedValue(
+      new HttpErrorResponse({ status: 422, error: { code: 'task.subtask-limit-reached' } }),
+    );
+    api['parentOf'].mockResolvedValue(null);
+    TestBed.tick();
+    await store.createSubtask('Write the tests');
+    expect(store.subtaskLimit()).toBe('count');
+
+    (detail['subtasks'] as WritableSignal<readonly unknown[]>).set([{ key: 'CAD-483' }]);
+    TestBed.tick();
+
+    expect(store.subtaskLimit()).toBeNull();
+  });
+
+  it('creates a subtask sent again after a failure under the same idempotency key', async () => {
+    api['createSubtask']
+      .mockRejectedValueOnce(new Error('offline'))
+      .mockResolvedValue({ key: 'CAD-733', name: 'Write the tests' });
+
+    await expect(store.createSubtask('Write the tests')).resolves.toBe(false);
+    await expect(store.createSubtask('Write the tests')).resolves.toBe(true);
+    await expect(store.createSubtask('Write the tests')).resolves.toBe(true);
+
+    const keys: unknown[] = api['createSubtask'].mock.calls.map((call: unknown[]) => call[2]);
+    expect(keys[1]).toBe(keys[0]);
+    expect(keys[2]).not.toBe(keys[1]);
+  });
+
   it('creates a subtask, toasts it and reads the detail again', async () => {
     api['createSubtask'].mockResolvedValue({ key: 'CAD-733', name: 'Write the tests' });
 

@@ -1,6 +1,7 @@
 import { computed, inject, type Signal, type Type } from '@angular/core';
 import {
   patchState,
+  signalMethod,
   signalStore,
   withComputed,
   withHooks,
@@ -107,7 +108,8 @@ interface TaskDetailSectionsState {
    * Property refusedLimit
    *
    * @description
-   * The limit a refused creation named, until another task opens.
+   * The limit a refused creation named, until the task moves under another parent or its
+   * subtask count changes.
    *
    * @type {SubtaskLimit | null}
    * @readonly
@@ -299,6 +301,11 @@ function createTaskDetailSectionsStore(): Type<TaskDetailSectionsStoreInstance> 
       };
       let draft: string | null = null;
       let timer: ReturnType<typeof setTimeout> | null = null;
+      let subtaskAttempt: {
+        readonly parentKey: string;
+        readonly name: string;
+        readonly idempotencyKey: string;
+      } | null = null;
       const flush: () => void = (): void => {
         if (timer !== null) clearTimeout(timer);
         timer = null;
@@ -365,13 +372,23 @@ function createTaskDetailSectionsStore(): Type<TaskDetailSectionsStoreInstance> 
         async createSubtask(name: string): Promise<boolean> {
           const parent: TaskDetailTask | null = store._detail.confirmedTask();
           if (!parent || name.trim() === '' || store.creating()) return false;
+          const trimmed: string = name.trim();
+          if (subtaskAttempt?.parentKey !== parent.key || subtaskAttempt.name !== trimmed) {
+            subtaskAttempt = {
+              parentKey: parent.key,
+              name: trimmed,
+              idempotencyKey: crypto.randomUUID(),
+            };
+          }
+          const sent: { readonly idempotencyKey: string } = subtaskAttempt;
           patchState(store, { creating: true });
           try {
             const created: { readonly key: string } = await store._api.createSubtask(
               parent.key,
-              name.trim(),
-              crypto.randomUUID(),
+              trimmed,
+              sent.idempotencyKey,
             );
+            if (subtaskAttempt === sent) subtaskAttempt = null;
             patchState(store, { creating: false });
             store._toasts.success(
               $localize`:@@task.subtasks.created:Subtask ${created.key}:key: created`,
@@ -408,25 +425,48 @@ function createTaskDetailSectionsStore(): Type<TaskDetailSectionsStoreInstance> 
           }
         },
 
-        async _readDepth(): Promise<void> {
-          const parentKey: string | null = store._detail.confirmedTask()?.parentKey ?? null;
-          if (parentKey === null) {
-            patchState(store, { depth: 0 });
-            return;
-          }
+        async _readDepth(parentKey: string | null, moved: boolean): Promise<void> {
+          patchState(store, {
+            depth: parentKey === null ? 0 : null,
+            ...(moved ? { refusedLimit: null } : {}),
+          });
+          if (parentKey === null) return;
+          const stillParent: () => boolean = (): boolean =>
+            (store._detail.confirmedTask()?.parentKey ?? null) === parentKey;
           try {
             const grandparent: string | null = await store._api.parentOf(parentKey);
-            patchState(store, { depth: grandparent === null ? 1 : 2 });
+            if (stillParent()) patchState(store, { depth: grandparent === null ? 1 : 2 });
           } catch {
-            patchState(store, { depth: null });
+            if (stillParent()) patchState(store, { depth: null });
           }
         },
+      };
+    }),
+    withMethods((store) => {
+      let readParent: string | null | undefined;
+      let seenCount: number | undefined;
+      return {
+        _followParent: signalMethod<string | null>((parentKey: string | null): void => {
+          if (parentKey === readParent) return;
+          const moved: boolean = readParent !== undefined;
+          readParent = parentKey;
+          void store._readDepth(parentKey, moved);
+        }),
+        _followCount: signalMethod<number>((count: number): void => {
+          const changed: boolean = seenCount !== undefined && seenCount !== count;
+          seenCount = count;
+          if (changed && store.refusedLimit() === 'count')
+            patchState(store, { refusedLimit: null });
+        }),
       };
     }),
     withHooks({
       onInit(store): void {
         void store._readPeople();
-        void store._readDepth();
+        store._followParent(
+          computed((): string | null => store._detail.confirmedTask()?.parentKey ?? null),
+        );
+        store._followCount(computed((): number => store._detail.subtasks().length));
       },
       onDestroy(store): void {
         store.flushDescription();
@@ -443,7 +483,9 @@ function createTaskDetailSectionsStore(): Type<TaskDetailSectionsStoreInstance> 
  * the description saved after `DESCRIPTION_SAVE_MS` of quiet through `TaskDetailStore.update`,
  * the checklist ticks shown at once then confirmed (rolled back with the failure toast), checklist
  * additions, subtask creation with its depth and size limits (the depth reads the parent's
- * parent once; a refusal names the limit), and the organization's member directory that names
+ * parent, again whenever the task moves under another parent; a refusal names the limit until
+ * then or until the subtask count changes; a creation sent again after a failure reuses its
+ * `Idempotency-Key`), and the organization's member directory that names
  * reviewers, authors, actors and assignees (a failed read leaves the initials of unknown people
  * out rather than blocking the tabs). Writes that answer the task hand it to
  * `TaskDetailStore.accept`; a creation reads the detail again.
