@@ -11,8 +11,8 @@ import type {
   IntakeRequest,
 } from '../../../models/intake-form/intake-form.interface';
 import {
-  fileKeyOf,
   intakeFailureOf,
+  isUncertainOutcome,
   PublicIntakeApi,
   submissionBodyOf,
 } from './public-intake-api.service';
@@ -192,6 +192,22 @@ describe('PublicIntakeApi', () => {
     expect(submissionBodyOf(request, form)).not.toBe(
       submissionBodyOf({ ...request, title: 'Other' }, form),
     );
-    expect(fileKeyOf(new File(['ab'], 'a.txt', { lastModified: 5 }))).toBe('a.txt|2|5');
+    const first: File = new File(['ab'], 'a.txt', { lastModified: 5 });
+    const twin: File = new File(['ab'], 'a.txt', { lastModified: 5 });
+    expect(submissionBodyOf({ ...request, files: [first] }, form)).toBe(
+      submissionBodyOf({ ...request, files: [first] }, form),
+    );
+    expect(submissionBodyOf({ ...request, files: [first] }, form)).not.toBe(
+      submissionBodyOf({ ...request, files: [twin] }, form),
+    );
+  });
+
+  it('tells an unknown submission outcome from a refusal', () => {
+    expect(isUncertainOutcome(new HttpErrorResponse({ status: 0 }))).toBe(true);
+    expect(isUncertainOutcome(problem(503))).toBe(true);
+    expect(isUncertainOutcome(problem(409, 'idempotency.request-in-progress'))).toBe(true);
+    expect(isUncertainOutcome(new Error('timeout'))).toBe(true);
+    expect(isUncertainOutcome(problem(422, 'request.invalid'))).toBe(false);
+    expect(isUncertainOutcome(problem(404, 'intake-form.not-found'))).toBe(false);
   });
 });

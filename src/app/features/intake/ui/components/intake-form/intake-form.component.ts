@@ -247,6 +247,18 @@ export class IntakeForm {
   public readonly failure: InputSignal<IntakeFailure | null> = input<IntakeFailure | null>(null);
 
   /**
+   * Property unconfirmed
+   *
+   * @description
+   * Title of a request sent without a confirmed outcome, which shows a notice with `Send it
+   * again`, or null.
+   *
+   * @type {InputSignal<string | null>}
+   * @readonly
+   */
+  public readonly unconfirmed: InputSignal<string | null> = input<string | null>(null);
+
+  /**
    * Property submitted
    *
    * @description
@@ -267,6 +279,28 @@ export class IntakeForm {
    * @readonly
    */
   public readonly restarted: OutputEmitterRef<void> = output();
+
+  /**
+   * Property resent
+   *
+   * @description
+   * `Send it again`: the unconfirmed request is to be sent again unchanged.
+   *
+   * @type {OutputEmitterRef<void>}
+   * @readonly
+   */
+  public readonly resent: OutputEmitterRef<void> = output();
+
+  /**
+   * Property fileRemoved
+   *
+   * @description
+   * A file removed, or replaced by a file of the same name, whose upload is to be forgotten.
+   *
+   * @type {OutputEmitterRef<File>}
+   * @readonly
+   */
+  public readonly fileRemoved: OutputEmitterRef<File> = output<File>();
 
   /**
    * Property ids
@@ -472,6 +506,22 @@ export class IntakeForm {
   });
 
   /**
+   * Property unconfirmedText
+   *
+   * @description
+   * The notice of a request sent without a confirmed outcome, or null.
+   *
+   * @type {Signal<string | null>}
+   * @readonly
+   */
+  protected readonly unconfirmedText: Signal<string | null> = computed((): string | null => {
+    const title: string | null = this.unconfirmed();
+    return title === null
+      ? null
+      : $localize`:@@intake.unconfirmed.text:Your request “${title}:title:” was sent, but its receipt could not be confirmed. Send it again to check before sending anything else.`;
+  });
+
+  /**
    * Property failureText
    *
    * @description
@@ -562,19 +612,25 @@ export class IntakeForm {
    * Method addFiles
    *
    * @description
-   * Adds the files the dropzone accepted, skipping one already attached.
+   * Adds the files the dropzone accepted; a file of the same name as an attached one replaces
+   * it, and the replaced file is emitted as removed.
    *
    * @param {File[]} added - The accepted files.
    */
   protected addFiles(added: File[]): void {
-    const current: readonly File[] = this.files();
-    const fresh: File[] = added.filter(
-      (file: File): boolean =>
-        !current.some(
-          (known: File): boolean => known.name === file.name && known.size === file.size,
-        ),
-    );
-    this.files.set([...current, ...fresh].slice(0, INTAKE_MAX_FILES));
+    const files: File[] = [...this.files()];
+    for (const file of added) {
+      const at: number = files.findIndex((known: File): boolean => known.name === file.name);
+      if (at === -1) {
+        files.push(file);
+        continue;
+      }
+      const replaced: File | undefined = files.at(at);
+      files[at] = file;
+      if (replaced) this.fileRemoved.emit(replaced);
+    }
+    for (const dropped of files.slice(INTAKE_MAX_FILES)) this.fileRemoved.emit(dropped);
+    this.files.set(files.slice(0, INTAKE_MAX_FILES));
     this.rejected.set(false);
   }
 
@@ -599,9 +655,11 @@ export class IntakeForm {
    * @param {number} index - Its position.
    */
   protected removeFile(index: number): void {
+    const removed: File | undefined = this.files().at(index);
     this.files.update((files: readonly File[]): File[] =>
       files.filter((_file: File, at: number): boolean => at !== index),
     );
+    if (removed) this.fileRemoved.emit(removed);
   }
 
   /**

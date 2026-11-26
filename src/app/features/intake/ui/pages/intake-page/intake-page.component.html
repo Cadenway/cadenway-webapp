@@ -9,8 +9,11 @@
         [pending]="store.pending()"
         [sent]="store.sent()"
         [failure]="store.failure()"
+        [unconfirmed]="store.unconfirmed()"
         (submitted)="send($event)"
         (restarted)="store.restart()"
+        (resent)="store.resend()"
+        (fileRemoved)="store.forget($event)"
       />
     </div>
   } @else {

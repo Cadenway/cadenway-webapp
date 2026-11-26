@@ -93,6 +93,23 @@ export function intakeFailureOf(error: unknown): IntakeFailure {
 }
 
 /**
+ * Function isUncertainOutcome
+ *
+ * @description
+ * Whether a failed submission may still have been recorded: no answer, a timeout, a server
+ * failure (`5xx`) or a matching submission still in progress (`409
+ * idempotency.request-in-progress`). Only replaying the same body with the same key tells.
+ *
+ * @param {unknown} error - The failure.
+ * @returns {boolean} Whether the outcome is unknown.
+ */
+export function isUncertainOutcome(error: unknown): boolean {
+  if (!(error instanceof HttpErrorResponse)) return true;
+  if (error.status === 0 || error.status >= 500) return true;
+  return readProblem(error)?.code === 'idempotency.request-in-progress';
+}
+
+/**
  * Function abortable
  *
  * @description
@@ -280,11 +297,52 @@ export class PublicIntakeApi {
 }
 
 /**
+ * Constant FILE_IDENTITIES
+ *
+ * @description
+ * A number for each picked file object, so two picks of files with the same name, size and date
+ * stay distinct.
+ *
+ * @type {WeakMap<File, number>}
+ */
+const FILE_IDENTITIES: WeakMap<File, number> = new WeakMap<File, number>();
+
+/**
+ * Constant nextFileIdentity
+ *
+ * @description
+ * The number the next file object gets.
+ *
+ * @type {{ value: number }}
+ */
+const nextFileIdentity: { value: number } = { value: 0 };
+
+/**
+ * Function fileIdentityOf
+ *
+ * @description
+ * The number of a picked file object, the same for the same object only.
+ *
+ * @param {File} file - The file.
+ * @returns {number} Its identity.
+ */
+function fileIdentityOf(file: File): number {
+  let identity: number | undefined = FILE_IDENTITIES.get(file);
+  if (identity === undefined) {
+    identity = nextFileIdentity.value += 1;
+    FILE_IDENTITIES.set(file, identity);
+  }
+  return identity;
+}
+
+/**
  * Function submissionBodyOf
  *
  * @description
  * A stable text of what a submission sends, without its keys, so that the caller reuses the
  * idempotency key only for the same body: the gateway refuses a reused key with another body.
+ * Files count by object, so a file picked again, even with the same name, size and date, makes
+ * another body.
  *
  * @param {IntakeRequest} request - The request as filled in.
  * @param {IntakeFormSettings} form - The form it was filled in.
@@ -293,19 +351,6 @@ export class PublicIntakeApi {
 export function submissionBodyOf(request: IntakeRequest, form: IntakeFormSettings): string {
   return JSON.stringify([
     toIntakeSubmission(request, form, []),
-    request.files.map((file: File): string => fileKeyOf(file)),
+    request.files.map((file: File): number => fileIdentityOf(file)),
   ]);
-}
-
-/**
- * Function fileKeyOf
- *
- * @description
- * Identifies a picked file within a draft, so a retry does not upload it again.
- *
- * @param {File} file - The file.
- * @returns {string} Its name, size and modification time.
- */
-export function fileKeyOf(file: File): string {
-  return `${file.name}|${String(file.size)}|${String(file.lastModified)}`;
 }

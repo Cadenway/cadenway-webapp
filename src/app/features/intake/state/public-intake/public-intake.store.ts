@@ -9,8 +9,8 @@ import {
 } from '@ngrx/signals';
 
 import {
-  fileKeyOf,
   intakeFailureOf,
+  isUncertainOutcome,
   PublicIntakeApi,
   submissionBodyOf,
 } from '../../data-access/services/public-intake-api/public-intake-api.service';
@@ -50,6 +50,103 @@ interface SubmissionAttempt {
    * @readonly
    */
   readonly idempotencyKey: string;
+  // #endregion
+}
+
+/**
+ * Interface SentSubmission
+ *
+ * @description
+ * A submission exactly as sent, so that it can be sent again unchanged.
+ */
+interface SentSubmission {
+  // #region Properties
+  /**
+   * Property request
+   *
+   * @description
+   * The request as filled in.
+   *
+   * @type {IntakeRequest}
+   * @readonly
+   */
+  readonly request: IntakeRequest;
+
+  /**
+   * Property form
+   *
+   * @description
+   * The form it was filled in.
+   *
+   * @type {IntakeFormSettings}
+   * @readonly
+   */
+  readonly form: IntakeFormSettings;
+
+  /**
+   * Property attachmentIds
+   *
+   * @description
+   * The verified uploads it carries.
+   *
+   * @type {readonly string[]}
+   * @readonly
+   */
+  readonly attachmentIds: readonly string[];
+
+  /**
+   * Property draftKey
+   *
+   * @description
+   * Private key of the draft its uploads belong to.
+   *
+   * @type {string}
+   * @readonly
+   */
+  readonly draftKey: string;
+
+  /**
+   * Property idempotencyKey
+   *
+   * @description
+   * Key it was sent with.
+   *
+   * @type {string}
+   * @readonly
+   */
+  readonly idempotencyKey: string;
+  // #endregion
+}
+
+/**
+ * Interface VerifiedUpload
+ *
+ * @description
+ * The verified upload of a picked file, within its draft.
+ */
+interface VerifiedUpload {
+  // #region Properties
+  /**
+   * Property draftKey
+   *
+   * @description
+   * Draft the upload belongs to.
+   *
+   * @type {string}
+   * @readonly
+   */
+  readonly draftKey: string;
+
+  /**
+   * Property id
+   *
+   * @description
+   * Id of the upload.
+   *
+   * @type {string}
+   * @readonly
+   */
+  readonly id: string;
   // #endregion
 }
 
@@ -106,6 +203,18 @@ interface PublicIntakeState {
   readonly failure: IntakeFailure | null;
 
   /**
+   * Property unconfirmed
+   *
+   * @description
+   * Title of a request sent without a confirmed outcome, which must be sent again before any
+   * other, or null.
+   *
+   * @type {string | null}
+   * @readonly
+   */
+  readonly unconfirmed: string | null;
+
+  /**
    * Property _draftKey
    *
    * @description
@@ -128,16 +237,15 @@ interface PublicIntakeState {
   readonly _attempt: SubmissionAttempt | null;
 
   /**
-   * Property _uploads
+   * Property _replay
    *
    * @description
-   * Verified upload id of each file of the draft (`fileKeyOf`), so a retry does not upload it
-   * again.
+   * The submission whose outcome is unknown, sent again unchanged by the next send, or null.
    *
-   * @type {Readonly<Partial<Record<string, string>>>}
+   * @type {SentSubmission | null}
    * @readonly
    */
-  readonly _uploads: Readonly<Partial<Record<string, string>>>;
+  readonly _replay: SentSubmission | null;
   // #endregion
 }
 
@@ -203,6 +311,17 @@ export interface PublicIntakeStoreInstance {
    * @readonly
    */
   readonly failure: Signal<IntakeFailure | null>;
+
+  /**
+   * Property unconfirmed
+   *
+   * @description
+   * Title of a request sent without a confirmed outcome, or null.
+   *
+   * @type {Signal<string | null>}
+   * @readonly
+   */
+  readonly unconfirmed: Signal<string | null>;
   // #endregion
 
   // #region Methods
@@ -220,12 +339,33 @@ export interface PublicIntakeStoreInstance {
    * Method submit
    *
    * @description
-   * Uploads the files not uploaded yet in this draft, then sends the request.
+   * Uploads the files not uploaded yet in this draft, then sends the request. While an earlier
+   * submission is unconfirmed, sends that one again unchanged instead.
    *
    * @param {IntakeRequest} request - The request as filled in.
-   * @returns {Promise<boolean>} Whether the request was recorded.
+   * @returns {Promise<boolean>} Whether a request was recorded.
    */
   submit(request: IntakeRequest): Promise<boolean>;
+
+  /**
+   * Method resend
+   *
+   * @description
+   * Sends the unconfirmed submission again, with its body and keys.
+   *
+   * @returns {Promise<boolean>} Whether it is recorded.
+   */
+  resend(): Promise<boolean>;
+
+  /**
+   * Method forget
+   *
+   * @description
+   * Forgets the upload of a file removed or replaced, so it is never sent.
+   *
+   * @param {File} file - The file.
+   */
+  forget(file: File): void;
 
   /**
    * Method restart
@@ -243,10 +383,13 @@ export interface PublicIntakeStoreInstance {
  * @description
  * The draft part of the state for a new request.
  *
- * @returns {Pick<PublicIntakeState, '_draftKey' | '_attempt' | '_uploads'>} A new draft.
+ * @returns {Pick<PublicIntakeState, '_draftKey' | '_attempt' | '_replay' | 'unconfirmed'>} A new draft.
  */
-function freshDraft(): Pick<PublicIntakeState, '_draftKey' | '_attempt' | '_uploads'> {
-  return { _draftKey: newDraftKey(), _attempt: null, _uploads: {} };
+function freshDraft(): Pick<
+  PublicIntakeState,
+  '_draftKey' | '_attempt' | '_replay' | 'unconfirmed'
+> {
+  return { _draftKey: newDraftKey(), _attempt: null, _replay: null, unconfirmed: null };
 }
 
 /**
@@ -270,6 +413,7 @@ function createPublicIntakeStore(): Type<PublicIntakeStoreInstance> {
       const api: PublicIntakeApi = inject(PublicIntakeApi);
       return {
         _api: api,
+        _uploads: new WeakMap<File, VerifiedUpload>(),
         form: resource({
           params: (): { publicKey: string } | undefined => {
             const publicKey: string | null = store.publicKey();
@@ -285,65 +429,125 @@ function createPublicIntakeStore(): Type<PublicIntakeStoreInstance> {
         }),
       };
     }),
-    withMethods((store) => ({
-      load: signalMethod<string>((publicKey: string): void => {
-        if (publicKey === store.publicKey()) return;
-        patchState(store, {
-          publicKey,
-          pending: false,
-          sent: null,
-          failure: null,
-          ...freshDraft(),
-        });
-      }),
-      async submit(request: IntakeRequest): Promise<boolean> {
-        const publicKey: string | null = store.publicKey();
-        const form: IntakeFormSettings | undefined = store.form.hasValue()
-          ? store.form.value()
-          : undefined;
-        if (publicKey === null || form === undefined || store.pending()) return false;
-        const body: string = submissionBodyOf(request, form);
-        const previous: SubmissionAttempt | null = store._attempt();
-        const attempt: SubmissionAttempt =
-          previous?.body === body ? previous : { body, idempotencyKey: crypto.randomUUID() };
-        const draftKey: string = store._draftKey();
-        patchState(store, { pending: true, failure: null, _attempt: attempt });
-        // Whether the publication and draft this send began with are still the shown ones; once
-        // they are not, the send stops and its answers are dropped.
-        const current: () => boolean = (): boolean =>
-          store.publicKey() === publicKey && store._draftKey() === draftKey;
+    withMethods((store) => {
+      // Whether the publication and draft a send began with are still the shown ones; once they
+      // are not, the send stops and its answers are dropped.
+      const current: (publicKey: string, draftKey: string) => boolean = (
+        publicKey: string,
+        draftKey: string,
+      ): boolean => store.publicKey() === publicKey && store._draftKey() === draftKey;
+      // Sends a submission. A lost answer, a timeout or a server failure leaves its outcome
+      // unknown: it is kept to be sent again unchanged before anything else.
+      const send: (publicKey: string, submission: SentSubmission) => Promise<boolean> = async (
+        publicKey: string,
+        submission: SentSubmission,
+      ): Promise<boolean> => {
         try {
-          const ids: string[] = [];
-          if (form.fields.attachments !== 'disabled') {
-            for (const file of request.files) {
-              const key: string = fileKeyOf(file);
-              const known: string | undefined = store._uploads()[key];
-              const id: string = known ?? (await store._api.upload(publicKey, draftKey, file));
-              if (!current()) return false;
-              if (known === undefined) {
-                patchState(store, { _uploads: { ...store._uploads(), [key]: id } });
-              }
-              ids.push(id);
-            }
-          }
-          await store._api.submit(publicKey, request, form, ids, {
-            draftKey,
-            idempotencyKey: attempt.idempotencyKey,
+          await store._api.submit(
+            publicKey,
+            submission.request,
+            submission.form,
+            submission.attachmentIds,
+            { draftKey: submission.draftKey, idempotencyKey: submission.idempotencyKey },
+          );
+          if (!current(publicKey, submission.draftKey)) return false;
+          patchState(store, {
+            pending: false,
+            failure: null,
+            sent: submission.request.title,
+            ...freshDraft(),
           });
-          if (!current()) return false;
-          patchState(store, { pending: false, sent: request.title, ...freshDraft() });
           return true;
         } catch (error: unknown) {
-          if (current()) {
-            patchState(store, { pending: false, failure: intakeFailureOf(error) });
+          if (!current(publicKey, submission.draftKey)) return false;
+          if (isUncertainOutcome(error)) {
+            patchState(store, {
+              pending: false,
+              failure: null,
+              unconfirmed: submission.request.title,
+              _replay: submission,
+            });
+          } else {
+            patchState(store, {
+              pending: false,
+              failure: intakeFailureOf(error),
+              unconfirmed: null,
+              _replay: null,
+            });
           }
           return false;
         }
-      },
-      restart(): void {
-        patchState(store, { sent: null, failure: null });
-      },
-    })),
+      };
+      const resend: () => Promise<boolean> = (): Promise<boolean> => {
+        const publicKey: string | null = store.publicKey();
+        const replay: SentSubmission | null = store._replay();
+        if (publicKey === null || replay === null || store.pending()) {
+          return Promise.resolve(false);
+        }
+        patchState(store, { pending: true, failure: null });
+        return send(publicKey, replay);
+      };
+      return {
+        load: signalMethod<string>((publicKey: string): void => {
+          if (publicKey === store.publicKey()) return;
+          patchState(store, {
+            publicKey,
+            pending: false,
+            sent: null,
+            failure: null,
+            ...freshDraft(),
+          });
+        }),
+        async submit(request: IntakeRequest): Promise<boolean> {
+          if (store._replay() !== null) return resend();
+          const publicKey: string | null = store.publicKey();
+          const form: IntakeFormSettings | undefined = store.form.hasValue()
+            ? store.form.value()
+            : undefined;
+          if (publicKey === null || form === undefined || store.pending()) return false;
+          const body: string = submissionBodyOf(request, form);
+          const previous: SubmissionAttempt | null = store._attempt();
+          const attempt: SubmissionAttempt =
+            previous?.body === body ? previous : { body, idempotencyKey: crypto.randomUUID() };
+          const draftKey: string = store._draftKey();
+          patchState(store, { pending: true, failure: null, _attempt: attempt });
+          const ids: string[] = [];
+          try {
+            if (form.fields.attachments !== 'disabled') {
+              for (const file of request.files) {
+                const known: VerifiedUpload | undefined = store._uploads.get(file);
+                const id: string =
+                  known?.draftKey === draftKey
+                    ? known.id
+                    : await store._api.upload(publicKey, draftKey, file);
+                if (!current(publicKey, draftKey)) return false;
+                store._uploads.set(file, { draftKey, id });
+                ids.push(id);
+              }
+            }
+          } catch (error: unknown) {
+            if (current(publicKey, draftKey)) {
+              patchState(store, { pending: false, failure: intakeFailureOf(error) });
+            }
+            return false;
+          }
+          return send(publicKey, {
+            request,
+            form,
+            attachmentIds: ids,
+            draftKey,
+            idempotencyKey: attempt.idempotencyKey,
+          });
+        },
+        resend,
+        forget(file: File): void {
+          store._uploads.delete(file);
+        },
+        restart(): void {
+          patchState(store, { sent: null, failure: null });
+        },
+      };
+    }),
   );
 }
 
@@ -352,10 +556,13 @@ function createPublicIntakeStore(): Type<PublicIntakeStoreInstance> {
  *
  * @description
  * The state of the public request form (`/f/:publicKey`), page-scoped on `IntakePage`. Each
- * draft has its own private key, and each body its own idempotency key, so a retry after a lost
- * answer neither uploads a file again nor creates a second task; a request sent starts a new
- * draft. A send whose key or draft is no longer the shown one stops before storing an upload
- * or submitting, and drops its answers.
+ * draft has its own private key, and each body its own idempotency key, so a retry after a
+ * refusal neither uploads a file again nor creates a second task; uploads are kept per file
+ * object, and a removed or replaced file forgets its upload. A submission whose outcome is
+ * unknown (no answer, a timeout, a server failure) is kept with its body and key: every send
+ * replays it unchanged until it is confirmed or refused, so an edit made meanwhile cannot create
+ * a second task. A request sent starts a new draft. A send whose key or draft is no longer the
+ * shown one stops before storing an upload or submitting, and drops its answers.
  *
  * @type {Type<PublicIntakeStoreInstance>}
  */

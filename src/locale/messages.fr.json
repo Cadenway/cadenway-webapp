@@ -1716,6 +1716,8 @@
     "intake.failure.closed": "Ce formulaire n’accepte plus de demandes.",
     "intake.failure.file": "Un fichier n’a pas pu être reçu. Retirez-le ou essayez-en un autre.",
     "intake.failure.unavailable": "La demande n’a pas pu être envoyée. Réessayez.",
+    "intake.unconfirmed.text": "Votre demande « {$title} » a été envoyée, mais sa réception n’a pas pu être confirmée. Renvoyez-la pour vérifier avant d’envoyer autre chose.",
+    "intake.unconfirmed.resend": "La renvoyer",
     "intake.files.remove": "Retirer {$name}",
     "intake.page.loading": "Chargement du formulaire",
     "layouts.app-shell.rail": "Applications",

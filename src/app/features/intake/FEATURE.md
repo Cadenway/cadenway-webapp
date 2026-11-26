@@ -45,12 +45,17 @@ It provides the English texts of its bricks itself. It also publishes `INTAKE_FI
 
 - `PublicIntakeStore`, page-scoped on `IntakePage`: the published form (primary read) and the
   sending of a request. Each draft has a private applicant key (32 random bytes, unpadded
-  base64url); each file gets its own reservation key and is uploaded once per draft (start, signed
+  base64url); each file gets its own reservation key and is uploaded once per draft and per
+  file object (a file removed or replaced by one of the same name forgets its upload) (start, signed
   multipart post without credentials, completion, which is still asked after a transfer with no
   answer); each submission body keeps its `Idempotency-Key`, so a retry of the same body after a
   lost answer replays it, while a changed body gets a new key. The draft key is sent with the
   submission only when it carries attachments. A `409 attachment.upload-not-ready` is retried
-  three times, one second apart, with the same keys. A send stops, without storing an upload or submitting, once the key or the
+  three times, one second apart, with the same keys. A submission without a confirmed outcome (no answer, a timeout,
+  a `5xx`, `409 idempotency.request-in-progress`) is kept with its body and keys: the renderer
+  shows that it could not be confirmed with `Send it again`, and every send replays it unchanged
+  until it is recorded or refused, so an edit made meanwhile cannot create a second task. A send
+  stops, without storing an upload or submitting, once the key or the
   draft it began with is no longer shown. A request sent starts a new draft; a late
   answer for another key is dropped.
 - The renderer validates as the mockup's `fmErrsOf` (`App.dc.html` lines 7733-7746): the title

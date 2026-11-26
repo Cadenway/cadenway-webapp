@@ -267,6 +267,35 @@
         }
       </div>
     }
+    @if (unconfirmedText(); as notice) {
+      <div
+        role="alert"
+        class="flex flex-col gap-2 rounded-lg border border-border px-3 py-2 text-sm"
+        data-testid="intake-unconfirmed"
+      >
+        <p class="flex items-start gap-1.5">
+          <ng-icon
+            name="phosphorWarningCircleBold"
+            class="mt-0.5 shrink-0 text-destructive"
+            aria-hidden="true"
+          />{{ notice }}
+        </p>
+        <div>
+          <button
+            cwButton
+            variant="outline"
+            size="sm"
+            type="button"
+            [loading]="pending()"
+            [disabled]="pending()"
+            (click)="resent.emit()"
+          >
+            <ng-icon name="phosphorArrowCounterClockwiseBold" aria-hidden="true" />
+            <ng-container i18n="@@intake.unconfirmed.resend">Send it again</ng-container>
+          </button>
+        </div>
+      </div>
+    }
     @if (failureText(); as failure) {
       <p
         role="alert"

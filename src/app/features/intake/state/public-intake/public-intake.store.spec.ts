@@ -88,8 +88,8 @@ describe('PublicIntakeStore', () => {
     expect(store.pending()).toBe(false);
   });
 
-  it('retries a failed send with the same keys and without uploading again', async () => {
-    api.submit.mockRejectedValueOnce(new HttpErrorResponse({ status: 503 }));
+  it('retries a refused send with the same keys and without uploading again', async () => {
+    api.submit.mockRejectedValueOnce(new HttpErrorResponse({ status: 429 }));
 
     expect(await store.submit(request)).toBe(false);
     expect(store.failure()).toBe('unavailable');
@@ -103,7 +103,7 @@ describe('PublicIntakeStore', () => {
   });
 
   it('gives a changed body a new idempotency key', async () => {
-    api.submit.mockRejectedValueOnce(new HttpErrorResponse({ status: 503 }));
+    api.submit.mockRejectedValueOnce(new HttpErrorResponse({ status: 429 }));
     await store.submit(request);
     await store.submit({ ...request, title: 'Export the credit notes as CSV' });
 
@@ -157,5 +157,67 @@ describe('PublicIntakeStore', () => {
       draftKey: second[1] as string,
       idempotencyKey: expect.any(String) as string,
     });
+  });
+
+  it('replays a submission whose answer was lost before any edited one, with the same key', async () => {
+    api.submit.mockRejectedValueOnce(new HttpErrorResponse({ status: 0 }));
+
+    expect(await store.submit(request)).toBe(false);
+    expect(store.unconfirmed()).toBe('Export the invoices as CSV');
+    expect(store.failure()).toBeNull();
+
+    const edited: IntakeRequest = { ...request, title: 'Export the credit notes as CSV' };
+    expect(await store.submit(edited)).toBe(true);
+
+    const [first, second]: [unknown[], unknown[]] = api.submit.mock.calls as [unknown[], unknown[]];
+    expect(second[1]).toBe(request);
+    expect(second[4]).toEqual(first[4]);
+    expect(api.upload).toHaveBeenCalledTimes(1);
+    expect(store.sent()).toBe('Export the invoices as CSV');
+    expect(store.unconfirmed()).toBeNull();
+  });
+
+  it('sends the unconfirmed submission again on resend, and lets a new one go once refused', async () => {
+    api.submit
+      .mockRejectedValueOnce(new HttpErrorResponse({ status: 504 }))
+      .mockRejectedValueOnce(
+        new HttpErrorResponse({ status: 422, error: { status: 422, code: 'request.invalid' } }),
+      );
+    await store.submit(request);
+
+    expect(await store.resend()).toBe(false);
+    expect(store.unconfirmed()).toBeNull();
+    expect(store.failure()).toBe('unavailable');
+
+    const edited: IntakeRequest = { ...request, title: 'Export the credit notes as CSV' };
+    expect(await store.submit(edited)).toBe(true);
+    const calls: unknown[][] = api.submit.mock.calls as unknown[][];
+    const key: (call: unknown[] | undefined) => string = (call) =>
+      (call?.[4] as { idempotencyKey: string }).idempotencyKey;
+    expect(key(calls[1])).toBe(key(calls[0]));
+    expect(key(calls[2])).not.toBe(key(calls[0]));
+    expect(calls[2]?.[1]).toBe(edited);
+  });
+
+  it('uploads a replacement file of the same name, size and date, and a forgotten one, again', async () => {
+    api.submit.mockRejectedValueOnce(
+      new HttpErrorResponse({ status: 422, error: { status: 422, code: 'request.invalid' } }),
+    );
+    api.upload.mockResolvedValueOnce('att-1').mockResolvedValueOnce('att-2');
+    await store.submit(request);
+
+    const twin: File = new File(['log'], 'error.log', { lastModified: 1 });
+    store.forget(log);
+    expect(await store.submit({ ...request, files: [twin] })).toBe(true);
+
+    expect(api.upload).toHaveBeenCalledTimes(2);
+    expect(api.upload).toHaveBeenLastCalledWith('key', expect.any(String), twin);
+    expect(api.submit).toHaveBeenLastCalledWith(
+      'key',
+      expect.objectContaining({ files: [twin] }),
+      form,
+      ['att-2'],
+      expect.any(Object),
+    );
   });
 });

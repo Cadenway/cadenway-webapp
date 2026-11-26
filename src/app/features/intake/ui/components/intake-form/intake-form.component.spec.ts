@@ -1,5 +1,7 @@
 import { type ComponentFixture, TestBed } from '@angular/core/testing';
+import { By } from '@angular/platform-browser';
 import { provideCadenwayIcons } from '@cadenway/icons';
+import { CwDropzone } from '@cadenway/ui/components/dropzone';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type {
@@ -176,5 +178,40 @@ describe('IntakeForm', () => {
 
     expect(restarted).toHaveBeenCalledTimes(1);
     expect(fieldOf(host, 'Title')?.value).toBe('');
+  });
+
+  it('says a request could not be confirmed and offers to send it again', async () => {
+    const resent: () => void = vi.fn();
+    fixture.componentInstance.resent.subscribe(resent);
+    fixture.componentRef.setInput('unconfirmed', 'Export the invoices as CSV');
+    await fixture.whenStable();
+
+    expect(host.querySelector('[data-testid="intake-unconfirmed"]')?.textContent).toContain(
+      'Your request “Export the invoices as CSV” was sent, but its receipt could not be confirmed.',
+    );
+    Array.from(host.querySelectorAll('button'))
+      .find((button: HTMLButtonElement) => button.textContent.includes('Send it again'))
+      ?.click();
+    expect(resent).toHaveBeenCalledTimes(1);
+  });
+
+  it('reports a removed file and a file replaced by one of the same name', async () => {
+    const removed: File[] = [];
+    fixture.componentInstance.fileRemoved.subscribe((file: File) => removed.push(file));
+    const dropzone: CwDropzone = fixture.debugElement
+      .query(By.directive(CwDropzone))
+      .injector.get(CwDropzone);
+    const first: File = new File(['log'], 'error.log', { lastModified: 1 });
+    const twin: File = new File(['log'], 'error.log', { lastModified: 1 });
+
+    dropzone.filesAdded.emit([first]);
+    dropzone.filesAdded.emit([twin]);
+    await fixture.whenStable();
+    expect(removed).toEqual([first]);
+    expect(host.querySelectorAll('[data-testid="intake-files"] li')).toHaveLength(1);
+
+    host.querySelector<HTMLButtonElement>('button[aria-label="Remove error.log"]')?.click();
+    await fixture.whenStable();
+    expect(removed).toEqual([first, twin]);
   });
 });
