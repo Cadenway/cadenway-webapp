@@ -125,7 +125,7 @@ describe('loadLocale', () => {
 
     await expect(loadLocale(window)).resolves.toBe('fr');
 
-    expect(fetchCatalog).toHaveBeenCalledWith(new URL('i18n/messages.fr.json', document.baseURI));
+    expect(fetchCatalog).toHaveBeenCalledWith(new URL('messages.fr.json', document.baseURI));
     expect(window.localStorage.getItem('cadenway-locale')).toBe('fr');
     expect($localize.locale).toBe('fr');
     expect(document.documentElement.lang).toBe('fr');

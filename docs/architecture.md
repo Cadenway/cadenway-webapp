@@ -149,7 +149,7 @@ Layouts never import features. Features fill them in three ways:
   placeholder-mismatched French text.
 - `core/locale` chooses the locale before bootstrap: `?lang=fr` or `?lang=en` selects it and is
   remembered on the device, otherwise the remembered choice applies, else English. French fetches
-  `/i18n/messages.fr.json` and its locale data, calls `loadTranslations()`, then sets
+  `/messages.fr.json` and its locale data, calls `loadTranslations()`, then sets
   `$localize.locale` (read by Angular's default `LOCALE_ID`) and `<html lang>`; only then does
   `main.ts` import the application modules, since messages are translated when their module
   evaluates. English loads nothing extra. A failed French load starts in English.

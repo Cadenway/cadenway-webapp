@@ -71,7 +71,7 @@ pnpm build
 ```
 
 `pnpm build` and `pnpm start` produce a single English application at the root, with the French
-catalog copied to `/i18n/messages.fr.json`; open any page with `?lang=fr` to load it at runtime,
+catalog copied to `/messages.fr.json`; open any page with `?lang=fr` to load it at runtime,
 and `?lang=en` to return to English (the choice is remembered on the device). `pnpm i18n:check`
 compares the extracted English catalog with `src/locale/messages.json`, then runs
 `src/locale/messages.spec.ts`, which fails on a missing, empty, orphan or placeholder-mismatched

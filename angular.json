@@ -56,7 +56,7 @@
               {
                 "glob": "messages.fr.json",
                 "input": "src/locale",
-                "output": "i18n"
+                "output": "/"
               }
             ],
             "styles": ["src/styles.css"]

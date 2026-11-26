@@ -45,8 +45,9 @@ export const LOCALE_STORAGE_KEY: string = 'cadenway-locale';
  *
  * @description
  * Address of the French translation catalog, relative to the document base. The build copies
- * `src/locale/messages.fr.json` there.
+ * `src/locale/messages.fr.json` there, at the root like `config.json`: a first segment with a
+ * dot is never an organization slug, so the address cannot hide a workspace.
  *
  * @type {string}
  */
-export const FRENCH_CATALOG_PATH: string = 'i18n/messages.fr.json';
+export const FRENCH_CATALOG_PATH: string = 'messages.fr.json';

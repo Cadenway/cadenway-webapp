@@ -63,7 +63,7 @@ The root transport provides Angular HTTP to the generated `@cadenway/api-client`
   application modules, since `$localize` translates a message when its module evaluates.
   `?lang=fr` or `?lang=en` selects it and is remembered on the device (`cadenway-locale`, inaccessible
   storage ignored); otherwise the remembered choice applies, else English, the source copy, which
-  loads nothing. French fetches `/i18n/messages.fr.json` (copied from `src/locale/messages.fr.json`)
+  loads nothing. French fetches `/messages.fr.json` (copied from `src/locale/messages.fr.json`)
   and its Angular locale data, then calls `loadTranslations()`; a failed load starts in English and
   is logged. `$localize.locale`, read by Angular's default `LOCALE_ID`, and `<html lang>` name the
   active locale. `LocaleService` reads it and switches by reloading the page with `?lang=`; no
