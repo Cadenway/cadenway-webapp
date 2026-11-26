@@ -14,6 +14,9 @@
       [members]="store.members.hasValue() ? store.members.value() : null"
       [showSidebarToggle]="sidebar !== null && !sidebar.expanded()"
       [spaceEditable]="spaceDetails()?.canEdit ?? false"
+      [dialogs]="released.dialogs"
+      [automationsEditable]="automationsEditable()"
+      (dialogRequested)="listDialog.set($event)"
       (sidebarToggled)="sidebar?.toggle()"
       (editRequested)="editList(list)"
       (spaceEditRequested)="editSpace()"
@@ -80,6 +83,7 @@
         [savedViews]="store.savedViews.hasValue() ? store.savedViews.value() : []"
         [activeViewId]="view.savedView()?.id ?? null"
         [modified]="view.modified()"
+        [customFields]="view.customFields()"
         [canEdit]="
           canEdit() &&
           store.savedViews.hasValue() &&
@@ -96,8 +100,10 @@
       />
     }
 
-    @if (!savedView() || view.savedView()?.id === savedView()) {
+    @if (view.tools().length > 0 && (!savedView() || view.savedView()?.id === savedView())) {
       <cw-view-tools
+        [tools]="view.tools()"
+        [hiddenStatuses]="view.presentation().hiddenBoardStatusKeys"
         [config]="view.config()"
         [statuses]="statuses()"
         [labels]="store.labels.hasValue() ? store.labels.value() : []"
@@ -120,6 +126,7 @@
         (sortChanged)="view.setSort($event)"
         (sortDirectionToggled)="view.toggleSortDirection()"
         (groupChanged)="view.setGroupBy($event)"
+        (hiddenStatusesChanged)="view.setPresentation({ hiddenBoardStatusKeys: $event })"
         (subtasksChanged)="view.setSubtasks($event)"
         (searchChanged)="view.setSearch($event)"
         (taskCreated)="createTask()"
@@ -148,6 +155,35 @@
     [pending]="dialogPending()"
     (submitted)="submitDialog($event)"
   />
+
+  @defer (when listDialog() === 'share') {
+    <cw-share-dialog
+      [open]="listDialog() === 'share'"
+      [list]="list"
+      (openChange)="closeDialog('share', $event)"
+    />
+  }
+  @defer (when listDialog() === 'sprint-report') {
+    <cw-sprint-report-dialog
+      [open]="listDialog() === 'sprint-report'"
+      [list]="list"
+      (openChange)="closeDialog('sprint-report', $event)"
+    />
+  }
+  @defer (when listDialog() === 'space-statuses') {
+    <cw-space-statuses-dialog
+      [open]="listDialog() === 'space-statuses'"
+      [space]="spaceDetails() ?? null"
+      (openChange)="closeDialog('space-statuses', $event)"
+    />
+  }
+  @defer (when listDialog() === 'automations') {
+    <cw-automations-dialog
+      [open]="listDialog() === 'automations'"
+      [space]="spaceDetails() ?? null"
+      (openChange)="closeDialog('automations', $event)"
+    />
+  }
 
   <cw-alert-dialog
     variant="destructive"

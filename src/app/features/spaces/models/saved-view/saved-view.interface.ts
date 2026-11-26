@@ -95,6 +95,18 @@ export interface SavedView {
   readonly config: ListViewConfig;
 
   /**
+   * Property unknownPresentation
+   *
+   * @description
+   * Stored presentation values this client does not read (a newer client's statuses, columns or
+   * sort), absent when there are none; written back with the view's next `Save`.
+   *
+   * @type {UnknownPresentation | undefined}
+   * @readonly
+   */
+  readonly unknownPresentation?: UnknownPresentation;
+
+  /**
    * Property version
    *
    * @description
@@ -104,6 +116,117 @@ export interface SavedView {
    * @readonly
    */
   readonly version: number;
+  // #endregion
+}
+
+/**
+ * Interface SavedViewCreationDraft
+ *
+ * @description
+ * What a new saved view stores: its name and icon, the layout and the configuration. A deleted
+ * view is created again from the `SavedView` itself (`ListsApi.restoreSavedView`).
+ */
+export interface SavedViewCreationDraft {
+  // #region Properties
+  /**
+   * Property name
+   *
+   * @description
+   * View name.
+   *
+   * @type {string}
+   * @readonly
+   */
+  readonly name: string;
+
+  /**
+   * Property icon
+   *
+   * @description
+   * Icon key, or null for the layout's icon.
+   *
+   * @type {LookIcon}
+   * @readonly
+   */
+  readonly icon: LookIcon;
+
+  /**
+   * Property layout
+   *
+   * @description
+   * Layout the view opens.
+   *
+   * @type {ViewLayout}
+   * @readonly
+   */
+  readonly layout: ViewLayout;
+
+  /**
+   * Property config
+   *
+   * @description
+   * Configuration to store.
+   *
+   * @type {ListViewConfig}
+   * @readonly
+   */
+  readonly config: ListViewConfig;
+  // #endregion
+}
+
+/**
+ * Interface UnknownPresentation
+ *
+ * @description
+ * The part of a stored presentation `ListViewPresentation` cannot hold: the contract lets future
+ * clients store statuses, sheet columns and sort values this client does not know. They are kept
+ * as read and merged back on writing, so saving a view never erases them.
+ */
+export interface UnknownPresentation {
+  // #region Properties
+  /**
+   * Property hiddenBoardStatusKeys
+   *
+   * @description
+   * Hidden board columns of unknown statuses.
+   *
+   * @type {readonly string[]}
+   * @readonly
+   */
+  readonly hiddenBoardStatusKeys: readonly string[];
+
+  /**
+   * Property hiddenSheetColumns
+   *
+   * @description
+   * Hidden sheet columns of unknown keys.
+   *
+   * @type {readonly string[]}
+   * @readonly
+   */
+  readonly hiddenSheetColumns: readonly string[];
+
+  /**
+   * Property sheetSort
+   *
+   * @description
+   * A sheet sort by an unknown column or in an unknown direction, or null.
+   *
+   * @type {{ readonly column: string; readonly direction: string } | null}
+   * @readonly
+   */
+  readonly sheetSort: { readonly column: string; readonly direction: string } | null;
+
+  /**
+   * Property customFieldSort
+   *
+   * @description
+   * A custom-field sort in an unknown direction, or null.
+   *
+   * @type {{ readonly fieldId: string; readonly direction: string } | null}
+   * @readonly
+   */
+  readonly customFieldSort: { readonly fieldId: string; readonly direction: string } | null;
   // #endregion
 }
 

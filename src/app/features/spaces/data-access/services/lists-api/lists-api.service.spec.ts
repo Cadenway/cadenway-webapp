@@ -6,6 +6,8 @@ import {
   ListsService,
   MembersService,
   TaskQueriesService,
+  type SavedView as SavedViewDto,
+  type SavedViewPatch,
   TasksService,
   type TaskList,
 } from '@cadenway/api-client';
@@ -15,6 +17,7 @@ import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 import { AccessDeniedRouteError } from '@shared/route-errors';
 
 import { DEFAULT_VIEW_CONFIG } from '../../../utils/list-view-query/list-view-query.util';
+import type { SavedView } from '../../../models/saved-view/saved-view.interface';
 import type { ListSprint } from '../../../models/task-list/task-list.interface';
 import { ListsApi } from './lists-api.service';
 
@@ -252,5 +255,103 @@ describe('ListsApi', () => {
     expect(tasks['executeBulkTaskAction']).toHaveBeenCalledWith(expect.anything(), {
       headers: { 'Idempotency-Key': 'key-1' },
     });
+  });
+
+  it('keeps the presentation values it does not read when a view is saved again', async () => {
+    const stored: SavedViewDto = {
+      id: 'sv-sheet',
+      listId: 'l-bugs',
+      name: 'Sheet by due date',
+      icon: null,
+      configuration: {
+        layout: 'table',
+        filters: {},
+        sort: 'manual',
+        groupBy: 'status',
+        presentation: {
+          hiddenBoardStatusKeys: ['backlog', 'archived' as never],
+          hiddenSheetColumns: ['spent', 'future-column'],
+          hiddenCustomFieldIds: ['cf-points'],
+          sheetSort: { column: 'future-column', direction: 'asc' },
+        },
+      },
+      createdAt: '',
+      updatedAt: '',
+      version: 4,
+    };
+    lists['listSavedViews'].mockReturnValue(of({ items: [stored], nextCursor: null }));
+    lists['updateSavedView'].mockReturnValue(of({ ...stored, version: 5 }));
+    const views: readonly SavedView[] = await api.savedViews('l-bugs');
+    const view: SavedView = views[0];
+    expect(view.config.presentation.hiddenSheetColumns).toEqual(['spent']);
+
+    await api.updateSavedView(view, {
+      config: {
+        ...view.config,
+        filters: { ...view.config.filters, priority: ['haute'] },
+      },
+    });
+
+    const patch: SavedViewPatch = lists['updateSavedView'].mock.calls[0]?.[2] as SavedViewPatch;
+    expect(patch.configuration?.filters?.priority).toEqual(['haute']);
+    expect(patch.configuration?.presentation).toEqual({
+      hiddenSheetColumns: ['spent', 'future-column'],
+      hiddenCustomFieldIds: ['cf-points'],
+      sheetSort: { column: 'future-column', direction: 'asc' },
+      customFieldSort: null,
+    });
+    expect(patch.configuration?.presentation).not.toHaveProperty('hiddenBoardStatusKeys');
+    expect(lists['updateSavedView']).toHaveBeenCalledWith('l-bugs', 'sv-sheet', patch, {
+      headers: { 'If-Match': '"4"' },
+    });
+  });
+
+  it('restores a deleted board view with its sheet settings and the values it did not read', async () => {
+    const presentation: NonNullable<SavedViewDto['configuration']['presentation']> = {
+      hiddenBoardStatusKeys: ['waiting', 'archived' as never],
+      hiddenSheetColumns: ['client', 'future-column'],
+      hiddenCustomFieldIds: ['cf-points'],
+      sheetSort: { column: 'future-column', direction: 'asc' },
+    };
+    lists['listSavedViews'].mockReturnValue(
+      of({
+        items: [
+          {
+            id: 'sv-board',
+            listId: 'l-bugs',
+            name: 'Board without waiting',
+            icon: 'flag',
+            configuration: {
+              layout: 'board',
+              filters: { label: ['Bug'] },
+              sort: '-priority',
+              groupBy: null,
+              presentation,
+            },
+            createdAt: '',
+            updatedAt: '',
+            version: 3,
+          },
+        ],
+        nextCursor: null,
+      }),
+    );
+    const views: readonly SavedView[] = await api.savedViews('l-bugs');
+
+    const restored: SavedView = await api.restoreSavedView(views[0]);
+
+    expect(lists['createSavedView']).toHaveBeenCalledExactlyOnceWith('l-bugs', {
+      name: 'Board without waiting',
+      icon: 'flag',
+      configuration: {
+        layout: 'board',
+        filters: { status: [], priority: [], assignee: [], label: ['Bug'] },
+        sort: '-priority',
+        groupBy: null,
+        presentation,
+      },
+    });
+    expect(restored.id).toBe('sv-1');
+    expect(restored.config.presentation.hiddenSheetColumns).toEqual(['client']);
   });
 });

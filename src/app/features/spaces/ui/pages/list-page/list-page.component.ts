@@ -14,7 +14,8 @@ import {
   untracked,
   type WritableSignal,
 } from '@angular/core';
-import { ActivatedRoute, Router, RouterOutlet } from '@angular/router';
+import { toSignal } from '@angular/core/rxjs-interop';
+import { ActivatedRoute, type Event, NavigationEnd, Router, RouterOutlet } from '@angular/router';
 import {
   CwAlertDialog,
   CwAlertDialogAction,
@@ -27,6 +28,7 @@ import { CwButton } from '@cadenway/ui/components/button';
 import { CwSkeleton } from '@cadenway/ui/components/skeleton';
 import { CwToastService } from '@cadenway/ui/components/toast';
 import { NgIcon } from '@ng-icons/core';
+import { filter, map } from 'rxjs';
 
 import { TaskCreate } from '@features/task';
 import {
@@ -35,8 +37,15 @@ import {
 } from '@features/workspace/ports/workspace-context';
 import { SHELL_SIDEBAR, type ShellSidebar } from '@shared/layout-slot';
 
+import { RELEASED_VIEWS } from '../../../constants/released-views/released-views.token';
 import { layoutLabels, statusLabels } from '../../../constants/view-labels/view-labels.constants';
+import {
+  LAYOUT_SEGMENTS,
+  VIEW_LAYOUTS,
+} from '../../../constants/view-layouts/view-layouts.constants';
 import type { ListExport } from '../../../data-access/services/lists-api/lists-api.service';
+import type { ListDialog } from '../../../models/list-dialog/list-dialog.type';
+import type { ReleasedViews } from '../../../models/released-views/released-views.interface';
 import type { StatusKey } from '../../../models/list-view-config/list-view-config.interface';
 import type {
   SavedView,
@@ -58,17 +67,11 @@ import { injectOrganizationSlug } from '../../../utils/workspace-route/workspace
 import { ListHeader } from '../../components/list-header/list-header.component';
 import { ViewTabs } from '../../components/view-tabs/view-tabs.component';
 import { ViewTools } from '../../components/view-tools/view-tools.component';
+import { AutomationsDialog } from '../../dialogs/automations-dialog/automations-dialog.component';
 import { SaveViewDialog } from '../../dialogs/save-view-dialog/save-view-dialog.component';
-
-/**
- * Constant BUILT_LAYOUTS
- *
- * @description
- * View layouts that have a route in step 4a; the other eight come in step 4b.
- *
- * @type {readonly ViewLayout[]}
- */
-const BUILT_LAYOUTS: readonly ViewLayout[] = ['list'];
+import { ShareDialog } from '../../dialogs/share-dialog/share-dialog.component';
+import { SpaceStatusesDialog } from '../../dialogs/space-statuses-dialog/space-statuses-dialog.component';
+import { SprintReportDialog } from '../../dialogs/sprint-report-dialog/sprint-report-dialog.component';
 
 /**
  * Function csvRecordCount
@@ -104,13 +107,20 @@ function csvRecordCount(content: string): number {
  * tabs with the saved views, the view tools and active filters, then the routed view. The list is
  * the primary read: reading its value in the template lets its typed failure reach the route's
  * error boundary. The page claims the shell's sidebar toggle for its breadcrumb row, follows
- * `?savedView=` (applying the view once the saved views are read, leaving it when the parameter
- * goes) and starts the view configuration over for another list. Writes confirm with the mockup's
- * toasts and failures show an error toast; deleting the list asks for its typed name.
+ * `?savedView=` (applying the view once the saved views are read, on its layout's segment when
+ * that layout is released, replacing the address; leaving it when the parameter goes) and starts
+ * the view configuration over for another list. The tabs offer the released
+ * layouts (`RELEASED_VIEWS`) and open their `LAYOUT_SEGMENTS` segment, a saved view of another
+ * layout opens on `list`; the routed layout is published to `ListViewStore.showLayout`, whose
+ * `tools` decide the view tools shown (none for `Form` and `Activity`). The page hosts the
+ * header's dialogs (`Share`, `Sprint report`, `Space statuses`, `Automations`), each loaded
+ * when first opened. Writes confirm with the mockup's toasts and failures show an error toast;
+ * deleting the list asks for its typed name.
  */
 @Component({
   selector: 'cw-list-page',
   imports: [
+    AutomationsDialog,
     CwAlertDialog,
     CwAlertDialogAction,
     CwAlertDialogCancel,
@@ -123,6 +133,9 @@ function csvRecordCount(content: string): number {
     NgIcon,
     RouterOutlet,
     SaveViewDialog,
+    ShareDialog,
+    SpaceStatusesDialog,
+    SprintReportDialog,
     ViewTabs,
     ViewTools,
   ],
@@ -298,15 +311,72 @@ export class ListPage {
   protected readonly slug: Signal<string> = injectOrganizationSlug();
 
   /**
+   * Property released
+   *
+   * @description
+   * The released layouts and header dialogs.
+   *
+   * @type {ReleasedViews}
+   * @readonly
+   */
+  protected readonly released: ReleasedViews = inject(RELEASED_VIEWS);
+
+  /**
    * Property layouts
    *
    * @description
-   * The standard views with a route.
+   * The standard views with a tab: the released layouts in the mockup's order, `list` always.
    *
    * @type {readonly ViewLayout[]}
    * @readonly
    */
-  protected readonly layouts: readonly ViewLayout[] = BUILT_LAYOUTS;
+  protected readonly layouts: readonly ViewLayout[] = VIEW_LAYOUTS.filter(
+    (layout: ViewLayout): boolean => layout === 'list' || this.released.layouts.includes(layout),
+  );
+
+  /**
+   * Property routedLayout
+   *
+   * @description
+   * Layout of the child route shown, followed on each completed navigation.
+   *
+   * @type {Signal<ViewLayout>}
+   * @readonly
+   */
+  private readonly routedLayout: Signal<ViewLayout> = toSignal(
+    this.router.events.pipe(
+      filter((event: Event): event is NavigationEnd => event instanceof NavigationEnd),
+      map((): ViewLayout => this.childLayout()),
+    ),
+    { initialValue: this.childLayout() },
+  );
+
+  /**
+   * Property listDialog
+   *
+   * @description
+   * The header dialog shown, or null.
+   *
+   * @type {WritableSignal<ListDialog | null>}
+   * @readonly
+   */
+  protected readonly listDialog: WritableSignal<ListDialog | null> = signal<ListDialog | null>(
+    null,
+  );
+
+  /**
+   * Property automationsEditable
+   *
+   * @description
+   * Whether `Automations` is enabled: released, and the caller is an admin or owner of the
+   * organization, whose rules they are.
+   *
+   * @type {Signal<boolean>}
+   * @readonly
+   */
+  protected readonly automationsEditable: Signal<boolean> = computed(
+    (): boolean => this.released.dialogs.includes('automations') && this.workspace.can('admin'),
+  );
 
   /**
    * Property spaceDetails
@@ -490,8 +560,8 @@ export class ListPage {
   protected readonly dialogSummary: Signal<string> = computed((): string => {
     const renamed: SavedView | null = this.dialogView();
     const text: string = renamed
-      ? viewSummary(renamed.layout, renamed.config, this.locale)
-      : viewSummary(this.view.layout(), this.view.config(), this.locale);
+      ? viewSummary(renamed.layout, renamed.config, this.locale, this.view.customFields())
+      : viewSummary(this.view.layout(), this.view.config(), this.locale, this.view.customFields());
     return `${text.charAt(0).toLocaleUpperCase(this.locale)}${text.slice(1)}.`;
   });
 
@@ -542,6 +612,7 @@ export class ListPage {
     this.sidebar?.claimToggle(inject(DestroyRef));
     this.store.followListEdits(this.navigation.listEdited);
     this.store.followSpaceEdits(this.navigation.spaceEdited);
+    this.view.showLayout(this.routedLayout);
 
     let previousList: string | null = null;
     effect((): void => {
@@ -586,7 +657,17 @@ export class ListPage {
           }
         } else {
           missingView = null;
-          if (applied?.id !== found.id) this.view.applySaved(found);
+          if (applied?.id === found.id) return;
+          this.view.applySaved(found);
+          const segment: string = this.segmentOf(found.layout);
+          if (segment !== LAYOUT_SEGMENTS[this.childLayout()]) {
+            void this.router.navigate([segment], {
+              relativeTo: this.route,
+              queryParamsHandling: 'preserve',
+              preserveFragment: true,
+              replaceUrl: true,
+            });
+          }
         }
       });
     });
@@ -641,7 +722,7 @@ export class ListPage {
    * @param {ViewLayout} layout - Layout.
    */
   protected pickLayout(layout: ViewLayout): void {
-    void this.router.navigate([BUILT_LAYOUTS.includes(layout) ? layout : 'list'], {
+    void this.router.navigate([this.segmentOf(layout)], {
       relativeTo: this.route,
       queryParams: { savedView: null },
       queryParamsHandling: 'merge',
@@ -652,16 +733,58 @@ export class ListPage {
    * Method pickSaved
    *
    * @description
-   * Opens a saved view through its address.
+   * Opens a saved view through its address, on its layout's segment, or on `list` while that
+   * layout is not released.
    *
    * @param {SavedView} saved - The view.
    */
   protected pickSaved(saved: SavedView): void {
-    void this.router.navigate([BUILT_LAYOUTS.includes(saved.layout) ? saved.layout : 'list'], {
+    void this.router.navigate([this.segmentOf(saved.layout)], {
       relativeTo: this.route,
       queryParams: { savedView: saved.id },
       queryParamsHandling: 'merge',
     });
+  }
+
+  /**
+   * Method segmentOf
+   *
+   * @description
+   * Route segment of a layout (`LAYOUT_SEGMENTS`), `list` while the layout is not released.
+   *
+   * @param {ViewLayout} layout - Layout.
+   * @returns {string} The segment below `l/:listId`.
+   */
+  private segmentOf(layout: ViewLayout): string {
+    return LAYOUT_SEGMENTS[this.released.layouts.includes(layout) ? layout : 'list'];
+  }
+
+  /**
+   * Method childLayout
+   *
+   * @description
+   * Layout of the child route shown, read from its path; `list` when none matches.
+   *
+   * @returns {ViewLayout} The layout.
+   */
+  private childLayout(): ViewLayout {
+    const path: string | undefined = this.route.firstChild?.routeConfig?.path;
+    return (
+      VIEW_LAYOUTS.find((layout: ViewLayout): boolean => LAYOUT_SEGMENTS[layout] === path) ?? 'list'
+    );
+  }
+
+  /**
+   * Method closeDialog
+   *
+   * @description
+   * Forgets a header dialog once it closes itself.
+   *
+   * @param {ListDialog} dialog - The dialog.
+   * @param {boolean} open - Its new open state.
+   */
+  protected closeDialog(dialog: ListDialog, open: boolean): void {
+    if (!open && this.listDialog() === dialog) this.listDialog.set(null);
   }
 
   /**
@@ -751,7 +874,10 @@ export class ListPage {
    * Downloads the tasks the view shows as a CSV file.
    */
   protected async exportCsv(): Promise<void> {
-    const file: ListExport | null = await this.store.exportCsv(this.view.taskQuery());
+    const file: ListExport | null = await this.store.exportCsv(
+      this.view.taskQuery(),
+      this.view.sheetExportSort(),
+    );
     if (!file || !saveTextFile(this.document, file.fileName, file.content)) {
       this.toasts.error($localize`:@@spaces.list.export-failed:Export not possible here`);
       return;
@@ -960,7 +1086,12 @@ export class ListPage {
       return;
     }
     const layout: ViewLayout = this.view.layout();
-    const summary: string = viewSummary(layout, this.view.config(), this.locale);
+    const summary: string = viewSummary(
+      layout,
+      this.view.config(),
+      this.locale,
+      this.view.customFields(),
+    );
     const created: SavedView | null = await this.store.createView(
       draft,
       layout,
@@ -1036,7 +1167,7 @@ export class ListPage {
       ? this.store.savedViews.value().findIndex((item: SavedView): boolean => item.id === saved.id)
       : -1;
     if (applied) {
-      await this.router.navigate(['list'], {
+      await this.router.navigate([this.segmentOf(saved.layout)], {
         relativeTo: this.route,
         queryParams: { savedView: null },
         queryParamsHandling: 'merge',

@@ -25,9 +25,13 @@ import type { ListMember, ListMembers } from '../../../models/list-member/list-m
 import type {
   ListTaskQuery,
   ListViewConfig,
+  SheetExportSort,
 } from '../../../models/list-view-config/list-view-config.interface';
 import type { LookIcon } from '../../../models/look/look.type';
-import type { SavedView, ViewLayout } from '../../../models/saved-view/saved-view.interface';
+import type {
+  SavedView,
+  SavedViewCreationDraft,
+} from '../../../models/saved-view/saved-view.interface';
 import type {
   ListDraft,
   ListSummary,
@@ -39,7 +43,9 @@ import {
   toBulkTaskAction,
   toExportParams,
   toSavedView,
+  toRestoredSavedViewConfiguration,
   toSavedViewConfiguration,
+  toSavedViewConfigurationPatch,
 } from '../../adapters/saved-view/saved-view.adapter';
 import { toListSummary, toTaskList } from '../../adapters/space/space.adapter';
 
@@ -426,15 +432,23 @@ export class ListsApi {
    * Method exportCsv
    *
    * @description
-   * Downloads the tasks the view shows as CSV, with the gateway's file name.
+   * Downloads the tasks the view shows as CSV, with the gateway's file name, in the sheet's
+   * own order when it has one.
    *
    * @param {TaskList} list - The list.
    * @param {ListTaskQuery} query - The view's task query.
+   * @param {SheetExportSort | null} sheetSort - The sheet's sort, or null.
    * @returns {Promise<ListExport>} The file.
    */
-  public async exportCsv(list: TaskList, query: ListTaskQuery): Promise<ListExport> {
+  public async exportCsv(
+    list: TaskList,
+    query: ListTaskQuery,
+    sheetSort: SheetExportSort | null = null,
+  ): Promise<ListExport> {
     const response: HttpResponse<string> = await firstValueFrom(
-      this.lists.exportListTasks(list.id, toExportParams(query), { observe: 'response' }),
+      this.lists.exportListTasks(list.id, toExportParams(query, sheetSort), {
+        observe: 'response',
+      }),
     );
     return {
       fileName:
@@ -511,16 +525,13 @@ export class ListsApi {
    * Method createSavedView
    *
    * @description
-   * Saves the current view under a name and an icon.
+   * Saves the current view under a name and an icon, with its layout's presentation.
    *
    * @param {string} listId - The list.
-   * @param {{ name: string; icon: LookIcon; layout: ViewLayout; config: ListViewConfig }} view - What to save.
+   * @param {SavedViewCreationDraft} view - What to save.
    * @returns {Promise<SavedView>} The saved view.
    */
-  public async createSavedView(
-    listId: string,
-    view: { name: string; icon: LookIcon; layout: ViewLayout; config: ListViewConfig },
-  ): Promise<SavedView> {
+  public async createSavedView(listId: string, view: SavedViewCreationDraft): Promise<SavedView> {
     return toSavedView(
       await firstValueFrom(
         this.lists.createSavedView(listId, {
@@ -533,10 +544,33 @@ export class ListsApi {
   }
 
   /**
+   * Method restoreSavedView
+   *
+   * @description
+   * Creates a deleted view again (a new id) with its name, icon and everything it stored: its
+   * whole presentation, every layout's members and the values this client did not read.
+   *
+   * @param {SavedView} view - The deleted view.
+   * @returns {Promise<SavedView>} The view created again.
+   */
+  public async restoreSavedView(view: SavedView): Promise<SavedView> {
+    return toSavedView(
+      await firstValueFrom(
+        this.lists.createSavedView(view.listId, {
+          name: view.name,
+          icon: view.icon,
+          configuration: toRestoredSavedViewConfiguration(view),
+        }),
+      ),
+    );
+  }
+
+  /**
    * Method updateSavedView
    *
    * @description
-   * Renames a saved view or replaces its settings, from the version shown.
+   * Renames a saved view or replaces its settings, from the version shown, writing back the
+   * presentation values this client did not read.
    *
    * @param {SavedView} view - The view as shown.
    * @param {{ name?: string; icon?: LookIcon; config?: ListViewConfig }} change - What changes.
@@ -550,7 +584,13 @@ export class ListsApi {
       ...(change.name !== undefined ? { name: change.name } : {}),
       ...(change.icon !== undefined ? { icon: change.icon } : {}),
       ...(change.config
-        ? { configuration: toSavedViewConfiguration(view.layout, change.config) }
+        ? {
+            configuration: toSavedViewConfigurationPatch(
+              view.layout,
+              change.config,
+              view.unknownPresentation,
+            ),
+          }
         : {}),
     };
     return toSavedView(

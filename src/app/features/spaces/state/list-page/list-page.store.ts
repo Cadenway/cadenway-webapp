@@ -38,6 +38,7 @@ import type { ListMember, ListMembers } from '../../models/list-member/list-memb
 import type {
   ListTaskQuery,
   ListViewConfig,
+  SheetExportSort,
 } from '../../models/list-view-config/list-view-config.interface';
 import type {
   SavedView,
@@ -232,12 +233,13 @@ export interface ListPageStoreInstance {
    * Method exportCsv
    *
    * @description
-   * Exports the tasks the view shows.
+   * Exports the tasks the view shows, in the sheet's own order when given.
    *
    * @param {ListTaskQuery} query - The view's task query.
+   * @param {SheetExportSort | null} sheetSort - The sheet's sort (`ListViewStore.sheetExportSort`).
    * @returns {Promise<ListExport | null>} The file, or null when refused.
    */
-  exportCsv(query: ListTaskQuery): Promise<ListExport | null>;
+  exportCsv(query: ListTaskQuery, sheetSort?: SheetExportSort | null): Promise<ListExport | null>;
 
   /**
    * Method archive
@@ -551,9 +553,14 @@ function createListPageStore(): Type<ListPageStoreInstance> {
           const list: TaskList | undefined = currentList();
           return list ? attempt(() => store._api.duplicate(list)) : Promise.resolve(null);
         },
-        exportCsv(query: ListTaskQuery): Promise<ListExport | null> {
+        exportCsv(
+          query: ListTaskQuery,
+          sheetSort: SheetExportSort | null = null,
+        ): Promise<ListExport | null> {
           const list: TaskList | undefined = currentList();
-          return list ? attempt(() => store._api.exportCsv(list, query)) : Promise.resolve(null);
+          return list
+            ? attempt(() => store._api.exportCsv(list, query, sheetSort))
+            : Promise.resolve(null);
         },
         async archive(): Promise<boolean> {
           const list: TaskList | undefined = currentList();
@@ -625,14 +632,7 @@ function createListPageStore(): Type<ListPageStoreInstance> {
           }
         },
         async restoreView(view: SavedView, index: number): Promise<SavedView | null> {
-          const created: SavedView | null = await attempt(() =>
-            store._api.createSavedView(view.listId, {
-              name: view.name,
-              icon: view.icon,
-              layout: view.layout,
-              config: view.config,
-            }),
-          );
+          const created: SavedView | null = await attempt(() => store._api.restoreSavedView(view));
           if (created && store.listId() === view.listId && store.savedViews.hasValue()) {
             const list: readonly SavedView[] = views();
             const at: number = Math.min(Math.max(index, 0), list.length);

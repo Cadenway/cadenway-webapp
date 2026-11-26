@@ -100,6 +100,7 @@ describe('ListPageStore', () => {
       archive: vi.fn(),
       remove: vi.fn(),
       createSavedView: vi.fn(),
+      restoreSavedView: vi.fn(),
       updateSavedView: vi.fn(),
       duplicateSavedView: vi.fn(),
       deleteSavedView: vi.fn(),
@@ -288,17 +289,13 @@ describe('ListPageStore', () => {
   it('creates a deleted view again at its former place', async () => {
     await loaded();
     const again: SavedView = { ...criticalBugs, id: 'sv-again' };
-    api['createSavedView'].mockResolvedValueOnce(again);
+    api['restoreSavedView'].mockResolvedValueOnce(again);
     await store.deleteView(criticalBugs);
 
     expect(await store.restoreView(criticalBugs, 0)).toEqual(again);
     expect(store.savedViews.value()).toEqual([again]);
-    expect(api['createSavedView']).toHaveBeenCalledWith('l-sprint14', {
-      name: criticalBugs.name,
-      icon: criticalBugs.icon,
-      layout: criticalBugs.layout,
-      config: criticalBugs.config,
-    });
+    expect(api['restoreSavedView']).toHaveBeenCalledExactlyOnceWith(criticalBugs);
+    expect(api['createSavedView']).not.toHaveBeenCalled();
   });
 
   it('removes a saved view at once and puts it back when the deletion is refused', async () => {
@@ -612,6 +609,18 @@ describe('ListPageStore', () => {
     expect((await store.exportCsv({ level: 'roots', sort: 'manual' }))?.fileName).toBe(
       'sprint-14.csv',
     );
-    expect(api['exportCsv']).toHaveBeenCalledWith(sprint14, { level: 'roots', sort: 'manual' });
+    expect(api['exportCsv']).toHaveBeenCalledWith(
+      sprint14,
+      { level: 'roots', sort: 'manual' },
+      null,
+    );
+
+    api['exportCsv'].mockResolvedValueOnce({ fileName: 'sprint-14.csv', content: 'a\nb' });
+    await store.exportCsv({ level: 'roots', sort: 'manual' }, { column: 'due', direction: 'desc' });
+    expect(api['exportCsv']).toHaveBeenLastCalledWith(
+      sprint14,
+      { level: 'roots', sort: 'manual' },
+      { column: 'due', direction: 'desc' },
+    );
   });
 });

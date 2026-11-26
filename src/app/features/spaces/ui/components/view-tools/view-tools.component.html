@@ -4,116 +4,142 @@
   i18n-ariaLabel="@@spaces.tools.label"
   data-testid="view-tools"
 >
-  <button
-    cwButton
-    cwToolbarItem
-    type="button"
-    size="sm"
-    variant="outline"
-    [class.border-primary/50]="milestonesOnly()"
-    [class.bg-primary/10]="milestonesOnly()"
-    [class.text-primary]="milestonesOnly()"
-    [attr.aria-pressed]="milestonesOnly()"
-    title="Show milestones only"
-    i18n-title="@@spaces.tools.milestones-title"
-    data-testid="view-milestones"
-    (click)="milestonesToggled.emit()"
-  >
-    <span
-      class="size-2.5 shrink-0 rotate-45 rounded-[2px] border-[1.5px] border-current"
-      aria-hidden="true"
-    ></span>
-    <ng-container i18n="@@spaces.tools.milestones">Milestones</ng-container>
-    @if (milestoneCount() !== null) {
-      <span
-        class="rounded-full bg-secondary px-1.5 text-xs leading-5 text-muted-foreground tabular-nums"
-        >{{ milestoneCount() }}</span
-      >
-    }
-  </button>
-  <button
-    cwButton
-    cwToolbarItem
-    pinned
-    type="button"
-    variant="outline"
-    size="sm"
-    [cwPopoverTrigger]="filterPopover"
-    data-testid="view-filter"
-  >
-    <ng-icon name="phosphorFunnelSimpleBold" aria-hidden="true" />
-    <ng-container i18n="@@spaces.tools.filter">Filter</ng-container>
-    @if (filterCount() > 0) {
-      <span
-        class="inline-flex h-4 min-w-4 items-center justify-center rounded-sm bg-secondary px-1 text-[11px] font-semibold whitespace-nowrap tabular-nums"
-        >{{ filterCount() }}</span
-      >
-    }
-  </button>
-  <button
-    cwButton
-    cwToolbarItem
-    type="button"
-    variant="outline"
-    size="sm"
-    [cwMenuTriggerFor]="sortMenu"
-    data-testid="view-sort"
-  >
-    <ng-icon
-      [name]="
-        config().sort.direction === 'asc'
-          ? 'phosphorSortAscendingBold'
-          : 'phosphorSortDescendingBold'
-      "
-      aria-hidden="true"
-    />
-    {{ sortLabel() }}
-  </button>
-  <button
-    cwButton
-    cwToolbarItem
-    type="button"
-    variant="outline"
-    size="sm"
-    [cwMenuTriggerFor]="groupMenu"
-    data-testid="view-group"
-  >
-    <ng-icon name="phosphorStackBold" aria-hidden="true" />
-    {{ groupLabel() }}
-  </button>
-  <cw-toolbar-spacer />
-  <div class="relative flex w-full items-center sm:w-56">
-    <ng-icon
-      name="phosphorMagnifyingGlassBold"
-      class="pointer-events-none absolute left-2.5 size-3.5 text-muted-foreground"
-      aria-hidden="true"
-    />
-    <input
-      cwInput
+  @if (has('milestones')) {
+    <button
+      cwButton
+      cwToolbarItem
+      type="button"
       size="sm"
-      type="search"
-      class="w-full pl-8"
-      aria-label="Search the list"
-      i18n-aria-label="@@spaces.tools.search-label"
-      placeholder="Search"
-      i18n-placeholder="@@spaces.tools.search"
-      data-testid="view-search"
-      [value]="search()"
-      (input)="onSearch($event)"
-    />
-  </div>
-  <button
-    cwButton
-    cwToolbarItem
-    pinned
-    type="button"
-    size="sm"
-    data-testid="view-create-task"
-    (click)="taskCreated.emit()"
-  >
-    <ng-icon name="phosphorPlusBold" aria-hidden="true" />
-    <ng-container i18n="@@spaces.tools.create-task">Create a task</ng-container>
-  </button>
+      variant="outline"
+      [class.border-primary/50]="milestonesOnly()"
+      [class.bg-primary/10]="milestonesOnly()"
+      [class.text-primary]="milestonesOnly()"
+      [attr.aria-pressed]="milestonesOnly()"
+      title="Show milestones only"
+      i18n-title="@@spaces.tools.milestones-title"
+      data-testid="view-milestones"
+      (click)="milestonesToggled.emit()"
+    >
+      <span
+        class="size-2.5 shrink-0 rotate-45 rounded-[2px] border-[1.5px] border-current"
+        aria-hidden="true"
+      ></span>
+      <ng-container i18n="@@spaces.tools.milestones">Milestones</ng-container>
+      @if (milestoneCount() !== null) {
+        <span
+          class="rounded-full bg-secondary px-1.5 text-xs leading-5 text-muted-foreground tabular-nums"
+          >{{ milestoneCount() }}</span
+        >
+      }
+    </button>
+  }
+  @if (has('filter')) {
+    <button
+      cwButton
+      cwToolbarItem
+      pinned
+      type="button"
+      variant="outline"
+      size="sm"
+      [cwPopoverTrigger]="filterPopover"
+      data-testid="view-filter"
+    >
+      <ng-icon name="phosphorFunnelSimpleBold" aria-hidden="true" />
+      <ng-container i18n="@@spaces.tools.filter">Filter</ng-container>
+      @if (filterCount() > 0) {
+        <span
+          class="inline-flex h-4 min-w-4 items-center justify-center rounded-sm bg-secondary px-1 text-[11px] font-semibold whitespace-nowrap tabular-nums"
+          >{{ filterCount() }}</span
+        >
+      }
+    </button>
+  }
+  @if (has('sort')) {
+    <button
+      cwButton
+      cwToolbarItem
+      type="button"
+      variant="outline"
+      size="sm"
+      [cwMenuTriggerFor]="sortMenu"
+      data-testid="view-sort"
+    >
+      <ng-icon
+        [name]="
+          config().sort.direction === 'asc'
+            ? 'phosphorSortAscendingBold'
+            : 'phosphorSortDescendingBold'
+        "
+        aria-hidden="true"
+      />
+      {{ sortLabel() }}
+    </button>
+  }
+  @if (has('group')) {
+    <button
+      cwButton
+      cwToolbarItem
+      type="button"
+      variant="outline"
+      size="sm"
+      [cwMenuTriggerFor]="groupMenu"
+      data-testid="view-group"
+    >
+      <ng-icon name="phosphorStackBold" aria-hidden="true" />
+      {{ groupLabel() }}
+    </button>
+  }
+  @if (has('columns')) {
+    <button
+      cwButton
+      cwToolbarItem
+      type="button"
+      variant="outline"
+      size="sm"
+      [cwMenuTriggerFor]="columnsMenu"
+      data-testid="view-columns"
+    >
+      <ng-icon name="phosphorColumnsBold" aria-hidden="true" />
+      <ng-container i18n="@@spaces.columns.button">Columns</ng-container>
+    </button>
+  }
+  <cw-toolbar-spacer />
+  @if (has('search')) {
+    <div class="relative flex w-full items-center sm:w-56">
+      <ng-icon
+        name="phosphorMagnifyingGlassBold"
+        class="pointer-events-none absolute left-2.5 size-3.5 text-muted-foreground"
+        aria-hidden="true"
+      />
+      <input
+        cwInput
+        size="sm"
+        type="search"
+        class="w-full pl-8"
+        aria-label="Search the list"
+        i18n-aria-label="@@spaces.tools.search-label"
+        placeholder="Search"
+        i18n-placeholder="@@spaces.tools.search"
+        data-testid="view-search"
+        [value]="search()"
+        (input)="onSearch($event)"
+      />
+    </div>
+  }
+  @if (has('create')) {
+    <button
+      cwButton
+      cwToolbarItem
+      pinned
+      type="button"
+      size="sm"
+      data-testid="view-create-task"
+      (click)="taskCreated.emit()"
+    >
+      <ng-icon name="phosphorPlusBold" aria-hidden="true" />
+      <ng-container i18n="@@spaces.tools.create-task">Create a task</ng-container>
+    </button>
+  }
 </cw-toolbar>
 
 <div
@@ -123,65 +149,67 @@
   class="flex flex-wrap items-center gap-2"
   data-testid="view-chips"
 >
-  @for (chip of chips(); track chip.field) {
-    <div
-      class="inline-flex h-7 items-stretch overflow-hidden rounded-md border border-input bg-background text-xs"
-      data-testid="view-chip"
-    >
-      <span class="flex items-center gap-1.5 px-2 text-muted-foreground">
-        <ng-icon [name]="chip.icon" class="size-3.5" aria-hidden="true" />{{ chip.name }}
-      </span>
-      <span class="flex items-center border-l border-input px-2 text-muted-foreground">{{
-        chip.operator
-      }}</span>
-      <span
-        class="flex max-w-48 items-center gap-1.5 truncate border-l border-input px-2 font-medium"
-        >{{ chip.values }}</span
+  @if (has('filter')) {
+    @for (chip of chips(); track chip.field) {
+      <div
+        class="inline-flex h-7 items-stretch overflow-hidden rounded-md border border-input bg-background text-xs"
+        data-testid="view-chip"
       >
-      <button
-        type="button"
-        class="flex items-center border-l border-input px-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:z-10 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none focus-visible:ring-inset"
-        [attr.aria-label]="removeLabel(chip)"
-        (click)="filterCleared.emit(chip.field)"
-      >
-        <ng-icon name="phosphorXBold" class="size-3.5" aria-hidden="true" />
-      </button>
-    </div>
-  }
-  <button
-    cwButton
-    type="button"
-    variant="ghost"
-    size="sm"
-    class="h-7 px-2 text-muted-foreground"
-    (click)="filterOpen.set(true)"
-  >
-    <ng-icon name="phosphorPlusBold" aria-hidden="true" />
-    <ng-container i18n="@@spaces.chips.add">Filter</ng-container>
-  </button>
-  @if (chips().length === 0) {
-    @if (taskTotal() !== null) {
-      <span class="text-xs whitespace-nowrap text-muted-foreground tabular-nums"
-        ><ng-container i18n="@@spaces.chips.no-filter">No filter</ng-container> ·
-        <ng-container i18n="@@spaces.chips.task-count">{taskTotal(), plural,
-          =1 {1 task}
-          other {{{ taskTotal() }} tasks}
-        }</ng-container></span
-      >
+        <span class="flex items-center gap-1.5 px-2 text-muted-foreground">
+          <ng-icon [name]="chip.icon" class="size-3.5" aria-hidden="true" />{{ chip.name }}
+        </span>
+        <span class="flex items-center border-l border-input px-2 text-muted-foreground">{{
+          chip.operator
+        }}</span>
+        <span
+          class="flex max-w-48 items-center gap-1.5 truncate border-l border-input px-2 font-medium"
+          >{{ chip.values }}</span
+        >
+        <button
+          type="button"
+          class="flex items-center border-l border-input px-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:z-10 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none focus-visible:ring-inset"
+          [attr.aria-label]="removeLabel(chip)"
+          (click)="filterCleared.emit(chip.field)"
+        >
+          <ng-icon name="phosphorXBold" class="size-3.5" aria-hidden="true" />
+        </button>
+      </div>
     }
-  } @else {
     <button
       cwButton
       type="button"
       variant="ghost"
       size="sm"
-      class="h-7 px-2.5"
-      data-testid="view-clear-filters"
-      (click)="filtersCleared.emit()"
-      i18n="@@spaces.chips.clear"
+      class="h-7 px-2 text-muted-foreground"
+      (click)="filterOpen.set(true)"
     >
-      Clear all
+      <ng-icon name="phosphorPlusBold" aria-hidden="true" />
+      <ng-container i18n="@@spaces.chips.add">Filter</ng-container>
     </button>
+    @if (chips().length === 0) {
+      @if (taskTotal() !== null) {
+        <span class="text-xs whitespace-nowrap text-muted-foreground tabular-nums"
+          ><ng-container i18n="@@spaces.chips.no-filter">No filter</ng-container> ·
+          <ng-container i18n="@@spaces.chips.task-count">{taskTotal(), plural,
+            =1 {1 task}
+            other {{{ taskTotal() }} tasks}
+          }</ng-container></span
+        >
+      }
+    } @else {
+      <button
+        cwButton
+        type="button"
+        variant="ghost"
+        size="sm"
+        class="h-7 px-2.5"
+        data-testid="view-clear-filters"
+        (click)="filtersCleared.emit()"
+        i18n="@@spaces.chips.clear"
+      >
+        Clear all
+      </button>
+    }
   }
   @if (savedView(); as view) {
     @if (modified()) {
@@ -224,7 +252,7 @@
       </div>
     }
   }
-  @if (hasSubtasks()) {
+  @if (has('subtasks') && hasSubtasks()) {
     <button
       cwButton
       type="button"
@@ -239,7 +267,7 @@
       ><span class="text-muted-foreground">: {{ subtaskShort() }}</span>
     </button>
   }
-  @if (canSave()) {
+  @if (has('save') && canSave()) {
     <button
       cwButton
       type="button"
@@ -348,6 +376,21 @@
       <button cwMenuItemRadio [value]="option.value">{{ option.label }}</button>
     }
   </cw-menu-radio-group>
+</cw-menu>
+
+<cw-menu #columnsMenu ariaLabel="Columns shown" i18n-ariaLabel="@@spaces.columns.menu">
+  <cw-menu-label i18n="@@spaces.columns.menu">Columns shown</cw-menu-label>
+  @for (column of columnOptions(); track column.value) {
+    <button
+      cwMenuItemCheckbox
+      type="button"
+      [checked]="!hiddenStatuses().includes(column.value)"
+      (checkedChange)="toggleColumn(column.value)"
+    >
+      <cw-status-icon [status]="column.value" size="3.5" />
+      {{ column.label }}
+    </button>
+  }
 </cw-menu>
 
 <cw-menu #subtaskMenu ariaLabel="Subtask display" i18n-ariaLabel="@@spaces.subtasks.menu">

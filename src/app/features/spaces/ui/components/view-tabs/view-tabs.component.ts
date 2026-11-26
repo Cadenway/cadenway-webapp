@@ -25,6 +25,7 @@ import { CwTab, CwTabs, CwTabsList } from '@cadenway/ui/components/tabs';
 import { NgIcon } from '@ng-icons/core';
 
 import { layoutLabels } from '../../../constants/view-labels/view-labels.constants';
+import type { ActiveCustomField } from '../../../models/list-view-config/list-view-config.interface';
 import type { SavedView, ViewLayout } from '../../../models/saved-view/saved-view.interface';
 import { layoutIconName, lookIconName } from '../../../utils/look/look.util';
 import { viewSummary } from '../../../utils/view-summary/view-summary.util';
@@ -136,6 +137,20 @@ export class ViewTabs {
    * @readonly
    */
   public readonly canEdit: InputSignal<boolean> = input(true);
+
+  /**
+   * Property customFields
+   *
+   * @description
+   * The list's custom fields for the saved views' summaries (`ListViewStore.customFields`), or
+   * null while unknown.
+   *
+   * @type {InputSignal<readonly ActiveCustomField[] | null>}
+   * @readonly
+   */
+  public readonly customFields: InputSignal<readonly ActiveCustomField[] | null> = input<
+    readonly ActiveCustomField[] | null
+  >(null);
 
   /**
    * Property layoutPicked
@@ -326,7 +341,7 @@ export class ViewTabs {
    * @returns {string} The tooltip.
    */
   protected viewTitle(view: SavedView): string {
-    const summary: string = viewSummary(view.layout, view.config, this.locale);
+    const summary: string = viewSummary(view.layout, view.config, this.locale, this.customFields());
     return $localize`:@@spaces.saved.tab-title:Saved view · ${summary}:summary:`;
   }
 
