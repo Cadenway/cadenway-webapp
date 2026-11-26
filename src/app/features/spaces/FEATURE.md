@@ -435,6 +435,9 @@ gateway checks them and `ORGANIZATION_PIN_OPERATIONS` lists them.
   - A creation sends one `Idempotency-Key` per draft and organization. A retry of the same draft
     reuses it; another draft, a closed builder or a recorded rule renews it. The created rule
     is added last and shows `Automation created`. A refusal keeps the builder and its values.
+    A comment over 5,000 characters (the contract's limit) blocks `Create the rule` and shows
+    `spaces.automations.comment-too-long`. The field also carries the native `maxlength` that
+    Signal Forms derives from the rule.
 - Statuses use their default words: a rule is not tied to a space, so the `space` input does not
   rename them.
 - Extension point for gap B6: the mockup's `Git automations` section (lines 3274-3296) is not
@@ -457,6 +460,7 @@ gateway checks them and `ORGANIZATION_PIN_OPERATIONS` lists them.
   | `spaces.automations.load-failed`, `runs-failed`, `members-failed`                                 | The mockup draws no failed read.                         |
   | `spaces.automations.create-failed`, `toggle-failed`, `delete-failed`                              | The mockup draws no refused write.                       |
   | `spaces.automations.toggle-not-applied`, `toggle-unknown`, `delete-not-applied`, `delete-unknown` | The mockup draws no lost answer.                         |
+  | `spaces.automations.comment-too-long`                                                             | The mockup has no wording for a comment over the limit.  |
   | `spaces.automations.former-member`                                                                | A rule or run naming someone no longer in the directory. |
   | `spaces.automations.loading`                                                                      | Accessible name of the skeleton rows.                    |
   | `spaces.automations.text-one`                                                                     | Singular form the mockup writes in the plural.           |

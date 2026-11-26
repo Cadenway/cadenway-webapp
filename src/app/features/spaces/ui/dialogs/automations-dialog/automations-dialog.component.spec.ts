@@ -370,6 +370,45 @@ describe('AutomationsDialog', () => {
     expect(byTestId('automation-builder')).toBeNull();
   });
 
+  it('blocks a comment over 5,000 characters with its message', async () => {
+    byTestId('automation-new')?.click();
+    fixture.detectChanges();
+    await fixture.whenStable();
+    buttonNamed('Add a comment')?.click();
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    const comment: HTMLInputElement | null = byTestId(
+      'automation-comment',
+    ) as HTMLInputElement | null;
+    const create: HTMLButtonElement | null = byTestId(
+      'automation-create',
+    ) as HTMLButtonElement | null;
+    expect(comment?.getAttribute('maxlength')).toBe('5000');
+
+    if (comment) {
+      comment.value = 'x'.repeat(5001);
+      comment.dispatchEvent(new Event('input'));
+    }
+    fixture.detectChanges();
+    expect(create?.disabled).toBe(true);
+    expect(byTestId('automation-comment-error')?.textContent).toContain(
+      'Keep the comment to 5,000 characters or fewer.',
+    );
+    expect(comment?.getAttribute('aria-describedby')).toBe('automation-comment-error');
+    create?.click();
+    await fixture.whenStable();
+    expect(store.create).not.toHaveBeenCalled();
+
+    if (comment) {
+      comment.value = 'x'.repeat(5000);
+      comment.dispatchEvent(new Event('input'));
+    }
+    fixture.detectChanges();
+    expect(create?.disabled).toBe(false);
+    expect(byTestId('automation-comment-error')).toBeNull();
+  });
+
   it('keeps the builder open with its values when the creation is refused', async () => {
     store.create.mockResolvedValueOnce(null);
     byTestId('automation-new')?.click();

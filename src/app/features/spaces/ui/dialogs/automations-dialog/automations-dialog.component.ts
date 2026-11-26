@@ -246,7 +246,8 @@ const COMMENT_MAX_LENGTH: number = 5000;
  * - `New automation` opens the builder: `When` (`Task created` / `Status becomes…` with the ten
  *   statuses), `Then` (`Assign to`, `Change the priority`, `Notify`, `Add a comment`) with the
  *   person, the priority or the comment's text, the preview `<when>, then <then>.`, `Cancel` and
- *   `Create the rule` (disabled while the comment is empty, or no person can be chosen). A created
+ *   `Create the rule` (disabled while the comment is empty or over 5,000 characters, with its
+ *   message, or while no person can be chosen). A created
  *   rule shows the `Automation created` toast and closes the builder; a refused one keeps it open
  *   with its values.
  * - `Last runs`: the eight most recent executions, shown only when there are some.
@@ -632,13 +633,18 @@ export class AutomationsDialog {
    * Property commentForm
    *
    * @description
-   * The comment field, 5,000 characters at most as the contract accepts.
+   * The comment field, 5,000 characters at most as the contract accepts: a longer one blocks
+   * `Create the rule` and shows its message. `[formField]` gives the input the rule's native
+   * `maxlength`, which stops typing and pasting beyond the limit; Angular refuses a static
+   * `maxlength` beside it.
    *
    * @type {FieldTree<CommentModel>}
    * @readonly
    */
   protected readonly commentForm: FieldTree<CommentModel> = form(this.commentModel, (path) => {
-    maxLength(path.body, COMMENT_MAX_LENGTH);
+    maxLength(path.body, COMMENT_MAX_LENGTH, {
+      message: $localize`:@@spaces.automations.comment-too-long:Keep the comment to 5,000 characters or fewer.`,
+    });
   });
 
   /**
@@ -698,7 +704,8 @@ export class AutomationsDialog {
    * Property draft
    *
    * @description
-   * The rule to create, or null while it is incomplete: an empty comment, or no person.
+   * The rule to create, or null while it is incomplete or invalid: an empty comment, one over
+   * 5,000 characters, or no person.
    *
    * @type {Signal<AutomationDraft | null>}
    * @readonly
@@ -706,7 +713,9 @@ export class AutomationsDialog {
   protected readonly draft: Signal<AutomationDraft | null> = computed(
     (): AutomationDraft | null => {
       const action: AutomationAction = this.previewAction();
-      if (action.type === 'comment' && !action.body.trim()) return null;
+      if (action.type === 'comment') {
+        if (!action.body.trim() || this.commentForm.body().invalid()) return null;
+      }
       if ((action.type === 'assign' || action.type === 'notify') && !action.userId) return null;
       return { trigger: this.previewTrigger(), action };
     },

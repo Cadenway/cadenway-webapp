@@ -782,6 +782,7 @@
     "spaces.automations.action-priority": "Change the priority",
     "spaces.automations.action-notify": "Notify",
     "spaces.automations.action-comment": "Add a comment",
+    "spaces.automations.comment-too-long": "Keep the comment to 5,000 characters or fewer.",
     "spaces.automations.delete-text": "{$when}, {$then}. It will no longer run.",
     "spaces.automations.create-failed": "The automation could not be created",
     "spaces.automations.created": "Automation created",

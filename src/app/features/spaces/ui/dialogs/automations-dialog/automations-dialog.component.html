@@ -271,8 +271,22 @@
               placeholder="Comment text"
               i18n-placeholder="@@spaces.automations.comment-placeholder"
               [formField]="commentForm.body"
+              [attr.aria-describedby]="
+                commentForm.body().invalid() ? 'automation-comment-error' : null
+              "
               data-testid="automation-comment"
             />
+            @if (commentForm.body().invalid()) {
+              <p
+                id="automation-comment-error"
+                class="text-xs text-destructive"
+                data-testid="automation-comment-error"
+              >
+                @for (error of commentForm.body().errors(); track error.kind) {
+                  {{ error.message }}
+                }
+              </p>
+            }
           }
           <p class="text-sm" data-testid="automation-preview">
             <ng-icon
