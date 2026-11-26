@@ -744,9 +744,11 @@ computed from the navigation's reads, for the command palette's `Lists` and the 
   rows change at once (`_patches`, one patch per action and task, merged in order; a confirmed
   patch applies until a read reaches the version the gateway returned): the icon, the word or the
   people at once, the group 460 ms after the task's last action, a moved or deleted row leaves at
-  once; `Mark done` and a move empty the selection at once. A refused, uncertain or unsent task
-  loses only that action's patch; a refused chunk stays selected and a second toast counts it; an
-  unresolved response warns and the rows are read again. Each applied action reads the list's
+  once; `Mark done` and a move empty the selection at once. A refused or unsent task loses only
+  that action's patch; a refused chunk stays selected and a second toast counts it; a task without
+  a certain outcome is settled as described below, and the warning
+  (`The outcome is unknown. The tasks are being refreshed.`) shows once it stays unknown. Each
+  applied action reads the list's
   counts again (`ListPageStore.refreshCounts`) and shows a toast whose `Undo` writes back the
   values confirmed before the action (statuses with their reasons and the cancellation notes
   recorded by the view, priorities, assignees, lists) or restores the trash entries of a deletion
@@ -765,6 +767,55 @@ computed from the navigation's reads, for the command palette's `Lists` and the 
   has not read (a `412` of a single-field write, any refused chunk of a bulk action, whose answer
   gives no reason) reads the tasks again; a refused single-field write shows
   `The task could not be changed`.
+- Invariants of the write engine (`withViewTaskWrites`) for a task without a certain outcome (no
+  answer, a timeout, a `5xx`, or a refused idempotent retry of `TaskActionsApi.bulk`):
+  - Nothing reads the view while the request may still commit, and a read of the view never
+    settles it: the task keeps its patch, still pending, so a read that answers meanwhile (a
+    realtime notice, a reload) never shows the old values over it, and a read that does not
+    contain the task (a subtask, a task past the first page) cannot release it.
+  - The task holds its next writes: they stay queued behind it, with their patches shown, until
+    its outcome is settled. Elapsed time alone never releases it; leaving the view or changing
+    its scope does.
+  - A single-field write (`update`, `If-Match`) and a bulk `status`, `priority`, `assign`,
+    `unassign` or `move` are sent again unchanged, at the same version, after 1 s, 2 s and 4 s
+    (`RESEND_DELAYS_MS`); each sets a target state at a version, so a request that committed
+    meanwhile makes the resend refused instead of applying it twice. A success settles it as
+    applied. A refusal reads the task back (`ListTasksApi.readBack`, `getTask` without the cache).
+    Only a read at a version past the one sent is conclusive, since the original request, checked
+    against that version, can no longer commit: applied when the task holds what the write sets
+    (for a cancellation with a note, that note too), refused otherwise (the error toast, the patch
+    removed, no note recorded for `Undo`). A `408`, any other refusal, no answer or a read at the
+    version sent leave it uncertain, and the resends go on.
+  - A bulk `trash` and `duplicate` are never sent again from the view: the gateway's bulk action
+    takes an `Idempotency-Key` that replays a recorded answer for 24 hours, but
+    `TaskActionsApi.bulk` (owned by Task) draws a key per chunk and keeps it for its own single
+    retry, so a send from the view would carry a new key and could copy a task twice.
+  - A copy without a certain outcome never holds its source, which it does not change: the source
+    is released at once, the warning shows, and the view is read once 2 s later so a created copy
+    shows.
+  - What stays uncertain once the resends are spent is reported in `unknown` and warns. From 2 s
+    later (`RECONCILE_DELAY_MS`, doubling up to 30 s) each such task is read back on its own
+    until a read settles it, and only then do its patch and its hold go: a `versioned` write
+    (above) by any read of the task, applied when it is past the version sent and holds the
+    written values; a deletion once the task reads in the trash (`404 task.trashed`, applied) or
+    past the version sent (the deletion can no longer commit), or once a read after the 30 s
+    wait still finds it at the version sent (the deletion never reached the server, or the view's
+    next read shows it).
+  - A read back past the version the view knows is applied in full: its values show over the
+    view's older read until the view reaches that version, its cancellation note is recorded for
+    `Undo`, and the task's next write is decided on, snapshotted for `Undo` and sent at that
+    state, never at the read's version over the view's older values.
+  - A `versioned` task released by a read still at the version sent is read again 10 s and 30 s
+    after its release (`FOLLOW_UP_READS_MS`), without holding its writes, until the view or its
+    scope changes: a read past that version is applied in full, and the view is read again.
+  - A write that only a read back of its task settled is applied without an `Undo`: a matching
+    value at a later version does not prove this request wrote it, so the task is absent from
+    the outcome's `before` and `after`, and the toast offers no `Undo`. An `Undo` is offered only
+    for tasks whose version comes from the write's own successful answer.
+  - A released task's next write is sent at the version of the state it shows (the view's read, a
+    write's answer or a read back applied in full). Every write carries that version, so an
+    original request committing after the release makes the next write refused (`412`), which
+    reads the tasks again, instead of overwriting what the original wrote.
 - The table declares gateway groups in order, omitting hidden and empty groups except the five default empty status groups in an unfiltered view. Filtered empty results show the empty state. `nearEnd` requests further pages with a threshold accounting for unread group lines. Under 768 px the grid keeps selection, name and due date.
 
 ## Organization pin
@@ -783,6 +834,9 @@ gateway checks them and `ORGANIZATION_PIN_OPERATIONS` lists them.
   otherwise it restores the reason without a note.
 - Row writes and the status icon's writes (`TaskStatusChangesStore`) are serialized separately;
   each reads the other's confirmed version only once it is read or settled.
+- A write released by a read at the version sent whose original request commits after the last
+  follow-up read (30 s) shows its old values until a realtime notice or the view's next read
+  reconciles it; the next write on the task is refused (`412`) and reads it again.
 
 - `cw-sidebar-space` has no slot next to the name: the private lock of a space shows on its
   overview, not in the sidebar, until the design system adds one.
