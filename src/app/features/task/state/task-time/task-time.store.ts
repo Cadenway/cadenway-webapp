@@ -535,6 +535,17 @@ function createTaskTimeStore(): Type<TaskTimeStoreInstance> {
         confirmedWrites.set(key, (confirmedWrites.get(key) ?? 0) + 1);
       };
 
+      const pendingDeletions: Map<string, Set<string>> = new Map<string, Set<string>>();
+
+      const withoutPendingDeletions: (key: string, log: TaskTimeLog) => TaskTimeLog = (
+        key: string,
+        log: TaskTimeLog,
+      ): TaskTimeLog => {
+        const deleting: Set<string> | undefined = pendingDeletions.get(key);
+        if (!deleting || deleting.size === 0) return log;
+        return logOf(log.entries.filter((item: TaskTimeEntry): boolean => !deleting.has(item.id)));
+      };
+
       const readLog: (key: string) => Promise<void> = async (key: string): Promise<void> => {
         patchState(store, { failed: false });
         try {
@@ -543,7 +554,7 @@ function createTaskTimeStore(): Type<TaskTimeStoreInstance> {
             const log: TaskTimeLog = await store._api.log(key);
             if (!current(key)) return;
             if ((confirmedWrites.get(key) ?? 0) === before) {
-              patchState(store, { log, failed: false });
+              patchState(store, { log: withoutPendingDeletions(key, log), failed: false });
               return;
             }
           }
@@ -634,21 +645,37 @@ function createTaskTimeStore(): Type<TaskTimeStoreInstance> {
         key: string,
         entry: TaskTimeEntry,
       ): Promise<boolean> => {
-        const shown: boolean = current(key);
-        const before: TaskTimeLog | null = shown ? store.log() : null;
-        if (before) {
-          patchState(store, {
-            log: logOf(before.entries.filter((item: TaskTimeEntry) => item.id !== entry.id)),
-          });
-        }
+        const without: (log: TaskTimeLog) => TaskTimeLog = (log: TaskTimeLog): TaskTimeLog =>
+          logOf(log.entries.filter((item: TaskTimeEntry) => item.id !== entry.id));
+        const deleting: Set<string> = pendingDeletions.get(key) ?? new Set<string>();
+        deleting.add(entry.id);
+        pendingDeletions.set(key, deleting);
+        const shown: TaskTimeLog | null = current(key) ? store.log() : null;
+        if (shown) patchState(store, { log: without(shown) });
         try {
           await store._api.remove(key, entry.id);
           confirmWrite(key);
+          const log: TaskTimeLog | null = current(key) ? store.log() : null;
+          if (log?.entries.some((item: TaskTimeEntry) => item.id === entry.id)) {
+            patchState(store, { log: without(log) });
+          }
           return true;
         } catch {
-          if (before && current(key)) patchState(store, { log: before });
+          const log: TaskTimeLog | null = current(key) ? store.log() : null;
+          if (log && !log.entries.some((item: TaskTimeEntry) => item.id === entry.id)) {
+            patchState(store, {
+              log: logOf(
+                [...log.entries, entry].sort((a: TaskTimeEntry, b: TaskTimeEntry): number =>
+                  b.createdAt.localeCompare(a.createdAt),
+                ),
+              ),
+            });
+          }
           failedToast();
           return false;
+        } finally {
+          deleting.delete(entry.id);
+          if (deleting.size === 0) pendingDeletions.delete(key);
         }
       };
 
@@ -792,7 +819,8 @@ function createTaskTimeStore(): Type<TaskTimeStoreInstance> {
  * elapsed minutes, one at least, with the note `Timer`, and clears the timer only once the entry
  * is confirmed (the stop sent, its entry and key, waits in the device storage next to the start,
  * so stopping again after a reopen or a reload sends the same entry under the same key); a read
- * of the entries that began before a confirmed write is dropped and made again; a write sent again after a failure reuses its `Idempotency-Key`. `Undo` acts on
+ * of the entries that began before a confirmed write is dropped and made again, and a read
+ * applied while a deletion is pending leaves that entry out; a write sent again after a failure reuses its `Idempotency-Key`. `Undo` acts on
  * the task its toast names, whichever task is open by then. It follows the open task of
  * `TaskDetailStore`. Recording time does not change the task version.
  *

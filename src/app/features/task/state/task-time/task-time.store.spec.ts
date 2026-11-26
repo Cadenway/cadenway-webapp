@@ -392,6 +392,44 @@ describe('TaskTimeStore', () => {
     expect(store.log()?.entries.map((item: TaskTimeEntry) => item.id)).toEqual(['e2', 'e1']);
   });
 
+  it('keeps a deleted entry out of a read that lands before the deletion answers', async () => {
+    create();
+    await settle();
+    let answer: () => void = () => undefined;
+    api.remove.mockReturnValueOnce(
+      new Promise<void>((resolve: () => void) => {
+        answer = resolve;
+      }),
+    );
+    const removed: Promise<boolean> = store.remove(entry);
+    expect(store.totalMinutes()).toBe(0);
+
+    await store.reload();
+
+    expect(store.log()).toEqual({ entries: [], totalMinutes: 0 });
+    answer();
+    expect(await removed).toBe(true);
+    expect(store.log()).toEqual({ entries: [], totalMinutes: 0 });
+  });
+
+  it('puts an entry back once its deletion is refused after a read left it out', async () => {
+    create();
+    await settle();
+    let refuse: (reason: unknown) => void = () => undefined;
+    api.remove.mockReturnValueOnce(
+      new Promise<void>((_resolve: unknown, reject: (reason: unknown) => void) => {
+        refuse = reject;
+      }),
+    );
+    const removed: Promise<boolean> = store.remove(entry);
+    await store.reload();
+
+    refuse(new Error('refused'));
+
+    expect(await removed).toBe(false);
+    expect(store.log()).toEqual(log);
+  });
+
   it('finds a running timer when the task opens again', async () => {
     localStorage.setItem(storageKey, '1762592400000');
     create();
