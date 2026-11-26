@@ -204,7 +204,9 @@ the task` with `Retry`; otherwise Errors' `RouteErrorPanel` renders the typed ro
     the next write goes against it. `acceptVersion` adopts a version only at confirmed + 1; any
     other newer version reads the task again. A `412` (`TaskVersionConflict`) reads the task again
     and the next write of that task waits for that read; the error goes back to the caller. A write
-    queued when another task opens is still sent with its own key and version.
+    queued when another task opens is still sent with its own key and version, and a write
+    confirmed once its task's detail closed or gave way to another calls
+    `TaskDetailOpener.notifyChanged(key)`, so the view under it reads its rows again.
   - `TASK_WRITE_LANE` (`ports/task-write-lane`): the optional write path the status
     changes use instead of writing on their own; the dialog provides it with its
     `TaskDetailStore` (`useExisting`), so a status write never overlaps another write of the task.
@@ -263,7 +265,8 @@ the task` with `Retry`; otherwise Errors' `RouteErrorPanel` renders the typed ro
     `Discard`. It is saved after the pause only when the description is still the one it was
     typed over; when the description changed since, the notice says so (`The task changed since;
 your unsaved changes are restored from this device.`) and offers `Keep my version`, which
-    saves it against the current version, and nothing is saved by itself), the
+    saves it against the current version, and nothing is saved by itself, editing included,
+    until `Keep my version` or `Discard`), the
     checklist
     (`<done> / <n>`, ticks shown at once and rolled back with the failure toast, `Add an item` with Enter and Escape; no deletion, as in the mockup), the
     attachments (`cw-attachment` tiles, `Add` and the drop zone, 25 MB refused with `File too
@@ -350,7 +353,10 @@ people`), and the due trigger shows the short date without `Tomorrow ·` or the
   another account on the device never sees it) and is lost with it;
   stopping records the elapsed minutes (1 to 1,440) for today and clears the timer only once the
   entry is confirmed: a refused stop keeps it, and stopping again sends the first stop's entry
-  under the same `Idempotency-Key`, as any entry sent again after a failure. That stop waits in
+  under the same `Idempotency-Key`, as any entry sent again after a failure. The stop's key is a
+  UUID-shaped SHA-256 of the organization, the user, the task and the start (`stableKey`), so
+  another tab stopping the same timer sends the same key and the entry the first stop froze, and
+  the gateway records it once. That stop waits in
   the device storage next to the start (`<timer key>.stop`) until confirmed, so a stop whose
   answer was lost is not recorded twice after a reopen or a reload. A read of the entries that
   began before a confirmed write is dropped and made again, and the total is summed from the
