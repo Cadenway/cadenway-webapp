@@ -483,6 +483,41 @@ describe('SpacesSidebar', () => {
     });
   });
 
+  it('ignores a space creation that answers after its dialog was closed', async () => {
+    let answer: (value: unknown) => void = () => undefined;
+    createSpace.mockReturnValueOnce(
+      new Promise((resolve: (value: unknown) => void) => {
+        answer = resolve;
+      }),
+    );
+    const harness: RouterTestingHarness = await RouterTestingHarness.create('/atelier-nord');
+    await expect.poll(() => text(harness, 'sidebar-spaces')).toContain('Backlog');
+
+    harness.routeNativeElement
+      ?.querySelector<HTMLButtonElement>('[aria-label="Create a space"]')
+      ?.click();
+    harness.detectChanges();
+    const name: HTMLInputElement | null = document.querySelector(
+      '[data-testid="space-dialog-name"]',
+    );
+    if (!name) throw new Error('No dialog');
+    name.value = 'Human resources';
+    name.dispatchEvent(new Event('input'));
+    harness.detectChanges();
+    document.querySelector<HTMLButtonElement>('[data-testid="space-dialog-submit"]')?.click();
+    await expect.poll(() => createSpace.mock.calls.length).toBe(1);
+    TestBed.inject(SpacesNavigationStore).closeDialog();
+    harness.detectChanges();
+
+    answer({
+      space: { ...product, id: 'sp-hr', name: 'Human resources', prefix: 'HUM' },
+      firstList: { ...list('l-first', 'First list'), spaceId: 'sp-hr' },
+    });
+    await new Promise((resolve: (value: unknown) => void) => setTimeout(resolve, 50));
+
+    expect(TestBed.inject(Router).url).toBe('/atelier-nord');
+  });
+
   it('deletes a space from its context menu once its name is typed', async () => {
     const harness: RouterTestingHarness = await RouterTestingHarness.create(
       '/atelier-nord/spaces/sp-product',

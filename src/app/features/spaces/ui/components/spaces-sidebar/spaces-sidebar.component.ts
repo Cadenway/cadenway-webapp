@@ -1197,12 +1197,24 @@ export class SpacesSidebar {
    */
   protected async saveSpace(draft: SpaceDraft): Promise<void> {
     const edited: SpaceDetails | null = this.spaceDialog()?.space ?? null;
+    // The dialog and the organization this save started from: a late answer must not close a newer
+    // dialog or navigate in another organization.
+    const dialog: SpacesDialog | null = this.navigation.dialog();
+    const slug: string = this.slug();
+    const sameDialog: () => boolean = (): boolean =>
+      this.navigation.dialog() === dialog && this.slug() === slug;
     this.pending.set(true);
     if (edited) {
       const recorded: SpaceDetails | 'prefix-taken' | null = await this.navigation.updateSpace(
         edited,
         draft,
       );
+      if (!sameDialog()) {
+        if (this.slug() === slug && recorded === null) {
+          this.toasts.error($localize`:@@spaces.space.save-failed:The space could not be saved`);
+        }
+        return;
+      }
       this.pending.set(false);
       if (recorded === 'prefix-taken') {
         this.prefixTaken.set(draft.prefix);
@@ -1222,6 +1234,15 @@ export class SpacesSidebar {
       return;
     }
     const created: SpaceCreationResult = await this.navigation.createSpace(draft);
+    if (!sameDialog()) {
+      if (this.slug() === slug && created && created !== 'prefix-taken') {
+        const name: string = created.space.name;
+        this.toasts.show($localize`:@@spaces.space.created:Space created`, {
+          description: $localize`:@@spaces.space.created-text:${name}:name: · a first list is ready.`,
+        });
+      }
+      return;
+    }
     this.pending.set(false);
     if (created === 'prefix-taken') {
       this.prefixTaken.set(draft.prefix);
@@ -1236,7 +1257,7 @@ export class SpacesSidebar {
     this.toasts.show($localize`:@@spaces.space.created:Space created`, {
       description: $localize`:@@spaces.space.created-text:${name}:name: · a first list is ready.`,
     });
-    void this.router.navigate(['/', this.slug(), 'l', created.firstList.id]);
+    void this.router.navigate(['/', slug, 'l', created.firstList.id]);
   }
 
   /**
