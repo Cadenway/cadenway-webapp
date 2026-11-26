@@ -1613,13 +1613,17 @@ function createListRowsStore(): Type<ListRowsStoreInstance> {
       const tails: Map<string, Promise<void>> = new Map<string, Promise<void>>();
       const queued: Map<string, QueuedAct> = new Map<string, QueuedAct>();
       let actions: number = 0;
-      // A write queued behind others must not start once its view is gone or its organization
-      // changed: the organization pin is read when each request leaves.
-      const notSent: Error = new Error('The list view or its organization changed before sending.');
+      // A write queued behind others must not start once its view is gone, its organization changed
+      // (the organization pin is read when each request leaves) or the reused route store moved to
+      // another list.
+      const notSent: Error = new Error('The list view, its list or its organization changed.');
       const sameContext: () => () => boolean = (): (() => boolean) => {
         const organizationId: string | undefined = store._params()?.organizationId;
+        const listId: string | undefined = store._params()?.listId;
         return (): boolean =>
-          !store._destroyRef.destroyed && store._params()?.organizationId === organizationId;
+          !store._destroyRef.destroyed &&
+          store._params()?.organizationId === organizationId &&
+          store._params()?.listId === listId;
       };
 
       const loadedTask: (key: string) => TaskSummary | undefined = (
