@@ -1,5 +1,7 @@
 import { WORKSPACE_CONTEXT } from '@features/workspace/ports/workspace-context';
 
+import { Location } from '@angular/common';
+import { provideLocationMocks } from '@angular/common/testing';
 import { TestBed } from '@angular/core/testing';
 import {
   Router,
@@ -101,6 +103,8 @@ const criticalBugs: SavedView = {
 describe('ListPage', () => {
   let api: Record<string, Mock>;
   let spaceRead: Mock;
+  let spaces: Mock;
+  let can: Mock;
 
   beforeEach(() => {
     api = {
@@ -127,6 +131,8 @@ describe('ListPage', () => {
       deleteSavedView: vi.fn(() => Promise.resolve(undefined)),
     };
     spaceRead = vi.fn(() => Promise.resolve(product));
+    spaces = vi.fn(() => Promise.resolve([product]));
+    can = vi.fn(() => false);
     TestBed.configureTestingModule({
       providers: [
         provideCadenwayIcons(),
@@ -146,6 +152,7 @@ describe('ListPage', () => {
           useValue: {
             organization: () => ({ id: 'org-1', slug: 'atelier-nord' }),
             user: () => ({ id: 'u1' }),
+            can,
           },
         },
         { provide: ListsApi, useValue: api },
@@ -176,7 +183,7 @@ describe('ListPage', () => {
           provide: SpacesApi,
           useValue: {
             space: spaceRead,
-            spaces: vi.fn(() => Promise.resolve([product])),
+            spaces,
             overview: vi.fn(() =>
               Promise.resolve({ spaceId: 'sp-product', taskCount: 3, lists: [] }),
             ),
@@ -764,6 +771,139 @@ describe('ListPage', () => {
     harness.detectChanges();
     await expect.poll(() => find('list-space-statuses')).not.toBeNull();
     expect(find('list-automations')).toBeNull();
+  });
+
+  it('follows back and forward between released layouts in the tools and the tabs', async () => {
+    TestBed.configureTestingModule({ providers: [provideLocationMocks()] });
+    TestBed.overrideProvider(RELEASED_VIEWS, {
+      useValue: { layouts: ['list', 'board'], dialogs: [] },
+    });
+    const router: Router = TestBed.inject(Router);
+    const location: Location = TestBed.inject(Location);
+    const harness: RouterTestingHarness = await open('/atelier-nord/l/l-bugs');
+    const selected: () => string | undefined = () =>
+      [...document.querySelectorAll<HTMLElement>('[data-testid="view-tabs"] [role="tab"]')]
+        .find((item: HTMLElement) => item.getAttribute('aria-selected') === 'true')
+        ?.textContent.trim();
+    const settle: (url: string, tool: string, tab: string) => Promise<void> = async (
+      url: string,
+      tool: string,
+      tab: string,
+    ): Promise<void> => {
+      await expect
+        .poll(() => {
+          harness.detectChanges();
+          return router.url;
+        })
+        .toBe(url);
+      await expect
+        .poll(() => {
+          harness.detectChanges();
+          return find(tool) !== null && selected() === tab;
+        })
+        .toBe(true);
+    };
+    await settle('/atelier-nord/l/l-bugs/list', 'view-group', 'List');
+    router.initialNavigation();
+
+    [...document.querySelectorAll<HTMLElement>('[data-testid="view-tabs"] [role="tab"]')]
+      .find((item: HTMLElement) => item.textContent.trim() === 'Board')
+      ?.click();
+    await settle('/atelier-nord/l/l-bugs/board', 'view-columns', 'Board');
+    expect(find('view-group')).toBeNull();
+
+    location.back();
+    await settle('/atelier-nord/l/l-bugs/list', 'view-group', 'List');
+    expect(find('view-columns')).toBeNull();
+    expect(find('list-rows')).not.toBeNull();
+
+    location.forward();
+    await settle('/atelier-nord/l/l-bugs/board', 'view-columns', 'Board');
+    expect(find('board-view')).not.toBeNull();
+  });
+
+  it('saves a hidden column into the applied view, which is then not modified', async () => {
+    TestBed.overrideProvider(RELEASED_VIEWS, {
+      useValue: { layouts: ['list', 'board'], dialogs: [] },
+    });
+    api['savedViews'].mockResolvedValue([{ ...criticalBugs, layout: 'board' }]);
+    api['updateSavedView'] = vi.fn((view: SavedView, change: { config: SavedView['config'] }) =>
+      Promise.resolve({ ...view, config: change.config, version: view.version + 1 }),
+    );
+    const harness: RouterTestingHarness = await open(
+      '/atelier-nord/l/l-bugs/board?savedView=sv-bugs',
+    );
+    await expect
+      .poll(() => {
+        harness.detectChanges();
+        return find('view-columns');
+      })
+      .not.toBeNull();
+    expect(find('view-modified')).toBeNull();
+
+    find('view-columns')?.click();
+    harness.detectChanges();
+    const column: () => HTMLButtonElement | undefined = () =>
+      [...document.querySelectorAll<HTMLButtonElement>('[role="menuitemcheckbox"]')].find((item) =>
+        item.textContent.includes('In progress'),
+      );
+    await expect.poll(() => column()).toBeTruthy();
+    column()?.click();
+    await expect
+      .poll(() => {
+        harness.detectChanges();
+        return find('view-save-settings');
+      })
+      .not.toBeNull();
+
+    find('view-save-settings')?.click();
+    await expect.poll(() => api['updateSavedView'].mock.calls.length).toBe(1);
+    const change: { config: SavedView['config'] } = api['updateSavedView'].mock.calls[0]?.[1] as {
+      config: SavedView['config'];
+    };
+    expect(change.config.presentation.hiddenBoardStatusKeys).toEqual(['progress']);
+    await expect
+      .poll(() => {
+        harness.detectChanges();
+        return find('view-modified');
+      })
+      .toBeNull();
+    expect(find('view-save')).toBeNull();
+  });
+
+  it('disables Space statuses on a space the caller cannot edit and Automations for members', async () => {
+    TestBed.overrideProvider(RELEASED_VIEWS, {
+      useValue: { layouts: ['list'], dialogs: ['space-statuses', 'automations'] },
+    });
+    spaces.mockResolvedValue([{ ...product, canEdit: false }]);
+    const harness: RouterTestingHarness = await open('/atelier-nord/l/l-bugs');
+    await expect
+      .poll(() => TestBed.inject(SpacesNavigationStore).spaceById('sp-product'))
+      .toBeTruthy();
+    find('list-more')?.click();
+    harness.detectChanges();
+    await expect.poll(() => find('list-space-statuses')).not.toBeNull();
+
+    expect(find('list-space-statuses')?.getAttribute('aria-disabled')).toBe('true');
+    expect(find('list-automations')?.getAttribute('aria-disabled')).toBe('true');
+    expect(can).toHaveBeenCalledWith('admin');
+  });
+
+  it('enables Space statuses on an editable space and Automations for admins', async () => {
+    TestBed.overrideProvider(RELEASED_VIEWS, {
+      useValue: { layouts: ['list'], dialogs: ['space-statuses', 'automations'] },
+    });
+    can.mockReturnValue(true);
+    const harness: RouterTestingHarness = await open('/atelier-nord/l/l-bugs');
+    await expect
+      .poll(() => TestBed.inject(SpacesNavigationStore).spaceById('sp-product'))
+      .toBeTruthy();
+    find('list-more')?.click();
+    harness.detectChanges();
+    await expect.poll(() => find('list-space-statuses')).not.toBeNull();
+
+    expect(find('list-space-statuses')?.getAttribute('aria-disabled')).not.toBe('true');
+    expect(find('list-automations')?.getAttribute('aria-disabled')).not.toBe('true');
   });
 
   it('opens the list dialog from the list icon and the space dialog from the menu', async () => {
