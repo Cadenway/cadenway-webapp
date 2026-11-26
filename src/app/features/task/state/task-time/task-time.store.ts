@@ -46,6 +46,94 @@ export const MAX_ENTRY_MINUTES: number = 1440;
 export const TIMER_STORAGE_PREFIX: string = 'cadenway-task-timer';
 
 /**
+ * Constant TIMER_STOP_SUFFIX
+ *
+ * @description
+ * Suffix of the device storage key, after the timer's own key, of a timer stop sent and not
+ * confirmed yet: it outlives the detail, so a stop whose answer was lost is sent again with the
+ * same entry and `Idempotency-Key` after a reopen or a reload.
+ *
+ * @type {string}
+ */
+export const TIMER_STOP_SUFFIX: string = 'stop';
+
+/**
+ * Constant LOG_READ_ATTEMPTS
+ *
+ * @description
+ * Reads of the entries made in a row while writes keep confirming during each of them.
+ *
+ * @type {number}
+ */
+const LOG_READ_ATTEMPTS: number = 3;
+
+/**
+ * Interface TaskTimerStop
+ *
+ * @description
+ * A timer stop the gateway has not confirmed: the entry frozen at the first stop and the key it
+ * is sent under.
+ */
+interface TaskTimerStop {
+  // #region Properties
+  /**
+   * Property startedAt
+   *
+   * @description
+   * Start of the timer it stops (epoch milliseconds); a stop of another start is ignored.
+   *
+   * @type {number}
+   * @readonly
+   */
+  readonly startedAt: number;
+
+  /**
+   * Property minutes
+   *
+   * @description
+   * Minutes of the entry, between 1 and 1,440.
+   *
+   * @type {number}
+   * @readonly
+   */
+  readonly minutes: number;
+
+  /**
+   * Property workDate
+   *
+   * @description
+   * Local day of the work (`YYYY-MM-DD`).
+   *
+   * @type {string}
+   * @readonly
+   */
+  readonly workDate: string;
+
+  /**
+   * Property note
+   *
+   * @description
+   * Note of the entry.
+   *
+   * @type {string}
+   * @readonly
+   */
+  readonly note: string;
+
+  /**
+   * Property idempotencyKey
+   *
+   * @description
+   * The key the entry is sent under.
+   *
+   * @type {string}
+   * @readonly
+   */
+  readonly idempotencyKey: string;
+  // #endregion
+}
+
+/**
  * Interface TaskTimeAttempt
  *
  * @description
@@ -178,13 +266,14 @@ interface TaskTimeState {
    * Property timerStop
    *
    * @description
-   * The entry of a timer stop the gateway has not confirmed (its minutes and day, frozen at the
-   * first stop so that stopping again sends the same entry under the same key), or null.
+   * The timer stop the gateway has not confirmed (its entry and key, frozen at the first stop and
+   * kept in the device storage so that stopping again, even after a reopen, sends the same entry
+   * under the same key), or null.
    *
-   * @type {{ readonly minutes: number; readonly workDate: string } | null}
+   * @type {TaskTimerStop | null}
    * @readonly
    */
-  readonly timerStop: { readonly minutes: number; readonly workDate: string } | null;
+  readonly timerStop: TaskTimerStop | null;
   // #endregion
 }
 
@@ -385,11 +474,59 @@ function createTaskTimeStore(): Type<TaskTimeStoreInstance> {
         }
       };
 
+      const readStop: (key: string, startedAt: number | null) => TaskTimerStop | null = (
+        key: string,
+        startedAt: number | null,
+      ): TaskTimerStop | null => {
+        if (startedAt === null) return null;
+        try {
+          const value: string | null =
+            store._storage?.getItem(`${storageKey(key)}.${TIMER_STOP_SUFFIX}`) ?? null;
+          const stop: Partial<TaskTimerStop> | null =
+            value === null ? null : (JSON.parse(value) as Partial<TaskTimerStop>);
+          const valid: boolean =
+            stop?.startedAt === startedAt &&
+            typeof stop.minutes === 'number' &&
+            typeof stop.workDate === 'string' &&
+            typeof stop.note === 'string' &&
+            typeof stop.idempotencyKey === 'string';
+          return valid ? (stop as TaskTimerStop) : null;
+        } catch {
+          return null;
+        }
+      };
+
+      const writeStop: (key: string, stop: TaskTimerStop | null) => void = (
+        key: string,
+        stop: TaskTimerStop | null,
+      ): void => {
+        try {
+          const name: string = `${storageKey(key)}.${TIMER_STOP_SUFFIX}`;
+          if (stop === null) store._storage?.removeItem(name);
+          else store._storage?.setItem(name, JSON.stringify(stop));
+        } catch {
+          return;
+        }
+      };
+
+      const confirmedWrites: Map<string, number> = new Map<string, number>();
+
+      const confirmWrite: (key: string) => void = (key: string): void => {
+        confirmedWrites.set(key, (confirmedWrites.get(key) ?? 0) + 1);
+      };
+
       const readLog: (key: string) => Promise<void> = async (key: string): Promise<void> => {
         patchState(store, { failed: false });
         try {
-          const log: TaskTimeLog = await store._api.log(key);
-          if (current(key)) patchState(store, { log, failed: false });
+          for (let attempt: number = 1; attempt <= LOG_READ_ATTEMPTS; attempt++) {
+            const before: number = confirmedWrites.get(key) ?? 0;
+            const log: TaskTimeLog = await store._api.log(key);
+            if (!current(key)) return;
+            if ((confirmedWrites.get(key) ?? 0) === before) {
+              patchState(store, { log, failed: false });
+              return;
+            }
+          }
         } catch {
           if (current(key)) patchState(store, { failed: true });
         }
@@ -432,22 +569,26 @@ function createTaskTimeStore(): Type<TaskTimeStoreInstance> {
         key: string,
         draft: TaskTimeDraft,
         workDate: string,
+        idempotencyKey?: string,
       ) => Promise<TaskTimeEntry | null> = async (
         key: string,
         draft: TaskTimeDraft,
         workDate: string,
+        idempotencyKey?: string,
       ): Promise<TaskTimeEntry | null> => {
         const minutes: number = Math.min(MAX_ENTRY_MINUTES, Math.max(1, Math.round(draft.minutes)));
-        const sent: TaskTimeAttempt = attemptKey(key, minutes, draft.note, workDate);
+        const sent: TaskTimeAttempt | null =
+          idempotencyKey === undefined ? attemptKey(key, minutes, draft.note, workDate) : null;
         if (current(key)) patchState(store, { pending: true });
         try {
           const entry: TaskTimeEntry = await store._api.record(
             key,
             { minutes, note: draft.note },
             workDate,
-            sent.idempotencyKey,
+            idempotencyKey ?? sent?.idempotencyKey ?? crypto.randomUUID(),
           );
-          if (attempt === sent) attempt = null;
+          if (sent !== null && attempt === sent) attempt = null;
+          confirmWrite(key);
           if (!current(key)) return entry;
           const log: TaskTimeLog = store.log() ?? { entries: [], totalMinutes: 0 };
           patchState(store, {
@@ -484,6 +625,7 @@ function createTaskTimeStore(): Type<TaskTimeStoreInstance> {
         }
         try {
           await store._api.remove(key, entry.id);
+          confirmWrite(key);
           return true;
         } catch {
           if (before && current(key)) patchState(store, { log: before });
@@ -496,12 +638,14 @@ function createTaskTimeStore(): Type<TaskTimeStoreInstance> {
         key: string,
         draft: TaskTimeDraft,
         workDate: string,
+        idempotencyKey?: string,
       ) => Promise<TaskTimeEntry | null> = async (
         key: string,
         draft: TaskTimeDraft,
         workDate: string,
+        idempotencyKey?: string,
       ): Promise<TaskTimeEntry | null> => {
-        const entry: TaskTimeEntry | null = await record(key, draft, workDate);
+        const entry: TaskTimeEntry | null = await record(key, draft, workDate, idempotencyKey);
         if (!entry || !current(key)) return entry;
         const task: TaskDetailTask | null = store._detail.task();
         const total: string = formatMinutes(store.totalMinutes());
@@ -523,7 +667,13 @@ function createTaskTimeStore(): Type<TaskTimeStoreInstance> {
       return {
         _load(key: string | null): void {
           if (key === store.key()) return;
-          patchState(store, { ...initialState, key, timerStartedAt: key ? readTimer(key) : null });
+          const startedAt: number | null = key ? readTimer(key) : null;
+          patchState(store, {
+            ...initialState,
+            key,
+            timerStartedAt: startedAt,
+            timerStop: key ? readStop(key, startedAt) : null,
+          });
           if (key !== null) void readLog(key);
         },
 
@@ -557,6 +707,7 @@ function createTaskTimeStore(): Type<TaskTimeStoreInstance> {
           if (key === null || store.timerStartedAt() !== null) return;
           const startedAt: number = Date.now();
           writeTimer(key, startedAt);
+          writeStop(key, null);
           patchState(store, { timerStartedAt: startedAt, timerStop: null });
         },
 
@@ -564,22 +715,30 @@ function createTaskTimeStore(): Type<TaskTimeStoreInstance> {
           const key: string | null = store.key();
           const startedAt: number | null = store.timerStartedAt();
           if (key === null || startedAt === null || store.pending()) return false;
-          const stop: { readonly minutes: number; readonly workDate: string } =
-            store.timerStop() ?? {
+          const stop: TaskTimerStop = store.timerStop() ??
+            readStop(key, startedAt) ?? {
+              startedAt,
               minutes: Math.min(
                 MAX_ENTRY_MINUTES,
                 Math.max(1, Math.round((now - startedAt) / 60_000)),
               ),
               workDate: localDay(new Date(now)),
+              note: $localize`:@@task.properties.timer-note:Timer`,
+              idempotencyKey: crypto.randomUUID(),
             };
+          writeStop(key, stop);
           patchState(store, { timerStop: stop });
           const entry: TaskTimeEntry | null = await add(
             key,
-            { minutes: stop.minutes, note: $localize`:@@task.properties.timer-note:Timer` },
+            { minutes: stop.minutes, note: stop.note },
             stop.workDate,
+            stop.idempotencyKey,
           );
           if (entry === null) return false;
-          if (readTimer(key) === startedAt) writeTimer(key, null);
+          if (readTimer(key) === startedAt) {
+            writeTimer(key, null);
+            writeStop(key, null);
+          }
           if (current(key) && store.timerStartedAt() === startedAt) {
             patchState(store, { timerStartedAt: null, timerStop: null });
           }
@@ -613,7 +772,9 @@ function createTaskTimeStore(): Type<TaskTimeStoreInstance> {
  * the device storage per organization and task (`TIMER_STORAGE_PREFIX`), read when the task
  * opens; a storage the browser refuses leaves the timer in memory only. Stopping records the
  * elapsed minutes, one at least, with the note `Timer`, and clears the timer only once the entry
- * is confirmed; a write sent again after a failure reuses its `Idempotency-Key`. `Undo` acts on
+ * is confirmed (the stop sent, its entry and key, waits in the device storage next to the start,
+ * so stopping again after a reopen or a reload sends the same entry under the same key); a read
+ * of the entries that began before a confirmed write is dropped and made again; a write sent again after a failure reuses its `Idempotency-Key`. `Undo` acts on
  * the task its toast names, whichever task is open by then. It follows the open task of
  * `TaskDetailStore`. Recording time does not change the task version.
  *

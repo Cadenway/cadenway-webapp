@@ -8,7 +8,12 @@ import { WORKSPACE_CONTEXT } from '@features/workspace/ports/workspace-context';
 import { TaskTimeApi } from '../../data-access/services/task-time-api/task-time-api.service';
 import type { TaskTimeEntry, TaskTimeLog } from '../../models/task-time/task-time.interface';
 import { TaskDetailStore } from '../task-detail/task-detail.store';
-import { TIMER_STORAGE_PREFIX, TaskTimeStore, type TaskTimeStoreInstance } from './task-time.store';
+import {
+  TIMER_STOP_SUFFIX,
+  TIMER_STORAGE_PREFIX,
+  TaskTimeStore,
+  type TaskTimeStoreInstance,
+} from './task-time.store';
 
 /**
  * Constant entry
@@ -272,6 +277,97 @@ describe('TaskTimeStore', () => {
       expect.any(String),
     );
     expect(store.log()).toEqual(shown);
+  });
+
+  it('sends a stop whose answer was lost again with its key after the detail reopens', async () => {
+    create();
+    await settle();
+    store.startTimer();
+    const startedAt: number = store.timerStartedAt() ?? 0;
+    api.record.mockRejectedValueOnce(new Error('offline'));
+    expect(await store.stopTimer(startedAt + 25 * 60_000)).toBe(false);
+    expect(localStorage.getItem(`${storageKey}.${TIMER_STOP_SUFFIX}`)).not.toBeNull();
+
+    taskKey.set('CAD-490');
+    await settle();
+    taskKey.set('CAD-482');
+    await settle();
+    expect(await store.stopTimer(startedAt + 40 * 60_000)).toBe(true);
+
+    const calls: unknown[][] = api.record.mock.calls;
+    expect(calls).toHaveLength(2);
+    expect(calls[1][1]).toEqual({ minutes: 25, note: 'Timer' });
+    expect(calls[1][2]).toBe(calls[0][2]);
+    expect(calls[1][3]).toBe(calls[0][3]);
+    expect(localStorage.getItem(storageKey)).toBeNull();
+    expect(localStorage.getItem(`${storageKey}.${TIMER_STOP_SUFFIX}`)).toBeNull();
+  });
+
+  it('sends a stop whose answer was lost again with its key after a reload', async () => {
+    create();
+    await settle();
+    store.startTimer();
+    const startedAt: number = store.timerStartedAt() ?? 0;
+    api.record.mockRejectedValueOnce(new Error('offline'));
+    await store.stopTimer(startedAt + 25 * 60_000);
+    const first: unknown[] = api.record.mock.calls[0];
+
+    TestBed.resetTestingModule();
+    create();
+    await settle();
+    expect(store.timerStartedAt()).toBe(startedAt);
+    expect(await store.stopTimer(startedAt + 90 * 60_000)).toBe(true);
+
+    const second: unknown[] = api.record.mock.calls[1];
+    expect(second[1]).toEqual({ minutes: 25, note: 'Timer' });
+    expect(second[3]).toBe(first[3]);
+  });
+
+  it('ignores a stored stop of another timer start', async () => {
+    localStorage.setItem(storageKey, '1762592400000');
+    localStorage.setItem(
+      `${storageKey}.${TIMER_STOP_SUFFIX}`,
+      JSON.stringify({
+        startedAt: 1762500000000,
+        minutes: 5,
+        workDate: '2026-11-07',
+        note: 'Timer',
+        idempotencyKey: 'old-key',
+      }),
+    );
+    create();
+    await settle();
+
+    await store.stopTimer(1762592400000 + 10 * 60_000);
+
+    expect(api.record.mock.calls[0][1]).toEqual({ minutes: 10, note: 'Timer' });
+    expect(api.record.mock.calls[0][3]).not.toBe('old-key');
+  });
+
+  it('drops a read of the entries that began before a confirmed write, and reads again', async () => {
+    create();
+    await settle();
+    let answer: (read: TaskTimeLog) => void = () => undefined;
+    api.log.mockReturnValueOnce(
+      new Promise<TaskTimeLog>((resolve: (read: TaskTimeLog) => void) => {
+        answer = resolve;
+      }),
+    );
+    const read: Promise<void> = store.reload();
+    await store.add({ minutes: 90, note: 'OAuth buttons' });
+    expect(store.totalMinutes()).toBe(135);
+    const fresh: TaskTimeLog = {
+      entries: [{ ...entry, id: 'e2', minutes: 90, note: 'OAuth buttons' }, entry],
+      totalMinutes: 135,
+    };
+    api.log.mockResolvedValueOnce(fresh);
+
+    answer(log);
+    await read;
+
+    expect(api.log).toHaveBeenCalledTimes(3);
+    expect(store.log()).toEqual(fresh);
+    expect(store.totalMinutes()).toBe(135);
   });
 
   it('finds a running timer when the task opens again', async () => {
