@@ -112,13 +112,17 @@ publication (`Publish the form`, `Unpublish the form`). A list the caller cannot
 - `FormViewStore` (`state/form-view`, route-scoped through `FORM_VIEW_PROVIDERS`) reads
   `getIntakeFormConfiguration` through `IntakeFormApi` (`data-access/services/intake-form-api`);
   that primary read fails to the route boundary, and a view re-entered after a failure reads
-  again. A change shows at once; 500 ms after the last one, what differs from the saved settings is
-  sent with `updateIntakeFormConfiguration` against their version (`If-Match`), one write after the
-  other; a blank title is not sent. A refused write forgets the changes, reads the settings again
-  and toasts `The form settings could not be saved` (`This status or assignee cannot be used in
-this list` for `422 intake-form.defaults-invalid`). `publishIntakeForm` and `disableIntakeForm`
-  (followed by a read, since it answers without a body) replace the saved settings. Another list
-  starts over and drops late answers.
+  again. A change shows at once; 500 ms after the last one, what differs from the newest recorded
+  settings is sent with `updateIntakeFormConfiguration` against their version (`If-Match`); a blank
+  title is not sent. Settings changes, `publishIntakeForm` and `disableIntakeForm` (followed by a
+  read, since it answers without a body) share one write queue: they run one after the other, a
+  publication first sends the change waiting before it, and an answer older than the version
+  already known is ignored. A change still waiting when the view is left, or when another list is
+  shown, is sent at once and completes after the store is gone. A refused change toasts `The form
+settings could not be saved` (`This status or assignee cannot be used in this list` for
+  `422 intake-form.defaults-invalid`) and reads the settings again: the settings it sent go back
+  to the recorded values unless edited since, and the edits made since are sent against the
+  settings read.
 - The mockup's `on`/`req` pair maps to the contract's mode: a hidden field is `disabled`, a field
   shown again is `optional`.
 - Known gaps: the destination note gives no next reference (`prochaine référence <id>`), which
