@@ -2,6 +2,7 @@ import type { SavedView as SavedViewDto } from '@cadenway/api-client';
 import { describe, expect, it } from 'vitest';
 
 import type { ListViewConfig } from '../../../models/list-view-config/list-view-config.interface';
+import type { SavedView } from '../../../models/saved-view/saved-view.interface';
 import {
   DEFAULT_PRESENTATION,
   DEFAULT_VIEW_CONFIG,
@@ -120,7 +121,7 @@ describe('saved view adapter', () => {
     expect(toSavedView(board).layout).toBe('board');
   });
 
-  it("stores only the layout's presentation, and patches the rest to null", () => {
+  it("stores and patches only the layout's presentation, an empty member as null", () => {
     expect(toSavedViewConfiguration('board', hiddenColumns).presentation).toEqual({
       hiddenBoardStatusKeys: ['backlog'],
     });
@@ -135,14 +136,65 @@ describe('saved view adapter', () => {
       filters: { status: [], priority: [], assignee: [], label: [] },
       sort: 'manual',
       groupBy: 'status',
-      presentation: {
-        hiddenBoardStatusKeys: ['backlog'],
-        hiddenSheetColumns: null,
-        hiddenCustomFieldIds: null,
-        sheetSort: null,
-        customFieldSort: null,
+      presentation: { hiddenBoardStatusKeys: ['backlog'] },
+    });
+    expect(
+      toSavedViewConfigurationPatch('table', {
+        ...hiddenColumns,
+        presentation: { ...hiddenColumns.presentation, hiddenSheetColumns: [], sheetSort: null },
+      }).presentation,
+    ).toEqual({
+      hiddenSheetColumns: null,
+      hiddenCustomFieldIds: ['cf-points'],
+      sheetSort: null,
+      customFieldSort: null,
+    });
+    expect(toSavedViewConfigurationPatch('list', hiddenColumns)).not.toHaveProperty('presentation');
+  });
+
+  it('keeps the unknown presentation values it read, unless a known sort replaces them', () => {
+    const view: SavedView = toSavedView({
+      ...criticalBugs,
+      configuration: {
+        ...criticalBugs.configuration,
+        layout: 'board',
+        presentation: {
+          hiddenBoardStatusKeys: ['backlog', 'archived' as never],
+          sheetSort: { column: 'future', direction: 'asc' },
+          customFieldSort: { fieldId: 'cf-points', direction: 'random' as never },
+        },
       },
     });
+    expect(view.unknownPresentation).toEqual({
+      hiddenBoardStatusKeys: ['archived'],
+      hiddenSheetColumns: [],
+      sheetSort: { column: 'future', direction: 'asc' },
+      customFieldSort: { fieldId: 'cf-points', direction: 'random' },
+    });
+    expect(toSavedView(criticalBugs)).not.toHaveProperty('unknownPresentation');
+
+    expect(
+      toSavedViewConfigurationPatch('board', view.config, view.unknownPresentation).presentation,
+    ).toEqual({ hiddenBoardStatusKeys: ['backlog', 'archived'] });
+    expect(
+      toSavedViewConfiguration('table', view.config, view.unknownPresentation).presentation,
+    ).toEqual({
+      sheetSort: { column: 'future', direction: 'asc' },
+      customFieldSort: { fieldId: 'cf-points', direction: 'random' },
+    });
+    expect(
+      toSavedViewConfigurationPatch(
+        'table',
+        {
+          ...view.config,
+          presentation: {
+            ...view.config.presentation,
+            sheetSort: { column: 'due', direction: 'desc' },
+          },
+        },
+        view.unknownPresentation,
+      ).presentation?.sheetSort,
+    ).toEqual({ column: 'due', direction: 'desc' });
   });
 
   it('stores layout, filters, signed sort and grouping, never the subtask display', () => {

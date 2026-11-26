@@ -28,7 +28,10 @@ import type {
   SheetExportSort,
 } from '../../../models/list-view-config/list-view-config.interface';
 import type { LookIcon } from '../../../models/look/look.type';
-import type { SavedView, ViewLayout } from '../../../models/saved-view/saved-view.interface';
+import type {
+  SavedView,
+  SavedViewCreationDraft,
+} from '../../../models/saved-view/saved-view.interface';
 import type {
   ListDraft,
   ListSummary,
@@ -521,22 +524,24 @@ export class ListsApi {
    * Method createSavedView
    *
    * @description
-   * Saves the current view under a name and an icon.
+   * Saves the current view under a name and an icon; a restored view keeps the presentation
+   * values this client did not read (`unknownPresentation`).
    *
    * @param {string} listId - The list.
-   * @param {{ name: string; icon: LookIcon; layout: ViewLayout; config: ListViewConfig }} view - What to save.
+   * @param {SavedViewCreationDraft} view - What to save.
    * @returns {Promise<SavedView>} The saved view.
    */
-  public async createSavedView(
-    listId: string,
-    view: { name: string; icon: LookIcon; layout: ViewLayout; config: ListViewConfig },
-  ): Promise<SavedView> {
+  public async createSavedView(listId: string, view: SavedViewCreationDraft): Promise<SavedView> {
     return toSavedView(
       await firstValueFrom(
         this.lists.createSavedView(listId, {
           name: view.name,
           icon: view.icon,
-          configuration: toSavedViewConfiguration(view.layout, view.config),
+          configuration: toSavedViewConfiguration(
+            view.layout,
+            view.config,
+            view.unknownPresentation,
+          ),
         }),
       ),
     );
@@ -546,7 +551,8 @@ export class ListsApi {
    * Method updateSavedView
    *
    * @description
-   * Renames a saved view or replaces its settings, from the version shown.
+   * Renames a saved view or replaces its settings, from the version shown, writing back the
+   * presentation values this client did not read.
    *
    * @param {SavedView} view - The view as shown.
    * @param {{ name?: string; icon?: LookIcon; config?: ListViewConfig }} change - What changes.
@@ -560,7 +566,13 @@ export class ListsApi {
       ...(change.name !== undefined ? { name: change.name } : {}),
       ...(change.icon !== undefined ? { icon: change.icon } : {}),
       ...(change.config
-        ? { configuration: toSavedViewConfigurationPatch(view.layout, change.config) }
+        ? {
+            configuration: toSavedViewConfigurationPatch(
+              view.layout,
+              change.config,
+              view.unknownPresentation,
+            ),
+          }
         : {}),
     };
     return toSavedView(

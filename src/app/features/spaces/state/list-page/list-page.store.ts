@@ -638,6 +638,7 @@ function createListPageStore(): Type<ListPageStoreInstance> {
               icon: view.icon,
               layout: view.layout,
               config: view.config,
+              unknownPresentation: view.unknownPresentation,
             }),
           );
           if (created && store.listId() === view.listId && store.savedViews.hasValue()) {

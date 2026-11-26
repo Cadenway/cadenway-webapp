@@ -189,8 +189,11 @@ computed from the navigation's reads, for the command palette's `Lists` and the 
     layout shows (`tools`, `LAYOUT_TOOLS`). The presentation (`setPresentation`) is saved with a
     view, but only the shown layout's part counts (`presentationFor`): hidden board columns on
     the board, hidden sheet columns and the sheet sort on the sheet make a standard tab savable
-    and an applied view `Modified`, and are the only part stored (a `Save` patches the others to
-    null). The export follows the sheet sort on the sheet (`sheetExportSort`, the custom field's
+    and an applied view `Modified`, and are the only part written (a `Save` leaves the other
+    layouts' stored members untouched). Presentation values a newer client stored (unknown
+    statuses, columns or sorts) are kept beside the view (`SavedView.unknownPresentation`) and
+    merged back on `Save` and on the `Undo` of a deletion, so this client never erases them.
+    The export follows the sheet sort on the sheet (`sheetExportSort`, the custom field's
     first).
     The shown view publishes its rows' summary to it (`followRows`, until the view is destroyed),
     so the list page's tools read `rows`: the tasks shown with the filters and whether the tasks
