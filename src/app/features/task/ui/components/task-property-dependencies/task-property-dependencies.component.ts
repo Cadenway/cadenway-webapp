@@ -267,8 +267,8 @@ export interface DependencyLink {
         </div>
         <div class="flex max-h-56 flex-col overflow-y-auto" aria-live="polite">
           @if (candidatesFailed()) {
-            <p class="px-2 py-3 text-sm" role="alert" i18n="@@task.create.read-failed">
-              Could not load this information.
+            <p class="px-2 py-3 text-sm" role="alert">
+              <span i18n="@@task.create.read-failed">Could not load this information.</span>
             </p>
           } @else {
             @for (candidate of candidates(); track candidate.key) {

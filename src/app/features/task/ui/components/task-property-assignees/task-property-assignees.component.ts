@@ -105,8 +105,8 @@ export function peopleOf(
         <span role="alert" class="block px-2 py-1.5 text-sm" i18n="@@task.create.read-failed"
           >Could not load this information.</span
         >
-        <button cwMenuItem type="button" (triggered)="retried.emit()" i18n="@@task.retry">
-          Retry
+        <button cwMenuItem type="button" (triggered)="retried.emit()">
+          <ng-container i18n="@@task.retry">Retry</ng-container>
         </button>
       } @else if (people() === null) {
         <cw-menu-label i18n="@@task.properties.people-loading">Loading the people</cw-menu-label>
