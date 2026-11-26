@@ -21,6 +21,7 @@ import type {
   TaskTimeEntry,
   TaskTimeLog,
 } from '../../models/task-time/task-time.interface';
+import { stableKey } from '../../utils/stable-key/stable-key.util';
 import { formatMinutes, localDay } from '../../utils/task-property/task-property.util';
 import { TaskDetailStore } from '../task-detail/task-detail.store';
 
@@ -710,6 +711,8 @@ function createTaskTimeStore(): Type<TaskTimeStoreInstance> {
         return entry;
       };
 
+      let stopping: boolean = false;
+
       return {
         _load(key: string | null): void {
           if (key === store.key()) return;
@@ -760,35 +763,47 @@ function createTaskTimeStore(): Type<TaskTimeStoreInstance> {
         async stopTimer(now: number): Promise<boolean> {
           const key: string | null = store.key();
           const startedAt: number | null = store.timerStartedAt();
-          if (key === null || startedAt === null || store.pending()) return false;
-          const stop: TaskTimerStop = store.timerStop() ??
-            readStop(key, startedAt) ?? {
-              startedAt,
-              minutes: Math.min(
-                MAX_ENTRY_MINUTES,
-                Math.max(1, Math.round((now - startedAt) / 60_000)),
-              ),
-              workDate: localDay(new Date(now)),
-              note: $localize`:@@task.properties.timer-note:Timer`,
-              idempotencyKey: crypto.randomUUID(),
-            };
-          writeStop(key, stop);
-          patchState(store, { timerStop: stop });
-          const entry: TaskTimeEntry | null = await add(
-            key,
-            { minutes: stop.minutes, note: stop.note },
-            stop.workDate,
-            stop.idempotencyKey,
-          );
-          if (entry === null) return false;
-          if (readTimer(key) === startedAt) {
-            writeTimer(key, null);
-            writeStop(key, null);
+          if (key === null || startedAt === null || store.pending() || stopping) return false;
+          stopping = true;
+          try {
+            const stop: TaskTimerStop = store.timerStop() ??
+              readStop(key, startedAt) ?? {
+                startedAt,
+                minutes: Math.min(
+                  MAX_ENTRY_MINUTES,
+                  Math.max(1, Math.round((now - startedAt) / 60_000)),
+                ),
+                workDate: localDay(new Date(now)),
+                note: $localize`:@@task.properties.timer-note:Timer`,
+                idempotencyKey: await stableKey([
+                  'task-timer-stop',
+                  store._workspace.organization().id,
+                  store._workspace.user().id,
+                  key,
+                  String(startedAt),
+                ]),
+              };
+            const sent: TaskTimerStop = readStop(key, startedAt) ?? stop;
+            writeStop(key, sent);
+            patchState(store, { timerStop: sent });
+            const entry: TaskTimeEntry | null = await add(
+              key,
+              { minutes: sent.minutes, note: sent.note },
+              sent.workDate,
+              sent.idempotencyKey,
+            );
+            if (entry === null) return false;
+            if (readTimer(key) === startedAt) {
+              writeTimer(key, null);
+              writeStop(key, null);
+            }
+            if (current(key) && store.timerStartedAt() === startedAt) {
+              patchState(store, { timerStartedAt: null, timerStop: null });
+            }
+            return true;
+          } finally {
+            stopping = false;
           }
-          if (current(key) && store.timerStartedAt() === startedAt) {
-            patchState(store, { timerStartedAt: null, timerStop: null });
-          }
-          return true;
         },
       };
     }),
@@ -819,7 +834,9 @@ function createTaskTimeStore(): Type<TaskTimeStoreInstance> {
  * opens; a storage the browser refuses leaves the timer in memory only. Stopping records the
  * elapsed minutes, one at least, with the note `Timer`, and clears the timer only once the entry
  * is confirmed (the stop sent, its entry and key, waits in the device storage next to the start,
- * so stopping again after a reopen or a reload sends the same entry under the same key); a read
+ * so stopping again after a reopen or a reload sends the same entry under the same key, and the
+ * key derives from the organization, the user, the task and the start, so another tab stopping
+ * the same timer sends the same key and the entry frozen by the first stop); a read
  * of the entries that began before a confirmed write is dropped and made again, and a read
  * applied while a deletion is pending leaves that entry out; a write sent again after a failure reuses its `Idempotency-Key`. `Undo` acts on
  * the task its toast names, whichever task is open by then. It follows the open task of

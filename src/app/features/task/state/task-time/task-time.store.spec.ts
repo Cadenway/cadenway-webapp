@@ -1,4 +1,4 @@
-import { signal, type WritableSignal } from '@angular/core';
+import { Injector, signal, type WritableSignal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { CwToastService, type CwToastOptions } from '@cadenway/ui/components/toast';
 import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
@@ -444,6 +444,61 @@ describe('TaskTimeStore', () => {
     expect(await store.stopTimer(1762592400000 + 10 * 60_000)).toBe(false);
     expect(api.record).not.toHaveBeenCalled();
     expect(localStorage.getItem(storageKey)).toBe('1762592400000');
+  });
+
+  it('sends one idempotency key when two tabs stop the same timer', async () => {
+    create();
+    await settle();
+    store.startTimer();
+    const startedAt: number = store.timerStartedAt() ?? 0;
+    const other: TaskTimeStoreInstance = Injector.create({
+      providers: [TaskTimeStore],
+      parent: TestBed.inject(Injector),
+    }).get(TaskTimeStore);
+    await settle();
+    expect(other.timerStartedAt()).toBe(startedAt);
+    let answer: (saved: TaskTimeEntry) => void = () => undefined;
+    api.record.mockReturnValueOnce(
+      new Promise<TaskTimeEntry>((resolve: (saved: TaskTimeEntry) => void) => {
+        answer = resolve;
+      }),
+    );
+
+    const first: Promise<boolean> = store.stopTimer(startedAt + 25 * 60_000);
+    await vi.waitFor(() => {
+      expect(api.record).toHaveBeenCalledTimes(1);
+    });
+    localStorage.removeItem(`${storageKey}.${TIMER_STOP_SUFFIX}`);
+    await other.stopTimer(startedAt + 26 * 60_000);
+    answer({ ...entry, id: 'e2', minutes: 25, note: 'Timer' });
+    await first;
+
+    const keys: unknown[] = api.record.mock.calls.map((call: unknown[]) => call[3]);
+    expect(keys).toHaveLength(2);
+    expect(keys[1]).toBe(keys[0]);
+    expect(keys[0]).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-8[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u,
+    );
+  });
+
+  it('sends the entry the first tab froze when a second tab stops the same timer', async () => {
+    create();
+    await settle();
+    store.startTimer();
+    const startedAt: number = store.timerStartedAt() ?? 0;
+    const other: TaskTimeStoreInstance = Injector.create({
+      providers: [TaskTimeStore],
+      parent: TestBed.inject(Injector),
+    }).get(TaskTimeStore);
+    await settle();
+    api.record.mockRejectedValueOnce(new Error('offline'));
+    await store.stopTimer(startedAt + 25 * 60_000);
+
+    await other.stopTimer(startedAt + 40 * 60_000);
+
+    const calls: unknown[][] = api.record.mock.calls;
+    expect(calls[1][1]).toEqual({ minutes: 25, note: 'Timer' });
+    expect(calls[1][3]).toBe(calls[0][3]);
   });
 
   it('finds a running timer when the task opens again', async () => {
