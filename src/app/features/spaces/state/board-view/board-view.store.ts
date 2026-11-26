@@ -5,6 +5,7 @@ import {
   patchState,
   signalStore,
   withComputed,
+  withHooks,
   withMethods,
   withProps,
   withState,
@@ -16,6 +17,7 @@ import {
   type Person,
   personOf,
   pickableStatuses,
+  STATUS_SETTLE_MS,
   type StatusOption,
   type TaskSummary,
 } from '@features/task';
@@ -37,8 +39,8 @@ import { ListViewStore } from '../list-view/list-view.store';
  * Interface BoardViewState
  *
  * @description
- * What the board keeps on its own: its folded columns and a counter that hands the board's
- * cards back to `cw-kanban` after a drop that changes nothing.
+ * What the board keeps on its own: its folded columns, the moves waiting to be written and a
+ * counter that hands the board's cards back to `cw-kanban` after a drop that changes nothing.
  */
 interface BoardViewState {
   // #region Properties
@@ -52,6 +54,18 @@ interface BoardViewState {
    * @readonly
    */
   readonly collapsedColumns: readonly string[];
+
+  /**
+   * Property _pending
+   *
+   * @description
+   * The status each moved card shows until its move is written, by task key: a drop settles
+   * `STATUS_SETTLE_MS` after the last move of its task.
+   *
+   * @type {Readonly<Record<string, StatusKey>>}
+   * @readonly
+   */
+  readonly _pending: Readonly<Record<string, StatusKey>>;
 
   /**
    * Property _revision
@@ -75,7 +89,17 @@ interface BoardViewState {
  *
  * @type {BoardViewState}
  */
-const initialState: BoardViewState = { collapsedColumns: [], _revision: 0 };
+const initialState: BoardViewState = { collapsedColumns: [], _pending: {}, _revision: 0 };
+
+/**
+ * Type BoardStatusSend
+ *
+ * @description
+ * Writes a settled move: the task as shown and the status of the column it was dropped in.
+ *
+ * @type {(task: TaskSummary, status: StatusKey) => void}
+ */
+export type BoardStatusSend = (task: TaskSummary, status: StatusKey) => void;
 
 /**
  * Function progressOf
@@ -142,8 +166,9 @@ export interface BoardViewStoreInstance {
    * Property cards
    *
    * @description
-   * The cards in the view's order, each filed under the status it shows (the view's writes and
-   * pending changes applied).
+   * The cards in the view's order, each filed under the status it shows: a move waiting to be
+   * written, else the view's writes and pending changes applied. A read of the tasks never
+   * replaces a waiting move.
    *
    * @type {Signal<readonly BoardCard[]>}
    * @readonly
@@ -189,8 +214,8 @@ export interface BoardViewStoreInstance {
    *
    * @description
    * `Hide the column` of the column menu: adds the status to the view's hidden board columns
-   * (`ListViewStore.presentation`) and shows `Column hidden`, whose `Undo` shows the columns
-   * hidden before.
+   * (`ListViewStore.presentation`) and shows `Column hidden`, whose `Undo` shows that column again
+   * and leaves the columns hidden since as they are.
    *
    * @param {StatusKey} column - Status of the column.
    */
@@ -218,6 +243,50 @@ export interface BoardViewStoreInstance {
    * the column of its status.
    */
   restoreCards(): void;
+
+  /**
+   * Method settleWith
+   *
+   * @description
+   * Gives the write a settled move goes through (the page's `ViewTaskWritesStore.setStatus`), or
+   * null once nothing may be written.
+   *
+   * @param {BoardStatusSend | null} send - The write.
+   */
+  settleWith(send: BoardStatusSend | null): void;
+
+  /**
+   * Method stage
+   *
+   * @description
+   * A card dropped in another column: the card shows the status at once and the move is written
+   * `STATUS_SETTLE_MS` after the last move of that task, so quick moves write only the last
+   * status. A move back to the status the view had confirmed cancels the waiting write: nothing
+   * is sent.
+   *
+   * @param {BoardCard} card - The moved card.
+   * @param {StatusKey} status - Status of the column it was dropped in.
+   */
+  stage(card: BoardCard, status: StatusKey): void;
+
+  /**
+   * Method discard
+   *
+   * @description
+   * Forgets the waiting moves of tasks without writing them: another write of their status (the
+   * task menu, a drop on `Cancelled`) replaces them.
+   *
+   * @param {readonly string[]} taskKeys - The tasks.
+   */
+  discard(taskKeys: readonly string[]): void;
+
+  /**
+   * Method flush
+   *
+   * @description
+   * Writes every waiting move at once, when the view is left.
+   */
+  flush(): void;
   // #endregion
 }
 
@@ -259,13 +328,14 @@ function createBoardViewStore(): Type<BoardViewStoreInstance> {
     withComputed((store) => ({
       cards: (): readonly BoardCard[] => {
         store._revision();
+        const pending: Readonly<Record<string, StatusKey>> = store._pending();
         const people: ReadonlyMap<string, Person> = new Map(
           store.people().map((person: Person): [string, Person] => [person.id, person]),
         );
         return store._tasks.items().map((item: ListTaskItem): BoardCard => ({
           task: item.task,
-          status: item.status,
-          closed: isClosedStatus(item.status),
+          status: pending[item.task.key] ?? item.status,
+          closed: isClosedStatus(pending[item.task.key] ?? item.status),
           progress: progressOf(item.task),
           assignees: item.task.assigneeIds.flatMap((id: string): Person[] => {
             const person: Person | undefined = people.get(id);
@@ -292,44 +362,111 @@ function createBoardViewStore(): Type<BoardViewStoreInstance> {
         });
       },
     })),
-    withMethods((store) => ({
-      setCollapsed(columns: readonly string[]): void {
-        patchState(store, { collapsedColumns: columns });
-      },
-      toggleCollapsed(column: string): void {
-        const collapsed: readonly string[] = store.collapsedColumns();
+    withMethods((store) => {
+      let send: BoardStatusSend | null = null;
+      const timers: Map<string, ReturnType<typeof setTimeout>> = new Map<
+        string,
+        ReturnType<typeof setTimeout>
+      >();
+      const forget: (keys: readonly string[]) => void = (keys: readonly string[]): void => {
+        for (const key of keys) {
+          clearTimeout(timers.get(key));
+          timers.delete(key);
+        }
         patchState(store, {
-          collapsedColumns: collapsed.includes(column)
-            ? collapsed.filter((key: string): boolean => key !== column)
-            : [...collapsed, column],
+          _pending: Object.fromEntries(
+            Object.entries(store._pending()).filter(
+              ([key]: [string, StatusKey]): boolean => !keys.includes(key),
+            ),
+          ),
         });
+      };
+      const write: (key: string) => void = (key: string): void => {
+        const pending: Readonly<Record<string, StatusKey>> = store._pending();
+        if (!Object.hasOwn(pending, key)) return;
+        const status: StatusKey = pending[key];
+        const item: ListTaskItem | undefined = store._tasks
+          .items()
+          .find((shown: ListTaskItem): boolean => shown.task.key === key);
+        if (item && item.status !== status) send?.(item.task, status);
+        forget([key]);
+      };
+      return {
+        setCollapsed(columns: readonly string[]): void {
+          patchState(store, { collapsedColumns: columns });
+        },
+        toggleCollapsed(column: string): void {
+          const collapsed: readonly string[] = store.collapsedColumns();
+          patchState(store, {
+            collapsedColumns: collapsed.includes(column)
+              ? collapsed.filter((key: string): boolean => key !== column)
+              : [...collapsed, column],
+          });
+        },
+        hideColumn(column: StatusKey): void {
+          const hidden: readonly StatusKey[] = store._view.presentation().hiddenBoardStatusKeys;
+          if (hidden.includes(column)) return;
+          const label: string =
+            store.statusOptions().find((option: StatusOption): boolean => option.key === column)
+              ?.label ?? '';
+          store._view.setPresentation({ hiddenBoardStatusKeys: [...hidden, column] });
+          store._toasts.show($localize`:@@spaces.board.hidden:Column hidden`, {
+            description: $localize`:@@spaces.board.hidden-text:${label}:label: · show it again from “Columns”.`,
+            undo: (): void => {
+              store._view.setPresentation({
+                hiddenBoardStatusKeys: store._view
+                  .presentation()
+                  .hiddenBoardStatusKeys.filter((key: StatusKey): boolean => key !== column),
+              });
+            },
+          });
+        },
+        accepts(card: BoardCard, column: string): column is StatusKey {
+          return (
+            column !== card.status &&
+            pickableStatuses(store.statusOptions(), card.status, card.task.milestone).some(
+              (option: StatusOption): boolean => option.key === column,
+            )
+          );
+        },
+        restoreCards(): void {
+          patchState(store, { _revision: store._revision() + 1 });
+        },
+        settleWith(next: BoardStatusSend | null): void {
+          send = next;
+        },
+        stage(card: BoardCard, status: StatusKey): void {
+          const key: string = card.task.key;
+          const confirmed: StatusKey | undefined = store._tasks
+            .items()
+            .find((item: ListTaskItem): boolean => item.task.key === key)?.status;
+          if (confirmed === undefined || confirmed === status) {
+            forget([key]);
+            return;
+          }
+          clearTimeout(timers.get(key));
+          patchState(store, { _pending: { ...store._pending(), [key]: status } });
+          timers.set(
+            key,
+            setTimeout((): void => {
+              timers.delete(key);
+              write(key);
+            }, STATUS_SETTLE_MS),
+          );
+        },
+        discard(taskKeys: readonly string[]): void {
+          forget(taskKeys);
+        },
+        flush(): void {
+          for (const key of Object.keys(store._pending())) write(key);
+        },
+      };
+    }),
+    withHooks({
+      onDestroy(store): void {
+        store.flush();
       },
-      hideColumn(column: StatusKey): void {
-        const previous: readonly StatusKey[] = store._view.presentation().hiddenBoardStatusKeys;
-        if (previous.includes(column)) return;
-        const label: string =
-          store.statusOptions().find((option: StatusOption): boolean => option.key === column)
-            ?.label ?? '';
-        store._view.setPresentation({ hiddenBoardStatusKeys: [...previous, column] });
-        store._toasts.show($localize`:@@spaces.board.hidden:Column hidden`, {
-          description: $localize`:@@spaces.board.hidden-text:${label}:label: · show it again from “Columns”.`,
-          undo: (): void => {
-            store._view.setPresentation({ hiddenBoardStatusKeys: previous });
-          },
-        });
-      },
-      accepts(card: BoardCard, column: string): column is StatusKey {
-        return (
-          column !== card.status &&
-          pickableStatuses(store.statusOptions(), card.status, card.task.milestone).some(
-            (option: StatusOption): boolean => option.key === column,
-          )
-        );
-      },
-      restoreCards(): void {
-        patchState(store, { _revision: store._revision() + 1 });
-      },
-    })),
+    }),
   );
 }
 
@@ -341,8 +478,11 @@ function createBoardViewStore(): Type<BoardViewStoreInstance> {
  * `BOARD_VIEW_PROVIDERS`, over the view's `ListTasksStore`: the status columns (`BOARD_ORDER`
  * with the space's names, without the columns hidden with `Columns` and the statuses the space
  * stopped using unless a card sits there), the cards filed under the status they show, the
- * folded columns (kept while the view lives) and `Hide the column` with its `Undo`. Moving a
- * card is written by the page through `ViewTaskWritesStore`; a drop that writes nothing hands
+ * folded columns (kept while the view lives) and `Hide the column` with its `Undo`. A moved
+ * card shows its new status at once (`stage`); the move is written through the page's
+ * `ViewTaskWritesStore` (`settleWith`) `STATUS_SETTLE_MS` after the last move of its task, a move
+ * back to the confirmed status writes nothing, and leaving the view writes the waiting moves
+ * (`flush`); a read of the tasks never replaces a waiting move. A drop that writes nothing hands
  * the cards back (`restoreCards`) so the card returns to its column.
  *
  * @type {Type<BoardViewStoreInstance>}

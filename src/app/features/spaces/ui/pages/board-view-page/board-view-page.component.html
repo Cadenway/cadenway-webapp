@@ -81,6 +81,18 @@
         </span>
       </span>
     </ng-template>
+    <ng-template cwKanbanColumnMenu let-column>
+      <button
+        cwButton
+        type="button"
+        variant="ghost"
+        size="icon-xs"
+        [attr.aria-label]="columnActionsLabel(column.label)"
+        (click)="openColumnMenu($event, column)"
+      >
+        <ng-icon name="phosphorDotsThreeBold" aria-hidden="true" />
+      </button>
+    </ng-template>
   </cw-kanban>
 </div>
 
@@ -93,7 +105,7 @@
   [userId]="writes.userId()"
   [lists]="writes.targets()"
   (openRequested)="writes.open($event.key, $event)"
-  (statusPicked)="writes.setStatus(menuTasks(), $event, menuMilestone())"
+  (statusPicked)="pickStatus($event)"
   (priorityPicked)="writes.setPriority(menuTasks(), $event)"
   (assigneeToggled)="writes.toggleAssignee(menuTasks(), $event)"
   (moved)="writes.moveTo(menuTasks(), $event)"

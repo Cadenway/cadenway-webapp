@@ -1,9 +1,9 @@
 import { signal, type WritableSignal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { CwToastService } from '@cadenway/ui/components/toast';
-import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 
-import type { TaskSummary } from '@features/task';
+import { STATUS_SETTLE_MS, type TaskSummary } from '@features/task';
 
 import type { BoardCard, BoardColumn } from '../../models/board-view/board-view.interface';
 import type { ListTaskItem } from '../../models/list-tasks/list-tasks.interface';
@@ -240,6 +240,104 @@ describe('BoardViewStore', () => {
     const undo: () => void = (show.mock.calls[0][1] as { undo: () => void }).undo;
     undo();
     expect(presentation().hiddenBoardStatusKeys).toEqual([]);
+  });
+
+  it('undoes a hidden column without showing the columns hidden since', () => {
+    const store: InstanceType<typeof BoardViewStore> = setup();
+
+    store.hideColumn('review');
+    store.hideColumn('blocked');
+    const undoReview: () => void = (show.mock.calls[0][1] as { undo: () => void }).undo;
+    undoReview();
+
+    expect(presentation().hiddenBoardStatusKeys).toEqual(['blocked']);
+  });
+
+  describe('moves', () => {
+    let send: Mock<(task: TaskSummary, status: string) => void>;
+
+    beforeEach(() => {
+      vi.useFakeTimers();
+      send = vi.fn();
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('shows a move at once and writes only the last status of quick moves', () => {
+      const store: InstanceType<typeof BoardViewStore> = setup();
+      store.settleWith(send);
+
+      store.stage(cardOf(store, 'CAD-461'), 'progress');
+      expect(cardOf(store, 'CAD-461').status).toBe('progress');
+      vi.advanceTimersByTime(STATUS_SETTLE_MS - 100);
+      store.stage(cardOf(store, 'CAD-461'), 'review');
+      vi.advanceTimersByTime(STATUS_SETTLE_MS - 100);
+      expect(send).not.toHaveBeenCalled();
+      vi.advanceTimersByTime(100);
+
+      expect(send).toHaveBeenCalledTimes(1);
+      expect(send).toHaveBeenCalledWith(
+        expect.objectContaining({ key: 'CAD-461' }) as TaskSummary,
+        'review',
+      );
+    });
+
+    it('sends nothing for a move back to the confirmed status', () => {
+      const store: InstanceType<typeof BoardViewStore> = setup();
+      store.settleWith(send);
+
+      store.stage(cardOf(store, 'CAD-461'), 'progress');
+      store.stage(cardOf(store, 'CAD-461'), 'todo');
+      vi.advanceTimersByTime(STATUS_SETTLE_MS * 2);
+
+      expect(send).not.toHaveBeenCalled();
+      expect(cardOf(store, 'CAD-461').status).toBe('todo');
+    });
+
+    it('keeps a waiting move over a read of the tasks', () => {
+      const store: InstanceType<typeof BoardViewStore> = setup();
+      store.settleWith(send);
+
+      store.stage(cardOf(store, 'CAD-461'), 'review');
+      items.set([...items()]);
+
+      expect(cardOf(store, 'CAD-461').status).toBe('review');
+    });
+
+    it('forgets a discarded move', () => {
+      const store: InstanceType<typeof BoardViewStore> = setup();
+      store.settleWith(send);
+
+      store.stage(cardOf(store, 'CAD-461'), 'review');
+      store.discard(['CAD-461']);
+      vi.advanceTimersByTime(STATUS_SETTLE_MS);
+
+      expect(send).not.toHaveBeenCalled();
+      expect(cardOf(store, 'CAD-461').status).toBe('todo');
+    });
+
+    it('writes the waiting moves at once on a flush and when destroyed', () => {
+      const store: InstanceType<typeof BoardViewStore> = setup();
+      store.settleWith(send);
+
+      store.stage(cardOf(store, 'CAD-461'), 'review');
+      store.flush();
+      expect(send).toHaveBeenCalledWith(
+        expect.objectContaining({ key: 'CAD-461' }) as TaskSummary,
+        'review',
+      );
+
+      store.stage(cardOf(store, 'CAD-482'), 'blocked');
+      TestBed.resetTestingModule();
+      expect(send).toHaveBeenLastCalledWith(
+        expect.objectContaining({ key: 'CAD-482' }) as TaskSummary,
+        'blocked',
+      );
+      vi.advanceTimersByTime(STATUS_SETTLE_MS);
+      expect(send).toHaveBeenCalledTimes(2);
+    });
   });
 
   it('folds and unfolds columns', () => {

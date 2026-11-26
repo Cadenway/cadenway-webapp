@@ -26,6 +26,8 @@ import {
   CwKanban,
   type CwKanbanAddRequest,
   CwKanbanCardDef,
+  type CwKanbanColumn,
+  CwKanbanColumnMenuDef,
   type CwKanbanMove,
 } from '@cadenway/ui/components/kanban';
 import { CwMenu, CwMenuItem, CwMenuLabel, CwMenuSeparator } from '@cadenway/ui/components/menu';
@@ -90,14 +92,16 @@ function isBoardCard(data: unknown): data is BoardCard {
  * when cancelled), the labels, the due date, the subtasks' or checklist's progress and the
  * assignees' initials; a closed card is see-through. A click or Enter opens the task's detail
  * (`?task=<KEY>`). A card dropped in another column, with the mouse or with Space, the arrows and
- * Space (the brick's keyboard move), changes its status through `ViewTaskWritesStore.setStatus`
- * (the card moves at once, the toast offers `Undo`, a refusal puts it back; `Cancelled` asks the
- * reason first); a drop in its own column, or in a column whose status the task cannot take,
+ * Space (the brick's keyboard move), moves at once and changes its status through
+ * `ViewTaskWritesStore.setStatus` 460 ms after the task's last move, so quick moves write only
+ * the last status and a move back writes nothing; leaving the view writes the waiting moves (the
+ * toast offers `Undo`, a refusal puts the card back; `Cancelled` asks the reason first, the card
+ * staying put until it is given); a drop in its own column, or in a column whose status the task cannot take,
  * puts it back, since the board has no manual order (G1). There is no work-in-progress limit
  * (G2) and no Git chip (G3). A right click, Shift F10 or the Menu key on a card opens
- * `cw-task-menu` for the card, or for the selection (Ctrl click) it belongs to; in a column,
- * the column menu: `New task in “X”`, `Fold the column` or `Unfold the column`, and
- * `Hide the column` (with `Undo`). `+` in a header, `Add a task` in a footer or an empty column
+ * `cw-task-menu` for the card, or for the selection (Ctrl click) it belongs to; in a column, or
+ * from the `…` button of its header, the column menu: `New task in “X”`, `Fold the column` or
+ * `Unfold the column`, and `Hide the column` (with `Undo`). `+` in a header, `Add a task` in a footer or an empty column
  * and N on a card open Task's create dialog with the column's status; N elsewhere creates in
  * this list. The first read shows the brick's skeleton (`Loading the board`) and a failed first
  * read reaches the route's error boundary; a failed refresh offers `Retry` in place; a list
@@ -115,6 +119,7 @@ function isBoardCard(data: unknown): data is BoardCard {
     CwButton,
     CwKanban,
     CwKanbanCardDef,
+    CwKanbanColumnMenuDef,
     CwMenu,
     CwMenuItem,
     CwMenuLabel,
@@ -360,8 +365,15 @@ export class BoardViewPage {
    * @readonly
    */
   protected readonly menuStatus: Signal<StatusKey | null> = computed((): StatusKey | null => {
+    const shown: ReadonlyMap<string, StatusKey> = new Map(
+      this.board
+        .cards()
+        .map((card: BoardCard): [string, StatusKey] => [card.task.key, card.status]),
+    );
     const statuses: Set<StatusKey> = new Set<StatusKey>(
-      this.menuTasks().map((task: TaskSummary): StatusKey => this.tasks.shownStatus(task)),
+      this.menuTasks().map(
+        (task: TaskSummary): StatusKey => shown.get(task.key) ?? this.tasks.shownStatus(task),
+      ),
     );
     return statuses.size === 1 ? [...statuses][0] : null;
   });
@@ -469,9 +481,10 @@ export class BoardViewPage {
    *
    * @description
    * Reads the tasks of the list with the view's query, publishes their summary to the view
-   * tools, makes `N` create in this list while the view lives and keeps the refused cards of a
-   * menu action selected. A failed first read is read again when the error boundary runs the
-   * route again.
+   * tools, makes `N` create in this list while the view lives, writes the board's settled moves
+   * through `ViewTaskWritesStore.setStatus` (the waiting ones at once when the view is left) and
+   * keeps the refused cards of a menu action selected. A failed first read is read again when the
+   * error boundary runs the route again.
    *
    * @constructor
    */
@@ -487,6 +500,13 @@ export class BoardViewPage {
     this.taskCreate.useDefaults(() => ({ listId: this.listId() }), destroyRef);
     this.writes.onRefused((taskKeys: readonly string[]): void => {
       this.selection.set(taskKeys);
+    });
+    this.board.settleWith((task: TaskSummary, status: StatusKey): void => {
+      this.writes.setStatus([task], status, task.milestone);
+    });
+    destroyRef.onDestroy((): void => {
+      this.board.flush();
+      this.board.settleWith(null);
     });
   }
   // #endregion
@@ -508,8 +528,10 @@ export class BoardViewPage {
    * Method moveCard
    *
    * @description
-   * A card dropped elsewhere: another column whose status the task may take writes that status
-   * (`Cancelled` asks the reason first); anything else puts the card back in its column.
+   * A card dropped elsewhere: in another column whose status the task may take, the card shows
+   * that status at once and the board writes it 460 ms after the task's last move
+   * (`BoardViewStore.stage`); `Cancelled` forgets a waiting move and asks the reason first, the
+   * card staying in its column until it is given. Anything else puts the card back.
    *
    * @param {CwKanbanMove<BoardCard>} move - The drop.
    */
@@ -517,9 +539,61 @@ export class BoardViewPage {
     const card: BoardCard = move.item;
     const column: string = move.to.column;
     if (this.board.accepts(card, column)) {
-      this.writes.setStatus([card.task], column, card.task.milestone);
+      if (column === 'cancelled') {
+        this.board.discard([card.task.key]);
+        this.writes.setStatus([card.task], column, card.task.milestone);
+      } else {
+        this.board.stage(card, column);
+      }
     }
     this.board.restoreCards();
+  }
+
+  /**
+   * Method pickStatus
+   *
+   * @description
+   * `Status` of the task menu: forgets the waiting moves of its tasks, then writes the status at
+   * once.
+   *
+   * @param {StatusKey} status - The status picked.
+   */
+  protected pickStatus(status: StatusKey): void {
+    const tasks: readonly TaskSummary[] = this.menuTasks();
+    this.board.discard(tasks.map((task: TaskSummary): string => task.key));
+    this.writes.setStatus(tasks, status, this.menuMilestone());
+  }
+
+  /**
+   * Method columnActionsLabel
+   *
+   * @description
+   * Accessible name of a column's `…` button: `Actions on the column In progress`.
+   *
+   * @param {string} label - Name of the column.
+   * @returns {string} The name.
+   */
+  protected columnActionsLabel(label: string): string {
+    return $localize`:@@spaces.board.column-actions:Actions on the column ${label}:label:`;
+  }
+
+  /**
+   * Method openColumnMenu
+   *
+   * @description
+   * The `…` button of an open column header: opens the column menu under it, as a right click in
+   * the column does, so touch screens reach it.
+   *
+   * @param {MouseEvent} event - The click.
+   * @param {CwKanbanColumn} column - The column.
+   */
+  protected openColumnMenu(event: MouseEvent, column: CwKanbanColumn): void {
+    const trigger: EventTarget | null = event.currentTarget;
+    const data: BoardColumn | undefined = this.board
+      .columns()
+      .find((item: BoardColumn): boolean => item.id === column.id);
+    if (!(trigger instanceof HTMLElement) || !data) return;
+    this.columnMenu()?.open({ origin: trigger, trigger, data, focus: 'first' });
   }
 
   /**

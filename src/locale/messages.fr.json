@@ -565,6 +565,7 @@
     "spaces.board.cancelled": "Déplacement annulé.",
     "spaces.board.collapse": "Replier la colonne {$column}",
     "spaces.board.column": "Colonne {$column}",
+    "spaces.board.column-actions": "Actions sur la colonne {$label}",
     "spaces.board.count-limit": "{$count}, limite de {$limit}",
     "spaces.board.count-many": "{$count} tâches",
     "spaces.board.count-one": "{$count} tâche",

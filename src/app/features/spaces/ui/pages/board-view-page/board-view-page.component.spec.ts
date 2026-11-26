@@ -13,6 +13,7 @@ import {
   type TaskBulkOutcome,
   TaskCreate,
   TaskDetailOpener,
+  STATUS_SETTLE_MS,
   TaskStatusChangesStore,
   type TaskSummary,
 } from '@features/task';
@@ -237,6 +238,49 @@ describe('BoardViewPage', () => {
     );
   }
 
+  /**
+   * Function move
+   *
+   * @description
+   * Grabs a card with Space, moves it with arrow keys and drops it with Space.
+   *
+   * @param {ComponentFixture<BoardViewPage>} fixture - The page.
+   * @param {string} name - Accessible name of the card.
+   * @param {readonly string[]} arrows - The arrow keys pressed while it is held.
+   * @returns {Promise<void>} Resolves once dropped.
+   */
+  async function move(
+    fixture: ComponentFixture<BoardViewPage>,
+    name: string,
+    arrows: readonly string[],
+  ): Promise<void> {
+    required(named(name)).focus();
+    key(required(named(name)), ' ');
+    await settle(fixture);
+    for (const arrow of arrows) {
+      key(required(named(name)), arrow);
+      await settle(fixture);
+    }
+    key(required(named(name)), ' ');
+    await settle(fixture);
+  }
+
+  /**
+   * Function waitSettle
+   *
+   * @description
+   * Lets the board's moves settle (`STATUS_SETTLE_MS`), then the page.
+   *
+   * @param {ComponentFixture<BoardViewPage>} fixture - The page.
+   * @returns {Promise<void>} Resolves once settled.
+   */
+  async function waitSettle(fixture: ComponentFixture<BoardViewPage>): Promise<void> {
+    await new Promise<void>((resolve: () => void): void => {
+      setTimeout(resolve, STATUS_SETTLE_MS + 40);
+    });
+    await settle(fixture);
+  }
+
   beforeEach(() => {
     page = vi.fn<ListTasksApi['page']>((): Promise<ListTaskPage> =>
       Promise.resolve({ items: sprintTasks, nextCursor: null, total: sprintTasks.length }),
@@ -367,15 +411,12 @@ describe('BoardViewPage', () => {
 
   it('moves a card to the next column with the keyboard and offers Undo', async () => {
     const fixture: ComponentFixture<BoardViewPage> = await render();
-    const card: HTMLElement = required(named('CAD-482 — Redesign the SSO sign-in screen'));
 
-    card.focus();
-    key(card, ' ');
-    await settle(fixture);
-    key(required(named('CAD-482 — Redesign the SSO sign-in screen')), 'ArrowRight');
-    await settle(fixture);
-    key(required(named('CAD-482 — Redesign the SSO sign-in screen')), ' ');
-    await settle(fixture);
+    await move(fixture, 'CAD-482 — Redesign the SSO sign-in screen', ['ArrowRight']);
+
+    expect(columnOf('In progress').textContent).toContain('Redesign the SSO sign-in screen');
+    expect(bulk).not.toHaveBeenCalled();
+    await waitSettle(fixture);
 
     expect(bulk).toHaveBeenCalledWith(
       [{ taskKey: 'CAD-482', version: 3 }],
@@ -396,6 +437,74 @@ describe('BoardViewPage', () => {
       { type: 'status', status: 'todo' },
       expect.any(Function),
     );
+  });
+
+  it('writes only the last status of two quick moves', async () => {
+    const fixture: ComponentFixture<BoardViewPage> = await render();
+
+    await move(fixture, 'CAD-482 — Redesign the SSO sign-in screen', ['ArrowRight']);
+    await move(fixture, 'CAD-482 — Redesign the SSO sign-in screen', ['ArrowRight']);
+    await waitSettle(fixture);
+
+    expect(bulk).toHaveBeenCalledTimes(1);
+    expect(bulk).toHaveBeenCalledWith(
+      [{ taskKey: 'CAD-482', version: 3 }],
+      { type: 'status', status: 'review' },
+      expect.any(Function),
+    );
+    expect(columnOf('In review').textContent).toContain('Redesign the SSO sign-in screen');
+  });
+
+  it('writes nothing for a move and its return', async () => {
+    const fixture: ComponentFixture<BoardViewPage> = await render();
+
+    await move(fixture, 'CAD-482 — Redesign the SSO sign-in screen', ['ArrowRight']);
+    await move(fixture, 'CAD-482 — Redesign the SSO sign-in screen', ['ArrowLeft']);
+    await waitSettle(fixture);
+
+    expect(bulk).not.toHaveBeenCalled();
+    expect(columnOf('To do').textContent).toContain('Redesign the SSO sign-in screen');
+  });
+
+  it('keeps a waiting move over a refresh of the tasks', async () => {
+    const fixture: ComponentFixture<BoardViewPage> = await render();
+
+    await move(fixture, 'CAD-482 — Redesign the SSO sign-in screen', ['ArrowRight']);
+    TestBed.inject(ListTasksStore).reload();
+    await settle(fixture);
+
+    expect(page).toHaveBeenCalledTimes(2);
+    expect(columnOf('In progress').textContent).toContain('Redesign the SSO sign-in screen');
+    await waitSettle(fixture);
+    expect(bulk).toHaveBeenCalledWith(
+      [{ taskKey: 'CAD-482', version: 3 }],
+      { type: 'status', status: 'progress' },
+      expect.any(Function),
+    );
+  });
+
+  it('writes a waiting move at once when the view is left', async () => {
+    const fixture: ComponentFixture<BoardViewPage> = await render();
+
+    await move(fixture, 'CAD-482 — Redesign the SSO sign-in screen', ['ArrowRight']);
+    expect(bulk).not.toHaveBeenCalled();
+    fixture.destroy();
+
+    expect(bulk).toHaveBeenCalledWith(
+      [{ taskKey: 'CAD-482', version: 3 }],
+      { type: 'status', status: 'progress' },
+      expect.any(Function),
+    );
+  });
+
+  it('opens the column menu from the button of its header', async () => {
+    const fixture: ComponentFixture<BoardViewPage> = await render();
+
+    required(named('Actions on the column In review')).click();
+    await settle(fixture);
+
+    expect(menuItem('New task in “In review”')).toBeDefined();
+    expect(menuItem('Hide the column')).toBeDefined();
   });
 
   it('puts back a card dropped in its own column without writing', async () => {

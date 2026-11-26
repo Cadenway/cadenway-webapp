@@ -1119,6 +1119,7 @@
     "spaces.board.hide": "Hide the column",
     "spaces.board.region": "Board of {$name}",
     "spaces.board.truncated": "The board shows the first {$count} tasks of the list.",
+    "spaces.board.column-actions": "Actions on the column {$label}",
     "spaces.form.title": "Request form",
     "spaces.form.read-only": "Only the list’s editors can set up its request form.",
     "spaces.form.preview-label": "Preview of the public page",
