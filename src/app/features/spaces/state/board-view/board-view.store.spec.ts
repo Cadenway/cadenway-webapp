@@ -76,6 +76,38 @@ function ready(value: unknown): object {
   return { hasValue: () => true, value: () => value };
 }
 
+/**
+ * Interface HeldWriter
+ *
+ * @description
+ * The board's writer over a reader whose write stays in flight, and the hand that settles it.
+ */
+interface HeldWriter {
+  // #region Properties
+  /**
+   * Property writer
+   *
+   * @description
+   * The board's writer (`writerOver`).
+   *
+   * @type {ViewTaskWriter}
+   * @readonly
+   */
+  readonly writer: ViewTaskWriter;
+
+  /**
+   * Property settle
+   *
+   * @description
+   * Settles the write in flight with an outcome.
+   *
+   * @type {(outcome: ViewTaskOutcome) => void}
+   * @readonly
+   */
+  readonly settle: (outcome: ViewTaskOutcome) => void;
+  // #endregion
+}
+
 describe('BoardViewStore', () => {
   let items: WritableSignal<readonly ListTaskItem[]>;
   let presentation: WritableSignal<ListViewPresentation>;
@@ -94,13 +126,9 @@ describe('BoardViewStore', () => {
    * The board's writer over a reader whose first write stays in flight until settled by hand.
    *
    * @param {InstanceType<typeof BoardViewStore>} store - The store.
-   * @returns {{ writer: ViewTaskWriter; settle: (outcome: ViewTaskOutcome) => void }} The writer
-   * and the hand that settles its write.
+   * @returns {HeldWriter} The writer and the hand that settles its write.
    */
-  function heldWriter(store: InstanceType<typeof BoardViewStore>): {
-    writer: ViewTaskWriter;
-    settle: (outcome: ViewTaskOutcome) => void;
-  } {
+  function heldWriter(store: InstanceType<typeof BoardViewStore>): HeldWriter {
     let settle: (outcome: ViewTaskOutcome) => void = (): void => undefined;
     const reader: ViewTaskWriter = {
       act: vi.fn(
@@ -527,7 +555,7 @@ describe('BoardViewStore', () => {
 
     it('sends nothing on leaving when a refused write leaves the task at the moved-back status', async () => {
       const store: InstanceType<typeof BoardViewStore> = setup();
-      const { writer, settle } = heldWriter(store);
+      const { writer, settle }: HeldWriter = heldWriter(store);
       void writer.act([cardOf(store, 'CAD-461').task], { type: 'status', status: 'progress' });
       showProgress();
 
@@ -542,7 +570,7 @@ describe('BoardViewStore', () => {
 
     it('offers the Undo of a move written on leaving back to the confirmed status', async () => {
       const store: InstanceType<typeof BoardViewStore> = setup();
-      const { writer, settle } = heldWriter(store);
+      const { writer, settle }: HeldWriter = heldWriter(store);
       void writer.act([cardOf(store, 'CAD-461').task], { type: 'status', status: 'progress' });
       showProgress();
 
@@ -567,7 +595,7 @@ describe('BoardViewStore', () => {
 
     it('offers no Undo when the write before the move has an unknown outcome', async () => {
       const store: InstanceType<typeof BoardViewStore> = setup();
-      const { writer, settle } = heldWriter(store);
+      const { writer, settle }: HeldWriter = heldWriter(store);
       void writer.act([cardOf(store, 'CAD-461').task], { type: 'status', status: 'progress' });
       showProgress();
 
