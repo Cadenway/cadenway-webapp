@@ -195,7 +195,7 @@ describe('gantt-timeline util', () => {
       shown(task('CAD-483')),
     ];
 
-    const nested: GanttTimeline = ganttTimelineOf(items, 'all', [], String, true);
+    const nested: GanttTimeline = ganttTimelineOf(items, 'all', [], String, () => true);
     expect(nested.items.map((item) => [item.id, nested.depths.get(item.id)])).toEqual([
       ['CAD-482', 0],
       ['CAD-486', 1],
@@ -216,6 +216,34 @@ describe('gantt-timeline util', () => {
     ]);
   });
 
+  it('leaves out the subtasks of a folded parent, with theirs, and marks the parents drawn', () => {
+    const items: readonly ListTaskItem[] = [
+      shown(task('CAD-482', { due: '2026-11-27' })),
+      shown(task('CAD-486', { parentKey: 'CAD-482', due: '2026-11-25' })),
+      shown(task('CAD-488', { parentKey: 'CAD-486', milestone: true, due: '2026-11-26' })),
+      shown(task('CAD-483')),
+    ];
+
+    const folded: GanttTimeline = ganttTimelineOf(items, 'all', [], String, () => false);
+    expect(folded.items.map((item) => item.id)).toEqual(['CAD-482', 'CAD-483']);
+    expect([...folded.parents]).toEqual([['CAD-482', { open: false, count: 1 }]]);
+    expect(folded.milestones).toEqual([]);
+    expect(folded.datedCount).toBe(1);
+
+    const partly: GanttTimeline = ganttTimelineOf(
+      items,
+      'all',
+      [],
+      String,
+      (key: string): boolean => key === 'CAD-482',
+    );
+    expect(partly.items.map((item) => item.id)).toEqual(['CAD-482', 'CAD-486', 'CAD-483']);
+    expect([...partly.parents]).toEqual([
+      ['CAD-482', { open: true, count: 1 }],
+      ['CAD-486', { open: false, count: 1 }],
+    ]);
+  });
+
   it('keeps every task once when subtasks point at each other', () => {
     const nested: GanttTimeline = ganttTimelineOf(
       [
@@ -225,7 +253,7 @@ describe('gantt-timeline util', () => {
       'all',
       [],
       String,
-      true,
+      () => true,
     );
 
     expect(nested.items.map((item) => item.id)).toEqual(['CAD-482', 'CAD-486']);

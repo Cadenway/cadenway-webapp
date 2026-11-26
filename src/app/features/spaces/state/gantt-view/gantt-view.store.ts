@@ -1,13 +1,6 @@
 import type { Signal, Type } from '@angular/core';
 import type { CwTimelineRange, CwTimelineScale } from '@cadenway/ui/components/timeline';
-import {
-  patchState,
-  signalStore,
-  withComputed,
-  withMethods,
-  withProps,
-  withState,
-} from '@ngrx/signals';
+import { patchState, signalStore, withComputed, withMethods, withState } from '@ngrx/signals';
 
 import type {
   GanttGrouping,
@@ -74,7 +67,43 @@ interface GanttViewState {
    * @readonly
    */
   readonly _collapsed: Readonly<Partial<Record<GanttGrouping, readonly string[]>>>;
+
+  /**
+   * Property today
+   *
+   * @description
+   * The local day the period around today was last derived from: read again by `Today` and a
+   * scale change, so a view left open past midnight does not keep the day before.
+   *
+   * @type {Date}
+   * @readonly
+   */
+  readonly today: Date;
+
+  /**
+   * Property _open
+   *
+   * @description
+   * The tasks whose subtasks the user folded (false) or unfolded (true), by task key.
+   *
+   * @type {Readonly<Record<string, boolean>>}
+   * @readonly
+   */
+  readonly _open: Readonly<Record<string, boolean>>;
   // #endregion
+}
+
+/**
+ * Function currentDay
+ *
+ * @description
+ * The current local day, at midnight.
+ *
+ * @returns {Date} The day.
+ */
+function currentDay(): Date {
+  const now: Date = new Date();
+  return new Date(now.getFullYear(), now.getMonth(), now.getDate());
 }
 
 /**
@@ -90,6 +119,8 @@ const initialState: GanttViewState = {
   zoom: 1,
   range: null,
   _collapsed: {},
+  today: new Date(0),
+  _open: {},
 };
 
 /**
@@ -158,6 +189,17 @@ export interface GanttViewStoreInstance {
    * @readonly
    */
   readonly window: Signal<CwTimelineRange>;
+
+  /**
+   * Property today
+   *
+   * @description
+   * The local day the period around today follows, for `cw-timeline`'s `today`.
+   *
+   * @type {Signal<Date>}
+   * @readonly
+   */
+  readonly today: Signal<Date>;
 
   /**
    * Property canZoomIn
@@ -243,7 +285,7 @@ export interface GanttViewStoreInstance {
    * Method goToday
    *
    * @description
-   * The scale's period around today.
+   * The scale's period around today, the current local day read again.
    */
   goToday(): void;
 
@@ -278,6 +320,29 @@ export interface GanttViewStoreInstance {
    * @param {readonly string[]} values - The folded group values.
    */
   setCollapsed(grouping: GanttGrouping, values: readonly string[]): void;
+
+  /**
+   * Method subtasksOpen
+   *
+   * @description
+   * Whether a task's subtasks show, once folded or unfolded by the user, else as the default.
+   *
+   * @param {string} taskKey - The parent task.
+   * @param {boolean} fallback - Whether they show by default (`Unfolded under their parent`).
+   * @returns {boolean} Whether they show.
+   */
+  subtasksOpen(taskKey: string, fallback: boolean): boolean;
+
+  /**
+   * Method setSubtasksOpen
+   *
+   * @description
+   * Records that the user folded or unfolded a task's subtasks, kept while the view lives.
+   *
+   * @param {string} taskKey - The parent task.
+   * @param {boolean} open - Whether they show.
+   */
+  setSubtasksOpen(taskKey: string, open: boolean): void;
   // #endregion
 }
 
@@ -291,13 +356,9 @@ export interface GanttViewStoreInstance {
  */
 function createGanttViewStore(): Type<GanttViewStoreInstance> {
   return signalStore(
-    withState(initialState),
-    withProps(() => {
-      const now: Date = new Date();
-      return { _today: new Date(now.getFullYear(), now.getMonth(), now.getDate()) };
-    }),
+    withState((): GanttViewState => ({ ...initialState, today: currentDay() })),
     withComputed((store) => ({
-      window: (): CwTimelineRange => store.range() ?? ganttWindow(store.scale(), store._today),
+      window: (): CwTimelineRange => store.range() ?? ganttWindow(store.scale(), store.today()),
       canZoomIn: (): boolean =>
         zoomIndexOf(store.scale(), store.zoom()) < GANTT_ZOOM_LADDER.length - 1,
       canZoomOut: (): boolean => zoomIndexOf(store.scale(), store.zoom()) > 0,
@@ -325,7 +386,7 @@ function createGanttViewStore(): Type<GanttViewStoreInstance> {
       };
       return {
         followScale(scale: CwTimelineScale): void {
-          patchState(store, { scale });
+          patchState(store, { scale, today: currentDay() });
         },
         followZoom(zoom: number): void {
           patchState(store, { zoom });
@@ -334,7 +395,7 @@ function createGanttViewStore(): Type<GanttViewStoreInstance> {
           patchState(store, { range });
         },
         pickScale(scale: CwTimelineScale): void {
-          patchState(store, { scale, zoom: 1, range: null });
+          patchState(store, { scale, zoom: 1, range: null, today: currentDay() });
         },
         zoomIn(): void {
           zoomBy(1);
@@ -343,7 +404,7 @@ function createGanttViewStore(): Type<GanttViewStoreInstance> {
           zoomBy(-1);
         },
         goToday(): void {
-          patchState(store, { range: null });
+          patchState(store, { range: null, today: currentDay() });
         },
         shift(steps: number): void {
           patchState(store, { range: shiftGanttWindow(store.window(), store.scale(), steps) });
@@ -353,6 +414,12 @@ function createGanttViewStore(): Type<GanttViewStoreInstance> {
         },
         setCollapsed(grouping: GanttGrouping, values: readonly string[]): void {
           patchState(store, { _collapsed: { ...store._collapsed(), [grouping]: values } });
+        },
+        subtasksOpen(taskKey: string, fallback: boolean): boolean {
+          return store._open()[taskKey] ?? fallback;
+        },
+        setSubtasksOpen(taskKey: string, open: boolean): void {
+          patchState(store, { _open: { ...store._open(), [taskKey]: open } });
         },
       };
     }),
@@ -365,9 +432,11 @@ function createGanttViewStore(): Type<GanttViewStoreInstance> {
  * @description
  * The presentation of the `Gantt` view (`l/:listId/gantt`), route-scoped through
  * `GANTT_VIEW_PROVIDERS`: the scale, the zoom on the ladder of `GANTT_ZOOM_LADDER`, the period
- * shown (null for the scale's period around today, as `cw-timeline` draws it) and the folded
- * groups of each grouping (`Cancelled` by status until the user unfolds it). Nothing is saved:
- * leaving the view forgets it, as in the mockup. The tasks come from `ListTasksStore`.
+ * shown (null for the scale's period around `today`, the local day read again by `Today` and each
+ * scale change, so a view left open past midnight moves on), the folded groups of each grouping
+ * (`Cancelled` by status until the user unfolds it) and the subtasks the user folded or unfolded.
+ * Nothing is saved: leaving the view forgets it, as in the mockup. The tasks come from
+ * `ListTasksStore`.
  *
  * @type {Type<GanttViewStoreInstance>}
  */

@@ -50,6 +50,38 @@ export interface GanttGroupOption {
 }
 
 /**
+ * Interface GanttParent
+ *
+ * @description
+ * A task drawn with subtasks in the read, under it.
+ */
+export interface GanttParent {
+  // #region Properties
+  /**
+   * Property open
+   *
+   * @description
+   * Whether its subtasks show.
+   *
+   * @type {boolean}
+   * @readonly
+   */
+  readonly open: boolean;
+
+  /**
+   * Property count
+   *
+   * @description
+   * How many subtasks of it the read holds.
+   *
+   * @type {number}
+   * @readonly
+   */
+  readonly count: number;
+  // #endregion
+}
+
+/**
  * Interface GanttTimeline
  *
  * @description
@@ -113,6 +145,18 @@ export interface GanttTimeline {
    * @readonly
    */
   readonly depths: ReadonlyMap<string, number>;
+
+  /**
+   * Property parents
+   *
+   * @description
+   * The items whose task has subtasks in the read, by item id, when subtasks show under their
+   * parent: their chevron.
+   *
+   * @type {ReadonlyMap<string, GanttParent>}
+   * @readonly
+   */
+  readonly parents: ReadonlyMap<string, GanttParent>;
 
   /**
    * Property datedCount

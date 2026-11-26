@@ -329,9 +329,31 @@ describe('GanttViewPage', () => {
    * @param {string} name - The key.
    * @param {boolean} [shiftKey] - Whether Shift is held.
    */
-  function key(element: HTMLElement, name: string, shiftKey: boolean = false): void {
+  function key(
+    element: HTMLElement,
+    name: string,
+    modifiers: { readonly shiftKey?: boolean; readonly altKey?: boolean } = {},
+  ): void {
     element.dispatchEvent(
-      new KeyboardEvent('keydown', { key: name, shiftKey, bubbles: true, cancelable: true }),
+      new KeyboardEvent('keydown', { key: name, ...modifiers, bubbles: true, cancelable: true }),
+    );
+  }
+
+  /**
+   * Function rowsOf
+   *
+   * @description
+   * The task rows drawn, with their depth under their parents.
+   *
+   * @param {RouterTestingHarness} harness - The harness.
+   * @returns {[string | null, string | null][]} The task keys and depths.
+   */
+  function rowsOf(harness: RouterTestingHarness): [string | null, string | null][] {
+    return [...hostOf(harness).querySelectorAll('[data-task-row]')].map(
+      (element: Element): [string | null, string | null] => [
+        element.getAttribute('data-task-row'),
+        element.getAttribute('data-depth'),
+      ],
     );
   }
 
@@ -401,26 +423,63 @@ describe('GanttViewPage', () => {
     expect(page).toHaveBeenCalledTimes(2);
   });
 
-  it('reschedules a bar moved with the keyboard, with its toast', async () => {
+  it('moves a bar by its due date alone, the gateway moving its start, with its toast', async () => {
     const harness: RouterTestingHarness = await open();
 
     key(barOf(harness, 'CAD-482'), 'ArrowRight');
     await settle(harness);
 
-    expect(update).toHaveBeenCalledWith('CAD-482', 3, {
-      startDate: '2026-11-24',
-      dueDate: '2026-11-28',
-    });
+    expect(update).toHaveBeenCalledWith('CAD-482', 3, { dueDate: '2026-11-28' });
     expect(toasts['show']).toHaveBeenCalledWith(
       'CAD-482 rescheduled',
       expect.objectContaining({ description: 'From November 24 to November 28.' }),
+    );
+    expect(hostOf(harness).textContent).toContain('5 d');
+  });
+
+  it('resizes a bar by the edge that changed, keeping the start of a resized end', async () => {
+    const harness: RouterTestingHarness = await open();
+
+    key(barOf(harness, 'CAD-482'), 'ArrowLeft', { altKey: true });
+    await settle(harness);
+    expect(update).toHaveBeenLastCalledWith('CAD-482', 3, { startDate: '2026-11-22' });
+
+    key(barOf(harness, 'CAD-483'), 'ArrowRight', { shiftKey: true });
+    await settle(harness);
+    expect(update).toHaveBeenLastCalledWith('CAD-483', 3, {
+      startDate: '2026-11-30',
+      dueDate: '2026-12-03',
+    });
+  });
+
+  it('moves a milestone with a start and a task without one by their due date alone', async () => {
+    page.mockResolvedValue({
+      items: [
+        task('CAD-491', 'Release 2.4', { milestone: true, start: '2026-12-01', due: '2026-12-04' }),
+        task('CAD-492', 'Write the changelog', { due: '2026-11-27' }),
+      ],
+      nextCursor: null,
+      total: 2,
+    });
+    const harness: RouterTestingHarness = await open();
+
+    key(barOf(harness, 'CAD-491'), 'ArrowRight');
+    await settle(harness);
+    expect(update).toHaveBeenLastCalledWith('CAD-491', 3, { dueDate: '2026-12-05' });
+
+    key(barOf(harness, 'CAD-492'), 'ArrowRight');
+    await settle(harness);
+    expect(update).toHaveBeenLastCalledWith('CAD-492', 3, { dueDate: '2026-11-28' });
+    expect(toasts['show']).toHaveBeenLastCalledWith(
+      'CAD-492 rescheduled',
+      expect.objectContaining({ description: 'On November 28.' }),
     );
   });
 
   it('keeps a milestone on one day and schedules an undated task over three days', async () => {
     const harness: RouterTestingHarness = await open();
 
-    key(barOf(harness, 'CAD-490'), 'ArrowRight', true);
+    key(barOf(harness, 'CAD-490'), 'ArrowRight', { shiftKey: true });
     await settle(harness);
     expect(update).toHaveBeenCalledWith('CAD-490', 3, { dueDate: '2026-12-05' });
     expect(toasts['show']).toHaveBeenCalledWith(
@@ -529,7 +588,7 @@ describe('GanttViewPage', () => {
     });
   });
 
-  it('reads every level and draws each subtask right after its parent, indented', async () => {
+  it('reads every level and folds subtasks under their parent until its chevron unfolds them', async () => {
     page.mockResolvedValue({
       items: [
         sprintTasks[0],
@@ -552,12 +611,6 @@ describe('GanttViewPage', () => {
     });
 
     const harness: RouterTestingHarness = await open();
-    const rows: [string | null, string | null][] = [
-      ...hostOf(harness).querySelectorAll('[data-task-row]'),
-    ].map((element: Element): [string | null, string | null] => [
-      element.getAttribute('data-task-row'),
-      element.getAttribute('data-depth'),
-    ]);
 
     expect(page).toHaveBeenCalledWith(
       'sprint-14',
@@ -568,17 +621,51 @@ describe('GanttViewPage', () => {
       expect.any(AbortSignal),
       null,
     );
-    expect(rows).toEqual([
+    expect(rowsOf(harness)).toEqual([
+      ['CAD-483', '0'],
+      ['CAD-482', '0'],
+    ]);
+    const chevron: HTMLButtonElement | undefined = button('Show the 2 subtasks of CAD-482');
+    expect(chevron?.getAttribute('aria-expanded')).toBe('false');
+
+    chevron?.click();
+    harness.detectChanges();
+    expect(rowsOf(harness)).toEqual([
       ['CAD-483', '0'],
       ['CAD-482', '0'],
       ['CAD-486', '1'],
       ['CAD-487', '1'],
     ]);
+    expect(button('Hide the 2 subtasks of CAD-482')?.getAttribute('aria-expanded')).toBe('true');
     expect(
       [...hostOf(harness).querySelectorAll('[role="img"]')].map((element: Element) =>
         element.getAttribute('aria-label')?.replace(/\s+/gu, ' '),
       ),
     ).toContain('Milestone Sign-off, Nov 26');
+  });
+
+  it('shows every subtask under its parent when the view unfolds them', async () => {
+    TestBed.inject(ListViewStore).setSubtasks('expanded');
+    page.mockResolvedValue({
+      items: [
+        task('CAD-482', 'Redesign the SSO sign-in screen', { due: '2026-11-27' }),
+        task('CAD-486', 'Plan the SSO rollout', { parentKey: 'CAD-482', due: '2026-11-25' }),
+        task('CAD-488', 'Draft the plan', { parentKey: 'CAD-486', due: '2026-11-24' }),
+      ],
+      nextCursor: null,
+      total: 3,
+    });
+
+    const harness: RouterTestingHarness = await open();
+
+    expect(rowsOf(harness)).toEqual([
+      ['CAD-482', '0'],
+      ['CAD-486', '1'],
+      ['CAD-488', '2'],
+    ]);
+    button('Hide the 1 subtasks of CAD-482')?.click();
+    harness.detectChanges();
+    expect(rowsOf(harness)).toEqual([['CAD-482', '0']]);
   });
 
   it('draws subtasks as tasks of their own when the view shows them apart', async () => {

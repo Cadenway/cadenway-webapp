@@ -119,4 +119,43 @@ describe('GanttViewStore', () => {
     expect(store.collapsedOf('priority')).toEqual(['basse']);
     expect(store.collapsedOf('assignee')).toEqual([]);
   });
+
+  it('reads the current day again on Today and on a scale change after midnight', () => {
+    vi.setSystemTime(new Date(2026, 10, 29, 23, 50));
+    const store: GanttViewStoreInstance = setup();
+    expect(store.today()).toEqual(new Date(2026, 10, 29));
+    expect(store.window().start).toEqual(new Date(2026, 10, 23));
+
+    vi.setSystemTime(new Date(2026, 10, 30, 0, 10));
+    store.goToday();
+    expect(store.today()).toEqual(new Date(2026, 10, 30));
+    expect(store.window()).toEqual({
+      start: new Date(2026, 10, 30),
+      end: new Date(2026, 11, 20),
+    });
+
+    vi.setSystemTime(new Date(2027, 0, 1, 0, 5));
+    store.pickScale('month');
+    expect(store.window()).toEqual({
+      start: new Date(2026, 11, 1),
+      end: new Date(2027, 4, 31),
+    });
+
+    vi.setSystemTime(new Date(2027, 0, 4, 0, 5));
+    store.followScale('day');
+    expect(store.today()).toEqual(new Date(2027, 0, 4));
+  });
+
+  it('keeps the subtasks the user folded or unfolded, else the default', () => {
+    const store: GanttViewStoreInstance = setup();
+
+    expect(store.subtasksOpen('CAD-482', false)).toBe(false);
+    expect(store.subtasksOpen('CAD-482', true)).toBe(true);
+
+    store.setSubtasksOpen('CAD-482', true);
+    store.setSubtasksOpen('CAD-483', false);
+
+    expect(store.subtasksOpen('CAD-482', false)).toBe(true);
+    expect(store.subtasksOpen('CAD-483', true)).toBe(false);
+  });
 });

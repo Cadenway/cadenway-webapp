@@ -125,14 +125,20 @@ included: it reads every level (`level: 'all'`) whatever the subtask display.
   (`GANTT_TIMELINE_LABELS`, `constants/gantt-labels`). It publishes `ListTasksStore.summary` with
   `followRows` (its count includes the subtasks read), and `N` creates in the list.
 - `GanttViewStore` (`state/gantt-view`, route-scoped) keeps the scale, the zoom on the mockup's
-  ladder (`GANTT_ZOOM_LADDER`), the period (null for the scale's period around today) and the
-  folded groups of each grouping (`Cancelled` by status). Nothing is saved, as in the mockup.
+  ladder (`GANTT_ZOOM_LADDER`), the period (null for the scale's period around `today`), the
+  folded groups of each grouping (`Cancelled` by status) and the subtasks the user folded or
+  unfolded. `today` is the current local day read again by `Today`, the scale radios and the
+  brick's scale changes, so a view left open past midnight moves on; the page gives it to
+  `cw-timeline`'s `today`. Nothing is saved, as in the mockup.
 - Rows: `ganttTimelineOf` (`utils/gantt-timeline`) groups the tasks by the view's `groupBy` (one
   `All tasks` group without it; a task shows under each assignee). With the subtasks folded or
   unfolded under their parent (`nested`, `expanded`), each subtask follows its parent, then its own
   subtasks, indented up to two levels (`GANTT_SUBTASK_DEPTH`); a subtask whose parent is not read
-  is a top-level row. With subtasks apart (`separate`), the rows follow the read's order, not
-  indented. Within a group, `cw-timeline` lists the dated rows before the undated ones, so a
+  is a top-level row. A parent with subtasks in the read shows the `List` view's chevron
+  (`Show the n subtasks of CAD-482`); its subtasks are folded by default (`Folded under their
+parent`) and unfolded with `Unfolded under their parent`, and what the user folds or unfolds is
+  kept while the view lives. A folded subtask, its bar and its milestone line are not drawn. With
+  subtasks apart (`separate`), the rows follow the read's order, not indented, without chevrons. Within a group, `cw-timeline` lists the dated rows before the undated ones, so a
   subtask follows its parent when both are dated or both undated. A row shows the status, name,
   key and duration. Its bar runs from the start date (when it is not after the due date) to the
   due date; a milestone holds its due date. A task without a due date offers `Schedule`. The bar
@@ -144,11 +150,18 @@ included: it reads every level (`level: 'all'`) whatever the subtask display.
   `<scale> · <n>%`, `Fit` (`cw-timeline`'s `fit()`; `Nothing to fit` without a dated task),
   `Today` and the previous and next periods. Ctrl + wheel, Ctrl +/−, T, J/S/M and Page Up/Down
   come from the brick.
-- Writes: moving or resizing a bar, the arrow keys (Shift for the end) and `Schedule` (three days
-  from the day under the pointer or today) write `startDate` and `dueDate` through
-  `ViewTaskWritesStore.updateFields`, with `<key> rescheduled` / `From 3 to 7 November.` and
-  `Undo`. A milestone keeps one day (the edge that moved), and keeps no start date when it had
-  none.
+- Writes go through `ViewTaskWritesStore.updateFields`, with `<key> rescheduled` /
+  `From 3 to 7 November.` and `Undo`, and send only what changed. `updateTask` moves an existing
+  start by as many days as a new due date unless the patch sets `startDate` too
+  (`openapi/public/tasks.yaml`, `updateTask`):
+  - a move (drag, arrow keys) sends `dueDate` alone, so the gateway moves an existing start and a
+    task without one gets none;
+  - a milestone holds one day: the edge that moved becomes its `dueDate`, alone;
+  - a resized start (its edge, Alt and the arrows) sends `startDate` alone;
+  - a resized end (its edge, Shift and the arrows) sends `dueDate` with the start shown, so the
+    start stays; a task without a start gets the day its bar started from;
+  - `Schedule` on an undated task sends both, three days from the day under the pointer or today
+    (a milestone: `dueDate` alone).
 - Menus: a right click, the Menu key or Shift F10 on a task row or its bar opens the shared
   `cw-task-menu` (handed to the row's name in the capture phase). Elsewhere, the chart menu opens
   with `Go to today`, `Scale` and `New task`.
@@ -167,7 +180,10 @@ included: it reads every level (`level: 'all'`) whatever the subtask display.
   - The duration column shows `1 d` for a milestone (`Jalon` in the mockup). An undated task
     shows nothing (`—` in the mockup).
   - The bars' accessible names come from the brick, not the mockup's wording.
-  - `cw-timeline` has no row level for a subtask: its indent is in the name cell only.
+  - `cw-timeline` has no row level for a subtask: its indent and chevron are in the name cell
+    only, and the chevron is not reachable from the keyboard (the treegrid keeps one tab stop);
+    `Unfolded under their parent` shows every subtask.
+  - The brick's T key and Page Up/Down derive the period from the day `today` last read.
 
 | Unit                                                                                                                                                                                                                                                                          | Reason                                                         |
 | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- |

@@ -138,6 +138,7 @@
       [groups]="chart().groups"
       [milestones]="chart().milestones"
       [nameColumnWidth]="nameWidth()"
+      [today]="gantt.today()"
       [loading]="!snapshot && tasks.initialLoading()"
       [scale]="gantt.scale()"
       (scaleChange)="gantt.followScale($event)"
@@ -154,13 +155,42 @@
       <ng-template cwTimelineName let-item>
         @let shown = itemOf(item.id);
         @let depth = depthOf(item.id);
+        @let parent = parentOf(item.id);
+        @if (nesting()) {
+          @if (parent) {
+            <button
+              type="button"
+              tabindex="-1"
+              class="inline-flex size-5 shrink-0 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+              [class.ml-5]="depth === 1"
+              [class.ml-10]="depth >= 2"
+              [attr.aria-expanded]="parent.open"
+              [attr.aria-label]="subtasksLabel(item.id)"
+              [title]="subtasksLabel(item.id)"
+              (click)="toggleSubtasks(item.id)"
+            >
+              <ng-icon
+                name="phosphorCaretRightBold"
+                size="0.75rem"
+                class="transition-transform duration-200 motion-reduce:transition-none"
+                [class.rotate-90]="parent.open"
+                aria-hidden="true"
+              />
+            </button>
+          } @else {
+            <span
+              aria-hidden="true"
+              class="size-5 shrink-0"
+              [class.ml-5]="depth === 1"
+              [class.ml-10]="depth >= 2"
+            ></span>
+          }
+        }
         <button
           type="button"
           tabindex="-1"
           data-row-menu
           class="flex min-w-0 flex-1 items-center gap-2 rounded-md px-1 py-1 text-left text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none focus-visible:ring-inset"
-          [class.pl-5]="depth === 1"
-          [class.pl-9]="depth >= 2"
           [attr.data-task-row]="shown?.task?.key ?? null"
           [attr.data-depth]="depth"
           [cwContextMenuTriggerFor]="taskMenu.menu()"

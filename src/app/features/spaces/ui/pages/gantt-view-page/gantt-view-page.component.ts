@@ -67,9 +67,11 @@ import {
 import type {
   GanttGroupOption,
   GanttGrouping,
+  GanttParent,
   GanttTimeline,
 } from '../../../models/gantt-timeline/gantt-timeline.interface';
 import type { ListTaskItem, ListTasksRead } from '../../../models/list-tasks/list-tasks.interface';
+import type { SubtaskMode } from '../../../models/list-view-config/list-view-config.interface';
 import type { TaskFieldChanges } from '../../../models/view-task-write/view-task-write.interface';
 import {
   GanttViewStore,
@@ -365,7 +367,8 @@ export class GanttViewPage {
    *
    * @description
    * The items, groups and milestone lines of the tasks shown: each subtask right after its
-   * parent, indented, unless the view shows subtasks apart.
+   * parent, indented, unless the view shows subtasks apart; the subtasks of a folded parent left
+   * out.
    *
    * @type {Signal<GanttTimeline>}
    * @readonly
@@ -376,8 +379,27 @@ export class GanttViewPage {
       this.grouping(),
       this.groupOptions(),
       (value: string): string => value,
-      this.view.config().subtasks !== 'separate',
+      this.subtasksOpen(),
     ),
+  );
+
+  /**
+   * Property subtasksOpen
+   *
+   * @description
+   * Whether a parent's subtasks show under it: as the user folded or unfolded them, else folded
+   * (`Folded under their parent`, the default) or unfolded (`Unfolded under their parent`);
+   * null when the view shows subtasks apart, as tasks.
+   *
+   * @type {Signal<((taskKey: string) => boolean) | null>}
+   * @readonly
+   */
+  private readonly subtasksOpen: Signal<((taskKey: string) => boolean) | null> = computed(
+    (): ((taskKey: string) => boolean) | null => {
+      const mode: SubtaskMode = this.view.config().subtasks;
+      if (mode === 'separate') return null;
+      return (taskKey: string): boolean => this.gantt.subtasksOpen(taskKey, mode === 'expanded');
+    },
   );
 
   /**
@@ -705,6 +727,63 @@ export class GanttViewPage {
   }
 
   /**
+   * Method parentOf
+   *
+   * @description
+   * The subtasks under an item's task, for its chevron.
+   *
+   * @param {string} id - The item id.
+   * @returns {GanttParent | undefined} Whether they show and how many, undefined without any.
+   */
+  protected parentOf(id: string): GanttParent | undefined {
+    return this.chart().parents.get(id);
+  }
+
+  /**
+   * Method nesting
+   *
+   * @description
+   * Whether subtasks show under their parent, so rows keep the chevron's room.
+   *
+   * @returns {boolean} Whether they do.
+   */
+  protected nesting(): boolean {
+    return this.subtasksOpen() !== null;
+  }
+
+  /**
+   * Method subtasksLabel
+   *
+   * @description
+   * Name of a parent's chevron, the `List` view's: `Show the 2 subtasks of CAD-482`.
+   *
+   * @param {string} id - The item id.
+   * @returns {string} The name.
+   */
+  protected subtasksLabel(id: string): string {
+    const parent: GanttParent | undefined = this.parentOf(id);
+    const count: number = parent?.count ?? 0;
+    const key: string = this.itemOf(id)?.task.key ?? '';
+    return parent?.open
+      ? $localize`:@@spaces.rows.hide-subtasks:Hide the ${count}:count: subtasks of ${key}:key:`
+      : $localize`:@@spaces.rows.show-subtasks:Show the ${count}:count: subtasks of ${key}:key:`;
+  }
+
+  /**
+   * Method toggleSubtasks
+   *
+   * @description
+   * Folds or unfolds the subtasks of an item's task, kept while the view lives.
+   *
+   * @param {string} id - The item id.
+   */
+  protected toggleSubtasks(id: string): void {
+    const parent: GanttParent | undefined = this.parentOf(id);
+    const shown: ListTaskItem | undefined = this.itemOf(id);
+    if (parent && shown) this.gantt.setSubtasksOpen(shown.task.key, !parent.open);
+  }
+
+  /**
    * Method open
    *
    * @description
@@ -721,21 +800,37 @@ export class GanttViewPage {
    * Method reschedule
    *
    * @description
-   * A bar moved or resized, by pointer or keyboard: writes its days. A milestone keeps one day,
-   * the edge that moved.
+   * A bar moved or resized, by pointer or keyboard: writes only what changed, so a start the
+   * bar does not show is neither wiped nor invented. `updateTask` moves an existing start by as
+   * many days as a new due date and keeps the duration, unless the patch sets `startDate` too
+   * (`cadenway-api-contracts`, `openapi/public/tasks.yaml`, `updateTask`, `dueDate`):
+   * - a move sends the new due date alone, and the start follows on the gateway;
+   * - a milestone holds one day: the edge that moved becomes its due date, alone;
+   * - a resized start sends the new start alone;
+   * - a resized end sends the new due date with the start shown, so that the start stays (a task
+   *   without a start date gets the day its bar started from, the range the user drew).
    *
    * @param {CwTimelineItemChange} change - The new days.
    */
   protected reschedule(change: CwTimelineItemChange): void {
     const shown: ListTaskItem | undefined = this.itemOf(change.item.id);
     if (!shown) return;
-    if (!shown.task.milestone) {
-      this.write(shown.task, change.start, change.end);
+    const task: TaskSummary = shown.task;
+    const startShift: number = daysBetween(change.previous.start, change.start);
+    const endShift: number = daysBetween(change.previous.end, change.end);
+    if (startShift === 0 && endShift === 0) return;
+    if (task.milestone) {
+      const day: Date = startShift !== 0 ? change.start : change.end;
+      this.write(task, { dueDate: todayIso(day) }, day, day);
       return;
     }
-    const day: Date =
-      daysBetween(change.previous.start, change.start) !== 0 ? change.start : change.end;
-    this.write(shown.task, day, day);
+    const startDate: string = todayIso(change.start);
+    const dueDate: string = todayIso(change.end);
+    let changes: TaskFieldChanges;
+    if (startShift === endShift) changes = { dueDate };
+    else if (endShift === 0) changes = { startDate };
+    else changes = { startDate, dueDate };
+    this.write(task, changes, change.start, change.end);
   }
 
   /**
@@ -749,10 +844,18 @@ export class GanttViewPage {
   protected schedule(event: CwTimelineSchedule): void {
     const shown: ListTaskItem | undefined = this.itemOf(event.item.id);
     if (!shown) return;
-    const end: Date = shown.task.milestone
-      ? event.start
-      : addDays(event.start, GANTT_SCHEDULE_DAYS - 1);
-    this.write(shown.task, event.start, end);
+    const task: TaskSummary = shown.task;
+    if (task.milestone) {
+      this.write(task, { dueDate: todayIso(event.start) }, event.start, event.start);
+      return;
+    }
+    const end: Date = addDays(event.start, GANTT_SCHEDULE_DAYS - 1);
+    this.write(
+      task,
+      { startDate: todayIso(event.start), dueDate: todayIso(end) },
+      event.start,
+      end,
+    );
   }
 
   /**
@@ -796,19 +899,21 @@ export class GanttViewPage {
    * Method write
    *
    * @description
-   * Writes a task's days with the toast `<key> rescheduled` and its `Undo`, unless they are the
-   * task's already. A milestone without a start date keeps none.
+   * Writes a task's dates with the toast `<key> rescheduled` and its `Undo`, unless they are the
+   * task's already.
    *
    * @param {TaskSummary} task - The task, as shown.
-   * @param {Date} start - First day.
-   * @param {Date} end - Last day.
+   * @param {TaskFieldChanges} changes - The dates to send.
+   * @param {Date} start - First day the bar shows once written, for the toast.
+   * @param {Date} end - Last day the bar shows once written, for the toast.
    */
-  private write(task: TaskSummary, start: Date, end: Date): void {
-    const startDate: string = todayIso(start);
-    const dueDate: string = todayIso(end);
-    const keepsStart: boolean = task.milestone && task.start === null;
-    if (task.due === dueDate && (keepsStart || task.start === startDate)) return;
-    const changes: TaskFieldChanges = keepsStart ? { dueDate } : { startDate, dueDate };
+  private write(task: TaskSummary, changes: TaskFieldChanges, start: Date, end: Date): void {
+    if (
+      (changes.dueDate === undefined || changes.dueDate === task.due) &&
+      (changes.startDate === undefined || changes.startDate === task.start)
+    ) {
+      return;
+    }
     const key: string = task.key;
     void this.writes.updateFields(task, changes, {
       title: $localize`:@@spaces.gantt.rescheduled:${key}:key: rescheduled`,
