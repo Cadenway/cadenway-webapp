@@ -9,7 +9,7 @@ space and list dialogs (create, edit, delete a space; create a list or a sprint,
 space overview, the frame of a list page (header, view tabs and saved views, view tools and active
 filters, the selection bar) with its view configuration, and the `List` view: its grouped,
 virtualized task rows, read page by page. The cells, pickers, status interaction and create dialog
-belong to Task, which the rows compose; the task detail opened from a row comes in step 5; the
+belong to Task, which the rows compose, as the task detail opened from a row does; the
 trash and archives screens belong to their features; the eight other views and the share, status
 and automation dialogs come in step 4b.
 
@@ -24,8 +24,8 @@ breadcrumb, dialog, inline edit, toolbar).
   redirects to `list`, which loads `ListViewPage` and provides `ListRowsStore`, Task's
   `TaskStatusChangesStore`, `ListTasksApi` (so it can read the workspace-scoped user for `me`),
   and the English texts of `cw-data-table`.
-  `?savedView=<id>` applies a saved view of the list; `?task=<KEY>` is set when a row opens (the
-  detail host that reads it comes in step 5).
+  `?savedView=<id>` applies a saved view of the list; `?task=<KEY>`, set when a row opens, opens
+  Task's detail over the view.
 - Failed primary reads render the router's default error component, `RouteErrorBoundary`, in the
   failing route's outlet: a failed view keeps the list header. The `list` view's `data`
   (`RouteErrorData`) titles its unavailable state `Could not load the tasks`
@@ -33,11 +33,11 @@ breadcrumb, dialog, inline edit, toolbar).
 
 ## Public entry points
 
-| Entry point            | Consumers |
-| ---------------------- | --------- |
-| `spaces.routes`        | workspace |
-| `providers`            | workspace |
-| `ports/list-directory` | search    |
+| Entry point            | Consumers    |
+| ---------------------- | ------------ |
+| `spaces.routes`        | workspace    |
+| `providers`            | workspace    |
+| `ports/list-directory` | search, task |
 
 `providers` publishes, for the `/:org` route that loads the shell:
 
@@ -53,7 +53,8 @@ breadcrumb, dialog, inline edit, toolbar).
 
 `ports/list-directory` publishes `LIST_DIRECTORY` (`ListDirectoryPort`: `lists`, a signal of
 `ListDirectoryEntry` — id, name, space id and name, Bold icon and tone class — in sidebar order),
-computed from the navigation's reads, for the command palette's `Lists`.
+computed from the navigation's reads, for the command palette's `Lists` and the task detail's
+`Move to…`.
 
 ## Dependencies
 
@@ -194,8 +195,9 @@ computed from the navigation's reads, for the command palette's `Lists`.
   priority or assignee, nobody for `Unassigned`), the empty state's `Add a task`, the
   list menu's `New task` and `N` (`TaskCreate.useDefaults`) open the create dialog in the
   open list.
-- A row: a click on the name, Enter or the `…` button opens `?task=<KEY>` with
-  `queryParamsHandling: 'merge'` (`App.dc.html` line 695); the right click, the Menu key, Shift F10
+- A row: a click on the name, Enter or the `…` button opens the task's detail over the view
+  (Task's `TaskDetailOpener`, `?task=<KEY>` merged into the address, the row as the header's
+  preview; `App.dc.html` line 695); a milestone of the overview opens it the same way; the right click, the Menu key, Shift F10
   or a long press anywhere in the task row (`App.dc.html` line 659; the view hands a right click
   or a key the cells' triggers do not handle to the row's `…` trigger, in the capture phase) open
   the menu of the task, or of the selection when the row belongs to

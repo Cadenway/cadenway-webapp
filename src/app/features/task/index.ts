@@ -16,12 +16,14 @@ export type {
 } from './models/task-bulk/task-bulk.interface';
 export { TaskActionsApi } from './data-access/services/task-actions-api/task-actions-api.service';
 export type { CreatedTask, TaskCreateOptions } from './models/task-create/task-create.interface';
+export type { TaskDetailPreview } from './models/task-detail/task-detail.interface';
 export type {
   TaskCancellation,
   TaskStatusChange,
 } from './models/task-status-change/task-status-change.interface';
 export type { TaskProgress, TaskSummary } from './models/task-summary/task-summary.interface';
 export { TaskCreate } from './services/task-create/task-create.service';
+export { TaskDetailOpener } from './services/task-detail-opener/task-detail-opener.service';
 export {
   STATUS_SETTLE_MS,
   type TaskCancelRequest,

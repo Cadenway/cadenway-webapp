@@ -26,7 +26,7 @@ import {
   type ListDirectoryEntry,
   type ListDirectoryPort,
 } from '@features/spaces/ports/list-directory';
-import { TaskCreate } from '@features/task';
+import { TaskCreate, TaskDetailOpener } from '@features/task';
 import {
   WORKSPACE_CONTEXT,
   type WorkspaceContextPort,
@@ -283,6 +283,17 @@ export class CommandPaletteDialog {
   private readonly taskCreate: TaskCreate = inject(TaskCreate);
 
   /**
+   * Property taskDetail
+   *
+   * @description
+   * Task's detail, opened over the current page by a task result.
+   *
+   * @type {TaskDetailOpener}
+   * @readonly
+   */
+  private readonly taskDetail: TaskDetailOpener = inject(TaskDetailOpener);
+
+  /**
    * Property toasts
    *
    * @description
@@ -418,13 +429,20 @@ export class CommandPaletteDialog {
    * Method openTask
    *
    * @description
-   * Remembers the task, closes the palette and opens `/<slug>/t/<key>`.
+   * Remembers the task, closes the palette and opens the task's detail over the current page
+   * (`?task=<key>`).
    *
    * @param {TaskSearchResult} task - The chosen task.
    */
   protected openTask(task: TaskSearchResult): void {
     this.recentTasks.remember(this.workspace.user().id, this.workspace.organization().id, task);
-    this.go(['t', task.key]);
+    this.palette.setOpen(false);
+    void this.taskDetail.open(task.key, {
+      key: task.key,
+      name: task.name,
+      status: task.status,
+      milestone: false,
+    });
   }
 
   /**

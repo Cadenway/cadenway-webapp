@@ -1,0 +1,64 @@
+<cw-dialog size="sm" [(open)]="open">
+  <cw-dialog-header>
+    <h2 cwDialogTitle i18n="@@task.detail.list.title">Move to…</h2>
+  </cw-dialog-header>
+  <div class="flex flex-col gap-2" data-testid="task-list-picker">
+    <div
+      class="flex h-8 items-center gap-2 rounded-md border border-input px-2 focus-within:border-ring"
+    >
+      <ng-icon
+        name="phosphorMagnifyingGlassBold"
+        class="size-3.5 text-muted-foreground"
+        aria-hidden="true"
+      />
+      <label for="task-list-query" class="sr-only" i18n="@@task.detail.list.search"
+        >Search for a list</label
+      >
+      <input
+        id="task-list-query"
+        type="text"
+        autocomplete="off"
+        class="h-full min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+        placeholder="List name"
+        i18n-placeholder="@@task.detail.list.placeholder"
+        [value]="query()"
+        (input)="query.set($any($event.target).value)"
+      />
+    </div>
+    <ul
+      class="flex max-h-72 flex-col overflow-y-auto"
+      aria-label="List"
+      i18n-aria-label="@@task.detail.list.label"
+    >
+      @for (list of shown(); track list.id) {
+        <li>
+          <button
+            type="button"
+            class="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm transition-colors hover:bg-muted focus-visible:bg-muted focus-visible:outline-none"
+            [attr.aria-current]="list.id === currentListId() ? 'true' : null"
+            (click)="pick(list)"
+          >
+            <ng-icon
+              [name]="list.icon"
+              class="size-4 shrink-0 text-muted-foreground"
+              aria-hidden="true"
+            />
+            <span class="min-w-0 flex-1 truncate">{{ list.name }}</span>
+            <span class="shrink-0 truncate text-xs text-muted-foreground">{{
+              list.spaceName
+            }}</span>
+            <span class="flex w-4 shrink-0 justify-end">
+              @if (list.id === currentListId()) {
+                <ng-icon name="phosphorCheckBold" class="size-4 text-primary" aria-hidden="true" />
+              }
+            </span>
+          </button>
+        </li>
+      } @empty {
+        <li class="px-2 py-3 text-sm text-muted-foreground" i18n="@@task.detail.list.none">
+          No list matches.
+        </li>
+      }
+    </ul>
+  </div>
+</cw-dialog>

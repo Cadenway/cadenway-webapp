@@ -1,0 +1,124 @@
+<cw-dialog
+  size="full"
+  scrollable
+  [showClose]="false"
+  [open]="open()"
+  (openChange)="dialogOpenChange($event)"
+  (closed)="closed.emit()"
+>
+  <cw-dialog-header>
+    @if (store.header(); as header) {
+      <cw-task-detail-header
+        [header]="header"
+        [statusLabel]="statusLabel()"
+        [parent]="store.parent()"
+        [cancelReason]="store.task()?.cancelReason ?? null"
+        [cancelNote]="store.task()?.cancelNote ?? null"
+        [due]="store.task()?.due ?? null"
+        [ready]="store.ready()"
+        [canEdit]="store.canEdit()"
+        [busy]="store.action() !== null"
+        [watchers]="store.watchers()"
+        [watchPending]="store.watchPending()"
+        [reminder]="store.reminder()"
+        [reminderPending]="store.reminderPending()"
+        (renamed)="rename($event)"
+        (parentOpened)="openParent($event)"
+        (watchToggled)="store.toggleWatch()"
+        (reminderScheduled)="schedule($event)"
+        (reminderNoteChanged)="store.saveReminderNote($event)"
+        (reminderDeleted)="store.deleteReminder()"
+        (linkCopied)="copyLink()"
+        (keyCopied)="copyKey()"
+        (duplicated)="store.duplicate()"
+        (moveRequested)="listPicker.set(true)"
+        (archived)="archive()"
+        (templateSaved)="store.saveTemplate()"
+        (parentPickRequested)="parentPicker.set(true)"
+        (detached)="store.detach()"
+        (deleteRequested)="confirmDelete.set(true)"
+        (closed)="close()"
+      />
+    }
+  </cw-dialog-header>
+
+  <div class="-mx-6 -my-3 flex min-h-0 flex-col md:h-[calc(100%+1.5rem)]" data-testid="task-detail">
+    @if (store.ready()) {
+      <div class="flex min-h-0 flex-1 flex-col md:flex-row">
+        <div class="flex min-w-0 flex-1 flex-col md:min-h-0">
+          <cw-task-detail-tabs />
+        </div>
+        <aside
+          aria-label="Properties of the task"
+          i18n-aria-label="@@task.detail.aside"
+          class="flex shrink-0 flex-col gap-1 border-t border-border bg-popover p-3 md:min-h-0 md:w-96 md:overflow-y-auto md:border-t-0 md:border-l"
+        >
+          <cw-task-properties-panel />
+        </aside>
+      </div>
+    } @else if (store.error(); as error) {
+      @if (inlineError()) {
+        <div class="flex min-h-0 flex-1 items-center justify-center px-4 py-8">
+          <cw-empty role="alert" class="min-w-0">
+            <cw-empty-header>
+              <cw-empty-media tone="destructive">
+                <ng-icon name="phosphorWarningCircleBold" aria-hidden="true" />
+              </cw-empty-media>
+              <cw-empty-title>
+                <h3 i18n="@@task.detail.unavailable">Could not load the task</h3>
+              </cw-empty-title>
+              <cw-empty-description i18n="@@task.detail.unavailable-text">
+                The detail could not be retrieved. The title and status shown are those of the list.
+              </cw-empty-description>
+            </cw-empty-header>
+            <cw-empty-content>
+              <button cwButton variant="outline" type="button" (click)="store.reload()">
+                <ng-icon name="phosphorArrowClockwiseBold" aria-hidden="true" />
+                <ng-container i18n="@@task.retry">Retry</ng-container>
+              </button>
+            </cw-empty-content>
+          </cw-empty>
+        </div>
+      } @else {
+        <cw-route-error-panel
+          [error]="error"
+          (retried)="store.reload()"
+          (restored)="store.reload()"
+        />
+      }
+    } @else {
+      <cw-task-detail-skeleton />
+    }
+  </div>
+</cw-dialog>
+
+<cw-alert-dialog
+  variant="destructive"
+  size="sm"
+  [(open)]="confirmDelete"
+  [pending]="store.action() === 'trash'"
+  (confirm)="trash()"
+>
+  <h2 cwAlertDialogTitle>{{ deleteTitle() }}</h2>
+  <p cwAlertDialogDescription>{{ deleteText() }}</p>
+  <button cwButton cwAlertDialogCancel variant="outline" i18n="@@task.detail.delete-cancel">
+    Cancel
+  </button>
+  <button cwButton cwAlertDialogAction variant="destructive" [loading]="store.action() === 'trash'">
+    <ng-icon name="phosphorTrashBold" aria-hidden="true" />
+    <ng-container i18n="@@task.detail.delete-confirm">Delete the task</ng-container>
+  </button>
+</cw-alert-dialog>
+
+<cw-task-list-picker-dialog
+  [(open)]="listPicker"
+  [lists]="listOptions()"
+  [currentListId]="store.task()?.listId ?? null"
+  (picked)="moveTo($event)"
+/>
+
+<cw-task-parent-picker-dialog
+  [(open)]="parentPicker"
+  [context]="parentContext()"
+  (picked)="attachTo($event)"
+/>

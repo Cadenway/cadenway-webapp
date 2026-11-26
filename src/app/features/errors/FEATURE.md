@@ -14,17 +14,20 @@ renders inside the shell. The page keeps the unknown address in the browser.
 
 ## Public entry points
 
-| Entry point     | Consumers              |
-| --------------- | ---------------------- |
-| `errors.routes` | app, workspace         |
-| `.`             | app, spaces, workspace |
+| Entry point     | Consumers                    |
+| --------------- | ---------------------------- |
+| `errors.routes` | app, workspace               |
+| `.`             | app, spaces, task, workspace |
 
 `.` publishes `RouteErrorBoundary`, the `defaultErrorComponent` of `withErrorBoundaries` in
 `app.config.ts`, a component under `ui/components/route-error-boundary`. A route that needs its
 own `errorComponent` uses the same component; the 404 route loads it too. It also publishes the
 `RouteErrorData` type: a route's `data` (`satisfies RouteErrorData`) may set `unavailableTitle`, the
 localized title of its unavailable state (Spaces' `list` view: `Could not load the
-tasks`); every other route keeps `Could not load this page` (`errors.unavailable.title`).
+tasks`); every other route keeps `Could not load this page` (`errors.unavailable.title`). It also
+publishes `RouteErrorPanel`: the same states for a read made outside the router (the task detail
+dialog), which emits `retried` on `Retry` and `restored` once a deleted task is back instead of
+running a route again.
 
 ## Dependencies
 

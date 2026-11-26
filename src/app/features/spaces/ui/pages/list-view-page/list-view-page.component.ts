@@ -17,7 +17,6 @@ import {
   type WritableSignal,
 } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
-import { ActivatedRoute, Router } from '@angular/router';
 import {
   type PriorityKey,
   STATUS_CATEGORIES,
@@ -81,6 +80,7 @@ import {
   TaskCancelDialog,
   type TaskCancellation,
   TaskCreate,
+  TaskDetailOpener,
   TaskDueDate,
   TaskLabelChips,
   TaskStatusChangesStore,
@@ -365,7 +365,7 @@ function confirmedOf(outcome: ListActOutcome): readonly ConfirmedTask[] {
  * in a virtualized `cw-data-table`, read page by page as the table scrolls. A row shows the
  * status and the name (`cw-task-title-cell`, the icon animating from the previous status), the
  * assignees, the due date, the priority (`Urgent` in red) and the labels. A click on the name,
- * Enter or the `…` button opens the task (`?task=<KEY>`, the detail comes in step 5); a right
+ * Enter or the `…` button opens the task's detail over the view (`?task=<KEY>`); a right
  * click, the Menu key or Shift F10 on a row opens its menu, which acts on the selection when the
  * row is selected: `Open`, `Status` (by category, with hints), `Priority`, `Assign`,
  * `Move to`, the reminder, `Duplicate`, the two copies and `Delete`. A right click
@@ -595,26 +595,15 @@ export class ListViewPage {
   private readonly toasts: CwToastService = inject(CwToastService);
 
   /**
-   * Property router
+   * Property taskDetail
    *
    * @description
-   * Opens a task in the address.
+   * Opens a task's detail over the view, in the address.
    *
-   * @type {Router}
+   * @type {TaskDetailOpener}
    * @readonly
    */
-  private readonly router: Router = inject(Router);
-
-  /**
-   * Property route
-   *
-   * @description
-   * The view's route, to stay on it when a task opens.
-   *
-   * @type {ActivatedRoute}
-   * @readonly
-   */
-  private readonly route: ActivatedRoute = inject(ActivatedRoute);
+  private readonly taskDetail: TaskDetailOpener = inject(TaskDetailOpener);
 
   /**
    * Property document
@@ -1495,17 +1484,20 @@ export class ListViewPage {
    * Method open
    *
    * @description
-   * Opens a task in the address (`?task=<KEY>`), keeping the view and its other parameters; the
-   * task detail that reads it comes in step 5.
+   * Opens a task's detail over the view (`?task=<KEY>`, Task's `TaskDetailOpener`), keeping the
+   * view and its other parameters; the row gives what it shows of the task, for the header while
+   * the detail is read.
    *
    * @param {string} taskKey - Key of the task.
+   * @param {TaskSummary} [task] - The row's task.
    */
-  protected open(taskKey: string): void {
-    void this.router.navigate([], {
-      relativeTo: this.route,
-      queryParams: { task: taskKey },
-      queryParamsHandling: 'merge',
-    });
+  protected open(taskKey: string, task?: TaskSummary): void {
+    void this.taskDetail.open(
+      taskKey,
+      task
+        ? { key: task.key, name: task.name, status: task.status, milestone: task.milestone }
+        : undefined,
+    );
   }
 
   /**

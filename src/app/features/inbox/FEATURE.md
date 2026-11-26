@@ -24,7 +24,8 @@ None.
   `markInboxNotificationsRead`, `markInboxNotificationRead`) and `RemindersService`
   (`getReminder`, `listReminders`, `snoozeReminder`, `completeReminder`) through `data-access/`.
 - `@core/realtime` for personal invalidations and reconnection.
-- Account's `ports/presence` (do-not-disturb), Workspace's `ports/workspace-context`.
+- Account's `ports/presence` (do-not-disturb), Workspace's `ports/workspace-context`, Task's `.`
+  entry (`TaskDetailOpener`).
 - `@cadenway/ui` (`app-rail`, `button`, `empty`, `popover`, `skeleton`, `tabs`, `toast`) and
   `@cadenway/icons`.
 
@@ -59,7 +60,8 @@ None.
 - The badge is hidden at zero and while the person's presence is `Do not disturb`, and the popover
   then shows `Do not disturb: notifications paused` (only for `do-not-disturb`; an unknown
   presence shows nothing).
-- Opening a notification or a reminder opens `/<slug>/t/<key>`, which renders the 404 until step 5.
+- Opening a notification or a reminder opens the task's detail over the current page (Task's
+  `TaskDetailOpener`, `?task=<key>`).
 - The inbox automatic loads, badge polling and realtime refreshes are passive and wait for workspace verification
   when stale; opening and Retry are active.
 

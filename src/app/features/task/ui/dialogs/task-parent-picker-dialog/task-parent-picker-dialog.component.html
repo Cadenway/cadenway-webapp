@@ -1,0 +1,61 @@
+<cw-dialog size="sm" [(open)]="open">
+  <cw-dialog-header>
+    <h2 cwDialogTitle i18n="@@task.detail.parent.title">Become a subtask of…</h2>
+  </cw-dialog-header>
+  <div class="flex flex-col gap-2" data-testid="task-parent-picker">
+    <div
+      class="flex h-8 items-center gap-2 rounded-md border border-input px-2 focus-within:border-ring"
+    >
+      <ng-icon
+        name="phosphorMagnifyingGlassBold"
+        class="size-3.5 text-muted-foreground"
+        aria-hidden="true"
+      />
+      <label for="task-parent-query" class="sr-only" i18n="@@task.detail.parent.search"
+        >Search for a task</label
+      >
+      <input
+        id="task-parent-query"
+        type="text"
+        autocomplete="off"
+        class="h-full min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+        placeholder="Name or identifier"
+        i18n-placeholder="@@task.detail.parent.placeholder"
+        [value]="store.query()"
+        (input)="store.search($any($event.target).value)"
+      />
+    </div>
+    <div class="flex max-h-64 flex-col overflow-y-auto" aria-live="polite">
+      @if (store.failed()) {
+        <div class="flex items-center justify-between gap-2 px-2 py-3" role="alert">
+          <p class="text-sm text-destructive" i18n="@@task.detail.parent.failed">
+            The tasks could not be read.
+          </p>
+          <button cwButton type="button" variant="outline" size="xs" (click)="store.retry()">
+            <ng-container i18n="@@task.retry">Retry</ng-container>
+          </button>
+        </div>
+      } @else if (store.loading() && store.options().length === 0) {
+        <p class="px-2 py-3 text-sm text-muted-foreground" i18n="@@task.detail.parent.loading">
+          Searching…
+        </p>
+      } @else {
+        @for (option of store.options(); track option.key) {
+          <button
+            type="button"
+            class="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm transition-colors hover:bg-muted focus-visible:bg-muted focus-visible:outline-none"
+            (click)="pick(option)"
+          >
+            <cw-status-icon [status]="option.status" size="3.5" />
+            <span class="min-w-0 flex-1 truncate">{{ option.name }}</span>
+            <span class="shrink-0 font-mono text-xs text-muted-foreground">{{ option.key }}</span>
+          </button>
+        } @empty {
+          <p class="px-2 py-3 text-sm text-muted-foreground" i18n="@@task.detail.parent.none">
+            No possible task: the 3-level limit would be exceeded.
+          </p>
+        }
+      }
+    </div>
+  </div>
+</cw-dialog>

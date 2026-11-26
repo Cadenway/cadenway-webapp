@@ -1,7 +1,6 @@
 import { Component, computed, inject, input, type InputSignal, type Signal } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 
-import { type ApiProblem, readProblem } from '@core/api';
 import { RuntimeConfigStore } from '@core/config';
 import {
   WORKSPACE_CONTEXT,
@@ -10,13 +9,13 @@ import {
 import {
   type AccessDeniedRouteError,
   type DeletedTaskRouteError,
-  isRouteError,
   type KnownRouteError,
   UnavailableRouteError,
 } from '@shared/route-errors';
 
 import type { RouteErrorData } from '../../../models/route-error-data/route-error-data.interface';
 import { ErrorRecoveryStore } from '../../../state/error-recovery/error-recovery.store';
+import { findProblem, findRouteError } from '../../../utils/route-error/route-error.util';
 import { RouteErrorState } from '../route-error-state/route-error-state.component';
 
 /**
@@ -28,45 +27,6 @@ import { RouteErrorState } from '../route-error-state/route-error-state.componen
  * @type {KnownRouteError['kind']}
  */
 type RouteErrorKind = KnownRouteError['kind'];
-
-/**
- * Function findRouteError
- *
- * @description
- * Finds the typed route error a failure carries. The router's boundary receives what the page
- * threw: a resource read in its error state throws an error whose `cause` is what the loader
- * rejected with, so the `cause` chain is followed.
- *
- * @param {unknown} error - Failure caught by the boundary, or given by route `data`.
- * @returns {KnownRouteError | null} The typed error, or null for any other failure.
- */
-function findRouteError(error: unknown): KnownRouteError | null {
-  let current: unknown = error;
-  for (let depth: number = 0; depth < 5 && current !== undefined; depth++) {
-    if (isRouteError(current)) return current;
-    current = current instanceof Error ? current.cause : undefined;
-  }
-  return null;
-}
-
-/**
- * Function findProblem
- *
- * @description
- * Finds the HTTP problem of a failure that is not a typed route error, through its `cause` chain.
- *
- * @param {unknown} error - Failure caught by the boundary.
- * @returns {ApiProblem | null} The problem, or null when no HTTP response is involved.
- */
-function findProblem(error: unknown): ApiProblem | null {
-  let current: unknown = error;
-  for (let depth: number = 0; depth < 5 && current !== undefined; depth++) {
-    const problem: ApiProblem | null = readProblem(current);
-    if (problem) return problem;
-    current = current instanceof Error ? current.cause : undefined;
-  }
-  return null;
-}
 
 /**
  * Component RouteErrorBoundary

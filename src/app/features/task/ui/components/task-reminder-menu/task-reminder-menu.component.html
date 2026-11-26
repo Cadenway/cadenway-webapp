@@ -1,0 +1,181 @@
+<button
+  cwButton
+  type="button"
+  variant="ghost"
+  size="sm"
+  class="h-7 gap-1 px-1.5 text-xs aria-expanded:bg-muted"
+  [class.text-primary]="reminder() !== null && !reminder()!.fired"
+  [class.text-grenat-text]="reminder()?.fired === true"
+  [class.text-muted-foreground]="reminder() === null"
+  aria-haspopup="dialog"
+  [attr.aria-label]="label()"
+  [attr.title]="label()"
+  [disabled]="disabled()"
+  [cwPopoverTrigger]="popover"
+  data-testid="task-detail-reminder"
+>
+  <ng-icon
+    [name]="reminder() ? 'phosphorAlarmFill' : 'phosphorAlarmBold'"
+    class="size-4"
+    aria-hidden="true"
+  />
+  @if (when(); as when) {
+    <span class="hidden sm:inline">{{ when }}</span>
+  }
+</button>
+
+<cw-popover
+  #popover
+  side="bottom"
+  align="end"
+  padding="none"
+  ariaLabel="Reminder"
+  i18n-ariaLabel="@@task.detail.reminder.dialog"
+  [open]="open()"
+  (openChange)="setOpen($event)"
+>
+  <div class="flex w-max max-w-sm min-w-72 flex-col p-1" data-testid="task-detail-reminder-popover">
+    <p
+      class="px-2 py-1.5 text-xs font-medium text-muted-foreground"
+      i18n="@@task.detail.reminder.title"
+    >
+      Remind me of this task
+    </p>
+    @for (preset of presets(); track preset.key) {
+      <button
+        type="button"
+        class="relative flex w-full cursor-default items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm whitespace-nowrap outline-hidden transition-colors select-none hover:bg-muted focus-visible:bg-muted"
+        (click)="pick(preset.at)"
+      >
+        <ng-icon
+          [name]="preset.icon"
+          class="size-4 shrink-0 text-muted-foreground"
+          aria-hidden="true"
+        />
+        <span class="flex-1">{{ preset.label }}</span>
+        <span class="pl-4 text-xs text-muted-foreground tabular-nums">{{ preset.when }}</span>
+        <span class="flex w-4 shrink-0 justify-end">
+          @if (reminder()?.at === preset.at.toISOString()) {
+            <ng-icon name="phosphorCheckBold" class="size-4 text-primary" aria-hidden="true" />
+          }
+        </span>
+      </button>
+    }
+    @if (custom() === null) {
+      <button
+        type="button"
+        class="relative flex w-full cursor-default items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm whitespace-nowrap outline-hidden transition-colors select-none hover:bg-muted focus-visible:bg-muted"
+        (click)="openCustom()"
+      >
+        <ng-icon
+          name="phosphorCalendarPlusBold"
+          class="size-4 shrink-0 text-muted-foreground"
+          aria-hidden="true"
+        />
+        <span class="flex-1" i18n="@@task.detail.reminder.custom">Choose a date and a time…</span>
+      </button>
+    } @else {
+      <div class="flex flex-col gap-2 rounded-md bg-muted/50 p-2">
+        <p class="text-xs font-medium text-muted-foreground" i18n="@@task.detail.reminder.day">
+          Day
+        </p>
+        <div
+          role="radiogroup"
+          aria-label="Day of the reminder"
+          i18n-aria-label="@@task.detail.reminder.days"
+          class="grid grid-cols-4 gap-1"
+        >
+          @for (day of days(); track day.offset) {
+            <button
+              type="button"
+              role="radio"
+              class="h-7 truncate rounded-md border px-1 text-xs whitespace-nowrap transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none border-border aria-checked:border-primary/50 aria-checked:bg-primary/10 aria-checked:text-primary"
+              [attr.aria-checked]="pickedDay() === day.offset"
+              (click)="pickedDay.set(day.offset)"
+            >
+              {{ day.label }}
+            </button>
+          }
+        </div>
+        <p class="text-xs font-medium text-muted-foreground" i18n="@@task.detail.reminder.time">
+          Time
+        </p>
+        <div
+          role="radiogroup"
+          aria-label="Time of the reminder"
+          i18n-aria-label="@@task.detail.reminder.times"
+          class="grid grid-cols-6 gap-1"
+        >
+          @for (hour of hours; track hour) {
+            <button
+              type="button"
+              role="radio"
+              class="h-7 rounded-md border text-xs whitespace-nowrap tabular-nums transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none border-border aria-checked:border-primary/50 aria-checked:bg-primary/10 aria-checked:text-primary"
+              [attr.aria-checked]="pickedHour() === hour"
+              (click)="pickedHour.set(hour)"
+            >
+              {{ hourLabel(hour) }}
+            </button>
+          }
+        </div>
+        @if (customPast()) {
+          <p class="text-xs text-destructive" i18n="@@task.detail.reminder.past">
+            This time has already passed.
+          </p>
+        }
+        <div class="flex items-center justify-between gap-2">
+          <button
+            cwButton
+            type="button"
+            variant="ghost"
+            size="xs"
+            (click)="closeCustom()"
+            i18n="@@task.detail.reminder.cancel"
+          >
+            Cancel
+          </button>
+          <button
+            cwButton
+            type="button"
+            size="xs"
+            [disabled]="customPast()"
+            (click)="saveCustom()"
+            i18n="@@task.detail.reminder.schedule"
+          >
+            Schedule · {{ whenOf(custom()!) }}
+          </button>
+        </div>
+      </div>
+    }
+    <div class="-mx-1 my-1 h-px bg-border"></div>
+    <div class="flex flex-col gap-1.5 px-1.5 pt-1 pb-1.5">
+      <label
+        for="task-reminder-note"
+        class="text-xs font-medium text-muted-foreground"
+        i18n="@@task.detail.reminder.note"
+        >Reminder note</label
+      >
+      <input
+        cwInput
+        id="task-reminder-note"
+        type="text"
+        autocomplete="off"
+        placeholder="Follow up on the mockups"
+        i18n-placeholder="@@task.detail.reminder.note-placeholder"
+        [value]="note()"
+        (change)="changeNote($any($event.target).value)"
+      />
+    </div>
+    @if (reminder()) {
+      <div class="-mx-1 my-1 h-px bg-border"></div>
+      <button
+        type="button"
+        class="relative flex w-full cursor-default items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm whitespace-nowrap text-destructive outline-hidden transition-colors select-none hover:bg-muted focus-visible:bg-muted"
+        (click)="remove()"
+      >
+        <ng-icon name="phosphorBellSlashBold" class="size-4 shrink-0" aria-hidden="true" />
+        <ng-container i18n="@@task.detail.reminder.delete">Delete the reminder</ng-container>
+      </button>
+    }
+  </div>
+</cw-popover>

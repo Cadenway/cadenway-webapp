@@ -8,7 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vite
 import { ThemeService } from '@core/theme';
 import { SignOut } from '@features/auth';
 import { LIST_DIRECTORY, type ListDirectoryEntry } from '@features/spaces/ports/list-directory';
-import { TaskCreate } from '@features/task';
+import { TaskCreate, TaskDetailOpener } from '@features/task';
 import {
   WORKSPACE_CONTEXT,
   type WorkspaceContextPort,
@@ -107,6 +107,7 @@ describe('CommandPaletteDialog', () => {
   let run: Mock<() => Promise<boolean>>;
   let toggle: Mock<() => void>;
   let createTask: Mock<() => boolean>;
+  let openTask: Mock<(taskKey: string, preview?: unknown) => Promise<boolean>>;
   let fixture: ComponentFixture<CommandPaletteDialog>;
 
   beforeEach(async () => {
@@ -117,6 +118,7 @@ describe('CommandPaletteDialog', () => {
     run = vi.fn(() => Promise.resolve(true));
     toggle = vi.fn();
     createTask = vi.fn(() => true);
+    openTask = vi.fn(() => Promise.resolve(true));
     TestBed.configureTestingModule({
       imports: [CommandPaletteDialog],
       providers: [
@@ -124,6 +126,7 @@ describe('CommandPaletteDialog', () => {
         { provide: Router, useValue: { navigate, navigateByUrl: navigate } },
         { provide: SignOut, useValue: { run } },
         { provide: TaskCreate, useValue: { open: createTask } },
+        { provide: TaskDetailOpener, useValue: { open: openTask } },
         { provide: ThemeService, useValue: { resolved: () => 'light', toggle } },
         { provide: WORKSPACE_CONTEXT, useValue: workspace },
         { provide: CwToastService, useValue: { error: vi.fn() } },
@@ -200,7 +203,13 @@ describe('CommandPaletteDialog', () => {
     expect(search).toHaveBeenCalledWith('sso');
     optionNamed('Review of the SSO flow')?.click();
 
-    expect(navigate).toHaveBeenCalledWith(['/', 'atelier-nord', 't', 'CAD-482']);
+    expect(openTask).toHaveBeenCalledWith('CAD-482', {
+      key: 'CAD-482',
+      name: 'Review of the SSO flow',
+      status: 'review',
+      milestone: false,
+    });
+    expect(navigate).not.toHaveBeenCalled();
     expect(localStorage.getItem('cadenway-recent-tasks:u1:o1')).toContain('CAD-482');
   });
 
