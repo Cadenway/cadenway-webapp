@@ -56,10 +56,9 @@ breadcrumb, dialog, inline edit, toolbar).
   file. `RELEASED_LIST_DIALOGS`, beside it, does the same for the header dialogs' openers (empty
   today).
 - Failed primary reads render the router's default error component, `RouteErrorBoundary`, in the
-  failing route's outlet: a failed view keeps the list header. Each view's `data`
-  (`RouteErrorData`) titles its unavailable state: `Could not load the tasks` for `list` and the
-  task views (`App.dc.html` lines 487-499, 4816-4821), `Could not load the workload`, `the form`,
-  `the activity` or `the timesheet` for the others.
+  failing route's outlet: a failed view keeps the list header. Every view's `data`
+  (`RouteErrorData`) titles its unavailable state with the mockup's single title, `Could not load
+the tasks` (`App.dc.html` lines 487-499, 4816-4821).
 
 ## View and dialog packages
 
@@ -374,26 +373,25 @@ gateway checks them and `ORGANIZATION_PIN_OPERATIONS` lists them.
 
 ## Copy not taken word for word from the mockup
 
-| Unit                                                                                                                                        | Reason                                                                                                  |
-| ------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
-| `spaces.retry`, `spaces.sidebar.failed`, `spaces.overview.milestones-failed`, `spaces.secondary.*`, `spaces.saved.read-failed`              | The mockup draws no failed read.                                                                        |
-| `spaces.favorite.failed`, `spaces.list.*-failed`, `spaces.saved.failed`, `spaces.saved.delete-failed`, `spaces.bulk.failed`                 | The mockup draws no refused write.                                                                      |
-| `spaces.saved-view.missing`                                                                                                                 | The mockup does not show a missing saved-view address.                                                  |
-| `spaces.save-view.name-required`                                                                                                            | The mockup disables the save button rather than showing an error.                                       |
-| `spaces.list.export-failed`                                                                                                                 | Taken from the mockup's `Export not possible here` title only.                                          |
-| `spaces.labels.*`, `spaces.table.*`                                                                                                         | The bricks' own default texts, which the mockup does not show as copy.                                  |
-| `spaces.rows.more-failed`, `spaces.rows.subtasks-failed`                                                                                    | The mockup draws no failed read.                                                                        |
-| `spaces.bulk.partial*`                                                                                                                      | The mockup draws no refused chunk of a bulk action.                                                     |
-| `spaces.rows.remind-failed`, `spaces.rows.copy-failed`, `spaces.bulk.restore-failed`                                                        | The mockup draws no refused reminder, copy or restore.                                                  |
-| `spaces.rows.empty`, `spaces.rows.add`                                                                                                      | The empty list without filters, from the board's `No task`.                                             |
-| `spaces.sidebar.overview`                                                                                                                   | The mockup's `Overview of …`, with the space name.                                                      |
-| `spaces.list-view.region`, `spaces.sprint-progress.label`, `spaces.saved.modified-group`                                                    | Accessible names of regions the mockup names differently or does not name.                              |
-| `spaces.route.overview`, `spaces.route.list`                                                                                                | Route titles.                                                                                           |
-| `spaces.tips.*`                                                                                                                             | Three of the five suggestions: the others need integrations.                                            |
-| `spaces.tips.invite-text-one`, `spaces.list.*-one`, `spaces.space.delete-*-one`                                                             | Singular forms the mockup writes in the plural.                                                         |
-| `spaces.space.save-failed`, `spaces.space.delete-failed`, `spaces.list.save-failed`, `spaces.list.unarchive-failed`                         | The mockup draws no refused write.                                                                      |
-| `spaces.space-dialog.name-required`, `spaces.list-dialog.name-required`                                                                     | The mockup disables the submit button rather than showing an error.                                     |
-| `spaces.list-dialog.date-*`, `spaces.list-dialog.pick-date`, `spaces.footer.*`                                                              | The date picker's texts and the footer rows' names.                                                     |
-| `spaces.look.*`                                                                                                                             | `LOOK_COLORS` names and the default choices of `lookPicker`.                                            |
-| `spaces.view-stub.text`                                                                                                                     | The stub of a view not built yet, which the mockup does not have.                                       |
-| `spaces.workload-view.load-failed`, `spaces.form-view.load-failed`, `spaces.activity-view.load-failed`, `spaces.timesheet-view.load-failed` | The mockup titles every failed view `Impossible de charger les tâches`; these name what the view reads. |
+| Unit                                                                                                                           | Reason                                                                     |
+| ------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------- |
+| `spaces.retry`, `spaces.sidebar.failed`, `spaces.overview.milestones-failed`, `spaces.secondary.*`, `spaces.saved.read-failed` | The mockup draws no failed read.                                           |
+| `spaces.favorite.failed`, `spaces.list.*-failed`, `spaces.saved.failed`, `spaces.saved.delete-failed`, `spaces.bulk.failed`    | The mockup draws no refused write.                                         |
+| `spaces.saved-view.missing`                                                                                                    | The mockup does not show a missing saved-view address.                     |
+| `spaces.save-view.name-required`                                                                                               | The mockup disables the save button rather than showing an error.          |
+| `spaces.list.export-failed`                                                                                                    | Taken from the mockup's `Export not possible here` title only.             |
+| `spaces.labels.*`, `spaces.table.*`                                                                                            | The bricks' own default texts, which the mockup does not show as copy.     |
+| `spaces.rows.more-failed`, `spaces.rows.subtasks-failed`                                                                       | The mockup draws no failed read.                                           |
+| `spaces.bulk.partial*`                                                                                                         | The mockup draws no refused chunk of a bulk action.                        |
+| `spaces.rows.remind-failed`, `spaces.rows.copy-failed`, `spaces.bulk.restore-failed`                                           | The mockup draws no refused reminder, copy or restore.                     |
+| `spaces.rows.empty`, `spaces.rows.add`                                                                                         | The empty list without filters, from the board's `No task`.                |
+| `spaces.sidebar.overview`                                                                                                      | The mockup's `Overview of …`, with the space name.                         |
+| `spaces.list-view.region`, `spaces.sprint-progress.label`, `spaces.saved.modified-group`                                       | Accessible names of regions the mockup names differently or does not name. |
+| `spaces.route.overview`, `spaces.route.list`                                                                                   | Route titles.                                                              |
+| `spaces.tips.*`                                                                                                                | Three of the five suggestions: the others need integrations.               |
+| `spaces.tips.invite-text-one`, `spaces.list.*-one`, `spaces.space.delete-*-one`                                                | Singular forms the mockup writes in the plural.                            |
+| `spaces.space.save-failed`, `spaces.space.delete-failed`, `spaces.list.save-failed`, `spaces.list.unarchive-failed`            | The mockup draws no refused write.                                         |
+| `spaces.space-dialog.name-required`, `spaces.list-dialog.name-required`                                                        | The mockup disables the submit button rather than showing an error.        |
+| `spaces.list-dialog.date-*`, `spaces.list-dialog.pick-date`, `spaces.footer.*`                                                 | The date picker's texts and the footer rows' names.                        |
+| `spaces.look.*`                                                                                                                | `LOOK_COLORS` names and the default choices of `lookPicker`.               |
+| `spaces.view-stub.text`                                                                                                        | The stub of a view not built yet, which the mockup does not have.          |

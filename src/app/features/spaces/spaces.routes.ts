@@ -42,9 +42,9 @@ import { WORKLOAD_VIEW_PROVIDERS } from './state/workload-view/workload-view.pro
  * the workspace context and pending changes die with the view; each other view takes its
  * providers from its own `state/<view>-view/<view>-view.providers.ts`, which its package owns.
  * The default error boundary renders a failed primary read in the failing route's outlet, so a
- * failed view keeps the list header; each view's `RouteErrorData` titles it, `Could not load the
- * tasks` (`spaces.list-view.load-failed`) for the task views. The bricks' texts are the English
- * source copy.
+ * failed view keeps the list header; every view's `RouteErrorData` titles it with the mockup's
+ * single title, `Could not load the tasks` (`spaces.list-view.load-failed`). The bricks' texts are
+ * the English source copy.
  *
  * @type {Routes}
  */
@@ -149,7 +149,7 @@ export const SPACES_ROUTES: Routes = [
             path: LAYOUT_SEGMENTS.workload,
             canActivate: [releasedLayoutGuard('workload')],
             data: {
-              unavailableTitle: $localize`:@@spaces.workload-view.load-failed:Could not load the workload`,
+              unavailableTitle: $localize`:@@spaces.list-view.load-failed:Could not load the tasks`,
             } satisfies RouteErrorData,
             providers: WORKLOAD_VIEW_PROVIDERS,
             loadComponent: async (): Promise<Type<unknown>> =>
@@ -170,7 +170,7 @@ export const SPACES_ROUTES: Routes = [
             path: LAYOUT_SEGMENTS.form,
             canActivate: [releasedLayoutGuard('form')],
             data: {
-              unavailableTitle: $localize`:@@spaces.form-view.load-failed:Could not load the form`,
+              unavailableTitle: $localize`:@@spaces.list-view.load-failed:Could not load the tasks`,
             } satisfies RouteErrorData,
             providers: FORM_VIEW_PROVIDERS,
             loadComponent: async (): Promise<Type<unknown>> =>
@@ -180,7 +180,7 @@ export const SPACES_ROUTES: Routes = [
             path: LAYOUT_SEGMENTS.activity,
             canActivate: [releasedLayoutGuard('activity')],
             data: {
-              unavailableTitle: $localize`:@@spaces.activity-view.load-failed:Could not load the activity`,
+              unavailableTitle: $localize`:@@spaces.list-view.load-failed:Could not load the tasks`,
             } satisfies RouteErrorData,
             providers: ACTIVITY_VIEW_PROVIDERS,
             loadComponent: async (): Promise<Type<unknown>> =>
@@ -191,7 +191,7 @@ export const SPACES_ROUTES: Routes = [
             path: LAYOUT_SEGMENTS.timesheet,
             canActivate: [releasedLayoutGuard('timesheet')],
             data: {
-              unavailableTitle: $localize`:@@spaces.timesheet-view.load-failed:Could not load the timesheet`,
+              unavailableTitle: $localize`:@@spaces.list-view.load-failed:Could not load the tasks`,
             } satisfies RouteErrorData,
             providers: TIMESHEET_VIEW_PROVIDERS,
             loadComponent: async (): Promise<Type<unknown>> =>
