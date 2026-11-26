@@ -16,6 +16,7 @@ import { CwInput } from '@cadenway/ui/components/input';
 import { CwProgress } from '@cadenway/ui/components/progress';
 import { NgIcon } from '@ng-icons/core';
 
+import type { TaskAddRequest } from '../../../models/task-detail-sections/task-detail-sections.interface';
 import type { TaskChecklistItem } from '../../../models/task-detail/task-detail.interface';
 
 /**
@@ -24,8 +25,8 @@ import type { TaskChecklistItem } from '../../../models/task-detail/task-detail.
  * @description
  * The `Checklist` of `Details` (`App.dc.html` lines 2141-2168): `<done> / <n>` with its bar, the
  * items with their box (`Complete: <item>` or `Reopen: <item>`, ticked items struck through), the
- * empty text, then `Add an item`, which opens a field: Enter emits `added` and keeps it open and
- * empty for the next item, Escape (or leaving it empty) closes it. The mockup has no deletion,
+ * empty text, then `Add an item`, which opens a field: Enter emits `added` and keeps it open,
+ * emptied for the next item once the item is saved (a refused one keeps its text), Escape (or leaving it empty) closes it. The mockup has no deletion,
  * edition or reordering. Without edit rights the boxes are disabled and nothing can be added.
  */
 @Component({
@@ -74,12 +75,12 @@ export class TaskChecklist {
    * Property added
    *
    * @description
-   * Emits the text of a new item, trimmed and not blank.
+   * Emits the text of a new item, trimmed and not blank, with how its addition settled.
    *
-   * @type {OutputEmitterRef<string>}
+   * @type {OutputEmitterRef<TaskAddRequest>}
    * @readonly
    */
-  public readonly added: OutputEmitterRef<string> = output<string>();
+  public readonly added: OutputEmitterRef<TaskAddRequest> = output<TaskAddRequest>();
 
   /**
    * Property adding
@@ -165,8 +166,12 @@ export class TaskChecklist {
     event.preventDefault();
     const text: string = field.value.trim();
     if (text === '') return;
-    this.added.emit(text);
-    field.value = '';
+    this.added.emit({
+      text,
+      settle: (saved: boolean): void => {
+        if (saved && field.value.trim() === text) field.value = '';
+      },
+    });
   }
 
   /**

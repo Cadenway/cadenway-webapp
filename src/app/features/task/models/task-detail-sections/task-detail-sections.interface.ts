@@ -462,3 +462,37 @@ export interface TaskMentionSpan {
   readonly end: number;
   // #endregion
 }
+
+/**
+ * Interface TaskAddRequest
+ *
+ * @description
+ * A text typed in an add field (a subtask, a checklist item) and how its write settled: the field
+ * keeps the text until `settle(true)`, so a refused write leaves it to correct or send again.
+ */
+export interface TaskAddRequest {
+  // #region Properties
+  /**
+   * Property text
+   *
+   * @description
+   * The typed text, trimmed and not blank.
+   *
+   * @type {string}
+   * @readonly
+   */
+  readonly text: string;
+
+  /**
+   * Property settle
+   *
+   * @description
+   * Reports whether the write was saved; the field is emptied only then, and only while it still
+   * holds the sent text.
+   *
+   * @type {(saved: boolean) => void}
+   * @readonly
+   */
+  readonly settle: (saved: boolean) => void;
+  // #endregion
+}

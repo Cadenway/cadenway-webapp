@@ -18,6 +18,7 @@ import { NgIcon } from '@ng-icons/core';
 
 import { PRIORITY_LABELS } from '../../../constants/task-copy/task-copy.constants';
 import type { Person } from '../../../models/person/person.interface';
+import type { TaskAddRequest } from '../../../models/task-detail-sections/task-detail-sections.interface';
 import type { TaskSummary } from '../../../models/task-summary/task-summary.interface';
 import type { SubtaskLimit } from '../../../state/task-detail-sections/task-detail-sections.store';
 import { TaskDueDate } from '../task-due-date/task-due-date.component';
@@ -177,12 +178,12 @@ export class TaskSubtasks {
    * Property created
    *
    * @description
-   * Emits the name of a new subtask, trimmed and not blank.
+   * Emits the name of a new subtask, trimmed and not blank, with how its creation settled.
    *
-   * @type {OutputEmitterRef<string>}
+   * @type {OutputEmitterRef<TaskAddRequest>}
    * @readonly
    */
-  public readonly created: OutputEmitterRef<string> = output<string>();
+  public readonly created: OutputEmitterRef<TaskAddRequest> = output<TaskAddRequest>();
 
   /**
    * Property done
@@ -313,7 +314,8 @@ export class TaskSubtasks {
    * Method key
    *
    * @description
-   * Enter in the add field emits the typed name and empties the field.
+   * Enter in the add field emits the typed name; the field is emptied once the creation is
+   * saved, and keeps the name when it is refused.
    *
    * @param {KeyboardEvent} event - The key event of the field.
    */
@@ -323,8 +325,12 @@ export class TaskSubtasks {
     const field: HTMLInputElement = event.target as HTMLInputElement;
     const name: string = field.value.trim();
     if (name === '' || this.creating()) return;
-    this.created.emit(name);
-    field.value = '';
+    this.created.emit({
+      text: name,
+      settle: (saved: boolean): void => {
+        if (saved && field.value.trim() === name) field.value = '';
+      },
+    });
   }
   // #endregion
 }

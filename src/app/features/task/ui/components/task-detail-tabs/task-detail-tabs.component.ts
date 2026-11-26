@@ -30,7 +30,10 @@ import {
 
 import { TASK_SECTIONS_BRICK_LABELS } from '../../../constants/task-detail-sections/task-detail-sections.constants';
 import type { Person } from '../../../models/person/person.interface';
-import type { TaskAttachment } from '../../../models/task-detail-sections/task-detail-sections.interface';
+import type {
+  TaskAddRequest,
+  TaskAttachment,
+} from '../../../models/task-detail-sections/task-detail-sections.interface';
 import type {
   TaskChecklistItem,
   TaskComment,
@@ -653,12 +656,12 @@ export class TaskDetailTabs {
    * Method addItem
    *
    * @description
-   * Adds a checklist item.
+   * Adds a checklist item and tells the field whether it was saved.
    *
-   * @param {string} text - The item.
+   * @param {TaskAddRequest} request - The item and its field's settlement.
    */
-  protected addItem(text: string): void {
-    void this.sections.addItem(text);
+  protected addItem(request: TaskAddRequest): void {
+    void this.sections.addItem(request.text).then(request.settle);
   }
 
   /**
@@ -749,12 +752,12 @@ export class TaskDetailTabs {
    * Method createSubtask
    *
    * @description
-   * Creates a subtask of the open task.
+   * Creates a subtask of the open task and tells the field whether it was saved.
    *
-   * @param {string} name - Its name.
+   * @param {TaskAddRequest} request - Its name and its field's settlement.
    */
-  protected createSubtask(name: string): void {
-    void this.sections.createSubtask(name);
+  protected createSubtask(request: TaskAddRequest): void {
+    void this.sections.createSubtask(request.text).then(request.settle);
   }
 
   /**
