@@ -1613,15 +1613,20 @@ function createListRowsStore(): Type<ListRowsStoreInstance> {
       const tails: Map<string, Promise<void>> = new Map<string, Promise<void>>();
       const queued: Map<string, QueuedAct> = new Map<string, QueuedAct>();
       let actions: number = 0;
+      // Incremented on every list or organization change of the reused route store, so a write
+      // captured before a change never starts after it, even once the user is back on its list.
+      let generation: number = 0;
       // A write queued behind others must not start once its view is gone, its organization changed
       // (the organization pin is read when each request leaves) or the reused route store moved to
-      // another list.
+      // another list, even if it came back since.
       const notSent: Error = new Error('The list view, its list or its organization changed.');
       const sameContext: () => () => boolean = (): (() => boolean) => {
         const organizationId: string | undefined = store._params()?.organizationId;
         const listId: string | undefined = store._params()?.listId;
+        const captured: number = generation;
         return (): boolean =>
           !store._destroyRef.destroyed &&
+          generation === captured &&
           store._params()?.organizationId === organizationId &&
           store._params()?.listId === listId;
       };
@@ -1726,6 +1731,7 @@ function createListRowsStore(): Type<ListRowsStoreInstance> {
           if (!params) return;
           const scope: string = `${params.organizationId}\u0000${params.listId}`;
           if (scope === store._scope()) return;
+          generation++;
           abortMore();
           childQueue.length = 0;
           childVersions.clear();
