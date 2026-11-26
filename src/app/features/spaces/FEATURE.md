@@ -95,6 +95,44 @@ constants belong to the lead):
   sprint's goal line, `Space statuses` (enabled when the space is editable) and `Automations`
   (enabled for organization admins and owners) in the list menu after `Edit the space`.
 
+## Form view
+
+The `Form` view (`ui/pages/form-view-page`, `App.dc.html` lines 1102-1297) designs the list's
+request form. The preview is Intake's renderer (`IntakeForm` from `@features/intake`), in a
+browser frame whose address is the public link (`<origin>/f/<publicKey>`, `Not published` until
+published), with the organization badge of `WORKSPACE_CONTEXT`. It follows the settings live and
+is inert: a valid request is not sent, and a toast says so. The settings aside shows from 1024 px:
+the name and description, a `Required` checkbox and a show switch per field (the title is locked),
+the created task's default status (the space's statuses and names) and assignee (`Unassigned`, then
+`ListPageStore.organizationMembers`), the destination note, `Copy the public link` (enabled once
+published), `Open the preview` (which hides the aside until `Close the preview`) and the
+publication (`Publish the form`, `Unpublish the form`). A list the caller cannot edit
+(`TaskList.canEdit`) shows an empty state and reads nothing.
+
+- `FormViewStore` (`state/form-view`, route-scoped through `FORM_VIEW_PROVIDERS`) reads
+  `getIntakeFormConfiguration` through `IntakeFormApi` (`data-access/services/intake-form-api`);
+  that primary read fails to the route boundary, and a view re-entered after a failure reads
+  again. A change shows at once; 500 ms after the last one, what differs from the saved settings is
+  sent with `updateIntakeFormConfiguration` against their version (`If-Match`), one write after the
+  other; a blank title is not sent. A refused write forgets the changes, reads the settings again
+  and toasts `The form settings could not be saved` (`This status or assignee cannot be used in
+this list` for `422 intake-form.defaults-invalid`). `publishIntakeForm` and `disableIntakeForm`
+  (followed by a read, since it answers without a body) replace the saved settings. Another list
+  starts over and drops late answers.
+- The mockup's `on`/`req` pair maps to the contract's mode: a hidden field is `disabled`, a field
+  shown again is `optional`.
+- Known gaps: the destination note gives no next reference (`prochaine référence <id>`), which
+  needs a published next-key read (G14); no realtime notice tells another editor's changes (G13);
+  the preview shows the organization badge that the public page cannot show.
+
+| Unit                                                                                                                                                                                              | Reason                                                     |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
+| `spaces.form.publish`, `spaces.form.unpublish`, `spaces.form.published`, `spaces.form.unpublished`, `spaces.form.unpublished-address`, `spaces.form.publish-failed`, `spaces.form.disable-failed` | The mockup has no publication.                             |
+| `spaces.form.destination`                                                                                                                                                                         | The mockup's note without its next reference (G14).        |
+| `spaces.form.preview-only*`                                                                                                                                                                       | The mockup's preview creates a task; this one never sends. |
+| `spaces.form.read-only`                                                                                                                                                                           | The mockup draws no list the caller cannot edit.           |
+| `spaces.form.save-failed`, `spaces.form.defaults-invalid`, `spaces.form.link-failed`                                                                                                              | The mockup draws no refused write.                         |
+
 ## Public entry points
 
 | Entry point            | Consumers    |
