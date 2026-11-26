@@ -118,9 +118,9 @@ describe('French message catalog', () => {
       locale: 'fr',
       translations: {
         'a.two': ' ',
-        'a.three': 'Trois',
-        'a.four': '{VAR_PLURAL, plural, =1 {un} other {plusieurs}}',
-        'a.gone': 'Parti',
+        'a.three': 'Three',
+        'a.four': '{VAR_PLURAL, plural, =1 {single} other {several}}',
+        'a.gone': 'Gone',
       },
     };
 

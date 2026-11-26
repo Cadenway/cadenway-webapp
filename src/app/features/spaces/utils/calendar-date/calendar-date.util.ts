@@ -49,7 +49,8 @@ export function formatDayMonth(iso: string, locale: string): string {
  *
  * @description
  * The range of a sprint as the mockup writes it (`sprintRange`): the month written once within
- * one month (`Nov 3 – 17` in English), both months across two (`Oct 27 – Nov 9`).
+ * one month, where the locale puts it (`Nov 3 – 17` in English, `3 – 17 nov.` in French), both
+ * months across two (`Oct 27 – Nov 9`). The dash always has a space on each side.
  *
  * @param {string} start - First day.
  * @param {string} end - Last day.
@@ -61,10 +62,10 @@ export function formatSprintRange(start: string, end: string, locale: string): s
   const last: Date = toLocalDate(end);
   const sameMonth: boolean =
     first.getMonth() === last.getMonth() && first.getFullYear() === last.getFullYear();
-  const from: string = sameMonth
-    ? new Intl.DateTimeFormat(locale, { day: 'numeric' }).format(first)
-    : formatDayMonth(start, locale);
-  return `${from} – ${formatDayMonth(end, locale)}`;
+  if (!sameMonth) return `${formatDayMonth(start, locale)} – ${formatDayMonth(end, locale)}`;
+  return new Intl.DateTimeFormat(locale, { day: 'numeric', month: 'short' })
+    .formatRange(first, last)
+    .replace(/\s*[–-]\s*/u, ' – ');
 }
 
 /**
