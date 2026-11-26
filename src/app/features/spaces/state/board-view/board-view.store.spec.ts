@@ -85,6 +85,78 @@ describe('BoardViewStore', () => {
   let warning: Mock;
   let refreshCounts: Mock;
   let organization: WritableSignal<{ id: string; slug: string }>;
+  let listId: WritableSignal<string | null>;
+
+  /**
+   * Function heldWriter
+   *
+   * @description
+   * The board's writer over a reader whose first write stays in flight until settled by hand.
+   *
+   * @param {InstanceType<typeof BoardViewStore>} store - The store.
+   * @returns {{ writer: ViewTaskWriter; settle: (outcome: ViewTaskOutcome) => void }} The writer
+   * and the hand that settles its write.
+   */
+  function heldWriter(store: InstanceType<typeof BoardViewStore>): {
+    writer: ViewTaskWriter;
+    settle: (outcome: ViewTaskOutcome) => void;
+  } {
+    let settle: (outcome: ViewTaskOutcome) => void = (): void => undefined;
+    const reader: ViewTaskWriter = {
+      act: vi.fn(
+        () =>
+          new Promise<ViewTaskOutcome>((resolve: (outcome: ViewTaskOutcome) => void): void => {
+            settle = resolve;
+          }),
+      ),
+      update: vi.fn(),
+      remind: vi.fn(),
+      restore: vi.fn(),
+      reload: vi.fn(),
+      shownStatus: (task: TaskSummary) => task.status,
+    };
+    return {
+      writer: store.writerOver(reader),
+      settle: (outcome: ViewTaskOutcome): void => {
+        settle(outcome);
+      },
+    };
+  }
+
+  /**
+   * Function refused
+   *
+   * @description
+   * A write of the view refused for CAD-461.
+   *
+   * @returns {ViewTaskOutcome} The outcome.
+   */
+  function refused(): ViewTaskOutcome {
+    return {
+      affected: 0,
+      done: [],
+      failed: [{ taskKey: 'CAD-461', version: 3 }],
+      unknown: [],
+      notSent: [],
+      before: {},
+      after: {},
+      changed: [],
+    };
+  }
+
+  /**
+   * Function showProgress
+   *
+   * @description
+   * Shows CAD-461 in progress over its confirmed `To do`, as an optimistic write leaves it.
+   */
+  function showProgress(): void {
+    items.update((current: readonly ListTaskItem[]) =>
+      current.map((item: ListTaskItem) =>
+        item.task.key === 'CAD-461' ? { ...item, status: 'progress' } : item,
+      ),
+    );
+  }
   let taskQuery: WritableSignal<ListTaskQuery>;
   let bulk: Mock<TaskActionsApi['bulk']>;
 
@@ -133,6 +205,7 @@ describe('BoardViewStore', () => {
           useValue: {
             space: ready({ id: 'product', statuses }),
             refreshCounts,
+            listId,
             organizationMembers: ready([
               { userId: 'u-ines', name: 'Inès Robert' },
               { userId: 'u-hugo', name: null },
@@ -198,6 +271,7 @@ describe('BoardViewStore', () => {
     warning = vi.fn();
     refreshCounts = vi.fn();
     organization = signal({ id: 'org-atelier-nord', slug: 'atelier-nord' });
+    listId = signal<string | null>('sprint-14');
     taskQuery = signal<ListTaskQuery>({ level: 'roots', sort: 'manual' });
     bulk = vi.fn<TaskActionsApi['bulk']>(() => Promise.resolve(applied('CAD-461', 4)));
   });
@@ -427,6 +501,124 @@ describe('BoardViewStore', () => {
         { type: 'status', status: 'review' },
         expect.any(Function),
       );
+    });
+
+    it('warns of an unknown outcome of a move written on leaving and reads the counts', async () => {
+      bulk.mockResolvedValue({
+        affected: 0,
+        done: [],
+        failed: [],
+        unknown: [{ taskKey: 'CAD-461', version: 3 }],
+        notSent: [],
+      });
+      const store: InstanceType<typeof BoardViewStore> = setup();
+
+      store.stage(cardOf(store, 'CAD-461'), 'review');
+      store.leave();
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(warning).toHaveBeenCalledWith(
+        'The outcome is unknown. The tasks are being refreshed.',
+      );
+      expect(refreshCounts).toHaveBeenCalledTimes(1);
+      expect(error).not.toHaveBeenCalled();
+      expect(show).not.toHaveBeenCalled();
+    });
+
+    it('sends nothing on leaving when a refused write leaves the task at the moved-back status', async () => {
+      const store: InstanceType<typeof BoardViewStore> = setup();
+      const { writer, settle } = heldWriter(store);
+      void writer.act([cardOf(store, 'CAD-461').task], { type: 'status', status: 'progress' });
+      showProgress();
+
+      store.stage(cardOf(store, 'CAD-461'), 'todo');
+      store.leave();
+      settle(refused());
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(bulk).not.toHaveBeenCalled();
+      expect(show).not.toHaveBeenCalled();
+    });
+
+    it('offers the Undo of a move written on leaving back to the confirmed status', async () => {
+      const store: InstanceType<typeof BoardViewStore> = setup();
+      const { writer, settle } = heldWriter(store);
+      void writer.act([cardOf(store, 'CAD-461').task], { type: 'status', status: 'progress' });
+      showProgress();
+
+      store.stage(cardOf(store, 'CAD-461'), 'review');
+      store.leave();
+      settle(refused());
+      await vi.advanceTimersByTimeAsync(0);
+      expect(bulk).toHaveBeenCalledWith(
+        [{ taskKey: 'CAD-461', version: 3 }],
+        { type: 'status', status: 'review' },
+        expect.any(Function),
+      );
+      (show.mock.calls[0][1] as { undo: () => void }).undo();
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(bulk).toHaveBeenLastCalledWith(
+        [{ taskKey: 'CAD-461', version: 4 }],
+        { type: 'status', status: 'todo' },
+        expect.any(Function),
+      );
+    });
+
+    it('offers no Undo when the write before the move has an unknown outcome', async () => {
+      const store: InstanceType<typeof BoardViewStore> = setup();
+      const { writer, settle } = heldWriter(store);
+      void writer.act([cardOf(store, 'CAD-461').task], { type: 'status', status: 'progress' });
+      showProgress();
+
+      store.stage(cardOf(store, 'CAD-461'), 'review');
+      store.leave();
+      settle({
+        ...refused(),
+        failed: [],
+        unknown: [{ taskKey: 'CAD-461', version: 3 }],
+      });
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(bulk).toHaveBeenCalledTimes(1);
+      expect(show).toHaveBeenCalledWith('CAD-461 · In review', {
+        description: 'Status changed.',
+      });
+    });
+
+    it('writes a waiting move in its own list when another list is shown', async () => {
+      const store: InstanceType<typeof BoardViewStore> = setup();
+      store.settleWith(send);
+      TestBed.tick();
+
+      store.stage(cardOf(store, 'CAD-461'), 'review');
+      listId.set('sprint-15');
+      TestBed.tick();
+      await vi.advanceTimersByTimeAsync(STATUS_SETTLE_MS);
+
+      expect(send).not.toHaveBeenCalled();
+      expect(bulk).toHaveBeenCalledTimes(1);
+      expect(bulk).toHaveBeenCalledWith(
+        [{ taskKey: 'CAD-461', version: 3 }],
+        { type: 'status', status: 'review' },
+        expect.any(Function),
+      );
+      expect(refreshCounts).not.toHaveBeenCalled();
+    });
+
+    it('drops a waiting move with the failure toast when another organization is shown', async () => {
+      const store: InstanceType<typeof BoardViewStore> = setup();
+      store.settleWith(send);
+      TestBed.tick();
+
+      store.stage(cardOf(store, 'CAD-461'), 'review');
+      organization.set({ id: 'org-other', slug: 'other' });
+      TestBed.tick();
+      await vi.advanceTimersByTimeAsync(STATUS_SETTLE_MS);
+
+      expect(send).not.toHaveBeenCalled();
+      expect(bulk).not.toHaveBeenCalled();
+      expect(error).toHaveBeenCalledWith('The task could not be changed');
     });
 
     it('writes the last move after the write in flight when the view is left', async () => {

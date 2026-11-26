@@ -146,12 +146,20 @@ column menu lines 7314-7323) files the list's tasks into status columns with `cw
   `TaskActionsApi.bulk` (root-provided, so it outlives the view; `BoardViewStore.leave`), each
   after the board's write of the same task still in flight has settled and at the version it
   left: `VIEW_TASK_WRITER` is `BoardViewStore.writerOver(ListTasksStore)`, the reader's writes
-  with each task's write in flight followed. A move written after leaving reads the list's
-  counts again (`ListPageStore.refreshCounts`, inert once the list page is left too, since its
-  resources are destroyed) and shows the same status toast, whose `Undo` writes the confirmed
-  status back with `TaskActionsApi` at the version the move left (a refusal warns
-  `CAD-482 changed since`); a refused, uncertain or unsent move (the organization changed) shows
-  `The task could not be changed`. In the view, the written move's toast offers `Undo` and a
+  with each task's write in flight followed, and the status its last settled status write left
+  (or an unknown outcome). Each waiting move keeps the list and organization it was made in: when
+  the route is reused for another list, the moves of the previous one are written the same way,
+  in their own organization; when another organization is shown, they are dropped with
+  `The task could not be changed`. A move written outside the view first waits for the task's
+  write in flight, then takes the confirmed status: the status the last settled write left, or
+  the read's when it is newer or no write settled. A move equal to it sends nothing. A sent move
+  reads the counts of its list when it is still shown (`ListPageStore.refreshCounts`, inert once
+  the list page is left, since its resources are destroyed) and shows the same status toast,
+  whose `Undo` writes that confirmed status back with `TaskActionsApi` at the version the move
+  left (a refusal warns `CAD-482 changed since`); no `Undo` is offered when the write before it
+  has an unknown outcome. An unknown outcome of the move itself warns
+  `The outcome is unknown. The tasks are being refreshed.` and reads the counts; a refused or
+  unsent move (the organization changed) shows `The task could not be changed`. In the view, the written move's toast offers `Undo` and a
   refusal puts the card back. A drop on `Cancelled`, or `Cancelled` in the task menu, asks the
   reason first and holds the waiting move meanwhile (the card keeps its column): confirming
   replaces it with the cancellation, dismissing lets it settle 460 ms later. `Cancelled` is never
@@ -170,7 +178,8 @@ column menu lines 7314-7323) files the list's tasks into status columns with `cw
   work-in-progress limit (G2: the mockup's `progress` limit of 2 is not kept); no Git chip on the
   cards (G3); the drop's toast is `ViewTaskWritesStore`'s status toast (`CAD-482 · In progress`,
   `Status changed.`), not the mockup's `CAD-482 déplacée` / `Statut : En cours.`, since
-  `setStatus` takes no toast wording; no selection bar on the board (the mockup has none); the
+  `setStatus` takes no toast wording; no selection bar on the board: the Ctrl click selection
+  reaches the task menu only, and the bulk bar of the `List` view is a follow-up; the
   mockup's folded column says `Déplier la colonne X`, the brick adds the count. A card has no
   visible trigger for its menu: `cw-kanban` 0.10.0 offers no card actions slot, and a button in
   the card template would sit inside the brick's focusable card (a nested control, a second tab

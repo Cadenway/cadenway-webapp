@@ -198,5 +198,28 @@ export interface BoardPendingMove {
    * @readonly
    */
   readonly task: TaskSummary;
+
+  /**
+   * Property listId
+   *
+   * @description
+   * The list the board showed when the move began: a move is never written through another
+   * list's view.
+   *
+   * @type {string}
+   * @readonly
+   */
+  readonly listId: string;
+
+  /**
+   * Property organizationId
+   *
+   * @description
+   * The organization the move was made in; it is only ever sent there.
+   *
+   * @type {string}
+   * @readonly
+   */
+  readonly organizationId: string;
   // #endregion
 }

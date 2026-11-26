@@ -1,5 +1,5 @@
-import { inject, type Signal, type Type } from '@angular/core';
-import type { StatusKey } from '@cadenway/contracts';
+import { computed, inject, type Signal, type Type } from '@angular/core';
+import type { CancelReason, StatusKey } from '@cadenway/contracts';
 import { CwToastService } from '@cadenway/ui/components/toast';
 import {
   patchState,
@@ -116,6 +116,50 @@ const initialState: BoardViewState = { collapsedColumns: [], _pending: {}, _revi
  * @type {(task: TaskSummary, status: StatusKey) => void}
  */
 export type BoardStatusSend = (task: TaskSummary, status: StatusKey) => void;
+
+/**
+ * Interface SettledStatus
+ *
+ * @description
+ * What the last settled status write of the board left a task at: its status and reason, or an
+ * unknown outcome, and the version it is known from. A read of a newer version replaces it.
+ */
+interface SettledStatus {
+  // #region Properties
+  /**
+   * Property status
+   *
+   * @description
+   * The status the write left, or null when its outcome is unknown.
+   *
+   * @type {StatusKey | null}
+   * @readonly
+   */
+  readonly status: StatusKey | null;
+
+  /**
+   * Property cancelReason
+   *
+   * @description
+   * The reason of a cancellation the write left, else null.
+   *
+   * @type {CancelReason | null}
+   * @readonly
+   */
+  readonly cancelReason: CancelReason | null;
+
+  /**
+   * Property version
+   *
+   * @description
+   * The version the write left the task at (the last read's for an unknown outcome).
+   *
+   * @type {number}
+   * @readonly
+   */
+  readonly version: number;
+  // #endregion
+}
 
 /**
  * Function progressOf
@@ -441,7 +485,15 @@ function createBoardViewStore(): Type<BoardViewStoreInstance> {
         Promise<ViewTaskOutcome>
       >();
       const versions: Map<string, number> = new Map<string, number>();
+      const settled: Map<string, SettledStatus> = new Map<string, SettledStatus>();
       let query: string | null = null;
+      const scopeNow: () => { listId: string | null; organizationId: string } = (): {
+        listId: string | null;
+        organizationId: string;
+      } => ({
+        listId: store._page.listId(),
+        organizationId: store._workspace.organization().id,
+      });
       const itemOf: (key: string) => ListTaskItem | undefined = (
         key: string,
       ): ListTaskItem | undefined =>
@@ -470,11 +522,19 @@ function createBoardViewStore(): Type<BoardViewStoreInstance> {
         const confirmed: StatusKey = item?.status ?? move.from;
         return confirmed === move.status
           ? null
-          : { task: item?.task ?? move.task, status: move.status, from: confirmed };
+          : { ...move, task: item?.task ?? move.task, from: confirmed };
       };
       const write: (key: string) => void = (key: string): void => {
-        const move: BoardPendingMove | null = due(key);
-        if (move) send?.(move.task, move.status);
+        const move: BoardPendingMove | undefined = store._pending()[key];
+        if (!move) return;
+        const scope: { listId: string | null; organizationId: string } = scopeNow();
+        if (move.listId !== scope.listId || move.organizationId !== scope.organizationId) {
+          forget([key]);
+          settleElsewhere(key, move);
+          return;
+        }
+        const shown: BoardPendingMove | null = due(key);
+        if (shown) send?.(shown.task, shown.status);
         forget([key]);
       };
       const schedule: (key: string) => void = (key: string): void => {
@@ -487,8 +547,13 @@ function createBoardViewStore(): Type<BoardViewStoreInstance> {
           }, STATUS_SETTLE_MS),
         );
       };
-      const follow: (keys: readonly string[], answer: Promise<ViewTaskOutcome>) => void = (
+      const follow: (
         keys: readonly string[],
+        action: TaskBulkAction | null,
+        answer: Promise<ViewTaskOutcome>,
+      ) => void = (
+        keys: readonly string[],
+        action: TaskBulkAction | null,
         answer: Promise<ViewTaskOutcome>,
       ): void => {
         for (const key of keys) inflight.set(key, answer);
@@ -496,9 +561,44 @@ function createBoardViewStore(): Type<BoardViewStoreInstance> {
           for (const key of keys) {
             const version: number | undefined = outcome.after[key];
             if (version !== undefined) versions.set(key, Math.max(versions.get(key) ?? 0, version));
+            const known: number = version ?? store._tasks.taskOf(key)?.version ?? 0;
+            const applied: boolean = outcome.done.some(
+              (entry: { readonly taskKey: string }): boolean => entry.taskKey === key,
+            );
+            const unknown: boolean = outcome.unknown.some(
+              (entry: { readonly taskKey: string }): boolean => entry.taskKey === key,
+            );
+            const before: SettledStatus | undefined = settled.get(key);
+            if (action?.type === 'status' && applied) {
+              settled.set(key, {
+                status: action.status,
+                cancelReason: action.status === 'cancelled' ? (action.cancelReason ?? null) : null,
+                version: known,
+              });
+            } else if (unknown) {
+              settled.set(key, { status: null, cancelReason: null, version: known });
+            } else if (applied && before) {
+              settled.set(key, { ...before, version: known });
+            }
             if (inflight.get(key) === answer) inflight.delete(key);
           }
         });
+      };
+      const confirmedOf: (
+        key: string,
+        fallback: TaskSummary,
+      ) => { status: StatusKey; cancelReason: CancelReason | null } | null = (
+        key: string,
+        fallback: TaskSummary,
+      ): { status: StatusKey; cancelReason: CancelReason | null } | null => {
+        const read: TaskSummary = store._tasks.taskOf(key) ?? fallback;
+        const last: SettledStatus | undefined = settled.get(key);
+        if (!last || read.version > last.version) {
+          return { status: read.status, cancelReason: read.cancelReason };
+        }
+        return last.status === null
+          ? null
+          : { status: last.status, cancelReason: last.cancelReason };
       };
       const failed: () => void = (): void => {
         store._toasts.error(
@@ -529,12 +629,17 @@ function createBoardViewStore(): Type<BoardViewStoreInstance> {
           failed();
         }
       };
+      const countsOf: (move: BoardPendingMove) => void = (move: BoardPendingMove): void => {
+        if (store._page.listId() === move.listId) store._page.refreshCounts();
+      };
       const sendAfter: (key: string, move: BoardPendingMove) => Promise<void> = async (
         key: string,
         move: BoardPendingMove,
       ): Promise<void> => {
-        const organizationId: string = store._workspace.organization().id;
         const outcome: ViewTaskOutcome | undefined = await inflight.get(key);
+        const confirmed: { status: StatusKey; cancelReason: CancelReason | null } | null =
+          confirmedOf(key, move.task);
+        if (move.status === 'cancelled' || confirmed?.status === move.status) return;
         const version: number = Math.max(
           move.task.version,
           store._tasks.taskOf(key)?.version ?? 0,
@@ -544,22 +649,29 @@ function createBoardViewStore(): Type<BoardViewStoreInstance> {
         const answer: TaskBulkOutcome = await store._actions.bulk(
           [{ taskKey: key, version }],
           { type: 'status', status: move.status },
-          (): boolean => store._workspace.organization().id === organizationId,
+          (): boolean => store._workspace.organization().id === move.organizationId,
         );
         const left: number | null | undefined = answer.done.find(
           (entry: { readonly taskKey: string }): boolean => entry.taskKey === key,
         )?.version;
         if (left === undefined) {
-          failed();
+          if (answer.unknown.length > 0) {
+            store._toasts.warning(
+              $localize`:@@spaces.bulk.unknown:The outcome is unknown. The tasks are being refreshed.`,
+            );
+            countsOf(move);
+          } else {
+            failed();
+          }
           return;
         }
-        store._page.refreshCounts();
-        const reason: TaskSummary['cancelReason'] = move.task.cancelReason;
-        const back: TaskBulkAction | null =
-          move.from !== 'cancelled'
-            ? { type: 'status', status: move.from }
-            : reason
-              ? { type: 'status', status: move.from, cancelReason: reason }
+        countsOf(move);
+        const back: TaskBulkAction | null = !confirmed
+          ? null
+          : confirmed.status !== 'cancelled'
+            ? { type: 'status', status: confirmed.status }
+            : confirmed.cancelReason
+              ? { type: 'status', status: 'cancelled', cancelReason: confirmed.cancelReason }
               : null;
         const word: string = statusLabel(move.status, store.statusOptions(), move.task.milestone);
         store._toasts.show($localize`:@@spaces.rows.status-toast:${key}:label: · ${word}:status:`, {
@@ -567,12 +679,31 @@ function createBoardViewStore(): Type<BoardViewStoreInstance> {
           ...(back && left !== null
             ? {
                 undo: (): void => {
-                  void undoLeft(key, left, back, organizationId);
+                  void undoLeft(key, left, back, move.organizationId);
                 },
               }
             : {}),
         });
       };
+      /**
+       * Function settleElsewhere
+       *
+       * @description
+       * Writes a waiting move outside the view that showed it (the view left, another list or
+       * organization shown) with `TaskActionsApi`, in the organization it was made in; when the
+       * organization already changed, nothing is sent and `The task could not be changed` shows.
+       *
+       * @param {string} key - The task.
+       * @param {BoardPendingMove} move - The waiting move.
+       */
+      function settleElsewhere(key: string, move: BoardPendingMove): void {
+        if (move.status === 'cancelled') return;
+        if (move.organizationId !== store._workspace.organization().id) {
+          failed();
+          return;
+        }
+        void sendAfter(key, move);
+      }
       return {
         setCollapsed(columns: readonly string[]): void {
           patchState(store, { collapsedColumns: columns });
@@ -629,7 +760,13 @@ function createBoardViewStore(): Type<BoardViewStoreInstance> {
           patchState(store, {
             _pending: {
               ...store._pending(),
-              [key]: { status, from: waiting?.from ?? confirmed, task: waiting?.task ?? card.task },
+              [key]: {
+                status,
+                from: waiting?.from ?? confirmed,
+                task: waiting?.task ?? card.task,
+                listId: waiting?.listId ?? store._page.listId() ?? card.task.listId,
+                organizationId: waiting?.organizationId ?? store._workspace.organization().id,
+              },
             },
           });
           schedule(key);
@@ -656,9 +793,9 @@ function createBoardViewStore(): Type<BoardViewStoreInstance> {
         },
         leave(): void {
           for (const key of Object.keys(store._pending())) {
-            const move: BoardPendingMove | null = due(key);
+            const move: BoardPendingMove | undefined = store._pending()[key];
             forget([key]);
-            if (move && move.status !== 'cancelled') void sendAfter(key, move);
+            if (move) settleElsewhere(key, move);
           }
           send = null;
         },
@@ -672,6 +809,7 @@ function createBoardViewStore(): Type<BoardViewStoreInstance> {
               const answer: Promise<ViewTaskOutcome> = writer.act(tasks, action, expected);
               follow(
                 tasks.map((task: TaskSummary): string => task.key),
+                action,
                 answer,
               );
               return answer;
@@ -682,7 +820,7 @@ function createBoardViewStore(): Type<BoardViewStoreInstance> {
               expected?: Readonly<Partial<Record<string, number>>>,
             ): Promise<ViewTaskOutcome> => {
               const answer: Promise<ViewTaskOutcome> = writer.update(task, changes, expected);
-              follow([task.key], answer);
+              follow([task.key], null, answer);
               return answer;
             },
             remind: (taskKeys: readonly string[], at: Date): Promise<readonly string[]> =>
@@ -694,6 +832,20 @@ function createBoardViewStore(): Type<BoardViewStoreInstance> {
             shownStatus: (task: TaskSummary): StatusKey => writer.shownStatus(task),
           };
         },
+        _followScope: signalMethod<string>((): void => {
+          const scope: { listId: string | null; organizationId: string } = scopeNow();
+          for (const key of Object.keys(store._pending())) {
+            const move: BoardPendingMove | undefined = store._pending()[key];
+            if (
+              !move ||
+              (move.listId === scope.listId && move.organizationId === scope.organizationId)
+            ) {
+              continue;
+            }
+            forget([key]);
+            settleElsewhere(key, move);
+          }
+        }),
         _followQuery: signalMethod<ListTaskQuery>((next: ListTaskQuery): void => {
           const key: string = JSON.stringify(next);
           if (query !== null && key !== query) {
@@ -705,6 +857,12 @@ function createBoardViewStore(): Type<BoardViewStoreInstance> {
     }),
     withHooks({
       onInit(store): void {
+        store._followScope(
+          computed(
+            (): string =>
+              `${store._workspace.organization().id}\u0000${store._page.listId() ?? ''}`,
+          ),
+        );
         store._followQuery(store._view.taskQuery);
       },
       onDestroy(store): void {
@@ -724,8 +882,9 @@ function createBoardViewStore(): Type<BoardViewStoreInstance> {
  * stopped using unless a card sits there), the cards filed under the status they show, the
  * folded columns (kept while the view lives) and `Hide the column` with its `Undo`. A moved
  * card shows its new status at once (`stage`); the move is written through the page's
- * `ViewTaskWritesStore` (`settleWith`) `STATUS_SETTLE_MS` after the last move of its task, a move
- * back to the confirmed status writes nothing, another query writes the waiting moves at once
+ * `ViewTaskWritesStore` (`settleWith`) `STATUS_SETTLE_MS` after the last move of its task (each
+ * waiting move keeps its list and organization: another one shown writes it in its own scope or
+ * drops it), a move back to the confirmed status writes nothing, another query writes the waiting moves at once
  * (`flush`, from the task each started from when the new read no longer holds it), and leaving
  * the view writes them with `TaskActionsApi` after the board's writes in flight (`leave`, over
  * the writer `writerOver` follows); a read of the tasks never replaces a waiting move. A drop that writes nothing hands
