@@ -645,6 +645,8 @@
     "spaces.list-view.load-failed": "Could not load the tasks",
     "spaces.form.defaults-invalid": "This status or assignee cannot be used in this list",
     "spaces.form.save-failed": "The form settings could not be saved",
+    "spaces.form.publish-blocked": "The form was not published: its settings could not be saved",
+    "spaces.form.publish-unconfirmed": "The form was not published: its settings could not be confirmed as saved",
     "spaces.form.publish-failed": "The form could not be published",
     "spaces.form.disable-failed": "The form could not be unpublished",
     "spaces.bulk.count": "{VAR_PLURAL, plural, =1 {1 selected} other {{INTERPOLATION} selected}}",

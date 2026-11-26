@@ -1,3 +1,4 @@
+import { HttpErrorResponse } from '@angular/common/http';
 import { inject, Service } from '@angular/core';
 import {
   type IntakeFormConfiguration as IntakeFormConfigurationDto,
@@ -15,6 +16,20 @@ import {
 } from '../../adapters/intake-form/intake-form.adapter';
 import { toRouteError } from '../../adapters/route-error/route-error.adapter';
 import { abortableRead } from '../../utils/abortable-read/abortable-read.util';
+
+/**
+ * Function isUncertainWrite
+ *
+ * @description
+ * Whether a failed write may still have been recorded: no answer, a timeout or a server failure
+ * (`5xx`), unlike a refusal (`4xx`).
+ *
+ * @param {unknown} error - The failure.
+ * @returns {boolean} Whether its outcome is unknown.
+ */
+export function isUncertainWrite(error: unknown): boolean {
+  return !(error instanceof HttpErrorResponse) || error.status === 0 || error.status >= 500;
+}
 
 /**
  * Service IntakeFormApi

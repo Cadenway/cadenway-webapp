@@ -116,8 +116,9 @@ publication (`Publish the form`, `Unpublish the form`). A list the caller cannot
   settings is sent with `updateIntakeFormConfiguration` against their version (`If-Match`); a blank
   title is not sent. Settings changes, `publishIntakeForm` and `disableIntakeForm` (followed by a
   read, since it answers without a body) share one write queue: they run one after the other, a
-  publication first sends the change waiting before it, and an answer older than the version
-  already known is ignored. A change still waiting when the view is left, or when another list is
+  publication first sends the change waiting before it and is not sent when a settings write
+  before it is refused or unconfirmed (`The form was not published: …`), a withdrawal goes ahead
+  anyway, and an answer older than the version already known is ignored. A change still waiting when the view is left, or when another list is
   shown, is sent at once and completes after the store is gone. A refused change toasts `The form
 settings could not be saved` (`This status or assignee cannot be used in this list` for
   `422 intake-form.defaults-invalid`) and reads the settings again: the settings it sent go back

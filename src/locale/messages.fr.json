@@ -818,6 +818,8 @@
     "spaces.form.defaults-invalid": "Ce statut ou cet assigné ne peut pas être utilisé dans cette liste",
     "spaces.form.save-failed": "Impossible d’enregistrer les réglages du formulaire",
     "spaces.form.publish-failed": "Impossible de publier le formulaire",
+    "spaces.form.publish-blocked": "Le formulaire n’a pas été publié : ses réglages n’ont pas pu être enregistrés",
+    "spaces.form.publish-unconfirmed": "Le formulaire n’a pas été publié : l’enregistrement de ses réglages n’a pas pu être confirmé",
     "spaces.form.disable-failed": "Impossible de dépublier le formulaire",
     "spaces.form.title": "Formulaire de demande",
     "spaces.form.read-only": "Seuls les éditeurs de la liste peuvent configurer son formulaire de demande.",

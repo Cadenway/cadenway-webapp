@@ -22,7 +22,10 @@ import {
 import { hasProblemCode } from '@core/api';
 import type { IntakeFieldKey, IntakeFieldMode } from '@features/intake';
 
-import { IntakeFormApi } from '../../data-access/services/intake-form-api/intake-form-api.service';
+import {
+  IntakeFormApi,
+  isUncertainWrite,
+} from '../../data-access/services/intake-form-api/intake-form-api.service';
 import type {
   IntakeFormChange,
   IntakeFormConfiguration,
@@ -38,6 +41,17 @@ import type {
  * @type {number}
  */
 const SAVE_DELAY_MS: number = 500;
+
+/**
+ * Type SaveOutcome
+ *
+ * @description
+ * How a settings write ended: recorded (or nothing to send), refused, or unknown (no answer, a
+ * timeout, a server failure).
+ *
+ * @type {'saved' | 'refused' | 'uncertain'}
+ */
+type SaveOutcome = 'saved' | 'refused' | 'uncertain';
 
 /**
  * Interface FormViewState
@@ -354,6 +368,9 @@ function createFormViewStore(): Type<FormViewStoreInstance> {
       // settings, which stay known once the view is gone.
       let timer: ReturnType<typeof setTimeout> | undefined;
       let pending: { listId: string; draft: IntakeFormDraft } | null = null;
+      // The last settings write and whether it has ended, which a publication waits for.
+      let lastSave: Promise<SaveOutcome> | null = null;
+      let lastSaveEnded: boolean = true;
       const shown: (listId: string) => boolean = (listId: string): boolean =>
         !store._destroyRef.destroyed && store.listId() === listId;
       const enqueue: <T>(job: () => Promise<T>) => Promise<T> = <T>(
@@ -389,16 +406,19 @@ function createFormViewStore(): Type<FormViewStoreInstance> {
         hasProblemCode(error, 'intake-form.defaults-invalid')
           ? $localize`:@@spaces.form.defaults-invalid:This status or assignee cannot be used in this list`
           : $localize`:@@spaces.form.save-failed:The form settings could not be saved`;
-      const save: (listId: string, draftOf: () => IntakeFormDraft | null) => Promise<void> = (
+      const save: (
         listId: string,
         draftOf: () => IntakeFormDraft | null,
-      ): Promise<void> =>
-        enqueue(async (): Promise<void> => {
+      ) => Promise<SaveOutcome> = (
+        listId: string,
+        draftOf: () => IntakeFormDraft | null,
+      ): Promise<SaveOutcome> => {
+        const run: Promise<SaveOutcome> = enqueue(async (): Promise<SaveOutcome> => {
           const base: IntakeFormConfiguration | null = baseOf(listId);
           const sent: IntakeFormDraft | null = draftOf();
-          if (base === null || sent === null) return;
+          if (base === null || sent === null) return 'saved';
           const change: IntakeFormChange = changeBetween(base.settings, sent);
-          if (Object.keys(change).length === 0) return;
+          if (Object.keys(change).length === 0) return 'saved';
           try {
             record(listId, await store._api.update(listId, change, base.version));
             const latest: IntakeFormDraft | null = shown(listId) ? store._draft() : null;
@@ -406,6 +426,7 @@ function createFormViewStore(): Type<FormViewStoreInstance> {
             if (latest !== null && now !== null && sameSettings(latest, now.settings)) {
               patchState(store, { _draft: null });
             }
+            return 'saved';
           } catch (error: unknown) {
             store._toasts.error(failureOf(error));
             let fresh: IntakeFormConfiguration | null;
@@ -415,9 +436,10 @@ function createFormViewStore(): Type<FormViewStoreInstance> {
             } catch {
               fresh = null;
             }
-            if (!shown(listId)) return;
+            const outcome: SaveOutcome = isUncertainWrite(error) ? 'uncertain' : 'refused';
+            if (!shown(listId)) return outcome;
             const latest: IntakeFormDraft | null = store._draft();
-            if (latest === null) return;
+            if (latest === null) return outcome;
             const target: IntakeFormDraft = (baseOf(listId) ?? base).settings;
             const kept: IntakeFormDraft = rebaseDraft(latest, base.settings, sent, target);
             patchState(store, { _draft: sameSettings(kept, target) ? null : kept });
@@ -426,8 +448,16 @@ function createFormViewStore(): Type<FormViewStoreInstance> {
                 shown(listId) ? store._draft() : null,
               );
             }
+            return outcome;
           }
         });
+        lastSave = run;
+        lastSaveEnded = false;
+        void run.finally((): void => {
+          if (lastSave === run) lastSaveEnded = true;
+        });
+        return run;
+      };
       // Sends the pending change now, with the settings it was made on, which stay known to the
       // queue once the view is gone.
       const send: (waiting: { listId: string; draft: IntakeFormDraft }) => void = ({
@@ -463,16 +493,31 @@ function createFormViewStore(): Type<FormViewStoreInstance> {
           if (waiting !== null) send(waiting);
         }, SAVE_DELAY_MS);
       };
+      // A publication sends the settings change waiting before it, then waits for the
+      // settings writes still running: when `afterSaves` is set (publishing), a refused or
+      // unconfirmed write stops it, so a form is never published without its intended settings.
+      // A withdrawal goes ahead anyway: it only takes the form down.
       const publication: (
         write: (listId: string) => Promise<IntakeFormConfiguration>,
         failure: string,
-      ) => Promise<boolean> = (write, failure) => {
+        afterSaves: boolean,
+      ) => Promise<boolean> = (write, failure, afterSaves) => {
         const listId: string | null = store.listId();
         if (listId === null || store.publishing()) return Promise.resolve(false);
         flush();
+        const before: Promise<SaveOutcome> | null = lastSaveEnded ? null : lastSave;
         patchState(store, { publishing: true });
         return enqueue(async (): Promise<boolean> => {
           try {
+            const outcome: SaveOutcome = before === null ? 'saved' : await before;
+            if (afterSaves && outcome !== 'saved') {
+              store._toasts.error(
+                outcome === 'refused'
+                  ? $localize`:@@spaces.form.publish-blocked:The form was not published: its settings could not be saved`
+                  : $localize`:@@spaces.form.publish-unconfirmed:The form was not published: its settings could not be confirmed as saved`,
+              );
+              return false;
+            }
             record(listId, await write(listId));
             return true;
           } catch {
@@ -506,12 +551,14 @@ function createFormViewStore(): Type<FormViewStoreInstance> {
           return publication(
             (listId: string) => store._api.publish(listId),
             $localize`:@@spaces.form.publish-failed:The form could not be published`,
+            true,
           );
         },
         disable(): Promise<boolean> {
           return publication(
             (listId: string) => store._api.disable(listId),
             $localize`:@@spaces.form.disable-failed:The form could not be unpublished`,
+            false,
           );
         },
       };
@@ -533,7 +580,8 @@ function createFormViewStore(): Type<FormViewStoreInstance> {
  * once in the preview and the settings; 500 ms after the last one, what differs from the newest
  * recorded settings is sent against their version. Settings changes, publications and
  * withdrawals share one queue: they are sent one after the other, and an answer older than the
- * version already known is ignored. A change still waiting when the view is left (or another
+ * version already known is ignored. A publication waits for the settings writes before it and
+ * does not happen when one is refused or unconfirmed; a toast says why. A change still waiting when the view is left (or another
  * list is shown) is sent at once and its write completes after the store is gone. A refused
  * change shows a failure toast and reads the settings again; the settings it sent go back to the
  * recorded values unless edited since, and the newer edits are sent against the settings read.

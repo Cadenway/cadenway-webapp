@@ -371,4 +371,47 @@ describe('FormViewStore', () => {
       description: 'New intro',
     });
   });
+
+  it('does not publish after a refused save, and says why', async () => {
+    await open();
+    vi.useFakeTimers();
+    api.update.mockRejectedValueOnce(
+      new HttpErrorResponse({ status: 422, error: { status: 422, code: 'request.invalid' } }),
+    );
+
+    store.edit({ fields: { dueDate: 'required' } });
+    const published: Promise<boolean> = store.publish();
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(await published).toBe(false);
+    expect(api.publish).not.toHaveBeenCalled();
+    expect(store.publicKey()).toBeNull();
+    expect(store.publishing()).toBe(false);
+    expect(toasts.error).toHaveBeenCalledWith(
+      'The form was not published: its settings could not be saved',
+    );
+  });
+
+  it('does not publish after a save without an answer, but still withdraws', async () => {
+    await open();
+    vi.useFakeTimers();
+    api.update
+      .mockRejectedValueOnce(new HttpErrorResponse({ status: 0 }))
+      .mockRejectedValueOnce(new HttpErrorResponse({ status: 0 }));
+
+    store.edit({ title: 'Bug report' });
+    const published: Promise<boolean> = store.publish();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(await published).toBe(false);
+    expect(toasts.error).toHaveBeenCalledWith(
+      'The form was not published: its settings could not be confirmed as saved',
+    );
+
+    store.edit({ title: 'Bug report 2' });
+    const withdrawn: Promise<boolean> = store.disable();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(await withdrawn).toBe(true);
+    expect(api.disable).toHaveBeenCalledTimes(1);
+    expect(api.publish).not.toHaveBeenCalled();
+  });
 });
