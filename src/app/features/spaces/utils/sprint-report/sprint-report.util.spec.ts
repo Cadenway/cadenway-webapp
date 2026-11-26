@@ -54,10 +54,24 @@ describe('sprint report helpers', () => {
     expect(isOnTrack(0.6)).toBe(false);
   });
 
-  it('shares the delivered points of the scope and counts its tasks', () => {
+  it('shares the delivered points of a fractional or empty scope and counts its tasks', () => {
     expect(deliveredShare(sprint14)).toBe(36);
     expect(scopeTaskCount(sprint14)).toBe(15);
     expect(deliveredShare({ ...sprint14, remaining: null })).toBe(null);
+    expect(
+      deliveredShare({
+        ...sprint14,
+        delivered: { points: 0.5, taskCount: 1, tasks: [] },
+        remaining: { points: 0, taskCount: 0, tasks: [] },
+      }),
+    ).toBe(100);
+    expect(
+      deliveredShare({
+        ...sprint14,
+        delivered: { points: 0, taskCount: 1, tasks: [] },
+        remaining: { points: 0, taskCount: 2, tasks: [] },
+      }),
+    ).toBe(null);
     expect(scopeTaskCount({ ...sprint14, delivered: null })).toBe(null);
   });
 

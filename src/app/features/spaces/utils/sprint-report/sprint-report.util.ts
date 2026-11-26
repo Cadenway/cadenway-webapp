@@ -189,7 +189,8 @@ export function isOnTrack(points: number): boolean {
  *
  * @description
  * The delivered share of the sprint's current scope, in whole percent (`D / P` of the mockup,
- * where the scope is the delivered and the remaining points); null when either part is unknown.
+ * where the scope is the delivered and the remaining points, fractional points included); null
+ * when either part is unknown or the scope holds no point, which has no share.
  *
  * @param {SprintReport} report - The report.
  * @returns {number | null} The percentage, or null.
@@ -197,7 +198,8 @@ export function isOnTrack(points: number): boolean {
 export function deliveredShare(report: SprintReport): number | null {
   if (report.delivered === null || report.remaining === null) return null;
   const scope: number = report.delivered.points + report.remaining.points;
-  return Math.round((report.delivered.points / Math.max(1, scope)) * 100);
+  if (scope <= 0) return null;
+  return Math.round((report.delivered.points / scope) * 100);
 }
 
 /**
