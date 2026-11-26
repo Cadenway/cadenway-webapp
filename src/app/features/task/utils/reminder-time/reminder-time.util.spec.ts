@@ -18,6 +18,17 @@ describe('reminderPresets', () => {
     ]);
   });
 
+  it('offers in one hour a full hour ahead at a time that is not on the hour', () => {
+    expect(reminderPresets(new Date(2026, 10, 8, 10, 59, 0), null)[0]).toEqual({
+      key: 'hour',
+      at: new Date(2026, 10, 8, 11, 59, 0),
+    });
+    expect(reminderPresets(new Date(2026, 10, 8, 10, 42, 30), null)[0]).toEqual({
+      key: 'hour',
+      at: new Date(2026, 10, 8, 11, 43, 0),
+    });
+  });
+
   it('leaves out a past afternoon and the eve of a missing or past due date', () => {
     const keys: string[] = reminderPresets(new Date(2026, 10, 10, 16, 0, 0), '2026-11-10').map(
       (preset: ReminderPreset) => preset.key,

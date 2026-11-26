@@ -62,6 +62,26 @@ export const REMINDER_HOURS: readonly number[] = [9, 11, 14, 16, 18, 20];
 export const REMINDER_DAYS: number = 14;
 
 /**
+ * Constant MINUTE_MS
+ *
+ * @description
+ * A minute, in milliseconds.
+ *
+ * @type {number}
+ */
+const MINUTE_MS: number = 60_000;
+
+/**
+ * Constant HOUR_MS
+ *
+ * @description
+ * An hour, in milliseconds.
+ *
+ * @type {number}
+ */
+const HOUR_MS: number = 60 * MINUTE_MS;
+
+/**
  * Function at
  *
  * @description
@@ -80,7 +100,8 @@ export function at(day: Date, days: number, hour: number): Date {
  * Function reminderPresets
  *
  * @description
- * The moments offered now, each in the future: in one hour (the next whole hour after it), this
+ * The moments offered now, each in the future: in one hour (an hour from now, rounded up to the
+ * minute, so `In 1 hour` is never less than one), this
  * afternoon at 15 h (only before then), tomorrow at 9 h, the Monday of next week at 9 h (a week
  * from Sunday, as in the mockup where Sunday 8 offers Monday 16), and the day before
  * the due date at 9 h (only with a due date whose day before is still ahead).
@@ -90,7 +111,8 @@ export function at(day: Date, days: number, hour: number): Date {
  * @returns {readonly ReminderPreset[]} The moments, in the mockup's order.
  */
 export function reminderPresets(now: Date, due: string | null): readonly ReminderPreset[] {
-  const presets: ReminderPreset[] = [{ key: 'hour', at: at(now, 0, now.getHours() + 1) }];
+  const inAnHour: Date = new Date(Math.ceil((now.getTime() + HOUR_MS) / MINUTE_MS) * MINUTE_MS);
+  const presets: ReminderPreset[] = [{ key: 'hour', at: inAnHour }];
   const afternoon: Date = at(now, 0, 15);
   if (afternoon > now) presets.push({ key: 'afternoon', at: afternoon });
   presets.push({ key: 'tomorrow', at: at(now, 1, 9) });
