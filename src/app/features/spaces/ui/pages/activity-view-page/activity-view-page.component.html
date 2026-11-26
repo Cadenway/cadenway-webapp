@@ -1,16 +1,220 @@
-<div
-  class="flex min-h-0 flex-1 items-center justify-center px-4 pb-6 sm:px-6"
+@let first = store.firstRead() ? store.primary.value() : undefined;
+<section
+  class="flex min-h-0 flex-1 flex-col gap-3 px-4 pt-1 pb-6 sm:px-6"
+  aria-label="List activity"
+  i18n-aria-label="@@spaces.activity.region"
   data-testid="activity-view"
+  [attr.aria-busy]="store.loading() && !first ? 'true' : null"
 >
-  <cw-empty role="status">
-    <cw-empty-header>
-      <cw-empty-media>
-        <ng-icon [name]="icon" aria-hidden="true" />
-      </cw-empty-media>
-      <cw-empty-title>{{ name }}</cw-empty-title>
-      <cw-empty-description i18n="@@spaces.view-stub.text"
-        >This view is not available yet.</cw-empty-description
-      >
-    </cw-empty-header>
-  </cw-empty>
-</div>
+  <div class="flex flex-wrap items-center gap-2">
+    <cw-select
+      class="w-52 shrink-0"
+      size="sm"
+      ariaLabel="Filter by person"
+      i18n-ariaLabel="@@spaces.activity.person"
+      [value]="personValue()"
+      (valueChange)="pickPerson($event)"
+    >
+      @for (option of personOptions(); track option.value) {
+        <cw-select-option [value]="option.value">{{ option.label }}</cw-select-option>
+      }
+    </cw-select>
+    <cw-toggle-group
+      type="multiple"
+      variant="outline"
+      size="sm"
+      class="flex-wrap"
+      [spacing]="1"
+      ariaLabel="Activity types"
+      i18n-ariaLabel="@@spaces.activity.types"
+      [value]="chipValue()"
+      (valueChange)="pickKinds($event)"
+    >
+      @for (chip of chips; track chip.value) {
+        <button cwToggleGroupItem [value]="chip.value">
+          <ng-icon [name]="chip.icon" size="0.875rem" aria-hidden="true" />{{ chip.label }}
+        </button>
+      }
+    </cw-toggle-group>
+    <span
+      class="ml-auto text-xs whitespace-nowrap text-muted-foreground tabular-nums"
+      aria-live="polite"
+      data-testid="activity-count"
+      >{{ countLabel() }}</span
+    >
+  </div>
+
+  <div class="min-h-0 flex-1 overflow-y-auto" (scroll)="scrolled($event)">
+    <div class="mx-auto flex w-full max-w-3xl flex-col gap-3">
+      @if (store.failed()) {
+        <div class="flex items-center gap-2 text-sm" role="alert" data-testid="activity-failed">
+          <ng-icon
+            name="phosphorWarningCircleBold"
+            class="shrink-0 text-destructive"
+            aria-hidden="true"
+          />
+          <span class="min-w-0 flex-1" i18n="@@spaces.activity.read-failed"
+            >The activity could not be loaded.</span
+          >
+          <button cwButton type="button" variant="outline" size="xs" (click)="store.reload()">
+            {{ retryLabel }}
+          </button>
+        </div>
+      }
+      @if (store.current() || store.loading()) {
+        <cw-activity-feed groupByDay [entries]="feed()" [loading]="store.loading()">
+          <ng-template cwActivitySummary [cwActivitySummaryOf]="feed()" let-data="data">
+            @if (data) {
+              <span class="text-muted-foreground">{{ data.verb }}</span>
+              @if (data.status; as status) {
+                <span class="inline-flex items-center gap-1 whitespace-nowrap text-muted-foreground"
+                  ><cw-status-icon [status]="status.from.key" size="4" />{{
+                    status.from.label
+                  }}</span
+                >
+                <ng-icon
+                  name="phosphorArrowRightBold"
+                  size="0.75rem"
+                  class="shrink-0 text-muted-foreground"
+                  aria-hidden="true"
+                />
+                <span class="sr-only" i18n="@@spaces.activity.to">to</span>
+                <span class="inline-flex items-center gap-1 font-medium whitespace-nowrap"
+                  ><cw-status-icon [status]="status.to.key" size="4" />{{ status.to.label }}</span
+                >
+              }
+              @if (data.priority; as priority) {
+                <span
+                  class="inline-flex items-center gap-1 font-medium whitespace-nowrap"
+                  [class.text-destructive]="priority.key === 'urgente'"
+                  ><cw-priority-icon [priority]="priority.key" size="3.5" />{{
+                    priority.label
+                  }}</span
+                >
+              }
+              @if (data.due; as due) {
+                <span class="font-medium whitespace-nowrap tabular-nums">{{ due }}</span>
+              }
+            }
+          </ng-template>
+          <ng-template cwActivityDetail [cwActivityDetailOf]="feed()" let-data="data">
+            @if (data) {
+              @let shown = shownTasks().get(data.task.key);
+              @if (shown) {
+                <button
+                  type="button"
+                  class="inline-flex h-6 max-w-full min-w-0 items-center gap-1.5 rounded-md border border-border bg-card px-1.5 text-xs transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background focus-visible:outline-none"
+                  data-testid="activity-task"
+                  [cwContextMenuTriggerFor]="taskMenu.menu()"
+                  (opened)="menuKey.set(data.task.key)"
+                  (click)="openTask(data.task)"
+                >
+                  <cw-status-icon
+                    [status]="shown.status"
+                    [milestone]="shown.task.milestone"
+                    size="3"
+                  />
+                  <span class="shrink-0 font-mono text-muted-foreground">{{ data.task.key }}</span>
+                  <span class="min-w-0 truncate">{{ shown.task.name }}</span>
+                </button>
+              } @else {
+                <button
+                  type="button"
+                  class="inline-flex h-6 max-w-full min-w-0 items-center gap-1.5 rounded-md border border-border bg-card px-1.5 text-xs transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background focus-visible:outline-none"
+                  data-testid="activity-task"
+                  (click)="openTask(data.task)"
+                >
+                  <cw-status-icon [status]="data.task.status" size="3" />
+                  <span class="shrink-0 font-mono text-muted-foreground">{{ data.task.key }}</span>
+                  <span class="min-w-0 truncate">{{ data.task.name }}</span>
+                </button>
+              }
+            }
+          </ng-template>
+          @if (store.filtered()) {
+            <button
+              cwButton
+              cwActivityFeedEmpty
+              type="button"
+              variant="outline"
+              size="sm"
+              (click)="store.clearFilters()"
+            >
+              <ng-container i18n="@@spaces.activity.clear">Clear filters</ng-container>
+            </button>
+          }
+        </cw-activity-feed>
+      }
+      @if (store.moreFailed()) {
+        <div
+          class="flex items-center justify-center gap-2 text-sm"
+          role="alert"
+          data-testid="activity-more-failed"
+        >
+          <span class="text-muted-foreground" i18n="@@spaces.activity.more-failed"
+            >Older entries could not be loaded.</span
+          >
+          <button cwButton type="button" variant="outline" size="xs" (click)="store.loadMore()">
+            {{ retryLabel }}
+          </button>
+        </div>
+      } @else if (store.hasMore()) {
+        <div class="flex justify-center">
+          <button
+            cwButton
+            type="button"
+            variant="ghost"
+            size="sm"
+            [loading]="store.loadingMore()"
+            (click)="store.loadMore()"
+          >
+            <ng-container i18n="@@spaces.activity.show-more">Show more</ng-container>
+          </button>
+        </div>
+      }
+    </div>
+  </div>
+</section>
+
+<cw-task-menu
+  #taskMenu
+  [tasks]="menuTasks()"
+  [status]="menuItem()?.status ?? null"
+  [statuses]="writes.statusOptions()"
+  [people]="writes.people()"
+  [userId]="writes.userId()"
+  [lists]="writes.targets()"
+  (openRequested)="openTask($event)"
+  (statusPicked)="writes.setStatus(menuTasks(), $event, menuItem()?.task?.milestone ?? false)"
+  (priorityPicked)="writes.setPriority(menuTasks(), $event)"
+  (assigneeToggled)="writes.toggleAssignee(menuTasks(), $event)"
+  (moved)="writes.moveTo(menuTasks(), $event)"
+  (remindRequested)="writes.remind(menuTasks())"
+  (duplicateRequested)="writes.duplicate(menuTasks())"
+  (copyLinkRequested)="writes.copyLinks(menuTasks())"
+  (copyKeyRequested)="writes.copyKeys(menuTasks())"
+  (deleteRequested)="writes.askDelete(menuTasks(), true)"
+/>
+
+<cw-task-cancel-dialog
+  [taskKeys]="writes.cancelKeys()"
+  (confirmed)="writes.confirmCancel($event)"
+  (kept)="writes.keepCancel()"
+/>
+
+<cw-alert-dialog
+  variant="destructive"
+  size="sm"
+  [open]="writes.deleteOpen()"
+  (openChange)="writes.setDeleteOpen($event)"
+  [items]="writes.deleteItems()"
+  [pending]="writes.deleting()"
+  (confirm)="writes.trash()"
+>
+  <h2 cwAlertDialogTitle>{{ writes.deleteTitle() }}</h2>
+  <p cwAlertDialogDescription>{{ writes.deleteText() }}</p>
+  <button cwButton cwAlertDialogCancel variant="outline" i18n="@@spaces.cancel">Cancel</button>
+  <button cwButton cwAlertDialogAction variant="destructive" [loading]="writes.deleting()">
+    {{ writes.deleteAction() }}
+  </button>
+</cw-alert-dialog>
