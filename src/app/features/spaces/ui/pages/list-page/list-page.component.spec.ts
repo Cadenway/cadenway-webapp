@@ -590,6 +590,40 @@ describe('ListPage', () => {
     expect(find('list-rows')).not.toBeNull();
   });
 
+  it('opens a saved view from the address on its released layout, replacing the address', async () => {
+    TestBed.overrideProvider(RELEASED_VIEWS, {
+      useValue: { layouts: ['list', 'board'], dialogs: [] },
+    });
+    api['savedViews'].mockResolvedValue([{ ...criticalBugs, layout: 'board' }]);
+    const router: Router = TestBed.inject(Router);
+    const navigate: MockInstance<Router['navigate']> = vi.spyOn(router, 'navigate');
+    const harness: RouterTestingHarness = await open(
+      '/atelier-nord/l/l-bugs/list?savedView=sv-bugs&keep=yes#section',
+    );
+    await expect
+      .poll(() => {
+        harness.detectChanges();
+        return router.url;
+      })
+      .toBe('/atelier-nord/l/l-bugs/board?savedView=sv-bugs&keep=yes#section');
+    expect(navigate).toHaveBeenCalledWith(
+      ['board'],
+      expect.objectContaining({
+        replaceUrl: true,
+        queryParamsHandling: 'preserve',
+        preserveFragment: true,
+      }),
+    );
+    await expect
+      .poll(() => {
+        harness.detectChanges();
+        return find('board-view');
+      })
+      .not.toBeNull();
+    expect(find('saved-view-tab')?.getAttribute('aria-selected')).toBe('true');
+    expect(find('view-chip')?.textContent).toContain('Urgent, High');
+  });
+
   it('loads each released view at its segment, with the tools its layout shows', async () => {
     TestBed.overrideProvider(RELEASED_VIEWS, {
       useValue: { layouts: VIEW_LAYOUTS, dialogs: [] },

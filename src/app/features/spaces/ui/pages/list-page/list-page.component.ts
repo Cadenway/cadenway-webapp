@@ -107,8 +107,9 @@ function csvRecordCount(content: string): number {
  * tabs with the saved views, the view tools and active filters, then the routed view. The list is
  * the primary read: reading its value in the template lets its typed failure reach the route's
  * error boundary. The page claims the shell's sidebar toggle for its breadcrumb row, follows
- * `?savedView=` (applying the view once the saved views are read, leaving it when the parameter
- * goes) and starts the view configuration over for another list. The tabs offer the released
+ * `?savedView=` (applying the view once the saved views are read, on its layout's segment when
+ * that layout is released, replacing the address; leaving it when the parameter goes) and starts
+ * the view configuration over for another list. The tabs offer the released
  * layouts (`RELEASED_VIEWS`) and open their `LAYOUT_SEGMENTS` segment, a saved view of another
  * layout opens on `list`; the routed layout is published to `ListViewStore.showLayout`, whose
  * `tools` decide the view tools shown (none for `Form` and `Activity`). The page hosts the
@@ -656,7 +657,17 @@ export class ListPage {
           }
         } else {
           missingView = null;
-          if (applied?.id !== found.id) this.view.applySaved(found);
+          if (applied?.id === found.id) return;
+          this.view.applySaved(found);
+          const segment: string = this.segmentOf(found.layout);
+          if (segment !== LAYOUT_SEGMENTS[this.childLayout()]) {
+            void this.router.navigate([segment], {
+              relativeTo: this.route,
+              queryParamsHandling: 'preserve',
+              preserveFragment: true,
+              replaceUrl: true,
+            });
+          }
         }
       });
     });
