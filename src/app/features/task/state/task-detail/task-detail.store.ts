@@ -903,7 +903,9 @@ export interface TaskDetailStoreInstance {
    * that task (`fallback` for a task the detail never confirmed, such as a subtask). `send`
    * adopts what its write returned (`accept` or `acceptVersion`) before it resolves, so the next
    * write goes against it. A `TaskVersionConflict` reads the task again, and the next write of
-   * the task waits for that read; the error is rethrown to the caller.
+   * the task waits for that read; the error is rethrown to the caller. A write confirmed once its
+   * task's detail has closed or given way to another task calls `TaskDetailOpener.notifyChanged`,
+   * so the view under the detail reads its rows again.
    *
    * @param {string} key - Key of the task written.
    * @param {(version: number) => Promise<T>} send - Sends the write against a version.
@@ -1300,7 +1302,9 @@ function createTaskDetailStore(): Type<TaskDetailStoreInstance> {
               : Math.max(known, fallback ?? 0);
           if (version === undefined) throw new Error(`No confirmed version of ${key}.`);
           try {
-            return await sendWrite(version);
+            const result: T = await sendWrite(version);
+            if (!current(key) || store._opener.taskKey() !== key) store._opener.notifyChanged(key);
+            return result;
           } catch (error: unknown) {
             if (error instanceof TaskVersionConflict) void reconcile(key);
             throw error;

@@ -1,5 +1,5 @@
 import { HttpErrorResponse } from '@angular/common/http';
-import { type Provider, signal } from '@angular/core';
+import { type Provider, signal, type WritableSignal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import type { StatusKey } from '@cadenway/contracts';
 import { CwToastService, type CwToastOptions } from '@cadenway/ui/components/toast';
@@ -182,6 +182,7 @@ describe('TaskDetailStore', () => {
   let saveReminderNote: Mock<(reminderId: string, note: string) => Promise<TaskReminder>>;
   let reminderRead: Mock<() => Promise<TaskReminder | null>>;
   let notifyChanged: Mock<(key: string) => void>;
+  let openedKey: WritableSignal<string | null>;
   let openTask: Mock<(key: string, preview?: unknown) => Promise<boolean>>;
   let watch: Mock<() => Subject<RealtimeChange>>;
   let show: Mock<(title: string, options?: CwToastOptions) => string>;
@@ -221,7 +222,10 @@ describe('TaskDetailStore', () => {
           },
         },
         { provide: RealtimeConnection, useValue: { watch } },
-        { provide: TaskDetailOpener, useValue: { open: openTask, notifyChanged } },
+        {
+          provide: TaskDetailOpener,
+          useValue: { open: openTask, notifyChanged, taskKey: openedKey },
+        },
         { provide: WORKSPACE_CONTEXT, useValue: workspace },
         { provide: CwToastService, useValue: { show, error, warning, dismiss: vi.fn() } },
       ],
@@ -257,6 +261,7 @@ describe('TaskDetailStore', () => {
     );
     reminderRead = vi.fn(() => Promise.resolve(null));
     notifyChanged = vi.fn();
+    openedKey = signal<string | null>('CAD-482');
     openTask = vi.fn(() => Promise.resolve(true));
     watch = vi.fn(() => notices);
     show = vi.fn(() => 't1');
@@ -282,7 +287,10 @@ describe('TaskDetailStore', () => {
             reminder: () => Promise.resolve(null),
           },
         },
-        { provide: TaskDetailOpener, useValue: { open: vi.fn() } },
+        {
+          provide: TaskDetailOpener,
+          useValue: { open: vi.fn(), notifyChanged: vi.fn(), taskKey: signal('CAD-482') },
+        },
         { provide: WORKSPACE_CONTEXT, useValue: workspace },
         { provide: CwToastService, useValue: { show, error, warning } },
       ],
@@ -338,7 +346,10 @@ describe('TaskDetailStore', () => {
             reminder: () => Promise.resolve(null),
           },
         },
-        { provide: TaskDetailOpener, useValue: { open: vi.fn() } },
+        {
+          provide: TaskDetailOpener,
+          useValue: { open: vi.fn(), notifyChanged: vi.fn(), taskKey: signal('CAD-482') },
+        },
         { provide: WORKSPACE_CONTEXT, useValue: workspace },
         { provide: CwToastService, useValue: { show, error, warning } },
       ],
@@ -748,6 +759,36 @@ describe('TaskDetailStore', () => {
 
     expect(store.reminder()?.note).toBe('Call Hugo back');
     expect(error).toHaveBeenCalledWith('Could not save the note', expect.anything());
+  });
+
+  it('tells the view under the detail when a write confirms after the detail closed', async () => {
+    const store: TaskDetailStoreInstance = await setup();
+    let answer: (saved: TaskDetailTask) => void = () => undefined;
+    update.mockReturnValueOnce(
+      new Promise<TaskDetailTask>((resolve: (saved: TaskDetailTask) => void) => {
+        answer = resolve;
+      }),
+    );
+    const saved: Promise<boolean> = store.update({ name: 'Redesign the sign-in' });
+    await vi.waitFor(() => {
+      expect(update).toHaveBeenCalledTimes(1);
+    });
+
+    openedKey.set(null);
+    store.close();
+    expect(notifyChanged).not.toHaveBeenCalled();
+    answer(taskAt(5, { name: 'Redesign the sign-in' }));
+
+    await expect(saved).resolves.toBe(true);
+    expect(notifyChanged).toHaveBeenCalledExactlyOnceWith('CAD-482');
+  });
+
+  it('does not notify the view for a write confirmed while its detail is shown', async () => {
+    const store: TaskDetailStoreInstance = await setup();
+
+    await expect(store.update({ name: 'Redesign the sign-in' })).resolves.toBe(true);
+
+    expect(notifyChanged).not.toHaveBeenCalled();
   });
 
   it('keeps the detail open when the deletion is refused', async () => {
