@@ -144,7 +144,7 @@ export const TASK_SECTIONS_BRICK_LABELS: readonly Provider[] = [
       code: $localize`:@@task.editor.code:Code`,
       mention: $localize`:@@task.composer.mention:Mention`,
       attach: $localize`:@@task.composer.attach:Attach a file`,
-      send: $localize`:@@task.composer.send:Send`,
+      send: $localize`:@@task.composer.send:Send the comment`,
       save: $localize`:@@task.composer.save:Save`,
       cancel: $localize`:@@task.composer.cancel:Cancel`,
       retry: $localize`:@@task.retry:Retry`,

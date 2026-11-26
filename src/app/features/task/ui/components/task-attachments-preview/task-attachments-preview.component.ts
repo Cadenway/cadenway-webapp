@@ -29,7 +29,7 @@ import {
  *
  * @description
  * The preview of an attachment (`App.dc.html` lines 2644-2673, 5021-5034): a full-size dialog
- * with the name, `<size> · <first name> · <when>`, the position `<i> / <n>`, `Download` and
+ * named `Preview: <name>` with the name as its title, `<size> · <first name> · <when>`, the position `<i> / <n>`, `Download` and
  * `Close the preview`; `Previous file` and `Next file` (disabled at the ends, also ArrowLeft and
  * ArrowRight), Escape closes (the dialog brick). A raster image shows from its signed address
  * (`imageUrl`, given by the tabs); any other file, and an SVG (never rendered inline), says
@@ -142,6 +142,20 @@ export class TaskAttachmentsPreview {
   protected readonly size: Signal<string> = computed((): string => {
     const shown: TaskAttachment | null = this.shown();
     return shown ? fileSize(shown.size, this.locale) : '';
+  });
+
+  /**
+   * Property dialogName
+   *
+   * @description
+   * The accessible name of the dialog, `Preview: <name>` (its title shows the name alone).
+   *
+   * @type {Signal<string>}
+   * @readonly
+   */
+  protected readonly dialogName: Signal<string> = computed((): string => {
+    const name: string = this.shown()?.name ?? '';
+    return $localize`:@@task.attachments.preview-name:Preview: ${name}:name:`;
   });
 
   /**

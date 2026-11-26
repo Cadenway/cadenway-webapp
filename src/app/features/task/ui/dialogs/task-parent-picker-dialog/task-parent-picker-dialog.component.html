@@ -1,6 +1,13 @@
 <cw-dialog size="sm" [(open)]="open">
   <cw-dialog-header>
-    <h2 cwDialogTitle i18n="@@task.detail.parent.title">Become a subtask of…</h2>
+    <h2
+      cwDialogTitle
+      aria-label="Attach to a task"
+      i18n-aria-label="@@task.detail.parent.dialog"
+      i18n="@@task.detail.parent.title"
+    >
+      Become a subtask of…
+    </h2>
   </cw-dialog-header>
   <div class="flex flex-col gap-2" data-testid="task-parent-picker">
     <div

@@ -15,7 +15,9 @@
           aria-hidden="true"
         />
         <div class="flex min-w-0 flex-1 flex-col">
-          <h2 cwDialogTitle class="truncate text-sm font-medium">{{ file.name }}</h2>
+          <h2 cwDialogTitle class="truncate text-sm font-medium" [attr.aria-label]="dialogName()">
+            {{ file.name }}
+          </h2>
           <span class="truncate text-xs text-muted-foreground">{{ meta() }}</span>
         </div>
         <span class="hidden text-xs text-muted-foreground tabular-nums sm:inline"

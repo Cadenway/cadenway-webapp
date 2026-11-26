@@ -347,7 +347,9 @@ export class TaskApprovalCard {
     const when: string = relativeInstant(round.requestedAt, new Date(), this.locale);
     const ok: number = this.approvedCount();
     const total: number = this.rows().length;
-    return $localize`:@@task.approval.sub-pending:By ${requester}:name:, ${when}:when: · ${ok}:ok: approval(s) of ${total}:total:`;
+    return ok > 1
+      ? $localize`:@@task.approval.sub-pending-many:By ${requester}:name:, ${when}:when: · ${ok}:ok: approvals of ${total}:total:`
+      : $localize`:@@task.approval.sub-pending-one:By ${requester}:name:, ${when}:when: · ${ok}:ok: approval of ${total}:total:`;
   });
 
   /**
@@ -363,9 +365,16 @@ export class TaskApprovalCard {
     const ok: number = this.approvedCount();
     const total: number = this.rows().length;
     const changes: number = this.changesCount();
-    return changes > 0
-      ? $localize`:@@task.approval.bar-changes:${ok}:ok: approval(s) of ${total}:total:, ${changes}:changes: change request(s)`
-      : $localize`:@@task.approval.bar:${ok}:ok: approval(s) of ${total}:total:`;
+    const approvals: string =
+      ok > 1
+        ? $localize`:@@task.approval.bar-many:${ok}:ok: approvals of ${total}:total:`
+        : $localize`:@@task.approval.bar-one:${ok}:ok: approval of ${total}:total:`;
+    if (changes === 0) return approvals;
+    const requests: string =
+      changes > 1
+        ? $localize`:@@task.approval.bar-requests-many:${changes}:changes: change requests`
+        : $localize`:@@task.approval.bar-requests-one:${changes}:changes: change request`;
+    return $localize`:@@task.approval.bar-changes:${approvals}:approvals:, ${requests}:requests:`;
   });
 
   /**

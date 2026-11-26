@@ -74,7 +74,47 @@ describe('TaskApprovalCard', () => {
     expect(host.textContent).toContain('Camille Martin (me)');
     expect(
       host.querySelector('[data-testid="task-approval-bar"]')?.getAttribute('aria-label'),
-    ).toBe('1 approval(s) of 2');
+    ).toBe('1 approval of 2');
+  });
+
+  it('pluralizes the approvals and the change requests as the mockup does', async () => {
+    fixture.componentRef.setInput('round', {
+      ...ROUND,
+      reviews: [
+        { userId: 'u2', decision: 'approved' },
+        { userId: 'u1', decision: 'approved' },
+        { userId: 'u3', decision: null },
+      ],
+    });
+    await fixture.whenStable();
+    const bar: () => string | null | undefined = () =>
+      host.querySelector('[data-testid="task-approval-bar"]')?.getAttribute('aria-label');
+
+    expect(bar()).toBe('2 approvals of 3');
+    expect(host.textContent).toContain('2 approvals of 3');
+
+    fixture.componentRef.setInput('round', {
+      ...ROUND,
+      status: 'changes-requested',
+      reviews: [
+        { userId: 'u2', decision: 'changes-requested' },
+        { userId: 'u1', decision: 'changes-requested' },
+        { userId: 'u3', decision: 'approved' },
+      ],
+    });
+    await fixture.whenStable();
+    expect(bar()).toBe('1 approval of 3, 2 change requests');
+
+    fixture.componentRef.setInput('round', {
+      ...ROUND,
+      status: 'changes-requested',
+      reviews: [
+        { userId: 'u2', decision: 'changes-requested' },
+        { userId: 'u1', decision: null },
+      ],
+    });
+    await fixture.whenStable();
+    expect(bar()).toBe('0 approval of 2, 1 change request');
   });
 
   it('sends a change request only once it is written', async () => {

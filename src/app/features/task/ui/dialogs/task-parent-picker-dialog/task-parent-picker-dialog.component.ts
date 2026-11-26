@@ -27,7 +27,8 @@ import {
  *
  * @description
  * `Attach to a task` (`App.dc.html` lines 2087-2102, 8437-8462), opened by `Convert to a subtask
- * of…` or `Move to another task…`: `Become a subtask of…`, a search by name or key, and up to 12
+ * of…` or `Move to another task…`, named `Attach to a task` over its title `Become a subtask
+ * of…`: a search by name or key, and up to 12
  * candidates (status icon, name, key), the open task's list first, without those that would break
  * the three levels or the 25 subtasks; none left says the limit would be exceeded, a failed read
  * offers `Retry`. Picking emits the candidate and closes. It provides its own

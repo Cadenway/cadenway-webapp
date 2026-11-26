@@ -387,9 +387,9 @@ export class TaskActivity {
     const day: (date: string) => string = (date: string): string =>
       formatDate(date, 'd MMM', this.locale);
     if (from && to) {
-      return $localize`:@@task.activity.due-moved:moved the due date: ${day(from)}:from: → ${day(to)}:to:`;
+      return $localize`:@@task.activity.due-moved:moved the due date ${day(from)}:from: → ${day(to)}:to:`;
     }
-    if (to) return $localize`:@@task.activity.due-set:set the due date: ${day(to)}:to:`;
+    if (to) return $localize`:@@task.activity.due-set:set the due date ${day(to)}:to:`;
     return $localize`:@@task.activity.due-removed:removed the due date`;
   }
   // #endregion

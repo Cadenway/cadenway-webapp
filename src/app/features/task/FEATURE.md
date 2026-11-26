@@ -170,7 +170,8 @@ be done`, `Out of scope`, `Obsolete` and optional `Details`; `Keep the task` cha
   creation was refused.
 - The task detail (`App.dc.html` lines 2027-2673):
   - Opening: `TaskDetailOpener.open` merges `?task=<KEY>`; `TaskDetailHost` renders
-    `TaskDetailDialog` while the parameter is there and another key shows that task in the same
+    `TaskDetailDialog` while the parameter holds a task key (the contracts' `TaskKey` pattern;
+    another value opens nothing) and another key shows that task in the same
     dialog. Closing (backdrop, `Close`, Escape from the brick, an archive or a deletion) removes
     the parameter and keeps the others; Back closes it with the address. The focus trap and the
     focus return come from `cw-dialog`. `N` creates nothing while a detail is open
@@ -200,7 +201,7 @@ the task` with `Retry`; otherwise Errors' `RouteErrorPanel` renders the typed ro
   - Header: key, `Subtask of <key> · <name>` (opens the parent), the read-only status badge with
     the space's label, `Cancelled: <reason> · <note>`, the title (saved on change or blur when
     changed and not blank), follow (count, `aria-pressed`, toasts), the reminder (presets from
-    the opening instant: in 1 hour, this afternoon before 15 h, tomorrow 9 h, the Monday of next
+    the opening instant: in 1 hour (an hour from now, to the minute), this afternoon before 15 h, tomorrow 9 h, the Monday of next
     week 9 h, the day before the due date 9 h; custom day among 14 and hour among six, a past
     hour refused; the note saved on change while a reminder exists; `Delete the reminder`),
     `Copy the link` (`<origin>/<slug>/t/<KEY>`), `More actions` (`Copy the identifier`,
@@ -234,21 +235,26 @@ the task` with `Retry`; otherwise Errors' `RouteErrorPanel` renders the typed ro
     text clears it; a confirmed text never replaces what is being typed), the checklist
     (`<done> / <n>`, ticks shown at once and rolled back with the failure toast, `Add an item` with Enter and Escape; no deletion, as in the mockup), the
     attachments (`cw-attachment` tiles, `Add` and the drop zone, 25 MB refused with `File too
-large`, a name already attached skipped, `Remove “<name>”?` confirmed then toasted, the
+large` and an empty file with `Empty file`, a name already attached skipped, files being sent
+    shown with a spinner (the fetch backend reports no upload progress), `Remove “<name>”?` confirmed then toasted, the
     preview dialog with previous and next, arrow keys and `Download`, raster images drawn from
     their signed address) and `cw-task-development`, the placeholder of the Git panel (empty
     state and the key hint, no action yet). `Subtasks`: progress, rows that open the subtask
     through `TaskDetailOpener` (click, Enter, Space) with a status button that advances through
-    `TaskStatusChangesStore`, the add field (`createSubtask`, toast, detail read again) and the
-    3-level and 25-subtask messages instead of it. `Comments`: the detail's first page, later
+    `TaskStatusChangesStore`, the add field (`createSubtask`, toast, detail read again; the name
+    stays in the field until the creation is saved, and a creation sent again reuses its
+    `Idempotency-Key`) and the 3-level and 25-subtask messages instead of it (the depth read again
+    when the task changes parent). `Comments`: the detail's first page, later
     pages with `Show more comments` (read again to the same depth on `commentsRevision`),
     `cw-markdown` bodies, the caller's own in the secondary bubble, the menu (right click, Shift
     F10 or the `More actions` button: `Copy the text`, `Reply` prefilling `@<first name> ` and
     answering that comment, `Delete` for the caller's own, shown at once, rolled back on refusal,
-    `Undo` posting it again); the composer (`cw-comment-composer`: marks, link, list, code, `@`
+    `Undo` posting it again to the task it was deleted from, whichever task is open by then); the
+    composer (`cw-comment-composer`: marks, link, list, code, `@`
     mentions of the participants sent as spans, files uploaded to the task's attachments and
     named on a last line `Attachments: …`, `<n> / 5,000`, Ctrl or Cmd Enter, the brick's error
-    with `Retry` keeping the text and its `Idempotency-Key`). Posting and deleting a comment read
+    with `Retry` keeping the text and its `Idempotency-Key` for the same body and reply target). The
+    tab's count corrects the first page's total only until the detail reads that page again. Posting and deleting a comment read
     the detail again (they change the task's version). `Activity`: read each time the tab opens,
     again while shown when the version moves; actor (member, automation, `GitHub` or `GitLab`, a
     service by name), what changed and when, `Show more`. Every list has its loading, inline
@@ -309,8 +315,11 @@ people`), and the due trigger shows the short date without `Tomorrow ·` or the
   is viewing) has no contract yet.
 - Properties gaps: the API keeps no running timer, so its start lives in the device storage per
   organization and task (`cadenway-task-timer.<organizationId>.<taskKey>`) and is lost with it;
-  stopping records the elapsed minutes (1 to 1,440) for today. A deleted time entry's `Undo`
-  records a new entry (the API has no restore). Changing approvers starts a new round
+  stopping records the elapsed minutes (1 to 1,440) for today and clears the timer only once the
+  entry is confirmed: a refused stop keeps it, and stopping again sends the first stop's entry
+  under the same `Idempotency-Key`, as any entry sent again after a failure. A deleted time
+  entry's `Undo` records a new entry (the API has no restore); both `Undo`s run against their task
+  after navigating away. Changing approvers starts a new round
   (`requestTaskApproval`), which clears every vote, not only the removed reviewer's; a round keeps
   one reviewer, so the last one cannot be removed and a round cannot be withdrawn. Another
   person than the caller can be followed or unfollowed only with `edit` (the panel is read-only
@@ -371,3 +380,5 @@ people`), and the due trigger shows the short date without `Tomorrow ·` or the
 | `task.properties.unknown-member`                                                            | A former member the mockup does not draw.                          |
 | `task.properties.due-yesterday`, `task.properties.due-*-month`                              | Taken from the spec and the calendar brick.                        |
 | `task.properties.time-entries`                                                              | The mockup writes `Saisies · 3 saisies`; the count is kept once.   |
+| `task.activity.automation`                                                                  | The mockup names no automation actor.                              |
+| `task.attachments.empty`, `task.attachments.empty-text`                                     | The mockup draws no refused empty file.                            |
