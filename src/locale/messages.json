@@ -943,6 +943,8 @@
     "spaces.timesheet.back-to-this-week": " Back to this week ",
     "spaces.timesheet.week-total": "Week total: ",
     "spaces.timesheet.refresh-failed": "The timesheet could not be refreshed.",
+    "spaces.timesheet.filters-unapplied": "Priority and label filters do not apply to recorded time.",
+    "spaces.timesheet.members-failed": "The names of the people could not be loaded.",
     "spaces.timesheet.empty-title": "No time recorded this week",
     "spaces.timesheet.empty-text": "Add time from a task’s detail, or start the timer.",
     "spaces.timesheet.estimates-failed": "The estimates could not be loaded.",

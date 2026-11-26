@@ -14,10 +14,12 @@ import { UnavailableRouteError } from '@shared/route-errors';
 
 import { TimesheetApi } from '../../../data-access/services/timesheet-api/timesheet-api.service';
 import type { ListMember } from '../../../models/list-member/list-member.interface';
+import type { ListTaskQuery } from '../../../models/list-view-config/list-view-config.interface';
 import type { ListTimesheet, TimesheetEntry } from '../../../models/timesheet/timesheet.interface';
 import { ListPageStore } from '../../../state/list-page/list-page.store';
+import { ListViewStore } from '../../../state/list-view/list-view.store';
 import { addDays, TimesheetViewStore } from '../../../state/timesheet-view/timesheet-view.store';
-import { TimesheetViewPage } from './timesheet-view-page.component';
+import { BOUNDED_ROWS, TimesheetViewPage } from './timesheet-view-page.component';
 
 /**
  * Function entry
@@ -106,11 +108,20 @@ describe('TimesheetViewPage', () => {
   let api: Record<string, Mock>;
   let open: Mock;
   let listId: WritableSignal<string | null>;
+  let taskQuery: WritableSignal<ListTaskQuery>;
+  let membersFailure: WritableSignal<Error | undefined>;
+  let membersReload: Mock;
 
   beforeEach(() => {
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(new Date(2026, 10, 8, 10));
     listId = signal('l-sprint14');
+    taskQuery = signal<ListTaskQuery>({ level: 'roots', sort: 'manual' });
+    membersFailure = signal<Error | undefined>(undefined);
+    membersReload = vi.fn(() => {
+      membersFailure.set(undefined);
+      return true;
+    });
     open = vi.fn(() => Promise.resolve(true));
     api = {
       week: vi.fn((_list: string, weekStart: string) =>
@@ -141,11 +152,14 @@ describe('TimesheetViewPage', () => {
             listId,
             organizationMembers: {
               isLoading: () => false,
-              hasValue: () => true,
+              hasValue: () => membersFailure() === undefined,
               value: () => members,
+              error: () => membersFailure(),
+              reload: membersReload,
             },
           },
         },
+        { provide: ListViewStore, useValue: { taskQuery } },
         {
           provide: TaskDetailOpener,
           useValue: {
@@ -156,7 +170,10 @@ describe('TimesheetViewPage', () => {
         },
         {
           provide: WORKSPACE_CONTEXT,
-          useValue: { organization: () => ({ id: 'org-1', slug: 'atelier-nord' }) },
+          useValue: {
+            organization: () => ({ id: 'org-1', slug: 'atelier-nord' }),
+            user: () => ({ id: 'u-cm' }),
+          },
         },
         {
           provide: RuntimeConfigStore,
@@ -343,5 +360,89 @@ describe('TimesheetViewPage', () => {
       ?.querySelector<HTMLButtonElement>('[data-testid="timesheet-estimates-failed"] button')
       ?.click();
     await expect.poll(() => text(harness, 'timesheet-kpis')).toContain('150% consumed');
+  });
+
+  it('follows the visible filters: the rows, the totals and the figures change', async () => {
+    const harness: RouterTestingHarness = await RouterTestingHarness.create(
+      '/atelier-nord/l/l-sprint14/timesheet',
+    );
+    await expect.poll(() => text(harness, 'timesheet-table')).toContain('Camille Martin');
+    expect(text(harness, 'timesheet-total')).toBe('Week total: 12 h');
+
+    taskQuery.set({ level: 'roots', sort: 'manual', search: 'sso' });
+    await expect.poll(() => text(harness, 'timesheet-total')).toBe('Week total: 4 h 50');
+    const names: string[] = [
+      ...(harness.routeNativeElement?.querySelectorAll('[data-testid="timesheet-person-name"]') ??
+        []),
+    ].map((cell: Element) => cell.textContent.trim());
+    expect(names).toEqual(['Camille Martin', 'Inès Robert']);
+    expect(text(harness, 'timesheet-table')).not.toContain('Rate limit');
+    expect(text(harness, 'timesheet-kpis')).toContain('1 task');
+
+    taskQuery.set({ level: 'roots', sort: 'manual', assignee: ['u-hd'] });
+    await expect.poll(() => text(harness, 'timesheet-total')).toBe('Week total: 3 h 20');
+    expect(text(harness, 'timesheet-table')).toContain('Rate limit');
+    expect(text(harness, 'timesheet-table')).not.toContain('Camille Martin');
+
+    taskQuery.set({ level: 'roots', sort: 'manual', status: ['done'] });
+    await expect.poll(() => text(harness, 'timesheet-no-match')).toContain('No task matches');
+    expect(text(harness, 'timesheet-empty')).toBe('');
+  });
+
+  it('says that priority and label filters do not apply', async () => {
+    taskQuery.set({ level: 'roots', sort: 'manual', priority: ['urgente'] });
+    const harness: RouterTestingHarness = await RouterTestingHarness.create(
+      '/atelier-nord/l/l-sprint14/timesheet',
+    );
+    await expect
+      .poll(() => text(harness, 'timesheet-unapplied'))
+      .toBe('Priority and label filters do not apply to recorded time.');
+    expect(text(harness, 'timesheet-total')).toBe('Week total: 12 h');
+  });
+
+  it('offers to read the names again when the members could not be read', async () => {
+    membersFailure.set(new Error('unavailable'));
+    const harness: RouterTestingHarness = await RouterTestingHarness.create(
+      '/atelier-nord/l/l-sprint14/timesheet',
+    );
+    await expect
+      .poll(() => text(harness, 'timesheet-members-failed'))
+      .toContain('The names of the people could not be loaded.');
+    expect(text(harness, 'timesheet-table')).toContain('Unknown user');
+
+    harness.routeNativeElement
+      ?.querySelector<HTMLButtonElement>('[data-testid="timesheet-members-failed"] button')
+      ?.click();
+    expect(membersReload).toHaveBeenCalledTimes(1);
+    await expect.poll(() => text(harness, 'timesheet-table')).toContain('Camille Martin');
+    expect(text(harness, 'timesheet-members-failed')).toBe('');
+  });
+
+  it('bounds a long table, keeping its header and total in view', async () => {
+    const harness: RouterTestingHarness = await RouterTestingHarness.create(
+      '/atelier-nord/l/l-sprint14/timesheet',
+    );
+    await expect.poll(() => text(harness, 'timesheet-table')).toContain('Camille Martin');
+    const frame: () => Element | null | undefined = () =>
+      harness.routeNativeElement?.querySelector('[data-testid="timesheet-frame"]');
+    expect(frame()?.getAttribute('data-bounded')).toBeNull();
+
+    const long: ListTimesheet = week(
+      '2026-10-26',
+      Array.from({ length: BOUNDED_ROWS }, (_: unknown, index: number) =>
+        entry(
+          index % 2 === 0 ? 'u-cm' : 'u-hd',
+          `CAD-${String(400 + index)}`,
+          `Task ${String(index)}`,
+          [30, 0, 0, 0, 0, 0, 0],
+        ),
+      ),
+    );
+    api['week'].mockResolvedValueOnce(long);
+    button(harness, 'Previous week')?.click();
+    await expect.poll(() => frame()?.getAttribute('data-bounded')).toBe('true');
+    expect(frame()?.className).toContain('max-h-[36rem]');
+    expect(frame()?.querySelector('thead')?.className).toContain('sticky');
+    expect(frame()?.querySelector('tfoot')?.className).toContain('sticky');
   });
 });

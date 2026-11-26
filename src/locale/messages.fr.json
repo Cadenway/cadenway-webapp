@@ -846,6 +846,8 @@
     "spaces.timesheet.failed": "Impossible de charger la feuille de temps",
     "spaces.timesheet.refresh-failed": "Impossible d’actualiser la feuille de temps.",
     "spaces.timesheet.estimates-failed": "Impossible de charger les estimations.",
+    "spaces.timesheet.filters-unapplied": "Les filtres de priorité et d’étiquette ne s’appliquent pas au temps saisi.",
+    "spaces.timesheet.members-failed": "Impossible de charger les noms des personnes.",
     "spaces.timesheet.chart-empty": "Aucune donnée sur la période",
     "spaces.timesheet.chart-category": "Jour",
     "spaces.timesheet.chart-capacity": "Capacité",

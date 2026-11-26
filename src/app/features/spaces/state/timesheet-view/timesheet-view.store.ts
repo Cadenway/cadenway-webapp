@@ -49,6 +49,10 @@ import type {
   TimesheetPerson,
   TimesheetTopTask,
 } from '../../models/timesheet/timesheet.interface';
+import type {
+  ListTaskQuery,
+  StatusKey,
+} from '../../models/list-view-config/list-view-config.interface';
 import { todayIso, toLocalDate } from '../../utils/calendar-date/calendar-date.util';
 
 /**
@@ -226,6 +230,114 @@ function taskKeysOf(sheet: ListTimesheet): readonly string[] {
 }
 
 /**
+ * Interface TimesheetFilter
+ *
+ * @description
+ * The part of the view's filters that timesheet rows carry the data for: the search (task key or
+ * name), the statuses and the people (the assignee filter, applied to the person who recorded the
+ * time). Null fields do not filter.
+ */
+interface TimesheetFilter {
+  // #region Properties
+  /**
+   * Property search
+   *
+   * @description
+   * Lower-case text the task key or name holds, or null.
+   *
+   * @type {string | null}
+   * @readonly
+   */
+  readonly search: string | null;
+
+  /**
+   * Property statuses
+   *
+   * @description
+   * Statuses kept, or null.
+   *
+   * @type {ReadonlySet<StatusKey> | null}
+   * @readonly
+   */
+  readonly statuses: ReadonlySet<StatusKey> | null;
+
+  /**
+   * Property people
+   *
+   * @description
+   * Accounts kept (`me` resolved to the signed-in user; `none` names nobody), or null.
+   *
+   * @type {ReadonlySet<string> | null}
+   * @readonly
+   */
+  readonly people: ReadonlySet<string> | null;
+  // #endregion
+}
+
+/**
+ * Function filterOf
+ *
+ * @description
+ * Reads the timesheet's part of the view's query. Priorities, labels, milestones, the subtask
+ * level and the sort have no data in timesheet rows and are not read.
+ *
+ * @param {ListTaskQuery | null} query - The view's query, or null before the page binds it.
+ * @param {string} userId - The signed-in user, for `me`.
+ * @returns {TimesheetFilter} The filter.
+ */
+function filterOf(query: ListTaskQuery | null, userId: string): TimesheetFilter {
+  const search: string = query?.search?.trim().toLocaleLowerCase() ?? '';
+  const statuses: readonly StatusKey[] = query?.status ?? [];
+  const people: readonly string[] = query?.assignee ?? [];
+  return {
+    search: search === '' ? null : search,
+    statuses: statuses.length === 0 ? null : new Set(statuses),
+    people:
+      people.length === 0
+        ? null
+        : new Set(
+            people
+              .filter((person: string): boolean => person !== 'none')
+              .map((person: string): string => (person === 'me' ? userId : person)),
+          ),
+  };
+}
+
+/**
+ * Function filteredWeek
+ *
+ * @description
+ * The week with only the entries the filter keeps, its day and week totals added up again from
+ * them; the week itself when the filter keeps everything.
+ *
+ * @param {ListTimesheet} sheet - The week.
+ * @param {TimesheetFilter} filter - The filter.
+ * @returns {ListTimesheet} The filtered week.
+ */
+function filteredWeek(sheet: ListTimesheet, filter: TimesheetFilter): ListTimesheet {
+  const { search, statuses, people }: TimesheetFilter = filter;
+  if (search === null && statuses === null && people === null) return sheet;
+  const entries: readonly TimesheetEntry[] = sheet.entries.filter(
+    (entry: TimesheetEntry): boolean =>
+      (statuses === null || statuses.has(entry.status)) &&
+      (people === null || people.has(entry.userId)) &&
+      (search === null ||
+        entry.taskKey.toLocaleLowerCase().includes(search) ||
+        entry.name.toLocaleLowerCase().includes(search)),
+  );
+  const totals: readonly number[] = sumByDay(entries);
+  return {
+    ...sheet,
+    days: sheet.days.map((day: { readonly date: string }, index: number) => ({
+      date: day.date,
+      totalMinutes: totals[index],
+    })),
+    totalMinutes: totals.reduce((sum: number, minutes: number): number => sum + minutes, 0),
+    entries,
+  };
+}
+
+/**
  * Interface TimesheetViewState
  *
  * @description
@@ -277,6 +389,17 @@ interface TimesheetViewState {
    * @readonly
    */
   readonly hasRead: boolean;
+
+  /**
+   * Property query
+   *
+   * @description
+   * The view's query (`ListViewStore.taskQuery`), or null before the page binds it.
+   *
+   * @type {ListTaskQuery | null}
+   * @readonly
+   */
+  readonly query: ListTaskQuery | null;
   // #endregion
 }
 
@@ -400,6 +523,40 @@ export interface TimesheetViewStoreInstance {
   readonly sheet: Signal<ListTimesheet | undefined>;
 
   /**
+   * Property week
+   *
+   * @description
+   * The week shown with the view's filters applied (`sheet` without the entries they leave out,
+   * its totals added up again), or undefined like `sheet`.
+   *
+   * @type {Signal<ListTimesheet | undefined>}
+   * @readonly
+   */
+  readonly week: Signal<ListTimesheet | undefined>;
+
+  /**
+   * Property filtering
+   *
+   * @description
+   * Whether a filter the timesheet applies (search, status, assignee) is active.
+   *
+   * @type {Signal<boolean>}
+   * @readonly
+   */
+  readonly filtering: Signal<boolean>;
+
+  /**
+   * Property unappliedFilters
+   *
+   * @description
+   * Whether a priority or label filter is active, which timesheet rows have no data for.
+   *
+   * @type {Signal<boolean>}
+   * @readonly
+   */
+  readonly unappliedFilters: Signal<boolean>;
+
+  /**
    * Property estimates
    *
    * @description
@@ -490,6 +647,16 @@ export interface TimesheetViewStoreInstance {
   show(listId: Signal<string | null> | string | null): void;
 
   /**
+   * Method followQuery
+   *
+   * @description
+   * Follows the view's query, whose search, statuses and assignees filter the week.
+   *
+   * @param {Signal<ListTaskQuery> | ListTaskQuery} query - The view's query.
+   */
+  followQuery(query: Signal<ListTaskQuery> | ListTaskQuery): void;
+
+  /**
    * Method previousWeek
    *
    * @description
@@ -517,7 +684,8 @@ export interface TimesheetViewStoreInstance {
    * Method reload
    *
    * @description
-   * Reads the week shown again, and its estimates; a read asked while one runs follows it.
+   * Reads the week shown again, and its estimates; a read of either asked while one of it runs
+   * follows it, so a refresh is never lost.
    */
   reload(): void;
   // #endregion
@@ -533,7 +701,7 @@ export interface TimesheetViewStoreInstance {
  */
 function initialState(): TimesheetViewState {
   const today: string = todayIso();
-  return { listId: null, today, weekStart: mondayOf(today), hasRead: false };
+  return { listId: null, today, weekStart: mondayOf(today), hasRead: false, query: null };
 }
 
 /**
@@ -586,9 +754,16 @@ function createTimesheetViewStore(): Type<TimesheetViewStoreInstance> {
           source.value ?? (previous?.source.key === source.key ? previous.value : undefined),
       });
       const sheet: Signal<ListTimesheet | undefined> = shown.asReadonly();
+      const filter: Signal<TimesheetFilter> = computed((): TimesheetFilter =>
+        filterOf(store.query(), workspace.user().id),
+      );
+      const week: Signal<ListTimesheet | undefined> = computed((): ListTimesheet | undefined => {
+        const current: ListTimesheet | undefined = sheet();
+        return current ? filteredWeek(current, filter()) : undefined;
+      });
       const estimateParams: Signal<{ readonly keys: readonly string[] } | undefined> = computed(
         (): { readonly keys: readonly string[] } | undefined => {
-          const current: ListTimesheet | undefined = sheet();
+          const current: ListTimesheet | undefined = week();
           if (!current) return undefined;
           const keys: readonly string[] = taskKeysOf(current);
           return keys.length === 0 ? undefined : { keys };
@@ -607,6 +782,15 @@ function createTimesheetViewStore(): Type<TimesheetViewStoreInstance> {
         _document: inject(DOCUMENT),
         timesheet,
         sheet,
+        week,
+        filtering: computed((): boolean => {
+          const { search, statuses, people }: TimesheetFilter = filter();
+          return search !== null || statuses !== null || people !== null;
+        }),
+        unappliedFilters: computed(
+          (): boolean =>
+            (store.query()?.priority?.length ?? 0) > 0 || (store.query()?.label?.length ?? 0) > 0,
+        ),
         estimates: resource({
           params: estimateParams,
           loader: ({
@@ -627,19 +811,19 @@ function createTimesheetViewStore(): Type<TimesheetViewStoreInstance> {
       ),
       isThisWeek: computed((): boolean => store.weekStart() === mondayOf(store.today())),
       empty: computed((): boolean => {
-        const sheet: ListTimesheet | undefined = store.sheet();
+        const sheet: ListTimesheet | undefined = store.week();
         return sheet !== undefined && peopleOf(sheet.entries).length === 0;
       }),
       people: computed((): readonly TimesheetPerson[] => {
-        const sheet: ListTimesheet | undefined = store.sheet();
+        const sheet: ListTimesheet | undefined = store.week();
         return sheet ? peopleOf(sheet.entries) : [];
       }),
       figures: computed((): TimesheetFigures | null => {
-        const sheet: ListTimesheet | undefined = store.sheet();
+        const sheet: ListTimesheet | undefined = store.week();
         return sheet ? figuresOf(sheet) : null;
       }),
       estimatedMinutes: computed((): number | null => {
-        const sheet: ListTimesheet | undefined = store.sheet();
+        const sheet: ListTimesheet | undefined = store.week();
         if (!sheet || !store.estimates.hasValue()) return null;
         const estimates: ReadonlyMap<string, number | null> = store.estimates.value();
         const keys: readonly string[] = taskKeysOf(sheet);
@@ -653,9 +837,10 @@ function createTimesheetViewStore(): Type<TimesheetViewStoreInstance> {
     })),
     withMethods((store) => {
       let queued: boolean = false;
+      let estimatesQueued: boolean = false;
       const reload: () => void = (): void => {
         if (!store.timesheet.reload() && store.timesheet.isLoading()) queued = true;
-        if (store.estimates.hasValue() || store.estimates.error()) store.estimates.reload();
+        if (!store.estimates.reload() && store.estimates.isLoading()) estimatesQueued = true;
       };
       return {
         show: signalMethod<string | null>((listId: string | null): void => {
@@ -673,7 +858,16 @@ function createTimesheetViewStore(): Type<TimesheetViewStoreInstance> {
           const today: string = todayIso();
           patchState(store, { today, weekStart: mondayOf(today) });
         },
+        followQuery: signalMethod<ListTaskQuery>((query: ListTaskQuery): void => {
+          patchState(store, { query });
+        }),
         reload,
+        _settleEstimates: signalMethod<ResourceStatus>((status: ResourceStatus): void => {
+          if (estimatesQueued && status !== 'loading' && status !== 'reloading') {
+            estimatesQueued = false;
+            store.estimates.reload();
+          }
+        }),
         _settle: signalMethod<ResourceStatus>((status: ResourceStatus): void => {
           if (status === 'resolved' && !store.hasRead()) patchState(store, { hasRead: true });
           if (queued && status !== 'loading' && status !== 'reloading') {
@@ -716,6 +910,7 @@ function createTimesheetViewStore(): Type<TimesheetViewStoreInstance> {
     withHooks({
       onInit(store): void {
         store._settle(store.timesheet.status);
+        store._settleEstimates(store.estimates.status);
         store._watch(store.listId);
       },
     }),
@@ -728,13 +923,17 @@ function createTimesheetViewStore(): Type<TimesheetViewStoreInstance> {
  * @description
  * The state of the `Timesheet` view (`l/:listId/timesheet`), route-scoped through
  * `TIMESHEET_VIEW_PROVIDERS`: one week of the time recorded on the list's tasks
- * (`getListTimesheet`, every page), Monday to Sunday, starting on the caller's current week. The
- * view's filters do not apply: the timesheet covers every live task of the list. `timesheet` is the
- * primary read; `sheet` keeps its last answer for the list and week shown while it is read again
- * and when a refresh fails. Another week or list shows nothing until its answer. Until a week of
- * the list was read once (`hasRead`), a failed read belongs to the route's error boundary. The
- * estimates of the week's tasks are a secondary read (`getTaskTimeSummary`, four at a time, gap
- * G7), read again only when the set of tasks changes. Time entries have no realtime notice (G13):
+ * (`getListTimesheet`, every page), Monday to Sunday, starting on the caller's current week.
+ * `timesheet` is the primary read; `sheet` keeps its last answer for the list and week shown while
+ * it is read again and when a refresh fails. Another week or list shows nothing until its answer.
+ * Until a week of the list was read once (`hasRead`), a failed read belongs to the route's error
+ * boundary. `getListTimesheet` takes no filter: `week` applies, in the client, the view's filters
+ * the rows carry data for (`followQuery`: the search on the task key or name, the statuses, the
+ * assignees as the person who recorded the time, `me` being the signed-in user) and adds the
+ * totals up again; the people, the figures and the estimates follow `week`. Priorities and labels
+ * cannot apply (`unappliedFilters`). The estimates of the week's tasks are a secondary read
+ * (`getTaskTimeSummary`, four at a time, gap G7), read again when the set of tasks changes or on a
+ * refresh, a refresh asked during a read following it. Time entries have no realtime notice (G13):
  * the week is read again 1 s after the first of a task notice of the list, the task detail closing
  * or giving way (`TaskDetailOpener.closed`, `changed`: time is recorded from the detail) and the
  * tab being shown again, once per window. Another organization reads again.

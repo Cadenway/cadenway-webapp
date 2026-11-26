@@ -102,7 +102,10 @@ describe('TimesheetViewStore', () => {
       providers: [
         TimesheetViewStore,
         { provide: TimesheetApi, useValue: api },
-        { provide: WORKSPACE_CONTEXT, useValue: { organization } },
+        {
+          provide: WORKSPACE_CONTEXT,
+          useValue: { organization, user: () => ({ id: 'u-cm' }) },
+        },
         {
           provide: RealtimeConnection,
           useValue: { watch: vi.fn((): Observable<RealtimeChange> => notices.asObservable()) },
@@ -278,5 +281,63 @@ describe('TimesheetViewStore', () => {
 
     organization.set({ id: 'org-other' });
     await expect.poll(() => api['week'].mock.calls.length).toBe(2);
+  });
+
+  it('applies the search, statuses and assignees of the view, and adds the totals up again', async () => {
+    await shown();
+
+    store.followQuery({ level: 'roots', sort: 'manual', search: 'cad-48' });
+    TestBed.tick();
+    expect(store.week()?.entries.map((item) => item.taskKey)).toEqual([
+      'CAD-482',
+      'CAD-488',
+      'CAD-482',
+    ]);
+    expect(store.week()?.totalMinutes).toBe(360);
+    expect(store.week()?.days.map((day) => day.totalMinutes)).toEqual([75, 0, 90, 0, 0, 150, 45]);
+    expect(store.figures()?.taskCount).toBe(2);
+    expect(store.filtering()).toBe(true);
+    expect(store.sheet()).toBe(thisWeek);
+
+    store.followQuery({ level: 'roots', sort: 'manual', assignee: ['me'] });
+    TestBed.tick();
+    expect(store.people().map((person) => person.userId)).toEqual(['u-cm']);
+    expect(store.figures()?.totalMinutes).toBe(270);
+    await expect
+      .poll((): unknown => api['estimates'].mock.lastCall?.[0] as unknown)
+      .toEqual(['CAD-482', 'CAD-488']);
+
+    store.followQuery({ level: 'roots', sort: 'manual', status: ['done'] });
+    TestBed.tick();
+    expect(store.empty()).toBe(true);
+    expect(store.week()?.totalMinutes).toBe(0);
+
+    store.followQuery({ level: 'roots', sort: 'manual', assignee: ['none'] });
+    TestBed.tick();
+    expect(store.people()).toEqual([]);
+
+    store.followQuery({ level: 'roots', sort: 'manual', priority: ['urgente'], label: ['Auth'] });
+    TestBed.tick();
+    expect(store.filtering()).toBe(false);
+    expect(store.unappliedFilters()).toBe(true);
+    expect(store.week()).toBe(thisWeek);
+  });
+
+  it('reads the estimates again after a refresh asked while they are read', async () => {
+    let answer: (estimates: ReadonlyMap<string, number | null>) => void = () => undefined;
+    api['estimates'].mockImplementationOnce(
+      () =>
+        new Promise<ReadonlyMap<string, number | null>>((resolve) => {
+          answer = resolve;
+        }),
+    );
+    await shown();
+    await expect.poll(() => store.estimates.isLoading()).toBe(true);
+
+    store.reload();
+    answer(new Map([['CAD-482', 60]]));
+
+    await expect.poll(() => api['estimates'].mock.calls.length).toBe(2);
+    await expect.poll(() => store.estimatedMinutes()).toBe(480);
   });
 });

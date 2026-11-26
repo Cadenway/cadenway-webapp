@@ -84,8 +84,9 @@ constants belong to the lead):
   `sheetColumnLabels()`.
 - `LAYOUT_TOOLS` gives the tools of each layout: all of them with `Columns` instead of `Group by`
   on the board (which shows `Columns shown`, writing `hiddenBoardStatusKeys`); none on `form` and
-  `activity`, which hides the toolbar (`App.dc.html` line 7811); all of them elsewhere,
-  `timesheet` included, as in the mockup, although its time entries ignore the filters.
+  `activity`, which hides the toolbar (`App.dc.html` line 7811); `Filter`, `Search`,
+  `Create a task` and `Save the view` on `timesheet`, whose rows have no milestone, order, group or
+  subtask level (see `Timesheet view`); all of them elsewhere.
 - A dialog package owns `ui/dialogs/<dialog>/*` (`share-dialog`, `sprint-report-dialog`,
   `space-statuses-dialog`, `automations-dialog`) and its `state/` and `data-access/` files. The list
   page hosts it in a `@defer` block loaded on first opening and binds `open` (a two-way model the
@@ -103,11 +104,19 @@ constants belong to the lead):
 Sunday (`App.dc.html` lines 1363-1449, 7813-7880; skeleton lines 613-624).
 
 - Data: `TaskTimeService.getListTimesheet` (`weekStart`, pages of 100, read to the end, no HTTP
-  cache), mapped by `data-access/adapters/timesheet` to `models/timesheet`. The view's filters,
-  search and grouping do not apply: the toolbar shows as in the mockup and the view publishes no
-  rows summary (`followRows`). Per-person sums, the figures and the chart series are computed in
-  the client; people are named from `ListPageStore.organizationMembers` (a former member reads
-  `Unknown user`), sorted by name.
+  cache), mapped by `data-access/adapters/timesheet` to `models/timesheet`. Per-person sums, the
+  figures and the chart series are computed in the client; people are named from
+  `ListPageStore.organizationMembers` (a former member reads `Unknown user`), sorted by name. A
+  failed members read shows `The names of the people could not be loaded.` with `Retry`
+  (`organizationMembers.reload()`).
+- Filters: `getListTimesheet` takes none. The store follows `ListViewStore.taskQuery`
+  (`followQuery`) and keeps, in the client, the rows matching the search (task key or name), the
+  statuses and the assignees, read as the person who recorded the time (`me` is the signed-in
+  user, `Unassigned` keeps nobody); every total, figure, chart and estimate is computed again from
+  the rows kept (`week`). A week with time but none kept shows `No task matches`. Priority and
+  label filters cannot apply, and the view says so (`Priority and label filters do not apply to
+recorded time.`). The toolbar shows `Filter`, `Search`, `Create a task` and `Save the view`
+  (`LAYOUT_TOOLS.timesheet`); the view publishes no rows summary (`followRows`).
 - Week: it opens on the caller's current week; `Previous week` and `Next week` move it, the title
   (`Week of Nov 2 to Nov 8`) is announced politely, `This week` or `Back to this week` follow.
   Another list starts over on the current week; another organization reads again.
@@ -115,11 +124,20 @@ Sunday (`App.dc.html` lines 1363-1449, 7813-7880; skeleton lines 613-624).
   divided by the working days with time), `Longest task` (across people) and
   `Estimated on these tasks` (`p% consumed`, or `No estimate`). The estimates are a secondary read,
   `getTaskTimeSummary` per task with time, four at a time, read again only when the set of tasks
-  changes or on a refresh; a failure stops the reads and shows `Retry` under the figures.
+  changes or on a refresh (a refresh asked while they are read follows that read); a failure stops
+  the reads and shows `Retry` under the figures.
 - Table (`table[cwTable]`, 760 px wide at least, scrolling below): `Person and task` × the seven
   days × `Total`; a person row (avatar, name, daily sums tinted by amount), then the person's
   tasks, whose row-wide button (`Open CAD-482 · …`) opens Task's detail over the view with the row
-  as preview; a `Total` footer. Weekend days are shaded, today ringed.
+  as preview; a `Total` footer. Weekend days are shaded, today ringed. Past 15 body rows
+  (`BOUNDED_ROWS`) the table scrolls in a frame 36 rem high, its header and footer sticky. It is
+  not virtualized: the CDK viewport's transformed wrapper would break the sticky header and footer,
+  and person and task rows differ in height. Measured on 2026-11-26 (Chromium through Playwright,
+  built styles, static markup): 1,000 rows lay out and paint in about 100 ms, 2,000 in about
+  200 ms, 4,000 in about 400 ms, scrolling at 60 frames per second at every size; Angular's
+  rendering of the rows (jsdom unit test) takes about 120 ms for 500, 270 ms for 1,000 and 340 to
+  720 ms for 2,000. Showing a week becomes noticeably slow from about 1,000 rows (one per person and
+  task with time).
 - Charts: `Time per day` (`cw-chart` stacked bars, one series per person, largest first, the fifth
   and later summed into `Others`) and `Breakdown by person` (a dot in the person's chart color and a
   `cw-meter` per person); they stack under `lg`.
@@ -149,13 +167,14 @@ Known gaps:
 
 Copy not taken word for word from the mockup:
 
-| Unit                                                                                              | Reason                                           |
-| ------------------------------------------------------------------------------------------------- | ------------------------------------------------ |
-| `spaces.timesheet.kpi-tasks`, `spaces.timesheet.kpi-tasks-one`                                    | The gateway gives no entry count (see the gaps). |
-| `spaces.timesheet.kpi-days-one`                                                                   | Singular form the mockup writes in the plural.   |
-| `spaces.timesheet.failed`, `spaces.timesheet.refresh-failed`, `spaces.timesheet.estimates-failed` | The mockup draws no failed read.                 |
-| `spaces.timesheet.chart-*`, `spaces.timesheet.stat-*`, `spaces.timesheet.meter-*`                 | The bricks' own default texts.                   |
-| `spaces.timesheet.share-percent`                                                                  | The mockup's `38%`, as a unit for its placement. |
+| Unit                                                                                                                                 | Reason                                           |
+| ------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------ |
+| `spaces.timesheet.kpi-tasks`, `spaces.timesheet.kpi-tasks-one`                                                                       | The gateway gives no entry count (see the gaps). |
+| `spaces.timesheet.kpi-days-one`                                                                                                      | Singular form the mockup writes in the plural.   |
+| `spaces.timesheet.failed`, `spaces.timesheet.refresh-failed`, `spaces.timesheet.estimates-failed`, `spaces.timesheet.members-failed` | The mockup draws no failed read.                 |
+| `spaces.timesheet.filters-unapplied`                                                                                                 | The mockup applies no filter to the timesheet.   |
+| `spaces.timesheet.chart-*`, `spaces.timesheet.stat-*`, `spaces.timesheet.meter-*`                                                    | The bricks' own default texts.                   |
+| `spaces.timesheet.share-percent`                                                                                                     | The mockup's `38%`, as a unit for its placement. |
 
 ## Space statuses dialog
 

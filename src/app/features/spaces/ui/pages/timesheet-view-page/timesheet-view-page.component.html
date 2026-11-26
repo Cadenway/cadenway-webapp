@@ -1,5 +1,5 @@
 @let primary = store.hasRead() || store.timesheet.value();
-@let sheet = store.sheet();
+@let sheet = store.week();
 <section
   class="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-4 pt-1 pb-6 sm:px-6"
   aria-label="Timesheet"
@@ -75,7 +75,37 @@
         </button>
       </div>
     }
-    @if (store.empty()) {
+    @if (store.unappliedFilters()) {
+      <p class="text-sm text-muted-foreground" role="note" data-testid="timesheet-unapplied">
+        <ng-container i18n="@@spaces.timesheet.filters-unapplied"
+          >Priority and label filters do not apply to recorded time.</ng-container
+        >
+      </p>
+    }
+    @if (membersFailed()) {
+      <div
+        class="flex items-center gap-2 text-sm"
+        role="alert"
+        data-testid="timesheet-members-failed"
+      >
+        <span i18n="@@spaces.timesheet.members-failed"
+          >The names of the people could not be loaded.</span
+        >
+        <button cwButton type="button" variant="outline" size="xs" (click)="retryMembers()">
+          {{ retryLabel }}
+        </button>
+      </div>
+    }
+    @if (noMatch()) {
+      <cw-empty variant="outline" role="status" class="py-14" data-testid="timesheet-no-match">
+        <cw-empty-header>
+          <cw-empty-media>
+            <ng-icon name="phosphorMagnifyingGlassBold" aria-hidden="true" />
+          </cw-empty-media>
+          <cw-empty-title i18n="@@spaces.rows.no-match">No task matches</cw-empty-title>
+        </cw-empty-header>
+      </cw-empty>
+    } @else if (store.empty()) {
       <cw-empty variant="outline" role="status" class="py-14" data-testid="timesheet-empty">
         <cw-empty-header>
           <cw-empty-media>
@@ -119,7 +149,12 @@
         </div>
       }
 
-      <cw-table-container class="shrink-0 rounded-xl border border-border bg-card">
+      <cw-table-container
+        class="shrink-0 rounded-xl border border-border bg-card"
+        [class]="bounded() ? 'max-h-[36rem]' : ''"
+        [attr.data-bounded]="bounded() ? 'true' : null"
+        data-testid="timesheet-frame"
+      >
         <table
           cwTable
           size="sm"
@@ -128,7 +163,7 @@
           i18n-aria-label="@@spaces.timesheet.table"
           data-testid="timesheet-table"
         >
-          <thead cwTableHeader class="bg-surface-muted">
+          <thead cwTableHeader class="sticky top-0 z-10 bg-surface-muted">
             <tr cwTableRow>
               <th cwTableHead class="w-auto min-w-60" i18n="@@spaces.timesheet.person-and-task">
                 Person and task
@@ -193,7 +228,7 @@
               }
             </tbody>
           }
-          <tfoot cwTableFooter>
+          <tfoot cwTableFooter class="sticky bottom-0 z-10 bg-surface-muted">
             <tr cwTableRow class="font-semibold" data-testid="timesheet-footer">
               <th scope="row" class="px-3 py-2 text-left" i18n="@@spaces.timesheet.total">Total</th>
               @for (cell of footer(); track cell.date) {

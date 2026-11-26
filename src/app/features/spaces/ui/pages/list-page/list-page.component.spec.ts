@@ -644,11 +644,7 @@ describe('ListPage', () => {
       ['sheet', 'sheet-view', ['view-group', 'view-filter']],
       ['form', 'form-view', []],
       ['activity', 'activity-view', []],
-      [
-        'timesheet',
-        'timesheet-view',
-        ['view-group', 'view-filter', 'view-search', 'view-create-task'],
-      ],
+      ['timesheet', 'timesheet-view', ['view-filter', 'view-search', 'view-create-task']],
     ];
     const router: Router = TestBed.inject(Router);
     for (const [segment, , tools] of views) {

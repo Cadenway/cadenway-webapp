@@ -49,6 +49,10 @@ import {
   type ListPageStoreInstance,
 } from '../../../state/list-page/list-page.store';
 import {
+  ListViewStore,
+  type ListViewStoreInstance,
+} from '../../../state/list-view/list-view.store';
+import {
   TimesheetViewStore,
   type TimesheetViewStoreInstance,
 } from '../../../state/timesheet-view/timesheet-view.store';
@@ -96,6 +100,20 @@ const DOT_CLASSES: Readonly<Record<CwChartColor, string>> = {
  * @type {number}
  */
 const MAX_SERIES: number = 5;
+
+/**
+ * Constant BOUNDED_ROWS
+ *
+ * @description
+ * Body rows (people and tasks) past which the table scrolls inside a bounded frame
+ * (`max-h-[36rem]`, about fifteen rows) with its header and `Total` footer kept in view. The
+ * table is not virtualized: measured in Chromium with the built styles, 1,000 rows lay out and
+ * paint in about 100 ms and scroll at 60 frames per second, 2,000 in about 200 ms, and a week
+ * holds one row per person and task with time.
+ *
+ * @type {number}
+ */
+export const BOUNDED_ROWS: number = 15;
 
 /**
  * Constant WEEKEND
@@ -697,6 +715,17 @@ export class TimesheetViewPage {
   private readonly listPage: ListPageStoreInstance = inject(ListPageStore);
 
   /**
+   * Property view
+   *
+   * @description
+   * The list's view configuration: its query filters the week.
+   *
+   * @type {ListViewStoreInstance}
+   * @readonly
+   */
+  private readonly view: ListViewStoreInstance = inject(ListViewStore);
+
+  /**
    * Property taskDetail
    *
    * @description
@@ -833,6 +862,80 @@ export class TimesheetViewPage {
   );
 
   /**
+   * Property membersFailed
+   *
+   * @description
+   * Whether the members that name the people could not be read: the people read `Unknown user`
+   * and a `Retry` line offers to read them again.
+   *
+   * @type {Signal<boolean>}
+   * @readonly
+   */
+  protected readonly membersFailed: Signal<boolean> = computed(
+    (): boolean => this.listPage.organizationMembers.error() !== undefined,
+  );
+
+  /**
+   * Property memberNames
+   *
+   * @description
+   * The directory names of the organization's members, by account.
+   *
+   * @type {Signal<ReadonlyMap<string, string>>}
+   * @readonly
+   */
+  private readonly memberNames: Signal<ReadonlyMap<string, string>> = computed(
+    (): ReadonlyMap<string, string> => {
+      const members: readonly ListMember[] = this.listPage.organizationMembers.hasValue()
+        ? this.listPage.organizationMembers.value()
+        : [];
+      return new Map(
+        members
+          .filter((member: ListMember): boolean => member.name !== null)
+          .map((member: ListMember): [string, string] => [member.userId, member.name ?? '']),
+      );
+    },
+  );
+
+  /**
+   * Property bounded
+   *
+   * @description
+   * Whether the table has more than `BOUNDED_ROWS` body rows and scrolls in its bounded frame.
+   *
+   * @type {Signal<boolean>}
+   * @readonly
+   */
+  protected readonly bounded: Signal<boolean> = computed(
+    (): boolean =>
+      this.store
+        .people()
+        .reduce(
+          (rows: number, person: TimesheetPerson): number => rows + 1 + person.tasks.length,
+          0,
+        ) > BOUNDED_ROWS,
+  );
+
+  /**
+   * Property noMatch
+   *
+   * @description
+   * Whether the week has time but none of it on the tasks and people the filters keep.
+   *
+   * @type {Signal<boolean>}
+   * @readonly
+   */
+  protected readonly noMatch: Signal<boolean> = computed(
+    (): boolean =>
+      this.store.filtering() &&
+      this.store.empty() &&
+      (this.store
+        .sheet()
+        ?.entries.some((entry: TimesheetEntry): boolean => entry.totalMinutes > 0) ??
+        false),
+  );
+
+  /**
    * Property rangeLabel
    *
    * @description
@@ -858,7 +961,7 @@ export class TimesheetViewPage {
    * @readonly
    */
   protected readonly weekTotal: Signal<string> = computed((): string => {
-    const sheet: ListTimesheet | undefined = this.store.sheet();
+    const sheet: ListTimesheet | undefined = this.store.week();
     return sheet ? minutesText(sheet.totalMinutes) : '';
   });
 
@@ -928,7 +1031,7 @@ export class TimesheetViewPage {
    */
   protected readonly footer: Signal<readonly TimesheetCell[]> = computed(
     (): readonly TimesheetCell[] =>
-      (this.store.sheet()?.days ?? []).map(
+      (this.store.week()?.days ?? []).map(
         (day: { readonly date: string; readonly totalMinutes: number }): TimesheetCell => ({
           date: day.date,
           text: day.totalMinutes > 0 ? minutesText(day.totalMinutes) : '·',
@@ -1148,14 +1251,16 @@ export class TimesheetViewPage {
    * Constructor
    *
    * @description
-   * Binds the store to the list of the route. A failed first read is read again when the error
-   * boundary runs the route again, which renders the page anew over the same route store.
+   * Binds the store to the list of the route and to the view's query. A failed first read is read
+   * again when the error boundary runs the route again, which renders the page anew over the same
+   * route store.
    *
    * @constructor
    */
   public constructor() {
     if (this.store.timesheet.error()) this.store.reload();
     this.store.show(this.listPage.listId);
+    this.store.followQuery(this.view.taskQuery);
   }
   // #endregion
 
@@ -1179,6 +1284,16 @@ export class TimesheetViewPage {
   }
 
   /**
+   * Method retryMembers
+   *
+   * @description
+   * Reads the organization's members again, for the people's names.
+   */
+  protected retryMembers(): void {
+    this.listPage.organizationMembers.reload();
+  }
+
+  /**
    * Method nameOf
    *
    * @description
@@ -1188,12 +1303,8 @@ export class TimesheetViewPage {
    * @returns {string} The name.
    */
   private nameOf(userId: string): string {
-    const members: readonly ListMember[] = this.listPage.organizationMembers.hasValue()
-      ? this.listPage.organizationMembers.value()
-      : [];
     return (
-      members.find((member: ListMember): boolean => member.userId === userId)?.name ??
-      $localize`:@@spaces.labels.avatar-unknown:Unknown user`
+      this.memberNames().get(userId) ?? $localize`:@@spaces.labels.avatar-unknown:Unknown user`
     );
   }
 
