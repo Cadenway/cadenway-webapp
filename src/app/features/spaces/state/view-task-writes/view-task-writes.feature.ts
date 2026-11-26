@@ -604,6 +604,18 @@ const HELD_READ_MAX_MS: number = 30_000;
 const FOLLOW_UP_READS_MS: readonly number[] = [10_000, 30_000];
 
 /**
+ * Constant READ_BACK_TIMEOUT_MS
+ *
+ * @description
+ * Longest wait, in milliseconds, for one read back of a task (`ListTasksApi.readBack`): past it
+ * the read is aborted and counts as failed, so the schedule goes on and one request that never
+ * answers holds no other task.
+ *
+ * @type {number}
+ */
+export const READ_BACK_TIMEOUT_MS: number = 10_000;
+
+/**
  * Constant NO_OUTCOME
  *
  * @description
@@ -1212,13 +1224,21 @@ export function withViewTaskWrites(): SignalStoreFeature<
           ...skipped,
         ]);
       };
+      // A read back answers within `READ_BACK_TIMEOUT_MS` or counts as failed; leaving the view or
+      // changing its scope ends the wait at once (`wakeAll`). Either way the request is aborted.
       const readBack: (key: string) => Promise<TaskReadBack | 'trashed' | null> = async (
         key: string,
       ): Promise<TaskReadBack | 'trashed' | null> => {
+        const abort: AbortController = new AbortController();
         try {
-          return await store._writeFields.readBack(key);
+          return await Promise.race([
+            store._writeFields.readBack(key, abort.signal),
+            pause(READ_BACK_TIMEOUT_MS).then((): null => null),
+          ]);
         } catch {
           return null;
+        } finally {
+          abort.abort();
         }
       };
       const readAll: (
@@ -1378,8 +1398,9 @@ export function withViewTaskWrites(): SignalStoreFeature<
       };
       // Settles the tasks a write left without a certain outcome, each from a read of that very
       // task (`ListTasksApi.readBack`), never from a read of the view, which may not contain it
-      // (a subtask, a task past the first page), nor from elapsed time. A read that settles
-      // nothing is retried later; leaving the view or changing its scope ends the wait.
+      // (a subtask, a task past the first page), nor from elapsed time. Each task settles as soon
+      // as its own read answers; a read that settles nothing is retried later. Leaving the view or
+      // changing its scope ends the wait and the reads in flight, and settles nothing more.
       const hold: (
         seq: number,
         items: readonly TaskBulkSelection[],
@@ -1398,11 +1419,12 @@ export function withViewTaskWrites(): SignalStoreFeature<
           const wait: number = Math.min(RECONCILE_DELAY_MS * 2 ** round, HELD_READ_MAX_MS);
           await pause(wait);
           if (!current()) break;
-          const reads: readonly (TaskReadBack | 'trashed' | null)[] = await readAll(open);
-          if (!current()) break;
           const still: TaskBulkSelection[] = [];
-          open.forEach((item: TaskBulkSelection, index: number): void => {
-            const answer: TaskReadBack | 'trashed' | null = reads[index];
+          const settled: string[] = [];
+          const settleOne: (
+            item: TaskBulkSelection,
+            answer: TaskReadBack | 'trashed' | null,
+          ) => void = (item: TaskBulkSelection, answer: TaskReadBack | 'trashed' | null): void => {
             const at: number = item.version ?? 0;
             const settlement: HeldSettlement = heldSettlement(
               plan.kind,
@@ -1437,9 +1459,16 @@ export function withViewTaskWrites(): SignalStoreFeature<
                 void followUp(seq, item, current);
               }
             }
+            settled.push(item.taskKey);
             release([item.taskKey]);
+          };
+          await settleLimited(open, WRITE_CALLS, async (item: TaskBulkSelection): Promise<void> => {
+            if (!current()) return;
+            const answer: TaskReadBack | 'trashed' | null = await readBack(item.taskKey);
+            if (current()) settleOne(item, answer);
           });
-          if (still.length < open.length) source?.reload();
+          if (!current()) break;
+          if (settled.length > 0) source?.reload();
           open = still;
         }
         release(open.map((item: TaskBulkSelection): string => item.taskKey));

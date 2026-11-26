@@ -305,15 +305,20 @@ export class ListTasksApi {
    * Reads one task without the HTTP cache (`getTask`), to tell whether a write whose answer was
    * lost or refused on a resend left the task with the written values. It never rejects:
    * `trashed` when the task is in the trash (`404 task.trashed`), null when it could not be read
-   * otherwise (no answer, another error, a task the caller no longer sees).
+   * otherwise (no answer, another error, a task the caller no longer sees, an aborted read).
    *
    * @param {string} taskKey - Key of the task.
+   * @param {AbortSignal | undefined} [signal] - Cancels the read: it then answers null.
    * @returns {Promise<TaskReadBack | 'trashed' | null>} The task, `trashed`, or null.
    */
-  public async readBack(taskKey: string): Promise<TaskReadBack | 'trashed' | null> {
+  public async readBack(
+    taskKey: string,
+    signal?: AbortSignal,
+  ): Promise<TaskReadBack | 'trashed' | null> {
     try {
-      const task: GetTaskClientResult = await firstValueFrom(
+      const task: GetTaskClientResult = await abortableRead(
         this.tasks.getTask(taskKey, { cache: 'no-store' }),
+        signal,
       );
       return {
         task: toListTask(task),

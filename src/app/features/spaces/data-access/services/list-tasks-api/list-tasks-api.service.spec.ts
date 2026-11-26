@@ -7,7 +7,7 @@ import {
   type TaskSummary as TaskSummaryDto,
 } from '@cadenway/api-client';
 import { CwToastService } from '@cadenway/ui/components/toast';
-import { of, throwError } from 'rxjs';
+import { NEVER, of, throwError } from 'rxjs';
 import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 
 import { WORKSPACE_CONTEXT } from '@features/workspace/ports/workspace-context';
@@ -231,7 +231,7 @@ describe('ListTasksApi', () => {
     });
   });
 
-  it('reads one task back without the HTTP cache, says when it is in the trash, and null otherwise', async () => {
+  it('reads one task back without the HTTP cache, says when it is in the trash, and null otherwise or once aborted', async () => {
     const read: TaskReadBack | null = (await api.readBack('CAD-482')) as TaskReadBack | null;
     expect(read?.task).toMatchObject({
       key: 'CAD-482',
@@ -259,6 +259,11 @@ describe('ListTasksApi', () => {
     await expect(api.readBack('CAD-482')).resolves.toBeNull();
     getTask.mockReturnValueOnce(throwError(() => new HttpErrorResponse({ status: 0 })));
     await expect(api.readBack('CAD-482')).resolves.toBeNull();
+    const abort: AbortController = new AbortController();
+    getTask.mockReturnValueOnce(NEVER);
+    const aborted: Promise<TaskReadBack | 'trashed' | null> = api.readBack('CAD-482', abort.signal);
+    abort.abort();
+    await expect(aborted).resolves.toBeNull();
   });
 
   it('reads the subtasks of a task', async () => {
