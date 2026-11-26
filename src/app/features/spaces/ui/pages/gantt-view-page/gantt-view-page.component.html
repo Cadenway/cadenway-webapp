@@ -114,6 +114,18 @@
     </div>
   </div>
 
+  @if (tasks.truncated()) {
+    <p class="text-xs text-muted-foreground" role="status">{{ truncatedText }}</p>
+  }
+  @if (tasks.hasCurrentSnapshot() && tasks.primary.error()) {
+    <div class="flex items-center gap-2 text-sm" role="alert">
+      <span i18n="@@spaces.rows.reload-failed">The tasks could not be refreshed.</span>
+      <button cwButton type="button" variant="outline" size="xs" (click)="tasks.reload()">
+        {{ retryLabel }}
+      </button>
+    </div>
+  }
+
   <div class="flex min-h-0 flex-1 flex-col" [cwContextMenuTriggerFor]="chartMenu">
     <cw-timeline
       class="flex-1"
@@ -141,12 +153,16 @@
     >
       <ng-template cwTimelineName let-item>
         @let shown = itemOf(item.id);
+        @let depth = depthOf(item.id);
         <button
           type="button"
           tabindex="-1"
           data-row-menu
           class="flex min-w-0 flex-1 items-center gap-2 rounded-md px-1 py-1 text-left text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none focus-visible:ring-inset"
+          [class.pl-5]="depth === 1"
+          [class.pl-9]="depth >= 2"
           [attr.data-task-row]="shown?.task?.key ?? null"
+          [attr.data-depth]="depth"
           [cwContextMenuTriggerFor]="taskMenu.menu()"
           (opened)="menuItem.set(item.id)"
           (click)="open(item)"

@@ -1,4 +1,5 @@
 import { BreakpointObserver } from '@angular/cdk/layout';
+import { formatNumber } from '@angular/common';
 import {
   Component,
   computed,
@@ -68,13 +69,14 @@ import type {
   GanttGrouping,
   GanttTimeline,
 } from '../../../models/gantt-timeline/gantt-timeline.interface';
-import type { ListTaskItem } from '../../../models/list-tasks/list-tasks.interface';
+import type { ListTaskItem, ListTasksRead } from '../../../models/list-tasks/list-tasks.interface';
 import type { TaskFieldChanges } from '../../../models/view-task-write/view-task-write.interface';
 import {
   GanttViewStore,
   type GanttViewStoreInstance,
 } from '../../../state/gantt-view/gantt-view.store';
 import {
+  LIST_TASKS_CAP,
   ListTasksStore,
   type ListTasksStoreInstance,
 } from '../../../state/list-tasks/list-tasks.store';
@@ -164,9 +166,10 @@ function isScale(value: unknown): value is CwTimelineScale {
  *
  * @description
  * The `Gantt` view at `/:org/l/:listId/gantt` (`App.dc.html` lines 830-956, 6417-6600,
- * 9223-9280), below the list frame: every task of the list with the view's query
- * (`ListTasksStore`, without a due window) on `cw-timeline`, grouped by the view's `groupBy`
- * (one `All tasks` group without it; `Cancelled` folded by status), each with its status, name,
+ * 9223-9280), below the list frame: every task of the list with the view's query at every
+ * level (`ListTasksStore`, without a due window) on `cw-timeline`, grouped by the view's
+ * `groupBy` (one `All tasks` group without it; `Cancelled` folded by status), each subtask right
+ * after its parent and indented unless the view shows subtasks apart, each with its status, name,
  * key and duration, its bar filled with its progress (`taskProgress`), and the dated milestones
  * as full-height lines. The toolbar shows the period, the hint, the scale radios, zoom out and in
  * along `GANTT_ZOOM_LADDER` with the scale and zoom, `Fit` (`cw-timeline`'s `fit()`, or
@@ -178,8 +181,11 @@ function isScale(value: unknown): value is CwTimelineScale {
  * Enter or a double click on a bar does too. A right click, the Menu key or Shift F10 on a task
  * row opens the shared task menu; elsewhere in the chart, the chart's menu (`Go to today`,
  * `Scale`, `New task`). A first read shows the timeline's skeleton; a failed one reaches the
- * route's error boundary, whose `Retry` runs the route again; a read without a task shows the
- * timeline's empty text. Dependencies are not drawn: they can only be read task by task (G5).
+ * route's error boundary, whose `Retry` runs the route again; a failed refresh keeps the chart
+ * under an inline error whose `Retry` reads again; a read without a task shows the timeline's
+ * empty text; a read stopped at `LIST_TASKS_CAP` says only the first tasks are shown, and `Fit`
+ * then speaks of the tasks shown. Dependencies are not drawn: they can only be read task by task
+ * (G5).
  */
 @Component({
   selector: 'cw-gantt-view-page',
@@ -301,6 +307,31 @@ export class GanttViewPage {
   protected readonly zoomInLabel: string = $localize`:@@spaces.gantt.zoom-in:Zoom in (Ctrl +)`;
 
   /**
+   * Property retryLabel
+   *
+   * @description
+   * Label of the inline refresh error's button.
+   *
+   * @type {string}
+   * @readonly
+   */
+  protected readonly retryLabel: string = $localize`:@@spaces.retry:Retry`;
+
+  /**
+   * Property truncatedText
+   *
+   * @description
+   * What the chart says when the read stopped at `LIST_TASKS_CAP` with tasks left out.
+   *
+   * @type {string}
+   * @readonly
+   */
+  protected readonly truncatedText: string = ((count: string): string =>
+    $localize`:@@spaces.gantt.truncated:Only the first ${count}:count: tasks are shown.`)(
+    formatNumber(LIST_TASKS_CAP, inject(LOCALE_ID)),
+  );
+
+  /**
    * Property nameWidth
    *
    * @description
@@ -333,7 +364,8 @@ export class GanttViewPage {
    * Property chart
    *
    * @description
-   * The items, groups and milestone lines of the tasks shown.
+   * The items, groups and milestone lines of the tasks shown: each subtask right after its
+   * parent, indented, unless the view shows subtasks apart.
    *
    * @type {Signal<GanttTimeline>}
    * @readonly
@@ -344,6 +376,7 @@ export class GanttViewPage {
       this.grouping(),
       this.groupOptions(),
       (value: string): string => value,
+      this.view.config().subtasks !== 'separate',
     ),
   );
 
@@ -395,14 +428,17 @@ export class GanttViewPage {
    * Property fitLabel
    *
    * @description
-   * The tooltip of `Fit`, with the dated tasks it fits.
+   * The tooltip of `Fit`, with the dated tasks it fits; only those shown when the read stopped
+   * at the cap.
    *
    * @type {Signal<string>}
    * @readonly
    */
   protected readonly fitLabel: Signal<string> = computed((): string => {
     const count: number = this.chart().datedCount;
-    return $localize`:@@spaces.gantt.fit-title:Fit to the ${count}:count: dated tasks`;
+    return this.tasks.truncated()
+      ? $localize`:@@spaces.gantt.fit-title-truncated:Fit to the ${count}:count: dated tasks shown`
+      : $localize`:@@spaces.gantt.fit-title:Fit to the ${count}:count: dated tasks`;
   });
 
   /**
@@ -610,8 +646,9 @@ export class GanttViewPage {
    * Constructor
    *
    * @description
-   * Reads every task of the list with the view's query, publishes the count to the view tools,
-   * makes `N` create in this list while the view lives and hands a task row's menu to its name.
+   * Reads every task of the list, subtasks included, with the view's query, publishes the count
+   * to the view tools, makes `N` create in this list while the view lives and hands a task row's
+   * menu to its name.
    * A failed first read is retried when the error boundary runs the route again.
    *
    * @constructor
@@ -619,7 +656,11 @@ export class GanttViewPage {
   public constructor() {
     if (this.tasks.primary.error()) this.tasks.primary.reload();
     this.tasks.load(
-      computed(() => ({ listId: this.listId(), query: this.view.taskQuery(), due: null })),
+      computed((): ListTasksRead => ({
+        listId: this.listId(),
+        query: { ...this.view.taskQuery(), level: 'all' },
+        due: null,
+      })),
     );
     this.view.followRows(this.tasks.summary);
     this.taskCreate.useDefaults(() => ({ listId: this.listId() }), this.destroyRef);
@@ -648,6 +689,19 @@ export class GanttViewPage {
    */
   protected itemOf(id: string): ListTaskItem | undefined {
     return this.chart().tasks.get(id);
+  }
+
+  /**
+   * Method depthOf
+   *
+   * @description
+   * How deep an item sits under its parents, for its indent.
+   *
+   * @param {string} id - The item id.
+   * @returns {number} The depth, 0 for a top-level task.
+   */
+  protected depthOf(id: string): number {
+    return this.chart().depths.get(id) ?? 0;
   }
 
   /**
@@ -710,7 +764,9 @@ export class GanttViewPage {
   protected fit(): void {
     if (this.timeline()?.fit()) return;
     this.toasts.show($localize`:@@spaces.gantt.nothing-to-fit:Nothing to fit`, {
-      description: $localize`:@@spaces.gantt.nothing-to-fit-text:No dated task in this list.`,
+      description: this.tasks.truncated()
+        ? $localize`:@@spaces.gantt.nothing-to-fit-truncated:No dated task among the tasks shown.`
+        : $localize`:@@spaces.gantt.nothing-to-fit-text:No dated task in this list.`,
     });
   }
 

@@ -103,6 +103,18 @@ export interface GanttTimeline {
   readonly tasks: ReadonlyMap<string, ListTaskItem>;
 
   /**
+   * Property depths
+   *
+   * @description
+   * How deep each item sits under its parents, by item id: 0 for a task whose parent is not shown
+   * above it, up to `GANTT_SUBTASK_DEPTH`; always 0 when subtasks show apart.
+   *
+   * @type {ReadonlyMap<string, number>}
+   * @readonly
+   */
+  readonly depths: ReadonlyMap<string, number>;
+
+  /**
    * Property datedCount
    *
    * @description

@@ -24,6 +24,7 @@ import { statusLabels } from '../../../constants/view-labels/view-labels.constan
 import { ListTasksApi } from '../../../data-access/services/list-tasks-api/list-tasks-api.service';
 import type { ListTaskPage } from '../../../models/list-rows/list-rows.interface';
 import { GANTT_VIEW_PROVIDERS } from '../../../state/gantt-view/gantt-view.providers';
+import { ListTasksStore } from '../../../state/list-tasks/list-tasks.store';
 import { ListPageStore } from '../../../state/list-page/list-page.store';
 import { ListViewStore } from '../../../state/list-view/list-view.store';
 import { SpacesNavigationStore } from '../../../state/spaces-navigation/spaces-navigation.store';
@@ -358,7 +359,7 @@ describe('GanttViewPage', () => {
     expect(button('Schedule')).toBeDefined();
     expect(page).toHaveBeenCalledWith(
       'sprint-14',
-      expect.objectContaining({ level: 'roots' }),
+      expect.objectContaining({ level: 'all' }),
       null,
       null,
       100,
@@ -473,5 +474,134 @@ describe('GanttViewPage', () => {
     expect(toasts['show']).toHaveBeenCalledWith('Nothing to fit', {
       description: 'No dated task in this list.',
     });
+  });
+
+  it('keeps the chart under an inline error when a refresh fails, and reads again on Retry', async () => {
+    const harness: RouterTestingHarness = await open();
+    page.mockRejectedValueOnce(new UnavailableRouteError(503, 'req-8'));
+
+    harness.routeDebugElement?.injector.get(ListTasksStore).reload();
+    await expect
+      .poll(() => {
+        harness.detectChanges();
+        return hostOf(harness).querySelector('[role="alert"]')?.textContent ?? '';
+      })
+      .toContain('The tasks could not be refreshed.');
+    expect(hostOf(harness).textContent).toContain('Redesign the SSO sign-in screen');
+
+    button('Retry')?.click();
+    await expect
+      .poll(() => {
+        harness.detectChanges();
+        return hostOf(harness).querySelector('[role="alert"]');
+      })
+      .toBeNull();
+    expect(page).toHaveBeenCalledTimes(3);
+    expect(hostOf(harness).textContent).toContain('Redesign the SSO sign-in screen');
+  });
+
+  it('says only the first tasks are shown when the read stops at the cap', async () => {
+    let read: number = 0;
+    page.mockImplementation((): Promise<ListTaskPage> => {
+      const first: number = read * 100;
+      read++;
+      return Promise.resolve({
+        items: Array.from({ length: 100 }, (_: unknown, index: number) =>
+          task(`CAD-${String(first + index + 1)}`, `Task ${String(first + index + 1)}`),
+        ),
+        nextCursor: 'more',
+        total: 2500,
+      });
+    });
+
+    const harness: RouterTestingHarness = await open();
+    await expect
+      .poll(() => {
+        harness.detectChanges();
+        return hostOf(harness).querySelector('[role="status"]')?.textContent.trim();
+      })
+      .toBe('Only the first 2,000 tasks are shown.');
+    expect(button('Fit')?.getAttribute('title')).toBe('Fit to the 0 dated tasks shown');
+
+    button('Fit')?.click();
+    expect(toasts['show']).toHaveBeenCalledWith('Nothing to fit', {
+      description: 'No dated task among the tasks shown.',
+    });
+  });
+
+  it('reads every level and draws each subtask right after its parent, indented', async () => {
+    page.mockResolvedValue({
+      items: [
+        sprintTasks[0],
+        sprintTasks[1],
+        task('CAD-486', 'Plan the SSO rollout', {
+          parentKey: 'CAD-482',
+          status: 'progress',
+          start: '2026-11-24',
+          due: '2026-11-25',
+        }),
+        task('CAD-487', 'Sign-off', {
+          parentKey: 'CAD-482',
+          status: 'progress',
+          milestone: true,
+          due: '2026-11-26',
+        }),
+      ],
+      nextCursor: null,
+      total: 4,
+    });
+
+    const harness: RouterTestingHarness = await open();
+    const rows: [string | null, string | null][] = [
+      ...hostOf(harness).querySelectorAll('[data-task-row]'),
+    ].map((element: Element): [string | null, string | null] => [
+      element.getAttribute('data-task-row'),
+      element.getAttribute('data-depth'),
+    ]);
+
+    expect(page).toHaveBeenCalledWith(
+      'sprint-14',
+      expect.objectContaining({ level: 'all' }),
+      null,
+      null,
+      100,
+      expect.any(AbortSignal),
+      null,
+    );
+    expect(rows).toEqual([
+      ['CAD-483', '0'],
+      ['CAD-482', '0'],
+      ['CAD-486', '1'],
+      ['CAD-487', '1'],
+    ]);
+    expect(
+      [...hostOf(harness).querySelectorAll('[role="img"]')].map((element: Element) =>
+        element.getAttribute('aria-label')?.replace(/\s+/gu, ' '),
+      ),
+    ).toContain('Milestone Sign-off, Nov 26');
+  });
+
+  it('draws subtasks as tasks of their own when the view shows them apart', async () => {
+    TestBed.inject(ListViewStore).setSubtasks('separate');
+    page.mockResolvedValue({
+      items: [
+        task('CAD-486', 'Plan the SSO rollout', { parentKey: 'CAD-482', due: '2026-11-25' }),
+        task('CAD-482', 'Redesign the SSO sign-in screen', { due: '2026-11-27' }),
+      ],
+      nextCursor: null,
+      total: 2,
+    });
+
+    const harness: RouterTestingHarness = await open();
+
+    expect(
+      [...hostOf(harness).querySelectorAll('[data-task-row]')].map((element: Element) => [
+        element.getAttribute('data-task-row'),
+        element.getAttribute('data-depth'),
+      ]),
+    ).toEqual([
+      ['CAD-486', '0'],
+      ['CAD-482', '0'],
+    ]);
   });
 });

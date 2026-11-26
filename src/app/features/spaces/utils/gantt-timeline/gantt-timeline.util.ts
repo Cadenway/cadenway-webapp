@@ -234,18 +234,79 @@ function groupValuesOf(item: ListTaskItem, grouping: GanttGrouping): readonly st
 }
 
 /**
+ * Constant GANTT_SUBTASK_DEPTH
+ *
+ * @description
+ * The deepest indent of a subtask under its parent, as in the `List` view; a deeper subtask
+ * keeps this indent.
+ *
+ * @type {number}
+ */
+export const GANTT_SUBTASK_DEPTH: number = 2;
+
+/**
+ * Function nestedOrderOf
+ *
+ * @description
+ * The tasks of the read with each subtask right after its parent, then its own subtasks, each
+ * list in the read's order, and the depth of each task (0 for a task whose parent is not read).
+ * Without nesting, the read's order with every depth at 0.
+ *
+ * @param {readonly ListTaskItem[]} items - The tasks as shown, in the read's order.
+ * @param {boolean} nest - Whether subtasks follow their parent.
+ * @returns {{ ordered: readonly ListTaskItem[]; depths: ReadonlyMap<string, number> }} The order
+ * and the depth of each task key.
+ */
+function nestedOrderOf(
+  items: readonly ListTaskItem[],
+  nest: boolean,
+): { ordered: readonly ListTaskItem[]; depths: ReadonlyMap<string, number> } {
+  const depths: Map<string, number> = new Map<string, number>();
+  if (!nest) {
+    for (const item of items) depths.set(item.task.key, 0);
+    return { ordered: items, depths };
+  }
+  const keys: Set<string> = new Set<string>(items.map((item: ListTaskItem) => item.task.key));
+  const children: Map<string, ListTaskItem[]> = new Map<string, ListTaskItem[]>();
+  const roots: ListTaskItem[] = [];
+  for (const item of items) {
+    const parent: string | null = item.task.parentKey;
+    if (parent !== null && parent !== item.task.key && keys.has(parent)) {
+      children.set(parent, [...(children.get(parent) ?? []), item]);
+    } else {
+      roots.push(item);
+    }
+  }
+  const ordered: ListTaskItem[] = [];
+  const visit: (item: ListTaskItem, depth: number) => void = (
+    item: ListTaskItem,
+    depth: number,
+  ): void => {
+    if (depths.has(item.task.key)) return;
+    depths.set(item.task.key, Math.min(depth, GANTT_SUBTASK_DEPTH));
+    ordered.push(item);
+    for (const child of children.get(item.task.key) ?? []) visit(child, depth + 1);
+  };
+  for (const root of roots) visit(root, 0);
+  for (const item of items) visit(item, 0);
+  return { ordered, depths };
+}
+
+/**
  * Function ganttTimelineOf
  *
  * @description
  * What the Gantt draws for the tasks of the view: one item per task and group, in the read's
- * order (an item's id is the task key, followed by `|` and the member when grouping by assignee,
- * since a task assigned to two members shows twice); the groups that hold tasks, in the order
- * of the options and then in the order met; and the dated milestones as lines.
+ * order, or with each subtask right after its parent when nesting (an item's id is the task key,
+ * followed by `|` and the member when grouping by assignee, since a task assigned to two members
+ * shows twice); the depth of each item under its parents; the groups that hold tasks, in the
+ * order of the options and then in the order met; and the dated milestones as lines.
  *
  * @param {readonly ListTaskItem[]} items - The tasks as shown.
  * @param {GanttGrouping} grouping - What the groups follow.
  * @param {readonly GanttGroupOption[]} options - The known groups, in order.
  * @param {(value: string) => string} fallbackLabel - The name of a group the options lack.
+ * @param {boolean} [nest] - Whether subtasks follow their parent, indented.
  * @returns {GanttTimeline} The timeline.
  */
 export function ganttTimelineOf(
@@ -253,14 +314,20 @@ export function ganttTimelineOf(
   grouping: GanttGrouping,
   options: readonly GanttGroupOption[],
   fallbackLabel: (value: string) => string,
+  nest: boolean = false,
 ): GanttTimeline {
+  const order: { ordered: readonly ListTaskItem[]; depths: ReadonlyMap<string, number> } =
+    nestedOrderOf(items, nest);
+  const ordered: readonly ListTaskItem[] = order.ordered;
+  const taskDepths: ReadonlyMap<string, number> = order.depths;
+  const depths: Map<string, number> = new Map<string, number>();
   const timelineItems: CwTimelineItem[] = [];
   const tasks: Map<string, ListTaskItem> = new Map<string, ListTaskItem>();
   const used: Set<string> = new Set<string>();
   const met: string[] = [];
   const milestones: CwMilestone[] = [];
   const dated: Set<string> = new Set<string>();
-  for (const item of items) {
+  for (const item of ordered) {
     const task: TaskSummary = item.task;
     const dates: { start: Date; end: Date } | null = datesOf(task);
     if (dates && !dated.has(task.key)) {
@@ -271,6 +338,7 @@ export function ganttTimelineOf(
       const id: string = grouping === 'assignee' ? `${task.key}|${group}` : task.key;
       if (tasks.has(id)) continue;
       tasks.set(id, item);
+      depths.set(id, taskDepths.get(task.key) ?? 0);
       if (!used.has(group)) {
         used.add(group);
         met.push(group);
@@ -298,5 +366,5 @@ export function ganttTimelineOf(
       .filter((value: string): boolean => !known.has(value))
       .map((value: string): CwTimelineGroup => ({ id: value, label: fallbackLabel(value) })),
   ];
-  return { items: timelineItems, groups, milestones, tasks, datedCount: dated.size };
+  return { items: timelineItems, groups, milestones, tasks, depths, datedCount: dated.size };
 }

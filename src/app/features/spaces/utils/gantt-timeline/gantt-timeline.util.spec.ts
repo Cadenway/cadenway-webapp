@@ -184,4 +184,50 @@ describe('gantt-timeline util', () => {
     expect(timeline.tasks.get('CAD-482|u-camille')?.task.key).toBe('CAD-482');
     expect(timeline.datedCount).toBe(1);
   });
+
+  it('puts each subtask right after its parent when nesting, at most two levels deep', () => {
+    const items: readonly ListTaskItem[] = [
+      shown(task('CAD-488', { parentKey: 'CAD-486' })),
+      shown(task('CAD-482')),
+      shown(task('CAD-486', { parentKey: 'CAD-482' })),
+      shown(task('CAD-489', { parentKey: 'CAD-488' })),
+      shown(task('CAD-490', { parentKey: 'CAD-999' })),
+      shown(task('CAD-483')),
+    ];
+
+    const nested: GanttTimeline = ganttTimelineOf(items, 'all', [], String, true);
+    expect(nested.items.map((item) => [item.id, nested.depths.get(item.id)])).toEqual([
+      ['CAD-482', 0],
+      ['CAD-486', 1],
+      ['CAD-488', 2],
+      ['CAD-489', 2],
+      ['CAD-490', 0],
+      ['CAD-483', 0],
+    ]);
+
+    const apart: GanttTimeline = ganttTimelineOf(items, 'all', [], String);
+    expect(apart.items.map((item) => [item.id, apart.depths.get(item.id)])).toEqual([
+      ['CAD-488', 0],
+      ['CAD-482', 0],
+      ['CAD-486', 0],
+      ['CAD-489', 0],
+      ['CAD-490', 0],
+      ['CAD-483', 0],
+    ]);
+  });
+
+  it('keeps every task once when subtasks point at each other', () => {
+    const nested: GanttTimeline = ganttTimelineOf(
+      [
+        shown(task('CAD-482', { parentKey: 'CAD-486' })),
+        shown(task('CAD-486', { parentKey: 'CAD-482' })),
+      ],
+      'all',
+      [],
+      String,
+      true,
+    );
+
+    expect(nested.items.map((item) => item.id)).toEqual(['CAD-482', 'CAD-486']);
+  });
 });

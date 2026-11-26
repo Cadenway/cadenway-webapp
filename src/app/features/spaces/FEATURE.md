@@ -119,18 +119,24 @@ constants belong to the lead):
 ## Gantt view
 
 The `Gantt` view (`ui/pages/gantt-view-page`, `App.dc.html` lines 830-956, 6417-6600 and
-9223-9280) draws every task of the list with the view's `taskQuery` on `cw-timeline`.
+9223-9280) draws every task of the list with the view's `taskQuery` on `cw-timeline`, subtasks
+included: it reads every level (`level: 'all'`) whatever the subtask display.
 
 - Providers: `GANTT_VIEW_PROVIDERS` adds `ListTasksApi`, `ListTasksStore` (no due window, so the
   undated tasks are read too) and `GanttViewStore` to Task's `TaskStatusChangesStore`. The page
   provides `ViewTaskWritesStore` over `ListTasksStore` and the English texts of `cw-timeline`
   (`GANTT_TIMELINE_LABELS`, `constants/gantt-labels`). It publishes `ListTasksStore.summary` with
-  `followRows`, and `N` creates in the list.
+  `followRows` (its count includes the subtasks read), and `N` creates in the list.
 - `GanttViewStore` (`state/gantt-view`, route-scoped) keeps the scale, the zoom on the mockup's
   ladder (`GANTT_ZOOM_LADDER`), the period (null for the scale's period around today) and the
   folded groups of each grouping (`Cancelled` by status). Nothing is saved, as in the mockup.
 - Rows: `ganttTimelineOf` (`utils/gantt-timeline`) groups the tasks by the view's `groupBy` (one
-  `All tasks` group without it; a task shows under each assignee). A row shows the status, name,
+  `All tasks` group without it; a task shows under each assignee). With the subtasks folded or
+  unfolded under their parent (`nested`, `expanded`), each subtask follows its parent, then its own
+  subtasks, indented up to two levels (`GANTT_SUBTASK_DEPTH`); a subtask whose parent is not read
+  is a top-level row. With subtasks apart (`separate`), the rows follow the read's order, not
+  indented. Within a group, `cw-timeline` lists the dated rows before the undated ones, so a
+  subtask follows its parent when both are dated or both undated. A row shows the status, name,
   key and duration. Its bar runs from the start date (when it is not after the due date) to the
   due date; a milestone holds its due date. A task without a due date offers `Schedule`. The bar
   fill is `taskProgress`: done 100 %, cancelled 0, then the closed share of the subtasks, then of
@@ -150,8 +156,11 @@ The `Gantt` view (`ui/pages/gantt-view-page`, `App.dc.html` lines 830-956, 6417-
   `cw-task-menu` (handed to the row's name in the capture phase). Elsewhere, the chart menu opens
   with `Go to today`, `Scale` and `New task`.
 - States: the first read shows the timeline's skeleton. A failed one reaches the route's error
-  boundary, whose `Retry` reads again. A read without a task shows `No task matches the search or
-the filters.`
+  boundary, whose `Retry` reads again. A failed refresh keeps the chart under the inline error
+  `The tasks could not be refreshed.` whose `Retry` reads the current query again. A read without
+  a task shows `No task matches the search or the filters.` A read stopped at `LIST_TASKS_CAP`
+  says `Only the first 2,000 tasks are shown.`; `Fit` then fits the dated tasks shown, and
+  `Nothing to fit` says no dated task is among the tasks shown.
 - Known gaps:
   - Dependencies are not drawn (G5). They can only be read task by task (`listTaskDependencies`,
     up to 2,000 calls a read), and their facts are not relayed. The `Dependencies` toggle, the
@@ -161,9 +170,11 @@ the filters.`
   - The duration column shows `1 d` for a milestone (`Jalon` in the mockup). An undated task
     shows nothing (`—` in the mockup).
   - The bars' accessible names come from the brick, not the mockup's wording.
+  - `cw-timeline` has no row level for a subtask: its indent is in the name cell only.
 
 | Unit                                                                                                                                                                                                                                                                          | Reason                                                         |
 | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- |
+| `spaces.gantt.truncated`, `spaces.gantt.fit-title-truncated`, `spaces.gantt.nothing-to-fit-truncated`                                                                                                                                                                         | The mockup reads every task; it draws no capped read.          |
 | `spaces.gantt.undated`, `spaces.gantt.week`, `spaces.gantt.late*`, `spaces.gantt.conflict*`, `spaces.gantt.moved`, `spaces.gantt.scale-announce`, `spaces.gantt.zoom-announce`, `spaces.gantt.percent`, `spaces.gantt.move`, `spaces.gantt.fitted*`, `spaces.gantt.milestone` | The brick's own texts, which the mockup does not show as copy. |
 
 ### Share dialog
