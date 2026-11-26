@@ -419,6 +419,26 @@ const initialState: TaskTimeState = {
 };
 
 /**
+ * Function logOf
+ *
+ * @description
+ * The log of a list of entries, its total summed from them: the read lists every entry of the
+ * task, so an entry a read already carries is never counted twice when its write answers later.
+ *
+ * @param {readonly TaskTimeEntry[]} entries - The entries, newest first.
+ * @returns {TaskTimeLog} The log.
+ */
+function logOf(entries: readonly TaskTimeEntry[]): TaskTimeLog {
+  return {
+    entries,
+    totalMinutes: entries.reduce(
+      (sum: number, item: TaskTimeEntry): number => sum + item.minutes,
+      0,
+    ),
+  };
+}
+
+/**
  * Function createTaskTimeStore
  *
  * @description
@@ -590,16 +610,17 @@ function createTaskTimeStore(): Type<TaskTimeStoreInstance> {
           if (sent !== null && attempt === sent) attempt = null;
           confirmWrite(key);
           if (!current(key)) return entry;
-          const log: TaskTimeLog = store.log() ?? { entries: [], totalMinutes: 0 };
+          const log: TaskTimeLog | null = store.log();
           patchState(store, {
             pending: false,
-            log: {
-              entries: [
-                entry,
-                ...log.entries.filter((item: TaskTimeEntry) => item.id !== entry.id),
-              ],
-              totalMinutes: log.totalMinutes + entry.minutes,
-            },
+            ...(log
+              ? {
+                  log: logOf([
+                    entry,
+                    ...log.entries.filter((item: TaskTimeEntry) => item.id !== entry.id),
+                  ]),
+                }
+              : {}),
           });
           return entry;
         } catch {
@@ -617,10 +638,7 @@ function createTaskTimeStore(): Type<TaskTimeStoreInstance> {
         const before: TaskTimeLog | null = shown ? store.log() : null;
         if (before) {
           patchState(store, {
-            log: {
-              entries: before.entries.filter((item: TaskTimeEntry) => item.id !== entry.id),
-              totalMinutes: Math.max(0, before.totalMinutes - entry.minutes),
-            },
+            log: logOf(before.entries.filter((item: TaskTimeEntry) => item.id !== entry.id)),
           });
         }
         try {

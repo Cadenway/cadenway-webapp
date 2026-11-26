@@ -370,6 +370,28 @@ describe('TaskTimeStore', () => {
     expect(store.totalMinutes()).toBe(135);
   });
 
+  it('counts an entry once when a read carrying it lands before its write answers', async () => {
+    create();
+    await settle();
+    const recorded: TaskTimeEntry = { ...entry, id: 'e2', minutes: 90, note: 'OAuth buttons' };
+    let answer: (saved: TaskTimeEntry) => void = () => undefined;
+    api.record.mockReturnValueOnce(
+      new Promise<TaskTimeEntry>((resolve: (saved: TaskTimeEntry) => void) => {
+        answer = resolve;
+      }),
+    );
+    const added: Promise<boolean> = store.add({ minutes: 90, note: 'OAuth buttons' });
+    api.log.mockResolvedValueOnce({ entries: [recorded, entry], totalMinutes: 135 });
+    await store.reload();
+    expect(store.totalMinutes()).toBe(135);
+
+    answer(recorded);
+    expect(await added).toBe(true);
+
+    expect(store.totalMinutes()).toBe(135);
+    expect(store.log()?.entries.map((item: TaskTimeEntry) => item.id)).toEqual(['e2', 'e1']);
+  });
+
   it('finds a running timer when the task opens again', async () => {
     localStorage.setItem(storageKey, '1762592400000');
     create();
