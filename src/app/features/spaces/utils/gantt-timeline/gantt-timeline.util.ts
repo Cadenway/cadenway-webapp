@@ -351,12 +351,14 @@ function nestedOrderOf(
  * Function ganttTimelineOf
  *
  * @description
- * What the Gantt draws for the tasks of the view: one item per task and group, in the read's
- * order, or with each subtask right after its parent when nesting, the subtasks of a folded
- * parent left out (an item's id is the task key, followed by `|` and the member when grouping
- * by assignee, since a task assigned to two members shows twice); the depth of each item under
- * its parents and the parents drawn; the groups that hold tasks, in the order of the options and
- * then in the order met; and the dated milestones drawn, as lines.
+ * What the Gantt draws for the tasks of the view: one item per task and group (an item's id is
+ * the task key, followed by `|` and the member when grouping by assignee, since a task assigned
+ * to two members shows twice). Within each group, in the read's order, or with each subtask right
+ * after its parent when nesting and the subtasks of a folded parent left out: a subtask nests
+ * under its parent only when both are in the group, else it is a top-level row of its own group,
+ * which no fold of another group hides. Also the depth of each item under its parents and the
+ * parents drawn; the groups that hold tasks, in the order of the options and then in the order
+ * met; and the dated milestones drawn, as lines.
  *
  * @param {readonly ListTaskItem[]} items - The tasks as shown.
  * @param {GanttGrouping} grouping - What the groups follow.
@@ -373,35 +375,42 @@ export function ganttTimelineOf(
   fallbackLabel: (value: string) => string,
   subtasksOpen: ((taskKey: string) => boolean) | null = null,
 ): GanttTimeline {
-  const order: NestedOrder = nestedOrderOf(items, subtasksOpen);
-  const ordered: readonly ListTaskItem[] = order.ordered;
-  const taskDepths: ReadonlyMap<string, number> = order.depths;
+  const members: Map<string, ListTaskItem[]> = new Map<string, ListTaskItem[]>();
+  const met: string[] = [];
+  for (const item of items) {
+    for (const group of new Set<string>(groupValuesOf(item, grouping))) {
+      const list: ListTaskItem[] | undefined = members.get(group);
+      if (list) {
+        list.push(item);
+      } else {
+        members.set(group, [item]);
+        met.push(group);
+      }
+    }
+  }
   const parents: Map<string, GanttParent> = new Map<string, GanttParent>();
   const depths: Map<string, number> = new Map<string, number>();
   const timelineItems: CwTimelineItem[] = [];
   const tasks: Map<string, ListTaskItem> = new Map<string, ListTaskItem>();
   const used: Set<string> = new Set<string>();
-  const met: string[] = [];
   const milestones: CwMilestone[] = [];
   const dated: Set<string> = new Set<string>();
-  for (const item of ordered) {
-    const task: TaskSummary = item.task;
-    const dates: { start: Date; end: Date } | null = datesOf(task);
-    if (dates && !dated.has(task.key)) {
-      dated.add(task.key);
-      if (task.milestone) milestones.push({ id: task.key, label: task.name, date: dates.end });
-    }
-    for (const group of groupValuesOf(item, grouping)) {
+  for (const group of met) {
+    const order: NestedOrder = nestedOrderOf(members.get(group) ?? [], subtasksOpen);
+    for (const item of order.ordered) {
+      const task: TaskSummary = item.task;
       const id: string = grouping === 'assignee' ? `${task.key}|${group}` : task.key;
       if (tasks.has(id)) continue;
+      const dates: { start: Date; end: Date } | null = datesOf(task);
+      if (dates && !dated.has(task.key)) {
+        dated.add(task.key);
+        if (task.milestone) milestones.push({ id: task.key, label: task.name, date: dates.end });
+      }
       tasks.set(id, item);
-      depths.set(id, taskDepths.get(task.key) ?? 0);
+      depths.set(id, order.depths.get(task.key) ?? 0);
       const parent: GanttParent | undefined = order.parents.get(task.key);
       if (parent) parents.set(id, parent);
-      if (!used.has(group)) {
-        used.add(group);
-        met.push(group);
-      }
+      used.add(group);
       timelineItems.push({
         id,
         name: task.name,

@@ -549,6 +549,20 @@ export class GanttViewPage {
   );
 
   /**
+   * Property menuTitle
+   *
+   * @description
+   * The title of a parent row's menu, as the task menu writes it: `CAD-482 · <name>`.
+   *
+   * @type {Signal<string>}
+   * @readonly
+   */
+  protected readonly menuTitle: Signal<string> = computed((): string => {
+    const task: TaskSummary | undefined = this.menuTasks().at(0);
+    return task ? `${task.key} · ${task.name}` : '';
+  });
+
+  /**
    * Property timeline
    *
    * @description
@@ -688,6 +702,7 @@ export class GanttViewPage {
     this.taskCreate.useDefaults(() => ({ listId: this.listId() }), this.destroyRef);
     const element: HTMLElement = this.host.nativeElement;
     const delegate: (event: Event) => void = (event: Event): void => {
+      this.openUndatedOnEnter(event);
       this.delegateRowMenu(event);
     };
     element.addEventListener('contextmenu', delegate, true);
@@ -767,6 +782,18 @@ export class GanttViewPage {
     return parent?.open
       ? $localize`:@@spaces.rows.hide-subtasks:Hide the ${count}:count: subtasks of ${key}:key:`
       : $localize`:@@spaces.rows.show-subtasks:Show the ${count}:count: subtasks of ${key}:key:`;
+  }
+
+  /**
+   * Method toggleMenuSubtasks
+   *
+   * @description
+   * `Show the n subtasks` / `Hide the n subtasks` of a parent row's menu: the chevron's toggle,
+   * for the keyboard.
+   */
+  protected toggleMenuSubtasks(): void {
+    const id: string | null = this.menuItem();
+    if (id !== null) this.toggleSubtasks(id);
   }
 
   /**
@@ -922,13 +949,47 @@ export class GanttViewPage {
   }
 
   /**
+   * Method openUndatedOnEnter
+   *
+   * @description
+   * Enter on an undated task row opens the task, as on any other row: `cw-timeline` would
+   * schedule it instead, so the key stops here, in the capture phase. Scheduling stays on the
+   * row's `Schedule` button.
+   *
+   * @param {Event} event - A `keydown` or `contextmenu` event inside the view.
+   */
+  private openUndatedOnEnter(event: Event): void {
+    if (
+      !(event instanceof KeyboardEvent) ||
+      event.key !== 'Enter' ||
+      event.defaultPrevented ||
+      event.altKey ||
+      event.ctrlKey ||
+      event.metaKey ||
+      event.shiftKey
+    ) {
+      return;
+    }
+    const target: EventTarget | null = event.target;
+    if (!(target instanceof HTMLElement) || target.getAttribute('role') !== 'row') return;
+    const name: HTMLElement | null = target.querySelector<HTMLElement>(
+      '[data-row-menu][data-undated]',
+    );
+    if (!name) return;
+    event.preventDefault();
+    event.stopPropagation();
+    name.click();
+  }
+
+  /**
    * Method delegateRowMenu
    *
    * @description
-   * Makes a whole task row open the task menu, as the mockup's bars and names do (`App.dc.html`
+   * Makes a whole task row open its menu, as the mockup's bars and names do (`App.dc.html`
    * lines 897, 909): a right click, the Menu key or Shift F10 on a bar or anywhere in a task row
-   * is handed to the row's name, which holds the menu's trigger, and the chart menu does not
-   * open. Elsewhere (a group row, the empty chart) the event goes on to the chart menu. Runs in
+   * is handed to the row's name, which holds the menu's trigger (the task menu, or for a parent
+   * the row menu with `Show` / `Hide the n subtasks` and the task menu as a submenu), and the
+   * chart menu does not open. Elsewhere (a group row, the empty chart) the event goes on to the chart menu. Runs in
    * the capture phase, since `cw-timeline` offers no item menu.
    *
    * @param {Event} event - A `contextmenu` or `keydown` event inside the view.

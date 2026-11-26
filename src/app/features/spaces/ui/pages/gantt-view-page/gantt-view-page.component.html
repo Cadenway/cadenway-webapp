@@ -193,7 +193,8 @@
           class="flex min-w-0 flex-1 items-center gap-2 rounded-md px-1 py-1 text-left text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none focus-visible:ring-inset"
           [attr.data-task-row]="shown?.task?.key ?? null"
           [attr.data-depth]="depth"
-          [cwContextMenuTriggerFor]="taskMenu.menu()"
+          [attr.data-undated]="item.end ? null : ''"
+          [cwContextMenuTriggerFor]="parent ? rowMenu : taskMenu.menu()"
           (opened)="menuItem.set(item.id)"
           (click)="open(item)"
         >
@@ -233,6 +234,24 @@
       <button cwMenuItemRadio type="button" [value]="option.value">{{ option.label }}</button>
     }
   </cw-menu-radio-group>
+</cw-menu>
+
+<cw-menu #rowMenu ariaLabel="Task actions" i18n-ariaLabel="@@spaces.rows.menu">
+  <cw-menu-label>{{ menuTitle() }}</cw-menu-label>
+  @if (menuItem(); as id) {
+    <button cwMenuItem type="button" (triggered)="toggleMenuSubtasks()">
+      <ng-icon
+        [name]="parentOf(id)?.open ? 'phosphorCaretDownBold' : 'phosphorCaretRightBold'"
+        aria-hidden="true"
+      />
+      {{ subtasksLabel(id) }}
+    </button>
+  }
+  <cw-menu-separator />
+  <button cwMenuItem type="button" [cwMenuTriggerFor]="taskMenu.menu()">
+    <ng-icon name="phosphorDotsThreeBold" aria-hidden="true" />
+    <ng-container i18n="@@spaces.rows.menu">Task actions</ng-container>
+  </button>
 </cw-menu>
 
 <cw-task-menu

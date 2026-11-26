@@ -2,6 +2,7 @@ import { Component, input, type InputSignal, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import {
   provideRouter,
+  Router,
   withComponentInputBinding,
   withErrorBoundaries,
   withRouterConfig,
@@ -642,6 +643,57 @@ describe('GanttViewPage', () => {
         element.getAttribute('aria-label')?.replace(/\s+/gu, ' '),
       ),
     ).toContain('Milestone Sign-off, Nov 26');
+  });
+
+  it('folds and unfolds the subtasks of a parent from its keyboard menu', async () => {
+    page.mockResolvedValue({
+      items: [
+        sprintTasks[0],
+        task('CAD-486', 'Plan the SSO rollout', {
+          parentKey: 'CAD-482',
+          status: 'progress',
+          due: '2026-11-25',
+        }),
+      ],
+      nextCursor: null,
+      total: 2,
+    });
+    const harness: RouterTestingHarness = await open();
+    const menuItem: (name: string) => HTMLElement | undefined = (name: string) =>
+      [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(
+        (element: HTMLElement): boolean => element.textContent.trim() === name,
+      );
+
+    key(barOf(harness, 'CAD-482'), 'F10', { shiftKey: true });
+    await settle(harness);
+    expect(menuItem('Task actions')).toBeDefined();
+    menuItem('Show the 1 subtasks of CAD-482')?.click();
+    await settle(harness);
+
+    expect(rowsOf(harness)).toEqual([
+      ['CAD-482', '0'],
+      ['CAD-486', '1'],
+    ]);
+    key(barOf(harness, 'CAD-482'), 'F10', { shiftKey: true });
+    await settle(harness);
+    menuItem('Hide the 1 subtasks of CAD-482')?.click();
+    await settle(harness);
+    expect(rowsOf(harness)).toEqual([['CAD-482', '0']]);
+  });
+
+  it('opens an undated task on Enter and schedules nothing', async () => {
+    const harness: RouterTestingHarness = await open();
+    const row: Element | null | undefined = hostOf(harness)
+      .querySelector('[data-task-row="CAD-485"]')
+      ?.closest('[role="row"]');
+
+    row?.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }),
+    );
+    await settle(harness);
+
+    await expect.poll(() => TestBed.inject(Router).url).toContain('task=CAD-485');
+    expect(update).not.toHaveBeenCalled();
   });
 
   it('shows every subtask under its parent when the view unfolds them', async () => {

@@ -244,6 +244,54 @@ describe('gantt-timeline util', () => {
     ]);
   });
 
+  it('nests a subtask only under a parent of the same group, never hidden by another group', () => {
+    const items: readonly ListTaskItem[] = [
+      shown(task('CAD-482', { status: 'cancelled' })),
+      shown(task('CAD-486', { parentKey: 'CAD-482', status: 'progress' })),
+      shown(task('CAD-487', { parentKey: 'CAD-482', status: 'cancelled' })),
+    ];
+    const statuses: readonly { value: string; label: string }[] = [
+      { value: 'progress', label: 'In progress' },
+      { value: 'cancelled', label: 'Cancelled' },
+    ];
+
+    const folded: GanttTimeline = ganttTimelineOf(items, 'status', statuses, String, () => false);
+    expect(folded.items.map((item) => [item.id, item.group, folded.depths.get(item.id)])).toEqual([
+      ['CAD-482', 'cancelled', 0],
+      ['CAD-486', 'progress', 0],
+    ]);
+    expect([...folded.parents]).toEqual([['CAD-482', { open: false, count: 1 }]]);
+
+    const open: GanttTimeline = ganttTimelineOf(items, 'status', statuses, String, () => true);
+    expect(open.items.map((item) => [item.id, item.group, open.depths.get(item.id)])).toEqual([
+      ['CAD-482', 'cancelled', 0],
+      ['CAD-487', 'cancelled', 1],
+      ['CAD-486', 'progress', 0],
+    ]);
+  });
+
+  it('nests a subtask under each assignee it shares with its parent only', () => {
+    const timeline: GanttTimeline = ganttTimelineOf(
+      [
+        shown(task('CAD-482', { assigneeIds: ['u-ines'] })),
+        shown(task('CAD-486', { parentKey: 'CAD-482', assigneeIds: ['u-ines', 'u-camille'] })),
+      ],
+      'assignee',
+      [
+        { value: 'u-ines', label: 'Inès Robert' },
+        { value: 'u-camille', label: 'Camille Martin' },
+      ],
+      String,
+      () => false,
+    );
+
+    expect(timeline.items.map((item) => [item.id, timeline.depths.get(item.id)])).toEqual([
+      ['CAD-482|u-ines', 0],
+      ['CAD-486|u-camille', 0],
+    ]);
+    expect([...timeline.parents.keys()]).toEqual(['CAD-482|u-ines']);
+  });
+
   it('keeps every task once when subtasks point at each other', () => {
     const nested: GanttTimeline = ganttTimelineOf(
       [
