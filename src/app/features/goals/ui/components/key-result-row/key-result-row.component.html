@@ -1,0 +1,117 @@
+@let item = result();
+<ng-icon [name]="icon()" class="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+<span class="flex min-w-0 flex-1 flex-col">
+  <span class="text-sm">{{ item.label }}</span>
+  @if (hint()) {
+    <span class="text-xs text-muted-foreground">{{ hint() }}</span>
+  }
+</span>
+@switch (item.kind) {
+  @case ('number') {
+    <span class="flex shrink-0 items-center gap-0.5">
+      @if (canWrite()) {
+        <button
+          cwButton
+          type="button"
+          variant="ghost"
+          size="icon-sm"
+          class="text-muted-foreground"
+          [attr.aria-label]="decreaseLabel()"
+          data-testid="result-decrease"
+          (click)="stepped.emit(-1)"
+        >
+          <ng-icon name="phosphorMinusBold" aria-hidden="true" />
+        </button>
+      }
+      <span
+        class="min-w-16 text-center text-sm font-medium tabular-nums"
+        data-testid="result-value"
+        >{{ value() }}</span
+      >
+      @if (canWrite()) {
+        <button
+          cwButton
+          type="button"
+          variant="ghost"
+          size="icon-sm"
+          class="text-muted-foreground"
+          [attr.aria-label]="increaseLabel()"
+          data-testid="result-increase"
+          (click)="stepped.emit(1)"
+        >
+          <ng-icon name="phosphorPlusBold" aria-hidden="true" />
+        </button>
+      }
+    </span>
+  }
+  @case ('checkbox') {
+    <span class="inline-flex h-7 shrink-0 items-center gap-2 rounded-md px-2 text-sm">
+      <cw-checkbox
+        [checked]="item.checked"
+        [disabled]="!canWrite()"
+        [ariaLabel]="item.label"
+        data-testid="result-checkbox"
+        (checkedChange)="toggled.emit()"
+      />
+      <span data-testid="result-value">{{ value() }}</span>
+    </span>
+  }
+  @case ('milestone') {
+    <button
+      cwButton
+      type="button"
+      variant="outline"
+      size="sm"
+      class="h-7 shrink-0 px-2.5 text-xs"
+      data-testid="result-milestone"
+      (click)="milestoneOpened.emit(item.taskKey)"
+    >
+      <span
+        class="size-2.5 rotate-45 rounded-[2px] border-[1.5px] border-current"
+        aria-hidden="true"
+      ></span>
+      <span data-testid="result-value">{{ value() }}</span>
+    </button>
+  }
+  @case ('list-progress') {
+    <button
+      cwButton
+      type="button"
+      variant="outline"
+      size="sm"
+      class="h-7 shrink-0 px-2.5 text-xs tabular-nums"
+      [attr.aria-label]="openListLabel()"
+      data-testid="result-list"
+      (click)="listOpened.emit(item.listId)"
+    >
+      <span data-testid="result-value">{{ value() }}</span>
+      <ng-icon name="phosphorArrowRightBold" class="size-3" aria-hidden="true" />
+    </button>
+  }
+}
+<span class="flex w-24 shrink-0 items-center gap-2">
+  <cw-progress
+    class="min-w-0 flex-1"
+    size="sm"
+    [value]="percent()"
+    [ariaLabel]="progressLabel()"
+    [valueText]="percentText()"
+  />
+  <span class="w-9 text-right text-xs text-muted-foreground tabular-nums">{{ percentText() }}</span>
+</span>
+@if (canWrite()) {
+  <button
+    cwButton
+    type="button"
+    variant="ghost"
+    size="icon-sm"
+    class="text-muted-foreground opacity-0 group-hover/kr:opacity-100 focus-visible:opacity-100 max-md:opacity-100"
+    title="Remove"
+    i18n-title="@@goals.result.remove-title"
+    [attr.aria-label]="removeLabel()"
+    data-testid="result-remove"
+    (click)="removed.emit()"
+  >
+    <ng-icon name="phosphorXBold" aria-hidden="true" />
+  </button>
+}
