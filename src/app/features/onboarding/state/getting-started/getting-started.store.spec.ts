@@ -10,7 +10,7 @@ import { TestBed } from '@angular/core/testing';
 import { provideRouter, Router } from '@angular/router';
 import { CwToastService } from '@cadenway/ui/components/toast';
 import { Subject } from 'rxjs';
-import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 
 import { OrganizationPin } from '@core/api';
 import type { CreatedTask } from '@features/task';
@@ -683,15 +683,92 @@ describe('GettingStartedStore', () => {
       expect(store.items()[0]).toEqual({ key: 'task', done: true });
     });
 
-    it('reads nothing more once the first task is recorded', async () => {
+    it('reads nothing more after a task is created once the first task is recorded', async () => {
       shown = progress(5, { firstTaskCreated: true });
       await setup();
 
       created.next({} as CreatedTask);
-      showTab();
       await settle();
 
       expect(api.get).toHaveBeenCalledTimes(1);
+    });
+
+    describe('changes made in another tab', () => {
+      let now: number;
+
+      beforeEach(() => {
+        now = Date.parse('2026-11-08T09:00:00Z');
+        vi.spyOn(Date, 'now').mockImplementation((): number => now);
+      });
+
+      afterEach(() => {
+        vi.restoreAllMocks();
+      });
+
+      it('shows a dismissal made elsewhere once the tab shows again', async () => {
+        shown = progress(5, { firstTaskCreated: true });
+        const store: GettingStartedStore = await setup();
+        expect(store.visible()).toBe(true);
+        shown = progress(6, { firstTaskCreated: true, presentation: 'dismissed' });
+
+        showTab();
+        await settle();
+
+        expect(api.get).toHaveBeenCalledTimes(2);
+        expect(store.visible()).toBe(false);
+      });
+
+      it('shows an invitation and a board visit made elsewhere', async () => {
+        shown = progress(5, { firstTaskCreated: true });
+        const store: GettingStartedStore = await setup();
+        shown = progress(7, { firstTaskCreated: true, invitationSent: true, boardTried: true });
+
+        showTab();
+        await settle();
+
+        expect(store.items()).toEqual([
+          { key: 'task', done: true },
+          { key: 'invite', done: true },
+          { key: 'board', done: true },
+        ]);
+      });
+
+      it('reads at most once every 30 seconds', async () => {
+        shown = progress(5, { firstTaskCreated: true });
+        await setup();
+
+        showTab();
+        await settle();
+        now = Date.parse('2026-11-08T09:00:29Z');
+        showTab();
+        await settle();
+        expect(api.get).toHaveBeenCalledTimes(2);
+
+        now = Date.parse('2026-11-08T09:00:30Z');
+        showTab();
+        await settle();
+        expect(api.get).toHaveBeenCalledTimes(3);
+      });
+
+      it('reads nothing when the tab shows again once the checklist was dismissed', async () => {
+        shown = progress(5, { firstTaskCreated: true, presentation: 'dismissed' });
+        await setup();
+
+        showTab();
+        await settle();
+
+        expect(api.get).toHaveBeenCalledTimes(1);
+      });
+
+      it('reads nothing when the tab shows again while the assistant is in progress', async () => {
+        shown = progress(2, {}, 'in-progress');
+        await setup();
+
+        showTab();
+        await settle();
+
+        expect(api.get).toHaveBeenCalledTimes(1);
+      });
     });
 
     it('reads the progress again when the tab shows again', async () => {

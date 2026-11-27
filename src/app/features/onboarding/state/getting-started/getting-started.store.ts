@@ -73,6 +73,17 @@ const BOARD_SEGMENT: string = 'board';
 const INVITE_BATCH_SIZE: number = 50;
 
 /**
+ * Constant SHOWN_REFRESH_INTERVAL
+ *
+ * @description
+ * Shortest time, in milliseconds, between two reads of the progress when the tab becomes visible
+ * while the checklist applies (a change made in another tab): 30 seconds.
+ *
+ * @type {number}
+ */
+const SHOWN_REFRESH_INTERVAL: number = 30_000;
+
+/**
  * Type ToastTone
  *
  * @description
@@ -243,6 +254,17 @@ interface GettingStartedLifecycle {
    * @type {boolean}
    */
   destroyed: boolean;
+
+  /**
+   * Property shownReadAt
+   *
+   * @description
+   * When the tab becoming visible last read the progress while the checklist applied, in
+   * milliseconds since the epoch; negative infinity before the first such read.
+   *
+   * @type {number}
+   */
+  shownReadAt: number;
   // #endregion
 }
 
@@ -409,7 +431,10 @@ function createGettingStartedStore(): Type<GettingStartedStoreInstance> {
     }),
     withProps(() => {
       const router: Router = inject(Router);
-      const lifecycle: GettingStartedLifecycle = { destroyed: false };
+      const lifecycle: GettingStartedLifecycle = {
+        destroyed: false,
+        shownReadAt: Number.NEGATIVE_INFINITY,
+      };
       return {
         _onboarding: inject(OnboardingStore),
         _workspace: inject<WorkspaceContextPort>(WORKSPACE_CONTEXT),
@@ -569,8 +594,19 @@ function createGettingStartedStore(): Type<GettingStartedStoreInstance> {
         );
       };
 
-      const refresh: () => Promise<void> = async (): Promise<void> => {
-        if (store._onboarding.failed() || store._taskToRefresh()) {
+      // `shown` is the tab becoming visible: while the checklist applies, it also reads a progress
+      // whose first task is recorded, so a dismissal, an invitation or a board visit made in
+      // another tab shows here; at most once per `SHOWN_REFRESH_INTERVAL`, and never by polling.
+      const refresh: (shown?: boolean) => Promise<void> = async (
+        shown: boolean = false,
+      ): Promise<void> => {
+        const now: number = Date.now();
+        const otherTab: boolean =
+          shown &&
+          store._checklist() !== null &&
+          now - store._lifecycle.shownReadAt >= SHOWN_REFRESH_INTERVAL;
+        if (store._onboarding.failed() || store._taskToRefresh() || otherTab) {
+          if (shown && store._checklist() !== null) store._lifecycle.shownReadAt = now;
           await store._onboarding.reload();
         }
         await store._onboarding.retryOwedInvitation();
@@ -770,7 +806,7 @@ function createGettingStartedStore(): Type<GettingStartedStoreInstance> {
             takeUntilDestroyed(),
           )
           .subscribe((): void => {
-            void store._refresh();
+            void store._refresh(true);
           });
       },
       onDestroy(store): void {
@@ -795,7 +831,9 @@ function createGettingStartedStore(): Type<GettingStartedStoreInstance> {
  * `boardTried` on each navigation to a list's `Board` view (and for the address shown when the
  * progress arrives) while the marker is not recorded, and reads the progress again after a task
  * is created through `TaskCreate` and when the tab shows again, while `firstTaskCreated` is not
- * set or the first read failed (no realtime fact exists, gap G8). An organization change closes
+ * set or the first read failed (no realtime fact exists, gap G8). While the checklist applies, the
+ * tab showing again also reads it once `firstTaskCreated` is set, at most once every 30 seconds,
+ * so a change made in another tab shows; it never polls. An organization change closes
  * the invite dialog and dismisses the toasts it showed, as its destruction does.
  *
  * @type {Type<GettingStartedStoreInstance>}
