@@ -133,6 +133,11 @@ route), `withGettingStarted()` and `withOnboardingWizard()` (the `overlays` cont
   compares it as typed), and the field empties and is untouched again. The focus returns to
   the field after an add, and after a removal goes to the remove button now at that place, else
   the last one, else the field. The mockup's guest badge (line 2695) is not drawn (gap G5).
+  A host with its own submit button reads `hasText` (text typed and not added) and calls
+  `commitPending()` before sending, which does what `Add` does: an empty field commits nothing,
+  a valid address is added, and an invalid one marks the field touched, shows its error, takes
+  the focus and returns false, so the host sends nothing. A typed address is never dropped
+  silently.
 - `GettingStartedStore` is component-scoped: `GettingStartedHost` provides it, so it lives with
   the application shell (a settings shell destroys it) and reads the route's `OnboardingStore`.
   Its invite dialog, toasts and listeners end with it: destroying it closes the dialog's
@@ -188,7 +193,17 @@ route), `withGettingStarted()` and `withOnboardingWizard()` (the `overlays` cont
   (`isUncertainOnboardingWrite`) keeps them with `The invitations may not have been sent` /
   `Sending again is safe.`, since a second batch answers `already-invited` for an address the
   first one reached. A `400 request.invalid` naming addresses is not mapped back to them: the
-  field has no error input. The addresses empty each time it opens.
+  field has no error input. The addresses empty each time it opens. `Invite`, enabled once an
+  address is added or typed, first commits the typed one (`commitPending()`); an invalid typed
+  address blocks the batch with the field's error.
+- Each opening of the invite dialog has its own generation, which closing it, an organization
+  change and the store's destruction move on. A batch's answer closes the dialog, empties it or
+  toasts only while the dialog that sent it is still the one shown, in its organization, and its
+  store alive: an earlier batch answering after the dialog was closed and opened again, after a
+  switch to another organization, or after a new host replaced its own, leaves the dialog shown
+  and its addresses alone, and shows no toast. Its `Invite` is not busy with that earlier batch.
+  Recording the marker does not depend on the dialog: it follows the batch, for the organization
+  the batch went to only.
 - The checklist records `invitationSent` when the batch invited an address or found one
   `already-invited` (an invitation is out for it, perhaps from a batch whose answer was lost).
   When that marker write fails other than by a drop, `OnboardingStore` keeps it owed

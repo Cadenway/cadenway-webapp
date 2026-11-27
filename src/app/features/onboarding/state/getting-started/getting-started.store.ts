@@ -181,15 +181,28 @@ function checklistApplies(progress: OnboardingProgress | null): progress is Onbo
 interface GettingStartedState {
   // #region Properties
   /**
-   * Property _inviting
+   * Property _dialog
    *
    * @description
-   * Whether the invite dialog's invitations are being sent.
+   * Generation of the invite dialog: each opening gets a new one, and closing it, an organization
+   * change or the store's destruction moves it on, so the answer of a batch sent from an earlier
+   * opening never closes, empties or toasts over a later one.
    *
-   * @type {boolean}
+   * @type {number}
    * @readonly
    */
-  readonly _inviting: boolean;
+  readonly _dialog: number;
+
+  /**
+   * Property _sending
+   *
+   * @description
+   * Generation of the dialog whose invitations are being sent, or null.
+   *
+   * @type {number | null}
+   * @readonly
+   */
+  readonly _sending: number | null;
 
   /**
    * Property _inviteOrganization
@@ -202,6 +215,26 @@ interface GettingStartedState {
    * @readonly
    */
   readonly _inviteOrganization: string | null;
+  // #endregion
+}
+
+/**
+ * Interface GettingStartedLifecycle
+ *
+ * @description
+ * Bookkeeping outside the state, since no view reads it.
+ */
+interface GettingStartedLifecycle {
+  // #region Properties
+  /**
+   * Property destroyed
+   *
+   * @description
+   * Whether the store was destroyed with its host: an answer arriving later changes no view.
+   *
+   * @type {boolean}
+   */
+  destroyed: boolean;
   // #endregion
 }
 
@@ -347,11 +380,13 @@ interface GettingStartedStoreInstance {
 function createGettingStartedStore(): Type<GettingStartedStoreInstance> {
   return signalStore(
     withState<GettingStartedState>({
-      _inviting: false,
+      _dialog: 0,
+      _sending: null,
       _inviteOrganization: null,
     }),
     withProps(() => {
       const router: Router = inject(Router);
+      const lifecycle: GettingStartedLifecycle = { destroyed: false };
       return {
         _onboarding: inject(OnboardingStore),
         _workspace: inject<WorkspaceContextPort>(WORKSPACE_CONTEXT),
@@ -361,6 +396,7 @@ function createGettingStartedStore(): Type<GettingStartedStoreInstance> {
         _taskCreate: inject(TaskCreate),
         _toasts: inject(CwToastService),
         _shownToasts: new Set<string>(),
+        _lifecycle: lifecycle,
         _document: inject(DOCUMENT),
         _router: router,
         _address: toSignal(
@@ -405,7 +441,7 @@ function createGettingStartedStore(): Type<GettingStartedStoreInstance> {
         expanded: (): boolean => checklist()?.checklist.presentation === 'expanded',
         items,
         inviteOpen: (): boolean => store._overlay.isOpen(ONBOARDING_INVITE_OVERLAY),
-        inviting: (): boolean => store._inviting(),
+        inviting: (): boolean => store._sending() === store._dialog(),
         _boardShown: (): ShownAddress | null => {
           const progress: OnboardingProgress | null = checklist();
           const address: ShownAddress = store._address();
@@ -446,13 +482,17 @@ function createGettingStartedStore(): Type<GettingStartedStoreInstance> {
 
       const setInviteOpen: (open: boolean) => void = (open: boolean): void => {
         if (open) {
+          if (store._overlay.isOpen(ONBOARDING_INVITE_OVERLAY)) return;
           if (store._overlay.open(ONBOARDING_INVITE_OVERLAY)) {
-            patchState(store, { _inviteOrganization: store._workspace.organization().id });
+            patchState(store, {
+              _dialog: store._dialog() + 1,
+              _inviteOrganization: store._workspace.organization().id,
+            });
           }
           return;
         }
         store._overlay.close(ONBOARDING_INVITE_OVERLAY);
-        patchState(store, { _inviteOrganization: null });
+        patchState(store, { _dialog: store._dialog() + 1, _inviteOrganization: null });
       };
 
       const leaveOrganization: () => void = (): void => {
@@ -572,22 +612,28 @@ function createGettingStartedStore(): Type<GettingStartedStoreInstance> {
         },
         setInviteOpen,
         async invite(emails: readonly string[]): Promise<void> {
-          if (store._inviting() || emails.length === 0) return;
+          const dialog: number = store._dialog();
+          if (store._sending() === dialog || emails.length === 0) return;
           const organization: string | null = store._inviteOrganization();
           const moved: () => boolean = (): boolean =>
             organization === null ||
             store._workspace.organization().id !== organization ||
             store._pin.current() !== organization;
-          if (moved()) {
-            setInviteOpen(false);
+          // The dialog that sent the batch is still the one shown, in its organization: only then
+          // may its answer close it, empty it or toast.
+          const current: () => boolean = (): boolean =>
+            !store._lifecycle.destroyed && store._dialog() === dialog && !moved();
+          if (!current()) {
+            if (!store._lifecycle.destroyed && store._dialog() === dialog) setInviteOpen(false);
             return;
           }
-          patchState(store, { _inviting: true });
+          patchState(store, { _sending: dialog });
           let outcome: OnboardingInvitationOutcome;
           try {
             outcome = await store._api.invite(emails);
           } catch (error: unknown) {
-            if (moved() || isDroppedOnboardingWrite(error)) {
+            if (!current()) return;
+            if (isDroppedOnboardingWrite(error)) {
               setInviteOpen(false);
               return;
             }
@@ -612,14 +658,16 @@ function createGettingStartedStore(): Type<GettingStartedStoreInstance> {
             );
             return;
           } finally {
-            patchState(store, { _inviting: false });
+            if (store._sending() === dialog) patchState(store, { _sending: null });
           }
-          if (moved()) return;
-          toastOutcome(outcome);
-          setInviteOpen(false);
-          if (outcome.invited > 0 || outcome.alreadyInvited > 0) {
-            // The invitations are out: a failed marker write stays owed in the route's
-            // `OnboardingStore`, which survives a shell change, and is retried on this store's
+          if (current()) {
+            toastOutcome(outcome);
+            setInviteOpen(false);
+          }
+          if (!moved() && (outcome.invited > 0 || outcome.alreadyInvited > 0)) {
+            // The invitations are out, whatever became of the dialog: the route's `OnboardingStore`
+            // records the marker for the organization they went to (never for one shown since),
+            // and a failed write stays owed there, surviving a shell change, for this store's
             // refresh occasions.
             await store._onboarding.recordInvitation().catch((): undefined => undefined);
           }
@@ -652,6 +700,7 @@ function createGettingStartedStore(): Type<GettingStartedStoreInstance> {
           });
       },
       onDestroy(store): void {
+        store._lifecycle.destroyed = true;
         store._overlay.close(ONBOARDING_INVITE_OVERLAY);
         store._dismissToasts();
       },

@@ -889,6 +889,114 @@ describe('GettingStartedStore', () => {
     });
   });
 
+  describe('late answers', () => {
+    /**
+     * Function heldInvite
+     *
+     * @description
+     * Makes the next batch wait until the test answers it.
+     *
+     * @returns {(invited: number) => void} Answers the batch with that many addresses invited.
+     */
+    function heldInvite(): (invited: number) => void {
+      let answer: (outcome: {
+        invited: number;
+        skipped: number;
+        alreadyInvited: number;
+      }) => void = (): void => undefined;
+      api.invite.mockReturnValueOnce(
+        new Promise(
+          (
+            resolve: (outcome: {
+              invited: number;
+              skipped: number;
+              alreadyInvited: number;
+            }) => void,
+          ) => {
+            answer = resolve;
+          },
+        ),
+      );
+      return (invited: number): void => {
+        answer({ invited, skipped: 0, alreadyInvited: 0 });
+      };
+    }
+
+    it('leaves a dialog opened again alone when the earlier batch answers', async () => {
+      const store: GettingStartedStore = await setup();
+      const answer: (invited: number) => void = heldInvite();
+      store.start('invite');
+      const sending: Promise<void> = store.invite(['ines.robert@ateliernord.fr']);
+
+      store.setInviteOpen(false);
+      store.start('invite');
+      expect(store.inviting()).toBe(false);
+      answer(1);
+      await sending;
+
+      expect(store.inviteOpen()).toBe(true);
+      expect(toasts.toasts()).toEqual([]);
+      expect(api.updateChecklist).toHaveBeenCalledWith({ invitationSent: true }, 4);
+    });
+
+    it('leaves the dialog of the new organization alone when the earlier batch answers', async () => {
+      const store: GettingStartedStore = await setup();
+      const answer: (invited: number) => void = heldInvite();
+      store.start('invite');
+      const sending: Promise<void> = store.invite(['ines.robert@ateliernord.fr']);
+
+      switchOrganization();
+      TestBed.tick();
+      await settle();
+      store.start('invite');
+      answer(1);
+      await sending;
+      await settle();
+
+      expect(store.inviteOpen()).toBe(true);
+      expect(toasts.toasts()).toEqual([]);
+      expect(api.updateChecklist).not.toHaveBeenCalled();
+    });
+
+    it('leaves the dialog of a new host alone when a batch of the destroyed one answers', async () => {
+      const store: GettingStartedStore = await setup();
+      const answer: (invited: number) => void = heldInvite();
+      store.start('invite');
+      const sending: Promise<void> = store.invite(['ines.robert@ateliernord.fr']);
+
+      host.destroy();
+      const again: GettingStartedStore = await createHost();
+      again.start('invite');
+      answer(1);
+      await sending;
+      await settle();
+
+      expect(again.inviteOpen()).toBe(true);
+      expect(toasts.toasts()).toEqual([]);
+      expect(api.updateChecklist).toHaveBeenCalledWith({ invitationSent: true }, 4);
+    });
+
+    it('leaves a dialog opened again alone when the earlier batch fails', async () => {
+      const store: GettingStartedStore = await setup();
+      let fail: (error: unknown) => void = (): void => undefined;
+      api.invite.mockReturnValueOnce(
+        new Promise((_resolve: unknown, reject: (error: unknown) => void) => {
+          fail = reject;
+        }),
+      );
+      store.start('invite');
+      const sending: Promise<void> = store.invite(['ines.robert@ateliernord.fr']);
+
+      store.setInviteOpen(false);
+      store.start('invite');
+      fail(problem(412, 'organization.context-changed'));
+      await sending;
+
+      expect(store.inviteOpen()).toBe(true);
+      expect(toasts.toasts()).toEqual([]);
+    });
+  });
+
   describe('organization change and destruction', () => {
     it('dismisses the toasts it showed when the organization changes', async () => {
       const store: GettingStartedStore = await setup();

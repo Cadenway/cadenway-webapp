@@ -8,6 +8,8 @@ import {
   type ModelSignal,
   output,
   type OutputEmitterRef,
+  type Signal,
+  viewChild,
   type WritableSignal,
 } from '@angular/core';
 import { CwButton } from '@cadenway/ui/components/button';
@@ -34,8 +36,9 @@ import { OnboardingInviteField } from '../../components/onboarding-invite-field/
  * dialog's (`App.dc.html` line 2987).
  *
  * Presentational: `[(open)]` opens it and the list of addresses empties each time it opens or
- * closes; `Invite`, enabled once an address is added, emits `submitted` with the addresses, and
- * the host sends them. While `pending`, the dialog cannot be closed, the field and its pills are
+ * closes. `Invite`, enabled once an address is added or typed, first commits the address still
+ * typed in the field (`commitPending()`, as `Add` does): an invalid one shows the field's error and
+ * sends nothing. It then emits `submitted` with the addresses, and the host sends them. While `pending`, the dialog cannot be closed, the field and its pills are
  * disabled and `Invite` shows its spinner.
  */
 @Component({
@@ -110,6 +113,18 @@ export class OnboardingInviteDialog {
     source: this.open,
     computation: (): readonly string[] => [],
   });
+
+  /**
+   * Property field
+   *
+   * @description
+   * The invitation field, to commit the address still typed in it before sending.
+   *
+   * @type {Signal<OnboardingInviteField | undefined>}
+   * @readonly
+   */
+  protected readonly field: Signal<OnboardingInviteField | undefined> =
+    viewChild(OnboardingInviteField);
   // #endregion
 
   // #region Methods
@@ -117,10 +132,13 @@ export class OnboardingInviteDialog {
    * Method send
    *
    * @description
-   * Emits the addresses, unless none is added or they are being sent.
+   * Commits the address still typed in the field, then emits the addresses; sends nothing while
+   * they are being sent, when the typed address is invalid, or when no address is left.
    */
   protected send(): void {
-    if (this.pending() || this.emails().length === 0) return;
+    if (this.pending()) return;
+    if (this.field()?.commitPending() === false) return;
+    if (this.emails().length === 0) return;
     this.submitted.emit(this.emails());
   }
   // #endregion

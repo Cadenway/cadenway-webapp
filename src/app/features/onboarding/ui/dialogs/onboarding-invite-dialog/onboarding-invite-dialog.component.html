@@ -13,7 +13,7 @@
       cwButton
       type="button"
       [loading]="pending()"
-      [disabled]="emails().length === 0"
+      [disabled]="emails().length === 0 && !field()?.hasText()"
       (click)="send()"
       data-testid="onboarding-invite-submit"
     >

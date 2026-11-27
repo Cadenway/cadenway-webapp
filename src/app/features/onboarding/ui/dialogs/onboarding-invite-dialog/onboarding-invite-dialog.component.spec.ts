@@ -65,6 +65,26 @@ async function add(
 }
 
 /**
+ * Function typeOnly
+ *
+ * @description
+ * Types an address in the field without pressing `Add`.
+ *
+ * @param {ComponentFixture<OnboardingInviteDialog>} fixture - The dialog.
+ * @param {string} email - The address.
+ * @returns {Promise<void>} Resolves once rendered.
+ */
+async function typeOnly(
+  fixture: ComponentFixture<OnboardingInviteDialog>,
+  email: string,
+): Promise<void> {
+  const field: HTMLInputElement = find('onboarding-invite-email') as HTMLInputElement;
+  field.value = email;
+  field.dispatchEvent(new Event('input'));
+  await fixture.whenStable();
+}
+
+/**
  * Function submitButton
  *
  * @description
@@ -129,5 +149,43 @@ describe('OnboardingInviteDialog', () => {
 
     expect(find('onboarding-invite-pill')).toBeNull();
     expect(submitButton().disabled).toBe(true);
+  });
+
+  it('sends the address still typed in the field with the pills', async () => {
+    const [fixture, submitted]: [ComponentFixture<OnboardingInviteDialog>, Mock] = await open();
+    await add(fixture, 'ines.robert@ateliernord.fr');
+    await typeOnly(fixture, 'marc.roux@ateliernord.fr');
+
+    submitButton().click();
+
+    expect(submitted).toHaveBeenCalledWith([
+      'ines.robert@ateliernord.fr',
+      'marc.roux@ateliernord.fr',
+    ]);
+  });
+
+  it('enables Invite for a typed address alone and sends it', async () => {
+    const [fixture, submitted]: [ComponentFixture<OnboardingInviteDialog>, Mock] = await open();
+    await typeOnly(fixture, 'marc.roux@ateliernord.fr');
+    expect(submitButton().disabled).toBe(false);
+
+    submitButton().click();
+
+    expect(submitted).toHaveBeenCalledWith(['marc.roux@ateliernord.fr']);
+  });
+
+  it('sends nothing and shows the error for an invalid typed address', async () => {
+    const [fixture, submitted]: [ComponentFixture<OnboardingInviteDialog>, Mock] = await open();
+    await add(fixture, 'ines.robert@ateliernord.fr');
+    await typeOnly(fixture, 'marc.roux@');
+
+    submitButton().click();
+    await fixture.whenStable();
+
+    expect(submitted).not.toHaveBeenCalled();
+    expect(find('onboarding-invite-error')?.textContent.trim()).toBe(
+      'Enter a full address, for example ines.robert@ateliernord.fr.',
+    );
+    expect(document.activeElement).toBe(find('onboarding-invite-email'));
   });
 });
