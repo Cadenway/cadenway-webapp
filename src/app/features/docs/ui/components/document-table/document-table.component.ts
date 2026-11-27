@@ -20,9 +20,10 @@ import { updatedLabel } from '../../../utils/updated-label/updated-label.util';
  *
  * @description
  * The table of the catalog (`App.dc.html` lines 1906-1921): `Title`, `Space`, `Author` and
- * `Modified`, one button per row (the file icon and the title, the space's name, the author's
+ * `Modified`; a row (the file icon and its title, the space's name, the author's
  * avatar and name, `—` while either is unknown, and the date of the last save), and
- * `No document matches.` when no row is left. The table keeps its 640 px and scrolls sideways
+ * `No document matches.` when no row is left. The title cell holds the row's only control, a
+ * button stretched over the whole row, so each cell stays a cell for screen readers. The table keeps its 640 px and scrolls sideways
  * inside its card on a narrower screen. A row's context menu (right click, Shift F10, the Menu key
  * or a long press; lines 7362-7372) offers `Open`, `Copy the link`, and for a document the caller
  * may edit `Edit` and `Delete`, which the document page also offers. It emits the row of each

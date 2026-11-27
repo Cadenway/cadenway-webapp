@@ -12,7 +12,7 @@ import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 import { PASSIVE_REQUEST } from '@core/api';
 import { NotFoundRouteError, UnavailableRouteError } from '@shared/route-errors';
 
-import type { DocumentDetail, DocumentSummary } from '../../../models/document/document.interface';
+import type { DocumentDetail, DocumentList } from '../../../models/document/document.interface';
 import { DocumentsApi } from './documents-api.service';
 
 /**
@@ -37,6 +37,16 @@ function dto(id: string, title: string): DocumentDetailDto {
     body: '# Highlights',
   };
 }
+
+/**
+ * Constant DOCUMENT_ID
+ *
+ * @description
+ * A document id in the contract's shape (a UUID version 7).
+ *
+ * @type {string}
+ */
+const DOCUMENT_ID: string = '019a7005-4b2c-7d4e-8f5a-6b7c8d9e0f17';
 
 /**
  * Function problem
@@ -86,11 +96,12 @@ describe('DocumentsApi', () => {
     ];
     documents.listDocuments.mockImplementation(() => of(pages.shift()));
 
-    const found: readonly DocumentSummary[] = await TestBed.inject(DocumentsApi).list('notes', {
+    const found: DocumentList = await TestBed.inject(DocumentsApi).list('notes', {
       passive: true,
     });
 
-    expect(found).toEqual([
+    expect(found.truncated).toBe(false);
+    expect(found.items).toEqual([
       {
         id: 'd1',
         spaceId: 's1',
@@ -117,8 +128,10 @@ describe('DocumentsApi', () => {
       of({ items: [dto('d1', 'Release notes 3.1')], nextCursor: 'more' }),
     );
 
-    await TestBed.inject(DocumentsApi).list('');
+    const found: DocumentList = await TestBed.inject(DocumentsApi).list('');
 
+    expect(found.truncated).toBe(true);
+    expect(found.items).toHaveLength(5);
     expect(documents.listDocuments).toHaveBeenCalledTimes(5);
     expect(documents.listDocuments.mock.calls[0]?.[0]).toEqual({ limit: 100 });
   });
@@ -154,8 +167,19 @@ describe('DocumentsApi', () => {
     documents.getDocument.mockReturnValueOnce(throwError(() => problem(404, 'document.not-found')));
     documents.getDocument.mockReturnValueOnce(throwError(() => problem(503, 'upstream.timeout')));
 
-    await expect(api.open('d1')).rejects.toBeInstanceOf(NotFoundRouteError);
-    await expect(api.open('d1')).rejects.toBeInstanceOf(UnavailableRouteError);
+    await expect(api.open(DOCUMENT_ID)).rejects.toBeInstanceOf(NotFoundRouteError);
+    await expect(api.open(DOCUMENT_ID)).rejects.toBeInstanceOf(UnavailableRouteError);
+    expect(documents.getDocument).toHaveBeenCalledWith(DOCUMENT_ID, expect.anything());
+  });
+
+  it('opens an address that names no document as not found, without any request', async () => {
+    const api: DocumentsApi = TestBed.inject(DocumentsApi);
+
+    await expect(api.open('doc-onboarding')).rejects.toBeInstanceOf(NotFoundRouteError);
+    await expect(api.open('019a7005-4b2c-4d4e-8f5a-6b7c8d9e0f17')).rejects.toBeInstanceOf(
+      NotFoundRouteError,
+    );
+    expect(documents.getDocument).not.toHaveBeenCalled();
   });
 
   it('names the authors from every page of the member directory', async () => {

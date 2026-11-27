@@ -56,7 +56,8 @@ const SEARCH_DELAY_MS: number = 300;
  *
  * The search is the address's `?q=`: typing writes it there after a 300 ms pause (replacing the
  * history entry), and the store reads the catalog for it on the server, keeping the last rows
- * shown meanwhile. The catalog is read again whenever the window regains focus (gap G-C4).
+ * shown meanwhile; past 500 documents a line asks to refine the search. The catalog is read again
+ * when the window regains focus, at most once per 30 s (gap G-C4).
  *
  * `New document` shows only when the caller may edit a space, creates an `Untitled` document in
  * it (gap G-C3) and opens it in edit mode (`?mode=edit`). A row opens its document; its menu's
@@ -110,14 +111,18 @@ export class DocsPage {
    * Property searchText
    *
    * @description
-   * The search field's text: the address's search, or what is typed until it is applied.
+   * The search field's text: what is typed, which the address's search replaces only when it
+   * changes otherwise (history, a link). The search this page wrote to the address keeps the text
+   * typed, its trailing spaces and what was typed while the address changed included.
    *
    * @type {WritableSignal<string>}
    * @readonly
    */
-  protected readonly searchText: WritableSignal<string> = linkedSignal(
-    (): string => this.q() ?? '',
-  );
+  protected readonly searchText: WritableSignal<string> = linkedSignal<string, string>({
+    source: (): string => this.q() ?? '',
+    computation: (query: string, previous?: { source: string; value: string }): string =>
+      previous !== undefined && query.trim() === this.written ? previous.value : query,
+  });
 
   /**
    * Property deleteOpen
@@ -206,6 +211,16 @@ export class DocsPage {
    * @type {ReturnType<typeof setTimeout> | null}
    */
   private searchTimer: ReturnType<typeof setTimeout> | null = null;
+
+  /**
+   * Property written
+   *
+   * @description
+   * The last search this page wrote to the address, trimmed, or null.
+   *
+   * @type {string | null}
+   */
+  private written: string | null = null;
   // #endregion
 
   // #region Constructor
@@ -252,6 +267,7 @@ export class DocsPage {
       this.searchTimer = null;
       const query: string = text.trim();
       if (query === (this.q() ?? '').trim()) return;
+      this.written = query;
       void this.router.navigate([], {
         relativeTo: this.route,
         queryParams: { q: query === '' ? null : query },

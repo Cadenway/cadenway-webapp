@@ -96,24 +96,13 @@ export function isVersionMismatch(error: unknown): boolean {
  * Function isGone
  *
  * @description
- * Whether the document no longer exists for the caller (`404`): deleted, or no longer visible.
+ * Whether the document no longer exists for the caller (`404 document.not-found`): deleted, or
+ * no longer visible. Another `404` (an inactive membership, `organization.not-found`) is not.
  *
  * @param {unknown} error - The failure.
  * @returns {boolean} Whether the document is gone.
  */
 export function isGone(error: unknown): boolean {
-  return readProblem(error)?.status === 404;
-}
-
-/**
- * Function isForbidden
- *
- * @description
- * Whether the caller may no longer write in the document's space (`403`).
- *
- * @param {unknown} error - The failure.
- * @returns {boolean} Whether the write is forbidden.
- */
-export function isForbidden(error: unknown): boolean {
-  return readProblem(error)?.status === 403;
+  const problem: ApiProblem | null = readProblem(error);
+  return problem?.status === 404 && problem.code === 'document.not-found';
 }

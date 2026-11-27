@@ -2,7 +2,7 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { ApplicationRef, signal, type WritableSignal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { CwToastService } from '@cadenway/ui/components/toast';
-import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 
 import { SPACE_DIRECTORY, type SpaceDirectoryEntry } from '@features/spaces/ports/space-directory';
 import {
@@ -14,10 +14,11 @@ import {
 import { DocumentsApi } from '../../data-access/services/documents-api/documents-api.service';
 import type {
   DocumentCreateOutcome,
+  DocumentList,
   DocumentRow,
   DocumentSummary,
 } from '../../models/document/document.interface';
-import { DocsStore } from './docs.store';
+import { DocsStore, IN_PROGRESS_DELAY_MS } from './docs.store';
 
 /**
  * Constant ATELIER_NORD
@@ -79,6 +80,19 @@ function summary(id: string, title: string, spaceId: string): DocumentSummary {
 }
 
 /**
+ * Function listOf
+ *
+ * @description
+ * A complete read of the catalog.
+ *
+ * @param {readonly DocumentSummary[]} items - The documents.
+ * @returns {DocumentList} The read.
+ */
+function listOf(...items: readonly DocumentSummary[]): DocumentList {
+  return { items, truncated: false };
+}
+
+/**
  * Function problem
  *
  * @description
@@ -121,9 +135,24 @@ function shownRows(store: InstanceType<typeof DocsStore>): [DocumentRow, Documen
   return [first, second];
 }
 
+/**
+ * Function keysOf
+ *
+ * @description
+ * The idempotency keys the creations were sent with.
+ *
+ * @param {Mock} create - The faked creation.
+ * @returns {string[]} The keys, in order.
+ */
+function keysOf(create: Mock): string[] {
+  return (create.mock.calls as [string, string, string][]).map(
+    ([, , key]: [string, string, string]): string => key,
+  );
+}
+
 describe('DocsStore', () => {
   let api: { list: Mock; authors: Mock; create: Mock; remove: Mock; get: Mock };
-  let toasts: { success: Mock; error: Mock; warning: Mock };
+  let toasts: { success: Mock; error: Mock; warning: Mock; info: Mock };
 
   beforeEach(() => {
     organization.set(ATELIER_NORD);
@@ -133,17 +162,19 @@ describe('DocsStore', () => {
     ]);
     api = {
       list: vi.fn(() =>
-        Promise.resolve([
-          summary('d1', 'Release notes 3.1', 's1'),
-          summary('d2', 'API integration guide', 's2'),
-        ]),
+        Promise.resolve(
+          listOf(
+            summary('d1', 'Release notes 3.1', 's1'),
+            summary('d2', 'API integration guide', 's2'),
+          ),
+        ),
       ),
       authors: vi.fn(() => Promise.resolve(new Map([['u2', 'Inès Roux']]))),
       create: vi.fn(() => Promise.resolve({ ...summary('d9', 'Untitled', 's1'), body: '' })),
       remove: vi.fn(() => Promise.resolve()),
       get: vi.fn(),
     };
-    toasts = { success: vi.fn(), error: vi.fn(), warning: vi.fn() };
+    toasts = { success: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn() };
     const workspace: Partial<WorkspaceContextPort> = { organization };
     TestBed.configureTestingModule({
       providers: [
@@ -154,6 +185,10 @@ describe('DocsStore', () => {
         { provide: SPACE_DIRECTORY, useValue: { spaces } },
       ],
     });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   /**
@@ -187,15 +222,26 @@ describe('DocsStore', () => {
       ['API integration guide', 'Operations', 'Inès Roux', false],
     ]);
     expect(store.targetSpace()?.id).toBe('s1');
+    expect(store.truncated()).toBe(false);
     expect(api.list).toHaveBeenCalledWith('', expect.anything());
+  });
+
+  it('says when more documents match than the catalog reads', async () => {
+    api.list.mockResolvedValueOnce({
+      items: [summary('d1', 'Release notes 3.1', 's1')],
+      truncated: true,
+    });
+    const store: InstanceType<typeof DocsStore> = await loaded();
+
+    expect(store.truncated()).toBe(true);
   });
 
   it('keeps the rows shown while another search is read, then shows its answer', async () => {
     const store: InstanceType<typeof DocsStore> = await loaded();
-    let answer: (items: readonly DocumentSummary[]) => void = (): void => undefined;
+    let answer: (list: DocumentList) => void = (): void => undefined;
     api.list.mockImplementationOnce(
       () =>
-        new Promise<readonly DocumentSummary[]>((resolve) => {
+        new Promise<DocumentList>((resolve) => {
           answer = resolve;
         }),
     );
@@ -206,7 +252,7 @@ describe('DocsStore', () => {
     expect(store.query()).toBe('notes');
     expect(store.rows()).toHaveLength(2);
     expect(store.searching()).toBe(true);
-    answer([summary('d1', 'Release notes 3.1', 's1')]);
+    answer(listOf(summary('d1', 'Release notes 3.1', 's1')));
     await settle();
     expect(store.rows()?.map((row: DocumentRow) => row.document.id)).toEqual(['d1']);
     expect(store.searching()).toBe(false);
@@ -233,9 +279,33 @@ describe('DocsStore', () => {
     const outcome: DocumentCreateOutcome = await store.create();
 
     expect(outcome).toEqual({ kind: 'created', id: 'd9' });
-    expect(api.create).toHaveBeenCalledTimes(2);
     expect(api.create.mock.calls[0]).toEqual(['s1', 'Untitled', expect.any(String)]);
     expect(api.create.mock.calls[1]).toEqual(api.create.mock.calls[0]);
+  });
+
+  it('sends again after a pause a creation the gateway still runs', async () => {
+    const store: InstanceType<typeof DocsStore> = await loaded();
+    vi.useFakeTimers();
+    api.create.mockRejectedValueOnce(problem(409, 'idempotency.request-in-progress'));
+
+    const creation: Promise<DocumentCreateOutcome> = store.create();
+    await vi.advanceTimersByTimeAsync(IN_PROGRESS_DELAY_MS - 1);
+    expect(api.create).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1);
+
+    expect(await creation).toEqual({ kind: 'created', id: 'd9' });
+    expect(new Set(keysOf(api.create)).size).toBe(1);
+  });
+
+  it('sends once with a new key a replay whose document was deleted since', async () => {
+    const store: InstanceType<typeof DocsStore> = await loaded();
+    api.create.mockRejectedValueOnce(problem(404, 'document.not-found'));
+
+    expect(await store.create()).toEqual({ kind: 'created', id: 'd9' });
+
+    const keys: string[] = keysOf(api.create);
+    expect(keys).toHaveLength(2);
+    expect(keys[1]).not.toBe(keys[0]);
   });
 
   it('warns when no answer confirmed a creation, and keeps its key for the next one', async () => {
@@ -243,6 +313,7 @@ describe('DocsStore', () => {
     api.create.mockRejectedValue(problem(503, 'upstream.unavailable'));
 
     expect(await store.create()).toEqual({ kind: 'unknown' });
+    expect(api.create).toHaveBeenCalledTimes(2);
     expect(toasts.warning).toHaveBeenCalledWith(
       'The document may not have been created',
       expect.anything(),
@@ -250,10 +321,7 @@ describe('DocsStore', () => {
     api.create.mockResolvedValue({ ...summary('d9', 'Untitled', 's1'), body: '' });
     await store.create();
 
-    const keys: string[] = (api.create.mock.calls as [string, string, string][]).map(
-      ([, , key]: [string, string, string]): string => key,
-    );
-    expect(new Set(keys).size).toBe(1);
+    expect(new Set(keysOf(api.create)).size).toBe(1);
   });
 
   it('reports a refused creation and offers none without an editable space', async () => {
@@ -263,6 +331,12 @@ describe('DocsStore', () => {
     expect(await store.create()).toEqual({ kind: 'failed' });
     expect(toasts.error).toHaveBeenCalledWith('The document could not be created', {
       description: 'You can no longer edit the documents of this space.',
+    });
+
+    api.create.mockRejectedValueOnce(problem(400, 'request.invalid'));
+    expect(await store.create()).toEqual({ kind: 'failed' });
+    expect(toasts.error).toHaveBeenLastCalledWith('The document could not be created', {
+      description: 'It was refused as invalid. Check the length of its title and its content.',
     });
 
     spaces.set([{ id: 's2', name: 'Operations', icon: null, tone: '', callerRole: 'view' }]);
@@ -296,6 +370,15 @@ describe('DocsStore', () => {
     });
   });
 
+  it('does not count another 404 as a deleted document', async () => {
+    const store: InstanceType<typeof DocsStore> = await loaded();
+    const [first]: [DocumentRow, DocumentRow] = shownRows(store);
+    api.remove.mockRejectedValueOnce(problem(404, 'organization.not-found'));
+
+    expect(await store.remove(first)).toBe('failed');
+    expect(store.rows()).toHaveLength(2);
+  });
+
   it('reads the document again after a lost deletion answer instead of failing', async () => {
     const store: InstanceType<typeof DocsStore> = await loaded();
     const [first, second]: [DocumentRow, DocumentRow] = shownRows(store);
@@ -312,7 +395,7 @@ describe('DocsStore', () => {
     });
   });
 
-  it('keeps a document that changed since it was shown', async () => {
+  it('keeps a document that changed since it was shown, and reads the catalog again', async () => {
     const store: InstanceType<typeof DocsStore> = await loaded();
     const [first]: [DocumentRow, DocumentRow] = shownRows(store);
     api.remove.mockRejectedValueOnce(problem(412, 'request.version-mismatch'));
@@ -324,16 +407,24 @@ describe('DocsStore', () => {
     expect(api.list).toHaveBeenCalledTimes(2);
   });
 
-  it('refreshes in the background and keeps the rows when that read fails', async () => {
+  it('refreshes in the background at most once per 30 s, keeping the rows when it fails', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-11-27T10:00:00Z'));
     const store: InstanceType<typeof DocsStore> = await loaded();
-    api.list.mockResolvedValueOnce([summary('d3', 'Quota specification', 's1')]);
+    api.list.mockResolvedValue(listOf(summary('d3', 'Quota specification', 's1')));
 
+    await store.refresh();
+    expect(api.list).toHaveBeenCalledTimes(1);
+
+    vi.setSystemTime(new Date('2026-11-27T10:00:31Z'));
     await store.refresh();
     expect(store.rows()?.map((row: DocumentRow) => row.document.id)).toEqual(['d3']);
     expect(api.list).toHaveBeenLastCalledWith('', { passive: true });
 
+    vi.setSystemTime(new Date('2026-11-27T10:01:02Z'));
     api.list.mockRejectedValueOnce(new HttpErrorResponse({ status: 0 }));
     await store.refresh();
+    expect(api.list).toHaveBeenCalledTimes(3);
     expect(store.rows()?.map((row: DocumentRow) => row.document.id)).toEqual(['d3']);
   });
 });

@@ -10,10 +10,12 @@ import {
 import { firstValueFrom, fromEvent, type Observable, takeUntil } from 'rxjs';
 
 import { PASSIVE_REQUEST } from '@core/api';
+import { NotFoundRouteError } from '@shared/route-errors';
 
 import type {
   DocumentDetail,
   DocumentDraft,
+  DocumentList,
   DocumentSummary,
 } from '../../../models/document/document.interface';
 import { toDocumentDetail, toDocumentSummary } from '../../adapters/document/document.adapter';
@@ -48,6 +50,17 @@ const MAX_DOCUMENT_PAGES: number = 5;
  * @type {number}
  */
 const MAX_MEMBER_PAGES: number = 20;
+
+/**
+ * Constant DOCUMENT_ID
+ *
+ * @description
+ * The contract's `DocumentUuid`: a UUID version 7.
+ *
+ * @type {RegExp}
+ */
+const DOCUMENT_ID: RegExp =
+  /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-7[0-9a-fA-F]{3}-[89aAbB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$/;
 
 /**
  * Function abortable
@@ -133,17 +146,18 @@ export class DocumentsApi {
    *
    * @description
    * Reads the documents whose title or body contains the query (all of them for an empty one),
-   * the most recently updated first, following the cursor for at most 500 documents.
+   * the most recently updated first, following the cursor for at most 500 documents; `truncated`
+   * says the last page read still had a next one.
    *
    * @param {string} query - The search, trimmed by the caller.
    * @param {{ readonly signal?: AbortSignal; readonly passive?: boolean }} options - Cancels a
    *   superseded read; marks a background read as passive.
-   * @returns {Promise<readonly DocumentSummary[]>} The documents.
+   * @returns {Promise<DocumentList>} The documents.
    */
   public async list(
     query: string,
     options: { readonly signal?: AbortSignal; readonly passive?: boolean } = {},
-  ): Promise<readonly DocumentSummary[]> {
+  ): Promise<DocumentList> {
     const items: DocumentSummary[] = [];
     let cursor: string | undefined;
     for (let page: number = 0; page < MAX_DOCUMENT_PAGES; page += 1) {
@@ -159,10 +173,10 @@ export class DocumentsApi {
         options.signal,
       );
       items.push(...answer.items.map(toDocumentSummary));
-      if (answer.nextCursor === null) break;
+      if (answer.nextCursor === null) return { items, truncated: false };
       cursor = answer.nextCursor;
     }
-    return items;
+    return { items, truncated: true };
   }
 
   /**
@@ -194,13 +208,15 @@ export class DocumentsApi {
    * @description
    * The document page's primary read: reads a document with its body, and rejects with the route
    * boundary's state, `NotFoundRouteError` for a missing, deleted or invisible document and
-   * `UnavailableRouteError` for any other answer.
+   * `UnavailableRouteError` for any other answer. An id that is not a document id (the contract's
+   * `DocumentUuid`, a UUID version 7) rejects with `NotFoundRouteError` without any request.
    *
    * @param {string} id - The document.
    * @param {AbortSignal | undefined} signal - Cancels a superseded read.
    * @returns {Promise<DocumentDetail>} The document.
    */
   public async open(id: string, signal?: AbortSignal): Promise<DocumentDetail> {
+    if (!DOCUMENT_ID.test(id)) throw new NotFoundRouteError();
     try {
       return await this.get(id, signal ? { signal } : {});
     } catch (error: unknown) {

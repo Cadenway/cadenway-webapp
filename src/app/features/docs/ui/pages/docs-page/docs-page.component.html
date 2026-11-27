@@ -55,6 +55,15 @@
       (linkCopyRequested)="copyLink($event)"
       (deleteRequested)="askDelete($event)"
     />
+    @if (store.truncated()) {
+      <p
+        class="text-center text-xs text-muted-foreground"
+        data-testid="documents-truncated"
+        i18n="@@docs.table.truncated"
+      >
+        Showing the 500 most recently modified documents. Refine the search to find the others.
+      </p>
+    }
   </div>
 } @else {
   <cw-docs-skeleton width="catalog" />

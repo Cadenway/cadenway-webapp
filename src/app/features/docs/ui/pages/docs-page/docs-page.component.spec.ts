@@ -79,7 +79,7 @@ describe('DocsPage', () => {
 
   beforeEach(() => {
     api = {
-      list: vi.fn(() => Promise.resolve(CATALOG)),
+      list: vi.fn(() => Promise.resolve({ items: CATALOG, truncated: false })),
       authors: vi.fn(() => Promise.resolve(new Map([['u2', 'Inès Roux']]))),
       create: vi.fn(() =>
         Promise.resolve({ ...CATALOG[0], id: 'd9', title: 'Untitled', version: 1, body: '' }),
@@ -122,6 +122,7 @@ describe('DocsPage', () => {
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     Reflect.deleteProperty(navigator, 'clipboard');
     TestBed.resetTestingModule();
   });
@@ -268,7 +269,7 @@ describe('DocsPage', () => {
   });
 
   it('shows the empty line for a completed read without document', async () => {
-    api.list.mockResolvedValue([]);
+    api.list.mockResolvedValue({ items: [], truncated: false });
     const harness: RouterTestingHarness = await open();
 
     expect(view(harness).querySelector('[data-testid="documents-empty"]')?.textContent).toContain(
@@ -302,9 +303,9 @@ describe('DocsPage', () => {
     );
     if (field === null) throw new Error('Expected the search field.');
     expect(field.getAttribute('aria-label')).toBe('Search for a document');
-    api.list.mockResolvedValue([CATALOG[0]]);
+    api.list.mockResolvedValue({ items: [CATALOG[0]], truncated: false });
 
-    field.value = 'notes';
+    field.value = 'notes ';
     field.dispatchEvent(new Event('input'));
 
     await expect.poll(() => TestBed.inject(Router).url).toBe('/atelier-nord/docs?q=notes');
@@ -315,6 +316,56 @@ describe('DocsPage', () => {
       })
       .toBe(1);
     expect(api.list).toHaveBeenLastCalledWith('notes', expect.anything());
+    expect(field.value).toBe('notes ');
+  });
+
+  it('keeps what is typed while the address takes the previous search', async () => {
+    const harness: RouterTestingHarness = await open();
+    const field: HTMLInputElement | null = view(harness).querySelector<HTMLInputElement>(
+      '[data-testid="docs-search"]',
+    );
+    if (field === null) throw new Error('Expected the search field.');
+
+    field.value = 'notes';
+    field.dispatchEvent(new Event('input'));
+    await expect.poll(() => TestBed.inject(Router).url).toBe('/atelier-nord/docs?q=notes');
+    field.value = 'notes 3';
+    field.dispatchEvent(new Event('input'));
+    harness.detectChanges();
+
+    expect(field.value).toBe('notes 3');
+    await expect.poll(() => TestBed.inject(Router).url).toBe('/atelier-nord/docs?q=notes%203');
+    harness.detectChanges();
+    expect(field.value).toBe('notes 3');
+
+    await TestBed.inject(Router).navigateByUrl('/atelier-nord/docs?q=guide');
+    harness.detectChanges();
+    expect(field.value).toBe('guide');
+  });
+
+  it('asks to refine the search past the 500 documents the catalog reads', async () => {
+    api.list.mockResolvedValue({ items: CATALOG, truncated: true });
+    const harness: RouterTestingHarness = await open();
+
+    expect(
+      view(harness).querySelector('[data-testid="documents-truncated"]')?.textContent.trim(),
+    ).toBe(
+      'Showing the 500 most recently modified documents. Refine the search to find the others.',
+    );
+  });
+
+  it('keeps each cell a cell, the row’s only button in its title cell', async () => {
+    const harness: RouterTestingHarness = await open();
+    const row: Element | undefined = [
+      ...view(harness).querySelectorAll('[data-testid="document-row"]'),
+    ].at(0);
+
+    expect(row?.querySelectorAll(':scope > [role="cell"]')).toHaveLength(4);
+    expect(row?.querySelectorAll('button')).toHaveLength(1);
+    expect(row?.querySelector('[role="cell"] button')?.textContent.trim()).toBe(
+      'Release notes 3.1',
+    );
+    expect(row?.querySelector('button [role="cell"]')).toBeNull();
   });
 
   it('reads the search of the address', async () => {
@@ -379,9 +430,16 @@ describe('DocsPage', () => {
     });
   });
 
-  it('reads the catalog again when the window regains focus', async () => {
+  it('reads the catalog again when the window regains focus, at most once per 30 s', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-11-27T10:00:00Z'));
     const harness: RouterTestingHarness = await open();
 
+    window.dispatchEvent(new Event('focus'));
+    harness.detectChanges();
+    expect(api.list).toHaveBeenCalledTimes(1);
+
+    vi.setSystemTime(new Date('2026-11-27T10:00:31Z'));
     window.dispatchEvent(new Event('focus'));
     harness.detectChanges();
 

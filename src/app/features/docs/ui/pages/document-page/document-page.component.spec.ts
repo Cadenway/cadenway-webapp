@@ -1,3 +1,4 @@
+import { HttpErrorResponse } from '@angular/common/http';
 import { Component, signal, type WritableSignal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { Title } from '@angular/platform-browser';
@@ -76,7 +77,7 @@ const spaces: WritableSignal<readonly SpaceDirectoryEntry[]> = signal([]);
 
 describe('DocumentPage', () => {
   let api: { open: Mock; get: Mock; update: Mock; remove: Mock; authors: Mock };
-  let toasts: { success: Mock; error: Mock; warning: Mock };
+  let toasts: { success: Mock; error: Mock; warning: Mock; info: Mock };
 
   beforeEach(() => {
     spaces.set([{ id: 's1', name: 'Product', icon: null, tone: '', callerRole: 'edit' }]);
@@ -89,7 +90,7 @@ describe('DocumentPage', () => {
       remove: vi.fn(() => Promise.resolve()),
       authors: vi.fn(() => Promise.resolve(new Map([['u2', 'Inès Roux']]))),
     };
-    toasts = { success: vi.fn(), error: vi.fn(), warning: vi.fn() };
+    toasts = { success: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn() };
     TestBed.configureTestingModule({
       providers: [
         provideCadenwayIcons(),
@@ -118,6 +119,7 @@ describe('DocumentPage', () => {
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     TestBed.resetTestingModule();
   });
 
@@ -358,8 +360,11 @@ describe('DocumentPage', () => {
   });
 
   it('reads the document again on focus while reading, never while editing', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-11-27T10:00:00Z'));
     const harness: RouterTestingHarness = await open();
     api.get.mockResolvedValue({ ...NOTES, title: 'Release notes 3.1.1', version: 4 });
+    vi.setSystemTime(new Date('2026-11-27T10:00:31Z'));
 
     window.dispatchEvent(new Event('focus'));
     await expect
@@ -371,7 +376,227 @@ describe('DocumentPage', () => {
 
     find(harness, 'document-edit')?.click();
     harness.detectChanges();
+    vi.setSystemTime(new Date('2026-11-27T10:02:00Z'));
     window.dispatchEvent(new Event('focus'));
     expect(api.get).toHaveBeenCalledTimes(1);
+  });
+
+  it('merges a version saved meanwhile, names who saved it, and confirms replacing it', async () => {
+    const harness: RouterTestingHarness = await open();
+    api.update.mockRejectedValueOnce(
+      new HttpErrorResponse({
+        status: 412,
+        error: { status: 412, code: 'request.version-mismatch' },
+      }),
+    );
+    api.get.mockResolvedValueOnce({
+      ...NOTES,
+      body: '# Fixes',
+      version: 5,
+      updatedAt: '2025-11-05T10:00:00Z',
+    });
+
+    find(harness, 'document-edit')?.click();
+    harness.detectChanges();
+    typeTitle(harness, 'Release notes 3.2');
+    find(harness, 'document-done')?.click();
+
+    await expect
+      .poll(() => {
+        harness.detectChanges();
+        return find(harness, 'document-conflict')?.textContent.trim();
+      })
+      .toBe(
+        'Inès Roux saved another version Nov 5, 2025. Your changes are kept over it; Done replaces it.',
+      );
+    expect((find(harness, 'document-title-field') as HTMLTextAreaElement | null)?.value).toBe(
+      'Release notes 3.2',
+    );
+
+    await harness.fixture.whenStable();
+    harness.detectChanges();
+    find(harness, 'document-done')?.click();
+    await expect
+      .poll(() => {
+        harness.detectChanges();
+        return overlay('document-replace-confirm');
+      })
+      .not.toBeNull();
+    expect(api.update).toHaveBeenCalledTimes(1);
+    overlay('document-replace-confirm')?.click();
+
+    await expect
+      .poll(() => {
+        harness.detectChanges();
+        return find(harness, 'document-title')?.textContent.trim();
+      })
+      .toBe('Release notes 3.2');
+    expect(api.update).toHaveBeenLastCalledWith('d1', 5, {
+      title: 'Release notes 3.2',
+      body: '# Fixes',
+    });
+  });
+
+  it('shows the version saved meanwhile when the draft changed nothing', async () => {
+    const harness: RouterTestingHarness = await open();
+    api.update.mockRejectedValueOnce(
+      new HttpErrorResponse({
+        status: 412,
+        error: { status: 412, code: 'request.version-mismatch' },
+      }),
+    );
+    api.get.mockResolvedValueOnce({ ...NOTES, title: 'Release notes 3.1.1', version: 5 });
+
+    find(harness, 'document-edit')?.click();
+    harness.detectChanges();
+    find(harness, 'document-done')?.click();
+
+    await expect
+      .poll(() => {
+        harness.detectChanges();
+        return find(harness, 'document-title')?.textContent.trim();
+      })
+      .toBe('Release notes 3.1.1');
+    expect(find(harness, 'document-conflict')).toBeNull();
+  });
+
+  it('keeps edit mode and what was typed while a save was on its way', async () => {
+    const harness: RouterTestingHarness = await open();
+    let answer: (saved: DocumentDetail) => void = (): void => undefined;
+    api.update.mockImplementationOnce(
+      (_id: string, version: number, draft: { title: string; body: string }) =>
+        new Promise<DocumentDetail>((resolve) => {
+          answer = (): void => {
+            resolve({ ...NOTES, ...draft, version: version + 1 });
+          };
+        }),
+    );
+
+    find(harness, 'document-edit')?.click();
+    harness.detectChanges();
+    typeTitle(harness, 'Release notes 3.2');
+    find(harness, 'document-done')?.click();
+    harness.detectChanges();
+    typeTitle(harness, 'Release notes 3.3');
+    answer(NOTES);
+
+    await expect.poll(() => toasts.success.mock.calls.length).toBe(1);
+    harness.detectChanges();
+    expect((find(harness, 'document-title-field') as HTMLTextAreaElement | null)?.value).toBe(
+      'Release notes 3.3',
+    );
+    find(harness, 'document-done')?.click();
+    await expect.poll(() => api.update.mock.calls.length).toBe(2);
+    expect(api.update).toHaveBeenLastCalledWith('d1', 4, {
+      title: 'Release notes 3.3',
+      body: NOTES.body,
+    });
+  });
+
+  it('waits for a save under way before leaving, and leaves once it saved the draft', async () => {
+    const harness: RouterTestingHarness = await open();
+    let answer: () => void = (): void => undefined;
+    api.update.mockImplementationOnce(
+      (_id: string, version: number, draft: { title: string; body: string }) =>
+        new Promise<DocumentDetail>((resolve) => {
+          answer = (): void => {
+            resolve({ ...NOTES, ...draft, version: version + 1 });
+          };
+        }),
+    );
+    find(harness, 'document-edit')?.click();
+    harness.detectChanges();
+    typeTitle(harness, 'Release notes 3.2');
+    find(harness, 'document-done')?.click();
+    harness.detectChanges();
+
+    const left: Promise<boolean> = TestBed.inject(Router).navigateByUrl('/atelier-nord/docs');
+    await new Promise<void>((resolve: () => void): void => {
+      setTimeout(resolve, 20);
+    });
+    harness.detectChanges();
+    expect(overlay('document-discard-confirm')).toBeNull();
+    answer();
+
+    expect(await left).toBe(true);
+    expect(overlay('document-discard-confirm')).toBeNull();
+    expect(TestBed.inject(Router).url).toBe('/atelier-nord/docs');
+  });
+
+  it('asks after the save under way when the draft changed during it', async () => {
+    const harness: RouterTestingHarness = await open();
+    let answer: () => void = (): void => undefined;
+    api.update.mockImplementationOnce(
+      (_id: string, version: number, draft: { title: string; body: string }) =>
+        new Promise<DocumentDetail>((resolve) => {
+          answer = (): void => {
+            resolve({ ...NOTES, ...draft, version: version + 1 });
+          };
+        }),
+    );
+    find(harness, 'document-edit')?.click();
+    harness.detectChanges();
+    typeTitle(harness, 'Release notes 3.2');
+    find(harness, 'document-done')?.click();
+    harness.detectChanges();
+    typeTitle(harness, 'Release notes 3.3');
+
+    const left: Promise<boolean> = TestBed.inject(Router).navigateByUrl('/atelier-nord/docs');
+    answer();
+    await expect
+      .poll(() => {
+        harness.detectChanges();
+        return overlay('document-discard-confirm');
+      })
+      .not.toBeNull();
+    overlay('document-discard-confirm')?.click();
+    harness.detectChanges();
+
+    expect(await left).toBe(true);
+  });
+
+  it('keeps the document and reads it again after a deletion refused as stale', async () => {
+    const harness: RouterTestingHarness = await open();
+    api.remove.mockRejectedValueOnce(
+      new HttpErrorResponse({
+        status: 412,
+        error: { status: 412, code: 'request.version-mismatch' },
+      }),
+    );
+    api.get.mockResolvedValueOnce({ ...NOTES, title: 'Release notes 3.1.1', version: 4 });
+
+    find(harness, 'document-delete')?.click();
+    harness.detectChanges();
+    await expect.poll(() => overlay('document-delete-confirm')).not.toBeNull();
+    overlay('document-delete-confirm')?.click();
+
+    await expect
+      .poll(() => {
+        harness.detectChanges();
+        return find(harness, 'document-title')?.textContent.trim();
+      })
+      .toBe('Release notes 3.1.1');
+    expect(TestBed.inject(Router).url).toBe('/atelier-nord/d/d1');
+    expect(toasts.error).toHaveBeenCalledWith('The document changed meanwhile', {
+      description: 'It was kept. Read it again before deleting it.',
+    });
+  });
+
+  it('reads the document after a lost deletion answer, and goes back once it is gone', async () => {
+    const harness: RouterTestingHarness = await open();
+    api.remove.mockRejectedValueOnce(new HttpErrorResponse({ status: 0 }));
+    api.get.mockRejectedValueOnce(
+      new HttpErrorResponse({ status: 404, error: { status: 404, code: 'document.not-found' } }),
+    );
+
+    find(harness, 'document-delete')?.click();
+    harness.detectChanges();
+    await expect.poll(() => overlay('document-delete-confirm')).not.toBeNull();
+    overlay('document-delete-confirm')?.click();
+
+    await expect.poll(() => TestBed.inject(Router).url).toBe('/atelier-nord/docs');
+    expect(toasts.success).toHaveBeenCalledWith('Document deleted', {
+      description: 'Release notes 3.1',
+    });
   });
 });

@@ -200,15 +200,88 @@ export type DocumentCreateOutcome =
  * Type DocumentSaveOutcome
  *
  * @description
- * How a save ended: `saved` (the draft is the stored document), `conflict` (someone saved another
- * version first; the draft is kept over it), `failed` (refused or not applied), `unknown` (no
- * answer and no read confirmed it), `gone` (the document no longer exists) or `cancelled` (the
- * organization changed or the page went away).
+ * How a save ended:
  *
- * @type {'saved' | 'conflict' | 'failed' | 'unknown' | 'gone' | 'cancelled'}
+ * - `saved`: the draft is the stored document;
+ * - `adopted`: someone saved another version first and the draft changed nothing of the version
+ *   it started from, so the other version is shown as it is;
+ * - `conflict`: someone saved another version first; `draft` merges it with the draft, field by
+ *   field (the other version's title or body wherever the draft did not change it), and the next
+ *   save replaces the other version;
+ * - `failed` (refused or not applied), `unknown` (no answer and no read confirmed it), `gone` (the
+ *   document no longer exists) or `cancelled` (the organization or the document changed, or the
+ *   page went away).
+ *
+ * @type {{ readonly kind: 'saved' | 'adopted' | 'failed' | 'unknown' | 'gone' | 'cancelled' } | { readonly kind: 'conflict'; readonly draft: DocumentDraft }}
  */
 export type DocumentSaveOutcome =
-  'saved' | 'conflict' | 'failed' | 'unknown' | 'gone' | 'cancelled';
+  | { readonly kind: 'saved' | 'adopted' | 'failed' | 'unknown' | 'gone' | 'cancelled' }
+  | { readonly kind: 'conflict'; readonly draft: DocumentDraft };
+
+/**
+ * Interface DocumentConflict
+ *
+ * @description
+ * The other version a save met: who saved it and when. The draft stays in edit mode over it until
+ * a save replaces it or the edit is cancelled.
+ */
+export interface DocumentConflict {
+  // #region Properties
+  /**
+   * Property authorUserId
+   *
+   * @description
+   * The account that saved the other version.
+   *
+   * @type {string}
+   * @readonly
+   */
+  readonly authorUserId: string;
+
+  /**
+   * Property updatedAt
+   *
+   * @description
+   * When it was saved, ISO 8601.
+   *
+   * @type {string}
+   * @readonly
+   */
+  readonly updatedAt: string;
+  // #endregion
+}
+
+/**
+ * Interface DocumentList
+ *
+ * @description
+ * The documents of a search, as far as the catalog reads them.
+ */
+export interface DocumentList {
+  // #region Properties
+  /**
+   * Property items
+   *
+   * @description
+   * The documents, the most recently saved first.
+   *
+   * @type {readonly DocumentSummary[]}
+   * @readonly
+   */
+  readonly items: readonly DocumentSummary[];
+
+  /**
+   * Property truncated
+   *
+   * @description
+   * Whether more documents match than the catalog reads (500).
+   *
+   * @type {boolean}
+   * @readonly
+   */
+  readonly truncated: boolean;
+  // #endregion
+}
 
 /**
  * Type DocumentDeleteOutcome

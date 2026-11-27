@@ -47,11 +47,13 @@ import {
 import { type UnsavedChanges, warnBeforeUnload } from '@shared/unsaved-changes';
 
 import {
+  BODY_MAX_LENGTH,
   normalizedTitle,
   TITLE_MAX_LENGTH,
   untitledTitle,
 } from '../../../constants/document-titles/document-titles.constants';
 import type {
+  DocumentConflict,
   DocumentDeleteOutcome,
   DocumentDetail,
   DocumentDraft,
@@ -70,28 +72,33 @@ import { DocumentDeleteDialog } from '../../dialogs/document-delete-dialog/docum
  * A document at its shareable address (mockup `App.dc.html` lines 1925-1959, `max-w-3xl`): the
  * `Documents` link back to the catalog, then the document in read mode or, for a caller who may
  * edit its space (gap G-C2), in edit mode. The page skeleton shows during the read; a missing
- * document renders the not found page and any other failure the unavailable state, through the
- * route's error boundary and the template's read of `current`. The document's title is the
- * page's title.
+ * document (or an address that names no document) renders the not found page and any other
+ * failure the unavailable state, through the route's error boundary and the template's read of
+ * `current`. The document's title is the page's title.
  *
  * Read mode: `Copy the document link` (`Document link copied`), and for an editor `Delete`, which
- * asks `DocumentDeleteDialog` and goes back to the catalog once deleted (gap G-C1, no `Undo`), and
- * `Edit`. The article shows the title, `<space> · Modified <when> by <author>` and the body
- * through `cw-markdown`, whose links open in a new tab and whose checkboxes are not clickable
- * (gap G-C5); an empty body shows the mockup's dashed line. The document is read again when the
- * window regains focus (gap G-C4), never while it is edited.
+ * asks `DocumentDeleteDialog` and goes back to the catalog once that document is deleted (gap
+ * G-C1, no `Undo`), and `Edit`. The article shows the title, `<space> · Modified <when> by
+ * <author>` and the body through `cw-markdown`, whose links open in a new tab and whose checkboxes
+ * are not clickable (gap G-C5); an empty body shows the mockup's dashed line. The document is read
+ * again when the window regains focus (gap G-C4), at most once per 30 s and never in edit mode.
  *
  * Edit mode (`Edit`, or `?mode=edit` when the caller may edit): the title field (`Untitled` as
- * placeholder, Enter moves to the body; a never edited `Untitled` document starts empty),
- * `<space> · editing in progress`, the block editor with its toolbar, and `Add a block at the
- * end`. The draft is a Signal Forms model. `Cancel` drops it; `Done` saves it (an empty title
- * saves as `Untitled`) and goes back to read mode once the stored document is the draft. Every
- * other outcome keeps the draft in edit mode, the store's toast saying why. Focus moves to the
- * title field on entering edit mode and to `Edit` on leaving it.
+ * placeholder, at most 200 characters, Enter moves to the body; a never edited `Untitled`
+ * document starts empty), `<space> · editing in progress`, the block editor with its toolbar
+ * (at most 100 000 characters), and `Add a block at the end`. The draft is a Signal Forms model;
+ * the store records the version it starts from. `Cancel` drops it; `Done` saves it (an empty title
+ * saves as `Untitled`) and goes back to read mode once the stored document is the draft and
+ * nothing was typed since. When someone saved another version first, a draft that changed nothing
+ * shows that version in read mode; otherwise the draft takes that version's title or body
+ * wherever it did not change them, a persistent notice names who saved and when, and the next
+ * `Done` asks `Replace the other version?` first. Every other outcome keeps the draft in edit
+ * mode, the store's toast saying why. Focus moves to the title field on entering edit mode and to
+ * `Edit` on leaving it.
  *
- * Leaving the page (`unsavedChangesGuard`) while the draft differs from the stored document or a
- * save is under way asks `Leave without saving?`; the browser asks before closing the tab
- * meanwhile.
+ * Leaving the page (`unsavedChangesGuard`) while a save is under way waits for it, then asks
+ * `Leave without saving?` only if the draft still differs from the stored document; the browser
+ * asks before closing the tab meanwhile.
  */
 @Component({
   selector: 'cw-document-page',
@@ -148,23 +155,12 @@ export class DocumentPage implements UnsavedChanges {
    * Property store
    *
    * @description
-   * The document, its rights, its save and its deletion.
+   * The document, its rights, its edit mode, its save and its deletion.
    *
    * @type {InstanceType<typeof DocumentStore>}
    * @readonly
    */
   protected readonly store: InstanceType<typeof DocumentStore> = inject(DocumentStore);
-
-  /**
-   * Property editing
-   *
-   * @description
-   * Whether the document shows in edit mode.
-   *
-   * @type {WritableSignal<boolean>}
-   * @readonly
-   */
-  protected readonly editing: WritableSignal<boolean> = signal(false);
 
   /**
    * Property draft
@@ -185,7 +181,7 @@ export class DocumentPage implements UnsavedChanges {
    *
    * @description
    * The title field and the block editor, bound to `draft`; the title takes at most the
-   * contract's 200 characters.
+   * contract's 200 characters and the body its 100 000.
    *
    * @type {FieldTree<DocumentDraft>}
    * @readonly
@@ -194,6 +190,7 @@ export class DocumentPage implements UnsavedChanges {
     this.draft,
     (fields: SchemaPathTree<DocumentDraft>): void => {
       maxLength(fields.title, TITLE_MAX_LENGTH);
+      maxLength(fields.body, BODY_MAX_LENGTH);
     },
   );
 
@@ -218,6 +215,17 @@ export class DocumentPage implements UnsavedChanges {
    * @readonly
    */
   protected readonly discardOpen: WritableSignal<boolean> = signal(false);
+
+  /**
+   * Property replaceOpen
+   *
+   * @description
+   * Whether `Replace the other version?` is open.
+   *
+   * @type {WritableSignal<boolean>}
+   * @readonly
+   */
+  protected readonly replaceOpen: WritableSignal<boolean> = signal(false);
 
   /**
    * Property shown
@@ -258,9 +266,28 @@ export class DocumentPage implements UnsavedChanges {
    */
   protected readonly dirty: Signal<boolean> = computed((): boolean => {
     const stored: DocumentDetail | undefined = this.shown();
-    if (!this.editing() || stored === undefined) return false;
+    if (!this.store.editing() || stored === undefined) return false;
     const draft: DocumentDraft = this.draft();
     return normalizedTitle(draft.title) !== stored.title || draft.body !== stored.body;
+  });
+
+  /**
+   * Property conflictNotice
+   *
+   * @description
+   * The persistent notice of a conflict: who saved the other version and when, or null.
+   *
+   * @type {Signal<string | null>}
+   * @readonly
+   */
+  protected readonly conflictNotice: Signal<string | null> = computed((): string | null => {
+    const conflict: DocumentConflict | null = this.store.conflict();
+    if (conflict === null) return null;
+    const when: string = updatedLabel(conflict.updatedAt, this.locale, 'inline');
+    const author: string | null = this.store.conflictAuthorName();
+    return author === null
+      ? $localize`:@@docs.conflict.notice-no-author:Another version was saved ${when}:when:. Your changes are kept over it; Done replaces it.`
+      : $localize`:@@docs.conflict.notice:${author}:author: saved another version ${when}:when:. Your changes are kept over it; Done replaces it.`;
   });
 
   /**
@@ -407,10 +434,9 @@ export class DocumentPage implements UnsavedChanges {
    * Constructor
    *
    * @description
-   * Makes the store follow the address's document; leaves edit mode for another document; opens
-   * edit mode from `?mode=edit` once the caller's rights are known; titles the page with the
-   * document's title after each navigation; and asks the browser to confirm closing the tab while
-   * changes are unsaved.
+   * Makes the store follow the address's document; opens edit mode from `?mode=edit` once the
+   * caller's rights are known; titles the page with the document's title after each navigation;
+   * and asks the browser to confirm closing the tab while changes are unsaved.
    *
    * @constructor
    */
@@ -431,10 +457,7 @@ export class DocumentPage implements UnsavedChanges {
     });
     effect((): void => {
       const stored: DocumentDetail | undefined = this.shown();
-      if (stored?.id !== this.docId()) {
-        this.editing.set(false);
-        return;
-      }
+      if (stored?.id !== this.docId()) return;
       if (this.mode() === 'edit' && this.store.canEdit() && this.editedFor !== stored.id) {
         this.editedFor = stored.id;
         this.startEditing();
@@ -452,7 +475,7 @@ export class DocumentPage implements UnsavedChanges {
    * Whether leaving now could lose edits: the draft differs from the stored document, or a save
    * is under way.
    *
-   * @returns {boolean} Whether to ask before leaving.
+   * @returns {boolean} Whether to hold the navigation.
    */
   public hasUnsavedChanges(): boolean {
     return this.dirty() || this.store.saving();
@@ -462,11 +485,14 @@ export class DocumentPage implements UnsavedChanges {
    * Method confirmDiscard
    *
    * @description
-   * Asks `Leave without saving?`.
+   * Waits for a save under way, then leaves when the draft is the stored document, and otherwise
+   * asks `Leave without saving?`.
    *
    * @returns {Promise<boolean>} Resolves true to leave, false to keep editing.
    */
-  public confirmDiscard(): Promise<boolean> {
+  public async confirmDiscard(): Promise<boolean> {
+    await this.store.saveSettled();
+    if (!this.dirty()) return true;
     this.discardAnswer?.(false);
     return new Promise<boolean>((resolve: (leave: boolean) => void): void => {
       this.discardAnswer = resolve;
@@ -493,10 +519,9 @@ export class DocumentPage implements UnsavedChanges {
    * Method refresh
    *
    * @description
-   * Reads the document again when the window regains focus, unless it is edited.
+   * Reads the document again when the window regains focus; the store skips it in edit mode.
    */
   protected refresh(): void {
-    if (this.editing()) return;
     void this.store.refresh();
   }
 
@@ -509,12 +534,10 @@ export class DocumentPage implements UnsavedChanges {
    * the mockup.
    */
   protected startEditing(): void {
-    const stored: DocumentDetail | undefined = this.shown();
-    if (stored === undefined || !this.store.canEdit()) return;
-    const fresh: boolean =
-      stored.version === 1 && stored.title === untitledTitle() && stored.body === '';
-    this.draft.set({ title: fresh ? '' : stored.title, body: stored.body });
-    this.editing.set(true);
+    const base: DocumentDetail | null = this.store.beginEditing();
+    if (base === null) return;
+    const fresh: boolean = base.version === 1 && base.title === untitledTitle() && base.body === '';
+    this.draft.set({ title: fresh ? '' : base.title, body: base.body });
     afterNextRender(
       (): void => {
         this.titleField()?.nativeElement.focus();
@@ -537,15 +560,30 @@ export class DocumentPage implements UnsavedChanges {
    * Method done
    *
    * @description
-   * `Done`: saves the draft, and goes back to read mode once the stored document is the draft
-   * sent and nothing was typed since.
+   * `Done`: saves the draft, after `Replace the other version?` when the last save met another
+   * version.
    *
    * @returns {Promise<void>} Resolves once settled.
    */
   protected async done(): Promise<void> {
-    const sent: DocumentDraft = this.draft();
-    const outcome: DocumentSaveOutcome = await this.store.save(sent);
-    if (outcome === 'saved' && this.draft() === sent && this.editing()) this.leaveEditing();
+    if (this.store.conflict() !== null) {
+      this.replaceOpen.set(true);
+      return;
+    }
+    await this.save();
+  }
+
+  /**
+   * Method confirmReplace
+   *
+   * @description
+   * `Replace`: saves the draft over the other version.
+   *
+   * @returns {Promise<void>} Resolves once settled.
+   */
+  protected async confirmReplace(): Promise<void> {
+    this.replaceOpen.set(false);
+    await this.save();
   }
 
   /**
@@ -590,16 +628,18 @@ export class DocumentPage implements UnsavedChanges {
    *
    * @description
    * Deletes the document once confirmed, closes the confirmation, and goes back to the catalog
-   * once it is deleted.
+   * once it is deleted, if the page still shows it.
    *
    * @returns {Promise<void>} Resolves once settled.
    */
   protected async confirmDelete(): Promise<void> {
     const slug: string = this.workspace.organization().slug;
+    const id: string = this.docId();
     const outcome: DocumentDeleteOutcome = await this.store.remove();
     this.deleteOpen.set(false);
+    if (this.docId() !== id) return;
     if (outcome === 'deleted') await this.router.navigate(['/', slug, 'docs']);
-    else if (outcome === 'conflict') void this.store.refresh();
+    else if (outcome === 'conflict' || outcome === 'unknown') void this.store.refresh(true);
   }
 
   /**
@@ -620,13 +660,56 @@ export class DocumentPage implements UnsavedChanges {
   }
 
   /**
+   * Method save
+   *
+   * @description
+   * Saves the draft and follows the outcome: back to read mode once the stored document is the
+   * draft sent and nothing was typed since, or once the other version replaced a draft that
+   * changed nothing; after a conflict, the merged draft, keeping what was typed during the save.
+   *
+   * @returns {Promise<void>} Resolves once settled.
+   */
+  private async save(): Promise<void> {
+    const id: string = this.docId();
+    const sent: DocumentDraft = this.draft();
+    const outcome: DocumentSaveOutcome = await this.store.save(sent);
+    if (this.docId() !== id || !this.store.editing()) return;
+    const typed: DocumentDraft = this.draft();
+    switch (outcome.kind) {
+      case 'saved':
+        if (typed === sent) this.leaveEditing();
+        break;
+      case 'adopted': {
+        const stored: DocumentDetail | undefined = this.shown();
+        if (typed === sent || stored === undefined) {
+          this.leaveEditing();
+        } else {
+          this.draft.set({
+            title: typed.title === sent.title ? stored.title : typed.title,
+            body: typed.body === sent.body ? stored.body : typed.body,
+          });
+        }
+        break;
+      }
+      case 'conflict':
+        this.draft.set({
+          title: typed.title === sent.title ? outcome.draft.title : typed.title,
+          body: typed.body === sent.body ? outcome.draft.body : typed.body,
+        });
+        break;
+      default:
+        break;
+    }
+  }
+
+  /**
    * Method leaveEditing
    *
    * @description
    * Goes back to read mode and gives focus to `Edit`.
    */
   private leaveEditing(): void {
-    this.editing.set(false);
+    this.store.endEditing();
     afterNextRender(
       (): void => {
         this.editButton()?.nativeElement.focus();
