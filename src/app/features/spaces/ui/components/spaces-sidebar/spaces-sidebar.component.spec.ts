@@ -44,6 +44,19 @@ import { SpacesSidebar } from './spaces-sidebar.component';
 class ShellStub {}
 
 /**
+ * Component SettingsRailStub
+ *
+ * @description
+ * Renders the rail item as the settings shell does, without a sidebar.
+ */
+@Component({
+  selector: 'cw-settings-rail-stub',
+  imports: [SpacesRailItem],
+  template: '<cw-spaces-rail-item variant="settings" />',
+})
+class SettingsRailStub {}
+
+/**
  * Function list
  *
  * @description
@@ -142,6 +155,7 @@ describe('SpacesSidebar', () => {
         provideCadenwayIcons(),
         provideRouter([
           { path: ':org', component: ShellStub },
+          { path: ':org/account/profile', component: SettingsRailStub },
           { path: ':org/l/:listId', component: ShellStub },
           { path: ':org/spaces/:spaceId', component: ShellStub },
         ]),
@@ -290,6 +304,26 @@ describe('SpacesSidebar', () => {
         ?.querySelector('[data-testid="rail-spaces"] button')
         ?.getAttribute('aria-current'),
     ).toBe('page');
+  });
+
+  it('keeps only the overview and favorite actions in the settings rail menu', async () => {
+    const harness: RouterTestingHarness = await RouterTestingHarness.create(
+      '/atelier-nord/account/profile',
+    );
+    await expect.poll(() => text(harness, 'rail-spaces')).toContain('Product');
+
+    rightClick(
+      harness,
+      harness.routeNativeElement?.querySelector('[data-testid="rail-spaces"] button'),
+    );
+
+    expect(
+      [...document.querySelectorAll('[role="menuitem"]')].map((item: Element) =>
+        item.textContent.trim(),
+      ),
+    ).toEqual(['Open the overview', 'Remove from favorite spaces']);
+    menuItem(harness, 'Open the overview')?.click();
+    await expect.poll(() => TestBed.inject(Router).url).toBe('/atelier-nord/spaces/sp-product');
   });
 
   it('opens the spaces screen from the rail and marks it current on a list', async () => {

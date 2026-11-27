@@ -2,6 +2,7 @@ import { computed, inject, type Provider } from '@angular/core';
 import type { SlotContribution, SlotFeature } from '@shared/layout-slot';
 
 import type { SpaceDetails } from '../../models/space/space.interface';
+import type { SpacesRailItemVariant } from '../../models/spaces-rail-item/spaces-rail-item-variant.type';
 import type { ListSummary, SpaceOverview } from '../../models/task-list/task-list.interface';
 import type {
   ListDirectoryEntry,
@@ -63,16 +64,22 @@ export function provideSpacesNavigation(): Provider[] {
  *
  * @description
  * Contributes `Spaces` to the shell's `railNavigation` slot, after `Inbox`: it
- * shows the spaces screen, and the favorite spaces follow it on desktop.
+ * shows the spaces screen, and the favorite spaces follow it on desktop. In the settings shell,
+ * pass `{ variant: 'settings' }`: there is no sidebar to host the space dialogs, so the favorite
+ * spaces' menu keeps only `Open the overview` and `Remove from favorite spaces`.
  *
+ * @param {{ readonly variant?: SpacesRailItemVariant }} [options] - Hosting shell, `app` by default.
  * @returns {SlotFeature<SlotContribution>} The slot contribution factory.
  */
-export function withSpacesRailItem(): SlotFeature<SlotContribution> {
+export function withSpacesRailItem(
+  options: { readonly variant?: SpacesRailItemVariant } = {},
+): SlotFeature<SlotContribution> {
   return {
     useFactory: (): SlotContribution => ({
       id: 'spaces.rail-item',
       order: 30,
       component: SpacesRailItem,
+      inputs: { variant: options.variant ?? 'app' },
     }),
   };
 }
