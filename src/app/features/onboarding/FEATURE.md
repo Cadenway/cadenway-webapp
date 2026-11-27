@@ -165,11 +165,13 @@ created` with `<n> lists` and `<n> invitations sent` (invited outcomes only; nev
   invited at least one address; any other outcome, an unknown one included, counts as not sent.
 - A draft color a later contract adds reads as `gris`, as `LookColorValue` says; the assistant
   draws no `gris` swatch and shows such a draft with the first swatch (`violet`) checked.
-- `OnboardingInviteField` is its own `<form>`, so a host never nests it in another form. `Add`
-  checks the trimmed address against the mockup's pattern (`^[^\s@]+@[^\s@]+\.[^\s@]{2,}$`, line
-  5258); an invalid one shows the error under the field with `aria-invalid` from that submit on,
-  not on blur, and an empty field adds nothing. A valid address is added once, compared without
-  regard to case (the mockup compares it as typed), and the field empties. The focus returns to
+- `OnboardingInviteField` is its own `<form>`, so a host never nests it in another form. Any text,
+  blank text included, must match the mockup's pattern once trimmed
+  (`^[^\s@]+@[^\s@]+\.[^\s@]{2,}$`, line 5258); only an empty field is valid, and `Add` then adds
+  nothing. Once the field is touched (blurred, or submitted with `Add`), an invalid address shows
+  the error under the field, which describes it, and `CwInput` sets `aria-invalid` from the same
+  field state. A valid address is added once, compared without regard to case (the mockup
+  compares it as typed), and the field empties and is untouched again. The focus returns to
   the field after an add, and after a removal goes to the remove button now at that place, else
   the last one, else the field. The mockup's guest badge (line 2695) is not drawn (gap G5).
 - The checklist will have the three items the contract records (step 9, getting-started
