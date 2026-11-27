@@ -266,6 +266,7 @@ describe('WORKSPACE_ROUTES', () => {
         {
           provide: BillingService,
           useValue: {
+            listBillingInvoices: () => of({ items: [], nextCursor: null }),
             getBillingSubscription: () =>
               of({
                 plan: 'team',
