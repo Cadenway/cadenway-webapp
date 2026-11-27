@@ -269,7 +269,7 @@ describe('WORKSPACE_ROUTES', () => {
             listDocuments: () => of({ items: [], nextCursor: null, total: 0 }),
             getDocument: () =>
               of({
-                id: 'doc-onboarding',
+                id: '019a7005-4b2c-7d4e-8f5a-6b7c8d9e0f17',
                 spaceId: 's1',
                 title: 'Onboarding',
                 authorUserId: 'u1',
@@ -455,7 +455,12 @@ describe('WORKSPACE_ROUTES', () => {
       ['/atelier-nord/dashboards', 'Team dashboard', 'Dashboards', 'dashboards-rail-item'],
       ['/atelier-nord/goals', 'Goals', 'Goals', 'goals-rail-item'],
       ['/atelier-nord/docs', 'Documents', 'Documents', 'docs-rail-item'],
-      ['/atelier-nord/d/doc-onboarding', 'Onboarding', 'Onboarding — Cadenway', 'docs-rail-item'],
+      [
+        '/atelier-nord/d/019a7005-4b2c-7d4e-8f5a-6b7c8d9e0f17',
+        'Onboarding',
+        'Onboarding — Cadenway',
+        'docs-rail-item',
+      ],
       ['/atelier-nord/trash', 'Trash', 'Trash', null],
       ['/atelier-nord/archives', 'Archives', 'Archives', null],
     ] as const) {
