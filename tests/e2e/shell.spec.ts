@@ -1,6 +1,8 @@
 import { expect, test } from '@playwright/test';
 import type { Page, Request, Route } from '@playwright/test';
 
+import { workspaceRead } from './workspace-reads';
+
 const user = {
   id: '019a5f3c-8d2e-7c4a-9b1f-3e5d7a9c1b30',
   name: 'Camille Martin',
@@ -149,7 +151,7 @@ async function stubGateway(page: Page): Promise<Gateway> {
         });
         return;
       default:
-        await route.fulfill(problem(404, 'route.not-found'));
+        await route.fulfill(workspaceRead(key) ?? problem(404, 'route.not-found'));
     }
   });
 
