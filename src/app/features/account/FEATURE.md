@@ -270,8 +270,8 @@ parent provides the English texts of `cw-password-strength` and `cw-input-otp` t
   reason. The confirmation closes and a warning says how to know: a scheduled deletion ends this
   session and sends an email, and signing in again cancels it. Once scheduled, the page lets the
   navigation go without asking and signs out through Auth's `SignOut`, which opens the signed-out screen (`/logged-out?reason=signed-out`,
-  opened directly when the sign-out request fails; known gap: that fallback cannot forget the
-  person's device data, since Auth publishes its cleanup only inside `SignOut.run()`).
+  and when the sign-out request fails, `SignOut.leaveLocally()` forgets the person's device data
+  and opens it all the same, the gateway having ended the session already).
   `409 account.organization-owner` closes the
   confirmation and toasts the organizations to hand over, named from `details.organizationIds`.
   The mockup's count of the API tokens revoked (line 1543) is left out: tokens are listed per

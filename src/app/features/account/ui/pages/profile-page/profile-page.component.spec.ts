@@ -191,14 +191,17 @@ describe('ProfilePage', () => {
   let api: Record<string, Mock>;
   let toasts: { success: Mock; error: Mock; show: Mock; warning: Mock };
   let refresh: Mock;
-  let signOut: { run: Mock };
+  let signOut: { run: Mock; leaveLocally: Mock };
   let ownStatus: WritableSignal<PresenceStatus | null>;
   let presenceStatus: WritableSignal<'disabled' | 'connected'>;
   let setPresence: Mock;
 
   beforeEach(() => {
     refresh = vi.fn(() => Promise.resolve());
-    signOut = { run: vi.fn(() => Promise.resolve(true)) };
+    signOut = {
+      run: vi.fn(() => Promise.resolve(true)),
+      leaveLocally: vi.fn(() => Promise.resolve()),
+    };
     ownStatus = signal<PresenceStatus | null>('online');
     presenceStatus = signal<'disabled' | 'connected'>('connected');
     setPresence = vi.fn((status: PresenceStatus) => {
@@ -549,6 +552,24 @@ describe('ProfilePage', () => {
 
     await expect.poll(() => signOut.run.mock.calls.length).toBe(1);
     expect(api['scheduleDeletion']).toHaveBeenCalledWith('u-camille');
+    expect(signOut.leaveLocally).not.toHaveBeenCalled();
+  });
+
+  it('leaves locally, forgetting the device data, when the sign-out after the deletion fails', async () => {
+    signOut.run.mockResolvedValueOnce(false);
+    const harness: RouterTestingHarness = await open();
+
+    byTestId(harness, 'profile-delete')?.click();
+    await expect.poll(() => document.querySelector('[role="alertdialog"] input')).not.toBeNull();
+    const field: HTMLInputElement | null = document.querySelector('[role="alertdialog"] input');
+    if (field === null) throw new Error('No confirmation field');
+    field.value = 'Camille Martin';
+    field.dispatchEvent(new Event('input'));
+    harness.detectChanges();
+    document.querySelector<HTMLElement>('[data-testid="account-deletion-confirm"]')?.click();
+
+    await expect.poll(() => signOut.leaveLocally.mock.calls.length).toBe(1);
+    expect(signOut.run).toHaveBeenCalledOnce();
   });
 
   it('toasts the organizations still owned when the deletion is refused', async () => {

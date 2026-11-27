@@ -19,7 +19,6 @@ import {
   validate,
   type ValidationError,
 } from '@angular/forms/signals';
-import { Router } from '@angular/router';
 import { CwAlert, CwAlertActions, CwAlertDescription } from '@cadenway/ui/components/alert';
 import { CwButton } from '@cadenway/ui/components/button';
 import {
@@ -450,17 +449,6 @@ export class ProfilePage implements UnsavedChanges {
    * @readonly
    */
   private readonly signOut: SignOut = inject(SignOut);
-
-  /**
-   * Property router
-   *
-   * @description
-   * Opens the signed-out screen when the sign-out request itself fails.
-   *
-   * @type {Router}
-   * @readonly
-   */
-  private readonly router: Router = inject(Router);
 
   /**
    * Property destroyRef
@@ -1003,7 +991,7 @@ export class ProfilePage implements UnsavedChanges {
       case 'scheduled':
         this.deletionOpen.set(false);
         if (!(await this.signOut.run())) {
-          await this.router.navigateByUrl('/logged-out?reason=signed-out', { replaceUrl: true });
+          await this.signOut.leaveLocally();
         }
         return;
       case 'owner': {
