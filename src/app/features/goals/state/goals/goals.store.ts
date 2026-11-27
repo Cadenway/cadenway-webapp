@@ -21,7 +21,15 @@ import {
   withProps,
   withState,
 } from '@ngrx/signals';
-import { auditTime, EMPTY, filter, fromEvent, merge, type Observable } from 'rxjs';
+import {
+  auditTime,
+  EMPTY,
+  filter,
+  fromEvent,
+  merge,
+  type Observable,
+  type Subscription,
+} from 'rxjs';
 
 import { hasProblemCode, OrganizationPin, OrganizationSwitchPendingError } from '@core/api';
 import { RealtimeConnection } from '@core/realtime';
@@ -207,8 +215,8 @@ export const CREATE_ATTEMPTS: number = 3;
  * Interface GoalsContext
  *
  * @description
- * Which organization, pin revision and generation the writes belong to, and whether the page
- * is gone.
+ * Which organization and generation the writes belong to, whether the workspace left that
+ * organization, and whether the page is gone.
  */
 interface GoalsContext {
   // #region Properties
@@ -235,24 +243,14 @@ interface GoalsContext {
   organizationId: string;
 
   /**
-   * Property revision
-   *
-   * @description
-   * The `OrganizationPin` revision the store adopted with its organization. The pin moves it on
-   * every commit, a switch back included, so once the page is gone (and nothing adopts a newer
-   * one) a write is never sent again after the workspace left its organization, even back to it.
-   *
-   * @type {number}
-   */
-  revision: number;
-
-  /**
    * Property left
    *
    * @description
    * Whether the pin was committed to another organization, or cleared, since the store adopted
-   * its organization; set synchronously by `OrganizationPin.organizationChanges`, so a switch and
-   * back within one tick still resets the store instead of only re-verifying it.
+   * its organization. `OrganizationPin.organizationChanges` sets it synchronously, and only a
+   * reset of a live store clears it, so a write is never sent again once the workspace left the
+   * organization, even back to it, within one tick or after the page is gone. A re-verification of
+   * the same organization does not set it, so it drops nothing.
    *
    * @type {boolean}
    */
@@ -264,8 +262,8 @@ interface GoalsContext {
    * @description
    * Whether the page that provided the store is gone: the writes already queued are still sent,
    * with the reads of one goal they need (after a `412` or an unknown outcome), while the
-   * workspace and the pin still name its organization and revision; the goals and a goal whose
-   * queue went idle are not read again, and no background read is sent.
+   * workspace and the pin still name its organization and it was never left; the goals and a goal
+   * whose queue went idle are not read again, and no background read is sent.
    *
    * @type {boolean}
    */
@@ -957,15 +955,11 @@ function createGoalsStore(): Type<GoalsStoreInstance> {
       const context: GoalsContext = {
         generation: 0,
         organizationId: workspace.organization().id,
-        revision: pin.revision(),
         left: false,
         destroyed: false,
       };
       inject(DestroyRef).onDestroy((): void => {
         context.destroyed = true;
-      });
-      pin.organizationChanges.pipe(takeUntilDestroyed()).subscribe((): void => {
-        context.left = true;
       });
       let ownersAsked: readonly string[] = [];
       return {
@@ -1201,17 +1195,30 @@ function createGoalsStore(): Type<GoalsStoreInstance> {
       // `current` only says whether `_followOrganization` has yet to reset a generation, so it
       // guards the flags that reset owns. The resolver commits another organization (workspace
       // context and pin) synchronously, before that effect moves the generation, and a destroyed
-      // store keeps its generation while the global pin moves on: `live` also checks both, and the
-      // pin's revision, against what the store adopted, so nothing is sent under another
-      // organization's pin or applied in between, nor after a switch and back.
+      // store keeps its generation while the global pin moves on: `live` also checks both against
+      // the organization the store adopted, and that the pin never left it since, so nothing is
+      // sent under another organization's pin or applied in between, nor after a switch and back.
       const current: (generation: number) => boolean = (generation: number): boolean =>
         generation === context.generation;
       const live: (generation: number) => boolean = (generation: number): boolean =>
         current(generation) &&
         !context.left &&
         store._workspace.organization().id === context.organizationId &&
-        store._pin.current() === context.organizationId &&
-        store._pin.revision() === context.revision;
+        store._pin.current() === context.organizationId;
+      // The writes still running, queued in a goal's lane or creating a goal. The store hears the
+      // organization changes until the page is gone and they all settled, so `left` keeps fencing
+      // the writes a gone page still sends.
+      let running: number = 0;
+      const changes: Subscription = store._pin.organizationChanges.subscribe((): void => {
+        context.left = true;
+      });
+      const hold: () => void = (): void => {
+        running += 1;
+      };
+      const free: () => void = (): void => {
+        running -= 1;
+        if (context.destroyed && running === 0) changes.unsubscribe();
+      };
       const alive: (generation: number) => boolean = (generation: number): boolean =>
         live(generation) && !context.destroyed;
       const guard: (generation: number) => void = (generation: number): void => {
@@ -1334,8 +1341,9 @@ function createGoalsStore(): Type<GoalsStoreInstance> {
         task: () => Promise<void>,
       ): Promise<void> => {
         const lane: GoalLane = laneOf(goalId);
+        hold();
         const run: Promise<void> = lane.tail.then(task);
-        const tail: Promise<void> = run.catch((): void => undefined);
+        const tail: Promise<void> = run.then(free, free);
         lane.tail = tail;
         void tail.then((): void => {
           if (lane.tail !== tail || !lane.dirty || !alive(generation)) return;
@@ -1571,6 +1579,7 @@ function createGoalsStore(): Type<GoalsStoreInstance> {
       };
       inject(DestroyRef).onDestroy((): void => {
         for (const resultId of [...bursts.keys()]) enter(resultId);
+        if (running === 0) changes.unsubscribe();
       });
       const edit: (
         goalId: string,
@@ -1599,12 +1608,13 @@ function createGoalsStore(): Type<GoalsStoreInstance> {
           const draftKey: string = JSON.stringify([quarter.key, draft]);
           const idempotencyKey: string = keyOf(draftKey);
           patchState(store, { creating: true });
+          hold();
           try {
             const goal: Goal = await created(generation, () =>
               store._api.create(draft, quarter, today(), idempotencyKey),
             );
-            createKeys.delete(draftKey);
             if (!live(generation)) return null;
+            createKeys.delete(draftKey);
             record({
               organizationId: organizationId(),
               after: store._readsIssued(),
@@ -1635,6 +1645,7 @@ function createGoalsStore(): Type<GoalsStoreInstance> {
             return null;
           } finally {
             if (current(generation)) patchState(store, { creating: false });
+            free();
           }
         },
         async remove(goalId: string, version: number): Promise<boolean> {
@@ -1756,8 +1767,8 @@ function createGoalsStore(): Type<GoalsStoreInstance> {
                 await fresh(goalId, generation);
                 write = await send(generation, goalId, creation);
               }
-              createKeys.delete(draftKey);
               if (!live(generation)) return;
+              createKeys.delete(draftKey);
               const lane: GoalLane = laneOf(goalId);
               lane.version = write.version ?? lane.version;
               lane.dirty = true;
@@ -1846,14 +1857,10 @@ function createGoalsStore(): Type<GoalsStoreInstance> {
           patchState(store, { _peopleRequest: store._peopleRequest() + 1 });
         }),
         _followOrganization: signalMethod<{ organizationId: string; revision: number }>(
-          ({ organizationId, revision }: { organizationId: string; revision: number }): void => {
-            if (organizationId === context.organizationId && !context.left) {
-              context.revision = revision;
-              return;
-            }
+          ({ organizationId }: { organizationId: string; revision: number }): void => {
+            if (organizationId === context.organizationId && !context.left) return;
             context.generation += 1;
             context.organizationId = organizationId;
-            context.revision = revision;
             context.left = false;
             lastAsked = null;
             records.clear();
@@ -1875,6 +1882,8 @@ function createGoalsStore(): Type<GoalsStoreInstance> {
     }),
     withHooks({
       onInit(store): void {
+        // The pin's revision moves on every commit: a switch and back within one tick leaves the
+        // organization unchanged, and only the revision makes the store react and reset.
         store._followOrganization(
           computed((): { organizationId: string; revision: number } => ({
             organizationId: store._workspace.organization().id,
@@ -1932,12 +1941,13 @@ function createGoalsStore(): Type<GoalsStoreInstance> {
  * goal, warns and reads it again, so deleting it takes a new confirmation. Every write is bound to
  * the organization generation it started in: after a switch, even back to the same organization,
  * nothing more is sent, patched or toasted. It is also sent, and its answer applied, only while the
- * workspace and `OrganizationPin` both name the organization the goals were read for, no other
- * organization was committed meanwhile, and the pin's revision is the one the store adopted (a
- * live store adopts a new revision of the same organization, a re-verification). So a write queued
- * or answered once the resolver committed another organization, before the store reacts, after the
- * page is gone, after a switch and back, or once the workspace is left (the pin cleared), is
- * dropped instead of reaching the gateway under another `If-Organization-Match`. A creation keeps its idempotency key until a definitive
+ * workspace and `OrganizationPin` both name the organization the goals were read for and the pin
+ * was not committed to another organization, or cleared, since (`organizationChanges`, heard until
+ * the page is gone and its writes settled; a re-verification of the same organization drops
+ * nothing). So a write queued or answered once the resolver committed another organization,
+ * before the store reacts, after the page is gone, after a switch and back, or once the workspace
+ * is left (the pin cleared), is dropped instead of reaching the gateway under another
+ * `If-Organization-Match`. A creation keeps its idempotency key until a definitive
  * answer and is sent again with it after an unknown outcome or
  * `409 idempotency.request-in-progress`, up to three times, then reported as unconfirmed; a resubmitted
  * identical draft reuses the key. The members are read again after a failure and for owners they

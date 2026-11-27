@@ -1289,4 +1289,48 @@ describe('GoalsStore', () => {
     expect(store.list()?.map((view: GoalView) => view.goal.id)).toEqual(['g1']);
     expect(toasts.success).not.toHaveBeenCalled();
   });
+
+  it('sends an edit and applies an answer that meet a re-verification of the organization before the store reacts', async () => {
+    api.get.mockResolvedValue(goal({ version: 5, results: [signups(186)] }));
+    const store: InstanceType<typeof GoalsStore> = await loaded();
+    const first: Subject<KeyResultWrite> = await queued(store);
+    await burst();
+
+    commit(ATELIER_NORD);
+    first.next({ result: signups(177), version: 4 });
+    first.complete();
+    await flush();
+
+    expect(api.updateResult.mock.calls).toEqual([
+      ['g1', 'k6', 3, { currentValue: 177 }],
+      ['g1', 'k6', 4, { currentValue: 186 }],
+    ]);
+    TestBed.tick();
+    await settle();
+    expect(shownValue(store)).toBe(186);
+    store.step('g1', 'k6', 1);
+    await settle();
+    expect(api.updateResult.mock.calls[2]).toEqual(['g1', 'k6', 5, { currentValue: 195 }]);
+    expect(toasts.error).not.toHaveBeenCalled();
+    expect(toasts.warning).not.toHaveBeenCalled();
+  });
+
+  it('records a creation answered during a re-verification of the organization, then forgets its key', async () => {
+    const answer: Deferred<Goal> = deferred<Goal>();
+    api.create.mockReturnValueOnce(answer.promise);
+    const store: InstanceType<typeof GoalsStore> = await loaded();
+    const creating: Promise<string | null> = store.create(SUPPORT);
+    await flush();
+
+    commit(ATELIER_NORD);
+    answer.resolve(goal({ id: 'g9', name: SUPPORT.name, version: 1, results: [] }));
+
+    await expect(creating).resolves.toBe('g9');
+    expect(toasts.success).toHaveBeenCalledWith('Goal created', { description: SUPPORT.name });
+    expect(store.list()?.map((view: GoalView) => view.goal.id)).toEqual(['g9', 'g1']);
+    TestBed.tick();
+    await settle();
+    await store.create(SUPPORT);
+    expect(new Set(api.create.mock.calls.map((call: unknown[]) => call[3])).size).toBe(2);
+  });
 });

@@ -96,12 +96,13 @@ confirmed` asks to submit again, which reuses the key. A deletion of unknown out
   write is bound to the organization generation it started in: after a switch, even back to the
   same organization, nothing more is sent, patched or toasted, and the forms and the confirmation
   close. A write is also sent, and its answer applied, only while the workspace and
-  `OrganizationPin` both name the organization the goals were read for and the pin's revision is
-  the one the store adopted (the resolver commits both synchronously, before the store reacts; a
-  re-verification of the same organization only moves the revision, which a live store adopts).
-  So a write queued or answered in between, after the page is gone and the pin moved on, even back
-  to the same organization, or once the workspace is left (the pin cleared), is dropped without a
-  toast; leaving the workspace therefore drops the last value of a burst still queued.
+  `OrganizationPin` both name the organization the goals were read for and the pin was not
+  committed to another organization, or cleared, since (the resolver commits both synchronously,
+  before the store reacts; `organizationChanges` is heard until the page is gone and its writes
+  settled; a re-verification of the same organization drops nothing). So a write queued or
+  answered in between, after the page is gone and the pin moved on, even back to the same
+  organization, or once the workspace is left (the pin cleared), is dropped without a toast;
+  leaving the workspace therefore drops the last value of a burst still queued.
 - Focus: after a key result is removed, the next row's control takes it, else `Add a key result`,
   else the goal's trigger; a closed goal form returns it to `New goal`, or to the new goal's trigger
   after a creation; a closed key result form returns it to `Add a key result`. The key result
