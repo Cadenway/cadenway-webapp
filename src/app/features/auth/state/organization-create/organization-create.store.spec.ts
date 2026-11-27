@@ -59,7 +59,7 @@ function setup(api: Partial<Record<keyof OrganizationApi, unknown>>): Organizati
 }
 
 describe('OrganizationCreateStore', () => {
-  it('creates, then enters the new organization with its logo and opens its workspace', async () => {
+  it('creates, then enters the new organization with its logo and opens its workspace with the assistant', async () => {
     const calls: string[] = [];
     const store: OrganizationCreateStore = setup({
       create: vi.fn(() => {
@@ -74,14 +74,14 @@ describe('OrganizationCreateStore', () => {
 
     await expect(store.create(draft)).resolves.toEqual({
       ok: true,
-      destination: '/studio-nord',
+      destination: '/studio-nord?onboarding=start',
       logoFailed: false,
     });
     expect(calls).toEqual(['create', 'enter org-studio logo.png']);
     expect(store.creating()).toBe(false);
   });
 
-  it('opens the chooser for a created organization whose slug is reserved', async () => {
+  it('opens the chooser without the assistant for a created organization whose slug is reserved', async () => {
     const store: OrganizationCreateStore = setup({
       create: () => Promise.resolve({ ...studio, slug: 'home' }),
       enterCreated: () => Promise.resolve({ logoFailed: false }),

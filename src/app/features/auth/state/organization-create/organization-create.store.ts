@@ -1,7 +1,7 @@
 import { inject, type Signal, type Type } from '@angular/core';
 import { patchState, signalStore, withMethods, withState } from '@ngrx/signals';
 
-import { workspacePath } from '@core/routing';
+import { isReservedSlug, workspacePath } from '@core/routing';
 
 import { authProblem } from '../../utils/auth-problem/auth-problem.util';
 import { OrganizationApi } from '../../data-access/services/organization-api/organization-api.service';
@@ -15,8 +15,10 @@ import type {
  * Type CreationResult
  *
  * @description
- * Outcome of a creation: the new workspace path, or the refusal. `created` is the organization
- * when the creation itself succeeded but moving the session to it failed.
+ * Outcome of a creation: the new workspace address, which asks Onboarding's assistant to open
+ * (`/<slug>?onboarding=start`, or `/organizations` for a reserved slug), or the refusal.
+ * `created` is the organization when the creation itself succeeded but moving the session to it
+ * failed.
  *
  * @type {{ readonly ok: true; readonly destination: string; readonly logoFailed: boolean } | { readonly ok: false; readonly problem: AuthProblem; readonly created: OrganizationChoice | null }}
  */
@@ -27,6 +29,22 @@ export type CreationResult =
       readonly problem: AuthProblem;
       readonly created: OrganizationChoice | null;
     };
+
+/**
+ * Function creationDestination
+ *
+ * @description
+ * The address a creation opens: the new workspace with `?onboarding=start`, which asks
+ * Onboarding's first-launch assistant to open there, or `/organizations` without the parameter
+ * when the slug is reserved or empty.
+ *
+ * @param {string} slug - Slug of the created organization.
+ * @returns {string} `/<slug>?onboarding=start` or `/organizations`.
+ */
+function creationDestination(slug: string): string {
+  const path: string = workspacePath(slug);
+  return slug === '' || isReservedSlug(slug) ? path : `${path}?onboarding=start`;
+}
 
 /**
  * Interface OrganizationCreateStoreInstance
@@ -95,7 +113,7 @@ function createOrganizationCreateStore(): Type<OrganizationCreateStoreInstance> 
           return { ok: false, problem: authProblem(error), created };
         }
         patchState(store, { creating: false });
-        return { ok: true, destination: workspacePath(created.slug), logoFailed };
+        return { ok: true, destination: creationDestination(created.slug), logoFailed };
       },
     })),
   );
