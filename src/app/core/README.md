@@ -10,15 +10,15 @@ configured in `api/client/`. The shell belongs to
 
 ## Public entry points
 
-| Entry point       | Responsibility                                               |
-| ----------------- | ------------------------------------------------------------ |
-| `@core/config`    | The root `RuntimeConfigStore` and the `RuntimeConfig` model. |
-| `@core/api`       | Transport, `OrganizationPin`, and validated problem readers. |
-| `@core/realtime`  | Workspace-scoped connection, rooms, presence, and notices.   |
-| `@core/theme`     | Theme preference and document synchronization.               |
-| `@core/shortcuts` | Scoped keyboard shortcut registration.                       |
-| `@core/routing`   | Route title, focus and the reserved first segments (slugs).  |
-| `@core/locale`    | Locale of the load, chosen and installed before bootstrap.   |
+| Entry point       | Responsibility                                                                         |
+| ----------------- | -------------------------------------------------------------------------------------- |
+| `@core/config`    | The root `RuntimeConfigStore` and the `RuntimeConfig` model.                           |
+| `@core/api`       | Transport, `OrganizationPin`, validated problem readers and write-outcome classifiers. |
+| `@core/realtime`  | Workspace-scoped connection, rooms, presence, and notices.                             |
+| `@core/theme`     | Theme preference and document synchronization.                                         |
+| `@core/shortcuts` | Scoped keyboard shortcut registration.                                                 |
+| `@core/routing`   | Route title, focus and the reserved first segments (slugs).                            |
+| `@core/locale`    | Locale of the load, chosen and installed before bootstrap.                             |
 
 ## Dependencies
 
@@ -68,6 +68,10 @@ The root transport provides Angular HTTP to the generated `@cadenway/api-client`
   is logged. `$localize.locale`, read by Angular's default `LOCALE_ID`, and `<html lang>` name the
   active locale. `LocaleService` reads it and switches by reloading the page with `?lang=`; no
   screen offers the switch yet.
+- `isUnknownWriteOutcome` calls a failed write uncertain when it may still have been applied (no
+  answer, `408`, `5xx`, `409 idempotency.request-in-progress`); `isDroppedOrganizationWrite` calls
+  it dropped when the pin blocked it during a switch or the gateway answered
+  `412 organization.context-changed`. Features never report either as a definite failure.
 - The resolved theme is reflected in `data-theme` on the document element.
 - After a path change, focus moves to the innermost route focus target or `main` without scrolling;
   initial and query-only navigation leave focus alone.

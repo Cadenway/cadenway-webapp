@@ -172,7 +172,7 @@ route), `withGettingStarted()` and `withOnboardingWizard()` (the `overlays` cont
   1. sends `finishOnboarding` with the trimmed name, the derived prefix, the template and the
      color. After `409 space.prefix-taken` it tries the first two letters followed by `A` to `Z`,
      each prefix once (a fallback equal to the base is skipped) and each with a new key, silently,
-     then asks for another name. An unknown outcome (`isUncertainOnboardingWrite`) shows an inline
+     then asks for another name. An unknown outcome (`isUnknownWriteOutcome` from `@core/api`) shows an inline
      error whose Retry sends the same body with the same `Idempotency-Key`; a new key is taken
      only after a definite refusal or a changed body. A stale version is retried once with a new
      key; `403 organization.role-forbidden` and other refusals show an inline error. A dropped
@@ -223,7 +223,7 @@ route), `withGettingStarted()` and `withOnboardingWizard()` (the `overlays` cont
   - after `412 request.version-mismatch` a draft or checklist write reads the progress and sends
     once more, unless the read shows the change, a closed assistant or a dismissed checklist; a
     failed read keeps the `412`;
-  - an uncertain outcome (`isUncertainOnboardingWrite`: no answer, `408`, `5xx`,
+  - an uncertain outcome (`isUnknownWriteOutcome` from `@core/api`: no answer, `408`, `5xx`,
     `409 idempotency.request-in-progress`) reads the progress and resolves when it shows the
     change, else rejects with the original failure;
   - a definite refusal rejects, after a read for `409 onboarding.wizard-closed`,
@@ -322,7 +322,7 @@ route), `withGettingStarted()` and `withOnboardingWizard()` (the `overlays` cont
   `429 invitation.daily-limit-reached`), else `{n} address(es) could not be invited` /
   `The addresses stay in the list: press Invite to try again.` for the addresses a batch answered
   with another outcome (`notSent`), else `The invitations may not have been sent` /
-  `Sending again is safe.` for batches whose outcome is unknown (`isUncertainOnboardingWrite`),
+  `Sending again is safe.` for batches whose outcome is unknown (`isUnknownWriteOutcome` from `@core/api`),
   since a second batch answers `already-invited` for an address the first one reached. A batch
   the organization pin dropped (`OrganizationSwitchPendingError`, `412 organization.context-changed`)
   stops the sending and closes the dialog with no toast. When the host was destroyed while the

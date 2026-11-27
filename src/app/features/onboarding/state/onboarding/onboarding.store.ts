@@ -10,17 +10,19 @@ import {
   withState,
 } from '@ngrx/signals';
 
-import { type ApiProblem, OrganizationPin, readProblem } from '@core/api';
+import {
+  type ApiProblem,
+  isDroppedOrganizationWrite,
+  isUnknownWriteOutcome,
+  OrganizationPin,
+  readProblem,
+} from '@core/api';
 import {
   WORKSPACE_CONTEXT,
   type WorkspaceContextPort,
 } from '@features/workspace/ports/workspace-context';
 
-import {
-  isDroppedOnboardingWrite,
-  isUncertainOnboardingWrite,
-  OnboardingApi,
-} from '../../data-access/services/onboarding-api/onboarding-api.service';
+import { OnboardingApi } from '../../data-access/services/onboarding-api/onboarding-api.service';
 import type {
   OnboardingDraft,
   OnboardingProgress,
@@ -412,7 +414,7 @@ interface OnboardingStoreInstance {
    * @returns {Promise<OnboardingProgress>} The progress saved, or read.
    * @throws {OnboardingWriteDroppedError} When the organization changed, or the write was dropped
    * for another session organization.
-   * @throws {unknown} The client's error otherwise (`isUncertainOnboardingWrite` tells an unknown
+   * @throws {unknown} The client's error otherwise (`isUnknownWriteOutcome` tells an unknown
    * outcome from a refusal).
    */
   saveDraft(draft: OnboardingDraft): Promise<OnboardingProgress>;
@@ -436,7 +438,7 @@ interface OnboardingStoreInstance {
    *
    * @description
    * Provisions the first space and finishes the assistant. It never sends twice by itself: after an
-   * uncertain outcome (`isUncertainOnboardingWrite`, `409 idempotency.request-in-progress`
+   * uncertain outcome (`isUnknownWriteOutcome`, `409 idempotency.request-in-progress`
    * included) it rejects at once, and the caller sends again with the same key. After `412` or
    * `409 onboarding.wizard-closed` it reads the progress, then rejects, and the caller decides the
    * next key and body.
@@ -630,10 +632,10 @@ function createOnboardingStore(): Type<OnboardingStoreInstance> {
         try {
           saved = await write.send(version);
         } catch (error: unknown) {
-          if (!live(generation) || isDroppedOnboardingWrite(error)) {
+          if (!live(generation) || isDroppedOrganizationWrite(error)) {
             throw new OnboardingWriteDroppedError(error);
           }
-          if (isUncertainOnboardingWrite(error)) {
+          if (isUnknownWriteOutcome(error)) {
             if (!write.recovers) throw error;
             const fresh: OnboardingProgress | null = await reread(generation, error);
             if (fresh !== null && write.settled(fresh)) return fresh;
@@ -669,7 +671,7 @@ function createOnboardingStore(): Type<OnboardingStoreInstance> {
               base = await read();
             } catch (error: unknown) {
               // Reads are aborted only by a switch or a destruction, which also end `live()`.
-              if (!live(generation) || isDroppedOnboardingWrite(error)) {
+              if (!live(generation) || isDroppedOrganizationWrite(error)) {
                 throw new OnboardingWriteDroppedError(error);
               }
               throw error;

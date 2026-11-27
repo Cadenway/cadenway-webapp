@@ -22,7 +22,12 @@ import {
 } from '@ngrx/signals';
 import { filter, fromEvent, map, type Subscription } from 'rxjs';
 
-import { OrganizationPin, readProblem } from '@core/api';
+import {
+  isDroppedOrganizationWrite,
+  isUnknownWriteOutcome,
+  OrganizationPin,
+  readProblem,
+} from '@core/api';
 import { TaskCreate } from '@features/task';
 import {
   WORKSPACE_CONTEXT,
@@ -34,11 +39,7 @@ import {
   ONBOARDING_INVITE_DIALOG_OVERLAY,
   ONBOARDING_WIZARD_OVERLAY,
 } from '../../constants/overlays/onboarding-overlays.constants';
-import {
-  isDroppedOnboardingWrite,
-  isUncertainOnboardingWrite,
-  OnboardingApi,
-} from '../../data-access/services/onboarding-api/onboarding-api.service';
+import { OnboardingApi } from '../../data-access/services/onboarding-api/onboarding-api.service';
 import type {
   GettingStartedItem,
   GettingStartedItemKey,
@@ -644,7 +645,7 @@ function createGettingStartedStore(): Type<GettingStartedStoreInstance> {
         title: string,
       ): void => {
         if (error instanceof OnboardingWriteDroppedError) return;
-        if (isUncertainOnboardingWrite(error)) {
+        if (isUnknownWriteOutcome(error)) {
           show(
             'warning',
             $localize`:@@onboarding.getting-started.presentation-uncertain:Your change to “Getting started” may not have been saved`,
@@ -925,11 +926,11 @@ function createGettingStartedStore(): Type<GettingStartedStoreInstance> {
                 void store._onboarding.recordInvitation().catch((): undefined => undefined);
               }
             } catch (error: unknown) {
-              if (isDroppedOnboardingWrite(error)) {
+              if (isDroppedOrganizationWrite(error)) {
                 dropped = true;
                 break;
               }
-              if (isUncertainOnboardingWrite(error)) {
+              if (isUnknownWriteOutcome(error)) {
                 uncertain = true;
                 continue;
               }
