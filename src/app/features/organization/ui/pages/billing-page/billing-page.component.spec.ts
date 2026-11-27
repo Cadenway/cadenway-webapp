@@ -20,6 +20,7 @@ import type { OrganizationSubscription } from '../../../models/organization-subs
 import { CHECKOUT_CONFIRM_DELAYS_MS } from '../../../state/billing-checkout/checkout-confirm-delays.token';
 import { CHECKOUT_KEY_STORAGE } from '../../../state/billing-checkout/checkout-key.storage';
 import { CHECKOUT_REDIRECT } from '../../../state/billing-checkout/checkout-redirect.token';
+import { PAYMENT_PENDING_STORAGE } from '../../../state/billing-checkout/payment-pending.storage';
 import { SubscriptionStore } from '../../../state/subscription/subscription.store';
 import { BillingPage } from './billing-page.component';
 
@@ -172,6 +173,27 @@ function rows(harness: RouterTestingHarness): string[] {
 }
 
 /**
+ * Function recordCheckout
+ *
+ * @description
+ * Stores the key record a checkout leaves before the round trip to Stripe.
+ *
+ * @param {string} organizationId - Organization of the checkout.
+ * @param {string} slug - Its slug.
+ * @param {string} [userId] - Person who started it.
+ */
+function recordCheckout(
+  organizationId: string,
+  slug: string,
+  userId: string = 'user-camille',
+): void {
+  sessionStorage.setItem(
+    CHECKOUT_KEY_STORAGE,
+    JSON.stringify({ organizationId, slug, userId, key: `key-${slug}`, createdAt: Date.now() }),
+  );
+}
+
+/**
  * Function deferred
  *
  * @description
@@ -237,6 +259,7 @@ describe('BillingPage', () => {
           [
             { path: 'billing', component: BillingPage, runGuardsAndResolvers: 'always' },
             { path: 'members', component: OtherSection },
+            { path: ':org/organization/billing', component: BillingPage },
           ],
           withErrorBoundaries({ defaultErrorComponent: RouteErrorBoundary }),
         ),
@@ -461,6 +484,7 @@ describe('BillingPage', () => {
   ] as const)(
     'toasts the return from Stripe (%s) once and leaves the parameter',
     async (value: string, kind: 'success' | 'info', title: string) => {
+      recordCheckout('org-nord', 'org-nord');
       const harness: RouterTestingHarness = await open(`/billing?checkout=${value}`);
 
       await vi.waitFor(() => {
@@ -473,15 +497,7 @@ describe('BillingPage', () => {
   );
 
   it('reads the plan again after a successful payment until it is no longer Free', async () => {
-    sessionStorage.setItem(
-      CHECKOUT_KEY_STORAGE,
-      JSON.stringify({
-        organizationId: 'org-nord',
-        userId: 'user-camille',
-        key: 'key-nord',
-        createdAt: Date.now(),
-      }),
-    );
+    recordCheckout('org-nord', 'org-nord');
     const confirmation: {
       promise: Promise<OrganizationSubscription>;
       resolve: (value: OrganizationSubscription) => void;
@@ -506,6 +522,7 @@ describe('BillingPage', () => {
   });
 
   it('notes a payment still unconfirmed after the last read, with Retry', async () => {
+    recordCheckout('org-nord', 'org-nord');
     api.subscription.mockResolvedValue(FREE);
     const harness: RouterTestingHarness = await open('/billing?checkout=success');
 
@@ -525,6 +542,104 @@ describe('BillingPage', () => {
     await expect.poll(() => byTestId(harness, 'plan-title')?.textContent.trim()).toBe('Team plan');
     expect(byTestId(harness, 'payment-unconfirmed')).toBeNull();
     expect(api.subscription).toHaveBeenCalledTimes(5);
+  });
+
+  it('sends the return of another organization of the person to its billing, confirming nothing here', async () => {
+    api.subscription.mockResolvedValue(FREE);
+    recordCheckout('org-lumen', 'lumen');
+    const harness: RouterTestingHarness = await RouterTestingHarness.create(
+      '/billing?checkout=success',
+    );
+
+    await vi.waitFor(() => {
+      harness.detectChanges();
+      expect(TestBed.inject(Router).url).toBe('/lumen/organization/billing?checkout=success');
+    });
+    expect(sessionStorage.getItem(CHECKOUT_KEY_STORAGE)).toContain('org-lumen');
+    expect(sessionStorage.getItem(PAYMENT_PENDING_STORAGE + 'org-nord')).toBeNull();
+    expect(toasts.success).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['no checkout record', (): void => undefined],
+    [
+      'the record of another person',
+      (): void => {
+        recordCheckout('org-lumen', 'lumen', 'user-hugo');
+      },
+    ],
+  ])(
+    'tells that the payment was for another organization with %s',
+    async (_case: string, arrange: () => void) => {
+      arrange();
+      const before: string | null = sessionStorage.getItem(CHECKOUT_KEY_STORAGE);
+      api.subscription.mockResolvedValue(FREE);
+      const harness: RouterTestingHarness = await open('/billing?checkout=success');
+
+      await vi.waitFor(() => {
+        harness.detectChanges();
+        expect(TestBed.inject(Router).url).toBe('/billing');
+      });
+      expect(toasts.info).toHaveBeenCalledWith('This payment was for another organization', {
+        description: "Its plan shows in that organization's billing.",
+      });
+      expect(toasts.success).not.toHaveBeenCalled();
+      expect(byTestId(harness, 'payment-confirming')).toBeNull();
+      expect(byTestId(harness, 'plan-upgrade')).not.toBeNull();
+      expect(api.subscription).toHaveBeenCalledTimes(1);
+      expect(sessionStorage.getItem(CHECKOUT_KEY_STORAGE)).toBe(before);
+    },
+  );
+
+  it('resumes the confirmation of a payment left awaiting when the page is opened again', async () => {
+    sessionStorage.setItem(
+      PAYMENT_PENDING_STORAGE + 'org-nord',
+      JSON.stringify({ since: Date.now(), unconfirmed: false }),
+    );
+    const confirmation: {
+      promise: Promise<OrganizationSubscription>;
+      resolve: (value: OrganizationSubscription) => void;
+    } = deferred<OrganizationSubscription>();
+    api.subscription.mockResolvedValueOnce(FREE).mockReturnValueOnce(confirmation.promise);
+    const harness: RouterTestingHarness = await open();
+
+    expect(byTestId(harness, 'plan-upgrade')).toBeNull();
+    await expect.poll(() => byTestId(harness, 'payment-confirming') !== null).toBe(true);
+    expect(api.invoices).toHaveBeenCalledTimes(1);
+
+    confirmation.resolve(TEAM);
+
+    await expect.poll(() => byTestId(harness, 'plan-title')?.textContent.trim()).toBe('Team plan');
+    expect(sessionStorage.getItem(PAYMENT_PENDING_STORAGE + 'org-nord')).toBeNull();
+    await vi.waitFor(() => {
+      expect(api.invoices).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  it('shows a payment left unconfirmed with Retry and no upgrade when the page is opened again', async () => {
+    api.subscription.mockResolvedValue(FREE);
+    sessionStorage.setItem(
+      PAYMENT_PENDING_STORAGE + 'org-nord',
+      JSON.stringify({ since: Date.now(), unconfirmed: true }),
+    );
+    const harness: RouterTestingHarness = await open();
+
+    expect(byTestId(harness, 'payment-unconfirmed')).not.toBeNull();
+    expect(byTestId(harness, 'plan-upgrade')).toBeNull();
+    expect(api.subscription).toHaveBeenCalledTimes(1);
+  });
+
+  it('offers the upgrade again once a payment awaited for an hour', async () => {
+    api.subscription.mockResolvedValue(FREE);
+    sessionStorage.setItem(
+      PAYMENT_PENDING_STORAGE + 'org-nord',
+      JSON.stringify({ since: Date.now() - 60 * 60 * 1000, unconfirmed: true }),
+    );
+    const harness: RouterTestingHarness = await open();
+
+    expect(byTestId(harness, 'plan-upgrade')).not.toBeNull();
+    expect(byTestId(harness, 'payment-unconfirmed')).toBeNull();
+    expect(sessionStorage.getItem(PAYMENT_PENDING_STORAGE + 'org-nord')).toBeNull();
   });
 
   it('keeps the pagination and moves the focus to the table caption on a page change', async () => {

@@ -41,6 +41,17 @@ export interface CheckoutKeyRecord {
   readonly organizationId: string;
 
   /**
+   * Property slug
+   *
+   * @description
+   * Slug of that organization when the checkout started, to send Stripe's return back to it.
+   *
+   * @type {string}
+   * @readonly
+   */
+  readonly slug: string;
+
+  /**
    * Property userId
    *
    * @description
@@ -90,6 +101,8 @@ function isRecord(value: unknown): value is CheckoutKeyRecord {
   return (
     typeof record['organizationId'] === 'string' &&
     typeof record['userId'] === 'string' &&
+    typeof record['slug'] === 'string' &&
+    record['slug'] !== '' &&
     typeof record['key'] === 'string' &&
     record['key'] !== '' &&
     typeof record['createdAt'] === 'number'
@@ -114,9 +127,28 @@ export function isUsable(
   userId: string,
   now: number,
 ): record is CheckoutKeyRecord {
+  return isRecent(record, userId, now) && record.organizationId === organizationId;
+}
+
+/**
+ * Function isRecent
+ *
+ * @description
+ * Whether a record is the person's and still within its lifetime, whatever its organization: the
+ * return from Stripe is matched against it.
+ *
+ * @param {CheckoutKeyRecord | null} record - The record.
+ * @param {string} userId - Person signed in.
+ * @param {number} now - Current time, in milliseconds since the epoch.
+ * @returns {boolean} True when the record tells whose checkout came back.
+ */
+export function isRecent(
+  record: CheckoutKeyRecord | null,
+  userId: string,
+  now: number,
+): record is CheckoutKeyRecord {
   return (
     record !== null &&
-    record.organizationId === organizationId &&
     record.userId === userId &&
     now >= record.createdAt &&
     now - record.createdAt < CHECKOUT_KEY_LIFETIME_MS

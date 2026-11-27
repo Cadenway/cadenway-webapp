@@ -297,7 +297,7 @@ February 2027`; the contract's end is the start of the next period) and the amou
   specs replace.
 - Billing keeps a Checkout open for two hours and answers `409 billing.checkout-in-progress` to
   another key meanwhile, so the key outlives the page: `sessionStorage`
-  (`cadenway-billing-checkout-key`) holds `{ organizationId, userId, key, createdAt }`, which
+  (`cadenway-billing-checkout-key`) holds `{ organizationId, slug, userId, key, createdAt }`, which
   survives the same-tab round trip to Stripe. A checkout of the same person and organization
   within two hours sends that key again, so coming back from a cancelled Checkout replays the open
   session. A definite refusal, `?checkout=success` and two hours drop it; a key of another person
@@ -308,13 +308,24 @@ February 2027`; the contract's end is the start of the next period) and the amou
 - Stripe returns to Billing's configured `BILLING_STRIPE_CHECKOUT_SUCCESS_URL` and
   `BILLING_STRIPE_CHECKOUT_CANCEL_URL`, which carry no organization. The page expects
   `/org/billing?checkout=success` and `/org/billing?checkout=cancel`, which Workspace's slug
-  redirect sends to the session's organization, toasts that return once and removes the
-  parameter. Settlement is asynchronous: after `?checkout=success` the page reads the
-  subscription again 2, 4 and 8 s later (`CHECKOUT_CONFIRM_DELAYS_MS`) until the plan is no
-  longer Free, writing each answer into the shared `SubscriptionStore`. Meanwhile `Upgrade` is
-  withheld and `Confirming the payment…` shows; a plan still Free after the last read shows
-  `The payment is not confirmed yet` with `Retry`, which reads it once more. The confirmation is
-  bound to its organization and page.
+  redirect sends to the session's organization, which another tab may have switched. So a
+  successful return is matched against the key record: for the organization shown it toasts once,
+  removes the parameter and starts the confirmation; for another organization of the same
+  person, the page opens `/<recorded slug>/organization/billing?checkout=success` once, where
+  the organization guard checks the membership and switches the session; with no record, another
+  person's or an expired one, it toasts `This payment was for another organization` and removes
+  the parameter. The key is never cleared nor a payment confirmed for an organization other than
+  the one shown. A cancelled return toasts and removes the parameter.
+- Settlement is asynchronous: after the successful return the page reads the subscription again
+  2, 4 and 8 s later (`CHECKOUT_CONFIRM_DELAYS_MS`) until the plan is no longer Free, writing each
+  answer into the shared `SubscriptionStore`. Meanwhile `Upgrade` is withheld and
+  `Confirming the payment…` shows; a plan still Free after the last read shows
+  `The payment is not confirmed yet` with `Retry`, which reads it once more. The wait is
+  recorded per organization in `sessionStorage` (`cadenway-billing-payment-pending:<id>`,
+  `{ since, unconfirmed }`) until a paid plan is observed or one hour passes, so a reload, a
+  visit to another section or a switch back resumes it: the reads, or the note with `Retry`, and
+  `Upgrade` stays withheld. A paid plan observed, by these reads or in the shared store, ends the
+  wait and reloads the invoices once. The confirmation is bound to its organization and page.
 - The page's toasts are dismissed when it is left or the organization changes.
 - Below 768 px the invoices become cards (header hidden, number full width, link right) and the
   upgrade button wraps under the plan title.
@@ -383,3 +394,4 @@ Billing section (`organization.billing.*`):
 | `already-subscribed`, `already-subscribed-text`, `checkout-in-progress`, `checkout-in-progress-text`, `checkout-failed`, `checkout-failed-text` | The mockup draws no refused checkout.                                                                                                                   |
 | `checkout-success`, `checkout-success-text`, `checkout-cancelled`, `checkout-cancelled-text`                                                    | The mockup draws no return from the payment provider.                                                                                                   |
 | `confirming`, `unconfirmed`, `unconfirmed-text`                                                                                                 | The mockup draws no payment awaiting Billing's confirmation.                                                                                            |
+| `checkout-elsewhere`, `checkout-elsewhere-text`                                                                                                 | The mockup draws no return from the payment provider for another organization.                                                                          |

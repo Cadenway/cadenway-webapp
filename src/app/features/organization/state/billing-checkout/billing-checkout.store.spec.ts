@@ -19,7 +19,9 @@ import {
   CHECKOUT_KEY_STORAGE,
   type CheckoutKeyRecord,
 } from './checkout-key.storage';
+import { InvoicesStore } from '../invoices/invoices.store';
 import { CHECKOUT_REDIRECT } from './checkout-redirect.token';
+import { PAYMENT_PENDING_STORAGE } from './payment-pending.storage';
 
 /**
  * Constant FREE
@@ -88,6 +90,8 @@ describe('BillingCheckoutStore', () => {
   let api: { checkout: Mock; subscription: Mock };
   let redirect: Mock;
   let setSubscription: Mock;
+  let current: WritableSignal<OrganizationSubscription | null>;
+  let reloadInvoices: Mock;
   let shown: WritableSignal<WorkspaceOrganization>;
   let userId: string;
 
@@ -106,7 +110,11 @@ describe('BillingCheckoutStore', () => {
         { provide: BillingApi, useValue: api },
         { provide: CHECKOUT_REDIRECT, useValue: redirect },
         { provide: CHECKOUT_CONFIRM_DELAYS_MS, useValue: [0, 0, 0] },
-        { provide: SubscriptionStore, useValue: { subscription: { set: setSubscription } } },
+        {
+          provide: SubscriptionStore,
+          useValue: { subscription: { set: setSubscription }, current },
+        },
+        { provide: InvoicesStore, useValue: { retry: reloadInvoices } },
         {
           provide: WORKSPACE_CONTEXT,
           useValue: { organization: shown, user: () => ({ id: userId }) },
@@ -148,7 +156,11 @@ describe('BillingCheckoutStore', () => {
       subscription: vi.fn(() => Promise.resolve(TEAM)),
     };
     redirect = vi.fn();
-    setSubscription = vi.fn();
+    current = signal<OrganizationSubscription | null>(null);
+    setSubscription = vi.fn((value: OrganizationSubscription): void => {
+      current.set(value);
+    });
+    reloadInvoices = vi.fn();
     shown = signal(organization('org-nord'));
     userId = 'user-camille';
   });
@@ -377,5 +389,86 @@ describe('BillingCheckoutStore', () => {
 
     await expect(store().start()).resolves.toBe(outcome);
     expect(redirect).not.toHaveBeenCalled();
+  });
+
+  it('tells whose payment the return from Stripe reports', async () => {
+    const checkout: InstanceType<typeof BillingCheckoutStore> = store();
+    expect(checkout.returnTarget()).toEqual({ kind: 'unknown' });
+
+    await checkout.start();
+    expect(checkout.returnTarget()).toEqual({ kind: 'here' });
+
+    shown.set(organization('org-lumen'));
+    expect(checkout.returnTarget()).toEqual({ kind: 'elsewhere', slug: 'org-nord' });
+
+    userId = 'user-hugo';
+    expect(checkout.returnTarget()).toEqual({ kind: 'unknown' });
+  });
+
+  it('resumes a payment awaiting confirmation once the store is created again', async () => {
+    api.subscription.mockReturnValueOnce(
+      new Promise<OrganizationSubscription>((): void => undefined),
+    );
+    const first: InstanceType<typeof BillingCheckoutStore> = store();
+    void first.confirmPayment();
+    expect(sessionStorage.getItem(PAYMENT_PENDING_STORAGE + 'org-nord')).not.toBeNull();
+    api.subscription.mockReset();
+    api.subscription.mockResolvedValueOnce(FREE).mockResolvedValueOnce(TEAM);
+
+    const checkout: InstanceType<typeof BillingCheckoutStore> = recreated();
+
+    expect(checkout.confirming()).toBe(true);
+    expect(checkout.awaitingPayment()).toBe(true);
+    await vi.waitFor(() => {
+      expect(checkout.awaitingPayment()).toBe(false);
+    });
+    expect(api.subscription).toHaveBeenCalledTimes(2);
+    expect(sessionStorage.getItem(PAYMENT_PENDING_STORAGE + 'org-nord')).toBeNull();
+    expect(reloadInvoices).toHaveBeenCalledTimes(1);
+  });
+
+  it('resumes the unconfirmed note without reading again', async () => {
+    api.subscription.mockResolvedValue(FREE);
+    await store().confirmPayment();
+
+    const checkout: InstanceType<typeof BillingCheckoutStore> = recreated();
+
+    expect(checkout.unconfirmed()).toBe(true);
+    expect(checkout.confirming()).toBe(false);
+    expect(api.subscription).toHaveBeenCalledTimes(3);
+  });
+
+  it('ends the wait when the shared store shows a paid plan, reloading the invoices once', async () => {
+    api.subscription.mockResolvedValue(FREE);
+    const checkout: InstanceType<typeof BillingCheckoutStore> = store();
+    await checkout.confirmPayment();
+    expect(checkout.unconfirmed()).toBe(true);
+    reloadInvoices.mockClear();
+
+    current.set(TEAM);
+    TestBed.tick();
+
+    expect(checkout.awaitingPayment()).toBe(false);
+    expect(sessionStorage.getItem(PAYMENT_PENDING_STORAGE + 'org-nord')).toBeNull();
+    expect(reloadInvoices).toHaveBeenCalledTimes(1);
+
+    current.set({ ...TEAM, seatsUsed: 4 });
+    TestBed.tick();
+    expect(reloadInvoices).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps the wait of an organization left during its confirmation for its next visit', () => {
+    api.subscription.mockReturnValueOnce(
+      new Promise<OrganizationSubscription>((): void => undefined),
+    );
+    const checkout: InstanceType<typeof BillingCheckoutStore> = store();
+    void checkout.confirmPayment();
+
+    shown.set(organization('org-lumen'));
+    TestBed.tick();
+
+    expect(checkout.awaitingPayment()).toBe(false);
+    expect(sessionStorage.getItem(PAYMENT_PENDING_STORAGE + 'org-nord')).not.toBeNull();
+    expect(sessionStorage.getItem(PAYMENT_PENDING_STORAGE + 'org-lumen')).toBeNull();
   });
 });

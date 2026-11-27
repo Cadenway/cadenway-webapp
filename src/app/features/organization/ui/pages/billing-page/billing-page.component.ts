@@ -7,7 +7,8 @@ import {
   inject,
   type Signal,
 } from '@angular/core';
-import { ActivatedRoute, Router } from '@angular/router';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { ActivatedRoute, type ParamMap, Router } from '@angular/router';
 import {
   CwAlert,
   CwAlertActions,
@@ -36,6 +37,7 @@ import type { OrganizationSubscription } from '../../../models/organization-subs
 import {
   BillingCheckoutStore,
   type CheckoutOutcome,
+  type CheckoutReturn,
 } from '../../../state/billing-checkout/billing-checkout.store';
 import { InvoicesStore } from '../../../state/invoices/invoices.store';
 import { SubscriptionStore } from '../../../state/subscription/subscription.store';
@@ -210,6 +212,16 @@ export class BillingPage {
   private readonly shownToasts: string[] = [];
 
   /**
+   * Property sentTo
+   *
+   * @description
+   * Slug of the organization this page sent a successful return to, so it sends it once.
+   *
+   * @type {string | null}
+   */
+  private sentTo: string | null = null;
+
+  /**
    * Property primary
    *
    * @description
@@ -304,19 +316,10 @@ export class BillingPage {
    * @constructor
    */
   public constructor() {
-    const returned: string | null = this.route.snapshot.queryParamMap.get(CHECKOUT_RETURN);
-    if (returned === 'success') void this.checkout.confirmPayment();
-    if (returned !== null) {
-      afterNextRender((): void => {
-        this.showReturn(returned);
-        void this.router.navigate([], {
-          relativeTo: this.route,
-          queryParams: { [CHECKOUT_RETURN]: null },
-          queryParamsHandling: 'merge',
-          replaceUrl: true,
-        });
-      });
-    }
+    this.route.queryParamMap.pipe(takeUntilDestroyed()).subscribe((params: ParamMap): void => {
+      const returned: string | null = params.get(CHECKOUT_RETURN);
+      if (returned !== null) this.handleReturn(returned);
+    });
     let organizationId: string = this.workspace.organization().id;
     effect((): void => {
       const current: string = this.workspace.organization().id;
@@ -387,6 +390,74 @@ export class BillingPage {
       case 'skipped':
         break;
     }
+  }
+
+  /**
+   * Method handleReturn
+   *
+   * @description
+   * Handles Stripe's return, which names no organization. A successful one is matched against the
+   * checkout's key record: for the organization shown, its confirmation starts at once (so the
+   * upgrade never shows), then the toast and the removal of the parameter follow the render; for
+   * another organization of the same person, the page opens that organization's billing with the
+   * parameter, once, where the guard switches the session; otherwise it toasts that the payment
+   * was for another organization and confirms nothing. A cancelled return toasts and leaves.
+   *
+   * @param {string} returned - Value of `checkout`.
+   */
+  private handleReturn(returned: string): void {
+    if (returned !== 'success') {
+      afterNextRender((): void => {
+        this.showReturn(returned);
+        this.leaveReturn();
+      });
+      return;
+    }
+    const target: CheckoutReturn = this.checkout.returnTarget();
+    if (target.kind === 'here') {
+      void this.checkout.confirmPayment();
+      afterNextRender((): void => {
+        this.showReturn(returned);
+        this.leaveReturn();
+      });
+      return;
+    }
+    if (target.kind === 'elsewhere' && this.sentTo !== target.slug) {
+      this.sentTo = target.slug;
+      afterNextRender((): void => {
+        void this.router.navigate(['/', target.slug, 'organization', 'billing'], {
+          queryParams: { [CHECKOUT_RETURN]: 'success' },
+          replaceUrl: true,
+        });
+      });
+      return;
+    }
+    afterNextRender((): void => {
+      this.track(
+        this.toasts.info(
+          $localize`:@@organization.billing.checkout-elsewhere:This payment was for another organization`,
+          {
+            description: $localize`:@@organization.billing.checkout-elsewhere-text:Its plan shows in that organization's billing.`,
+          },
+        ),
+      );
+      this.leaveReturn();
+    });
+  }
+
+  /**
+   * Method leaveReturn
+   *
+   * @description
+   * Removes Stripe's return parameter from the address.
+   */
+  private leaveReturn(): void {
+    void this.router.navigate([], {
+      relativeTo: this.route,
+      queryParams: { [CHECKOUT_RETURN]: null },
+      queryParamsHandling: 'merge',
+      replaceUrl: true,
+    });
   }
 
   /**

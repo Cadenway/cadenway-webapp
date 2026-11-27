@@ -848,6 +848,8 @@
     "organization.billing.already-subscribed-text": "Son plan actuel est affiché.",
     "organization.billing.checkout-cancelled": "Paiement annulé",
     "organization.billing.checkout-cancelled-text": "Votre plan n’a pas changé.",
+    "organization.billing.checkout-elsewhere": "Ce paiement concernait une autre organisation",
+    "organization.billing.checkout-elsewhere-text": "Son plan s’affiche dans la facturation de cette organisation.",
     "organization.billing.checkout-failed": "La page de paiement n’a pas pu s’ouvrir",
     "organization.billing.checkout-failed-text": "Réessayez dans un instant.",
     "organization.billing.checkout-in-progress": "Un autre paiement est en cours",

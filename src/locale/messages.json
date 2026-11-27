@@ -1007,6 +1007,8 @@
     "organization.billing.checkout-in-progress-text": "Finish it or wait until it expires, then try again.",
     "organization.billing.checkout-failed": "The payment page could not be opened",
     "organization.billing.checkout-failed-text": "Try again in a moment.",
+    "organization.billing.checkout-elsewhere": "This payment was for another organization",
+    "organization.billing.checkout-elsewhere-text": "Its plan shows in that organization's billing.",
     "organization.billing.checkout-success": "Payment complete",
     "organization.billing.checkout-success-text": "The new plan shows here as soon as the payment is confirmed.",
     "organization.billing.checkout-cancelled": "Payment cancelled",

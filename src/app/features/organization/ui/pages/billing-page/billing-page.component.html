@@ -62,7 +62,7 @@
           <cw-plan-card
             [subscription]="subscription"
             [upgrading]="checkout.starting()"
-            [upgradeHidden]="checkout.confirming() || checkout.unconfirmed()"
+            [upgradeHidden]="checkout.awaitingPayment()"
             (upgradeRequested)="upgrade()"
           />
         }
