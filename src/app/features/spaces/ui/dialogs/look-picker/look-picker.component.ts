@@ -11,8 +11,10 @@ import { CwToggleGroup, CwToggleGroupItem } from '@cadenway/ui/components/toggle
 import { NgIcon } from '@ng-icons/core';
 
 import { lookIconLabels } from '../../../constants/view-labels/view-labels.constants';
+import type { LookColorChoice } from '../../../models/look/look-color-choice.interface';
 import type { LookColor, LookIcon } from '../../../models/look/look.type';
 import { LOOK_ICON_KEYS, lookIconName } from '../../../utils/look/look.util';
+import { lookColorChoices } from '../../../utils/space-look/space-look.util';
 
 /**
  * Constant DEFAULT_ICON
@@ -23,83 +25,6 @@ import { LOOK_ICON_KEYS, lookIconName } from '../../../utils/look/look.util';
  * @type {string}
  */
 const DEFAULT_ICON: string = 'default';
-
-/**
- * Interface LookColorChoice
- *
- * @description
- * A color of the `Color` group with its name and swatch.
- */
-interface LookColorChoice {
-  // #region Properties
-  /**
-   * Property value
-   *
-   * @description
-   * The color key.
-   *
-   * @type {LookColor}
-   * @readonly
-   */
-  readonly value: LookColor;
-
-  /**
-   * Property label
-   *
-   * @description
-   * Its name (`Amethyst`).
-   *
-   * @type {string}
-   * @readonly
-   */
-  readonly label: string;
-
-  /**
-   * Property swatch
-   *
-   * @description
-   * Background class of its swatch, a literal class of the tokens.
-   *
-   * @type {string}
-   * @readonly
-   */
-  readonly swatch: string;
-  // #endregion
-}
-
-/**
- * Function lookColorChoices
- *
- * @description
- * The thirteen colors of `LOOK_COLORS`, in the mockup's order.
- *
- * @returns {readonly LookColorChoice[]} The choices.
- */
-function lookColorChoices(): readonly LookColorChoice[] {
-  return [
-    { value: 'gris', label: $localize`:@@spaces.look.gris:Gray`, swatch: 'bg-ink-muted' },
-    {
-      value: 'violet',
-      label: $localize`:@@spaces.look.violet:Amethyst`,
-      swatch: 'bg-amethyste',
-    },
-    { value: 'indigo', label: $localize`:@@spaces.look.indigo:Indigo`, swatch: 'bg-indigo' },
-    { value: 'azur', label: $localize`:@@spaces.look.azur:Azure`, swatch: 'bg-azur' },
-    { value: 'lagon', label: $localize`:@@spaces.look.lagon:Lagoon`, swatch: 'bg-lagon' },
-    { value: 'vert', label: $localize`:@@spaces.look.vert:Jade`, swatch: 'bg-jade' },
-    { value: 'olive', label: $localize`:@@spaces.look.olive:Olive`, swatch: 'bg-olive' },
-    { value: 'jaune', label: $localize`:@@spaces.look.jaune:Beacon`, swatch: 'bg-balise' },
-    {
-      value: 'orange',
-      label: $localize`:@@spaces.look.orange:Carnelian`,
-      swatch: 'bg-cornaline',
-    },
-    { value: 'rouge', label: $localize`:@@spaces.look.rouge:Garnet`, swatch: 'bg-grenat' },
-    { value: 'rose', label: $localize`:@@spaces.look.rose:Pink`, swatch: 'bg-rose' },
-    { value: 'fuchsia', label: $localize`:@@spaces.look.fuchsia:Fuchsia`, swatch: 'bg-fuchsia' },
-    { value: 'ardoise', label: $localize`:@@spaces.look.ardoise:Slate`, swatch: 'bg-ardoise' },
-  ];
-}
 
 /**
  * Component LookPicker

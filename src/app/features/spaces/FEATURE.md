@@ -848,7 +848,8 @@ through `SpaceStatusesApi` (`data-access/services/space-statuses-api/`, `updateS
 | `providers`                | workspace                                                        |
 | `ports/list-directory`     | search, task, home, my-tasks, dashboards, goals, trash, archives |
 | `ports/space-directory`    | docs, goals, archives                                            |
-| `ports/navigation-refresh` | trash, archives                                                  |
+| `ports/navigation-refresh` | trash, archives, onboarding                                      |
+| `utils/space-look`         | onboarding                                                       |
 
 `providers` publishes, for the `/:org` route that loads the shell:
 
@@ -887,6 +888,13 @@ again, after another feature's write that may bring a list or a space back (a re
 unarchived list); `refreshCounts()` reads only the trash and archive counts of the sidebar footer
 again (a purge, an emptied trash, an unarchived task). Both only schedule reads: a read in flight,
 even the first one, is followed by one more.
+
+`utils/space-look` publishes `prefixFromName(name)`, the key prefix proposed for a space name (its
+first three unaccented letters in capitals, completed with `X`, empty for a blank name), and
+`lookColorChoices()`, the thirteen colors of `LOOK_COLORS` in the mockup's order as
+`LookColorChoice` (value, name under the `spaces.look.*` ids, literal swatch class), with the
+`LookColor` type. The space dialog and the look picker use them too, so the onboarding assistant
+proposes the same prefix and names the colors with the same words.
 
 ## Dependencies
 

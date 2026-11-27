@@ -4,7 +4,7 @@ import { provideCadenwayIcons } from '@cadenway/icons';
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import type { SpaceDetails, SpaceDraft } from '../../../models/space/space.interface';
-import { prefixFromName, SpaceDialog } from './space-dialog.component';
+import { SpaceDialog } from './space-dialog.component';
 
 /**
  * Component SpaceDialogHost
@@ -124,13 +124,6 @@ describe('SpaceDialog', () => {
     input.dispatchEvent(new Event('input'));
     fixture.detectChanges();
   }
-
-  it('proposes the prefix from the name, as the mockup does', () => {
-    expect(prefixFromName('Human resources')).toBe('HUM');
-    expect(prefixFromName('Na\u00efve')).toBe('NAI');
-    expect(prefixFromName('Q')).toBe('QXX');
-    expect(prefixFromName('  ')).toBe('');
-  });
 
   it('creates a space with the proposed prefix until it is typed', () => {
     fixture.componentInstance.open.set(true);
