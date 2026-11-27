@@ -16,7 +16,8 @@ import {
  * catalog or a document (`/<slug>/d/<id>`) is shown, whatever the query parameters (`?q=`,
  * `?mode=edit`). It follows an organization switch in place through the `workspace` port. The
  * current state comes from the router's `isActive` signals rather than `RouterLinkActive`, which
- * removes `aria-current` whenever its own link is inactive, as on a document. Its host is
+ * removes `aria-current` on each of its updates unless `ariaCurrentWhenActive` is set, so neither a
+ * document nor a query-only navigation would keep it. Its host is
  * `display: contents`, so its group joins the rail's layout.
  */
 @Component({

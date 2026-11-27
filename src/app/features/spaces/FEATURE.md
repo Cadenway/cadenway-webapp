@@ -882,10 +882,11 @@ for the documents' space names and `New document`, the space of an archived list
 member may create. An absent gateway role reads as `edit`, an unknown one as `view`.
 
 `ports/navigation-refresh` publishes `NAVIGATION_REFRESH` (`NavigationRefreshPort`): `refresh()`
-reads the spaces, their lists and counts, and the trash and archive counts again, after another
-feature's write that may bring a list or a space back (a restore, an unarchived list);
-`refreshCounts()` reads only the trash and archive counts of the sidebar footer again (a purge, an
-emptied trash, an unarchived task). Both only schedule reads.
+reads the spaces (the overviews follow them), the favorites and the trash and archive counts
+again, after another feature's write that may bring a list or a space back (a restore, an
+unarchived list); `refreshCounts()` reads only the trash and archive counts of the sidebar footer
+again (a purge, an emptied trash, an unarchived task). Both only schedule reads: a read in flight,
+even the first one, is followed by one more.
 
 ## Dependencies
 

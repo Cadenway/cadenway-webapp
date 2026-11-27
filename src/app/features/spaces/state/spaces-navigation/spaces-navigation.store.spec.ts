@@ -203,6 +203,7 @@ describe('SpacesNavigationStore', () => {
   let store: InstanceType<typeof SpacesNavigationStore>;
   let creations: Subject<CreatedTask>;
   let lists: Record<string, Mock>;
+  let sidebar: { readonly seats: Mock; readonly trashCount: Mock; readonly archiveCount: Mock };
   const today: string = todayIso();
   const roadmap: Favorite = {
     id: 'f1',
@@ -250,19 +251,17 @@ describe('SpacesNavigationStore', () => {
       unarchive: vi.fn(),
       remove: vi.fn(),
     };
+    sidebar = {
+      seats: vi.fn(() => Promise.resolve({ plan: 'team', free: 7 })),
+      trashCount: vi.fn(() => Promise.resolve(2)),
+      archiveCount: vi.fn(() => Promise.resolve(3)),
+    };
     TestBed.configureTestingModule({
       providers: [
         SpacesNavigationStore,
         { provide: SpacesApi, useValue: api },
         { provide: ListsApi, useValue: lists },
-        {
-          provide: SidebarApi,
-          useValue: {
-            seats: vi.fn(() => Promise.resolve({ plan: 'team', free: 7 })),
-            trashCount: vi.fn(() => Promise.resolve(2)),
-            archiveCount: vi.fn(() => Promise.resolve(3)),
-          },
-        },
+        { provide: SidebarApi, useValue: sidebar },
         { provide: WORKSPACE_CONTEXT, useValue: { organization } },
         { provide: TaskCreate, useValue: { created: creations.asObservable() } },
       ],
@@ -646,5 +645,60 @@ describe('SpacesNavigationStore', () => {
     await expect.poll(() => store.spaces.hasValue()).toBe(true);
     store.refresh();
     await expect.poll(() => api.spaces.mock.calls.length).toBe(2);
+  });
+
+  it('reads the overviews once on refresh, after the new spaces', async () => {
+    await expect.poll(() => store.overviews.status()).toBe('resolved');
+    const reads: number = api.overview.mock.calls.length;
+
+    store.refresh();
+    await expect.poll(() => api.spaces.mock.calls.length).toBe(2);
+    await expect.poll(() => store.overviews.status()).toBe('resolved');
+    await new Promise<void>((resolve: () => void): void => {
+      setTimeout(resolve, 20);
+    });
+
+    expect(api.overview.mock.calls.length).toBe(reads + 2);
+  });
+
+  it('reads the counts once more when asked during their first read', async () => {
+    let answer: (count: number) => void = (): void => undefined;
+    sidebar.trashCount.mockImplementationOnce(
+      () =>
+        new Promise<number>((resolve: (count: number) => void): void => {
+          answer = resolve;
+        }),
+    );
+    TestBed.tick();
+    await expect.poll(() => sidebar.trashCount.mock.calls.length).toBe(1);
+    expect(store.trashCount.isLoading()).toBe(true);
+
+    store.refreshCounts();
+    answer(1);
+
+    await expect.poll(() => sidebar.trashCount.mock.calls.length).toBe(2);
+    await expect.poll(() => store.trashCount.value()).toBe(2);
+    await expect.poll(() => sidebar.archiveCount.mock.calls.length).toBe(2);
+    expect(api.spaces).toHaveBeenCalledTimes(1);
+  });
+
+  it('reads the favorites once more when asked during their read', async () => {
+    let answer: (favorites: readonly Favorite[]) => void = (): void => undefined;
+    api.favorites.mockImplementationOnce(
+      () =>
+        new Promise<readonly Favorite[]>(
+          (resolve: (favorites: readonly Favorite[]) => void): void => {
+            answer = resolve;
+          },
+        ),
+    );
+    TestBed.tick();
+    await expect.poll(() => api.favorites.mock.calls.length).toBe(1);
+
+    store.refreshFavorites();
+    answer([]);
+
+    await expect.poll(() => api.favorites.mock.calls.length).toBe(2);
+    await expect.poll(() => store.favoriteOf('list', 'l-roadmap')).toEqual(roadmap);
   });
 });

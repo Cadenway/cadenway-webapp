@@ -36,5 +36,7 @@ dashboard is shown, whatever its query parameters.
 ## Invariants
 
 - The page's `h1` is its route focus target (`data-route-focus`).
+- The rail item reads the router's `isActive` signal instead of `RouterLinkActive`, which removes
+  `aria-current` on each of its updates (a query-only navigation such as `?task=` included).
 - A failure of the page's primary read renders `RouteErrorBoundary` in place of the page, so the
   shell stays.

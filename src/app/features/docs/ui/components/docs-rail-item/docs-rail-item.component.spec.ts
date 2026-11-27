@@ -81,6 +81,13 @@ describe('DocsRailItem', () => {
     expect(link()?.textContent).toContain('Documents');
     expect(link()?.getAttribute('aria-current')).toBe('page');
 
+    const shown: HTMLAnchorElement | null = link();
+    await harness.navigateByUrl('/atelier-nord/docs?task=CAD-482');
+    await harness.fixture.whenStable();
+    harness.detectChanges();
+    expect(link()).toBe(shown);
+    expect(link()?.getAttribute('aria-current')).toBe('page');
+
     await harness.navigateByUrl('/atelier-nord/d/doc-onboarding?mode=edit');
     await harness.fixture.whenStable();
     harness.detectChanges();

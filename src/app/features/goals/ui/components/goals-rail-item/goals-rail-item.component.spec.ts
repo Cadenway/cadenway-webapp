@@ -80,6 +80,13 @@ describe('GoalsRailItem', () => {
     expect(link()?.textContent).toContain('Goals');
     expect(link()?.getAttribute('aria-current')).toBe('page');
 
+    const shown: HTMLAnchorElement | null = link();
+    await harness.navigateByUrl('/atelier-nord/goals?task=CAD-482');
+    await harness.fixture.whenStable();
+    harness.detectChanges();
+    expect(link()).toBe(shown);
+    expect(link()?.getAttribute('aria-current')).toBe('page');
+
     await harness.navigateByUrl('/atelier-nord');
     await harness.fixture.whenStable();
     harness.detectChanges();

@@ -90,16 +90,15 @@ export function provideSpacesNavigation(): Provider[] {
       useFactory: (): NavigationRefreshPort => {
         const navigation: InstanceType<typeof SpacesNavigationStore> =
           inject(SpacesNavigationStore);
-        const refreshCounts: () => void = (): void => {
-          navigation.trashCount.reload();
-          navigation.archiveCount.reload();
-        };
         return {
           refresh: (): void => {
             navigation.refresh();
-            refreshCounts();
+            navigation.refreshFavorites();
+            navigation.refreshCounts();
           },
-          refreshCounts,
+          refreshCounts: (): void => {
+            navigation.refreshCounts();
+          },
         };
       },
     },

@@ -43,7 +43,8 @@ is shown, whatever the query parameters.
 
 - Each page's `h1` is its route focus target (`data-route-focus`).
 - The rail item reads the router's `isActive` signals instead of `RouterLinkActive`, which removes
-  `aria-current` whenever its own link is inactive, as on a document.
+  `aria-current` on each of its updates (every navigation, query-only ones included) unless
+  `ariaCurrentWhenActive` is set, while the brick writes the attribute only when `current` changes.
 - A failure of a page's primary read renders `RouteErrorBoundary` in place of the page, so the
   shell stays.
 

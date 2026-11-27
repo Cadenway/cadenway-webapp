@@ -55,7 +55,7 @@ const workspace: WorkspaceContextPort = {
 class RailHost {}
 
 describe('MyTasksRailItem', () => {
-  it('links to my tasks and marks itself current on that screen, whatever its tab', async () => {
+  it('links to my tasks and stays current on that screen, also after a query-only navigation', async () => {
     TestBed.configureTestingModule({
       providers: [
         provideCadenwayIcons(),
@@ -78,6 +78,13 @@ describe('MyTasksRailItem', () => {
 
     expect(link()?.getAttribute('href')).toBe('/atelier-nord/my-tasks');
     expect(link()?.textContent).toContain('My tasks');
+    expect(link()?.getAttribute('aria-current')).toBe('page');
+
+    const shown: HTMLAnchorElement | null = link();
+    await harness.navigateByUrl('/atelier-nord/my-tasks?task=CAD-482');
+    await harness.fixture.whenStable();
+    harness.detectChanges();
+    expect(link()).toBe(shown);
     expect(link()?.getAttribute('aria-current')).toBe('page');
 
     await harness.navigateByUrl('/atelier-nord');
