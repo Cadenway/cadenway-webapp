@@ -1,0 +1,292 @@
+@let tokens = store.list();
+<div class="mx-auto flex w-full max-w-3xl flex-col gap-6 px-4 py-6 sm:px-8 sm:py-8">
+  @if (tokens) {
+    <header class="flex flex-wrap items-start gap-4">
+      <div class="flex min-w-0 flex-1 flex-col gap-1">
+        <h1
+          class="text-2xl font-semibold tracking-tight"
+          tabindex="-1"
+          data-route-focus
+          i18n="@@account.api-tokens.title"
+        >
+          API tokens
+        </h1>
+        <p class="text-sm text-muted-foreground" i18n="@@account.api-tokens.description">
+          Personal tokens for the REST API and webhooks. They act with your rights.
+        </p>
+      </div>
+      <button
+        #createButton
+        cwButton
+        type="button"
+        data-testid="token-create"
+        (click)="openCreate()"
+      >
+        <ng-icon name="phosphorPlusBold" aria-hidden="true" />
+        <ng-container i18n="@@account.api-tokens.create">Create a token</ng-container>
+      </button>
+    </header>
+
+    <cw-table-container class="rounded-lg border border-border">
+      <table
+        cwTable
+        role="table"
+        class="max-md:block md:min-w-[640px]"
+        aria-label="Personal access tokens"
+        i18n-aria-label="@@account.api-tokens.table"
+      >
+        <thead cwTableHeader role="rowgroup" class="max-md:sr-only">
+          <tr cwTableRow role="row">
+            <th cwTableHead role="columnheader" i18n="@@account.api-tokens.column-name">Name</th>
+            <th
+              cwTableHead
+              role="columnheader"
+              class="w-48"
+              i18n="@@account.api-tokens.column-scopes"
+            >
+              Scopes
+            </th>
+            <th
+              cwTableHead
+              role="columnheader"
+              class="w-28"
+              i18n="@@account.api-tokens.column-last-used"
+            >
+              Last used
+            </th>
+            <th
+              cwTableHead
+              role="columnheader"
+              class="w-28"
+              i18n="@@account.api-tokens.column-expires"
+            >
+              Expires
+            </th>
+            <th cwTableHead role="columnheader" class="w-24">
+              <span class="sr-only" i18n="@@account.api-tokens.column-actions">Actions</span>
+            </th>
+          </tr>
+        </thead>
+        <tbody cwTableBody role="rowgroup" class="max-md:block">
+          @for (token of tokens; track token.id) {
+            <tr
+              cwTableRow
+              role="row"
+              class="max-md:flex max-md:h-auto max-md:flex-wrap max-md:items-center max-md:gap-x-3 max-md:gap-y-1.5 max-md:p-3"
+              [class.bg-selected]="token.id === store.highlightedId()"
+              [attr.data-highlighted]="token.id === store.highlightedId() ? 'true' : null"
+              data-testid="token-row"
+            >
+              <td cwTableCell role="cell" class="py-2 max-md:block max-md:basis-full max-md:p-0">
+                <span class="flex min-w-0 flex-col">
+                  <span class="truncate leading-5 font-medium">{{ token.name }}</span>
+                  <span class="font-mono text-xs text-muted-foreground">{{ token.prefix }}</span>
+                </span>
+              </td>
+              <td cwTableCell role="cell" class="py-2 max-md:block max-md:p-0">
+                <span class="flex flex-wrap gap-1">
+                  @for (scope of token.scopes; track scope) {
+                    <span cwBadge variant="outline" size="sm" class="font-mono">{{ scope }}</span>
+                  }
+                </span>
+              </td>
+              <td
+                cwTableCell
+                role="cell"
+                class="text-xs text-muted-foreground max-md:block max-md:p-0"
+              >
+                @switch (token.lastUse.kind) {
+                  @case ('never') {
+                    <ng-container i18n="@@account.api-tokens.used-never">Never</ng-container>
+                  }
+                  @case ('minutes') {
+                    @let minutes = countOf(token.lastUse);
+                    <ng-container i18n="@@account.api-tokens.used-minutes"
+                      >{{ minutes }} min ago</ng-container
+                    >
+                  }
+                  @case ('hours') {
+                    @let hours = countOf(token.lastUse);
+                    <ng-container i18n="@@account.api-tokens.used-hours"
+                      >{{ hours }} h ago</ng-container
+                    >
+                  }
+                  @case ('days') {
+                    @let days = countOf(token.lastUse);
+                    <ng-container i18n="@@account.api-tokens.used-days">{days, plural,
+                      =1 {1 day ago}
+                      other {{{ days }} days ago}
+                    }</ng-container>
+                  }
+                  @case ('date') {
+                    {{ dateLabel(token.lastUse) }}
+                  }
+                }
+              </td>
+              <td
+                cwTableCell
+                role="cell"
+                class="text-xs max-md:block max-md:p-0"
+                [class.text-grenat-text]="token.expiry.soon"
+                [class.text-muted-foreground]="!token.expiry.soon"
+                data-testid="token-expiry"
+              >
+                @switch (token.expiry.kind) {
+                  @case ('never') {
+                    <ng-container i18n="@@account.api-tokens.expires-never"
+                      >No expiration</ng-container
+                    >
+                  }
+                  @case ('days') {
+                    @let left = countOf(token.expiry);
+                    <ng-container i18n="@@account.api-tokens.expires-days">{left, plural,
+                      =1 {In 1 day}
+                      other {In {{ left }} days}
+                    }</ng-container>
+                  }
+                  @case ('years') {
+                    @let years = countOf(token.expiry);
+                    <ng-container i18n="@@account.api-tokens.expires-years">{years, plural,
+                      =1 {In 1 year}
+                      other {In {{ years }} years}
+                    }</ng-container>
+                  }
+                  @case ('date') {
+                    {{ dateLabel(token.expiry) }}
+                  }
+                }
+              </td>
+              <td cwTableCell role="cell" class="text-right max-md:ml-auto max-md:block max-md:p-0">
+                <button
+                  #revokeButton
+                  cwButton
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  class="text-destructive"
+                  [attr.aria-label]="revokeLabel(token)"
+                  data-testid="token-revoke"
+                  (click)="askRevoke(token)"
+                  i18n="@@account.api-tokens.revoke"
+                >
+                  Revoke
+                </button>
+              </td>
+            </tr>
+          } @empty {
+            <tr cwTableRow role="row" class="hover:bg-transparent max-md:block max-md:h-auto">
+              <td cwTableCell role="cell" colspan="5" class="max-md:block max-md:p-0">
+                <cw-empty size="sm" data-testid="tokens-empty">
+                  <cw-empty-header>
+                    <cw-empty-media>
+                      <ng-icon
+                        name="phosphorKeyBold"
+                        class="text-muted-foreground"
+                        aria-hidden="true"
+                      />
+                    </cw-empty-media>
+                    <cw-empty-title i18n="@@account.api-tokens.empty-title"
+                      >No active token</cw-empty-title
+                    >
+                    <cw-empty-description i18n="@@account.api-tokens.empty-description"
+                      >Create a token to call the REST API or receive
+                      webhooks.</cw-empty-description
+                    >
+                  </cw-empty-header>
+                  <cw-empty-content>
+                    <button
+                      cwButton
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      data-testid="token-create-empty"
+                      (click)="openCreate()"
+                    >
+                      <ng-icon name="phosphorPlusBold" aria-hidden="true" />
+                      <ng-container i18n="@@account.api-tokens.create">Create a token</ng-container>
+                    </button>
+                  </cw-empty-content>
+                </cw-empty>
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </cw-table-container>
+  } @else {
+    <div
+      class="flex flex-col gap-6"
+      role="status"
+      aria-busy="true"
+      aria-label="Loading the section"
+      i18n-aria-label="@@account.api-tokens.loading"
+      data-testid="tokens-loading"
+    >
+      <div class="flex items-start gap-4" aria-hidden="true">
+        <div class="flex min-w-0 flex-1 flex-col gap-2">
+          <div cwSkeleton class="h-7 w-56"></div>
+          <div cwSkeleton class="h-3 w-3/4"></div>
+        </div>
+        <div cwSkeleton class="h-8 w-32 rounded-lg"></div>
+      </div>
+      <div class="overflow-hidden rounded-xl border border-border bg-card" aria-hidden="true">
+        <div class="flex h-10 items-center gap-4 border-b border-border px-4">
+          <div cwSkeleton class="h-2.5 w-24"></div>
+          <div cwSkeleton class="ml-auto h-2.5 w-16"></div>
+          <div cwSkeleton class="h-2.5 w-20"></div>
+        </div>
+        @for (row of [1, 2, 3]; track row) {
+          <div class="flex h-14 items-center gap-3 border-b border-border px-4 last:border-b-0">
+            <div class="flex min-w-0 flex-1 flex-col gap-1.5">
+              <div cwSkeleton class="h-3 w-40"></div>
+              <div cwSkeleton class="h-2.5 w-24"></div>
+            </div>
+            <div cwSkeleton class="h-5 w-16 rounded-full"></div>
+            <div cwSkeleton class="h-3 w-20"></div>
+          </div>
+        }
+      </div>
+    </div>
+  }
+</div>
+
+<cw-token-create-dialog
+  [open]="createOpen()"
+  [pending]="store.creating()"
+  [secret]="store.secret()"
+  (submitted)="create($event)"
+  (copyRequested)="copySecret()"
+  (dismissed)="closeCreate()"
+  (detached)="forgetSecret()"
+/>
+
+@let target = revokeTarget();
+<cw-alert-dialog
+  variant="destructive"
+  [(open)]="revokeOpen"
+  [confirmText]="target?.name ?? ''"
+  [pending]="revoking()"
+  data-testid="token-revoke-dialog"
+  (confirm)="confirmRevoke()"
+>
+  <cw-alert-dialog-media>
+    <ng-icon name="phosphorKeyBold" aria-hidden="true" />
+  </cw-alert-dialog-media>
+  <h2 cwAlertDialogTitle>{{ target ? revokeTitle(target) : '' }}</h2>
+  <p cwAlertDialogDescription i18n="@@account.api-tokens.revoke-description">
+    Scripts and integrations that use it will receive a 401 error immediately. This action cannot be
+    undone.
+  </p>
+  <button cwButton cwAlertDialogCancel variant="outline" i18n="@@account.api-tokens.cancel">
+    Cancel
+  </button>
+  <button
+    cwButton
+    cwAlertDialogAction
+    variant="destructive"
+    [loading]="revoking()"
+    data-testid="token-revoke-confirm"
+  >
+    <ng-container i18n="@@account.api-tokens.revoke-confirm">Revoke the token</ng-container>
+  </button>
+</cw-alert-dialog>
