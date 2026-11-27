@@ -1,5 +1,5 @@
 <div class="mx-auto flex w-full max-w-3xl flex-col gap-6 px-4 py-6 sm:px-8 sm:py-8">
-  @if (settings()) {
+  @if (loaded()) {
     <header class="flex flex-col gap-1">
       <h1 class="text-2xl font-semibold tracking-tight" i18n="@@account.preferences.title">
         Preferences
@@ -65,6 +65,39 @@
           </cw-select>
         </div>
       </div>
+      @if (sync.unconfirmed()) {
+        <div
+          class="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-muted px-3 py-2"
+          role="status"
+          data-testid="account-language-unconfirmed"
+        >
+          <p class="flex items-start gap-2 text-sm">
+            <ng-icon
+              class="mt-0.5 shrink-0 text-muted-foreground"
+              name="phosphorInfoBold"
+              aria-hidden="true"
+            />
+            <span class="flex flex-col gap-0.5">
+              <span class="font-medium" i18n="@@account.preferences.unconfirmed"
+                >Could not confirm the language</span
+              >
+              <span class="text-muted-foreground" i18n="@@account.preferences.unconfirmed-text"
+                >The server did not answer. Your choice may already be saved.</span
+              >
+            </span>
+          </p>
+          <button
+            cwButton
+            type="button"
+            variant="outline"
+            size="sm"
+            (click)="sync.retry()"
+            i18n="@@account.preferences.unconfirmed-retry"
+          >
+            Retry
+          </button>
+        </div>
+      }
     </cw-card>
   } @else {
     <div

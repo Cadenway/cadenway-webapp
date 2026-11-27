@@ -20,6 +20,7 @@ import type {
   AccountLanguageSettings,
 } from '../../../data-access/services/language-api/account-language.interface';
 import { LanguageApi } from '../../../data-access/services/language-api/language-api.service';
+import { CONFIRMATION_DELAYS } from '../../../services/account-language-sync/confirmation-delays.token';
 import { PreferencesPage } from './preferences-page.component';
 
 /**
@@ -93,7 +94,7 @@ describe('PreferencesPage', () => {
   let recorded: AccountLanguageSettings;
   let read: Mock<LanguageApi['read']>;
   let write: Mock<LanguageApi['write']>;
-  let toasts: { success: Mock; error: Mock };
+  let toasts: { success: Mock; error: Mock; dismiss: Mock };
   let locale: { current: AppLocale; use: Mock };
   let theme: {
     preference: WritableSignal<ThemePreference>;
@@ -108,7 +109,11 @@ describe('PreferencesPage', () => {
       recorded = { language, version: version + 1 };
       return Promise.resolve(recorded);
     });
-    toasts = { success: vi.fn(() => 'toast-1'), error: vi.fn(() => 'toast-2') };
+    toasts = {
+      success: vi.fn(() => 'toast-1'),
+      error: vi.fn(() => 'toast-2'),
+      dismiss: vi.fn(),
+    };
     locale = { current: 'fr', use: vi.fn() };
     theme = {
       preference: signal<ThemePreference>('system'),
@@ -121,7 +126,10 @@ describe('PreferencesPage', () => {
       providers: [
         provideCadenwayIcons(),
         provideRouter(
-          [{ path: 'preferences', component: PreferencesPage }],
+          [
+            { path: 'preferences', component: PreferencesPage },
+            { path: 'elsewhere', component: FakeBoundary },
+          ],
           withErrorBoundaries({ defaultErrorComponent: FakeBoundary }),
           withRouterConfig({ onSameUrlNavigation: 'reload' }),
         ),
@@ -130,6 +138,7 @@ describe('PreferencesPage', () => {
         { provide: LocaleService, useValue: locale },
         { provide: ThemeService, useValue: theme },
         { provide: WORKSPACE_CONTEXT, useValue: workspace },
+        { provide: CONFIRMATION_DELAYS, useValue: [0, 0, 0] },
       ],
     });
   });
@@ -389,5 +398,44 @@ describe('PreferencesPage', () => {
       })
       .toBe('Preferences');
     expect(read).toHaveBeenCalledTimes(2);
+  });
+
+  it('applies a language saved after the page closed', async () => {
+    let finish: (settings: AccountLanguageSettings) => void = (): void => undefined;
+    write.mockReturnValueOnce(
+      new Promise<AccountLanguageSettings>((resolve: (value: AccountLanguageSettings) => void) => {
+        finish = resolve;
+      }),
+    );
+    const harness: RouterTestingHarness = await open();
+
+    await pickLanguage(harness, 'English');
+    await expect.poll(() => write.mock.calls.length).toBe(1);
+    await harness.navigateByUrl('/elsewhere');
+    finish({ language: 'en', version: 4 });
+
+    await expect.poll(() => locale.use.mock.calls).toEqual([['en']]);
+  });
+
+  it('shows a neutral note with Retry when a save cannot be confirmed', async () => {
+    write.mockRejectedValueOnce(new HttpErrorResponse({ status: 0 }));
+    const harness: RouterTestingHarness = await open();
+    read.mockRejectedValue(new HttpErrorResponse({ status: 0 }));
+
+    await pickLanguage(harness, 'English');
+
+    const note: () => HTMLElement | null = (): HTMLElement | null => {
+      harness.detectChanges();
+      return hostOf(harness).querySelector('[data-testid="account-language-unconfirmed"]');
+    };
+    await expect.poll(() => note()?.textContent).toContain('Could not confirm the language');
+    expect(shownLanguage(harness)).toBe('English');
+    expect(toasts.error).not.toHaveBeenCalled();
+
+    read.mockResolvedValue({ language: 'en', version: 4 });
+    note()?.querySelector('button')?.click();
+
+    await expect.poll(() => locale.use.mock.calls).toEqual([['en']]);
+    await expect.poll(() => note()).toBeNull();
   });
 });

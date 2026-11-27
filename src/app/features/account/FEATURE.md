@@ -38,8 +38,8 @@ parent provides the English texts of `cw-password-strength` and `cw-input-otp` t
   person's tokens of the current organization, with the section skeleton while loading, the
   route's error boundary for a failed read and `No active token` for an empty list.
 - `preferences` (package A4) replaces its stub: the page reads the account's language through
-  `LanguageApi`, with the section skeleton while loading and the route's error boundary for a
-  failed read.
+  the root-scoped `AccountLanguageSync`, with the section skeleton while loading and the route's
+  error boundary for a failed read.
 
 ## Public entry points
 
@@ -190,14 +190,27 @@ parent provides the English texts of `cw-password-strength` and `cw-input-otp` t
 - `preferences` (`Compte.dc.html` lines 405-505): the `Theme` cards drive `ThemeService` at once,
   the transition spreading from the chosen card, and stay per device. `Language` is the account's
   (`updateCurrentUser` with `If-Match` on the account version, after the same account check under
-  the session lock as the notification preferences). A pick shows at once and saves; a `412` or a
-  write without a known outcome reads the account again, counts as saved when it holds the pick,
-  and is otherwise resent once. Once saved, the application reloads in the pick's locale with
-  `LocaleService.use` (`?lang=`) when that locale is not the one shown (German and Spanish show
-  English), and otherwise confirms with `Preference saved`. A refusal puts the previous language
-  back with `Could not save`; another account or none holding the session stops silently. Known
-  gaps: the date format, the week start and the `Display and accessibility` card are hidden until
-  the account stores them (B9); the application does not apply the account's language on load.
+  the session lock as the notification preferences).
+  - `AccountLanguageSync` (`services/account-language-sync`, root-scoped `@Service()`, bound to
+    `WORKSPACE_CONTEXT`'s user through the page's read) holds the confirmed language, the latest
+    pick and the save run, so a save outlives the page: once confirmed, the application reloads
+    in the pick's locale with `LocaleService.use` (`?lang=`) when that locale is not the one shown
+    (German and Spanish show English), even after the page closed, and otherwise confirms with
+    `Preference saved`. Binding another account, or a session held by another account or none,
+    resets it silently.
+  - Picks save one at a time, the latest winning. A `412` or a write without a known outcome
+    reads the account, counts as saved when it holds the pick, and is otherwise resent once.
+    When that read fails, or the resend's outcome is unknown too, the state stays uncertain: the
+    account is read again after 2, 4 and 8 s, and when none of these reads answers, a neutral
+    `Could not confirm the language` note with `Retry` shows. While uncertain, the cached language
+    is never taken as confirmed: the next save reads first and sends a pick even when it equals
+    the cached value.
+  - Only a refusal known for certain (a `4xx`, or a read showing the account without the pick)
+    puts the confirmed language back with `Could not save`; when an earlier pick of the same run
+    was saved, that pick's locale is applied.
+  - Known gaps: the date format, the week start and the `Display and accessibility` card are
+    hidden until the account stores them (B9); the application does not apply the account's
+    language on load.
 
 ## Copy not taken word for word from the mockup
 
@@ -226,4 +239,5 @@ parent provides the English texts of `cw-password-strength` and `cw-input-otp` t
 | `account.notifications.save-failed`, `account.notifications.save-failed-text`                                                                                                                                     | The mockup draws no refused save; the section saves at once.                                   |
 | `account.preferences.lead`, `account.preferences.saved-text`                                                                                                                                                      | The theme stays per device and the accessibility settings are hidden (B9).                     |
 | `account.preferences.language-unknown`, `account.preferences.save-failed`, `account.preferences.save-failed-text`                                                                                                 | The mockup draws no unknown language and no refused save.                                      |
+| `account.preferences.unconfirmed`, `account.preferences.unconfirmed-text`, `account.preferences.unconfirmed-retry`                                                                                                | The mockup draws no save whose outcome stays unknown.                                          |
 | `account.user-menu.avatar-unknown`, `account.user-menu.avatar-online`, `account.user-menu.avatar-away`, `account.user-menu.avatar-dnd`, `account.user-menu.avatar-invisible`, `account.user-menu.avatar-disabled` | Texts of the avatar brick, taken from its defaults.                                            |

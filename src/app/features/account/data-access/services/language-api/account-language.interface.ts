@@ -41,3 +41,46 @@ export interface AccountLanguageSettings {
   readonly version: number;
   // #endregion
 }
+
+/**
+ * Interface AccountLanguageOption
+ *
+ * @description
+ * A language the preferences section offers, named in that language.
+ */
+export interface AccountLanguageOption {
+  // #region Properties
+  /**
+   * Property value
+   *
+   * @description
+   * The account language it saves.
+   *
+   * @type {AccountLanguage}
+   * @readonly
+   */
+  readonly value: AccountLanguage;
+
+  /**
+   * Property label
+   *
+   * @description
+   * Name of the language, in that language.
+   *
+   * @type {string}
+   * @readonly
+   */
+  readonly label: string;
+
+  /**
+   * Property flag
+   *
+   * @description
+   * Flag icon before the name.
+   *
+   * @type {string}
+   * @readonly
+   */
+  readonly flag: string;
+  // #endregion
+}
