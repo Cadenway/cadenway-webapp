@@ -448,6 +448,12 @@ describe('WORKSPACE_ROUTES', () => {
   });
 
   it('opens each cross-cutting page inside the shell, its rail item current', async () => {
+    TestBed.overrideProvider(ArchivesService, {
+      useValue: {
+        listArchivedLists: () => of({ items: [], nextCursor: null, total: 0 }),
+        listArchivedTasks: () => of({ items: [], nextCursor: null, total: 0 }),
+      },
+    });
     const harness: RouterTestingHarness = await open('/atelier-nord');
     for (const [url, heading, title, item] of [
       ['/atelier-nord/my-tasks?tab=closed', 'My tasks', 'My tasks', 'my-tasks-rail-item'],
