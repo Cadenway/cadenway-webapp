@@ -1,5 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 
+import { workspaceRead } from './workspace-reads';
+
 const user = {
   id: '019a5f3c-8d2e-7c4a-9b1f-3e5d7a9c1b30',
   name: 'Camille Martin',
@@ -33,8 +35,19 @@ const sessionExpired = {
   },
 };
 
-/** Stubs the runtime configuration and the two reads of the workspace guards. */
+/**
+ * Stubs the runtime configuration and the two reads of the workspace guards; the shell's other
+ * reads get their empty answers, and any other route a 404.
+ */
 async function stubGateway(page: Page, { signedIn }: { signedIn: boolean }): Promise<void> {
+  await page.route('**/v1/**', async (route) => {
+    const key = `${route.request().method()} ${new URL(route.request().url()).pathname}`;
+    const notFound = {
+      status: 404,
+      json: { type: 'about:blank', title: 'Never shown', status: 404, code: 'route.not-found' },
+    };
+    await route.fulfill(signedIn ? (workspaceRead(key) ?? notFound) : sessionExpired);
+  });
   await page.route('**/config.json', async (route) => {
     const origin = new URL(route.request().url()).origin;
     await route.fulfill({ json: { apiUrl: origin, realtimeUrl: origin } });

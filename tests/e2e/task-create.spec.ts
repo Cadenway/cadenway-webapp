@@ -1,6 +1,8 @@
 import { expect, test } from '@playwright/test';
 import type { Page, Request, Route } from '@playwright/test';
 
+import { workspaceRead } from './workspace-reads';
+
 const user = {
   id: '019a5f3c-8d2e-7c4a-9b1f-3e5d7a9c1b30',
   name: 'Camille Martin',
@@ -74,6 +76,7 @@ function problem(status: number, code: string) {
 async function stubGateway(page: Page): Promise<Gateway> {
   const calls: string[] = [];
   const creations: { body: unknown; key: string | null }[] = [];
+  let created: Record<string, unknown> | null = null;
 
   await page.route('**/config.json', async (route: Route) => {
     const origin = new URL(route.request().url()).origin;
@@ -129,6 +132,19 @@ async function stubGateway(page: Page): Promise<Gateway> {
       case 'GET /v1/spaces/product/lists':
         await route.fulfill({ json: { items: [sprint14], nextCursor: null } });
         return;
+      case 'GET /v1/spaces/product/overview':
+        await route.fulfill({
+          json: {
+            spaceId: 'product',
+            listCount: 1,
+            taskCount: 0,
+            items: [
+              { list: sprint14, counts: { total: 0, open: 0, done: 0, cancelled: 0, late: 0 } },
+            ],
+            nextCursor: null,
+          },
+        });
+        return;
       case 'GET /v1/spaces/product/task-templates':
         await route.fulfill({ json: { items: [], nextCursor: null } });
         return;
@@ -158,38 +174,60 @@ async function stubGateway(page: Page): Promise<Gateway> {
       case 'POST /v1/lists/sprint-14/tasks': {
         const body = request.postDataJSON() as { name: string; status?: string };
         creations.push({ body, key: request.headers()['idempotency-key'] ?? null });
-        await route.fulfill({
-          status: 201,
-          json: {
-            key: 'CAD-495',
-            name: body.name,
-            description: null,
-            status: body.status ?? 'todo',
-            cancelReason: null,
-            cancelNote: null,
-            priority: 'moyenne',
-            assignees: [{ userId: user.id }],
-            dueDate: null,
-            startDate: null,
-            estimateMinutes: null,
-            labels: [],
-            parentKey: null,
-            listId: 'sprint-14',
-            spaceId: 'product',
-            subtaskCounts: { total: 0, closed: 0 },
-            checklist: [],
-            checklistCounts: { total: 0, done: 0 },
-            completedAt: null,
-            createdAt: '2026-11-08T09:00:00Z',
-            createdBy: { userId: user.id },
-            updatedAt: '2026-11-08T09:00:00Z',
-            version: 1,
-          },
-        });
+        created = {
+          key: 'CAD-495',
+          name: body.name,
+          description: null,
+          status: body.status ?? 'todo',
+          cancelReason: null,
+          cancelNote: null,
+          priority: 'moyenne',
+          assignees: [{ userId: user.id }],
+          dueDate: null,
+          startDate: null,
+          estimateMinutes: null,
+          labels: [],
+          parentKey: null,
+          listId: 'sprint-14',
+          spaceId: 'product',
+          subtaskCounts: { total: 0, closed: 0 },
+          checklist: [],
+          checklistCounts: { total: 0, done: 0 },
+          completedAt: null,
+          createdAt: '2026-11-08T09:00:00Z',
+          createdBy: { userId: user.id },
+          updatedAt: '2026-11-08T09:00:00Z',
+          version: 1,
+        };
+        await route.fulfill({ status: 201, json: created });
         return;
       }
+      case 'GET /v1/tasks/CAD-495/detail':
+        await route.fulfill(
+          created === null
+            ? problem(404, 'task.not-found')
+            : {
+                json: {
+                  task: created,
+                  space: product,
+                  list: sprint14,
+                  parent: null,
+                  subtasks: [],
+                  partial: [],
+                },
+              },
+        );
+        return;
+      case 'GET /v1/tasks/CAD-495/watchers':
+        await route.fulfill({
+          json: { items: [], nextCursor: null, total: 0, callerFollows: false },
+        });
+        return;
+      case 'GET /v1/tasks/CAD-495/reminder':
+        await route.fulfill(problem(404, 'reminder.not-found'));
+        return;
       default:
-        await route.fulfill(problem(404, 'route.not-found'));
+        await route.fulfill(workspaceRead(key) ?? problem(404, 'route.not-found'));
     }
   });
 
@@ -231,8 +269,13 @@ test('N opens the create dialog, a task is created and the toast offers Open', a
   });
   expect(gateway.creations[0].key).toMatch(/^[0-9a-f-]{36}$/);
 
+  // `Open` shows the task's detail over the current page (`?task=<KEY>`).
   await page.getByRole('button', { name: 'Open' }).click();
-  await expect(page).toHaveURL(/\/atelier-nord\/t\/CAD-495$/);
+  await expect(page).toHaveURL(/\/atelier-nord\?task=CAD-495$/);
+  const detail = page.getByRole('dialog', { name: 'CAD-495' });
+  await expect(detail.getByRole('textbox', { name: 'Title of the task' })).toHaveValue(
+    'Prepare the sprint demo',
+  );
 });
 
 test('Escape closes an open menu first, then the dialog', async ({ page }) => {
