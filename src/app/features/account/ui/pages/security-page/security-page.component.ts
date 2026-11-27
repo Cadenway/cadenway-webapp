@@ -21,7 +21,7 @@ import {
 import { CwButton } from '@cadenway/ui/components/button';
 import { CwCard, CwCardContent } from '@cadenway/ui/components/card';
 import { CwSkeleton } from '@cadenway/ui/components/skeleton';
-import { CwToastService } from '@cadenway/ui/components/toast';
+import { type CwToastAction, CwToastService } from '@cadenway/ui/components/toast';
 import { NgIcon } from '@ng-icons/core';
 import { take } from 'rxjs';
 
@@ -521,7 +521,7 @@ export class SecurityPage implements UnsavedChanges {
         return;
       case 'unconfirmed':
         this.passwordOpen.set(false);
-        this.toasts.warning(
+        this.warnUntilClosed(
           $localize`:@@account.security.password-unconfirmed:The password change could not be confirmed`,
           {
             description: $localize`:@@account.security.password-unconfirmed-text:Reload the page to see whether your password changed before you try again.`,
@@ -613,7 +613,7 @@ export class SecurityPage implements UnsavedChanges {
         return;
       case 'enabled-without-codes':
         this.setupOpen.set(false);
-        this.toasts.warning(
+        this.warnUntilClosed(
           $localize`:@@account.security.two-step-enabled-unseen:Two-step verification is on`,
           {
             description: $localize`:@@account.security.two-step-enabled-unseen-text:Its backup codes could not be shown: generate new ones to keep a set offline.`,
@@ -623,7 +623,7 @@ export class SecurityPage implements UnsavedChanges {
         return;
       case 'unconfirmed':
         this.setupOpen.set(false);
-        this.toasts.warning(
+        this.warnUntilClosed(
           $localize`:@@account.security.setup-unconfirmed:The setup could not be confirmed`,
           {
             description: $localize`:@@account.security.setup-unconfirmed-text:Reload the page to check it. If two-step verification is on, generate new backup codes.`,
@@ -763,7 +763,7 @@ export class SecurityPage implements UnsavedChanges {
           this.backupOpen.set(true);
           return;
         case 'codes-unseen':
-          this.toasts.warning(
+          this.warnUntilClosed(
             $localize`:@@account.security.codes-unseen:New backup codes were not shown`,
             {
               description: $localize`:@@account.security.codes-unseen-text:Your previous codes no longer work: generate new ones to keep a set offline.`,
@@ -772,7 +772,7 @@ export class SecurityPage implements UnsavedChanges {
           );
           return;
         case 'unconfirmed':
-          this.toasts.warning(
+          this.warnUntilClosed(
             $localize`:@@account.security.codes-unconfirmed:Your backup codes may have changed`,
             {
               description: $localize`:@@account.security.codes-unconfirmed-text:Generate new codes to be sure you keep a set that works.`,
@@ -893,6 +893,15 @@ export class SecurityPage implements UnsavedChanges {
         this.toasts.error(title, {
           description: $localize`:@@account.security.key-limit:You already have 10 keys: remove one first.`,
         });
+        return;
+      case 'unconfirmed':
+        this.keyNameOpen.set(false);
+        this.warnUntilClosed(
+          $localize`:@@account.security.key-unconfirmed:The new key could not be confirmed`,
+          {
+            description: $localize`:@@account.security.key-unconfirmed-text:Reload the page to see whether it was added.`,
+          },
+        );
         return;
       case 'not-enabled':
       case 'failed':
@@ -1107,7 +1116,7 @@ export class SecurityPage implements UnsavedChanges {
   private disabled(outcome: DisableOutcome): void {
     switch (outcome.kind) {
       case 'unconfirmed':
-        this.toasts.warning(
+        this.warnUntilClosed(
           $localize`:@@account.security.two-step-disable-unconfirmed:Turning off could not be confirmed`,
           {
             description: $localize`:@@account.security.two-step-disable-unconfirmed-text:Reload the page to see whether two-step verification is still on.`,
@@ -1156,6 +1165,13 @@ export class SecurityPage implements UnsavedChanges {
       this.toasts.success($localize`:@@account.security.key-removed:Security key removed`, {
         description: $localize`:@@account.security.key-removed-text:${name}:name: can no longer confirm your sign-ins.`,
       });
+    } else if (outcome.kind === 'unconfirmed') {
+      this.warnUntilClosed(
+        $localize`:@@account.security.key-remove-unconfirmed:The removal could not be confirmed`,
+        {
+          description: $localize`:@@account.security.key-remove-unconfirmed-text:Reload the page to see whether the key is still listed.`,
+        },
+      );
     } else if (outcome.kind === 'failed') {
       this.toasts.error($localize`:@@account.security.key-remove-failed:Could not remove the key`, {
         description: this.tryAgain(),
@@ -1178,6 +1194,13 @@ export class SecurityPage implements UnsavedChanges {
       this.toasts.success($localize`:@@account.security.session-revoked:Session revoked`, {
         description: $localize`:@@account.security.session-revoked-text:${device}:device: is signed out.`,
       });
+    } else if (outcome.kind === 'unconfirmed') {
+      this.warnUntilClosed(
+        $localize`:@@account.security.session-revoke-unconfirmed:The sign-out could not be confirmed`,
+        {
+          description: $localize`:@@account.security.session-revoke-unconfirmed-text:Reload the page to see whether the session is still open.`,
+        },
+      );
     } else if (outcome.kind === 'failed') {
       this.toasts.error(
         $localize`:@@account.security.session-revoke-failed:Could not revoke the session`,
@@ -1205,12 +1228,37 @@ export class SecurityPage implements UnsavedChanges {
           description: $localize`:@@account.security.sessions-closed-text:Only this device stays signed in.`,
         },
       );
+    } else if (outcome.kind === 'unconfirmed') {
+      this.warnUntilClosed(
+        $localize`:@@account.security.sessions-close-unconfirmed:Closing the sessions could not be confirmed`,
+        {
+          description: $localize`:@@account.security.sessions-close-unconfirmed-text:Reload the page to see which sessions are still open.`,
+        },
+      );
     } else if (outcome.kind === 'failed') {
       this.toasts.error(
         $localize`:@@account.security.sessions-close-failed:Could not close the other sessions`,
         { description: this.tryAgain() },
       );
     }
+  }
+
+  /**
+   * Method warnUntilClosed
+   *
+   * @description
+   * A warning about a write whose outcome stays unknown or whose codes were not shown. It stays
+   * until the person closes it, so its recovery action (`Generate new codes`) is not lost.
+   *
+   * @param {string} title - The title.
+   * @param {{ readonly description: string; readonly action?: CwToastAction }} options - Its text
+   * and its action.
+   */
+  private warnUntilClosed(
+    title: string,
+    options: { readonly description: string; readonly action?: CwToastAction },
+  ): void {
+    this.toasts.warning(title, { ...options, duration: Infinity, closable: true });
   }
 
   /**

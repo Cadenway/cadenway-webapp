@@ -11,6 +11,7 @@ import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vite
 
 import type { SecurityOverview } from '../../../models/two-step/security-overview.interface';
 import { AccountChangedError } from '../notification-preferences-api/account-changed.error';
+import { WriteNotSentError } from '../notification-preferences-api/write-not-sent.error';
 import { IncompleteSessionListError, SecurityApi } from './security-api.service';
 
 /**
@@ -167,6 +168,17 @@ describe('SecurityApi', () => {
     auth.getCurrentUser.mockReturnValue(throwError(() => new HttpErrorResponse({ status: 401 })));
     await expect(api.revokeOtherSessions('u-camille')).rejects.toBeInstanceOf(AccountChangedError);
     expect(sessions.revokeOtherSessions).not.toHaveBeenCalled();
+  });
+
+  it('tells a write that was never sent from a lost answer', async () => {
+    auth.getCurrentUser.mockReturnValue(throwError(() => new HttpErrorResponse({ status: 503 })));
+    await expect(api.revokeSession('u-camille', 's2')).rejects.toBeInstanceOf(WriteNotSentError);
+    expect(sessions.revokeSession).not.toHaveBeenCalled();
+    sessions.revokeSession.mockReturnValueOnce(
+      throwError(() => new HttpErrorResponse({ status: 503 })),
+    );
+    auth.getCurrentUser.mockReturnValue(of({ id: 'u-camille' }));
+    await expect(api.revokeSession('u-camille', 's2')).rejects.toBeInstanceOf(HttpErrorResponse);
   });
 
   it('returns only the key of a setup, not its address', async () => {

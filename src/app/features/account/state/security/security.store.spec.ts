@@ -13,6 +13,7 @@ import type { BackupCodeSet, TwoStepOverview } from '../../models/two-step/two-s
 import { ReauthenticationCancelledError } from '../../reauthentication/reauthentication-cancelled.error';
 import { ReauthenticationService } from '../../reauthentication/reauthentication.service';
 import { SecurityKeyRegistration } from '../../services/security-key-registration/security-key-registration.service';
+import { SECURITY_REREAD_DELAYS, SECURITY_REREAD_DELAYS_MS } from './security-reread-delays.token';
 import { SecurityStore } from './security.store';
 
 /**
@@ -143,12 +144,17 @@ describe('SecurityStore', () => {
    * @description
    * Creates the store and waits for its read.
    *
+   * @param {readonly number[]} [delays] - The delays before each read that settles a lost
+   * answer; none by default, so specs do not wait.
    * @returns {Promise<InstanceType<typeof SecurityStore>>} The store after the read.
    */
-  async function store(): Promise<InstanceType<typeof SecurityStore>> {
+  async function store(
+    delays: readonly number[] = [0, 0, 0, 0],
+  ): Promise<InstanceType<typeof SecurityStore>> {
     TestBed.configureTestingModule({
       providers: [
         SecurityStore,
+        { provide: SECURITY_REREAD_DELAYS, useValue: delays },
         { provide: SecurityApi, useValue: api },
         { provide: SecurityKeyRegistration, useValue: keys },
         { provide: ReauthenticationService, useValue: { run } },
@@ -231,7 +237,7 @@ describe('SecurityStore', () => {
     await expect(instance.changePassword('old', 'password12345')).resolves.toEqual({
       kind: 'password-compromised',
     });
-    api['changePassword'].mockRejectedValueOnce(problem(503, 'gateway.unavailable'));
+    api['changePassword'].mockRejectedValueOnce(problem(429, 'rate-limit.exceeded'));
     await expect(instance.changePassword('old', 'a new long secret')).resolves.toEqual({
       kind: 'failed',
     });
@@ -438,13 +444,56 @@ describe('SecurityStore', () => {
       expect(instance.overview()?.passwordChangedAt).toBe('2026-11-08T10:00:00Z');
     });
 
-    it('counts a password change as failed when the date read again is the same', async () => {
+    it('leaves a password change unconfirmed, never failed, when no read shows it', async () => {
       const instance: InstanceType<typeof SecurityStore> = await store();
       api['changePassword'].mockRejectedValueOnce(problem(503, 'gateway.unavailable'));
       await expect(instance.changePassword('old secret', 'a new long secret')).resolves.toEqual({
-        kind: 'failed',
+        kind: 'unconfirmed',
       });
       expect(api['changePassword']).toHaveBeenCalledOnce();
+      expect(api['overview']).toHaveBeenCalledTimes(5);
+    });
+
+    it('reads again at once, then 2, 4 and 8 seconds later', async () => {
+      const instance: InstanceType<typeof SecurityStore> = await store(SECURITY_REREAD_DELAYS_MS);
+      expect(SECURITY_REREAD_DELAYS_MS).toEqual([0, 2000, 4000, 8000]);
+      vi.useFakeTimers();
+      try {
+        api['disableTwoStep'].mockRejectedValueOnce(LOST);
+        const pending: Promise<unknown> = instance.disable();
+        await vi.advanceTimersByTimeAsync(0);
+        expect(api['overview']).toHaveBeenCalledTimes(2);
+        await vi.advanceTimersByTimeAsync(1999);
+        expect(api['overview']).toHaveBeenCalledTimes(2);
+        await vi.advanceTimersByTimeAsync(1);
+        expect(api['overview']).toHaveBeenCalledTimes(3);
+        await vi.advanceTimersByTimeAsync(4000);
+        expect(api['overview']).toHaveBeenCalledTimes(4);
+        expect(instance.sending()).toBe(true);
+        await vi.advanceTimersByTimeAsync(8000);
+        expect(api['overview']).toHaveBeenCalledTimes(5);
+        await expect(pending).resolves.toEqual({ kind: 'unconfirmed' });
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('settles a write the gateway applies only after the first read again', async () => {
+      const instance: InstanceType<typeof SecurityStore> = await store();
+      api['regenerateBackupCodes'].mockRejectedValueOnce(problem(504, 'gateway.timeout'));
+      api['overview']
+        .mockResolvedValueOnce(OVERVIEW)
+        .mockResolvedValueOnce(OVERVIEW)
+        .mockResolvedValueOnce({
+          ...OVERVIEW,
+          twoStep: {
+            ...TWO_STEP_ON,
+            backupCodes: { remaining: 10, total: 10, generatedAt: '2026-11-08T09:00:00Z' },
+          },
+        });
+      await expect(instance.regenerateBackupCodes()).resolves.toEqual({ kind: 'codes-unseen' });
+      expect(api['overview']).toHaveBeenCalledTimes(4);
+      expect(api['regenerateBackupCodes']).toHaveBeenCalledOnce();
     });
 
     it('stays unconfirmed, outside the error boundary, when the read fails too', async () => {
@@ -454,7 +503,7 @@ describe('SecurityStore', () => {
       await expect(instance.changePassword('old secret', 'a new long secret')).resolves.toEqual({
         kind: 'unconfirmed',
       });
-      expect(instance.security.status()).toBe('resolved');
+      expect(instance.security.status()).not.toBe('error');
       expect(instance.overview()?.passwordChangedAt).toBe('2026-08-12T09:00:00Z');
     });
 
@@ -473,7 +522,7 @@ describe('SecurityStore', () => {
       });
       expect(instance.sending()).toBe(true);
       finish(OVERVIEW);
-      await expect(pending).resolves.toEqual({ kind: 'failed' });
+      await expect(pending).resolves.toEqual({ kind: 'unconfirmed' });
       expect(instance.sending()).toBe(false);
     });
 
@@ -502,11 +551,65 @@ describe('SecurityStore', () => {
       expect(instance.overview()?.twoStep.enabled).toBe(true);
     });
 
-    it('keeps a setup pending when two-step verification is still off', async () => {
+    it('leaves a setup unconfirmed while two-step verification still reads off', async () => {
       api['overview'].mockResolvedValue({ ...OVERVIEW, twoStep: TWO_STEP_OFF });
       const instance: InstanceType<typeof SecurityStore> = await store();
       api['confirmAuthenticatorSetup'].mockRejectedValueOnce(problem(408, 'request.timeout'));
-      await expect(instance.confirmSetup('123456')).resolves.toEqual({ kind: 'failed' });
+      await expect(instance.confirmSetup('123456')).resolves.toEqual({ kind: 'unconfirmed' });
+    });
+
+    it('counts a key removal as done once the key is gone from a read again', async () => {
+      const instance: InstanceType<typeof SecurityStore> = await store();
+      api['removeSecurityKey'].mockRejectedValueOnce(LOST);
+      api['overview'].mockResolvedValueOnce({
+        ...OVERVIEW,
+        twoStep: { ...TWO_STEP_ON, securityKeys: [] },
+      });
+      await expect(instance.removeSecurityKey(TWO_STEP_ON.securityKeys[0])).resolves.toEqual({
+        kind: 'done',
+      });
+      expect(instance.overview()?.twoStep.securityKeys).toEqual([]);
+    });
+
+    it('leaves a revocation unconfirmed while the session still reads open', async () => {
+      const instance: InstanceType<typeof SecurityStore> = await store();
+      api['revokeSession'].mockRejectedValueOnce(LOST);
+      await expect(instance.revokeSession(session('s2', false))).resolves.toEqual({
+        kind: 'unconfirmed',
+      });
+      expect(instance.overview()?.sessions).toHaveLength(3);
+    });
+
+    it('counts the other sessions as closed once a read again shows none', async () => {
+      const instance: InstanceType<typeof SecurityStore> = await store();
+      api['revokeOtherSessions'].mockRejectedValueOnce(LOST);
+      api['overview'].mockResolvedValueOnce({ ...OVERVIEW, sessions: [session('s1', true)] });
+      await expect(instance.revokeOtherSessions()).resolves.toEqual({ kind: 'done', count: 2 });
+    });
+
+    it('counts a key as registered once a read again shows a new key', async () => {
+      const instance: InstanceType<typeof SecurityStore> = await store();
+      api['addSecurityKey'].mockRejectedValueOnce(LOST);
+      api['overview'].mockResolvedValueOnce({
+        ...OVERVIEW,
+        twoStep: {
+          ...TWO_STEP_ON,
+          securityKeys: [
+            ...TWO_STEP_ON.securityKeys,
+            { id: 'k2', name: 'Touch ID', createdAt: '2026-11-08T10:00:00Z', lastUsedAt: null },
+          ],
+        },
+      });
+      await expect(instance.addSecurityKey('Touch ID')).resolves.toEqual({ kind: 'added' });
+      expect(api['addSecurityKey']).toHaveBeenCalledOnce();
+    });
+
+    it('does not read again when the key registration could not start', async () => {
+      const instance: InstanceType<typeof SecurityStore> = await store();
+      api['startSecurityKeyRegistration'].mockRejectedValueOnce(LOST);
+      await expect(instance.addSecurityKey('Touch ID')).resolves.toEqual({ kind: 'failed' });
+      expect(api['overview']).toHaveBeenCalledOnce();
+      expect(keys.create).not.toHaveBeenCalled();
     });
 
     it('counts turning off as done when the read again shows it off', async () => {

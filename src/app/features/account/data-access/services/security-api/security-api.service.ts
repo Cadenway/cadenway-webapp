@@ -36,6 +36,7 @@ import {
   toTwoStepOverview,
 } from '../../adapters/two-step/two-step.adapter';
 import { AccountChangedError } from '../notification-preferences-api/account-changed.error';
+import { WriteNotSentError } from '../notification-preferences-api/write-not-sent.error';
 
 /**
  * Constant PAGE_SIZE
@@ -365,21 +366,32 @@ export class SecurityApi {
    * Method locked
    *
    * @description
-   * Runs a write under the exclusive session lock, once the session's account is checked.
+   * Runs a write under the exclusive session lock, once the session's account is checked. A
+   * failure before the write itself was sent (the lock, the account check) rejects with
+   * `WriteNotSentError`, so a caller never takes it for a lost answer of the write.
    *
    * @param {string} userId - The account the page shows.
    * @param {() => Promise<T>} send - The write.
    * @returns {Promise<T>} The write's answer.
+   * @throws {AccountChangedError} When another account, or none, holds the session.
+   * @throws {WriteNotSentError} When the write could not be sent.
    */
-  private locked<T>(userId: string, send: () => Promise<T>): Promise<T> {
-    return firstValueFrom(
-      withSessionLock(() =>
-        defer(async (): Promise<T> => {
-          await this.assertAccount(userId);
-          return send();
-        }),
-      ),
-    );
+  private async locked<T>(userId: string, send: () => Promise<T>): Promise<T> {
+    const progress: { sent: boolean } = { sent: false };
+    try {
+      return await firstValueFrom(
+        withSessionLock(() =>
+          defer(async (): Promise<T> => {
+            await this.assertAccount(userId);
+            progress.sent = true;
+            return send();
+          }),
+        ),
+      );
+    } catch (error: unknown) {
+      if (progress.sent || error instanceof AccountChangedError) throw error;
+      throw new WriteNotSentError(error);
+    }
   }
 
   /**

@@ -16,6 +16,7 @@ import type { SecurityOverview } from '../../../models/two-step/security-overvie
 import type { BackupCodeSet, TwoStepOverview } from '../../../models/two-step/two-step.interface';
 import { ReauthenticationService } from '../../../reauthentication/reauthentication.service';
 import { SecurityKeyRegistration } from '../../../services/security-key-registration/security-key-registration.service';
+import { SECURITY_REREAD_DELAYS } from '../../../state/security/security-reread-delays.token';
 import { SecurityPage } from './security-page.component';
 
 /**
@@ -186,6 +187,7 @@ describe('SecurityPage', () => {
         ),
         { provide: SecurityApi, useValue: api },
         { provide: SecurityKeyRegistration, useValue: keys },
+        { provide: SECURITY_REREAD_DELAYS, useValue: [0, 0, 0, 0] },
         {
           provide: ReauthenticationService,
           useValue: { run: (operation: () => Promise<unknown>) => operation() },
@@ -802,6 +804,8 @@ describe('SecurityPage', () => {
     expect(api['changePassword']).toHaveBeenCalledOnce();
     expect(toasts.warning).toHaveBeenCalledWith('The password change could not be confirmed', {
       description: 'Reload the page to see whether your password changed before you try again.',
+      duration: Infinity,
+      closable: true,
     });
     expect(text(byTestId('password-changed'))).toBe('Changed on August 12, 2026.');
     expect(view(harness).querySelector('[data-testid="boundary"]')).toBeNull();
@@ -878,5 +882,73 @@ describe('SecurityPage', () => {
     expect(toasts.success).toHaveBeenCalledWith('1 session closed', {
       description: 'Only this device stays signed in.',
     });
+  });
+  it('keeps the warning about possibly changed codes open with Generate new codes', async () => {
+    const harness: RouterTestingHarness = await open();
+    api['regenerateBackupCodes'].mockRejectedValueOnce(new HttpErrorResponse({ status: 0 }));
+    byTestId('two-step-backup-generate')?.click();
+
+    await vi.waitFor(() => {
+      expect(toasts.warning).toHaveBeenCalledOnce();
+    });
+    const [title, options]: [
+      string,
+      {
+        description: string;
+        action: { label: string };
+        duration: number;
+        closable: boolean;
+      },
+    ] = toasts.warning.mock.calls[0] as [
+      string,
+      { description: string; action: { label: string }; duration: number; closable: boolean },
+    ];
+    expect(title).toBe('Your backup codes may have changed');
+    expect(options.description).toBe('Generate new codes to be sure you keep a set that works.');
+    expect(options.action.label).toBe('Generate new codes');
+    expect(options.duration).toBe(Infinity);
+    expect(options.closable).toBe(true);
+    expect(api['overview']).toHaveBeenCalledTimes(5);
+    expect(harness.routeNativeElement?.querySelector('[data-testid="boundary"]')).toBeNull();
+  });
+
+  it('warns that a sign-out could not be confirmed while the session still reads open', async () => {
+    const harness: RouterTestingHarness = await open();
+    api['revokeSession'].mockRejectedValueOnce(new HttpErrorResponse({ status: 502 }));
+    view(harness)
+      .querySelector<HTMLButtonElement>('[aria-label="Revoke the session of Cadenway · iPhone 15"]')
+      ?.click();
+    await harness.fixture.whenStable();
+    byTestId('security-confirm-action')?.click();
+
+    await vi.waitFor(() => {
+      expect(toasts.warning).toHaveBeenCalledWith('The sign-out could not be confirmed', {
+        description: 'Reload the page to see whether the session is still open.',
+        duration: Infinity,
+        closable: true,
+      });
+    });
+    expect(toasts.error).not.toHaveBeenCalled();
+    expect(view(harness).querySelectorAll('[data-testid="session-row"]')).toHaveLength(2);
+  });
+
+  it('counts a sign-out as done when a read again no longer lists the session', async () => {
+    const harness: RouterTestingHarness = await open();
+    api['revokeSession'].mockRejectedValueOnce(new HttpErrorResponse({ status: 0 }));
+    api['overview'].mockResolvedValueOnce({ ...overview(TWO_STEP_ON), sessions: [SESSIONS[0]] });
+    view(harness)
+      .querySelector<HTMLButtonElement>('[aria-label="Revoke the session of Cadenway · iPhone 15"]')
+      ?.click();
+    await harness.fixture.whenStable();
+    byTestId('security-confirm-action')?.click();
+
+    await vi.waitFor(async () => {
+      await harness.fixture.whenStable();
+      expect(view(harness).querySelectorAll('[data-testid="session-row"]')).toHaveLength(1);
+    });
+    expect(toasts.success).toHaveBeenCalledWith('Session revoked', {
+      description: 'Cadenway · iPhone 15 is signed out.',
+    });
+    expect(api['revokeSession']).toHaveBeenCalledOnce();
   });
 });

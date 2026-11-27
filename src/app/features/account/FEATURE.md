@@ -209,14 +209,19 @@ parent provides the English texts of `cw-password-strength` and `cw-input-otp` t
   A confirmed write applies its answer to the read: the password date, two-step verification
   on or off, the keys, the backup codes left, the sessions. A key or session already gone
   (`404`) counts as removed.
-- A write whose answer was lost (no status, `408`, `5xx`) may have been applied, so it is never
-  sent again: the section is read again as a secondary read (never through the error boundary),
-  replaces the read when it succeeds, and settles the write. A newer password date means the
-  password changed; two-step verification now on means the setup committed, its codes unseen;
-  now off means it was turned off; a newer generation date means the codes were replaced
-  unseen. Unseen or possibly changed backup codes warn and offer `Generate new codes`. When the
-  read fails too, a warning says the write could not be confirmed, and the password dialog
-  closes so the old current password is not sent again.
+- A write whose answer was lost (no status, `408`, `5xx`) may have been applied, or may still
+  be, so it is never sent again: the section is read again as a secondary read (never through
+  the error boundary) at once, then 2, 4 and 8 seconds later (`SECURITY_REREAD_DELAYS`), until a
+  read shows the write; each read that answers replaces the one shown. A newer password date
+  means the password changed; two-step verification now on means the setup committed, its codes
+  unseen; now off means it was turned off; a newer generation date means the codes were
+  replaced unseen; the key or session gone means it was removed; a key not shown before means
+  it was registered; no other session left means they were closed. When no read shows it, the
+  write is unconfirmed, never failed: a warning says so and stays until closed, with
+  `Generate new codes` when backup codes may have changed (also when they were replaced
+  unseen); the password dialog closes so the old current password is not sent again. A failure
+  before the write was sent (the session lock, the account check, the start of a key
+  registration) is a plain failure, with no read again.
 - Leaving waits for a write on its way (`sending`, which lasts until its result is settled, the
   reread of a lost answer included; not a write waiting only for the reauthentication dialog),
   then for the page's own generation or confirmation to receive its codes, then leaves unless
@@ -304,3 +309,4 @@ Security section (`account.security.*`):
 | `password-current-required`, `password-too-short`, `password-compromised`, `password-incorrect`, `password-incorrect-attempts`, `password-locked`                                                                                                                                                                      | The mockup disables `Modifier le mot de passe` and draws no refusal; the wording follows the reauthentication dialog. |
 | `disable-title`, `disable-description`, `disable-confirm`, `two-step-disabled`, `two-step-disabled-text`, `two-step-still-required`, `two-step-still-required-text`                                                                                                                                                    | The mockup turns two-step verification off with no confirmation, toast or refusal.                                    |
 | `password-unconfirmed`, `password-unconfirmed-text`, `setup-unconfirmed`, `setup-unconfirmed-text`, `two-step-enabled-unseen`, `two-step-enabled-unseen-text`, `codes-unseen`, `codes-unseen-text`, `codes-unconfirmed`, `codes-unconfirmed-text`, `two-step-disable-unconfirmed`, `two-step-disable-unconfirmed-text` | The mockup draws no lost answer; these warnings follow the read again of the section.                                 |
+| `key-unconfirmed`, `key-unconfirmed-text`, `key-remove-unconfirmed`, `key-remove-unconfirmed-text`, `session-revoke-unconfirmed`, `session-revoke-unconfirmed-text`, `sessions-close-unconfirmed`, `sessions-close-unconfirmed-text`                                                                                   | The mockup draws no lost answer; these neutral warnings follow the reads again of the section.                        |

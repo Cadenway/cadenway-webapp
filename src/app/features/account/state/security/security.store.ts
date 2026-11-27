@@ -54,6 +54,7 @@ import {
   isPromptDismissed,
   SecurityKeyRegistration,
 } from '../../services/security-key-registration/security-key-registration.service';
+import { SECURITY_REREAD_DELAYS } from './security-reread-delays.token';
 
 /**
  * Interface SecurityState
@@ -108,10 +109,9 @@ interface SecurityState {
  * What `perform` resolves with: the write's value, or how it ended without one.
  *
  * `uncertain` marks a failure whose answer was lost (no status, `408`, `5xx`), which the
- * gateway may still have applied; `fresh` is then the section read again, or null when that read
- * failed too.
+ * gateway may still have applied; `applied` then says whether a section read again showed it.
  *
- * @type {{ readonly ok: true; readonly value: T } | { readonly ok: false; readonly end: SecurityWriteEnd; readonly error: unknown; readonly uncertain: boolean; readonly fresh: SecurityOverview | null }}
+ * @type {{ readonly ok: true; readonly value: T } | { readonly ok: false; readonly end: SecurityWriteEnd; readonly error: unknown; readonly uncertain: boolean; readonly applied: boolean }}
  */
 type Settled<T> =
   | { readonly ok: true; readonly value: T }
@@ -120,7 +120,7 @@ type Settled<T> =
       readonly end: SecurityWriteEnd;
       readonly error: unknown;
       readonly uncertain: boolean;
-      readonly fresh: SecurityOverview | null;
+      readonly applied: boolean;
     };
 
 /**
@@ -345,6 +345,17 @@ const FAILED: SecurityWriteEnd = { kind: 'failed' };
 const SKIPPED: SecurityWriteEnd = { kind: 'skipped' };
 
 /**
+ * Constant UNCONFIRMED
+ *
+ * @description
+ * The end of a write whose answer was lost and that no read again showed: it may still have
+ * been applied, or never was.
+ *
+ * @type {{ readonly kind: 'unconfirmed' }}
+ */
+const UNCONFIRMED: { readonly kind: 'unconfirmed' } = { kind: 'unconfirmed' };
+
+/**
  * Function isUncertain
  *
  * @description
@@ -469,6 +480,7 @@ function createSecurityStore(): Type<SecurityStoreInstance> {
         reauthentication: ReauthenticationService = inject(ReauthenticationService),
         workspace: WorkspaceContextPort = inject(WORKSPACE_CONTEXT),
         destroyRef: DestroyRef = inject(DestroyRef),
+        rereadDelays: readonly number[] = inject(SECURITY_REREAD_DELAYS),
       ) => {
         // Who waits in `sent()` for the write on its way.
         let waiters: (() => void)[] = [];
@@ -482,18 +494,21 @@ function createSecurityStore(): Type<SecurityStoreInstance> {
 
         // Runs one write bound to the account shown when it starts and to the page: once either
         // changes, nothing more is sent (the retry after a reauthentication included) and its
-        // answer is dropped. `step` stops between the parts of a write the same way.
+        // answer is dropped. `step` stops between the parts of a write the same way. `applied`
+        // tells whether a section read again shows the write; a lost answer is settled with it.
         const perform: <T>(
           action: SecurityAction,
           targetId: string | null,
           send: (userId: string, step: () => void) => Promise<T>,
+          applied: ((fresh: SecurityOverview) => boolean) | null,
         ) => Promise<Settled<T>> = async <T>(
           action: SecurityAction,
           targetId: string | null,
           send: (userId: string, step: () => void) => Promise<T>,
+          applied: ((fresh: SecurityOverview) => boolean) | null,
         ): Promise<Settled<T>> => {
           if (!store.security.hasValue() || store.busy() !== null) {
-            return { ok: false, end: SKIPPED, error: null, uncertain: false, fresh: null };
+            return { ok: false, end: SKIPPED, error: null, uncertain: false, applied: false };
           }
           const userId: string = workspace.user().id;
           const abandoned: Error = new Error('The security write was abandoned.');
@@ -502,11 +517,18 @@ function createSecurityStore(): Type<SecurityStoreInstance> {
           const step: () => void = (): void => {
             if (!stillWanted()) throw abandoned;
           };
+          const cancelled: Settled<T> = {
+            ok: false,
+            end: CANCELLED,
+            error: null,
+            uncertain: false,
+            applied: false,
+          };
           patchState(store, { busy: action, busyId: targetId });
           try {
-            // A sent write stays `sending` until its result is settled here, the reread of a lost
-            // answer included; a refusal applied nothing, so it ends `sending` at once (the write
-            // may go on to the reauthentication dialog).
+            // A sent write stays `sending` until its result is settled here, the rereads of a
+            // lost answer included; a refusal applied nothing, so it ends `sending` at once (the
+            // write may go on to the reauthentication dialog).
             const value: T = await reauthentication.run(async (): Promise<T> => {
               step();
               markSending(true);
@@ -517,9 +539,7 @@ function createSecurityStore(): Type<SecurityStoreInstance> {
                 throw error;
               }
             });
-            if (!stillWanted()) {
-              return { ok: false, end: CANCELLED, error: null, uncertain: false, fresh: null };
-            }
+            if (!stillWanted()) return cancelled;
             return { ok: true, value };
           } catch (error: unknown) {
             const silent: boolean =
@@ -527,20 +547,32 @@ function createSecurityStore(): Type<SecurityStoreInstance> {
               error instanceof ReauthenticationCancelledError ||
               error instanceof AccountChangedError ||
               !stillWanted();
-            if (silent) return { ok: false, end: CANCELLED, error, uncertain: false, fresh: null };
-            if (!isUncertain(error)) {
-              return { ok: false, end: FAILED, error, uncertain: false, fresh: null };
+            if (silent) return cancelled;
+            if (!isUncertain(error) || applied === null) {
+              return { ok: false, end: FAILED, error, uncertain: false, applied: false };
             }
-            // The gateway may have applied the write: read the section again, outside the error
-            // boundary, so the caller can tell what happened.
-            const fresh: SecurityOverview | null = await api
-              .overview(userId)
-              .catch((): null => null);
-            if (!stillWanted()) {
-              return { ok: false, end: CANCELLED, error, uncertain: false, fresh: null };
+            // The gateway may have applied the write, or may still apply it: read the section
+            // again, outside the error boundary, at once and then after each delay, until a read
+            // shows the write. Each read that answers replaces the one shown.
+            for (const delay of rereadDelays) {
+              if (delay > 0) {
+                await new Promise<void>((resolve: () => void): void => {
+                  setTimeout(resolve, delay);
+                });
+              }
+              if (!stillWanted()) return cancelled;
+              const fresh: SecurityOverview | null = await api
+                .overview(userId)
+                .catch((): null => null);
+              if (!stillWanted()) return cancelled;
+              if (fresh !== null) {
+                store.security.set(fresh);
+                if (applied(fresh)) {
+                  return { ok: false, end: FAILED, error, uncertain: true, applied: true };
+                }
+              }
             }
-            if (fresh !== null) store.security.set(fresh);
-            return { ok: false, end: FAILED, error, uncertain: true, fresh };
+            return { ok: false, end: FAILED, error, uncertain: true, applied: false };
           } finally {
             patchState(store, { busy: null, busyId: null });
             markSending(false);
@@ -552,6 +584,9 @@ function createSecurityStore(): Type<SecurityStoreInstance> {
         ): void => {
           if (store.security.hasValue()) store.security.set(change(store.security.value()));
         };
+
+        const shown: () => SecurityOverview | null = (): SecurityOverview | null =>
+          store.security.hasValue() ? store.security.value() : null;
 
         return {
           sent(): Promise<void> {
@@ -565,14 +600,13 @@ function createSecurityStore(): Type<SecurityStoreInstance> {
             currentPassword: string,
             newPassword: string,
           ): Promise<PasswordChangeOutcome> {
-            const before: string | null = store.security.hasValue()
-              ? store.security.value().passwordChangedAt
-              : null;
+            const before: string | null = shown()?.passwordChangedAt ?? null;
             const settled: Settled<string | null> = await perform(
               'password',
               null,
               (userId: string): Promise<string | null> =>
                 api.changePassword(userId, currentPassword, newPassword),
+              (fresh: SecurityOverview): boolean => isLater(fresh.passwordChangedAt, before),
             );
             if (settled.ok) {
               const changedAt: string | null = settled.value;
@@ -583,10 +617,7 @@ function createSecurityStore(): Type<SecurityStoreInstance> {
               return { kind: 'saved' };
             }
             if (settled.end.kind !== 'failed') return settled.end;
-            if (settled.uncertain) {
-              if (settled.fresh === null) return { kind: 'unconfirmed' };
-              return isLater(settled.fresh.passwordChangedAt, before) ? { kind: 'saved' } : FAILED;
-            }
+            if (settled.uncertain) return settled.applied ? { kind: 'saved' } : UNCONFIRMED;
             const problem: ApiProblem | null = readProblem(settled.error);
             switch (problem?.code) {
               case 'auth.password-incorrect': {
@@ -613,19 +644,22 @@ function createSecurityStore(): Type<SecurityStoreInstance> {
               'setup',
               null,
               (userId: string): Promise<AuthenticatorSetup> => api.startAuthenticatorSetup(userId),
+              null,
             );
             return settled.ok ? { kind: 'started', setup: settled.value } : settled.end;
           },
 
           async confirmSetup(code: string): Promise<SetupConfirmOutcome> {
-            const before: TwoStepOverview | null = store.security.hasValue()
-              ? store.security.value().twoStep
-              : null;
+            const before: TwoStepOverview | null = shown()?.twoStep ?? null;
             const settled: Settled<AuthenticatorConfirmation> = await perform(
               'confirm',
               null,
               (userId: string): Promise<AuthenticatorConfirmation> =>
                 api.confirmAuthenticatorSetup(userId, code),
+              (fresh: SecurityOverview): boolean =>
+                fresh.twoStep.enabled &&
+                (before?.enabled !== true ||
+                  isLater(fresh.twoStep.appConfiguredAt, before.appConfiguredAt)),
             );
             if (settled.ok) {
               const confirmation: AuthenticatorConfirmation = settled.value;
@@ -637,14 +671,10 @@ function createSecurityStore(): Type<SecurityStoreInstance> {
             }
             if (settled.end.kind !== 'failed') return settled.end;
             if (settled.uncertain) {
-              if (settled.fresh === null) return { kind: 'unconfirmed' };
-              const fresh: TwoStepOverview = settled.fresh.twoStep;
-              if (fresh.enabled && before?.enabled !== true) {
-                return { kind: 'enabled-without-codes' };
-              }
-              return fresh.enabled && isLater(fresh.appConfiguredAt, before?.appConfiguredAt)
+              if (!settled.applied) return UNCONFIRMED;
+              return before?.enabled === true
                 ? { kind: 'confirmed', backupCodes: null }
-                : FAILED;
+                : { kind: 'enabled-without-codes' };
             }
             switch (codeOf(settled.error)) {
               case 'auth.two-step-code-invalid':
@@ -661,6 +691,7 @@ function createSecurityStore(): Type<SecurityStoreInstance> {
               'disable',
               null,
               (userId: string): Promise<void> => api.disableTwoStep(userId),
+              (fresh: SecurityOverview): boolean => !fresh.twoStep.enabled,
             );
             if (settled.ok) {
               apply((overview: SecurityOverview): SecurityOverview => ({
@@ -670,24 +701,21 @@ function createSecurityStore(): Type<SecurityStoreInstance> {
               return { kind: 'disabled' };
             }
             if (settled.end.kind !== 'failed') return settled.end;
-            if (settled.uncertain) {
-              if (settled.fresh === null) return { kind: 'unconfirmed' };
-              return settled.fresh.twoStep.enabled ? FAILED : { kind: 'disabled' };
-            }
+            if (settled.uncertain) return settled.applied ? { kind: 'disabled' } : UNCONFIRMED;
             return codeOf(settled.error) === 'auth.mfa-required-by-organization'
               ? { kind: 'required' }
               : FAILED;
           },
 
           async regenerateBackupCodes(): Promise<BackupCodesOutcome> {
-            const shown: TwoStepOverview | null = store.security.hasValue()
-              ? store.security.value().twoStep
-              : null;
-            const replaced: number = shown?.backupCodes?.remaining ?? 0;
+            const before: TwoStepOverview | null = shown()?.twoStep ?? null;
+            const replaced: number = before?.backupCodes?.remaining ?? 0;
             const settled: Settled<BackupCodeSet> = await perform(
               'backup-codes',
               null,
               (userId: string): Promise<BackupCodeSet> => api.regenerateBackupCodes(userId),
+              (fresh: SecurityOverview): boolean =>
+                isLater(fresh.twoStep.backupCodes?.generatedAt, before?.backupCodes?.generatedAt),
             );
             if (settled.ok) {
               const codes: BackupCodeSet = settled.value;
@@ -699,13 +727,7 @@ function createSecurityStore(): Type<SecurityStoreInstance> {
             }
             if (settled.end.kind !== 'failed') return settled.end;
             if (settled.uncertain) {
-              if (settled.fresh === null) return { kind: 'unconfirmed' };
-              return isLater(
-                settled.fresh.twoStep.backupCodes?.generatedAt,
-                shown?.backupCodes?.generatedAt,
-              )
-                ? { kind: 'codes-unseen' }
-                : FAILED;
+              return settled.applied ? { kind: 'codes-unseen' } : UNCONFIRMED;
             }
             return codeOf(settled.error) === 'auth.two-step-not-enabled'
               ? { kind: 'not-enabled' }
@@ -715,12 +737,23 @@ function createSecurityStore(): Type<SecurityStoreInstance> {
           async addSecurityKey(name: string): Promise<SecurityKeyAddOutcome> {
             if (!store.keysSupported) return SKIPPED;
             const dismissed: Error = new Error('The key prompt was dismissed.');
+            const known: ReadonlySet<string> = new Set<string>(
+              (shown()?.twoStep.securityKeys ?? []).map((key: SecurityKey): string => key.id),
+            );
             const settled: Settled<SecurityKey> = await perform(
               'add-key',
               null,
               async (userId: string, step: () => void): Promise<SecurityKey> => {
-                const options: PublicKeyCredentialCreationOptionsJSON =
-                  await api.startSecurityKeyRegistration(userId);
+                let options: PublicKeyCredentialCreationOptionsJSON;
+                try {
+                  options = await api.startSecurityKeyRegistration(userId);
+                } catch (error: unknown) {
+                  // No key can exist before the browser answered: a lost answer here is a
+                  // plain failure, not one to settle by reading again.
+                  throw isUncertain(error)
+                    ? new Error('The key registration did not start.', { cause: error })
+                    : error;
+                }
                 step();
                 let credential: RegistrationResponseJSON;
                 try {
@@ -732,6 +765,8 @@ function createSecurityStore(): Type<SecurityStoreInstance> {
                 step();
                 return api.addSecurityKey(userId, name, credential);
               },
+              (fresh: SecurityOverview): boolean =>
+                fresh.twoStep.securityKeys.some((key: SecurityKey): boolean => !known.has(key.id)),
             );
             if (settled.ok) {
               const key: SecurityKey = settled.value;
@@ -751,6 +786,7 @@ function createSecurityStore(): Type<SecurityStoreInstance> {
             }
             if (settled.error === dismissed) return CANCELLED;
             if (settled.end.kind !== 'failed') return settled.end;
+            if (settled.uncertain) return settled.applied ? { kind: 'added' } : UNCONFIRMED;
             switch (codeOf(settled.error)) {
               case 'auth.security-key-refused':
                 return { kind: 'refused' };
@@ -770,11 +806,16 @@ function createSecurityStore(): Type<SecurityStoreInstance> {
               'remove-key',
               key.id,
               (userId: string): Promise<void> => api.removeSecurityKey(userId, key.id),
+              (fresh: SecurityOverview): boolean =>
+                !fresh.twoStep.securityKeys.some(
+                  (item: SecurityKey): boolean => item.id === key.id,
+                ),
             );
-            const gone: boolean =
-              settled.ok ||
-              (settled.end.kind === 'failed' && codeOf(settled.error) === 'security-key.not-found');
-            if (!gone) return settled.ok ? { kind: 'done' } : settled.end;
+            if (!settled.ok) {
+              if (settled.end.kind !== 'failed') return settled.end;
+              if (settled.uncertain) return settled.applied ? { kind: 'done' } : UNCONFIRMED;
+              if (codeOf(settled.error) !== 'security-key.not-found') return FAILED;
+            }
             apply((overview: SecurityOverview): SecurityOverview => ({
               ...overview,
               twoStep: {
@@ -793,11 +834,14 @@ function createSecurityStore(): Type<SecurityStoreInstance> {
               'revoke',
               session.id,
               (userId: string): Promise<void> => api.revokeSession(userId, session.id),
+              (fresh: SecurityOverview): boolean =>
+                !fresh.sessions.some((item: AccountSession): boolean => item.id === session.id),
             );
-            const gone: boolean =
-              settled.ok ||
-              (settled.end.kind === 'failed' && codeOf(settled.error) === 'session.not-found');
-            if (!gone) return settled.ok ? { kind: 'done' } : settled.end;
+            if (!settled.ok) {
+              if (settled.end.kind !== 'failed') return settled.end;
+              if (settled.uncertain) return settled.applied ? { kind: 'done' } : UNCONFIRMED;
+              if (codeOf(settled.error) !== 'session.not-found') return FAILED;
+            }
             apply((overview: SecurityOverview): SecurityOverview => ({
               ...overview,
               sessions: overview.sessions.filter(
@@ -808,12 +852,21 @@ function createSecurityStore(): Type<SecurityStoreInstance> {
           },
 
           async revokeOtherSessions(): Promise<RevokeOthersOutcome> {
+            const others: number = (shown()?.sessions ?? []).filter(
+              (item: AccountSession): boolean => !item.current,
+            ).length;
             const settled: Settled<number> = await perform(
               'revoke-others',
               null,
               (userId: string): Promise<number> => api.revokeOtherSessions(userId),
+              (fresh: SecurityOverview): boolean =>
+                fresh.sessions.every((item: AccountSession): boolean => item.current),
             );
-            if (!settled.ok) return settled.end;
+            if (!settled.ok) {
+              if (settled.end.kind !== 'failed') return settled.end;
+              if (!settled.uncertain) return FAILED;
+              return settled.applied ? { kind: 'done', count: others } : UNCONFIRMED;
+            }
             apply((overview: SecurityOverview): SecurityOverview => ({
               ...overview,
               sessions: overview.sessions.filter((item: AccountSession): boolean => item.current),
@@ -837,9 +890,10 @@ function createSecurityStore(): Type<SecurityStoreInstance> {
  * A write on its way may still be applied, so `sending` tells it apart from one waiting only for
  * the reauthentication dialog, and `sent()` waits for it until its result is settled. A confirmed
  * write applies its answer to the read. A write whose answer was lost (no status, `408`, `5xx`)
- * may have been applied: the section is read again outside the error boundary, replaces the read
- * when it succeeds, and the outcome says what the read shows (or `unconfirmed`); nothing is sent
- * again. Passwords, codes and secrets pass through the methods only: those a write brings are
+ * may have been applied, or may still be: the section is read again outside the error boundary
+ * at once, then 2, 4 and 8 seconds later (`SECURITY_REREAD_DELAYS`), until a read shows the
+ * write; each read that answers replaces the one shown. The outcome is then the write's own, or
+ * `unconfirmed` when no read showed it, never a failure; nothing is sent again. Passwords, codes and secrets pass through the methods only: those a write brings are
  * returned to the page, never kept in the state.
  *
  * @type {ReturnType<typeof createSecurityStore>}
