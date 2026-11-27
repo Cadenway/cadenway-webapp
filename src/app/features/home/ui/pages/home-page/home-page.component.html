@@ -1,3 +1,4 @@
+@let read = store.read();
 <div class="mx-auto flex w-full max-w-5xl flex-col gap-6 px-4 py-6 sm:px-6">
   <header class="flex flex-wrap items-end gap-3">
     <div class="flex min-w-0 flex-1 flex-col gap-1">
@@ -10,6 +11,10 @@
         Hello {{ firstName() }}
       </h1>
     </div>
+    <button cwButton type="button" (click)="create()">
+      <ng-icon name="phosphorPlusBold" aria-hidden="true" />
+      <ng-container i18n="@@home.header.create">Create a task</ng-container>
+    </button>
   </header>
   @if (logoFailed()) {
     <cw-alert
@@ -25,4 +30,153 @@
       >
     </cw-alert>
   }
+
+  @if (read) {
+    @if (read.refreshFailed) {
+      <div
+        class="flex flex-wrap items-center gap-3 rounded-lg border border-border px-3 py-2 text-sm"
+        role="alert"
+        data-testid="home-stale"
+      >
+        <span class="min-w-0 flex-1" i18n="@@home.stale.text"
+          >The home page could not be refreshed.</span
+        >
+        <button
+          cwButton
+          type="button"
+          variant="outline"
+          size="sm"
+          [loading]="store.reloading()"
+          (click)="store.retry()"
+          i18n="@@home.stale.retry"
+        >
+          Retry
+        </button>
+      </div>
+    }
+
+    <cw-home-stats [stats]="read.stats" />
+
+    <div class="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_20rem]">
+      <cw-home-priorities
+        [rows]="priorities()"
+        [allLink]="base() + '/my-tasks'"
+        [menu]="taskMenu.menu()"
+        (opened)="rowActions.open($event)"
+        (menuOpened)="openMenu($event)"
+      />
+      <aside class="flex min-w-0 flex-col gap-6">
+        @if (read.sprint; as sprint) {
+          <cw-home-sprint-card [sprint]="sprint" [link]="base() + '/l/' + sprint.listId" />
+        }
+        <section class="flex flex-col gap-2" aria-labelledby="home-mentions">
+          <h2 id="home-mentions" class="text-base font-semibold" i18n="@@home.mentions.title">
+            Mentions and activity
+          </h2>
+          <cw-inbox-digest />
+        </section>
+        @if (lists().length > 0) {
+          <cw-home-lists [rows]="lists()" />
+        }
+      </aside>
+    </div>
+  } @else {
+    <div
+      class="flex flex-col gap-6"
+      role="status"
+      aria-busy="true"
+      aria-label="Loading the home page"
+      i18n-aria-label="@@home.loading"
+      data-testid="home-loading"
+    >
+      <div class="flex flex-col gap-6" aria-hidden="true">
+        <div
+          class="grid grid-cols-2 divide-x divide-border rounded-xl border border-border bg-card lg:grid-cols-4"
+        >
+          @for (cell of [0, 1, 2, 3]; track cell) {
+            <div
+              class="flex flex-col gap-2 p-4 [&:nth-child(2)]:max-lg:border-e-0 [&:nth-child(n+3)]:max-lg:border-t [&:nth-child(n+3)]:max-lg:border-border"
+            >
+              <div cwSkeleton class="h-3 w-24"></div>
+              <div cwSkeleton class="h-7 w-16"></div>
+              <div cwSkeleton class="h-2.5 w-28"></div>
+            </div>
+          }
+        </div>
+        <div class="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_20rem]">
+          <div class="flex min-w-0 flex-col gap-2">
+            <div cwSkeleton class="h-4 w-36"></div>
+            <ul class="flex flex-col overflow-hidden rounded-lg border border-border">
+              @for (width of skeletonRows; track $index) {
+                <li
+                  class="flex h-11 items-center gap-3 border-b border-border px-3 last:border-b-0"
+                >
+                  <div cwSkeleton class="size-4 rounded-full"></div>
+                  <div cwSkeleton class="h-2.5 w-14"></div>
+                  <div cwSkeleton class="h-3" [class]="width"></div>
+                  <div cwSkeleton class="ml-auto h-5 w-16 rounded-full"></div>
+                  <div cwSkeleton class="size-6 rounded-full"></div>
+                </li>
+              }
+            </ul>
+          </div>
+          <div class="flex flex-col gap-4">
+            @for (card of skeletonSide; track $index) {
+              <div class="flex flex-col gap-3 rounded-xl border border-border bg-card p-4">
+                <div cwSkeleton class="h-4 w-28"></div>
+                @for (width of card; track $index) {
+                  <div class="flex items-center gap-2">
+                    <div cwSkeleton class="size-6 rounded-full"></div>
+                    <div cwSkeleton class="h-3" [class]="width"></div>
+                  </div>
+                }
+              </div>
+            }
+          </div>
+        </div>
+      </div>
+    </div>
+  }
 </div>
+
+<cw-task-menu
+  #taskMenu
+  [tasks]="menuTasks()"
+  [status]="menuStatus()"
+  [people]="store.people()"
+  [userId]="rowActions.userId()"
+  [lists]="store.moveTargets()"
+  (openRequested)="rowActions.open($event)"
+  (statusPicked)="pickStatus($event)"
+  (priorityPicked)="pickPriority($event)"
+  (assigneeToggled)="toggleAssignee($event)"
+  (moved)="move($event)"
+  (remindRequested)="act('remind')"
+  (duplicateRequested)="act('duplicate')"
+  (copyLinkRequested)="act('copyLink')"
+  (copyKeyRequested)="act('copyKey')"
+  (deleteRequested)="act('delete')"
+/>
+
+<cw-task-cancel-dialog
+  [taskKeys]="rowActions.cancelKeys()"
+  (confirmed)="rowActions.confirmCancel($event)"
+  (kept)="rowActions.keepCancel()"
+/>
+
+<cw-alert-dialog
+  variant="destructive"
+  size="sm"
+  [open]="rowActions.deleteOpen()"
+  (openChange)="rowActions.setDeleteOpen($event)"
+  [items]="rowActions.deleteItems()"
+  [pending]="rowActions.deleting()"
+  (confirm)="confirmDelete()"
+>
+  <h2 cwAlertDialogTitle>{{ rowActions.deleteTitle() }}</h2>
+  <p cwAlertDialogDescription>{{ rowActions.deleteText() }}</p>
+  <button cwButton cwAlertDialogCancel variant="outline" i18n="@@home.delete.cancel">Cancel</button>
+  <button cwButton cwAlertDialogAction variant="destructive" [loading]="rowActions.deleting()">
+    {{ rowActions.deleteAction() }}
+  </button>
+</cw-alert-dialog>
