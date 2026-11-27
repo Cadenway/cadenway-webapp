@@ -6,11 +6,14 @@ The task building blocks other features compose (step 4a of the mockup integrati
 create dialog and the task detail (step 5). It owns the task display models and their adapters,
 the status change interaction of `cw-status-interactions`, the cancel reason dialog, the status,
 priority, people and label pickers, the due date, the label chips and the name cell of a row, the
-create dialog with its `N` shortcut, and the task detail: a dialog over the current page driven by
+task menu (`cw-task-menu`) shared by every view that lists tasks, the one-line row of the pages
+whose tasks belong to no list (`cw-task-line`) with the menu's writes for those rows
+(`TaskRowActionsStore`), the create dialog with its `N` shortcut, and the task detail: a dialog over the current page driven by
 `?task=<KEY>`, its store, header, layout, properties panel (`cw-task-properties-panel`), tabs
 (`cw-task-detail-tabs`: details with the Development panel of the task's Git links, subtasks,
 comments, activity) and their stores, list and parent pickers. Lists, boards and their grouping
-belong to Spaces, which composes these blocks and opens the detail through `TaskDetailOpener`;
+belong to Spaces, which composes these blocks (its list views write the menu's actions through
+their own `ViewTaskWritesStore`) and opens the detail through `TaskDetailOpener`;
 the typed route error states belong to Errors.
 
 ## Routes
@@ -33,11 +36,11 @@ the typed route error states belong to Errors.
 
 ## Public entry points
 
-| Entry point   | Consumers             |
-| ------------- | --------------------- |
-| `.`           | spaces, search, inbox |
-| `providers`   | workspace             |
-| `task.routes` | workspace             |
+| Entry point   | Consumers                                                                 |
+| ------------- | ------------------------------------------------------------------------- |
+| `.`           | spaces, search, inbox, home, my-tasks, dashboards, goals, trash, archives |
+| `providers`   | workspace                                                                 |
+| `task.routes` | workspace                                                                 |
 
 `providers` publishes, bound on `/:org`:
 
@@ -51,7 +54,8 @@ the typed route error states belong to Errors.
 - Models: `TaskSummary` (`id` is the key, `version` is the `If-Match` precondition), `TaskProgress`,
   `StatusOption`, `Person`, `TaskStatusChange`, `TaskCancellation`, `TaskCancelRequest`,
   `TaskCreateOptions` (list, status, due date, parent, priority and assignees), `CreatedTask`,
-  `TaskBulkAction`, `TaskBulkSelection`, `TaskBulkEntry`, `TaskBulkOutcome`; the words
+  `TaskBulkAction`, `TaskBulkSelection`, `TaskBulkEntry`, `TaskBulkOutcome`, `TaskMoveTarget` (a
+  list of `Move to`: id, name, space name, icon and tone class), `TaskLineVariant`; the words
   `STATUS_LABELS`, `STATUS_HINTS`, `MILESTONE_STATUS_HINTS`, `STATUS_CATEGORY_LABELS`,
   `CANCEL_REASON_LABELS` and `PRIORITY_LABELS`; the rules `nextStatus`, `isClosedStatus`,
   `isMilestoneStatus`, `statusLabel`, `pickableStatuses` and `defaultStatusOptions`; `initialsOf` and `personOf(userId, name)` for members another feature read.
@@ -67,6 +71,18 @@ the typed route error states belong to Errors.
   of the retry leaving the chunk unknown; per-task versions, copies and trash entries),
   `remind(taskKey, at)` and
   `restore(entryId)`, for the stores of the screens that act on several tasks.
+- `TASK_ROW_ACTIONS_PROVIDERS`, what the page of rows outside a list provides on its route:
+  `TaskRowWriteLaneStore` (also bound as `TASK_WRITE_LANE`), `TaskStatusChangesStore` and
+  `TaskRowActionsStore`.
+- `TaskRowActionsStore`, typed `TaskRowActionsStoreInstance`: the writes of `cw-task-menu`
+  for one task, `setStatus` (through `TaskStatusChangesStore`), `cancelKeys` with `confirmCancel`
+  and `keepCancel` for `cw-task-cancel-dialog`, `setPriority`, `toggleAssignee(task, person)`,
+  `moveTo(task, target)`, `remind`, `duplicate`, `copyLink`, `copyKey`, `askDelete` with
+  `deleteOpen`, `deleteTitle`, `deleteText`, `deleteAction`, `deleteItems`, `deleting`,
+  `setDeleteOpen` and `trash()` for the page's `cw-alert-dialog`; `open(task)`, `userId`,
+  `sync(tasks)` (a `signalMethod` the page binds to its read tasks), `rows(tasks)`,
+  `displayedTask(task)`, `displayedStatus(task)`, and the `changed` stream (task keys) on which
+  the page reads its rows again.
 - `TaskCreate` (root): `open(options?)`, `useDefaults(defaults, destroyRef)`, `close()`, `isOpen`,
   `options`, `created`.
 - `TaskDetailOpener` (root): `open(taskKey, preview?, options?)` merges `?task=<KEY>` into the
@@ -82,7 +98,10 @@ the typed route error states belong to Errors.
 - Presentational components, inputs and outputs only: `cw-task-status-picker` (`statusChanged`
   for the split button's advance, `statusPicked` for a menu option),
   `cw-task-priority-picker`, `cw-task-people-picker`, `cw-task-label-picker`, `cw-task-due-date`,
-  `cw-task-label-chips`, `cw-task-title-cell` and `cw-task-cancel-dialog`.
+  `cw-task-label-chips`, `cw-task-title-cell`, `cw-task-cancel-dialog`, `cw-task-menu` (`TaskMenu`:
+  `tasks`, `status`, `statuses`, `people`, `userId`, `lists`; one output per item; the page opens
+  `menu()` from its own `[cwContextMenuTriggerFor]`) and `cw-task-line` (`TaskLine`: `task`,
+  `status`, `from`, `listName`, `people`, `variant` `mine`, `priority` or `late`; `opened`).
 
 ## Dependencies
 
@@ -151,6 +170,54 @@ the typed route error states belong to Errors.
   away from `Cancelled` sends its reason again without its note, which task summaries do not carry.
   A pending write flushed after destruction is dropped if its queued organization is no longer
   the committed organization.
+- `TaskRowActionsStore`, its `TaskStatusChangesStore` and its write lane are never provided at the
+  root: the page of rows outside a list provides `TASK_ROW_ACTIONS_PROVIDERS`, so their shown
+  values, holds and `Undo` and `Open` toasts die with it.
+  - One write lane per task (`TaskRowWriteLaneStore`, bound as `TASK_WRITE_LANE`) carries the
+    status changes and the menu's other writes, so they never overlap. Each write goes after the
+    task's earlier writes and reads, at the newest known version: the page's copy, or the version
+    the lane last sent at, returned or read. A returned version is adopted only at known + 1;
+    another version, or a `TaskVersionConflict`, reads the task again and the next write waits for
+    that read. The page's own changes therefore never cause a `412`. A lane read waits 10 s at most
+    (`LANE_READ_TIMEOUT_MS`) and is aborted when the page is left, so it never holds the task for
+    good. A queued write, status included, is dropped (`TaskWriteCancelled`, no failure toast, the
+    shown value put back) right before it would be sent when the page was left since it was queued
+    or its organization is no longer the current one; a last click flushed while the page is left
+    is still sent in its organization.
+  - Priority, assignee, move, duplicate and deletion go through `TaskActionsApi.bulk` with that
+    version. A refused chunk reads the task back: found past the version sent, it changed
+    elsewhere (warning, its values shown); otherwise the failure toast.
+  - An uncertain answer keeps the shown value, warns, and holds the task's next writes while the
+    task is read back after `ROW_RECONCILE_DELAYS_MS` (2, 4 and 8 s): a read past the version sent
+    settles the write (applied when it holds the written values), a deleted task settles a
+    deletion; once the reads still find the version sent, the write is taken as not applied (a
+    late commit then refuses the next write, sent at that version). When no read answers, the
+    outcome stays unknown: the value stays shown with the `is not confirmed` warning and no failure
+    toast, the hold goes, and the page's next read (`sync`) decides. A copy is never held.
+  - Shown values: the confirmed ones (a write's answer, a read) over a page copy older than their
+    version, then each waiting write's own; a refusal drops only its write's values. An assignee
+    toggle computes its assignees from the task as confirmed when it starts, never from an earlier
+    write still waiting. `sync` prunes the confirmed values a page copy at their version or later
+    replaced.
+  - `Undo` is offered only when the returned version is the one sent + 1 (the write was the task's
+    only change, the rule of `TaskDetailStore.acceptVersion`). It puts back the values confirmed
+    when the write started, never an earlier optimistic value, and is sent against the returned
+    version, so a later change refuses it (`The change could not be undone`); it does nothing once
+    the organization changed.
+  - A deletion is confirmed first, hides the row at once and counts the subtasks in its toast; its
+    `Undo` restores the trash entry. A refused deletion or restore shows the row again (a refused
+    restore also emits `changed`); `sync` shows a deleted task again once a read no longer holds
+    it, unless its deletion is still uncertain.
+  - Every queued write, reminder and restore checks the organization it was asked in before it
+    is sent. Each settled write, restore and status write emits `changed`. A write answered after
+    an organization change reports nothing; one answered after the page was left reports only
+    what failed; leaving the page dismisses its `Undo` and `Open` toasts, and an `Open` does
+    nothing in another organization.
+- `cw-task-menu` keeps the `spaces.rows.*` and `spaces.bulk.*` ids it had in Spaces, so moving it
+  changed no catalog text.
+- `cw-task-line` is one button: its status icon never changes the status (the detail or the menu
+  does), and the status word is read with the default words, since the space's own names are not
+  known outside a list.
 - `Cancelled` always opens the cancel reason dialog first (`cancelRequest`): `Duplicate`, `Will not
 be done`, `Out of scope`, `Obsolete` and optional `Details`; `Keep the task` changes nothing.
   The consumer renders `cw-task-cancel-dialog` bound to `cancelRequest`, `confirmCancel` and
@@ -470,3 +537,8 @@ people`), and the due trigger shows the short date without `Tomorrow ·` or the
 | `task.development.checks-failed-some`, `task.development.checks-failed`                     | The mockup writes one failed check; counts from the contract.      |
 | `task.development.checks-failed-short`                                                      | The mockup's `11/12` counts suites still running as passed.        |
 | `task.development.detected-description`                                                     | The mockup detects no key in a request's description.              |
+| `task.row-actions.failed`, `task.row-actions.delete-failed`                                 | The mockup draws no refused write.                                 |
+| `task.row-actions.undo-failed`, `remind-failed`, `restore-failed`                           | The mockup draws no refused undo, reminder or restore.             |
+| `task.row-actions.conflict`, `task.row-actions.conflict-text`                               | The mockup draws no conflicting write.                             |
+| `task.row-actions.unconfirmed`, `task.row-actions.unconfirmed-text`                         | The mockup draws no unanswered write.                              |
+| `task.row-actions.unknown`, `task.row-actions.copy-failed`                                  | The mockup draws no uncertain write nor refused copy.              |

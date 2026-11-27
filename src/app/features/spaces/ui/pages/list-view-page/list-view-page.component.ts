@@ -61,6 +61,7 @@ import {
   TaskDetailOpener,
   TaskDueDate,
   TaskLabelChips,
+  TaskMenu,
   type TaskStatusChangesInstance,
   TaskStatusChangesStore,
   type TaskSummary,
@@ -88,7 +89,6 @@ import { VIEW_TASK_WRITER } from '../../../state/view-task-writes/view-task-writ
 import { saveTextFile } from '../../../utils/file-download/file-download.util';
 import { NO_ASSIGNEE_GROUP } from '../../../utils/list-rows/list-rows.util';
 import { BulkBar, type BulkPerson } from '../../components/bulk-bar/bulk-bar.component';
-import { TaskMenu } from '../../components/task-menu/task-menu.component';
 
 /**
  * Constant DEFAULT_STATUS_GROUPS

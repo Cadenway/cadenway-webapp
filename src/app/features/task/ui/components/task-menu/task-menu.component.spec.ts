@@ -5,9 +5,11 @@ import { provideCadenwayIcons } from '@cadenway/icons';
 import { CwContextMenuTriggerFor } from '@cadenway/ui/components/context-menu';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { defaultStatusOptions, type Person, personOf, type TaskSummary } from '@features/task';
-
-import type { MoveTarget } from '../../../models/view-task-write/view-task-write.interface';
+import type { Person } from '../../../models/person/person.interface';
+import type { TaskMoveTarget } from '../../../models/task-move-target/task-move-target.interface';
+import type { TaskSummary } from '../../../models/task-summary/task-summary.interface';
+import { personOf } from '../../../utils/person/person.util';
+import { defaultStatusOptions } from '../../../utils/task-status/task-status.util';
 import { TaskMenu } from './task-menu.component';
 
 /**
@@ -52,9 +54,9 @@ function task(key: string, name: string, rest: Partial<TaskSummary> = {}): TaskS
  * @description
  * Two lists of the `Product` space the tasks may move to.
  *
- * @type {readonly MoveTarget[]}
+ * @type {readonly TaskMoveTarget[]}
  */
-const lists: readonly MoveTarget[] = [
+const lists: readonly TaskMoveTarget[] = [
   {
     listId: 'sprint-14',
     name: 'Sprint 14',
@@ -159,10 +161,10 @@ class TaskMenuHost {
    * @description
    * The lists offered under `Move to`.
    *
-   * @type {readonly MoveTarget[]}
+   * @type {readonly TaskMoveTarget[]}
    * @readonly
    */
-  public readonly lists: readonly MoveTarget[] = lists;
+  public readonly lists: readonly TaskMoveTarget[] = lists;
 
   /**
    * Property events

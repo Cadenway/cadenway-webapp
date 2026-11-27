@@ -36,7 +36,13 @@ import {
 import { CwStatusIcon } from '@cadenway/ui/components/status-icon';
 import { NgIcon } from '@ng-icons/core';
 
-import { type Person, TaskCancelDialog, TaskCreate, type TaskSummary } from '@features/task';
+import {
+  type Person,
+  TaskCancelDialog,
+  TaskCreate,
+  TaskMenu,
+  type TaskSummary,
+} from '@features/task';
 
 import { SPACES_RETRY } from '../../../constants/data-table-texts/data-table-texts.constants';
 import type {
@@ -62,7 +68,6 @@ import {
 } from '../../../state/workload-view/workload-view.store';
 import { toLocalDate } from '../../../utils/calendar-date/calendar-date.util';
 import { WORKLOAD_DAY_CAPACITY_MINUTES } from '../../../utils/workload/workload.util';
-import { TaskMenu } from '../../components/task-menu/task-menu.component';
 
 /**
  * Constant UNASSIGNED_ROW

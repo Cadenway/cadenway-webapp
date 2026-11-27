@@ -42,6 +42,7 @@ import {
   statusLabel,
   TaskCancelDialog,
   TaskDetailOpener,
+  TaskMenu,
   type TaskSummary,
 } from '@features/task';
 
@@ -68,7 +69,6 @@ import {
   type ViewTaskWritesStoreInstance,
 } from '../../../state/view-task-writes/view-task-writes.store';
 import { VIEW_TASK_WRITER } from '../../../state/view-task-writes/view-task-writer.token';
-import { TaskMenu } from '../../components/task-menu/task-menu.component';
 
 /**
  * Constant EVERYONE
