@@ -3,6 +3,8 @@ import type { Routes } from '@angular/router';
 
 import { unsavedChangesGuard } from '@shared/unsaved-changes';
 
+import { shouldRecheckOrganizationRole } from '@features/workspace/http/guards/organization-role';
+
 import { organizationSectionGuard } from './http/guards/organization-section/organization-section.guard';
 
 /**
@@ -13,8 +15,10 @@ import { organizationSectionGuard } from './http/guards/organization-section/org
  * settings shell. `''` opens `general`; `general`, `members`, `billing`, `quotas`, `security`,
  * `integrations` and `audit-log` load their page behind `organizationSectionGuard`, which lets
  * the least role of `ORGANIZATION_SECTIONS` in (owner for Billing and Quotas, administrator for
- * Security, Integrations and the Audit log, member for General and Members) and sends anyone else
- * to the first section their role may open, or to `/<slug>` for a guest. `general` keeps unsaved
+ * General, Security, Integrations and the Audit log, member for Members) and sends anyone else to
+ * the first section their role may open, or to `/<slug>` for a guest. The guards run again on
+ * every workspace recovery (`shouldRecheckOrganizationRole`), so a demoted person leaves a
+ * section they may no longer open. `general` keeps unsaved
  * edits with `unsavedChangesGuard`. A failed primary read renders the router's default error
  * component, `RouteErrorBoundary`, in the shell, titled by the `unavailableTitle` the mounting
  * route sets. An unknown section renders the 404 inside the shell.
@@ -27,6 +31,7 @@ export const ORGANIZATION_ROUTES: Routes = [
     path: 'general',
     title: $localize`:@@organization.route.general:Organization profile`,
     canActivate: [organizationSectionGuard('general')],
+    runGuardsAndResolvers: shouldRecheckOrganizationRole,
     canDeactivate: [unsavedChangesGuard],
     loadComponent: async (): Promise<Type<unknown>> =>
       (await import('./ui/pages/general-page/general-page.component')).GeneralPage,
@@ -35,6 +40,7 @@ export const ORGANIZATION_ROUTES: Routes = [
     path: 'members',
     title: $localize`:@@organization.route.members:Members`,
     canActivate: [organizationSectionGuard('members')],
+    runGuardsAndResolvers: shouldRecheckOrganizationRole,
     loadComponent: async (): Promise<Type<unknown>> =>
       (await import('./ui/pages/members-page/members-page.component')).MembersPage,
   },
@@ -42,6 +48,7 @@ export const ORGANIZATION_ROUTES: Routes = [
     path: 'billing',
     title: $localize`:@@organization.route.billing:Billing`,
     canActivate: [organizationSectionGuard('billing')],
+    runGuardsAndResolvers: shouldRecheckOrganizationRole,
     loadComponent: async (): Promise<Type<unknown>> =>
       (await import('./ui/pages/billing-page/billing-page.component')).BillingPage,
   },
@@ -49,6 +56,7 @@ export const ORGANIZATION_ROUTES: Routes = [
     path: 'quotas',
     title: $localize`:@@organization.route.quotas:Quotas and usage`,
     canActivate: [organizationSectionGuard('quotas')],
+    runGuardsAndResolvers: shouldRecheckOrganizationRole,
     loadComponent: async (): Promise<Type<unknown>> =>
       (await import('./ui/pages/quotas-page/quotas-page.component')).QuotasPage,
   },
@@ -56,6 +64,7 @@ export const ORGANIZATION_ROUTES: Routes = [
     path: 'security',
     title: $localize`:@@organization.route.security:Security and SSO`,
     canActivate: [organizationSectionGuard('security')],
+    runGuardsAndResolvers: shouldRecheckOrganizationRole,
     loadComponent: async (): Promise<Type<unknown>> =>
       (await import('./ui/pages/security-page/security-page.component')).SecurityPage,
   },
@@ -63,6 +72,7 @@ export const ORGANIZATION_ROUTES: Routes = [
     path: 'integrations',
     title: $localize`:@@organization.route.integrations:Integrations`,
     canActivate: [organizationSectionGuard('integrations')],
+    runGuardsAndResolvers: shouldRecheckOrganizationRole,
     loadComponent: async (): Promise<Type<unknown>> =>
       (await import('./ui/pages/integrations-page/integrations-page.component')).IntegrationsPage,
   },
@@ -70,6 +80,7 @@ export const ORGANIZATION_ROUTES: Routes = [
     path: 'audit-log',
     title: $localize`:@@organization.route.audit-log:Audit log`,
     canActivate: [organizationSectionGuard('audit-log')],
+    runGuardsAndResolvers: shouldRecheckOrganizationRole,
     loadComponent: async (): Promise<Type<unknown>> =>
       (await import('./ui/pages/audit-log-page/audit-log-page.component')).AuditLogPage,
   },

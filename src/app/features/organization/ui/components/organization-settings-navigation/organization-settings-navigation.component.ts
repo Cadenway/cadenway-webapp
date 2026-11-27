@@ -53,7 +53,8 @@ interface OrganizationNavigationItem {
  * lines 50-64, logic lines 1617-1647 and 1738): the identity row (initials square, name, then
  * `Team plan · 18 members` from the subscription's used seats, or the plan alone for whoever may
  * not read billing), then the `Organization` group with a link per section the person's role may
- * open (`WORKSPACE_CONTEXT.can()`), to `/<slug>/organization/<section>`. The current link carries
+ * open (`WORKSPACE_CONTEXT.can()`), to `/<slug>/organization/<section>`; without any, the group
+ * and its heading are not rendered. The current link carries
  * `aria-current="page"`, the violet tint and the Fill icon; `Quotas and usage` carries the red
  * `Critical quota` alert while the seats or the storage use at least 90 % of their limit. Below
  * 768 px the links wrap in rows. It reads Organization's `SubscriptionStore` of `/:org` and follows
@@ -75,50 +76,52 @@ interface OrganizationNavigationItem {
         <span class="truncate text-xs text-muted-foreground tabular-nums">{{ subtitle() }}</span>
       </span>
     </div>
-    <div
-      class="flex flex-col gap-px"
-      role="group"
-      aria-labelledby="organization-settings-navigation-heading"
-    >
+    @if (items().length > 0) {
       <div
-        id="organization-settings-navigation-heading"
-        class="flex h-8 items-center px-2 text-xs font-medium text-muted-foreground"
-        i18n="@@organization.navigation.heading"
+        class="flex flex-col gap-px"
+        role="group"
+        aria-labelledby="organization-settings-navigation-heading"
       >
-        Organization
-      </div>
-      <div class="flex flex-row flex-wrap gap-px md:flex-col">
-        @for (item of items(); track item.section.path) {
-          @let section = item.section;
-          <a
-            [routerLink]="item.link"
-            routerLinkActive
-            #active="routerLinkActive"
-            ariaCurrentWhenActive="page"
-            class="flex h-8 items-center gap-2 rounded-md px-2 text-left text-sm transition-colors hover:bg-sidebar-accent focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:outline-none focus-visible:ring-inset"
-            [class]="active.isActive ? 'bg-primary/5 font-medium text-primary' : ''"
-            [attr.data-testid]="'organization-navigation-' + section.path"
-          >
-            <ng-icon
-              [name]="active.isActive ? section.activeIcon : section.icon"
-              class="size-4 shrink-0"
-              [class]="active.isActive ? 'text-primary' : 'text-muted-foreground'"
-              aria-hidden="true"
-            />
-            {{ section.label }}
-            @if (section.path === 'quotas' && usage.quotaCritical()) {
+        <div
+          id="organization-settings-navigation-heading"
+          class="flex h-8 items-center px-2 text-xs font-medium text-muted-foreground"
+          i18n="@@organization.navigation.heading"
+        >
+          Organization
+        </div>
+        <div class="flex flex-row flex-wrap gap-px md:flex-col">
+          @for (item of items(); track item.section.path) {
+            @let section = item.section;
+            <a
+              [routerLink]="item.link"
+              routerLinkActive
+              #active="routerLinkActive"
+              ariaCurrentWhenActive="page"
+              class="flex h-8 items-center gap-2 rounded-md px-2 text-left text-sm transition-colors hover:bg-sidebar-accent focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:outline-none focus-visible:ring-inset"
+              [class]="active.isActive ? 'bg-primary/5 font-medium text-primary' : ''"
+              [attr.data-testid]="'organization-navigation-' + section.path"
+            >
               <ng-icon
-                name="phosphorWarningCircleFill"
-                aria-hidden="false"
-                class="ml-auto size-3.5 shrink-0 text-destructive"
-                aria-label="Critical quota"
-                i18n-aria-label="@@organization.navigation.quota-critical"
+                [name]="active.isActive ? section.activeIcon : section.icon"
+                class="size-4 shrink-0"
+                [class]="active.isActive ? 'text-primary' : 'text-muted-foreground'"
+                aria-hidden="true"
               />
-            }
-          </a>
-        }
+              {{ section.label }}
+              @if (section.path === 'quotas' && usage.quotaCritical()) {
+                <ng-icon
+                  name="phosphorWarningCircleFill"
+                  aria-hidden="false"
+                  class="ml-auto size-3.5 shrink-0 text-destructive"
+                  aria-label="Critical quota"
+                  i18n-aria-label="@@organization.navigation.quota-critical"
+                />
+              }
+            </a>
+          }
+        </div>
       </div>
-    </div>
+    }
   `,
 })
 export class OrganizationSettingsNavigation {

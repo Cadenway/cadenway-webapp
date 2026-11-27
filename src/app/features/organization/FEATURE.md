@@ -18,7 +18,7 @@ section has `organizationSectionGuard(<section>)` (`http/guards/organization-sec
 | Path           | Page (`ui/pages/…`)                        | Title                  | Least role | Other guards                         |
 | -------------- | ------------------------------------------ | ---------------------- | ---------- | ------------------------------------ |
 | `''`           | redirects to `general`                     |                        |            |                                      |
-| `general`      | `general-page` (`GeneralPage`)             | `Organization profile` | member     | `canDeactivate: unsavedChangesGuard` |
+| `general`      | `general-page` (`GeneralPage`)             | `Organization profile` | admin      | `canDeactivate: unsavedChangesGuard` |
 | `members`      | `members-page` (`MembersPage`)             | `Members`              | member     |                                      |
 | `billing`      | `billing-page` (`BillingPage`)             | `Billing`              | owner      |                                      |
 | `quotas`       | `quotas-page` (`QuotasPage`)               | `Quotas and usage`     | owner      |                                      |
@@ -28,8 +28,13 @@ section has `organizationSectionGuard(<section>)` (`http/guards/organization-sec
 | `**`           | Errors' `ERRORS_ROUTES` (404 in the shell) |                        |            |                                      |
 
 - A person below a section's least role is redirected to the first section, in the navigation's
-  order, their role may open (`/<slug>/organization/general` for a member or an administrator), and
-  a guest to `/<slug>`. The navigation already hides those sections; the guard covers deep links.
+  order, their role may open (`/<slug>/organization/general` for an administrator,
+  `/<slug>/organization/members` for a member), and a guest to `/<slug>`. Workspace's
+  `organizationRoleGuard('member')` on the frame sends a guest away before it renders. Each section
+  route sets `runGuardsAndResolvers: shouldRecheckOrganizationRole`, so a workspace recovery that
+  finds a lower role (an owner demoted while Billing is shown) redirects off the section.
+- General is administrator only: every control on it writes, and `updateCurrentOrganization` and
+  the logo are owner or administrator. The navigation already hides those sections; the guard covers deep links.
 - Billing and Quotas are owner only because `billing.yaml` answers the owner only
   (`Organisation.dc.html` line 321); Quotas reads the same `getBillingSubscription`.
 - Each page is a stub (WP0 of steps 7 and 8) showing the mockup's section title in the
@@ -82,7 +87,8 @@ loaded.` with `Retry`; the banner stays hidden until a retry succeeds.
   mockup's `orgSubtitle` does (line 1738), and `<plan> plan` for whoever may not read billing.
   It shows the initials; the logo comes with O1.
 - The navigation items and the account settings' links are filtered with `WORKSPACE_CONTEXT.can()`
-  and the least role of `ORGANIZATION_SECTIONS`; a guest gets no `Organization · <name>` group.
+  and the least role of `ORGANIZATION_SECTIONS`; a group without any section is not rendered, its
+  heading included (a guest gets no `Organization · <name>` group).
   The settings shell has no `cw-sidebar`, so the items are links styled as the mockup draws them,
   not `cwSidebarItem`, which requires one.
 - `general` keeps unsaved edits through `unsavedChangesGuard`; its page asks with Workspace's

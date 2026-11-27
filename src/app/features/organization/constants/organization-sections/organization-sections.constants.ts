@@ -8,15 +8,16 @@ import type { OrganizationSection } from '../../models/organization-section/orga
  * @description
  * The 7 sections of the organization settings, in the mockup's order (`Organisation.dc.html`
  * lines 1617-1623), with the least role that may open each: Billing and Quotas for the owner
- * (`billing.yaml` answers the owner only, O:321), Security and SSO, Integrations and the Audit
- * log for an administrator, General and Members for a member. Guests open none.
+ * (`billing.yaml` answers the owner only, O:321); General (every control writes, and
+ * `updateCurrentOrganization` is owner or admin), Security and SSO, Integrations and the Audit log
+ * for an administrator; Members for a member. Guests open none.
  *
  * @type {readonly OrganizationSection[]}
  */
 export const ORGANIZATION_SECTIONS: readonly OrganizationSection[] = [
   {
     path: 'general',
-    least: 'member',
+    least: 'admin',
     label: $localize`:@@organization.navigation.general:General`,
     icon: 'phosphorBuildingsBold',
     activeIcon: 'phosphorBuildingsFill',
