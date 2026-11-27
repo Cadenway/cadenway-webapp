@@ -468,6 +468,52 @@ describe('GoalsPage', () => {
     ).toBe('true');
   });
 
+  it('names the key result checkbox after its label', async () => {
+    const harness: RouterTestingHarness = await render();
+
+    const box: Element | null = view(harness).querySelector(
+      '[role="checkbox"][aria-label="SSO guide published"]',
+    );
+    expect(box?.getAttribute('aria-checked')).toBe('false');
+  });
+
+  it('moves the focus to the next row after removing a key result', async () => {
+    const harness: RouterTestingHarness = await render();
+
+    element(harness, '[data-testid="result-remove"]', HTMLButtonElement).click();
+    await expect
+      .poll(() => {
+        harness.detectChanges();
+        return document.activeElement?.getAttribute('aria-label');
+      })
+      .toBe('Decrease “Customer organizations on SSO”');
+    expect(api.deleteResult).toHaveBeenCalledWith('g1', 'k1', 3);
+  });
+
+  it('returns the focus to the trigger of a closed form', async () => {
+    const harness: RouterTestingHarness = await render();
+
+    element(harness, '[data-testid="goal-new"]', HTMLButtonElement).click();
+    harness.detectChanges();
+    element(harness, '[data-testid="goal-form-cancel"]', HTMLButtonElement).click();
+    await expect
+      .poll(() => {
+        harness.detectChanges();
+        return document.activeElement?.getAttribute('data-testid');
+      })
+      .toBe('goal-new');
+
+    element(harness, '[data-testid="key-result-start"]', HTMLButtonElement).click();
+    harness.detectChanges();
+    element(harness, '[data-testid="key-result-cancel"]', HTMLButtonElement).click();
+    await expect
+      .poll(() => {
+        harness.detectChanges();
+        return document.activeElement?.getAttribute('data-testid');
+      })
+      .toBe('key-result-start');
+  });
+
   it('asks a member for a space and hides the creation without one', async () => {
     role.set('member');
     const harness: RouterTestingHarness = await render();

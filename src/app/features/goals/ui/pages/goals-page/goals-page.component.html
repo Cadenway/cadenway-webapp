@@ -31,7 +31,7 @@
         [spaces]="store.spaceOptions()"
         [pending]="store.creating()"
         (submitted)="create($event)"
-        (cancelled)="formOpen.set(false)"
+        (cancelled)="closeForm()"
       />
     }
 
@@ -42,6 +42,7 @@
           <cw-accordion-item
             class="flex! flex-wrap items-center gap-x-3 overflow-hidden rounded-xl border border-border bg-card last:border-b [&>h3]:min-w-0 [&>h3]:flex-1 [&>h3]:py-2 [&>h3]:pl-2 sm:[&>h3]:py-3 sm:[&>h3]:pl-3"
             data-testid="goal-row"
+            [attr.data-goal-id]="goal.id"
             [value]="goal.id"
           >
             <button
@@ -94,7 +95,7 @@
             }
             <cw-accordion-content class="order-last basis-full [&_[role=region]]:p-0">
               <div role="list" class="mt-2 flex flex-col border-t border-border sm:mt-3">
-                @for (result of goal.results; track result.id) {
+                @for (result of goal.results; track result.id; let index = $index) {
                   <cw-key-result-row
                     [result]="result"
                     [canWrite]="view.canWrite"
@@ -113,7 +114,7 @@
                     (toggled)="store.toggle(goal.id, result.id)"
                     (milestoneOpened)="openMilestone($event)"
                     (listOpened)="openList($event)"
-                    (removed)="store.removeResult(goal.id, result.id)"
+                    (removed)="removeResult(goal.id, result.id, index)"
                   />
                 }
               </div>
@@ -123,7 +124,7 @@
                     [formId]="'key-result-' + goal.id"
                     [pending]="store.addingTo() === goal.id"
                     (submitted)="addResult(goal.id, $event)"
-                    (cancelled)="resultFormFor.set(null)"
+                    (cancelled)="closeResultForm(goal.id)"
                   />
                 } @else {
                   <div class="px-3 py-2 sm:pl-12">

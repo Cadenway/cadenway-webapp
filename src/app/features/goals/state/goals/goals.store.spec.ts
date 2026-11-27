@@ -6,7 +6,7 @@ import { firstValueFrom, Subject } from 'rxjs';
 import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 
 import { SPACE_DIRECTORY, type SpaceDirectoryEntry } from '@features/spaces/ports/space-directory';
-import { TaskDetailOpener } from '@features/task';
+import { type Person, TaskDetailOpener } from '@features/task';
 import {
   WORKSPACE_CONTEXT,
   type WorkspaceContextPort,
@@ -26,7 +26,7 @@ import type {
   KeyResult,
   NumberKeyResult,
 } from '../../models/goal/goal.interface';
-import { GoalsStore } from './goals.store';
+import { CREATE_ATTEMPTS, GoalsStore, RETRY_DELAY_MS } from './goals.store';
 
 /**
  * Constant ATELIER_NORD
@@ -183,6 +183,21 @@ function list(goals: readonly Goal[]): GoalList {
 }
 
 /**
+ * Constant SUPPORT
+ *
+ * @description
+ * The goal the form of the mockup suggests, owned by Hugo Dubois.
+ *
+ * @type {GoalDraft}
+ */
+const SUPPORT: GoalDraft = {
+  name: 'Cut the support response time',
+  ownerUserId: 'u-hd',
+  spaceId: null,
+  firstResult: null,
+};
+
+/**
  * Function problem
  *
  * @description
@@ -313,7 +328,7 @@ describe('GoalsStore', () => {
     | 'owners',
     Mock
   >;
-  let toasts: { success: Mock; error: Mock };
+  let toasts: { success: Mock; error: Mock; warning: Mock };
 
   beforeEach(() => {
     organization.set(ATELIER_NORD);
@@ -346,7 +361,7 @@ describe('GoalsStore', () => {
         ]),
       ),
     };
-    toasts = { success: vi.fn(), error: vi.fn() };
+    toasts = { success: vi.fn(), error: vi.fn(), warning: vi.fn() };
     TestBed.configureTestingModule({
       providers: [
         GoalsStore,
@@ -577,23 +592,88 @@ describe('GoalsStore', () => {
     });
   });
 
-  it('settles a creation of unknown outcome by reading the goals again', async () => {
+  it('sends a creation of unknown outcome again with the same idempotency key', async () => {
     const store: InstanceType<typeof GoalsStore> = await loaded();
-    api.create.mockRejectedValueOnce(problem(504));
-    api.list.mockResolvedValueOnce(
-      list([goal({ id: 'g9', name: 'Cut the support response time' }), goal()]),
-    );
+    vi.useFakeTimers();
+    try {
+      api.create
+        .mockRejectedValueOnce(problem(504))
+        .mockRejectedValueOnce(problem(409, 'idempotency.request-in-progress'));
 
-    const id: string | null = await store.create({
-      name: 'Cut the support response time',
-      ownerUserId: 'u-cm',
-      spaceId: null,
-      firstResult: null,
+      const pending: Promise<string | null> = store.create(SUPPORT);
+      await vi.advanceTimersByTimeAsync(RETRY_DELAY_MS * 2);
+
+      expect(await pending).toBe('g9');
+      expect(api.create).toHaveBeenCalledTimes(3);
+      const keys: unknown[] = api.create.mock.calls.map((call: unknown[]) => call[3]);
+      expect(new Set(keys).size).toBe(1);
+      expect(toasts.warning).not.toHaveBeenCalled();
+      expect(toasts.success).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('reports a creation that stays unknown and reuses its key when sent again', async () => {
+    const store: InstanceType<typeof GoalsStore> = await loaded();
+    vi.useFakeTimers();
+    try {
+      api.create.mockRejectedValue(new HttpErrorResponse({ status: 0 }));
+
+      const pending: Promise<string | null> = store.create(SUPPORT);
+      await vi.advanceTimersByTimeAsync(RETRY_DELAY_MS * CREATE_ATTEMPTS);
+
+      expect(await pending).toBeNull();
+      expect(api.create).toHaveBeenCalledTimes(CREATE_ATTEMPTS);
+      expect(toasts.warning).toHaveBeenCalledWith('The goal could not be confirmed', {
+        description: 'Create it again: it will not be created twice.',
+      });
+      expect(toasts.error).not.toHaveBeenCalled();
+
+      api.create.mockResolvedValueOnce(goal({ id: 'g9', name: SUPPORT.name, results: [] }));
+      expect(await store.create(SUPPORT)).toBe('g9');
+      expect(new Set(api.create.mock.calls.map((call: unknown[]) => call[3])).size).toBe(1);
+
+      api.create.mockResolvedValueOnce(goal({ id: 'g10', name: SUPPORT.name, results: [] }));
+      await store.create(SUPPORT);
+      expect(new Set(api.create.mock.calls.map((call: unknown[]) => call[3])).size).toBe(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('sends a key result of unknown outcome again with the same idempotency key', async () => {
+    const store: InstanceType<typeof GoalsStore> = await loaded();
+    vi.useFakeTimers();
+    try {
+      api.createResult.mockRejectedValueOnce(problem(503));
+
+      const pending: Promise<boolean> = store.addResult('g1', {
+        label: 'Customer demos held',
+        target: 12,
+      });
+      await vi.advanceTimersByTimeAsync(RETRY_DELAY_MS);
+
+      expect(await pending).toBe(true);
+      expect(api.createResult).toHaveBeenCalledTimes(2);
+      expect(api.createResult.mock.calls[0][3]).toBe(api.createResult.mock.calls[1][3]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('warns when a deletion of unknown outcome leaves the goal in place', async () => {
+    const store: InstanceType<typeof GoalsStore> = await loaded();
+    api.delete.mockRejectedValueOnce(problem(502));
+    api.get.mockResolvedValueOnce(goal());
+
+    expect(await store.remove('g1')).toBe(false);
+
+    expect(store.list()).toHaveLength(1);
+    expect(toasts.warning).toHaveBeenCalledWith('The deletion could not be confirmed', {
+      description: 'The goal is still shown. Try again in a moment.',
     });
-
-    expect(id).toBe('g9');
     expect(toasts.error).not.toHaveBeenCalled();
-    expect(toasts.success).toHaveBeenCalledTimes(1);
   });
 
   it('deletes a goal from the version shown and counts a missing goal as deleted', async () => {
@@ -640,5 +720,154 @@ describe('GoalsStore', () => {
     expect(toasts.error).toHaveBeenCalledWith('The key result could not be removed', {
       description: 'Try again in a moment.',
     });
+  });
+
+  it('keeps a later edit when an earlier send of it fails, then sends it', async () => {
+    const first: Subject<KeyResultWrite> = new Subject<KeyResultWrite>();
+    api.updateResult.mockReturnValueOnce(firstValueFrom(first));
+    const store: InstanceType<typeof GoalsStore> = await loaded();
+
+    store.step('g1', 'k6', 1);
+    await flush();
+    store.step('g1', 'k6', 1);
+    first.error(problem(403, 'access.role-insufficient'));
+    await settle();
+
+    expect(api.updateResult.mock.calls.map((call: unknown[]) => call[3])).toEqual([
+      { currentValue: 177 },
+      { currentValue: 186 },
+    ]);
+    expect(toasts.error).toHaveBeenCalledTimes(1);
+  });
+
+  it('still sends the last value of a burst once the page is gone, without reading it again', async () => {
+    const first: Subject<KeyResultWrite> = new Subject<KeyResultWrite>();
+    api.updateResult.mockReturnValueOnce(firstValueFrom(first));
+    const store: InstanceType<typeof GoalsStore> = await loaded();
+
+    store.step('g1', 'k6', 1);
+    await flush();
+    store.step('g1', 'k6', 1);
+    store.step('g1', 'k6', 1);
+    TestBed.resetTestingModule();
+    first.next({ result: signups(177), version: 4 });
+    first.complete();
+    await flush();
+
+    expect(api.updateResult.mock.calls).toEqual([
+      ['g1', 'k6', 3, { currentValue: 177 }],
+      ['g1', 'k6', 4, { currentValue: 195 }],
+    ]);
+    expect(api.get).not.toHaveBeenCalled();
+  });
+
+  it('moves a number by the same steps from a newer value after a stale version', async () => {
+    api.updateResult.mockRejectedValueOnce(problem(412, 'request.version-mismatch'));
+    api.get.mockResolvedValueOnce(goal({ version: 7, results: [signups(200)] }));
+    const store: InstanceType<typeof GoalsStore> = await loaded();
+
+    store.step('g1', 'k6', 1);
+    await settle();
+
+    expect(api.updateResult.mock.calls[1]).toEqual(['g1', 'k6', 7, { currentValue: 209 }]);
+  });
+
+  it('drops a checkbox changed elsewhere after a stale version, with a warning', async () => {
+    const guide: KeyResult = {
+      id: 'k3',
+      kind: 'checkbox',
+      label: 'SSO guide published',
+      checked: false,
+      progressPercent: 0,
+    };
+    api.list.mockResolvedValue(list([goal({ results: [guide] })]));
+    api.updateResult.mockRejectedValueOnce(problem(412, 'request.version-mismatch'));
+    api.get.mockResolvedValueOnce(
+      goal({ version: 7, results: [{ ...guide, checked: true, progressPercent: 100 }] }),
+    );
+    const store: InstanceType<typeof GoalsStore> = await loaded();
+
+    store.toggle('g1', 'k3');
+    await settle();
+
+    expect(api.updateResult).toHaveBeenCalledTimes(1);
+    expect(toasts.warning).toHaveBeenCalledWith('This key result changed elsewhere', {
+      description: 'It now shows its latest state.',
+    });
+    const shown: KeyResult | undefined = store.list()?.[0].goal.results[0];
+    expect(shown?.kind === 'checkbox' && shown.checked).toBe(true);
+  });
+
+  it('sends nothing more after switching to another organization and back', async () => {
+    const first: Subject<KeyResultWrite> = new Subject<KeyResultWrite>();
+    api.updateResult.mockReturnValueOnce(firstValueFrom(first));
+    const store: InstanceType<typeof GoalsStore> = await loaded();
+
+    store.step('g1', 'k6', 1);
+    await flush();
+    store.step('g1', 'k6', 1);
+    organization.set(STUDIO_SUD);
+    await settle();
+    organization.set(ATELIER_NORD);
+    await settle();
+    first.next({ result: signups(177), version: 4 });
+    first.complete();
+    await settle();
+
+    expect(api.updateResult).toHaveBeenCalledTimes(1);
+    expect(api.get).not.toHaveBeenCalled();
+    expect(shownValue(store)).toBe(168);
+  });
+
+  it('does not keep a goal snapshot sent before a newer read landed', async () => {
+    const snapshot: Subject<Goal> = new Subject<Goal>();
+    api.get.mockReturnValueOnce(firstValueFrom(snapshot));
+    const store: InstanceType<typeof GoalsStore> = await loaded();
+
+    store.step('g1', 'k6', 1);
+    await flush();
+    expect(api.get).toHaveBeenCalledTimes(1);
+    api.list.mockResolvedValueOnce(list([goal({ version: 6, results: [signups(300)] })]));
+    store.refresh();
+    await settle();
+    snapshot.next(goal({ version: 4, results: [signups(177)] }));
+    snapshot.complete();
+    await settle();
+
+    expect(shownValue(store)).toBe(300);
+  });
+
+  it('names a former member only once a read of the members confirms it', async () => {
+    const second: Subject<readonly Person[]> = new Subject<readonly Person[]>();
+    api.owners
+      .mockResolvedValueOnce([{ id: 'u-cm', name: 'Camille Martin', initials: 'CM', avatar: null }])
+      .mockReturnValueOnce(firstValueFrom(second));
+    api.list.mockResolvedValue(list([goal({ ownerUserId: 'u-lp' })]));
+    const store: InstanceType<typeof GoalsStore> = TestBed.inject(GoalsStore);
+    await expect
+      .poll(async () => {
+        TestBed.tick();
+        await flush();
+        return api.owners.mock.calls.length;
+      })
+      .toBe(2);
+    expect(store.list()?.[0].ownerName).toBeNull();
+    second.next([{ id: 'u-cm', name: 'Camille Martin', initials: 'CM', avatar: null }]);
+    second.complete();
+    await settle();
+
+    expect(store.list()?.[0].ownerName).toBe('Former member');
+    expect(api.owners).toHaveBeenCalledTimes(2);
+  });
+
+  it('reads the members again after a failure', async () => {
+    api.owners.mockRejectedValueOnce(problem(503));
+    const store: InstanceType<typeof GoalsStore> = await loaded();
+    expect(store.owners().map((person: Person) => person.id)).toEqual(['u-cm']);
+
+    store.refresh();
+    await settle();
+
+    expect(store.owners().map((person: Person) => person.id)).toEqual(['u-cm', 'u-hd']);
   });
 });

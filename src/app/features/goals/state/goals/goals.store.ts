@@ -1,6 +1,7 @@
 import { DOCUMENT } from '@angular/common';
 import {
   computed,
+  DestroyRef,
   inject,
   resource,
   type ResourceRef,
@@ -166,6 +167,175 @@ interface GoalsState {
    * @type {number}
    */
   _readsIssued: number;
+
+  /**
+   * Property _peopleRequest
+   *
+   * @description
+   * How many times the members were asked for again (after a failure, or for owners they did not
+   * name); each change reads them again.
+   *
+   * @type {number}
+   */
+  _peopleRequest: number;
+  // #endregion
+}
+
+/**
+ * Constant RETRY_DELAY_MS
+ *
+ * @description
+ * Wait, in milliseconds, before a creation of unknown outcome is sent again with its idempotency
+ * key, so a request still running on the gateway (`409 idempotency.request-in-progress`) can end.
+ *
+ * @type {number}
+ */
+export const RETRY_DELAY_MS: number = 1000;
+
+/**
+ * Constant CREATE_ATTEMPTS
+ *
+ * @description
+ * Sends of one creation, the first included, before its outcome is reported as unknown.
+ *
+ * @type {number}
+ */
+export const CREATE_ATTEMPTS: number = 3;
+
+/**
+ * Interface GoalsContext
+ *
+ * @description
+ * Which organization generation the writes belong to and whether the page is gone.
+ */
+interface GoalsContext {
+  // #region Properties
+  /**
+   * Property generation
+   *
+   * @description
+   * Organization switches so far; a write of an older generation sends, patches and toasts
+   * nothing more, even after switching back.
+   *
+   * @type {number}
+   */
+  generation: number;
+
+  /**
+   * Property destroyed
+   *
+   * @description
+   * Whether the page that provided the store is gone: the writes already queued are still sent,
+   * but nothing is read again.
+   *
+   * @type {boolean}
+   */
+  destroyed: boolean;
+  // #endregion
+}
+
+/**
+ * Interface GoalLane
+ *
+ * @description
+ * The write queue of one goal: its last write and the last version the gateway named for it.
+ */
+interface GoalLane {
+  // #region Properties
+  /**
+   * Property tail
+   *
+   * @description
+   * Settles once the last queued write of the goal settled.
+   *
+   * @type {Promise<void>}
+   */
+  tail: Promise<void>;
+
+  /**
+   * Property version
+   *
+   * @description
+   * The goal's last known version, sent as `If-Match`; the newer of the goal shown and the last
+   * write or read of the queue, kept once the page is gone.
+   *
+   * @type {number | null}
+   */
+  version: number | null;
+
+  /**
+   * Property dirty
+   *
+   * @description
+   * Whether a write changed the goal's key results since it was last read; the goal is read again
+   * once its queue is idle.
+   *
+   * @type {boolean}
+   */
+  dirty: boolean;
+  // #endregion
+}
+
+/**
+ * Interface EditRecord
+ *
+ * @description
+ * What a key result edit started from and what the gateway last confirmed for it.
+ */
+interface EditRecord {
+  // #region Properties
+  /**
+   * Property start
+   *
+   * @description
+   * The confirmed value when the edit started; a stale version retries only while the goal read
+   * again still shows it.
+   *
+   * @type {number | boolean}
+   */
+  start: number | boolean;
+
+  /**
+   * Property confirmed
+   *
+   * @description
+   * The value the gateway last confirmed.
+   *
+   * @type {number | boolean}
+   */
+  confirmed: number | boolean;
+  // #endregion
+}
+
+/**
+ * Interface PeopleRead
+ *
+ * @description
+ * A read of the members, with the owner ids it was asked to check.
+ */
+interface PeopleRead {
+  // #region Properties
+  /**
+   * Property people
+   *
+   * @description
+   * The members who may own a goal.
+   *
+   * @type {readonly Person[]}
+   * @readonly
+   */
+  readonly people: readonly Person[];
+
+  /**
+   * Property checked
+   *
+   * @description
+   * Owner ids the read was sent for; those it does not name are former members.
+   *
+   * @type {readonly string[]}
+   * @readonly
+   */
+  readonly checked: readonly string[];
   // #endregion
 }
 
@@ -185,6 +355,7 @@ const initialState: GoalsState = {
   _hidden: [],
   _writes: [],
   _readsIssued: 0,
+  _peopleRequest: 0,
 };
 
 /**
@@ -225,6 +396,17 @@ interface GoalsLoads {
    * @type {{ readonly organizationId: string; readonly list: GoalList } | null}
    */
   last: { readonly organizationId: string; readonly list: GoalList } | null;
+
+  /**
+   * Property landed
+   *
+   * @description
+   * Issue number of the newest read that landed; a snapshot of one goal sent before it is already
+   * reflected, so it is not kept over the goals.
+   *
+   * @type {number}
+   */
+  landed: number;
   // #endregion
 }
 
@@ -544,11 +726,13 @@ export interface GoalsStoreInstance {
    * Method create
    *
    * @description
-   * Creates a goal in the quarter shown, in the organization the workspace shows when it starts,
-   * and toasts `Goal created` with its name. A refusal toasts the failure. When the answer is lost
-   * or the gateway fails (`5xx`), the goals are read again: a new goal of that name counts as
-   * created, otherwise nothing is reported and the form keeps its values. Nothing is patched or
-   * toasted once the workspace shows another organization. Ignored while a creation runs.
+   * Creates a goal in the quarter shown and toasts `Goal created` with its name. The draft keeps
+   * one idempotency key until a definitive answer: after an unknown outcome or
+   * `409 idempotency.request-in-progress`, the same request is sent again with it after
+   * `RETRY_DELAY_MS`, up to `CREATE_ATTEMPTS` sends, then the warning `The goal could not be
+   * confirmed` asks to create it again, which reuses the key so it is never created twice. A
+   * refusal toasts the failure. Bound to the organization generation it started in. Ignored while
+   * a creation runs.
    *
    * @param {GoalDraft} draft - What the form submitted.
    * @returns {Promise<string | null>} The id of the new goal, or null when none is known.
@@ -559,10 +743,11 @@ export interface GoalsStoreInstance {
    * Method remove
    *
    * @description
-   * Deletes a goal after its confirmation, from the version shown (once more from the current
-   * version after a `412`), and toasts `Goal deleted` with its name; a goal already gone counts
-   * as deleted. An unknown outcome reads the goal again: gone, it counts as deleted, otherwise it
-   * stays without a report. A refusal toasts the failure. Ignored while a deletion runs.
+   * Deletes a goal after its confirmation, from the version its queue knows (once more from the
+   * current version after a `412`), and toasts `Goal deleted` with its name; a goal already gone
+   * counts as deleted. An unknown outcome reads the goal again: gone, it counts as deleted;
+   * still there, the warning `The deletion could not be confirmed` shows. A refusal toasts the
+   * failure. Ignored while a deletion runs.
    *
    * @param {string} goalId - Id of the goal.
    * @returns {Promise<boolean>} Whether the goal left the list shown.
@@ -600,9 +785,10 @@ export interface GoalsStoreInstance {
    * Method addResult
    *
    * @description
-   * Adds a number key result from 0 towards its target, after the goal's other writes. An unknown
-   * outcome reads the goal again: a new key result of that label counts as added, otherwise
-   * nothing is reported. A refusal toasts the failure.
+   * Adds a number key result from 0 towards its target, after the goal's other writes, with an
+   * idempotency key kept like `create`'s (a new one after a `412`, which reads the goal first). An
+   * outcome still unknown after the retries shows `The key result could not be confirmed`. A
+   * refusal toasts the failure.
    *
    * @param {string} goalId - Id of the goal.
    * @param {KeyResultDraft} draft - What the form submitted.
@@ -625,6 +811,50 @@ export interface GoalsStoreInstance {
 }
 
 /**
+ * Function isUncertainCreation
+ *
+ * @description
+ * Whether a creation sent with an idempotency key may still be recorded: an unknown outcome, or
+ * the same key still running on the gateway (`409 idempotency.request-in-progress`).
+ *
+ * @param {unknown} error - The failure.
+ * @returns {boolean} Whether to send it again with the same key.
+ */
+function isUncertainCreation(error: unknown): boolean {
+  return isUncertainWrite(error) || hasProblemCode(error, 'idempotency.request-in-progress');
+}
+
+/**
+ * Function wait
+ *
+ * @description
+ * Resolves after a delay.
+ *
+ * @param {number} ms - The delay, in milliseconds.
+ * @returns {Promise<void>} Resolves once elapsed.
+ */
+function wait(ms: number): Promise<void> {
+  return new Promise<void>((done: () => void): void => {
+    setTimeout(done, ms);
+  });
+}
+
+/**
+ * Function valueOf
+ *
+ * @description
+ * The editable value of a key result: the current value of a number, the state of a checkbox.
+ *
+ * @param {KeyResult | undefined} result - The key result.
+ * @returns {number | boolean | null} Its value, or null for another kind or none.
+ */
+function valueOf(result: KeyResult | undefined): number | boolean | null {
+  if (result?.kind === 'number') return result.currentValue;
+  if (result?.kind === 'checkbox') return result.checked;
+  return null;
+}
+
+/**
  * Function createGoalsStore
  *
  * @description
@@ -638,30 +868,52 @@ function createGoalsStore(): Type<GoalsStoreInstance> {
     withProps((store) => {
       const api: GoalsApi = inject(GoalsApi);
       const workspace: WorkspaceContextPort = inject(WORKSPACE_CONTEXT);
-      const loads: GoalsLoads = { background: false, queued: false, last: null };
+      const loads: GoalsLoads = { background: false, queued: false, last: null, landed: 0 };
+      const context: GoalsContext = { generation: 0, destroyed: false };
+      inject(DestroyRef).onDestroy((): void => {
+        context.destroyed = true;
+      });
+      let ownersAsked: readonly string[] = [];
       return {
         _api: api,
         _workspace: workspace,
         _loads: loads,
+        _context: context,
         _toasts: inject(CwToastService),
         _document: inject(DOCUMENT),
         _realtime: inject(RealtimeConnection, { optional: true }),
         _opener: inject(TaskDetailOpener),
         _spaces: inject(SPACE_DIRECTORY, { optional: true })?.spaces ?? signal([]),
         _lists: inject(LIST_DIRECTORY, { optional: true })?.lists ?? signal([]),
+        _askOwners(ids: readonly string[]): void {
+          ownersAsked = ids;
+        },
         goals: resource({
           params: (): { organizationId: string } => ({
             organizationId: workspace.organization().id,
           }),
-          loader: async ({ params }: { params: { organizationId: string } }): Promise<GoalList> => {
+          loader: async ({
+            params,
+            abortSignal,
+          }: {
+            params: { organizationId: string };
+            abortSignal: AbortSignal;
+          }): Promise<GoalList> => {
             const background: boolean = loads.background;
             loads.background = false;
             const issued: number = store._readsIssued() + 1;
             patchState(store, { _readsIssued: issued });
             const now: Date = new Date();
             try {
-              const list: GoalList = await api.list(quarterOf(now), todayIso(now), background);
+              const list: GoalList = await api.list(
+                quarterOf(now),
+                todayIso(now),
+                background,
+                abortSignal,
+              );
+              if (abortSignal.aborted) return list;
               loads.last = { organizationId: params.organizationId, list };
+              loads.landed = Math.max(loads.landed, issued);
               patchState(store, {
                 _writes: store
                   ._writes()
@@ -672,17 +924,25 @@ function createGoalsStore(): Type<GoalsStoreInstance> {
               });
               return list;
             } catch (error: unknown) {
-              if (background && loads.last?.organizationId === params.organizationId)
+              if (
+                !abortSignal.aborted &&
+                background &&
+                loads.last?.organizationId === params.organizationId
+              )
                 return loads.last.list;
               throw error;
             }
           },
         }),
         _people: resource({
-          params: (): { organizationId: string } => ({
+          params: (): { organizationId: string; request: number } => ({
             organizationId: workspace.organization().id,
+            request: store._peopleRequest(),
           }),
-          loader: (): Promise<readonly Person[]> => api.owners(false),
+          loader: async (): Promise<PeopleRead> => {
+            const checked: readonly string[] = ownersAsked;
+            return { people: await api.owners(false), checked };
+          },
         }),
       };
     }),
@@ -693,10 +953,17 @@ function createGoalsStore(): Type<GoalsStoreInstance> {
           ? new Map<string, string>(
               store._people
                 .value()
-                .map((person: Person): [string, string] => [person.id, person.name]),
+                .people.map((person: Person): [string, string] => [person.id, person.name]),
             )
           : null,
       );
+      const former: Signal<ReadonlySet<string>> = computed((): ReadonlySet<string> => {
+        const names: ReadonlyMap<string, string> | null = people();
+        if (names === null || !store._people.hasValue()) return new Set<string>();
+        return new Set<string>(
+          store._people.value().checked.filter((id: string): boolean => !names.has(id)),
+        );
+      });
       const roles: Signal<ReadonlyMap<string, SpaceDirectoryEntry>> = computed(
         () =>
           new Map<string, SpaceDirectoryEntry>(
@@ -722,23 +989,37 @@ function createGoalsStore(): Type<GoalsStoreInstance> {
         const goals: readonly Goal[] | undefined = confirmed();
         if (goals === undefined) return undefined;
         const names: ReadonlyMap<string, string> | null = people();
+        const gone: ReadonlySet<string> = former();
         const user: { id: string; name: string } = store._workspace.user();
         const hidden: ReadonlySet<string> = new Set<string>(store._hidden());
         const edits: Readonly<Record<string, number | boolean>> = store._edits();
-        return goals.map((goal: Goal): GoalView => ({
-          goal: applyEdits(goal, edits, hidden),
-          ownerName:
-            names?.get(goal.ownerUserId) ??
-            (goal.ownerUserId === user.id
-              ? user.name
-              : names === null
-                ? null
-                : $localize`:@@goals.goal.former-member:Former member`),
-          canWrite: canWrite(goal),
-        }));
+        return goals.map((goal: Goal): GoalView => {
+          const owner: string = goal.ownerUserId;
+          return {
+            goal: applyEdits(goal, edits, hidden),
+            ownerName:
+              names?.get(owner) ??
+              (owner === user.id
+                ? user.name
+                : gone.has(owner)
+                  ? $localize`:@@goals.goal.former-member:Former member`
+                  : null),
+            canWrite: canWrite(goal),
+          };
+        });
       });
       return {
         _confirmed: confirmed,
+        _unknownOwners: computed((): string | null => {
+          if (!store.goals.hasValue() || store._people.isLoading()) return null;
+          const names: ReadonlyMap<string, string> = people() ?? new Map<string, string>();
+          const user: string = store._workspace.user().id;
+          const ids: Set<string> = new Set<string>();
+          for (const goal of confirmed() ?? [])
+            if (!names.has(goal.ownerUserId) && goal.ownerUserId !== user)
+              ids.add(goal.ownerUserId);
+          return ids.size === 0 ? null : [...ids].sort().join(' ');
+        }),
         list,
         quarter: computed((): Quarter | null =>
           store.goals.hasValue() ? store.goals.value().quarter : null,
@@ -785,8 +1066,8 @@ function createGoalsStore(): Type<GoalsStoreInstance> {
                 })),
         ),
         owners: computed((): readonly Person[] => {
-          if (store._people.hasValue() && store._people.value().length > 0)
-            return store._people.value();
+          if (store._people.hasValue() && store._people.value().people.length > 0)
+            return store._people.value().people;
           const user: { id: string; name: string; initials: string } = store._workspace.user();
           return [{ id: user.id, name: user.name, initials: user.initials, avatar: null }];
         }),
@@ -820,24 +1101,29 @@ function createGoalsStore(): Type<GoalsStoreInstance> {
       ),
     })),
     withMethods((store) => {
-      const organizationId: () => string = (): string => store._workspace.organization().id;
+      const context: GoalsContext = store._context;
       const today: () => string = (): string => todayIso(new Date());
-      const ensureOrganization: (organization: string) => void = (organization: string): void => {
-        if (organization !== organizationId()) throw new WriteDroppedError();
+      const current: (generation: number) => boolean = (generation: number): boolean =>
+        generation === context.generation;
+      const alive: (generation: number) => boolean = (generation: number): boolean =>
+        current(generation) && !context.destroyed;
+      const guard: (generation: number) => void = (generation: number): void => {
+        if (!current(generation)) throw new WriteDroppedError();
       };
-      const mismatched: (error: unknown, organization: string) => boolean = (
+      const dropped: (error: unknown, generation: number) => boolean = (
         error: unknown,
-        organization: string,
+        generation: number,
       ): boolean =>
         error instanceof WriteDroppedError ||
         error instanceof OrganizationSwitchPendingError ||
         hasProblemCode(error, 'organization.context-changed') ||
-        organization !== organizationId();
+        !current(generation);
+      const organizationId: () => string = (): string => store._workspace.organization().id;
       const record: (write: GoalWrite) => void = (write: GoalWrite): void => {
         patchState(store, { _writes: [...store._writes(), write] });
       };
       const shown: (goalId: string) => Goal | undefined = (goalId: string): Goal | undefined =>
-        (store.goals.hasValue() ? store._confirmed() : undefined)?.find(
+        (context.destroyed || !store.goals.hasValue() ? undefined : store._confirmed())?.find(
           (goal: Goal): boolean => goal.id === goalId,
         );
       const resultOf: (goalId: string, resultId: string) => KeyResult | undefined = (
@@ -850,14 +1136,21 @@ function createGoalsStore(): Type<GoalsStoreInstance> {
           description: $localize`:@@goals.toast.failed-text:Try again in a moment.`,
         });
       };
-      const dropEdit: (resultId: string) => void = (resultId: string): void => {
+      const records: Map<string, EditRecord> = new Map<string, EditRecord>();
+      let lastAsked: string | null = null;
+      const dropEdit: (resultId: string, only?: number | boolean) => boolean = (
+        resultId: string,
+        only?: number | boolean,
+      ): boolean => {
+        const edits: Readonly<Record<string, number | boolean>> = store._edits();
+        if (!(resultId in edits) || (only !== undefined && edits[resultId] !== only)) return false;
+        records.delete(resultId);
         patchState(store, {
           _edits: Object.fromEntries(
-            Object.entries(store._edits()).filter(
-              ([id]: [string, number | boolean]) => id !== resultId,
-            ),
+            Object.entries(edits).filter(([id]: [string, number | boolean]) => id !== resultId),
           ),
         });
+        return true;
       };
       const unhide: (resultId: string) => void = (resultId: string): void => {
         patchState(store, {
@@ -865,6 +1158,9 @@ function createGoalsStore(): Type<GoalsStoreInstance> {
         });
       };
       const refresh: () => void = (): void => {
+        if (context.destroyed) return;
+        if (store._people.status() === 'error')
+          patchState(store, { _peopleRequest: store._peopleRequest() + 1 });
         if (store.goals.isLoading()) {
           store._loads.queued = true;
           return;
@@ -874,23 +1170,43 @@ function createGoalsStore(): Type<GoalsStoreInstance> {
         store.goals.reload();
       };
 
-      const lanes: Map<string, Promise<void>> = new Map<string, Promise<void>>();
-      const dirty: Set<string> = new Set<string>();
+      const lanes: Map<string, GoalLane> = new Map<string, GoalLane>();
       const scheduled: Set<string> = new Set<string>();
-      const reread: (goalId: string, organization: string) => Promise<void> = async (
+      const laneOf: (goalId: string) => GoalLane = (goalId: string): GoalLane => {
+        let lane: GoalLane | undefined = lanes.get(goalId);
+        if (lane === undefined) {
+          lane = { tail: Promise.resolve(), version: null, dirty: false };
+          lanes.set(goalId, lane);
+        }
+        const version: number | undefined = shown(goalId)?.version;
+        if (version !== undefined && (lane.version === null || version > lane.version))
+          lane.version = version;
+        return lane;
+      };
+      const fresh: (goalId: string, generation: number) => Promise<Goal> = async (
         goalId: string,
-        organization: string,
+        generation: number,
+      ): Promise<Goal> => {
+        guard(generation);
+        const issued: number = store._readsIssued();
+        const goal: Goal = await store._api.get(goalId, today());
+        guard(generation);
+        laneOf(goalId).version = goal.version;
+        if (store._loads.landed <= issued)
+          record({ organizationId: organizationId(), after: issued, kind: 'goal', goal });
+        return goal;
+      };
+      const reread: (goalId: string, generation: number) => Promise<void> = async (
+        goalId: string,
+        generation: number,
       ): Promise<void> => {
         try {
-          ensureOrganization(organization);
-          const goal: Goal = await store._api.get(goalId, today());
-          if (organization !== organizationId()) return;
-          record({ organizationId: organization, after: store._readsIssued(), kind: 'goal', goal });
+          await fresh(goalId, generation);
         } catch (error: unknown) {
-          if (organization !== organizationId()) return;
+          if (!alive(generation) || dropped(error, generation)) return;
           if (isGone(error))
             record({
-              organizationId: organization,
+              organizationId: organizationId(),
               after: store._readsIssued(),
               kind: 'removed',
               goalId,
@@ -898,96 +1214,141 @@ function createGoalsStore(): Type<GoalsStoreInstance> {
           else refresh();
         }
       };
-      const inLane: (goalId: string, task: () => Promise<void>) => Promise<void> = (
+      const inLane: (
         goalId: string,
+        generation: number,
+        task: () => Promise<void>,
+      ) => Promise<void> = (
+        goalId: string,
+        generation: number,
         task: () => Promise<void>,
       ): Promise<void> => {
-        const organization: string = organizationId();
-        const run: Promise<void> = (lanes.get(goalId) ?? Promise.resolve()).then(task);
+        const lane: GoalLane = laneOf(goalId);
+        const run: Promise<void> = lane.tail.then(task);
         const tail: Promise<void> = run.catch((): void => undefined);
-        lanes.set(goalId, tail);
+        lane.tail = tail;
         void tail.then((): void => {
-          if (lanes.get(goalId) !== tail) return;
-          lanes.delete(goalId);
-          if (!dirty.delete(goalId) || organization !== organizationId()) return;
-          void inLane(goalId, () => reread(goalId, organization));
+          if (lane.tail !== tail || !lane.dirty || !alive(generation)) return;
+          lane.dirty = false;
+          void inLane(goalId, generation, () => reread(goalId, generation));
         });
         return run;
       };
       const send: <T>(
-        organization: string,
+        generation: number,
         goalId: string,
         operation: (version: number) => Promise<T>,
-      ) => Promise<T> = async <T>(
-        organization: string,
+      ) => Promise<T> = <T>(
+        generation: number,
         goalId: string,
         operation: (version: number) => Promise<T>,
       ): Promise<T> => {
-        ensureOrganization(organization);
-        const goal: Goal | undefined = shown(goalId);
-        if (goal === undefined) throw new WriteDroppedError();
-        try {
-          return await operation(goal.version);
-        } catch (error: unknown) {
-          if (!isVersionMismatch(error)) throw error;
-          const fresh: Goal = await store._api.get(goalId, today());
-          ensureOrganization(organization);
-          record({
-            organizationId: organization,
-            after: store._readsIssued(),
-            kind: 'goal',
-            goal: fresh,
-          });
-          return operation(fresh.version);
+        guard(generation);
+        const version: number | null = laneOf(goalId).version;
+        if (version === null) throw new WriteDroppedError();
+        return operation(version);
+      };
+      const created: <T>(generation: number, operation: () => Promise<T>) => Promise<T> = async <T>(
+        generation: number,
+        operation: () => Promise<T>,
+      ): Promise<T> => {
+        for (let attempt: number = 1; ; attempt += 1) {
+          guard(generation);
+          try {
+            return await operation();
+          } catch (error: unknown) {
+            if (!isUncertainCreation(error) || attempt >= CREATE_ATTEMPTS) throw error;
+          }
+          await wait(RETRY_DELAY_MS);
         }
       };
-      const flush: (
+      const createKeys: Map<string, string> = new Map<string, string>();
+      const keyOf: (draft: string) => string = (draft: string): string => {
+        const known: string | undefined = createKeys.get(draft);
+        if (known !== undefined) return known;
+        const key: string = crypto.randomUUID();
+        createKeys.set(draft, key);
+        return key;
+      };
+      const flush: (goalId: string, resultId: string, generation: number) => Promise<void> = async (
         goalId: string,
         resultId: string,
-        organization: string,
-      ) => Promise<void> = async (
-        goalId: string,
-        resultId: string,
-        organization: string,
+        generation: number,
       ): Promise<void> => {
         scheduled.delete(resultId);
-        if (organization !== organizationId()) return;
+        if (!current(generation)) return;
         const edits: Readonly<Record<string, number | boolean>> = store._edits();
         if (!(resultId in edits)) return;
-        const wanted: number | boolean = edits[resultId];
-        const result: KeyResult | undefined = resultOf(goalId, resultId);
-        if (
-          result === undefined ||
-          (result.kind === 'number' && result.currentValue === wanted) ||
-          (result.kind === 'checkbox' && result.checked === wanted)
-        ) {
-          dropEdit(resultId);
+        const edit: EditRecord | undefined = records.get(resultId);
+        let wanted: number | boolean = edits[resultId];
+        if (edit === undefined || wanted === edit.confirmed) {
+          dropEdit(resultId, wanted);
           return;
         }
-        try {
-          const write: KeyResultWrite = await send(organization, goalId, (version: number) =>
-            store._api.updateResult(
-              goalId,
-              resultId,
-              version,
-              typeof wanted === 'number' ? { currentValue: wanted } : { checked: wanted },
-            ),
+        const update: (version: number) => Promise<KeyResultWrite> = (version: number) =>
+          store._api.updateResult(
+            goalId,
+            resultId,
+            version,
+            typeof wanted === 'number' ? { currentValue: wanted } : { checked: wanted },
           );
-          if (organization !== organizationId()) return;
+        try {
+          let write: KeyResultWrite;
+          try {
+            write = await send(generation, goalId, update);
+          } catch (error: unknown) {
+            if (!isVersionMismatch(error)) throw error;
+            const goal: Goal = await fresh(goalId, generation);
+            const value: number | boolean | null = valueOf(
+              goal.results.find((result: KeyResult): boolean => result.id === resultId),
+            );
+            if (value === null) {
+              dropEdit(resultId);
+              return;
+            }
+            if (value !== edit.start) {
+              if (typeof value !== 'number' || typeof wanted !== 'number') {
+                dropEdit(resultId);
+                store._toasts.warning(
+                  $localize`:@@goals.toast.changed-elsewhere:This key result changed elsewhere`,
+                  {
+                    description: $localize`:@@goals.toast.changed-elsewhere-text:It now shows its latest state.`,
+                  },
+                );
+                return;
+              }
+              const start: number = edit.start as number;
+              const latest: number | boolean | undefined = store._edits()[resultId];
+              wanted = value + (wanted - start);
+              edit.start = value;
+              edit.confirmed = value;
+              patchState(store, {
+                _edits: {
+                  ...store._edits(),
+                  [resultId]: typeof latest === 'number' ? value + (latest - start) : wanted,
+                },
+              });
+            }
+            write = await send(generation, goalId, update);
+          }
+          if (!current(generation)) return;
+          const lane: GoalLane = laneOf(goalId);
+          lane.version = write.version ?? lane.version;
+          lane.dirty = true;
           if (write.result !== null)
             record({
-              organizationId: organization,
+              organizationId: organizationId(),
               after: store._readsIssued(),
               kind: 'result',
               goalId,
               result: write.result,
               version: write.version,
             });
-          dirty.add(goalId);
-          if (store._edits()[resultId] === wanted) dropEdit(resultId);
+          edit.confirmed = wanted;
+          dropEdit(resultId, wanted);
         } catch (error: unknown) {
-          if (mismatched(error, organization)) return;
-          dropEdit(resultId);
+          if (dropped(error, generation)) return;
+          dropEdit(resultId, wanted);
           if (isUncertainWrite(error) || isGone(error)) {
             refresh();
             return;
@@ -1003,8 +1364,25 @@ function createGoalsStore(): Type<GoalsStoreInstance> {
       ): void => {
         if (scheduled.has(resultId)) return;
         scheduled.add(resultId);
-        const organization: string = organizationId();
-        void inLane(goalId, () => flush(goalId, resultId, organization));
+        const generation: number = context.generation;
+        void inLane(goalId, generation, () => flush(goalId, resultId, generation));
+      };
+      const edit: (
+        goalId: string,
+        resultId: string,
+        next: (value: number | boolean) => number | boolean,
+      ) => void = (
+        goalId: string,
+        resultId: string,
+        next: (value: number | boolean) => number | boolean,
+      ): void => {
+        const value: number | boolean | null = valueOf(resultOf(goalId, resultId));
+        if (value === null) return;
+        if (!records.has(resultId)) records.set(resultId, { start: value, confirmed: value });
+        const edits: Readonly<Record<string, number | boolean>> = store._edits();
+        const base: number | boolean = resultId in edits ? edits[resultId] : value;
+        patchState(store, { _edits: { ...edits, [resultId]: next(base) } });
+        schedule(goalId, resultId);
       };
 
       return {
@@ -1012,22 +1390,18 @@ function createGoalsStore(): Type<GoalsStoreInstance> {
         async create(draft: GoalDraft): Promise<string | null> {
           const quarter: Quarter | null = store.quarter();
           if (store.creating() || quarter === null) return null;
-          const organization: string = organizationId();
-          const known: ReadonlySet<string> = new Set<string>(
-            (store._confirmed() ?? []).map((goal: Goal): string => goal.id),
-          );
+          const generation: number = context.generation;
+          const draftKey: string = JSON.stringify([quarter.key, draft]);
+          const idempotencyKey: string = keyOf(draftKey);
           patchState(store, { creating: true });
           try {
-            ensureOrganization(organization);
-            const goal: Goal = await store._api.create(
-              draft,
-              quarter,
-              today(),
-              crypto.randomUUID(),
+            const goal: Goal = await created(generation, () =>
+              store._api.create(draft, quarter, today(), idempotencyKey),
             );
-            if (organization !== organizationId()) return null;
+            createKeys.delete(draftKey);
+            if (!current(generation)) return null;
             record({
-              organizationId: organization,
+              organizationId: organizationId(),
               after: store._readsIssued(),
               kind: 'goal',
               goal,
@@ -1037,47 +1411,34 @@ function createGoalsStore(): Type<GoalsStoreInstance> {
             });
             return goal.id;
           } catch (error: unknown) {
-            if (mismatched(error, organization)) return null;
-            if (!isUncertainWrite(error)) {
-              failed(
-                hasProblemCode(error, 'goal.owner-ineligible')
-                  ? $localize`:@@goals.toast.owner-ineligible:This person cannot read the goal`
-                  : $localize`:@@goals.toast.create-failed:The goal could not be created`,
+            if (dropped(error, generation)) return null;
+            if (isUncertainCreation(error)) {
+              store._toasts.warning(
+                $localize`:@@goals.toast.create-unknown:The goal could not be confirmed`,
+                {
+                  description: $localize`:@@goals.toast.create-unknown-text:Create it again: it will not be created twice.`,
+                },
               );
               return null;
             }
-            try {
-              const now: Date = new Date();
-              const list: GoalList = await store._api.list(quarter, todayIso(now), false);
-              if (organization !== organizationId()) return null;
-              const goal: Goal | undefined = list.goals.find(
-                (item: Goal): boolean => item.name === draft.name && !known.has(item.id),
-              );
-              if (goal === undefined) return null;
-              record({
-                organizationId: organization,
-                after: store._readsIssued(),
-                kind: 'goal',
-                goal,
-              });
-              store._toasts.success($localize`:@@goals.toast.created:Goal created`, {
-                description: goal.name,
-              });
-              return goal.id;
-            } catch {
-              return null;
-            }
+            createKeys.delete(draftKey);
+            failed(
+              hasProblemCode(error, 'goal.owner-ineligible')
+                ? $localize`:@@goals.toast.owner-ineligible:This person cannot read the goal`
+                : $localize`:@@goals.toast.create-failed:The goal could not be created`,
+            );
+            return null;
           } finally {
-            patchState(store, { creating: false });
+            if (current(generation)) patchState(store, { creating: false });
           }
         },
         async remove(goalId: string): Promise<boolean> {
           const goal: Goal | undefined = shown(goalId);
           if (store.deletingId() !== null || goal === undefined) return false;
-          const organization: string = organizationId();
+          const generation: number = context.generation;
           const removed: () => boolean = (): boolean => {
             record({
-              organizationId: organization,
+              organizationId: organizationId(),
               after: store._readsIssued(),
               kind: 'removed',
               goalId,
@@ -1087,16 +1448,22 @@ function createGoalsStore(): Type<GoalsStoreInstance> {
             });
             return true;
           };
+          const deletion: (version: number) => Promise<void> = (version: number) =>
+            store._api.delete(goalId, version);
           patchState(store, { deletingId: goalId });
           let outcome: boolean = false;
-          await inLane(goalId, async (): Promise<void> => {
+          await inLane(goalId, generation, async (): Promise<void> => {
             try {
-              await send(organization, goalId, (version: number) =>
-                store._api.delete(goalId, version),
-              );
-              if (organization === organizationId()) outcome = removed();
+              try {
+                await send(generation, goalId, deletion);
+              } catch (error: unknown) {
+                if (!isVersionMismatch(error)) throw error;
+                await fresh(goalId, generation);
+                await send(generation, goalId, deletion);
+              }
+              if (current(generation)) outcome = removed();
             } catch (error: unknown) {
-              if (mismatched(error, organization)) return;
+              if (dropped(error, generation)) return;
               if (isGone(error)) {
                 outcome = removed();
                 return;
@@ -1106,126 +1473,129 @@ function createGoalsStore(): Type<GoalsStoreInstance> {
                 return;
               }
               try {
-                const fresh: Goal = await store._api.get(goalId, today());
-                if (organization !== organizationId()) return;
-                record({
-                  organizationId: organization,
-                  after: store._readsIssued(),
-                  kind: 'goal',
-                  goal: fresh,
-                });
+                await fresh(goalId, generation);
+                store._toasts.warning(
+                  $localize`:@@goals.toast.delete-unknown:The deletion could not be confirmed`,
+                  {
+                    description: $localize`:@@goals.toast.delete-unknown-text:The goal is still shown. Try again in a moment.`,
+                  },
+                );
               } catch (reread: unknown) {
-                if (organization === organizationId() && isGone(reread)) outcome = removed();
+                if (current(generation) && isGone(reread)) outcome = removed();
               }
             }
           });
-          if (organization === organizationId()) patchState(store, { deletingId: null });
+          if (current(generation)) patchState(store, { deletingId: null });
           return outcome;
         },
         step(goalId: string, resultId: string, direction: 1 | -1): void {
           const result: KeyResult | undefined = resultOf(goalId, resultId);
-          const goal: Goal | undefined = shown(goalId);
-          if (result?.kind !== 'number' || goal === undefined) return;
-          const edit: number | boolean | undefined = store._edits()[resultId];
-          const base: number = typeof edit === 'number' ? edit : result.currentValue;
+          if (result?.kind !== 'number') return;
           const size: number = Math.max(
             1,
             Math.round(Math.abs(result.targetValue - result.startValue) / 20),
           );
           const down: boolean = result.targetValue < result.startValue;
-          patchState(store, {
-            _edits: { ...store._edits(), [resultId]: base + direction * (down ? -size : size) },
-          });
-          schedule(goalId, resultId);
+          edit(
+            goalId,
+            resultId,
+            (value: number | boolean): number =>
+              (value as number) + direction * (down ? -size : size),
+          );
         },
         toggle(goalId: string, resultId: string): void {
-          const result: KeyResult | undefined = resultOf(goalId, resultId);
-          if (result?.kind !== 'checkbox') return;
-          const edit: number | boolean | undefined = store._edits()[resultId];
-          const checked: boolean = typeof edit === 'boolean' ? edit : result.checked;
-          patchState(store, { _edits: { ...store._edits(), [resultId]: !checked } });
-          schedule(goalId, resultId);
+          if (resultOf(goalId, resultId)?.kind !== 'checkbox') return;
+          edit(goalId, resultId, (value: number | boolean): boolean => !(value as boolean));
         },
         async addResult(goalId: string, draft: KeyResultDraft): Promise<boolean> {
           if (store.addingTo() !== null || shown(goalId) === undefined) return false;
-          const organization: string = organizationId();
-          const known: ReadonlySet<string> = new Set<string>(
-            shown(goalId)?.results.map((result: KeyResult): string => result.id) ?? [],
-          );
-          const idempotencyKey: string = crypto.randomUUID();
+          const generation: number = context.generation;
+          const draftKey: string = JSON.stringify([goalId, draft]);
+          let idempotencyKey: string = keyOf(draftKey);
           let outcome: boolean = false;
+          const creation: (version: number) => Promise<KeyResultWrite> = (version: number) =>
+            created(generation, () =>
+              store._api.createResult(goalId, version, draft, idempotencyKey),
+            );
           patchState(store, { addingTo: goalId });
-          await inLane(goalId, async (): Promise<void> => {
+          await inLane(goalId, generation, async (): Promise<void> => {
             try {
-              const write: KeyResultWrite = await send(organization, goalId, (version: number) =>
-                store._api.createResult(goalId, version, draft, idempotencyKey),
-              );
-              if (organization !== organizationId()) return;
+              let write: KeyResultWrite;
+              try {
+                write = await send(generation, goalId, creation);
+              } catch (error: unknown) {
+                if (!isVersionMismatch(error)) throw error;
+                createKeys.delete(draftKey);
+                idempotencyKey = keyOf(draftKey);
+                await fresh(goalId, generation);
+                write = await send(generation, goalId, creation);
+              }
+              createKeys.delete(draftKey);
+              if (!current(generation)) return;
+              const lane: GoalLane = laneOf(goalId);
+              lane.version = write.version ?? lane.version;
+              lane.dirty = true;
               if (write.result !== null)
                 record({
-                  organizationId: organization,
+                  organizationId: organizationId(),
                   after: store._readsIssued(),
                   kind: 'result',
                   goalId,
                   result: write.result,
                   version: write.version,
                 });
-              dirty.add(goalId);
               outcome = true;
             } catch (error: unknown) {
-              if (mismatched(error, organization)) return;
-              if (!isUncertainWrite(error)) {
-                if (isGone(error)) refresh();
-                failed(
-                  hasProblemCode(error, 'goal.result-limit-reached')
-                    ? $localize`:@@goals.toast.result-limit:This goal already has 20 key results`
-                    : $localize`:@@goals.toast.result-add-failed:The key result could not be added`,
+              if (dropped(error, generation)) return;
+              if (isUncertainCreation(error)) {
+                store._toasts.warning(
+                  $localize`:@@goals.toast.result-add-unknown:The key result could not be confirmed`,
+                  {
+                    description: $localize`:@@goals.toast.result-add-unknown-text:Add it again: it will not be added twice.`,
+                  },
                 );
                 return;
               }
-              try {
-                const fresh: Goal = await store._api.get(goalId, today());
-                if (organization !== organizationId()) return;
-                record({
-                  organizationId: organization,
-                  after: store._readsIssued(),
-                  kind: 'goal',
-                  goal: fresh,
-                });
-                outcome = fresh.results.some(
-                  (result: KeyResult): boolean =>
-                    !known.has(result.id) && result.label === draft.label,
-                );
-              } catch {
-                refresh();
-              }
+              createKeys.delete(draftKey);
+              if (isGone(error)) refresh();
+              failed(
+                hasProblemCode(error, 'goal.result-limit-reached')
+                  ? $localize`:@@goals.toast.result-limit:This goal already has 20 key results`
+                  : $localize`:@@goals.toast.result-add-failed:The key result could not be added`,
+              );
             }
           });
-          if (organization === organizationId()) patchState(store, { addingTo: null });
+          if (current(generation)) patchState(store, { addingTo: null });
           return outcome;
         },
         removeResult(goalId: string, resultId: string): void {
           if (resultOf(goalId, resultId) === undefined || store._hidden().includes(resultId))
             return;
-          const organization: string = organizationId();
+          const generation: number = context.generation;
+          const removal: (version: number) => Promise<void> = (version: number) =>
+            store._api.deleteResult(goalId, resultId, version);
           patchState(store, { _hidden: [...store._hidden(), resultId] });
-          void inLane(goalId, async (): Promise<void> => {
+          void inLane(goalId, generation, async (): Promise<void> => {
             try {
-              await send(organization, goalId, (version: number) =>
-                store._api.deleteResult(goalId, resultId, version),
-              );
-              if (organization !== organizationId()) return;
+              try {
+                await send(generation, goalId, removal);
+              } catch (error: unknown) {
+                if (!isVersionMismatch(error)) throw error;
+                await fresh(goalId, generation);
+                await send(generation, goalId, removal);
+              }
+              if (!current(generation)) return;
               record({
-                organizationId: organization,
+                organizationId: organizationId(),
                 after: store._readsIssued(),
                 kind: 'result-removed',
                 goalId,
                 resultId,
               });
-              dirty.add(goalId);
+              laneOf(goalId).dirty = true;
               unhide(resultId);
             } catch (error: unknown) {
-              if (mismatched(error, organization)) return;
+              if (dropped(error, generation)) return;
               unhide(resultId);
               if (isUncertainWrite(error) || isGone(error)) {
                 refresh();
@@ -1242,11 +1612,27 @@ function createGoalsStore(): Type<GoalsStoreInstance> {
           store._loads.queued = false;
           refresh();
         }),
+        _checkOwners: signalMethod<string | null>((ids: string | null): void => {
+          if (ids === null) return;
+          if (ids === lastAsked) return;
+          lastAsked = ids;
+          store._askOwners(ids.split(' '));
+          patchState(store, { _peopleRequest: store._peopleRequest() + 1 });
+        }),
         _followOrganization: signalMethod<string>((): void => {
-          patchState(store, { _edits: {}, _hidden: [], deletingId: null, addingTo: null });
+          context.generation += 1;
+          lastAsked = null;
+          records.clear();
           scheduled.clear();
-          dirty.clear();
+          createKeys.clear();
           store._loads.queued = false;
+          patchState(store, {
+            _edits: {},
+            _hidden: [],
+            deletingId: null,
+            addingTo: null,
+            creating: false,
+          });
         }),
       };
     }),
@@ -1254,6 +1640,7 @@ function createGoalsStore(): Type<GoalsStoreInstance> {
       onInit(store): void {
         store._followOrganization(computed((): string => store._workspace.organization().id));
         store._settled(computed((): boolean => store.goals.isLoading()));
+        store._checkOwners(store._unknownOwners);
         const view: Window | null = store._document.defaultView;
         const triggers: Observable<unknown>[] = [
           store._realtime?.reconnected ?? EMPTY,
@@ -1281,15 +1668,22 @@ function createGoalsStore(): Type<GoalsStoreInstance> {
  * State of the goals page, provided by its page. It reads every goal of the current quarter of the
  * workspace's organization once, again after a switch, and in the background on a focus, a
  * visible tab, a realtime reconnection (no goal notice exists, gap G-R2) and when a task detail
- * closes or reports a change (milestones and lists move with task writes elsewhere). A background
- * read keeps the goals shown while it runs and when it fails; only the first read of an
- * organization reaches the error boundary. Its own confirmed writes stay over the read goals until
- * a read issued after them lands, so neither a read in progress nor an older one hides them. The
- * writes of one goal are sent one after the other, each from the version the previous one
- * returned (`If-Match`), with one retry from the current version after a `412`; once a goal's
- * writes settle, the goal is read again for its progress and health. Every write is bound to the
- * organization it started in: after a switch nothing more is sent, patched or toasted. An unknown
- * outcome (no answer, a `5xx`) is settled by a read, never reported as a failure.
+ * closes or reports a change (milestones and lists move with task writes elsewhere). A superseded
+ * read is aborted between its pages. A background read keeps the goals shown while it runs and
+ * when it fails; only the first read of an organization reaches the error boundary. Its own
+ * confirmed writes stay over the read goals until a read issued after them lands, a snapshot read
+ * of one goal counting from when it was sent, so neither a read in progress nor an older one hides
+ * them. The writes of one goal are sent one after the other from the version its queue last knew
+ * (`If-Match`), kept once the page is gone so the last value of a burst is still sent; once a
+ * goal's writes settle, it is read again for its progress and health, unless the page is gone. A
+ * `412` reads the goal: an edit is sent again only while the goal still shows the value it started
+ * from, a number moves by the same steps from a newer value, and a checkbox changed elsewhere is
+ * dropped with a warning. Every write is bound to the organization generation it started in: after
+ * a switch, even back to the same organization, nothing more is sent, patched or toasted. A
+ * creation keeps its idempotency key until a definitive answer and is sent again with it after an
+ * unknown outcome or `409 idempotency.request-in-progress`, up to three times, then reported as
+ * unconfirmed; a resubmitted identical draft reuses the key. The members are read again after a
+ * failure and for owners they did not name, which read as former members only once a read says so.
  *
  * @type {ReturnType<typeof createGoalsStore>}
  */

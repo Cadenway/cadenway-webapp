@@ -1,9 +1,11 @@
 import { formatDate } from '@angular/common';
 import {
+  afterNextRender,
   Component,
   computed,
-  type ElementRef,
+  ElementRef,
   inject,
+  Injector,
   linkedSignal,
   LOCALE_ID,
   type Signal,
@@ -234,6 +236,28 @@ export class GoalsPage {
    */
   private readonly title: Signal<ElementRef<HTMLHeadingElement> | undefined> =
     viewChild<ElementRef<HTMLHeadingElement>>('title');
+
+  /**
+   * Property host
+   *
+   * @description
+   * The page's element, where the focus moves after a removal or a closed form.
+   *
+   * @type {ElementRef<HTMLElement>}
+   * @readonly
+   */
+  private readonly host: ElementRef<HTMLElement> = inject<ElementRef<HTMLElement>>(ElementRef);
+
+  /**
+   * Property injector
+   *
+   * @description
+   * Schedules a focus move after the next render.
+   *
+   * @type {Injector}
+   * @readonly
+   */
+  private readonly injector: Injector = inject(Injector);
 
   /**
    * Property today
@@ -474,6 +498,7 @@ export class GoalsPage {
           ? [open]
           : [];
       this.openGoals.set([...values.filter((value: string) => value !== id), id]);
+      this.focusLater((): HTMLElement | null => this.trigger(id));
     } finally {
       this.creatingNow.set(false);
     }
@@ -493,7 +518,107 @@ export class GoalsPage {
     const organization: string = this.organizationId();
     const added: boolean = await this.store.addResult(goalId, draft);
     if (added && organization === this.organizationId() && this.resultFormFor() === goalId)
-      this.resultFormFor.set(null);
+      this.closeResultForm(goalId);
+  }
+
+  /**
+   * Method closeForm
+   *
+   * @description
+   * Closes the goal form and moves the focus back to `New goal`.
+   */
+  protected closeForm(): void {
+    this.formOpen.set(false);
+    this.focusLater((): HTMLElement | null =>
+      this.host.nativeElement.querySelector<HTMLElement>('[data-testid="goal-new"]'),
+    );
+  }
+
+  /**
+   * Method closeResultForm
+   *
+   * @description
+   * Closes a goal's key result form and moves the focus to its `Add a key result`.
+   *
+   * @param {string} goalId - Id of the goal.
+   */
+  protected closeResultForm(goalId: string): void {
+    this.resultFormFor.set(null);
+    this.focusLater(
+      (): HTMLElement | null =>
+        this.item(goalId)?.querySelector<HTMLElement>('[data-testid="key-result-start"]') ?? null,
+    );
+  }
+
+  /**
+   * Method removeResult
+   *
+   * @description
+   * Removes a key result, then moves the focus to the next row's control, else to `Add a key
+   * result`, else to the goal's trigger.
+   *
+   * @param {string} goalId - Id of the goal.
+   * @param {string} resultId - Id of the key result.
+   * @param {number} index - Its position among the goal's key results.
+   */
+  protected removeResult(goalId: string, resultId: string, index: number): void {
+    this.store.removeResult(goalId, resultId);
+    this.focusLater((): HTMLElement | null => {
+      const item: HTMLElement | null = this.item(goalId);
+      const next: Element | undefined = item?.querySelectorAll('cw-key-result-row')[index];
+      return (
+        next?.querySelector<HTMLElement>('button:not([disabled])') ??
+        item?.querySelector<HTMLElement>('[data-testid="key-result-start"]') ??
+        this.trigger(goalId)
+      );
+    });
+  }
+
+  /**
+   * Method item
+   *
+   * @description
+   * The accordion item of a goal.
+   *
+   * @param {string} goalId - Id of the goal.
+   * @returns {HTMLElement | null} The item, or null when not shown.
+   */
+  private item(goalId: string): HTMLElement | null {
+    return (
+      [...this.host.nativeElement.querySelectorAll<HTMLElement>('[data-goal-id]')].find(
+        (element: HTMLElement): boolean => element.dataset['goalId'] === goalId,
+      ) ?? null
+    );
+  }
+
+  /**
+   * Method trigger
+   *
+   * @description
+   * The accordion trigger of a goal.
+   *
+   * @param {string} goalId - Id of the goal.
+   * @returns {HTMLElement | null} The trigger, or null when not shown.
+   */
+  private trigger(goalId: string): HTMLElement | null {
+    return this.item(goalId)?.querySelector<HTMLElement>('[data-testid="goal-toggle"]') ?? null;
+  }
+
+  /**
+   * Method focusLater
+   *
+   * @description
+   * Moves the focus once the page has rendered the change that called it.
+   *
+   * @param {() => HTMLElement | null} target - Finds the element to focus.
+   */
+  private focusLater(target: () => HTMLElement | null): void {
+    afterNextRender(
+      (): void => {
+        target()?.focus();
+      },
+      { injector: this.injector },
+    );
   }
 
   /**

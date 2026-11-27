@@ -11,7 +11,19 @@ import {
   TasksService,
   type UpdateGoalResultClientResult,
 } from '@cadenway/api-client';
-import { catchError, EMPTY, expand, firstValueFrom, map, type Observable, of, reduce } from 'rxjs';
+import {
+  catchError,
+  EMPTY,
+  expand,
+  firstValueFrom,
+  fromEvent,
+  map,
+  NEVER,
+  type Observable,
+  of,
+  reduce,
+  takeUntil,
+} from 'rxjs';
 
 import { type ApiProblem, PASSIVE_REQUEST, readProblem } from '@core/api';
 import { personOf, type Person } from '@features/task';
@@ -208,14 +220,20 @@ export class GoalsApi {
    * @description
    * Every goal of a quarter the caller can read, following the cursors to the last page, with the
    * expected progress of the first page's summary. Read without the HTTP cache, so a read after a
-   * focus or a reconnection is current.
+   * focus or a reconnection is current. An abort cancels the page in flight and sends no other.
    *
    * @param {Quarter} quarter - The quarter.
    * @param {string} today - The caller's day, `YYYY-MM-DD`.
    * @param {boolean} background - Whether the read was triggered in the background.
-   * @returns {Promise<GoalList>} The goals.
+   * @param {AbortSignal} [abortSignal] - Cancels the read.
+   * @returns {Promise<GoalList>} The goals; rejects with the abort reason once aborted.
    */
-  public list(quarter: Quarter, today: string, background: boolean): Promise<GoalList> {
+  public async list(
+    quarter: Quarter,
+    today: string,
+    background: boolean,
+    abortSignal?: AbortSignal,
+  ): Promise<GoalList> {
     const page: (cursor: string | undefined) => Observable<ListGoalsClientResult> = (
       cursor: string | undefined,
     ) =>
@@ -223,11 +241,15 @@ export class GoalsApi {
         { quarter: quarter.key, today, limit: PAGE_SIZE, cursor },
         { context: passive(background), cache: 'no-store' },
       );
-    return firstValueFrom(
+    const aborted: Observable<Event> =
+      abortSignal === undefined ? NEVER : fromEvent(abortSignal, 'abort');
+    if (abortSignal?.aborted) throw abortSignal.reason;
+    const list: GoalList = await firstValueFrom(
       page(undefined).pipe(
         expand((current: ListGoalsClientResult) =>
-          current.nextCursor === null ? EMPTY : page(current.nextCursor),
+          current.nextCursor === null || abortSignal?.aborted ? EMPTY : page(current.nextCursor),
         ),
+        takeUntil(aborted),
         reduce(
           (list: GoalList | null, current: ListGoalsClientResult): GoalList => ({
             quarter,
@@ -243,6 +265,8 @@ export class GoalsApi {
         ),
       ),
     );
+    if (abortSignal?.aborted) throw abortSignal.reason;
+    return list;
   }
 
   /**

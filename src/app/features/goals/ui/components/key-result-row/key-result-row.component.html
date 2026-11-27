@@ -49,7 +49,7 @@
       <cw-checkbox
         [checked]="item.checked"
         [disabled]="!canWrite()"
-        [attr.aria-label]="item.label"
+        [ariaLabel]="item.label"
         data-testid="result-checkbox"
         (checkedChange)="toggled.emit()"
       />

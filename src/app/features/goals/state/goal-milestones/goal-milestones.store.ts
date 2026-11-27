@@ -1,25 +1,18 @@
-import { computed, inject, type Signal, type Type } from '@angular/core';
-import { patchState, signalStore, withMethods, withState } from '@ngrx/signals';
-import { rxMethod } from '@ngrx/signals/rxjs-interop';
+import { inject, type Signal, type Type } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import {
-  combineLatest,
-  EMPTY,
-  from,
-  map,
-  merge,
-  mergeMap,
-  type Observable,
-  of,
-  startWith,
-  switchMap,
-} from 'rxjs';
+  patchState,
+  signalMethod,
+  signalStore,
+  withHooks,
+  withMethods,
+  withProps,
+  withState,
+} from '@ngrx/signals';
+import { EMPTY, filter, map, merge, mergeMap, type Observable, Subject, takeUntil } from 'rxjs';
 
 import { RealtimeConnection } from '@core/realtime';
 import { TaskDetailOpener } from '@features/task';
-import {
-  WORKSPACE_CONTEXT,
-  type WorkspaceContextPort,
-} from '@features/workspace/ports/workspace-context';
 
 import { GoalsApi } from '../../data-access/services/goals-api/goals-api.service';
 import type { MilestoneState } from '../../models/goal/goal.interface';
@@ -46,7 +39,7 @@ interface GoalMilestonesState {
    * Property milestones
    *
    * @description
-   * The milestone tasks read, by key; a key not read yet is absent.
+   * The milestone tasks of the goals shown, by key; `unknown` until read.
    *
    * @type {Readonly<Record<string, MilestoneState>>}
    */
@@ -79,7 +72,8 @@ export interface GoalMilestonesStoreInstance {
    * Method follow
    *
    * @description
-   * Reads the tasks of the given milestone keys, and again whenever they change.
+   * Follows the milestone keys of the goals shown: a new key is read, a key that left is
+   * forgotten and its read cancelled.
    *
    * @param {Signal<readonly string[]>} keys - The sorted keys of the goals shown.
    */
@@ -98,53 +92,70 @@ export interface GoalMilestonesStoreInstance {
 function createGoalMilestonesStore(): Type<GoalMilestonesStoreInstance> {
   return signalStore(
     withState<GoalMilestonesState>({ milestones: {} }),
+    withProps(() => ({
+      _api: inject(GoalsApi),
+      _opener: inject(TaskDetailOpener),
+      _realtime: inject(RealtimeConnection, { optional: true }),
+      _requests: new Subject<string>(),
+      _forgotten: new Subject<string>(),
+    })),
     withMethods((store) => {
-      const api: GoalsApi = inject(GoalsApi);
-      const workspace: WorkspaceContextPort = inject(WORKSPACE_CONTEXT);
-      const opener: TaskDetailOpener = inject(TaskDetailOpener);
-      const realtime: RealtimeConnection | null = inject(RealtimeConnection, { optional: true });
-      const again: Observable<null> = merge(
-        realtime?.reconnected ?? EMPTY,
-        opener.closed,
-        opener.changed,
-      ).pipe(
-        map((): null => null),
-        startWith(null),
-      );
-      const organization: Signal<string> = computed((): string => workspace.organization().id);
+      const tracked: () => readonly string[] = (): readonly string[] =>
+        Object.keys(store.milestones());
       return {
-        follow: rxMethod<readonly string[]>((keys: Observable<readonly string[]>) =>
-          combineLatest([keys, again]).pipe(
-            switchMap(([list]: [readonly string[], null]) => {
-              const current: string = organization();
-              const known: Readonly<Record<string, MilestoneState>> = store.milestones();
-              patchState(store, {
-                milestones: Object.fromEntries(
-                  list.map((key: string): [string, MilestoneState] => [
-                    key,
-                    known[key] ?? 'unknown',
-                  ]),
-                ),
-              });
-              if (list.length === 0) return of(null);
-              return from(list).pipe(
-                mergeMap(
-                  (key: string) =>
-                    api
-                      .milestone(key)
-                      .pipe(map((state: MilestoneState): [string, MilestoneState] => [key, state])),
-                  MILESTONE_CONCURRENCY,
-                ),
-                map(([key, state]: [string, MilestoneState]): null => {
-                  if (current === organization())
-                    patchState(store, { milestones: { ...store.milestones(), [key]: state } });
-                  return null;
-                }),
-              );
-            }),
-          ),
-        ),
+        follow: signalMethod<readonly string[]>((keys: readonly string[]): void => {
+          const known: Readonly<Record<string, MilestoneState>> = store.milestones();
+          const wanted: ReadonlySet<string> = new Set<string>(keys);
+          const added: readonly string[] = keys.filter((key: string): boolean => !(key in known));
+          for (const key of Object.keys(known)) if (!wanted.has(key)) store._forgotten.next(key);
+          patchState(store, {
+            milestones: Object.fromEntries(
+              keys.map((key: string): [string, MilestoneState] => [key, known[key] ?? 'unknown']),
+            ),
+          });
+          for (const key of added) store._requests.next(key);
+        }),
+        _again(keys: readonly string[]): void {
+          const current: ReadonlySet<string> = new Set<string>(tracked());
+          for (const key of keys) if (current.has(key)) store._requests.next(key);
+        },
+        _settle(key: string, state: MilestoneState): void {
+          if (key in store.milestones())
+            patchState(store, { milestones: { ...store.milestones(), [key]: state } });
+        },
+        _tracked: tracked,
       };
+    }),
+    withHooks({
+      onInit(store): void {
+        store._requests
+          .pipe(
+            mergeMap(
+              (key: string): Observable<[string, MilestoneState]> =>
+                !store._tracked().includes(key)
+                  ? EMPTY
+                  : store._api.milestone(key).pipe(
+                      takeUntil(
+                        store._forgotten.pipe(filter((gone: string): boolean => gone === key)),
+                      ),
+                      map((state: MilestoneState): [string, MilestoneState] => [key, state]),
+                    ),
+              MILESTONE_CONCURRENCY,
+            ),
+            takeUntilDestroyed(),
+          )
+          .subscribe(([key, state]: [string, MilestoneState]): void => {
+            store._settle(key, state);
+          });
+        merge(store._opener.closed, store._opener.changed)
+          .pipe(takeUntilDestroyed())
+          .subscribe((key: string): void => {
+            store._again([key]);
+          });
+        (store._realtime?.reconnected ?? EMPTY).pipe(takeUntilDestroyed()).subscribe((): void => {
+          store._again(store._tracked());
+        });
+      },
     }),
   );
 }
@@ -155,11 +166,12 @@ function createGoalMilestonesStore(): Type<GoalMilestonesStoreInstance> {
  * @description
  * Page-scoped store of the milestone tasks the goals link to (gap G-G1: a milestone key result
  * carries only its key and whether it is reached, so its due date and lateness need one
- * `getTask` per milestone). At most four tasks are read at once; a new set of keys, a realtime
- * reconnection or a task detail closing or reporting a change cancels the reads in flight and
- * starts again, keeping what is known meanwhile. A task the gateway answers `404` for is
- * `missing`; any other failure leaves it `unknown`, shown as upcoming. Answers for an organization
- * the workspace has left change nothing, and the reads stop with the page.
+ * `getTask` per milestone). At most four tasks are read at once. Only the new keys of a changed set
+ * are read; a key that left is forgotten and its read, queued or in flight, cancelled. A task
+ * detail that closes or reports a change reads only that task again, a realtime reconnection every
+ * task. A task the gateway answers `404` for is `missing`; any other failure leaves it `unknown`,
+ * shown as upcoming. An organization switch empties the goals, so every key leaves; the reads stop
+ * with the page.
  *
  * @type {ReturnType<typeof createGoalMilestonesStore>}
  */

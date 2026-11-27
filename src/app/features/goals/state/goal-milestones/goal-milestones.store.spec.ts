@@ -4,31 +4,10 @@ import { type Observable, of, Subject } from 'rxjs';
 import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 
 import { TaskDetailOpener } from '@features/task';
-import {
-  WORKSPACE_CONTEXT,
-  type WorkspaceOrganization,
-} from '@features/workspace/ports/workspace-context';
 
 import { GoalsApi } from '../../data-access/services/goals-api/goals-api.service';
 import type { MilestoneState } from '../../models/goal/goal.interface';
 import { GoalMilestonesStore, MILESTONE_CONCURRENCY } from './goal-milestones.store';
-
-/**
- * Constant ATELIER_NORD
- *
- * @description
- * The organization the workspace shows.
- *
- * @type {WorkspaceOrganization}
- */
-const ATELIER_NORD: WorkspaceOrganization = {
-  id: 'o1',
-  slug: 'atelier-nord',
-  name: 'Atelier Nord',
-  initials: 'AN',
-  role: 'owner',
-  plan: 'team',
-};
 
 describe('GoalMilestonesStore', () => {
   let reads: Map<string, Subject<MilestoneState>>;
@@ -47,7 +26,6 @@ describe('GoalMilestonesStore', () => {
       providers: [
         GoalMilestonesStore,
         { provide: GoalsApi, useValue: { milestone } },
-        { provide: WORKSPACE_CONTEXT, useValue: { organization: signal(ATELIER_NORD) } },
         { provide: TaskDetailOpener, useValue: { closed, changed: new Subject<string>() } },
       ],
     });
@@ -88,14 +66,24 @@ describe('GoalMilestonesStore', () => {
     expect(store.milestones()).toEqual({ 'CAD-580': 'missing' });
   });
 
-  it('reads them again when a task detail closes', () => {
-    milestone.mockImplementation(() => of({ key: 'CAD-580', dueDate: null }));
+  it('reads only the task whose detail closed, and only the new keys of a set', () => {
+    milestone.mockImplementation((key: string) => of({ key, dueDate: null }));
     const store: InstanceType<typeof GoalMilestonesStore> = TestBed.inject(GoalMilestonesStore);
-    store.follow(signal(['CAD-580']));
+    const keys: WritableSignal<readonly string[]> = signal<readonly string[]>([
+      'CAD-580',
+      'CAD-581',
+    ]);
+    store.follow(keys);
     TestBed.tick();
+    milestone.mockClear();
 
-    closed.next('CAD-580');
+    closed.next('CAD-581');
+    closed.next('CAD-999');
+    expect(milestone.mock.calls).toEqual([['CAD-581']]);
 
-    expect(milestone).toHaveBeenCalledTimes(2);
+    milestone.mockClear();
+    keys.set(['CAD-580', 'CAD-581', 'CAD-582']);
+    TestBed.tick();
+    expect(milestone.mock.calls).toEqual([['CAD-582']]);
   });
 });

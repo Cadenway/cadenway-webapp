@@ -67,20 +67,40 @@ null`); anyone else gets a required `Space` select of the spaces they `edit`, an
   without one. A goal of the organization is changed by an owner or administrator, a space goal by
   whoever has `edit` on its space; the others see it read-only (no `Delete`, steps, checkbox,
   `Remove` or `Add a key result`). The gateway still refuses what a role does not allow.
-- Writes: every goal write sends the version shown as `If-Match`; a `412 request.version-mismatch`
-  reads the goal and sends once more from its version. The writes of one goal are serialized, and
-  only the last value of a burst of `−`/`+` clicks is sent; once a goal's writes settle, the goal is
-  read again for its progress, health and version. Values show at once and return to the confirmed
-  ones after a refusal, which toasts the failure. An unknown outcome (no answer, a `5xx`) is
-  settled by a read and never reported as a failure: a creation of unknown outcome counts as done
-  when the read finds it. Confirmed writes stay over the read goals until a read issued after them
-  lands. Each write is bound to the organization it started in: after a switch nothing more is
-  sent, patched or toasted, and the forms and the confirmation close.
+- Writes: every goal write sends the version its goal's write queue last knew as `If-Match` (the
+  newer of the goal shown and the last write or read of the queue). The writes of one goal are
+  serialized, and only the last value of a burst of `−`/`+` clicks is sent, still after the page
+  is left; once a goal's writes settle, the goal is read again for its progress, health and
+  version, unless the page is gone. A `412 request.version-mismatch` reads the goal: an edit is
+  sent again only while the goal still shows the value it started from; a number otherwise moves
+  by the same steps from the newer value, and a checkbox is dropped with `This key result changed
+elsewhere`. Values show at once and return to the confirmed ones after a refusal, which toasts
+  the failure; a later edit of the same key result is kept and sent. An unknown outcome (no
+  answer, a `5xx`) is settled by a read and never reported as a failure. A creation (goal or key
+  result) keeps one idempotency key per draft until a definitive answer and is sent again with it
+  after an unknown outcome or `409 idempotency.request-in-progress`, one second apart, three sends
+  in all; still unknown, `The goal could not be confirmed` or `The key result could not be
+confirmed` asks to submit again, which reuses the key. A deletion of unknown outcome whose goal is
+  still there shows `The deletion could not be confirmed`. Confirmed writes stay over the read
+  goals until a read issued after them lands; a snapshot of one goal counts from when it was sent
+  and is not kept once a newer read landed. A superseded read is aborted between its pages. Each
+  write is bound to the organization generation it started in: after a switch, even back to the
+  same organization, nothing more is sent, patched or toasted, and the forms and the confirmation
+  close.
+- Focus: after a key result is removed, the next row's control takes it, else `Add a key result`,
+  else the goal's trigger; a closed goal form returns it to `New goal`, or to the new goal's trigger
+  after a creation; a closed key result form returns it to `Add a key result`. The key result
+  checkbox is named after its label.
+- Members: an owner the members read does not name shows no name until a read sent for that
+  owner confirms it, then `Former member`; the members are read again once per new set of unknown
+  owners and, after a failure, on the next background read.
 - Deletion asks for a confirmation (`Delete the goal “<name>”?`), since `deleteGoal` is final and
   no restore exists (gap G-G4); the toast `Goal deleted` has no `Undo`. A goal already gone counts
   as deleted. A key result is removed without undo, as the mockup does.
-- Milestones (gap G-G1): one `getTask` per milestone key, at most four at once, cancelled when the
-  keys change, on a reconnection, when a task detail closes or reports a change, and with the page.
+- Milestones (gap G-G1): one `getTask` per milestone key, at most four at once. Only the new keys
+  of a changed set are read, and a key that leaves has its read cancelled; a task detail that
+  closes or reports a change reads only that task again, a realtime reconnection every task; the
+  reads stop with the page.
   A `404` shows `Milestone not found`; a task due before today shows `Late`, otherwise `Upcoming`.
 - A list-progress result names its list from `LIST_DIRECTORY`, or reads `Calculated from its list`
   for an archived list the sidebar does not show (gap G-G2).

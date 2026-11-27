@@ -128,6 +128,19 @@ describe('GoalsApi', () => {
     expect(options.context.get(PASSIVE_REQUEST)).toBe(true);
   });
 
+  it('stops between pages once the read is aborted', async () => {
+    const abort: AbortController = new AbortController();
+    goals.listGoals.mockImplementationOnce(() => {
+      abort.abort(new Error('superseded'));
+      return of(page(['g1'], 'next', 41.3));
+    });
+
+    await expect(
+      TestBed.inject(GoalsApi).list(Q4, '2026-11-08', false, abort.signal),
+    ).rejects.toThrow('superseded');
+    expect(goals.listGoals).toHaveBeenCalledTimes(1);
+  });
+
   it('sends the version shown as If-Match and reads the new one from the ETag', async () => {
     goals.updateGoalResult.mockReturnValue(
       of(
