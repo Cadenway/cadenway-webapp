@@ -257,6 +257,39 @@ interface Deferred<T> {
 }
 
 /**
+ * Interface SwitchedBack
+ *
+ * @description
+ * A store back on its organization after a switch away and back, with a change of before the
+ * switch whose answer the spec gives.
+ */
+interface SwitchedBack {
+  // #region Properties
+  /**
+   * Property store
+   *
+   * @description
+   * The store.
+   *
+   * @type {InstanceType<typeof GoalsStore>}
+   * @readonly
+   */
+  readonly store: InstanceType<typeof GoalsStore>;
+
+  /**
+   * Property answer
+   *
+   * @description
+   * The answer of the change.
+   *
+   * @type {Subject<KeyResultWrite>}
+   * @readonly
+   */
+  readonly answer: Subject<KeyResultWrite>;
+  // #endregion
+}
+
+/**
  * Function deferred
  *
  * @description
@@ -1557,5 +1590,142 @@ describe('GoalsStore', () => {
     expect(api.list).toHaveBeenCalledTimes(reads + 1);
     expect(shownValue(store)).toBe(177);
     expect(api.get).not.toHaveBeenCalled();
+  });
+
+  /**
+   * Function switchedBackWithWrite
+   *
+   * @description
+   * Loads the goals with waits of 100 ms before each catch-up retry, starts a change whose answer
+   * the spec gives, then switches the workspace away and back so that change belongs to an older
+   * generation, and lets the read of the reset land with the goals of before it (168).
+   *
+   * @returns {Promise<SwitchedBack>} The store and the change's answer.
+   */
+  async function switchedBackWithWrite(): Promise<SwitchedBack> {
+    TestBed.overrideProvider(GOAL_SETTLE_BACKOFF_MS, { useValue: [100, 100, 100] });
+    const answer: Subject<KeyResultWrite> = new Subject<KeyResultWrite>();
+    api.updateResult.mockReturnValueOnce(firstValueFrom(answer));
+    const store: InstanceType<typeof GoalsStore> = await loaded();
+    store.step('g1', 'k6', 1);
+    await burst();
+    commit(STUDIO_SUD);
+    commit(ATELIER_NORD);
+    TestBed.tick();
+    await settle();
+    expect(shownValue(store)).toBe(168);
+    return { store, answer };
+  }
+
+  it('reads the goals again after a failed catch-up read until the completed write shows', async () => {
+    const { store, answer }: SwitchedBack = await switchedBackWithWrite();
+    const reads: number = api.list.mock.calls.length;
+    api.list
+      .mockRejectedValueOnce(problem(503))
+      .mockResolvedValue(list([goal({ version: 4, results: [signups(177)] })]));
+
+    answer.next({ result: signups(177), version: 4 });
+    answer.complete();
+    await settle();
+    expect(api.list).toHaveBeenCalledTimes(reads + 1);
+    expect(shownValue(store)).toBe(168);
+
+    await pause(120);
+    await settle();
+
+    expect(api.list).toHaveBeenCalledTimes(reads + 2);
+    expect(shownValue(store)).toBe(177);
+    expect(toasts.error).not.toHaveBeenCalled();
+  });
+
+  it('stops the catch-up retries after their waits, then reads again on the next refresh occasion', async () => {
+    const { store, answer }: SwitchedBack = await switchedBackWithWrite();
+    const reads: number = api.list.mock.calls.length;
+    api.list.mockRejectedValue(problem(503));
+
+    answer.next({ result: signups(177), version: 4 });
+    answer.complete();
+    await settle();
+    for (let wait: number = 0; wait < 4; wait += 1) {
+      await pause(120);
+      await settle();
+    }
+    expect(api.list).toHaveBeenCalledTimes(reads + 4);
+    expect(shownValue(store)).toBe(168);
+
+    api.list.mockResolvedValue(list([goal({ version: 4, results: [signups(177)] })]));
+    store.refresh();
+    await settle();
+
+    expect(api.list).toHaveBeenCalledTimes(reads + 5);
+    expect(shownValue(store)).toBe(177);
+  });
+
+  it('reads nothing more once a catch-up read lands, even when a later background read fails', async () => {
+    const { store, answer }: SwitchedBack = await switchedBackWithWrite();
+    const reads: number = api.list.mock.calls.length;
+    api.list.mockResolvedValue(list([goal({ version: 4, results: [signups(177)] })]));
+
+    answer.next({ result: signups(177), version: 4 });
+    answer.complete();
+    await settle();
+    expect(shownValue(store)).toBe(177);
+    api.list.mockRejectedValueOnce(problem(503));
+    store.refresh();
+    await settle();
+    await pause(250);
+    await settle();
+
+    expect(api.list).toHaveBeenCalledTimes(reads + 2);
+    expect(shownValue(store)).toBe(177);
+  });
+
+  it('reads the goals again after a failed catch-up read at the reset until the completed write shows', async () => {
+    TestBed.overrideProvider(GOAL_SETTLE_BACKOFF_MS, { useValue: [100, 100, 100] });
+    const answer: Subject<KeyResultWrite> = new Subject<KeyResultWrite>();
+    api.updateResult.mockReturnValueOnce(firstValueFrom(answer));
+    const store: InstanceType<typeof GoalsStore> = await loaded();
+    store.step('g1', 'k6', 1);
+    await burst();
+    const reads: number = api.list.mock.calls.length;
+    api.list
+      .mockRejectedValueOnce(problem(503))
+      .mockResolvedValue(list([goal({ version: 4, results: [signups(177)] })]));
+
+    pin.set(STUDIO_SUD.id);
+    answer.next({ result: signups(177), version: 4 });
+    answer.complete();
+    await flush();
+    pin.set(ATELIER_NORD.id);
+    TestBed.tick();
+    await settle();
+    expect(api.list).toHaveBeenCalledTimes(reads + 1);
+    expect(shownValue(store)).toBe(168);
+
+    await pause(120);
+    await settle();
+
+    expect(api.list).toHaveBeenCalledTimes(reads + 2);
+    expect(shownValue(store)).toBe(177);
+  });
+
+  it('drops a catch-up still owed when the workspace switches to another organization', async () => {
+    const { answer }: SwitchedBack = await switchedBackWithWrite();
+    const unavailable: Mock = vi.fn().mockRejectedValue(problem(503));
+    api.list.mockImplementation((): Promise<GoalList> =>
+      organization().id === ATELIER_NORD.id ? unavailable() : Promise.resolve(list([goal()])),
+    );
+    answer.next({ result: signups(177), version: 4 });
+    answer.complete();
+    await settle();
+
+    commit(STUDIO_SUD);
+    TestBed.tick();
+    await settle();
+    const reads: number = api.list.mock.calls.length;
+    await pause(250);
+    await settle();
+
+    expect(api.list).toHaveBeenCalledTimes(reads);
   });
 });

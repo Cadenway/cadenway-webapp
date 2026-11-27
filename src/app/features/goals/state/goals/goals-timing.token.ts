@@ -19,7 +19,9 @@ export const GOAL_EDIT_BURST_MS: InjectionToken<number> = new InjectionToken<num
  *
  * @description
  * Waits, in milliseconds, before each new read of a goal that settles a change of unknown outcome
- * after the first read failed; 2, 4 and 8 s by default.
+ * after the first read failed, and before each new read of the goals after a failed catch-up read
+ * (a write that completed while the workspace was away from its organization); 2, 4 and 8 s by
+ * default. Their count bounds the attempts.
  *
  * @type {InjectionToken<readonly number[]>}
  */
