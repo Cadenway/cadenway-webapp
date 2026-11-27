@@ -46,7 +46,7 @@
         </p>
       </div>
       @if (canInvite()) {
-        <button cwButton type="button" (click)="inviteOpen.set(true)" data-testid="members-invite">
+        <button cwButton type="button" (click)="openInvite()" data-testid="members-invite">
           <ng-icon name="phosphorUserPlusBold" aria-hidden="true" />
           <ng-container i18n="@@organization.members.invite-open">Invite members</ng-container>
         </button>

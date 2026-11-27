@@ -140,8 +140,14 @@ loaded.` with `Retry`; the banner stays hidden until a retry succeeds.
   remove members (after `Remove <name> from the organization?`), invite, and see `Two-step`
   and `Pending invitations`, which the API answers them only. A member gets a read-only table. The
   owner's row and the person's own row are never editable.
-- Both stores follow the workspace organization: a switch resets the filters, the pages and the
-  writes, and a write that settles after it changes nothing and shows no toast.
+- Both stores follow the workspace organization: a switch resets the filters, the pages, the
+  writes and the section skeleton (the next organization's first read failing reaches the error
+  boundary), and a write that settles after it changes nothing and shows no toast. The page binds
+  the invite dialog and the removal confirmation to the organization they were opened for: a
+  switch closes and empties them, and a submission for another organization sends nothing.
+- `MembersStore` subscribes to `RealtimeConnection.presenceChanges` for its lifetime, which starts
+  the connection on a direct visit; the presence dots and tabs read `presences`. A presence tab's
+  page that live changes leave without rows goes back to the last page with rows.
 - Search and the role tabs go to `listMembers` (`Administrators` is `role=owner,admin`), 8 per page
   by cursor; the store keeps the cursor of each page reached for `Previous`. The search is sent
   250 ms after the last keystroke; `Clear filters` drops a search still waiting. A presence tab,
@@ -174,7 +180,7 @@ loaded.` with `Retry`; the banner stays hidden until a retry succeeds.
 - Invite splits the addresses on spaces, commas and semicolons, keeps each once, and checks them as
   the contract does (zod's `email()`, 254 characters at most); it refuses an invalid one, none, or
   more than 50, then reads the invitations again. A `400` whose `details.issues[].path` is
-  `emails.<n>` names those addresses on the field. The toast counts the addresses invited and
+  `emails.<n>` names those addresses on the field until they change or the dialog opens again. The toast counts the addresses invited and
   those skipped (already a member or invited). The dialog stays open on a refusal.
 - Counts pick their singular or plural text with `Intl.PluralRules($localize.locale)`, so French
   reads `0 membre` as the mockup does.

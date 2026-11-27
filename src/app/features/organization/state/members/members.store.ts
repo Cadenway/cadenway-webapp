@@ -17,6 +17,7 @@ import {
   withProps,
   withState,
 } from '@ngrx/signals';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { rxMethod } from '@ngrx/signals/rxjs-interop';
 import { debounceTime, pipe, tap } from 'rxjs';
 
@@ -1045,6 +1046,9 @@ function createMembersStore(): Type<MembersStoreInstance> {
       return {
         _current: current,
         _freshRange: freshRange,
+        _presenceMatches: computed((): number | null =>
+          shownSnapshot()?.read.complete === true ? matching().length : null,
+        ),
         shown: computed((): boolean => store._shown()),
         loading: computed((): boolean => store.members.isLoading()),
         failed: computed((): boolean => store.members.status() === 'error'),
@@ -1162,6 +1166,12 @@ function createMembersStore(): Type<MembersStoreInstance> {
           reconcile();
         }),
 
+        _clampPage: signalMethod<number | null>((count: number | null): void => {
+          if (count === null || store.pageIndex() === 0) return;
+          const last: number = Math.max(0, Math.ceil(count / MEMBERS_PAGE_SIZE) - 1);
+          if (store.pageIndex() > last) patchState(store, { pageIndex: last });
+        }),
+
         _keepRange: signalMethod<RangeView | null>((fresh: RangeView | null): void => {
           if (fresh !== null) patchState(store, { _lastRange: fresh });
         }),
@@ -1170,13 +1180,13 @@ function createMembersStore(): Type<MembersStoreInstance> {
           if (followed !== null && followed !== organizationId) {
             patchState(store, {
               ...filters,
-              _version: store._version() + 1,
               _roles: {},
               _removing: [],
               _confirmed: [],
               _stepBack: false,
               _last: null,
               _lastRange: { first: 0, last: 0, total: 0 },
+              _shown: false,
             });
           }
           followed = organizationId;
@@ -1313,6 +1323,8 @@ function createMembersStore(): Type<MembersStoreInstance> {
       onInit(store): void {
         store._onRead(computed((): unknown => [store._current(), store.members.isLoading()]));
         store._keepRange(store._freshRange);
+        store._clampPage(store._presenceMatches);
+        store._realtime?.presenceChanges.pipe(takeUntilDestroyed()).subscribe();
         store._followOrganization(computed((): string => store._workspace.organization().id));
       },
     }),
@@ -1329,7 +1341,9 @@ function createMembersStore(): Type<MembersStoreInstance> {
  * cursor, 8 per page, keeping the cursor of each page reached for `Previous`. A presence filter,
  * which the API does not offer, reads every member of the role tab once (at most
  * `PRESENCE_READ_LIMIT`), then searches and pages them in the browser against the live presence.
- * Role changes and removals are optimistic; a confirmed write is applied to every read issued
+ * The store subscribes to the realtime presence changes for its lifetime, which starts the
+ * connection on a direct visit; a page of a presence tab that live changes leave without rows
+ * goes back to the last page with rows. Role changes and removals are optimistic; a confirmed write is applied to every read issued
  * before it settled, until a read issued after it lands, and the view is read again when the
  * answer shown cannot hold it. While a read is under way the counts and the range keep their last
  * values.

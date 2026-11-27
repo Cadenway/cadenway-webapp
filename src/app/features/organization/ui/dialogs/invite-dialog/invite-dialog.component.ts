@@ -3,6 +3,7 @@ import {
   computed,
   effect,
   input,
+  linkedSignal,
   type InputSignal,
   model,
   type ModelSignal,
@@ -365,6 +366,20 @@ export class InviteDialog {
   ];
 
   /**
+   * Property refusedShown
+   *
+   * @description
+   * The refused addresses the field names: those of `refused`, until the addresses change or the
+   * dialog opens again.
+   *
+   * @type {WritableSignal<readonly string[]>}
+   * @readonly
+   */
+  protected readonly refusedShown: WritableSignal<readonly string[]> = linkedSignal<
+    readonly string[]
+  >((): readonly string[] => this.refused());
+
+  /**
    * Property model
    *
    * @description
@@ -406,7 +421,7 @@ export class InviteDialog {
     validate(path.emails, (context: FieldContext<string>) => {
       const { valid, invalid }: ParsedAddresses = parseAddresses(context.value());
       const refused: ReadonlySet<string> = new Set<string>(
-        this.refused().map((email: string): string => email.toLowerCase()),
+        this.refusedShown().map((email: string): string => email.toLowerCase()),
       );
       const wrong: readonly string[] = [
         ...invalid,
@@ -518,7 +533,8 @@ export class InviteDialog {
    * Constructor
    *
    * @description
-   * Empties the form, as a member, each time the dialog opens.
+   * Empties the form, as a member, each time the dialog opens, and forgets the refused
+   * addresses then and whenever the addresses change.
    *
    * @constructor
    */
@@ -527,7 +543,16 @@ export class InviteDialog {
       if (!this.open()) return;
       untracked((): void => {
         this.model.set({ emails: '', role: 'member' });
+        this.refusedShown.set([]);
         this.inviteForm().reset();
+      });
+    });
+    let typed: string | null = null;
+    effect((): void => {
+      const emails: string = this.model().emails;
+      untracked((): void => {
+        if (typed !== null && typed !== emails) this.refusedShown.set([]);
+        typed = emails;
       });
     });
   }

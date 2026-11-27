@@ -193,11 +193,33 @@ describe('InviteDialog', () => {
     await type(fixture, 'marc.roux@ateliernord.fr, lucie@');
     await submit(fixture);
     expect(text(find('invite-error'))).toBe('Check these addresses: lucie@.');
-    fixture.componentRef.setInput('refused', ['marc.roux@ateliernord.fr']);
     await type(fixture, 'marc.roux@ateliernord.fr lucie@example.com');
+    fixture.componentRef.setInput('refused', ['marc.roux@ateliernord.fr']);
+    await fixture.whenStable();
 
     expect(text(find('invite-error'))).toBe('Check these addresses: marc.roux@ateliernord.fr.');
     expect(submitted).not.toHaveBeenCalled();
+  });
+
+  it('forgets the refused addresses once they change and when it opens again', async () => {
+    const [fixture, submitted]: [ComponentFixture<InviteDialog>, Mock] = await open(null);
+    await type(fixture, 'marc.roux@ateliernord.fr');
+    await submit(fixture);
+    fixture.componentRef.setInput('refused', ['marc.roux@ateliernord.fr']);
+    await fixture.whenStable();
+    expect(find('invite-error')).not.toBeNull();
+
+    await type(fixture, 'marc.roux@ateliernord.fr ');
+    expect(find('invite-error')).toBeNull();
+    fixture.componentRef.setInput('open', false);
+    await fixture.whenStable();
+    fixture.componentRef.setInput('open', true);
+    await fixture.whenStable();
+    await type(fixture, 'marc.roux@ateliernord.fr');
+    await submit(fixture);
+
+    expect(find('invite-error')).toBeNull();
+    expect(submitted).toHaveBeenCalledTimes(2);
   });
 
   it('starts empty, as a member, each time it opens again', async () => {

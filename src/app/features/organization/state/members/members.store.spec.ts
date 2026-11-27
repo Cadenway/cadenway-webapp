@@ -2,6 +2,7 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { ApplicationRef, signal, type WritableSignal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { CwToastService } from '@cadenway/ui/components/toast';
+import { Observable } from 'rxjs';
 import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 
 import { RealtimeConnection } from '@core/realtime';
@@ -281,6 +282,18 @@ interface Harness {
    * @readonly
    */
   readonly organization: WritableSignal<WorkspaceOrganization>;
+
+  /**
+   * Property realtime
+   *
+   * @description
+   * How often the fake presence stream was subscribed and torn down; subscribing starts the
+   * connection.
+   *
+   * @type {{ started: number; stopped: number }}
+   * @readonly
+   */
+  readonly realtime: { started: number; stopped: number };
   // #endregion
 }
 
@@ -311,6 +324,13 @@ async function setup(overrides: Partial<ApiFake>, role: WorkspaceRole = 'owner')
     signal(new Map([['ir', 'online' as const]]));
   const organization: WritableSignal<WorkspaceOrganization> = signal({ ...ATELIER_NORD, role });
   const ranks: readonly WorkspaceRole[] = ['guest', 'member', 'admin', 'owner'];
+  const realtime: { started: number; stopped: number } = { started: 0, stopped: 0 };
+  const presenceChanges: Observable<never> = new Observable<never>(() => {
+    realtime.started += 1;
+    return () => {
+      realtime.stopped += 1;
+    };
+  });
   const workspace: WorkspaceContextPort = {
     user: signal({
       id: CAMILLE.userId,
@@ -329,13 +349,13 @@ async function setup(overrides: Partial<ApiFake>, role: WorkspaceRole = 'owner')
       MembersStore,
       { provide: MembersApi, useValue: api },
       { provide: CwToastService, useValue: toasts },
-      { provide: RealtimeConnection, useValue: { presences } },
+      { provide: RealtimeConnection, useValue: { presences, presenceChanges } },
       { provide: WORKSPACE_CONTEXT, useValue: workspace },
     ],
   });
   const store: MembersStoreInstance = TestBed.inject(MembersStore);
   await settle();
-  return { store, api, toasts, presences, organization };
+  return { store, api, toasts, presences, organization, realtime };
 }
 
 /**
@@ -508,6 +528,37 @@ describe('MembersStore', () => {
     expect(store.filtered()).toBe(true);
   });
 
+  it('starts the realtime presence on a direct visit and stops it with the page', async () => {
+    const { realtime }: Harness = await setup({});
+
+    expect(realtime).toEqual({ started: 1, stopped: 0 });
+    TestBed.resetTestingModule();
+    expect(realtime).toEqual({ started: 1, stopped: 1 });
+  });
+
+  it('goes back to the last page with rows when live presence shrinks the online list', async () => {
+    const many: OrganizationMember[] = Array.from(
+      { length: 10 },
+      (_value: unknown, index: number) =>
+        person(`p${String(index)}`, `Person ${String(index)}`, 'member'),
+    );
+    const { store, presences }: Harness = await setup({
+      all: vi.fn(() => Promise.resolve(page(many))),
+    });
+    presences.set(new Map(many.map((item: OrganizationMember) => [item.id, 'online' as const])));
+    store.setPresence('online');
+    await settle();
+    store.next();
+    await settle();
+    expect(store.pageIndex()).toBe(1);
+
+    presences.set(new Map([['p0', 'online' as const]]));
+    await settle();
+
+    expect(store.pageIndex()).toBe(0);
+    expect(ids(store)).toEqual(['p0']);
+  });
+
   it('flags a presence read that reached its member limit', async () => {
     const { store }: Harness = await setup({
       all: vi.fn(() => Promise.resolve({ ...page([INES]), truncated: true })),
@@ -676,6 +727,18 @@ describe('MembersStore', () => {
 
     expect(store.pageIndex()).toBe(0);
     expect(ids(store)).toEqual(['cm', 'ir']);
+  });
+
+  it('shows the skeleton again for the next organization and lets its failure reach the boundary', async () => {
+    const { store, api, organization }: Harness = await setup({});
+    api.page.mockRejectedValueOnce(refusal(503));
+
+    organization.set({ ...ATELIER_NORD, id: 'o2', slug: 'lumen', name: 'Lumen' });
+    await settle();
+
+    expect(store.shown()).toBe(false);
+    expect(store.failed()).toBe(true);
+    expect(() => store.members.value()).toThrow();
   });
 
   it('resets the filters and forgets a write that settles after an organization switch', async () => {

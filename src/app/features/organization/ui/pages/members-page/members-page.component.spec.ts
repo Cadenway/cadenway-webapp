@@ -1,5 +1,5 @@
 import { HttpErrorResponse } from '@angular/common/http';
-import { signal } from '@angular/core';
+import { signal, type WritableSignal } from '@angular/core';
 import { type ComponentFixture, TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 import { provideCadenwayIcons } from '@cadenway/icons';
@@ -9,6 +9,7 @@ import { afterEach, describe, expect, it, type Mock, vi } from 'vitest';
 import {
   WORKSPACE_CONTEXT,
   type WorkspaceContextPort,
+  type WorkspaceOrganization,
   type WorkspaceRole,
 } from '@features/workspace/ports/workspace-context';
 
@@ -19,6 +20,7 @@ import type { InvitationList } from '../../../models/invitation/invitation.inter
 import type { MemberPage, OrganizationMember } from '../../../models/member/member.interface';
 import { SubscriptionStore } from '../../../state/subscription/subscription.store';
 import { MembersTable } from '../../components/members-table/members-table.component';
+import { InviteDialog } from '../../dialogs/invite-dialog/invite-dialog.component';
 import { MembersPage } from './members-page.component';
 
 /**
@@ -145,6 +147,17 @@ interface Fakes {
    * @readonly
    */
   readonly toasts: Record<'success' | 'error' | 'info' | 'warning', Mock>;
+
+  /**
+   * Property organization
+   *
+   * @description
+   * The workspace organization, switchable.
+   *
+   * @type {WritableSignal<WorkspaceOrganization>}
+   * @readonly
+   */
+  readonly organization: WritableSignal<WorkspaceOrganization>;
   // #endregion
 }
 
@@ -178,6 +191,14 @@ async function render(
       revoke: vi.fn(),
     },
     toasts: { success: vi.fn(), error: vi.fn(), info: vi.fn(), warning: vi.fn() },
+    organization: signal<WorkspaceOrganization>({
+      id: 'o1',
+      slug: 'atelier-nord',
+      name: 'Atelier Nord',
+      initials: 'AN',
+      role,
+      plan: 'team',
+    }),
   };
   const workspace: WorkspaceContextPort = {
     user: signal({
@@ -188,14 +209,7 @@ async function render(
       email: 'cm@ateliernord.fr',
       initials: 'CM',
     }),
-    organization: signal({
-      id: 'o1',
-      slug: 'atelier-nord',
-      name: 'Atelier Nord',
-      initials: 'AN',
-      role,
-      plan: 'team',
-    }),
+    organization: fakes.organization,
     role: signal(role),
     can: (least: WorkspaceRole): boolean => ranks.indexOf(role) >= ranks.indexOf(least),
   };
@@ -383,6 +397,52 @@ describe('MembersPage', () => {
     expect(fakes.toasts.success).toHaveBeenCalledWith('Théo Bernard removed', {
       description: 'Their tasks stay assigned; a seat is freed.',
     });
+  });
+
+  it('closes and empties the invite dialog when the organization changes', async () => {
+    const [fixture, fakes]: [ComponentFixture<MembersPage>, Fakes] = await render('owner');
+    find('members-invite')?.click();
+    await fixture.whenStable();
+    const field: HTMLTextAreaElement = find('invite-emails') as HTMLTextAreaElement;
+    field.value = 'marc.roux@ateliernord.fr';
+    field.dispatchEvent(new Event('input'));
+    await fixture.whenStable();
+
+    fakes.organization.set({ ...fakes.organization(), id: 'o2', slug: 'lumen', name: 'Lumen' });
+    await fixture.whenStable();
+    expect(find('invite-emails')).toBeNull();
+    find('members-invite')?.click();
+    await fixture.whenStable();
+
+    expect((find('invite-emails') as HTMLTextAreaElement).value).toBe('');
+  });
+
+  it('refuses an invite opened for the previous organization', async () => {
+    const [fixture, fakes]: [ComponentFixture<MembersPage>, Fakes] = await render('owner');
+    find('members-invite')?.click();
+    await fixture.whenStable();
+    const dialog: InviteDialog = fixture.debugElement.query(By.directive(InviteDialog))
+      .componentInstance as InviteDialog;
+
+    fakes.organization.set({ ...fakes.organization(), id: 'o2', slug: 'lumen', name: 'Lumen' });
+    dialog.submitted.emit({ emails: ['marc.roux@ateliernord.fr'], role: 'member' });
+    await fixture.whenStable();
+
+    expect(fakes.invitations.invite).not.toHaveBeenCalled();
+    expect(find('invite-emails')).toBeNull();
+  });
+
+  it('drops the removal confirmation when the organization changes', async () => {
+    const [fixture, fakes]: [ComponentFixture<MembersPage>, Fakes] = await render('owner');
+    all('member-remove')[1]?.click();
+    await fixture.whenStable();
+    expect(document.querySelector('[role="alertdialog"]')).not.toBeNull();
+
+    fakes.organization.set({ ...fakes.organization(), id: 'o2', slug: 'lumen', name: 'Lumen' });
+    await fixture.whenStable();
+
+    expect(document.querySelector('[role="alertdialog"]')).toBeNull();
+    expect(fakes.members.remove).not.toHaveBeenCalled();
   });
 
   it('asks for an address, then sends the invitations and closes the dialog', async () => {

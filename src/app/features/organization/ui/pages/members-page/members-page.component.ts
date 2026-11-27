@@ -2,10 +2,12 @@ import {
   afterNextRender,
   Component,
   computed,
+  effect,
   inject,
   Injector,
   type Signal,
   signal,
+  untracked,
   viewChild,
   type WritableSignal,
 } from '@angular/core';
@@ -184,6 +186,18 @@ export class MembersPage {
   protected readonly confirmOpen: WritableSignal<boolean> = signal<boolean>(false);
 
   /**
+   * Property dialogOrganization
+   *
+   * @description
+   * Organization the open dialog (invite or removal confirmation) was opened for; null when none
+   * is open. A submission for another organization is refused.
+   *
+   * @type {WritableSignal<string | null>}
+   * @readonly
+   */
+  private readonly dialogOrganization: WritableSignal<string | null> = signal<string | null>(null);
+
+  /**
    * Property skeleton
    *
    * @description
@@ -358,7 +372,42 @@ export class MembersPage {
   });
   // #endregion
 
+  // #region Constructor
+  /**
+   * Constructor
+   *
+   * @description
+   * Closes and resets every dialog when the workspace organization changes, so that neither the
+   * typed addresses nor the member to remove carry over to the next organization.
+   *
+   * @constructor
+   */
+  public constructor() {
+    let followed: string | null = null;
+    effect((): void => {
+      const organizationId: string = this.workspace.organization().id;
+      untracked((): void => {
+        if (followed !== null && followed !== organizationId) this.closeDialogs();
+        followed = organizationId;
+      });
+    });
+  }
+  // #endregion
+
   // #region Methods
+  /**
+   * Method openInvite
+   *
+   * @description
+   * Opens the invite dialog for the current organization, without the addresses an earlier
+   * submit had refused.
+   */
+  protected openInvite(): void {
+    this.refused.set([]);
+    this.dialogOrganization.set(this.workspace.organization().id);
+    this.inviteOpen.set(true);
+  }
+
   /**
    * Method changeRole
    *
@@ -377,11 +426,12 @@ export class MembersPage {
    * Method askRemove
    *
    * @description
-   * Opens the removal confirmation for a member.
+   * Opens the removal confirmation for a member of the current organization.
    *
    * @param {MemberRow} member - The member.
    */
   protected askRemove(member: MemberRow): void {
+    this.dialogOrganization.set(this.workspace.organization().id);
     this.removing.set(member);
     this.confirmOpen.set(true);
   }
@@ -392,12 +442,16 @@ export class MembersPage {
    * @description
    * Removes the confirmed member, whose row hides at once, and moves the focus to the row now at
    * its place, or to the search when the table is empty; a confirmed removal reads the seats
-   * again.
+   * again. A confirmation opened for another organization is refused and closed.
    *
    * @param {MemberRow} member - The member.
    * @returns {Promise<void>} Resolves once the removal is settled.
    */
   protected async confirmRemove(member: MemberRow): Promise<void> {
+    if (!this.sameOrganization()) {
+      this.closeDialogs();
+      return;
+    }
     const index: number = this.store
       .rows()
       .findIndex((row: MemberRow): boolean => row.id === member.id);
@@ -444,12 +498,17 @@ export class MembersPage {
    *
    * @description
    * Sends the dialog's invitations and closes it once they are accepted; a refusal keeps it open,
-   * and addresses the API refused as invalid are named on its field.
+   * and addresses the API refused as invalid are named on its field. A dialog opened for another
+   * organization sends nothing and closes.
    *
    * @param {InviteRequest} request - Addresses and role.
    * @returns {Promise<void>} Resolves once the batch is settled.
    */
   protected async invite(request: InviteRequest): Promise<void> {
+    if (!this.sameOrganization()) {
+      this.closeDialogs();
+      return;
+    }
     this.refused.set([]);
     const result: InviteResult = await this.invitations.invite(request.emails, request.role);
     if (result === 'sent') {
@@ -467,6 +526,32 @@ export class MembersPage {
    */
   private refreshSeats(): void {
     if (this.workspace.role() === 'owner') this.subscription.retry();
+  }
+
+  /**
+   * Method sameOrganization
+   *
+   * @description
+   * Whether the open dialog was opened for the current organization.
+   *
+   * @returns {boolean} Whether its submission may be sent.
+   */
+  private sameOrganization(): boolean {
+    return this.dialogOrganization() === this.workspace.organization().id;
+  }
+
+  /**
+   * Method closeDialogs
+   *
+   * @description
+   * Closes the invite dialog and the removal confirmation and forgets what they held.
+   */
+  private closeDialogs(): void {
+    this.inviteOpen.set(false);
+    this.confirmOpen.set(false);
+    this.removing.set(null);
+    this.refused.set([]);
+    this.dialogOrganization.set(null);
   }
   // #endregion
 }
