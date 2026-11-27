@@ -354,7 +354,7 @@ describe('PreferencesPage', () => {
     expect(toasts.error).not.toHaveBeenCalled();
   });
 
-  it('counts a write without an answer as saved when the account holds it', async () => {
+  it('fences a write without an answer even when the account already shows the pick', async () => {
     write.mockRejectedValueOnce(new HttpErrorResponse({ status: 0 }));
     read
       .mockImplementationOnce(() => Promise.resolve(recorded))
@@ -364,7 +364,10 @@ describe('PreferencesPage', () => {
     await pickLanguage(harness, 'English');
 
     await expect.poll(() => locale.use.mock.calls.length).toBe(1);
-    expect(write).toHaveBeenCalledTimes(1);
+    expect(
+      write.mock.calls.map(([, version]: [AccountLanguage, number, string]) => version),
+    ).toEqual([3, 4]);
+    expect(toasts.error).not.toHaveBeenCalled();
   });
 
   it('stops silently when another account holds the session', async () => {

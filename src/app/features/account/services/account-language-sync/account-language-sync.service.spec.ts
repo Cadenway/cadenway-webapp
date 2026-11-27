@@ -48,6 +48,77 @@ const versionMismatch: HttpErrorResponse = new HttpErrorResponse({
 const refused: HttpErrorResponse = new HttpErrorResponse({ status: 403 });
 
 /**
+ * Function rejection
+ *
+ * @description
+ * A promise rejected with a gateway error, as the generated client rejects.
+ *
+ * @param {HttpErrorResponse} error - The gateway error.
+ * @returns {Promise<never>} The rejected promise.
+ */
+function rejection(error: HttpErrorResponse): Promise<never> {
+  return vi.fn<() => Promise<never>>().mockRejectedValue(error)();
+}
+
+/**
+ * Class FakeAccount
+ *
+ * @description
+ * The account as identity-service keeps it: a language and a version, changed only by a write
+ * whose `If-Match` names the current version.
+ */
+class FakeAccount {
+  // #region Properties
+  /**
+   * Property state
+   *
+   * @description
+   * The recorded language and version.
+   *
+   * @type {AccountLanguageSettings}
+   */
+  public state: AccountLanguageSettings = { language: 'fr', version: 3 };
+  // #endregion
+
+  // #region Methods
+  /**
+   * Method apply
+   *
+   * @description
+   * Records a write against its version, or refuses a stale one with `412`.
+   *
+   * @param {AccountLanguage} language - The written language.
+   * @param {number} version - Its `If-Match` version.
+   * @returns {AccountLanguageSettings | HttpErrorResponse} The recorded language and new
+   * version, or `412` when the version is not the current one.
+   */
+  public apply(
+    language: AccountLanguage,
+    version: number,
+  ): AccountLanguageSettings | HttpErrorResponse {
+    if (version !== this.state.version) return versionMismatch;
+    this.state = { language, version: version + 1 };
+    return this.state;
+  }
+
+  /**
+   * Method answer
+   *
+   * @description
+   * Records a write as the gateway answers it.
+   *
+   * @param {AccountLanguage} language - The written language.
+   * @param {number} version - Its `If-Match` version.
+   * @returns {Promise<AccountLanguageSettings>} The recorded language, or a `412` rejection.
+   */
+  public answer(language: AccountLanguage, version: number): Promise<AccountLanguageSettings> {
+    const result: AccountLanguageSettings | HttpErrorResponse = this.apply(language, version);
+    return result instanceof HttpErrorResponse ? rejection(result) : Promise.resolve(result);
+  }
+  // #endregion
+}
+
+/**
  * Interface Deferred
  *
  * @description
@@ -96,6 +167,7 @@ function deferred<T>(): Deferred<T> {
 }
 
 describe('AccountLanguageSync', () => {
+  let account: FakeAccount;
   let read: Mock<LanguageApi['read']>;
   let write: Mock<LanguageApi['write']>;
   let toasts: { success: Mock; error: Mock; dismiss: Mock };
@@ -106,9 +178,9 @@ describe('AccountLanguageSync', () => {
    * Function setUp
    *
    * @description
-   * Creates the sync with the given confirmation delays and loads Camille's account in French.
+   * Creates the sync with the given delays and loads Camille's account.
    *
-   * @param {readonly number[]} delays - Waits before each confirming read.
+   * @param {readonly number[]} delays - Waits before the fencing attempts.
    * @returns {Promise<void>} Resolves once loaded.
    */
   async function setUp(delays: readonly number[] = [0, 0, 0]): Promise<void> {
@@ -125,21 +197,27 @@ describe('AccountLanguageSync', () => {
   }
 
   /**
-   * Function sent
+   * Function writes
    *
    * @description
-   * The languages written so far, in order.
+   * The writes sent so far, as language and `If-Match` version.
    *
-   * @returns {AccountLanguage[]} The languages.
+   * @returns {[AccountLanguage, number][]} The writes.
    */
-  function sent(): AccountLanguage[] {
-    return write.mock.calls.map(([language]: [AccountLanguage, number, string]) => language);
+  function writes(): [AccountLanguage, number][] {
+    return write.mock.calls.map(
+      ([language, version]: [AccountLanguage, number, string]): [AccountLanguage, number] => [
+        language,
+        version,
+      ],
+    );
   }
 
   beforeEach(() => {
-    read = vi.fn<LanguageApi['read']>(() => Promise.resolve({ language: 'fr', version: 3 }));
+    account = new FakeAccount();
+    read = vi.fn<LanguageApi['read']>(() => Promise.resolve(account.state));
     write = vi.fn<LanguageApi['write']>((language: AccountLanguage, version: number) =>
-      Promise.resolve({ language, version: version + 1 }),
+      account.answer(language, version),
     );
     toasts = { success: vi.fn(() => 't-ok'), error: vi.fn(() => 't-ko'), dismiss: vi.fn() };
     locale = { current: 'fr', use: vi.fn() };
@@ -163,35 +241,102 @@ describe('AccountLanguageSync', () => {
     expect(sync.confirmed()).toEqual({ language: 'en', version: 4 });
   });
 
-  it('confirms an unknown write with reads after 2, 4 and 8 s', async () => {
+  it('fences a late first write that lands after a read already showing the pick', async () => {
+    await setUp();
+    let landFirst: () => unknown = (): unknown => undefined;
+    write.mockImplementationOnce((language: AccountLanguage, version: number) => {
+      landFirst = (): unknown => account.apply(language, version);
+      return rejection(noAnswer);
+    });
+    read.mockImplementationOnce(() => {
+      account.state = { language: 'en', version: 4 };
+      return Promise.resolve(account.state);
+    });
+
+    sync.choose('en');
+
+    await expect.poll(() => locale.use.mock.calls).toEqual([['en']]);
+    expect(writes()).toEqual([
+      ['en', 3],
+      ['en', 4],
+    ]);
+    expect(landFirst()).toBe(versionMismatch);
+    expect(account.state).toEqual({ language: 'en', version: 5 });
+    expect(sync.confirmed()).toEqual({ language: 'en', version: 5 });
+  });
+
+  it('fences instead of reporting a failure when a read shows the old value with the first write pending', async () => {
+    await setUp();
+    read.mockRejectedValueOnce(noAnswer);
+    let landFirst: () => unknown = (): unknown => undefined;
+    write.mockImplementationOnce((language: AccountLanguage, version: number) => {
+      landFirst = (): unknown => account.apply(language, version);
+      return rejection(noAnswer);
+    });
+
+    sync.choose('en');
+
+    await expect.poll(() => locale.use.mock.calls).toEqual([['en']]);
+    expect(read).toHaveBeenLastCalledWith('u1');
+    expect(writes()).toEqual([
+      ['en', 3],
+      ['en', 3],
+    ]);
+    expect(landFirst()).toBe(versionMismatch);
+    expect(toasts.error).not.toHaveBeenCalled();
+    expect(sync.confirmed()).toEqual({ language: 'en', version: 4 });
+  });
+
+  it('reads and fences again when the first write lands between the read and the fencing write', async () => {
+    await setUp();
+    write
+      .mockImplementationOnce(() => rejection(noAnswer))
+      .mockImplementationOnce((language: AccountLanguage, version: number) => {
+        account.apply('en', 3);
+        return account.answer(language, version);
+      });
+
+    sync.choose('en');
+
+    await expect.poll(() => locale.use.mock.calls).toEqual([['en']]);
+    expect(writes()).toEqual([
+      ['en', 3],
+      ['en', 3],
+      ['en', 4],
+    ]);
+    expect(sync.confirmed()).toEqual({ language: 'en', version: 5 });
+    expect(toasts.error).not.toHaveBeenCalled();
+  });
+
+  it('waits 2, 4 and 8 s before fencing attempts that follow no answer', async () => {
     vi.useFakeTimers();
     await setUp([2000, 4000, 8000]);
     write.mockRejectedValueOnce(noAnswer);
     read
       .mockRejectedValueOnce(noAnswer)
       .mockRejectedValueOnce(noAnswer)
-      .mockRejectedValueOnce(noAnswer)
-      .mockResolvedValueOnce({ language: 'en', version: 4 });
+      .mockImplementationOnce(() => Promise.resolve(account.state));
 
     sync.choose('en');
-    await vi.advanceTimersByTimeAsync(0);
-    expect(read).toHaveBeenCalledTimes(2);
     await vi.advanceTimersByTimeAsync(1999);
-    expect(read).toHaveBeenCalledTimes(2);
+    expect(read).toHaveBeenCalledTimes(1);
     await vi.advanceTimersByTimeAsync(1);
-    expect(read).toHaveBeenCalledTimes(3);
+    expect(read).toHaveBeenCalledTimes(2);
     await vi.advanceTimersByTimeAsync(4000);
+    expect(read).toHaveBeenCalledTimes(3);
+    await vi.advanceTimersByTimeAsync(7999);
+    expect(read).toHaveBeenCalledTimes(3);
+    await vi.advanceTimersByTimeAsync(1);
     expect(read).toHaveBeenCalledTimes(4);
-    await vi.advanceTimersByTimeAsync(8000);
-    expect(read).toHaveBeenCalledTimes(5);
 
+    expect(writes()).toEqual([
+      ['en', 3],
+      ['en', 3],
+    ]);
     expect(locale.use).toHaveBeenCalledWith('en');
-    expect(toasts.error).not.toHaveBeenCalled();
-    expect(sync.unconfirmed()).toBe(false);
-    expect(write).toHaveBeenCalledTimes(1);
   });
 
-  it('keeps an unanswered outcome unconfirmed, never claims the previous language, and retries', async () => {
+  it('stays unconfirmed without a failure when no fencing write answers, and fences on Retry', async () => {
     await setUp();
     write.mockRejectedValueOnce(noAnswer);
     read.mockRejectedValue(noAnswer);
@@ -200,44 +345,34 @@ describe('AccountLanguageSync', () => {
 
     await expect.poll(() => sync.unconfirmed()).toBe(true);
     expect(sync.requested()).toBe('en');
+    expect(sync.confirmed()).toEqual({ language: 'fr', version: 3 });
     expect(toasts.error).not.toHaveBeenCalled();
     expect(locale.use).not.toHaveBeenCalled();
 
-    read.mockResolvedValue({ language: 'en', version: 4 });
+    read.mockImplementation(() => Promise.resolve(account.state));
     sync.retry();
 
     await expect.poll(() => locale.use.mock.calls).toEqual([['en']]);
+    expect(writes()).toEqual([
+      ['en', 3],
+      ['en', 3],
+    ]);
     expect(sync.unconfirmed()).toBe(false);
     expect(sync.requested()).toBeNull();
   });
 
-  it('stays uncertain when the resend after a version mismatch gets no answer', async () => {
+  it('fences a first write refused with 412 against the version read', async () => {
     await setUp();
-    write.mockRejectedValueOnce(versionMismatch).mockRejectedValueOnce(noAnswer);
-    read
-      .mockResolvedValueOnce({ language: 'fr', version: 5 })
-      .mockResolvedValueOnce({ language: 'en', version: 6 });
+    account.state = { language: 'fr', version: 5 };
 
     sync.choose('en');
 
     await expect.poll(() => locale.use.mock.calls).toEqual([['en']]);
-    expect(
-      write.mock.calls.map(([, version]: [AccountLanguage, number, string]) => version),
-    ).toEqual([3, 5]);
+    expect(writes()).toEqual([
+      ['en', 3],
+      ['en', 5],
+    ]);
     expect(toasts.error).not.toHaveBeenCalled();
-  });
-
-  it('says a save failed only once a read shows the account without the pick', async () => {
-    await setUp();
-    write.mockRejectedValueOnce(noAnswer);
-    read.mockRejectedValueOnce(noAnswer).mockResolvedValueOnce({ language: 'fr', version: 3 });
-
-    sync.choose('en');
-
-    await expect.poll(() => toasts.error.mock.calls.length).toBe(1);
-    expect(sync.requested()).toBeNull();
-    expect(sync.confirmed()).toEqual({ language: 'fr', version: 3 });
-    expect(locale.use).not.toHaveBeenCalled();
   });
 
   it('sends a newer pick equal to the cached language while the state is uncertain', async () => {
@@ -248,10 +383,14 @@ describe('AccountLanguageSync', () => {
     sync.choose('en');
     await expect.poll(() => sync.unconfirmed()).toBe(true);
 
+    read.mockImplementation(() => Promise.resolve(account.state));
     sync.choose('fr');
 
-    await expect.poll(() => sent()).toEqual(['en', 'fr']);
     await expect.poll(() => sync.requested()).toBeNull();
+    expect(writes()).toEqual([
+      ['en', 3],
+      ['fr', 3],
+    ]);
     expect(sync.confirmed()).toEqual({ language: 'fr', version: 4 });
   });
 
@@ -266,7 +405,7 @@ describe('AccountLanguageSync', () => {
 
   it('applies the saved earlier pick when a later pick is refused', async () => {
     locale.current = 'en';
-    read.mockResolvedValueOnce({ language: 'en', version: 3 });
+    account.state = { language: 'en', version: 3 };
     await setUp();
     const first: Deferred<AccountLanguageSettings> = deferred<AccountLanguageSettings>();
     write.mockReturnValueOnce(first.promise).mockRejectedValueOnce(refused);
@@ -276,10 +415,32 @@ describe('AccountLanguageSync', () => {
     first.resolve({ language: 'fr', version: 4 });
 
     await expect.poll(() => toasts.error.mock.calls.length).toBe(1);
-    expect(sent()).toEqual(['fr', 'de']);
+    expect(writes().map(([language]: [AccountLanguage, number]) => language)).toEqual(['fr', 'de']);
     expect(sync.requested()).toBeNull();
     expect(sync.confirmed()).toEqual({ language: 'fr', version: 4 });
     expect(locale.use).toHaveBeenCalledWith('fr');
+  });
+
+  it('saves a pick made on a new account while the old account still has a run pending', async () => {
+    await setUp();
+    const stale: Deferred<AccountLanguageSettings> = deferred<AccountLanguageSettings>();
+    write.mockReturnValueOnce(stale.promise);
+    sync.choose('en');
+    await expect.poll(() => write.mock.calls.length).toBe(1);
+
+    read.mockResolvedValueOnce({ language: 'de', version: 1 });
+    await sync.load('u2');
+    write.mockResolvedValueOnce({ language: 'es', version: 2 });
+    sync.choose('es');
+
+    await expect.poll(() => sync.confirmed()).toEqual({ language: 'es', version: 2 });
+    expect(write).toHaveBeenLastCalledWith('es', 1, 'u2');
+    stale.resolve({ language: 'en', version: 4 });
+    await Promise.resolve();
+    expect(sync.confirmed()).toEqual({ language: 'es', version: 2 });
+    expect(
+      write.mock.calls.filter(([, , userId]: [AccountLanguage, number, string]) => userId === 'u2'),
+    ).toHaveLength(1);
   });
 
   it('stops silently and forgets the account when another one holds the session', async () => {

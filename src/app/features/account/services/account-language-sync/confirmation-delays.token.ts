@@ -4,7 +4,8 @@ import { InjectionToken } from '@angular/core';
  * Constant CONFIRMATION_DELAYS
  *
  * @description
- * Waits before each read that confirms a write without a known outcome, in milliseconds: 2, 4
+ * Waits before the fencing attempts that follow a write or read without an answer, in
+ * milliseconds; their count bounds the attempts. 2, 4
  * and 8 s by default. Specs provide shorter ones.
  *
  * @type {InjectionToken<readonly number[]>}

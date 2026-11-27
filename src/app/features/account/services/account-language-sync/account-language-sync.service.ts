@@ -18,26 +18,15 @@ import {
 import { CONFIRMATION_DELAYS } from './confirmation-delays.token';
 
 /**
- * Type AttemptOutcome
+ * Type SaveOutcome
  *
  * @description
- * What one save of a language ended with: the account holds it, it holds another one (both read
- * or answered by the gateway), or nothing tells.
+ * What saving a language ended with: a write answered `2xx` (`saved`), the gateway refused the
+ * first write for certain (`refused`), or no fencing write answered `2xx` (`unanswered`).
  *
- * @type {'saved' | 'refused' | 'unknown'}
+ * @type {'saved' | 'refused' | 'unanswered'}
  */
-type AttemptOutcome = 'saved' | 'refused' | 'unknown';
-
-/**
- * Type ConfirmationOutcome
- *
- * @description
- * What the delayed reads of an unknown save ended with: a read answered (`saved` or `refused`),
- * a newer pick replaced the language (`superseded`), or no read answered (`unanswered`).
- *
- * @type {'saved' | 'refused' | 'superseded' | 'unanswered'}
- */
-type ConfirmationOutcome = 'saved' | 'refused' | 'superseded' | 'unanswered';
+type SaveOutcome = 'saved' | 'refused' | 'unanswered';
 
 /**
  * Function displayLocale
@@ -59,23 +48,28 @@ export function displayLocale(language: AccountLanguage): AppLocale {
  * @description
  * Holds the account's language for the browser session (root-scoped, so a save outlives the
  * preferences page that started it), bound to one account as `NotificationPreferencesSync` is:
- * binding another account drops the pending pick and ignores late answers, and a session held by
- * another account or none (`AccountChangedError`) stops it silently.
+ * binding another account drops the pending pick and ignores the old binding's answers, and a
+ * session held by another account or none (`AccountChangedError`) stops it silently. Each run
+ * belongs to the binding it started in and writes for that binding's account only, so a pick made
+ * after a new binding starts its own run.
  *
- * - `confirmed` is the language and version last answered by the gateway; `requested` is the
- *   latest pick not yet confirmed, which the page shows over it.
- * - Picks are saved one at a time, the latest winning. While the account's language is known, a
- *   pick equal to it sends nothing; while it is uncertain, the account is read first, and the
- *   pick is sent when that read fails, whatever the cached value.
- * - A `412` or a write without a known outcome reads the account: it counts as saved when the
- *   account holds the pick, and is otherwise resent once against the version read. When the
- *   resend's outcome is unknown too, or the read fails, the state stays uncertain and the
- *   account is read again after 2, 4 and 8 s. If none answers, `unconfirmed` turns on: the page
- *   shows a neutral note with `retry`, and nothing is taken as confirmed.
+ * - `confirmed` is the language and version last settled by the gateway; `requested` is the
+ *   latest pick not yet settled, which the page shows over it.
+ * - Picks are saved one at a time, the latest winning, with `If-Match` on the confirmed version.
+ *   While the state is certain, a pick equal to the confirmed language sends nothing.
+ * - A write without a known outcome (no answer, a timeout, a `5xx`) may still land, so no read
+ *   can settle it, whatever it shows. The state turns uncertain and is fenced: the account is
+ *   read for its current version and the latest pick is sent again with `If-Match` on it, even
+ *   when the read already shows it. A late first write then fails on its stale version. A fencing
+ *   write refused with `412` reads and fences again; at most 3 fencing attempts run, after 2, 4
+ *   and 8 s when the previous one got no answer. Only a `2xx` on a fencing write settles the
+ *   state; otherwise `unconfirmed` turns on and the page shows a neutral note with `retry`.
+ *   A first write refused with `412` is fenced the same way.
  * - Once the latest pick is confirmed, the application shows its locale: `LocaleService.use`
  *   reloads it when that locale is not the one shown, and otherwise `Preference saved` confirms.
- * - A refusal known for certain puts the confirmed language back with `Could not save`; when an
- *   earlier pick of the same run was saved, its locale is applied the same way.
+ * - Only a first write refused for certain (a `4xx` other than `412`, while the state is
+ *   certain) puts the confirmed language back with `Could not save`; when an earlier pick of the
+ *   same run was saved, its locale is applied the same way.
  */
 @Service()
 export class AccountLanguageSync {
@@ -117,7 +111,8 @@ export class AccountLanguageSync {
    * Property delays
    *
    * @description
-   * Waits before each confirming read, in milliseconds.
+   * Waits before each fencing attempt that follows an unanswered one, in milliseconds; their
+   * count bounds the attempts.
    *
    * @type {readonly number[]}
    * @readonly
@@ -128,7 +123,7 @@ export class AccountLanguageSync {
    * Property confirmedState
    *
    * @description
-   * The language and version last answered by the gateway, or null before the first read.
+   * The language and version last settled by the gateway, or null before the first read.
    *
    * @type {WritableSignal<AccountLanguageSettings | null>}
    * @readonly
@@ -140,7 +135,7 @@ export class AccountLanguageSync {
    * Property requestedState
    *
    * @description
-   * The latest pick not yet confirmed, or null.
+   * The latest pick not yet settled, or null.
    *
    * @type {WritableSignal<AccountLanguage | null>}
    * @readonly
@@ -163,7 +158,7 @@ export class AccountLanguageSync {
    * Property confirmed
    *
    * @description
-   * The language and version last answered by the gateway.
+   * The language and version last settled by the gateway.
    *
    * @type {Signal<AccountLanguageSettings | null>}
    * @readonly
@@ -175,7 +170,7 @@ export class AccountLanguageSync {
    * Property requested
    *
    * @description
-   * The latest pick not yet confirmed.
+   * The latest pick not yet settled.
    *
    * @type {Signal<AccountLanguage | null>}
    * @readonly
@@ -214,21 +209,22 @@ export class AccountLanguageSync {
   private epoch: number = 0;
 
   /**
-   * Property running
+   * Property runningEpoch
    *
    * @description
-   * Whether a save run is in progress; picks made meanwhile join it.
+   * The binding whose save run is in progress, or null; picks of that binding join it, and a run
+   * of an earlier binding never blocks the current one.
    *
-   * @type {boolean}
+   * @type {number | null}
    */
-  private running: boolean = false;
+  private runningEpoch: number | null = null;
 
   /**
    * Property uncertain
    *
    * @description
-   * Whether the account's real language is unknown: a write may have landed unseen, so the
-   * confirmed value is not trusted until a read answers.
+   * Whether a write of the current binding may have landed unseen: until a fencing write answers
+   * `2xx`, the confirmed value is not trusted.
    *
    * @type {boolean}
    */
@@ -238,7 +234,7 @@ export class AccountLanguageSync {
    * Property wake
    *
    * @description
-   * Ends the current confirmation wait early, when a newer pick or a reset arrives.
+   * Ends the current wait early, when a newer pick or a reset arrives.
    *
    * @type {(() => void) | null}
    */
@@ -272,13 +268,10 @@ export class AccountLanguageSync {
     this.bind(userId);
     const epoch: number = this.epoch;
     const known: AccountLanguageSettings | null = this.confirmedState();
-    if (known !== null && (this.running || this.requestedState() !== null)) return known;
+    if (known !== null && !this.idle()) return known;
     const fresh: AccountLanguageSettings = await this.api.read(userId, abortSignal);
     if (epoch !== this.epoch) throw new AccountChangedError();
-    if (!this.running && this.requestedState() === null) {
-      this.confirmedState.set(fresh);
-      this.uncertain = false;
-    }
+    if (this.idle()) this.confirmedState.set(fresh);
     return this.confirmedState() ?? fresh;
   }
 
@@ -295,19 +288,31 @@ export class AccountLanguageSync {
     this.requestedState.set(language);
     this.unconfirmedState.set(false);
     this.wake?.();
-    void this.run(this.epoch);
+    void this.run(this.epoch, this.userId);
   }
 
   /**
    * Method retry
    *
    * @description
-   * Tries again to confirm the latest pick once its outcome could not be confirmed.
+   * Fences the latest pick again once its outcome could not be confirmed.
    */
   public retry(): void {
-    if (!this.unconfirmedState()) return;
+    if (!this.unconfirmedState() || this.userId === null) return;
     this.unconfirmedState.set(false);
-    void this.run(this.epoch);
+    void this.run(this.epoch, this.userId);
+  }
+
+  /**
+   * Method idle
+   *
+   * @description
+   * Whether the current binding has nothing in progress and nothing unsettled.
+   *
+   * @returns {boolean} Whether a read may replace the confirmed language.
+   */
+  private idle(): boolean {
+    return this.runningEpoch !== this.epoch && this.requestedState() === null && !this.uncertain;
   }
 
   /**
@@ -360,14 +365,15 @@ export class AccountLanguageSync {
    * Saves the requested language, then each newer pick, one at a time, and applies the result
    * once nothing is left to save. A changed account stops it silently.
    *
-   * @param {number} epoch - The epoch it runs in.
+   * @param {number} epoch - The binding it runs for.
+   * @param {string} userId - That binding's account, the only one it writes for.
    * @returns {Promise<void>} Resolves once the run ends.
    */
-  private async run(epoch: number): Promise<void> {
-    if (this.running) return;
-    this.running = true;
+  private async run(epoch: number, userId: string): Promise<void> {
+    if (this.runningEpoch === epoch) return;
+    this.runningEpoch = epoch;
     let savedAny: boolean = false;
-    let outcome: 'saved' | 'refused' | 'unconfirmed' | null = null;
+    let outcome: SaveOutcome | null = null;
     try {
       while (this.current(epoch)) {
         const target: AccountLanguage | null = this.requestedState();
@@ -377,19 +383,21 @@ export class AccountLanguageSync {
           this.requestedState.set(null);
           break;
         }
-        let result: AttemptOutcome | ConfirmationOutcome = await this.attempt(target, epoch);
+        const result: { outcome: SaveOutcome; language: AccountLanguage } = await this.save(
+          target,
+          epoch,
+          userId,
+        );
         if (!this.current(epoch)) return;
-        if (result === 'unknown') result = await this.confirm(target, epoch);
-        if (!this.current(epoch)) return;
-        if (result === 'saved') savedAny = true;
-        if (this.requestedState() !== target || result === 'superseded') continue;
-        if (result === 'unanswered') {
+        if (result.outcome === 'saved') savedAny = true;
+        if (this.requestedState() !== result.language) continue;
+        if (result.outcome === 'unanswered') {
           this.unconfirmedState.set(true);
-          outcome = 'unconfirmed';
+          outcome = 'unanswered';
           break;
         }
         this.requestedState.set(null);
-        outcome = result;
+        outcome = result.outcome;
         break;
       }
     } catch (error: unknown) {
@@ -397,9 +405,9 @@ export class AccountLanguageSync {
       if (this.current(epoch)) this.reset();
       return;
     } finally {
-      this.running = false;
+      if (this.runningEpoch === epoch) this.runningEpoch = null;
     }
-    if (!this.current(epoch) || outcome === 'unconfirmed') return;
+    if (!this.current(epoch) || outcome === 'unanswered') return;
     const language: AccountLanguage | null = this.confirmedState()?.language ?? null;
     if (outcome === 'refused') this.failed();
     if (!savedAny || language === null) return;
@@ -408,124 +416,108 @@ export class AccountLanguageSync {
   }
 
   /**
-   * Method attempt
+   * Method save
    *
    * @description
-   * Saves one language. While the state is uncertain, the account is read first and the
-   * language counts as saved when it already holds it; when that read fails, the language is
-   * sent against the cached version anyway. A `412` or an unknown outcome reads the account and
-   * resends once against it.
+   * Saves one language. While the state is certain, it is written against the confirmed version;
+   * a `2xx` settles it and a `4xx` other than `412` refuses it. A `412`, an unknown outcome, or
+   * an uncertain state leads to fencing.
    *
    * @param {AccountLanguage} target - The language to save.
-   * @param {number} epoch - The run's epoch.
-   * @returns {Promise<AttemptOutcome>} What the account holds afterwards, as far as is known.
+   * @param {number} epoch - The run's binding.
+   * @param {string} userId - That binding's account.
+   * @returns {Promise<{ outcome: SaveOutcome; language: AccountLanguage }>} The outcome and the
+   * language it settled or concerns.
    * @throws {AccountChangedError} When another account or none holds the session.
    */
-  private async attempt(target: AccountLanguage, epoch: number): Promise<AttemptOutcome> {
-    if (this.uncertain) {
-      const fresh: AccountLanguageSettings | null = await this.reread(epoch);
-      if (fresh?.language === target) return 'saved';
-    }
+  private async save(
+    target: AccountLanguage,
+    epoch: number,
+    userId: string,
+  ): Promise<{ outcome: SaveOutcome; language: AccountLanguage }> {
     const base: AccountLanguageSettings | null = this.confirmedState();
-    if (base === null || !this.current(epoch)) return 'unknown';
-    let first: unknown;
-    try {
-      this.record(await this.api.write(target, base.version, this.bound()), epoch);
-      return 'saved';
-    } catch (error: unknown) {
-      if (error instanceof AccountChangedError) throw error;
-      first = error;
-    }
-    const unknown: boolean = isUncertainWrite(first);
-    if (!unknown && !isVersionMismatch(first)) return this.uncertain ? 'unknown' : 'refused';
-    if (unknown) this.uncertain = true;
-    const fresh: AccountLanguageSettings | null = await this.reread(epoch);
-    if (fresh === null) return 'unknown';
-    if (fresh.language === target) return 'saved';
-    try {
-      this.record(await this.api.write(target, fresh.version, this.bound()), epoch);
-      return 'saved';
-    } catch (error: unknown) {
-      if (error instanceof AccountChangedError) throw error;
-      if (unknown || isUncertainWrite(error)) {
-        this.uncertain = true;
-        return 'unknown';
+    let unknown: boolean = false;
+    if (!this.uncertain && base !== null) {
+      try {
+        this.settle(await this.api.write(target, base.version, userId), epoch);
+        return { outcome: 'saved', language: target };
+      } catch (error: unknown) {
+        if (error instanceof AccountChangedError) throw error;
+        if (!isUncertainWrite(error) && !isVersionMismatch(error)) {
+          return { outcome: 'refused', language: target };
+        }
+        unknown = isUncertainWrite(error);
+        if (unknown && this.current(epoch)) this.uncertain = true;
       }
-      return 'refused';
     }
+    return this.fence(target, epoch, userId, unknown);
   }
 
   /**
-   * Method confirm
+   * Method fence
    *
    * @description
-   * Reads the account after 2, 4 and 8 s until a read answers, a newer pick replaces the
-   * language or the binding changes.
+   * Reads the account for its current version, then sends the latest pick with `If-Match` on it,
+   * so a write still in flight fails on its stale version. Each attempt first waits its delay
+   * (2, 4 and 8 s) when the previous read or write got no answer, the first one when the write it
+   * fences just got none; a `412` fences again at once. At most as many attempts as delays run.
    *
-   * @param {AccountLanguage} target - The language whose save is unknown.
-   * @param {number} epoch - The run's epoch.
-   * @returns {Promise<ConfirmationOutcome>} What the reads found.
+   * @param {AccountLanguage} target - The language being saved when fencing started.
+   * @param {number} epoch - The run's binding.
+   * @param {string} userId - That binding's account.
+   * @param {boolean} afterUnknown - Whether the write it fences just got no answer.
+   * @returns {Promise<{ outcome: SaveOutcome; language: AccountLanguage }>} `saved` with the
+   * language a fencing write settled, or `unanswered` with the latest pick.
    * @throws {AccountChangedError} When another account or none holds the session.
    */
-  private async confirm(target: AccountLanguage, epoch: number): Promise<ConfirmationOutcome> {
+  private async fence(
+    target: AccountLanguage,
+    epoch: number,
+    userId: string,
+    afterUnknown: boolean,
+  ): Promise<{ outcome: SaveOutcome; language: AccountLanguage }> {
+    let latest: AccountLanguage = target;
+    let wait: boolean = afterUnknown;
     for (const delay of this.delays) {
-      await this.pause(delay);
-      if (!this.current(epoch) || this.requestedState() !== target) return 'superseded';
-      const fresh: AccountLanguageSettings | null = await this.reread(epoch);
-      if (fresh !== null) return fresh.language === target ? 'saved' : 'refused';
+      if (wait) await this.pause(delay);
+      if (!this.current(epoch)) return { outcome: 'unanswered', language: latest };
+      latest = this.requestedState() ?? latest;
+      wait = true;
+      let version: number;
+      try {
+        version = (await this.api.read(userId)).version;
+      } catch (error: unknown) {
+        if (error instanceof AccountChangedError) throw error;
+        continue;
+      }
+      if (!this.current(epoch)) return { outcome: 'unanswered', language: latest };
+      latest = this.requestedState() ?? latest;
+      try {
+        this.settle(await this.api.write(latest, version, userId), epoch);
+        return { outcome: 'saved', language: latest };
+      } catch (error: unknown) {
+        if (error instanceof AccountChangedError) throw error;
+        if (isVersionMismatch(error)) wait = false;
+        else if (isUncertainWrite(error) && this.current(epoch)) this.uncertain = true;
+      }
     }
-    return 'unanswered';
+    return { outcome: 'unanswered', language: this.requestedState() ?? latest };
   }
 
   /**
-   * Method reread
+   * Method settle
    *
    * @description
-   * Reads the account; an answer becomes the confirmed language and settles the uncertainty.
-   *
-   * @param {number} epoch - The run's epoch.
-   * @returns {Promise<AccountLanguageSettings | null>} The answer, or null when the read failed.
-   * @throws {AccountChangedError} When another account or none holds the session.
-   */
-  private async reread(epoch: number): Promise<AccountLanguageSettings | null> {
-    try {
-      const fresh: AccountLanguageSettings = await this.api.read(this.bound());
-      if (!this.current(epoch)) return null;
-      this.record(fresh, epoch);
-      return fresh;
-    } catch (error: unknown) {
-      if (error instanceof AccountChangedError) throw error;
-      return null;
-    }
-  }
-
-  /**
-   * Method record
-   *
-   * @description
-   * Takes a gateway answer as the confirmed language, unless the binding changed.
+   * Takes a `2xx` answer as the confirmed language and ends the uncertainty, unless the binding
+   * changed.
    *
    * @param {AccountLanguageSettings} answer - The answer.
-   * @param {number} epoch - The run's epoch.
+   * @param {number} epoch - The run's binding.
    */
-  private record(answer: AccountLanguageSettings, epoch: number): void {
+  private settle(answer: AccountLanguageSettings, epoch: number): void {
     if (!this.current(epoch)) return;
     this.confirmedState.set(answer);
     this.uncertain = false;
-  }
-
-  /**
-   * Method bound
-   *
-   * @description
-   * The bound account.
-   *
-   * @returns {string} Its id.
-   * @throws {AccountChangedError} When no account is bound any more.
-   */
-  private bound(): string {
-    if (this.userId === null) throw new AccountChangedError();
-    return this.userId;
   }
 
   /**
@@ -589,7 +581,7 @@ export class AccountLanguageSync {
    * Method failed
    *
    * @description
-   * Says the latest pick was not saved; the confirmed language shows again. Replaces the previous
+   * Says the latest pick was refused; the confirmed language shows again. Replaces the previous
    * failure toast.
    */
   private failed(): void {

@@ -197,15 +197,18 @@ parent provides the English texts of `cw-password-strength` and `cw-input-otp` t
     in the pick's locale with `LocaleService.use` (`?lang=`) when that locale is not the one shown
     (German and Spanish show English), even after the page closed, and otherwise confirms with
     `Preference saved`. Binding another account, or a session held by another account or none,
-    resets it silently.
-  - Picks save one at a time, the latest winning. A `412` or a write without a known outcome
-    reads the account, counts as saved when it holds the pick, and is otherwise resent once.
-    When that read fails, or the resend's outcome is unknown too, the state stays uncertain: the
-    account is read again after 2, 4 and 8 s, and when none of these reads answers, a neutral
-    `Could not confirm the language` note with `Retry` shows. While uncertain, the cached language
-    is never taken as confirmed: the next save reads first and sends a pick even when it equals
-    the cached value.
-  - Only a refusal known for certain (a `4xx`, or a read showing the account without the pick)
+    resets it silently. Each run belongs to its binding and writes for that binding's account
+    only, so a pick on a new account is saved even while the old account's run is still pending.
+  - Picks save one at a time, the latest winning, with `If-Match` on the confirmed version.
+  - A write without a known outcome may still land, so no read settles it, whatever it shows: the
+    state turns uncertain and is fenced. The account is read for its current version and the
+    latest pick is sent again with `If-Match` on it, even when the read already shows it, so a
+    late earlier write fails on its stale version. A fencing write refused with `412` reads and
+    fences again, at most 3 attempts, after 2, 4 and 8 s when the previous one got no answer; a
+    first write refused with `412` is fenced the same way. Only a `2xx` on a fencing write
+    settles the state; otherwise a neutral `Could not confirm the language` note with `Retry`
+    shows, and the cached language is never taken as confirmed.
+  - Only a first write refused for certain (a `4xx` other than `412`, while the state is certain)
     puts the confirmed language back with `Could not save`; when an earlier pick of the same run
     was saved, that pick's locale is applied.
   - Known gaps: the date format, the week start and the `Display and accessibility` card are
