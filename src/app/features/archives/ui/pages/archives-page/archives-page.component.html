@@ -54,10 +54,30 @@
                 />
               }
             </div>
-            @if (store.listCount() > listRows().length) {
-              <p class="text-xs text-muted-foreground" data-testid="archives-lists-truncated">
-                {{ truncated(listRows().length, store.listCount()) }}
-              </p>
+            @if (store.listCount() > listRows().length || store.hasMore('lists')) {
+              <div class="flex flex-wrap items-center gap-x-3 gap-y-2">
+                @if (store.listCount() > listRows().length) {
+                  <p class="text-xs text-muted-foreground" data-testid="archives-lists-truncated">
+                    {{ truncated(listRows().length, store.listCount()) }}
+                  </p>
+                }
+                @if (store.hasMore('lists')) {
+                  <button
+                    cwButton
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    class="aria-disabled:cursor-default aria-disabled:opacity-50"
+                    [attr.aria-disabled]="store.moreLoading('lists') || null"
+                    [attr.aria-busy]="store.moreLoading('lists') || null"
+                    data-testid="archives-lists-more"
+                    (click)="showMore('lists')"
+                    i18n="@@archives.tabs.show-more"
+                  >
+                    Show more
+                  </button>
+                }
+              </div>
             }
           } @else {
             <cw-empty variant="outline" data-testid="archives-empty">
@@ -103,10 +123,30 @@
                 />
               }
             </div>
-            @if (store.taskCount() > taskRows().length) {
-              <p class="text-xs text-muted-foreground" data-testid="archives-tasks-truncated">
-                {{ truncated(taskRows().length, store.taskCount()) }}
-              </p>
+            @if (store.taskCount() > taskRows().length || store.hasMore('tasks')) {
+              <div class="flex flex-wrap items-center gap-x-3 gap-y-2">
+                @if (store.taskCount() > taskRows().length) {
+                  <p class="text-xs text-muted-foreground" data-testid="archives-tasks-truncated">
+                    {{ truncated(taskRows().length, store.taskCount()) }}
+                  </p>
+                }
+                @if (store.hasMore('tasks')) {
+                  <button
+                    cwButton
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    class="aria-disabled:cursor-default aria-disabled:opacity-50"
+                    [attr.aria-disabled]="store.moreLoading('tasks') || null"
+                    [attr.aria-busy]="store.moreLoading('tasks') || null"
+                    data-testid="archives-tasks-more"
+                    (click)="showMore('tasks')"
+                    i18n="@@archives.tabs.show-more"
+                  >
+                    Show more
+                  </button>
+                }
+              </div>
             }
           } @else {
             <cw-empty variant="outline" data-testid="archives-empty">

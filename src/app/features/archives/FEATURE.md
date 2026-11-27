@@ -23,8 +23,9 @@ place (`replaceUrl`), dropping it for `Lists`. Spaces' sidebar footer links to i
 ## Dependencies
 
 - `@cadenway/api-client` through `data-access/` (`ArchivesApi`): `ArchivesService`
-  (`listArchivedLists` and `listArchivedTasks`, each read 100 at a time up to 10 pages, so 1,000
-  items per tab; `unarchiveList`, `unarchiveTask`, without `If-Match`), `MembersService.listMembers`
+  (`listArchivedLists` and `listArchivedTasks`, read 100 at a time, 10 pages (1,000 items) per tab
+  at first and per `Show more` from the tab's cursor; `unarchiveList`, `unarchiveTask`, without
+  `If-Match`), `MembersService.listMembers`
   (every page, for the `by` of the rows), and `ListsService.getList` and `TasksService.getTask`
   (one item, bypassing the HTTP cache, to settle an unknown restore outcome). Each read is given
   10 s and each restore 30 s, since restoring a task restores its subtree and maybe its list.
@@ -40,11 +41,18 @@ place (`replaceUrl`), dropping it for `Lists`. Spaces' sidebar footer links to i
 ## Invariants
 
 - `ArchivesStore` is page-scoped (`ArchivesPage` providers) and keyed on the organization pin. It
-  reads both tabs side by side, each up to 10 pages (1,000 items), with the gateway's totals:
-  actively when the page opens, passively on window focus, on a tab becoming visible, after a
-  realtime reconnection, after a task detail closes and after each restore, once at the end of a
-  300 ms burst; no organization-wide notice exists (gap G-R2). A read asked for while one runs is
-  sent once it settles. A tab holding fewer rows than its total says so under its rows.
+  reads both tabs side by side, each down to its depth (10 pages, so 1,000 items, at first), with
+  the gateway's totals and each tab's continuation cursor: actively when the page opens,
+  passively on window focus, on a tab becoming visible, after a realtime reconnection, after a
+  task detail closes and after each restore, once at the end of a 300 ms burst; no
+  organization-wide notice exists (gap G-R2). A read asked for while one runs is sent once it
+  settles. A tab holding fewer rows than its total says so under its rows.
+- While a tab's cursor is not null, `Show more` under its rows reads the next 10 pages from that
+  cursor and adds them (deduplicated) under the rows, so every archived item can be reached and
+  restored; the tab's depth grows by 10 pages, and later background reads refresh it down to that
+  depth only. A failed `Show more` keeps the depth and the rows and shows a failure toast; one
+  that ends while a read of the archives runs or after one landed reads again at the new depth.
+  An organization switch resets both depths.
 - A failure of the first read renders `RouteErrorBoundary` (the unavailable state with `Retry`) in
   place of the page, so the shell stays; a background read that fails keeps the rows. An empty tab
   is a successful read with no item (`No archived list`, `No archived task`). The mockup draws no
@@ -60,6 +68,8 @@ place (`replaceUrl`), dropping it for `Lists`. Spaces' sidebar footer links to i
   `aria-busy`, and ignores clicks.
 - A confirmed restore hides its item from every read that began before the confirmation, so an
   older read still in flight cannot bring it back; a read that began later is the gateway's word.
+  Restoring a task whose list is archived (`list.state === 'archived'`) restores that list too, so
+  the list is hidden the same way.
   The summary and tab counts are the gateway's totals less the hidden items.
 - An unknown outcome (no answer, a timeout, `408`, `5xx`) is never reported as a failure: the row
   stays pending while the item itself is read again 2, 4 and 8 s later (`ARCHIVES_CONFIRM_DELAYS_MS`).
@@ -80,7 +90,8 @@ place (`replaceUrl`), dropping it for `Lists`. Spaces' sidebar footer links to i
   actor (an automation, a service) and while the members are not known; a failed members read is
   read again with the next archives read.
 - Copy not taken word for word from the mockup: `Loading the archives`, `archived on <date>`
-  without `by`, the truncation notice `Only the <n> most recently archived are shown, out of
+  without `by`, `Show more` and its failure `The next archived items could not be loaded`, the
+  truncation notice `Only the <n> most recently archived are shown, out of
 <total>.`, the failure toasts `The list could not be restored`, `The sprint could not be
 restored` and `<KEY> could not be restored`, the missing-right toasts `You cannot restore
 <name or KEY>` / `Restoring takes the edit right on the list.`, and the neutral notices `The

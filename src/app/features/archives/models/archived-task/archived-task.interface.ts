@@ -54,6 +54,17 @@ export interface ArchivedTaskItem {
   readonly milestone: boolean;
 
   /**
+   * Property listId
+   *
+   * @description
+   * Identifier of its list; restoring the task restores that list too when it is archived.
+   *
+   * @type {string}
+   * @readonly
+   */
+  readonly listId: string;
+
+  /**
    * Property listName
    *
    * @description

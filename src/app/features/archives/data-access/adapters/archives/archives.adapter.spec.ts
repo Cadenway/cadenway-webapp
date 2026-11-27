@@ -104,6 +104,7 @@ describe('archives adapter', () => {
       name: 'Old pricing page',
       status: 'done',
       milestone: false,
+      listId: 'l-sprint14',
       listName: 'Sprint 14',
       listArchived: false,
       archivedAt: '2026-11-05T11:30:00Z',

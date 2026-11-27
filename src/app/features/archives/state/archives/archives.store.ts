@@ -30,12 +30,17 @@ import {
   ArchivesApi,
   isForbiddenRestore,
   isUncertainRestore,
+  MAX_PAGES,
 } from '../../data-access/services/archives-api/archives-api.service';
 import type { ArchiveCheck } from '../../models/archive-check/archive-check.type';
 import { ARCHIVES_CONFIRM_DELAYS_MS } from './archives-confirm-delays.token';
 import type { ArchivedListItem } from '../../models/archived-list/archived-list.interface';
 import type { ArchivedTaskItem } from '../../models/archived-task/archived-task.interface';
-import type { ArchivesRead } from '../../models/archives-read/archives-read.interface';
+import type {
+  ArchivesMore,
+  ArchivesRead,
+  ArchivesTab,
+} from '../../models/archives-read/archives-read.interface';
 import type { RestoreOutcome } from '../../models/restore-outcome/restore-outcome.type';
 
 /**
@@ -150,6 +155,17 @@ interface ArchivesState {
    * @readonly
    */
   readonly _restored: Readonly<Partial<Record<string, number>>>;
+
+  /**
+   * Property _loadingMore
+   *
+   * @description
+   * Tabs whose `Show more` read runs.
+   *
+   * @type {readonly ArchivesTab[]}
+   * @readonly
+   */
+  readonly _loadingMore: readonly ArchivesTab[];
   // #endregion
 }
 
@@ -222,6 +238,17 @@ interface ArchivesLoads {
    * @type {boolean}
    */
   destroyed: boolean;
+
+  /**
+   * Property depth
+   *
+   * @description
+   * Pages each tab shows: `MAX_PAGES` at first, `MAX_PAGES` more per `Show more`. Every read
+   * after the first refreshes each tab down to it.
+   *
+   * @type {{ lists: number; tasks: number }}
+   */
+  depth: { lists: number; tasks: number };
   // #endregion
 }
 
@@ -318,6 +345,43 @@ export interface ArchivesStoreInstance {
 
   // #region Methods
   /**
+   * Method hasMore
+   *
+   * @description
+   * Whether a tab has archived items past those read (`Show more`).
+   *
+   * @param {ArchivesTab} tab - The tab.
+   * @returns {boolean} Whether its read stopped before its last page.
+   */
+  hasMore(tab: ArchivesTab): boolean;
+
+  /**
+   * Method moreLoading
+   *
+   * @description
+   * Whether a tab's `Show more` read runs.
+   *
+   * @param {ArchivesTab} tab - The tab.
+   * @returns {boolean} Whether it runs.
+   */
+  moreLoading(tab: ArchivesTab): boolean;
+
+  /**
+   * Method showMore
+   *
+   * @description
+   * Reads the next `MAX_PAGES` pages of a tab from where it stopped and adds them under its rows;
+   * later background reads refresh the tab down to that new depth. A read of the archives running
+   * meanwhile makes it read again at the new depth instead.
+   *
+   * @param {ArchivesTab} tab - The tab.
+   * @returns {Promise<'shown' | 'failed' | 'stale'>} `shown` once added (or read again),
+   * `failed` when the read failed (the depth stays), `stale` when nothing was to read, a read
+   * already ran, the organization changed or the page left.
+   */
+  showMore(tab: ArchivesTab): Promise<'shown' | 'failed' | 'stale'>;
+
+  /**
    * Method listPending
    *
    * @description
@@ -358,8 +422,9 @@ export interface ArchivesStoreInstance {
    *
    * @description
    * Unarchives a task with its subtree (and its list when archived too). Once confirmed in the
-   * organization where it started, `beforeLeave` runs, the task leaves the tab, the sidebar is
-   * read again and so are the archives (its list may have left the `Lists` tab).
+   * organization where it started, `beforeLeave` runs, the task leaves the tab (and its list the
+   * `Lists` tab when that list was archived, since the gateway restores it too), the sidebar is
+   * read again and so are the archives.
    *
    * @param {ArchivedTaskItem} task - The archived root.
    * @param {() => void} [beforeLeave] - Runs just before the row leaves the tab.
@@ -377,7 +442,12 @@ export interface ArchivesStoreInstance {
  *
  * @type {ArchivesState}
  */
-const initialState: ArchivesState = { _organizationId: null, _pending: [], _restored: {} };
+const initialState: ArchivesState = {
+  _organizationId: null,
+  _pending: [],
+  _restored: {},
+  _loadingMore: [],
+};
 
 /**
  * Function listKey
@@ -425,6 +495,7 @@ function createArchivesStore(): Type<ArchivesStoreInstance> {
         generation: 0,
         last: null,
         destroyed: false,
+        depth: { lists: MAX_PAGES, tasks: MAX_PAGES },
       };
       const byOrganization: () => { organizationId: string } | undefined = () => {
         const organizationId: string | null = store._organizationId();
@@ -452,7 +523,7 @@ function createArchivesStore(): Type<ArchivesStoreInstance> {
             loads.passive = false;
             const sequence: number = (loads.sequence += 1);
             try {
-              const read: ArchivesRead = await api.read(passive, abortSignal);
+              const read: ArchivesRead = await api.read(passive, abortSignal, { ...loads.depth });
               const snapshot: ArchivesSnapshot = {
                 organizationId: params.organizationId,
                 sequence,
@@ -539,14 +610,21 @@ function createArchivesStore(): Type<ArchivesStoreInstance> {
           _pending: store._pending().filter((pending: string) => pending !== key),
         });
       };
-      const confirmed: (key: string, beforeLeave: (() => void) | undefined) => RestoreOutcome = (
+      const confirmed: (
         key: string,
+        alsoRestored: readonly string[],
+        beforeLeave: (() => void) | undefined,
+      ) => RestoreOutcome = (
+        key: string,
+        alsoRestored: readonly string[],
         beforeLeave: (() => void) | undefined,
       ): RestoreOutcome => {
         beforeLeave?.();
+        const restored: Partial<Record<string, number>> = { ...store._restored() };
+        for (const each of [key, ...alsoRestored]) restored[each] = store._loads.sequence;
         patchState(store, {
           _pending: store._pending().filter((pending: string) => pending !== key),
-          _restored: { ...store._restored(), [key]: store._loads.sequence },
+          _restored: restored,
         });
         store._navigation?.refresh();
         read();
@@ -554,11 +632,13 @@ function createArchivesStore(): Type<ArchivesStoreInstance> {
       };
       const restore: (
         key: string,
+        alsoRestored: readonly string[],
         write: () => Promise<void>,
         check: () => Promise<ArchiveCheck>,
         beforeLeave: (() => void) | undefined,
       ) => Promise<RestoreOutcome> = async (
         key: string,
+        alsoRestored: readonly string[],
         write: () => Promise<void>,
         check: () => Promise<ArchiveCheck>,
         beforeLeave: (() => void) | undefined,
@@ -597,7 +677,7 @@ function createArchivesStore(): Type<ArchivesStoreInstance> {
               state = null;
             }
             if (!current()) return 'stale';
-            if (state === 'restored') return confirmed(key, beforeLeave);
+            if (state === 'restored') return confirmed(key, alsoRestored, beforeLeave);
             if (state === 'gone') break;
           }
           settle(key);
@@ -606,7 +686,40 @@ function createArchivesStore(): Type<ArchivesStoreInstance> {
           return 'unconfirmed';
         }
         if (!current()) return 'stale';
-        return confirmed(key, beforeLeave);
+        return confirmed(key, alsoRestored, beforeLeave);
+      };
+      const extend: (tab: ArchivesTab, more: ArchivesMore<unknown>) => ArchivesRead | null = (
+        tab: ArchivesTab,
+        more: ArchivesMore<unknown>,
+      ): ArchivesRead | null => {
+        if (!store.archives.hasValue()) return null;
+        const read: ArchivesRead = store.archives.value().read;
+        if (tab === 'lists') {
+          const known: Set<string> = new Set<string>(
+            read.lists.map((list: ArchivedListItem) => list.id),
+          );
+          const added: ArchivedListItem[] = (more.items as readonly ArchivedListItem[]).filter(
+            (list: ArchivedListItem) => !known.has(list.id),
+          );
+          return {
+            ...read,
+            lists: [...read.lists, ...added],
+            listTotal: more.total,
+            listCursor: more.cursor,
+          };
+        }
+        const known: Set<string> = new Set<string>(
+          read.tasks.map((task: ArchivedTaskItem) => task.key),
+        );
+        const added: ArchivedTaskItem[] = (more.items as readonly ArchivedTaskItem[]).filter(
+          (task: ArchivedTaskItem) => !known.has(task.key),
+        );
+        return {
+          ...read,
+          tasks: [...read.tasks, ...added],
+          taskTotal: more.total,
+          taskCursor: more.cursor,
+        };
       };
       return {
         _refresh: read,
@@ -621,7 +734,13 @@ function createArchivesStore(): Type<ArchivesStoreInstance> {
           store._loads.passive = false;
           store._loads.queued = false;
           store._loads.last = null;
-          patchState(store, { _organizationId: organizationId, _pending: [], _restored: {} });
+          store._loads.depth = { lists: MAX_PAGES, tasks: MAX_PAGES };
+          patchState(store, {
+            _organizationId: organizationId,
+            _pending: [],
+            _restored: {},
+            _loadingMore: [],
+          });
         }),
         listPending(listId: string): boolean {
           return store._pending().includes(listKey(listId));
@@ -629,9 +748,72 @@ function createArchivesStore(): Type<ArchivesStoreInstance> {
         taskPending(key: string): boolean {
           return store._pending().includes(taskKey(key));
         },
+        hasMore(tab: ArchivesTab): boolean {
+          if (!store.archives.hasValue()) return false;
+          const read: ArchivesRead = store.archives.value().read;
+          return (tab === 'lists' ? read.listCursor : read.taskCursor) !== null;
+        },
+        moreLoading(tab: ArchivesTab): boolean {
+          return store._loadingMore().includes(tab);
+        },
+        async showMore(tab: ArchivesTab): Promise<'shown' | 'failed' | 'stale'> {
+          if (!store.archives.hasValue() || store._loadingMore().includes(tab)) return 'stale';
+          const snapshot: ArchivesSnapshot = store.archives.value();
+          const cursor: string | null =
+            tab === 'lists' ? snapshot.read.listCursor : snapshot.read.taskCursor;
+          const organizationId: string | null = store._organizationId();
+          if (cursor === null || organizationId === null) return 'stale';
+          const generation: number = store._loads.generation;
+          const current: () => boolean = (): boolean =>
+            !store._loads.destroyed &&
+            generation === store._loads.generation &&
+            store._pin.current() === organizationId;
+          const done: () => void = (): void => {
+            patchState(store, {
+              _loadingMore: store._loadingMore().filter((each: ArchivesTab) => each !== tab),
+            });
+          };
+          patchState(store, { _loadingMore: [...store._loadingMore(), tab] });
+          store._loads.depth = {
+            ...store._loads.depth,
+            [tab]: store._loads.depth[tab] + MAX_PAGES,
+          };
+          let more: ArchivesMore<unknown>;
+          try {
+            more =
+              tab === 'lists'
+                ? await store._api.moreLists(cursor)
+                : await store._api.moreTasks(cursor);
+          } catch {
+            if (!current()) return 'stale';
+            store._loads.depth = {
+              ...store._loads.depth,
+              [tab]: store._loads.depth[tab] - MAX_PAGES,
+            };
+            done();
+            return 'failed';
+          }
+          if (!current()) return 'stale';
+          done();
+          const unchanged: boolean =
+            !store.archives.isLoading() &&
+            store.archives.hasValue() &&
+            store.archives.value() === snapshot;
+          const extended: ArchivesRead | null = unchanged ? extend(tab, more) : null;
+          if (extended === null) {
+            // A newer read landed or runs: it reads again down to the new depth.
+            read();
+            return 'shown';
+          }
+          const next: ArchivesSnapshot = { ...snapshot, read: extended };
+          store._loads.last = next;
+          store.archives.set(next);
+          return 'shown';
+        },
         restoreList(list: ArchivedListItem, beforeLeave?: () => void): Promise<RestoreOutcome> {
           return restore(
             listKey(list.id),
+            [],
             () => store._api.unarchiveList(list.id),
             () => store._api.checkList(list.id),
             beforeLeave,
@@ -640,6 +822,7 @@ function createArchivesStore(): Type<ArchivesStoreInstance> {
         restoreTask(task: ArchivedTaskItem, beforeLeave?: () => void): Promise<RestoreOutcome> {
           return restore(
             taskKey(task.key),
+            task.listArchived ? [listKey(task.listId)] : [],
             () => store._api.unarchiveTask(task.key),
             () => store._api.checkTask(task.key),
             beforeLeave,
@@ -682,7 +865,8 @@ function createArchivesStore(): Type<ArchivesStoreInstance> {
  *
  * @description
  * Page-scoped on `ArchivesPage`. It reads both tabs of the archives of the organization the
- * organization pin holds, side by side, each up to `MAX_PAGES` pages, with the members' names:
+ * organization pin holds, side by side, each down to its depth (`MAX_PAGES` pages at first,
+ * `MAX_PAGES` more per `Show more`, which reads on from the tab's cursor), with the members' names:
  * actively
  * when the page opens (a failure reaches the route's error boundary), passively (in the background)
  * on focus, on a visible tab, after a realtime reconnection, after a task detail closes and after
@@ -690,7 +874,8 @@ function createArchivesStore(): Type<ArchivesStoreInstance> {
  * runs is sent once it settles. A background read that fails keeps the last read. An organization
  * switch drops its rows, its pending and confirmed restores, and reads again; a restore that
  * started in an earlier organization changes nothing and reports `stale`. A confirmed restore
- * hides its item from every read that began before the confirmation, so an older read still in
+ * hides its item (and, for a task whose list was archived, that list) from every read that began
+ * before the confirmation, so an older read still in
  * flight cannot bring it back; a later read is the gateway's word. An unknown outcome (no answer,
  * a timeout, `408`, `5xx`) is never reported as a failure: the row stays pending while the item
  * itself is read again after each of `ARCHIVES_CONFIRM_DELAYS_MS`; it reports `restored` once the

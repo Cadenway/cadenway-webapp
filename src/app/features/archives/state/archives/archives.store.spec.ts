@@ -68,6 +68,7 @@ const cad430: ArchivedTaskItem = {
   name: 'Old pricing page',
   status: 'done',
   milestone: false,
+  listId: 'l-sprint14',
   listName: 'Sprint 14',
   listArchived: false,
   archivedAt: '2026-11-05T11:30:00Z',
@@ -88,7 +89,14 @@ function archives(
   lists: readonly ArchivedListItem[],
   tasks: readonly ArchivedTaskItem[],
 ): ArchivesRead {
-  return { lists, listTotal: lists.length, tasks, taskTotal: tasks.length };
+  return {
+    lists,
+    listTotal: lists.length,
+    listCursor: null,
+    tasks,
+    taskTotal: tasks.length,
+    taskCursor: null,
+  };
 }
 
 /**
@@ -131,7 +139,14 @@ const forbidden: HttpErrorResponse = new HttpErrorResponse({
 
 describe('ArchivesStore', () => {
   let api: Record<
-    'read' | 'memberNames' | 'unarchiveList' | 'unarchiveTask' | 'checkList' | 'checkTask',
+    | 'read'
+    | 'memberNames'
+    | 'unarchiveList'
+    | 'unarchiveTask'
+    | 'checkList'
+    | 'checkTask'
+    | 'moreLists'
+    | 'moreTasks',
     Mock
   >;
   let navigation: { refresh: Mock; refreshCounts: Mock };
@@ -150,6 +165,8 @@ describe('ArchivesStore', () => {
       ),
       unarchiveList: vi.fn(() => Promise.resolve()),
       unarchiveTask: vi.fn(() => Promise.resolve()),
+      moreLists: vi.fn(),
+      moreTasks: vi.fn(),
       checkList: vi.fn(() => Promise.resolve('archived')),
       checkTask: vi.fn(() => Promise.resolve('archived')),
     };
@@ -190,7 +207,10 @@ describe('ArchivesStore', () => {
   it('reads both tabs actively, with the totals and the member names', async () => {
     const store: InstanceType<typeof ArchivesStore> = await loaded();
 
-    expect(api.read).toHaveBeenCalledWith(false, expect.any(AbortSignal));
+    expect(api.read).toHaveBeenCalledWith(false, expect.any(AbortSignal), {
+      lists: 10,
+      tasks: 10,
+    });
     expect(store.lists()).toEqual([sprint13, campaign]);
     expect(store.tasks()).toEqual([cad430]);
     expect(store.listCount()).toBe(2);
@@ -215,7 +235,10 @@ describe('ArchivesStore', () => {
     reconnected.next();
 
     await expect.poll(() => api.read.mock.calls.length, { timeout: 2000 }).toBe(2);
-    expect(api.read).toHaveBeenLastCalledWith(true, expect.any(AbortSignal));
+    expect(api.read).toHaveBeenLastCalledWith(true, expect.any(AbortSignal), {
+      lists: 10,
+      tasks: 10,
+    });
     await expect.poll(() => store.archives.isLoading()).toBe(false);
     expect(store.archives.status()).not.toBe('error');
     expect(store.lists()).toEqual([sprint13, campaign]);
@@ -415,7 +438,10 @@ describe('ArchivesStore', () => {
     expect(api.read).toHaveBeenCalledOnce();
 
     await expect.poll(() => api.read.mock.calls.length, { timeout: 2000 }).toBe(2);
-    expect(api.read).toHaveBeenLastCalledWith(true, expect.any(AbortSignal));
+    expect(api.read).toHaveBeenLastCalledWith(true, expect.any(AbortSignal), {
+      lists: 10,
+      tasks: 10,
+    });
     await new Promise<void>((resolve: () => void) => {
       setTimeout(resolve, REFRESH_AUDIT_MS + 50);
     });
@@ -486,5 +512,110 @@ describe('ArchivesStore', () => {
 
     await expect(first).resolves.toBe('restored');
     expect(api.unarchiveList).toHaveBeenCalledOnce();
+  });
+  it('reaches an item beyond the first 1,000 with Show more, and restores it', async () => {
+    const first: ArchivedListItem[] = Array.from(
+      { length: 1_000 },
+      (_: unknown, index: number): ArchivedListItem => ({
+        ...campaign,
+        id: `l-${String(index)}`,
+        name: `List ${String(index)}`,
+      }),
+    );
+    const beyond: ArchivedListItem = { ...campaign, id: 'l-1000', name: 'List 1000' };
+    api.read.mockResolvedValue({
+      ...archives(first, []),
+      listTotal: 1_001,
+      listCursor: 'c11',
+    });
+    api.moreLists.mockResolvedValueOnce({ items: [beyond], total: 1_001, cursor: null });
+    const store: InstanceType<typeof ArchivesStore> = await loaded();
+    expect(store.hasMore('lists')).toBe(true);
+    expect(store.lists()).toHaveLength(1_000);
+
+    await expect(store.showMore('lists')).resolves.toBe('shown');
+
+    expect(api.moreLists).toHaveBeenCalledWith('c11');
+    expect(store.lists()).toHaveLength(1_001);
+    expect(store.lists()[1_000]).toEqual(beyond);
+    expect(store.hasMore('lists')).toBe(false);
+    expect(store.listCount()).toBe(1_001);
+    api.read.mockResolvedValue({ ...archives(first, []), listTotal: 1_000 });
+
+    await expect(store.restoreList(beyond)).resolves.toBe('restored');
+    expect(api.unarchiveList).toHaveBeenCalledWith('l-1000');
+    expect(store.lists()).not.toContainEqual(beyond);
+    expect(store.listCount()).toBe(1_000);
+  });
+
+  it('refreshes each tab down to the depth already shown', async () => {
+    api.read.mockResolvedValue({ ...archives([sprint13], [cad430]), listCursor: 'c11' });
+    api.moreLists.mockResolvedValueOnce({ items: [campaign], total: 2, cursor: null });
+    const store: InstanceType<typeof ArchivesStore> = await loaded();
+    await store.showMore('lists');
+
+    reconnected.next();
+
+    await expect.poll(() => api.read.mock.calls.length, { timeout: 2000 }).toBe(2);
+    expect(api.read).toHaveBeenLastCalledWith(true, expect.any(AbortSignal), {
+      lists: 20,
+      tasks: 10,
+    });
+  });
+
+  it('keeps the depth and the rows when Show more fails', async () => {
+    api.read.mockResolvedValue({ ...archives([sprint13], []), listCursor: 'c11' });
+    api.moreLists.mockRejectedValueOnce(new HttpErrorResponse({ status: 503 }));
+    const store: InstanceType<typeof ArchivesStore> = await loaded();
+
+    await expect(store.showMore('lists')).resolves.toBe('failed');
+
+    expect(store.lists()).toEqual([sprint13]);
+    expect(store.hasMore('lists')).toBe(true);
+    expect(store.moreLoading('lists')).toBe(false);
+    reconnected.next();
+    await expect.poll(() => api.read.mock.calls.length, { timeout: 2000 }).toBe(2);
+    expect(api.read).toHaveBeenLastCalledWith(true, expect.any(AbortSignal), {
+      lists: 10,
+      tasks: 10,
+    });
+  });
+
+  it('hides the archived list a restored task brings back from an older read', async () => {
+    const inSprint13: ArchivedTaskItem = {
+      ...cad430,
+      listId: sprint13.id,
+      listName: sprint13.name,
+      listArchived: true,
+    };
+    api.read.mockResolvedValue(archives([sprint13, campaign], [inSprint13]));
+    const store: InstanceType<typeof ArchivesStore> = await loaded();
+    const older: ReturnType<typeof deferred<ArchivesRead>> = deferred<ArchivesRead>();
+    api.read.mockReturnValueOnce(older.promise);
+    reconnected.next();
+    await expect.poll(() => api.read.mock.calls.length, { timeout: 2000 }).toBe(2);
+    api.read.mockResolvedValue(archives([campaign], []));
+
+    await expect(store.restoreTask(inSprint13)).resolves.toBe('restored');
+
+    expect(store.lists()).toEqual([campaign]);
+    expect(store.listCount()).toBe(1);
+    older.resolve(archives([sprint13, campaign], [inSprint13]));
+    await expect.poll(() => api.read.mock.calls.length).toBe(3);
+    expect(store.lists()).toEqual([campaign]);
+    expect(store.listCount()).toBe(1);
+  });
+
+  it('keeps the list of a restored task whose list was live', async () => {
+    const store: InstanceType<typeof ArchivesStore> = await loaded();
+    const older: ReturnType<typeof deferred<ArchivesRead>> = deferred<ArchivesRead>();
+    api.read.mockReturnValueOnce(older.promise);
+    reconnected.next();
+    await expect.poll(() => api.read.mock.calls.length, { timeout: 2000 }).toBe(2);
+
+    await store.restoreTask({ ...cad430, listId: sprint13.id });
+    older.resolve(archives([sprint13, campaign], [cad430]));
+
+    await expect.poll(() => store.lists()).toEqual([sprint13, campaign]);
   });
 });

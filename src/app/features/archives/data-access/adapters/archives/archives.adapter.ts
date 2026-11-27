@@ -67,6 +67,7 @@ export function toArchivedTaskItem(entry: ArchivedTask): ArchivedTaskItem {
     name: entry.task.name,
     status: entry.task.status,
     milestone: entry.task.milestone === true,
+    listId: entry.list.id,
     listName: entry.list.name,
     listArchived: entry.list.state === 'archived',
     archivedAt: entry.archivedAt,

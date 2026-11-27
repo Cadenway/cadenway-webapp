@@ -20,6 +20,7 @@ import {
   CwEmptyMedia,
   CwEmptyTitle,
 } from '@cadenway/ui/components/empty';
+import { CwButton } from '@cadenway/ui/components/button';
 import { CwSkeleton } from '@cadenway/ui/components/skeleton';
 import { CwTab, CwTabPanel, CwTabs, CwTabsList } from '@cadenway/ui/components/tabs';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
@@ -149,7 +150,8 @@ const SEPARATOR: string = ' · ';
  * for another actor or while the names are not known. The mockup draws no loading state: rows
  * skeletons stand in while the first read runs. A failed first read throws into the route's
  * `RouteErrorBoundary` (the unavailable state with `Retry`). A tab holding fewer rows than its
- * total (the read stops at 1,000 items) says so under its rows. `Restore` is offered only on the
+ * total says so under its rows, with `Show more` while the gateway has more (each click reads
+ * up to 1,000 more items from where the tab stopped). `Restore` is offered only on the
  * lists the caller may edit. Each restore shows the mockup's toast once confirmed (`Open` opens a
  * restored task's detail, only in the organization it was restored in), a neutral notice when its
  * outcome could not be confirmed, a toast for a missing `edit` right, a failure toast for another
@@ -163,6 +165,7 @@ const SEPARATOR: string = ' · ';
   selector: 'cw-archives-page',
   imports: [
     ArchiveRow,
+    CwButton,
     CwEmpty,
     CwEmptyDescription,
     CwEmptyHeader,
@@ -521,6 +524,27 @@ export class ArchivesPage {
    */
   protected truncated(shown: number, total: number): string {
     return $localize`:@@archives.tabs.truncated:Only the ${shown}:shown: most recently archived are shown, out of ${total}:total:.`;
+  }
+
+  /**
+   * Method showMore
+   *
+   * @description
+   * Reads the next pages of a tab (`Show more`); a failure is reported and the button stays.
+   *
+   * @param {ArchivesTab} tab - The tab.
+   * @returns {Promise<void>} Resolves once handled.
+   */
+  protected async showMore(tab: ArchivesTab): Promise<void> {
+    if (this.store.moreLoading(tab)) return;
+    const organizationId: string | null = this.pin.current();
+    const outcome: 'shown' | 'failed' | 'stale' = await this.store.showMore(tab);
+    if (outcome === 'failed' && this.stillHere(organizationId)) {
+      this.toast(
+        'error',
+        $localize`:@@archives.tabs.show-more-failed:The next archived items could not be loaded`,
+      );
+    }
   }
 
   /**

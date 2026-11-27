@@ -208,6 +208,8 @@
     "archives.row.restore": "Restaurer",
     "archives.tabs.label": "Type d’élément archivé",
     "archives.tabs.lists": "Listes",
+    "archives.tabs.show-more": "Afficher plus",
+    "archives.tabs.show-more-failed": "La suite des archives n’a pas pu être chargée",
     "archives.tabs.tasks": "Tâches",
     "archives.tabs.truncated": "Seuls les {$shown} éléments archivés le plus récemment sont affichés, sur {$total}.",
     "archives.task.archived-list": "Liste archivée",

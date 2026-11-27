@@ -9,7 +9,11 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { OrganizationSwitchPendingError, PASSIVE_REQUEST } from '@core/api';
 
-import type { ArchivesRead } from '../../../models/archives-read/archives-read.interface';
+import type { ArchivedListItem } from '../../../models/archived-list/archived-list.interface';
+import type {
+  ArchivesMore,
+  ArchivesRead,
+} from '../../../models/archives-read/archives-read.interface';
 import type { ArchiveCheck } from '../../../models/archive-check/archive-check.type';
 import {
   ArchivesApi,
@@ -115,6 +119,27 @@ describe('ArchivesApi', () => {
     expect(read.lists).toHaveLength(MAX_PAGES);
     expect(read.listTotal).toBe(2_500);
     http.expectNone((request) => request.url === '/v1/archives/lists');
+  });
+
+  it('reads a tab down to a given depth, and the next pages from its cursor', async () => {
+    const reading: Promise<ArchivesRead> = api.read(false, undefined, { lists: 1, tasks: 1 });
+    http
+      .expectOne((request) => request.url === '/v1/archives/tasks')
+      .flush({ items: [], nextCursor: null, total: 0 });
+    http
+      .expectOne((request) => request.url === '/v1/archives/lists')
+      .flush({ items: [listEntry('l-1')], nextCursor: 'c2', total: 2 });
+    const read: ArchivesRead = await reading;
+    expect(read.listCursor).toBe('c2');
+    expect(read.taskCursor).toBeNull();
+
+    const more: Promise<ArchivesMore<ArchivedListItem>> = api.moreLists('c2');
+    const next: TestRequest = http.expectOne(
+      (request) => request.url === '/v1/archives/lists' && request.params.get('cursor') === 'c2',
+    );
+    expect(next.request.context.get(PASSIVE_REQUEST)).toBe(false);
+    next.flush({ items: [listEntry('l-2')], nextCursor: null, total: 2 });
+    await expect(more).resolves.toMatchObject({ total: 2, cursor: null });
   });
 
   it('unarchives a list and a task without a version precondition, with the longer timeout', async () => {

@@ -79,6 +79,7 @@ const cad430: ArchivedTaskItem = {
   name: 'Old pricing page',
   status: 'done',
   milestone: false,
+  listId: 'l-sprint14',
   listName: 'Sprint 14',
   listArchived: false,
   archivedAt: '2026-11-05T11:30:00Z',
@@ -115,7 +116,14 @@ function archives(
   lists: readonly ArchivedListItem[],
   tasks: readonly ArchivedTaskItem[],
 ): ArchivesRead {
-  return { lists, listTotal: lists.length, tasks, taskTotal: tasks.length };
+  return {
+    lists,
+    listTotal: lists.length,
+    listCursor: null,
+    tasks,
+    taskTotal: tasks.length,
+    taskCursor: null,
+  };
 }
 
 /**
@@ -129,7 +137,14 @@ class ElsewhereStub {}
 
 describe('ArchivesPage', () => {
   let api: Record<
-    'read' | 'memberNames' | 'unarchiveList' | 'unarchiveTask' | 'checkList' | 'checkTask',
+    | 'read'
+    | 'memberNames'
+    | 'unarchiveList'
+    | 'unarchiveTask'
+    | 'checkList'
+    | 'checkTask'
+    | 'moreLists'
+    | 'moreTasks',
     Mock
   >;
   let toasts: { show: Mock; error: Mock; dismiss: Mock };
@@ -148,6 +163,8 @@ describe('ArchivesPage', () => {
       ),
       unarchiveList: vi.fn(() => Promise.resolve()),
       unarchiveTask: vi.fn(() => Promise.resolve()),
+      moreLists: vi.fn(),
+      moreTasks: vi.fn(),
       checkList: vi.fn(() => Promise.resolve('archived')),
       checkTask: vi.fn(() => Promise.resolve('archived')),
     };
@@ -586,5 +603,44 @@ describe('ArchivesPage', () => {
 
     expect(toasts.dismiss).toHaveBeenCalledWith('t1');
     expect(opening).not.toHaveBeenCalled();
+  });
+  it('reveals items past those read with Show more, and restores one', async () => {
+    api.read.mockResolvedValue({
+      ...archives([sprint13], []),
+      listTotal: 2,
+      listCursor: 'c11',
+    });
+    api.moreLists.mockResolvedValueOnce({ items: [campaign], total: 2, cursor: null });
+    const harness: RouterTestingHarness = await open('/atelier-nord/archives');
+    await expect.poll(() => text(harness, 'archives-lists-more')).toBe('Show more');
+
+    root(harness).querySelector<HTMLElement>('[data-testid="archives-lists-more"]')?.click();
+
+    await expect
+      .poll(() => button(harness, 'Restore the list Back-to-school campaign'))
+      .toBeDefined();
+    expect(api.moreLists).toHaveBeenCalledWith('c11');
+    expect(root(harness).querySelector('[data-testid="archives-lists-more"]')).toBeNull();
+    api.read.mockResolvedValue({ ...archives([sprint13], []), listTotal: 1 });
+    button(harness, 'Restore the list Back-to-school campaign')?.click();
+
+    await expect.poll(() => toasts.show.mock.calls.length).toBe(1);
+    expect(api.unarchiveList).toHaveBeenCalledWith(campaign.id);
+  });
+
+  it('reports a failed Show more and keeps the button', async () => {
+    api.read.mockResolvedValue({ ...archives([sprint13], []), listTotal: 2, listCursor: 'c11' });
+    api.moreLists.mockRejectedValueOnce(new HttpErrorResponse({ status: 503 }));
+    const harness: RouterTestingHarness = await open('/atelier-nord/archives');
+    await expect.poll(() => text(harness, 'archives-lists-more')).toBe('Show more');
+
+    root(harness).querySelector<HTMLElement>('[data-testid="archives-lists-more"]')?.click();
+
+    await expect.poll(() => toasts.error.mock.calls.length).toBe(1);
+    expect(toasts.error).toHaveBeenCalledWith(
+      'The next archived items could not be loaded',
+      undefined,
+    );
+    expect(text(harness, 'archives-lists-more')).toBe('Show more');
   });
 });

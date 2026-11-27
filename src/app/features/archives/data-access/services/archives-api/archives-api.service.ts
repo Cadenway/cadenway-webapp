@@ -18,7 +18,11 @@ import { hasProblemCode, OrganizationSwitchPendingError, PASSIVE_REQUEST } from 
 import type { ArchiveCheck } from '../../../models/archive-check/archive-check.type';
 import type { ArchivedListItem } from '../../../models/archived-list/archived-list.interface';
 import type { ArchivedTaskItem } from '../../../models/archived-task/archived-task.interface';
-import type { ArchivesRead } from '../../../models/archives-read/archives-read.interface';
+import type {
+  ArchivesDepth,
+  ArchivesMore,
+  ArchivesRead,
+} from '../../../models/archives-read/archives-read.interface';
 import {
   toArchivedListItem,
   toArchivedTaskItem,
@@ -39,8 +43,9 @@ const PAGE_SIZE: number = 100;
  * Constant MAX_PAGES
  *
  * @description
- * Pages read per collection at most, so a read costs at most 1,000 items per tab however large
- * the archives grow (they never expire). The tab says when it shows fewer than its total.
+ * Pages read per tab by the first read and by each `Show more`, so one read costs at most
+ * 1,000 items per tab however large the archives grow (they never expire). A background read
+ * refreshes each tab down to the depth already shown.
  *
  * @type {number}
  */
@@ -158,62 +163,36 @@ interface PageAnswer<E> {
 }
 
 /**
- * Interface Paged
+ * Function readPages
  *
  * @description
- * Every item of a paged read, with the total of its last page.
- */
-interface Paged<T> {
-  // #region Properties
-  /**
-   * Property items
-   *
-   * @description
-   * The items of every page, in order.
-   *
-   * @type {readonly T[]}
-   * @readonly
-   */
-  readonly items: readonly T[];
-
-  /**
-   * Property total
-   *
-   * @description
-   * The total the gateway counted on the last page.
-   *
-   * @type {number}
-   * @readonly
-   */
-  readonly total: number;
-  // #endregion
-}
-
-/**
- * Function readAll
- *
- * @description
- * Reads a paged archives collection one page after the other, to its last cursor or to
- * `MAX_PAGES` pages, whichever comes first; the total stays the gateway's.
+ * Reads a paged archives collection one page after the other, from a cursor (or the start), to
+ * its last page or to `pages` pages, whichever comes first; the total stays the gateway's.
  *
  * @param {(cursor: string | undefined) => Observable<PageAnswer<E>>} page - Reads one page after
  * a cursor.
  * @param {(entry: E) => T} map - Maps an entry to its display model.
+ * @param {number} pages - Pages to read at most, at least one.
+ * @param {string | undefined} from - Cursor to start from, or undefined for the first page.
  * @param {AbortSignal | undefined} signal - Resource cancellation signal.
- * @returns {Promise<Paged<T>>} The items read and the last total.
+ * @returns {Promise<ArchivesMore<T>>} The items read, the last total and the next cursor.
  */
-async function readAll<E, T>(
+async function readPages<E, T>(
   page: (cursor: string | undefined) => Observable<PageAnswer<E>>,
   map: (entry: E) => T,
+  pages: number,
+  from: string | undefined,
   signal: AbortSignal | undefined,
-): Promise<Paged<T>> {
+): Promise<ArchivesMore<T>> {
   const items: T[] = [];
-  let cursor: string | undefined;
+  let cursor: string | undefined = from;
   for (let read: number = 1; ; read += 1) {
     const answer: PageAnswer<E> = await untilAborted(page(cursor), signal);
     items.push(...answer.items.map(map));
     cursor = answer.nextCursor ?? undefined;
-    if (!cursor || read >= MAX_PAGES) return { items, total: answer.total };
+    if (!cursor || read >= Math.max(1, pages)) {
+      return { items, total: answer.total, cursor: cursor ?? null };
+    }
   }
 }
 
@@ -222,8 +201,9 @@ async function readAll<E, T>(
  *
  * @description
  * The archives page's access to `archives`, `members`, `lists` and `tasks` of the gateway, mapped
- * to display models: both tabs (up to `MAX_PAGES` pages each), the names of the members, the
- * unarchiving of a list or a task, and the read of one item that settles an unknown outcome.
+ * to display models: both tabs (down to a given depth each) and their next pages, the names of
+ * the members, the unarchiving of a list or a task, and the read of one item that settles an
+ * unknown outcome.
  * Every operation needs the session's current organization, which the organization pin attaches.
  */
 @Service()
@@ -279,46 +259,59 @@ export class ArchivesApi {
    * Method read
    *
    * @description
-   * Reads the archived lists and the archived tasks side by side, each to its last page or to
-   * `MAX_PAGES` pages, with the gateway's totals.
+   * Reads the archived lists and the archived tasks side by side, each from its first page down
+   * to its depth (or its last page), with the gateway's totals and the cursors that continue them.
    *
    * @param {boolean} passive - Whether the read was triggered in the background (focus,
    * reconnection, after a write), which waits for a verified workspace context.
    * @param {AbortSignal} [signal] - Cancels the read when its resource is superseded.
-   * @returns {Promise<ArchivesRead>} Both tabs and their totals.
+   * @param {ArchivesDepth} [depth] - Pages per tab; `MAX_PAGES` each by default.
+   * @returns {Promise<ArchivesRead>} Both tabs, their totals and their cursors.
    */
-  public async read(passive: boolean, signal?: AbortSignal): Promise<ArchivesRead> {
-    const context: HttpContext = new HttpContext().set(PASSIVE_REQUEST, passive);
-    const options: { context: HttpContext; timeout: number } = {
-      context,
-      timeout: REQUEST_TIMEOUT_MS,
-    };
-    const [lists, tasks]: [Paged<ArchivedListItem>, Paged<ArchivedTaskItem>] = await Promise.all([
-      readAll(
-        (cursor: string | undefined) =>
-          this.archives.listArchivedLists(
-            { limit: PAGE_SIZE, ...(cursor ? { cursor } : {}) },
-            options,
-          ),
-        (entry: ArchivedList) => toArchivedListItem(entry),
-        signal,
-      ),
-      readAll(
-        (cursor: string | undefined) =>
-          this.archives.listArchivedTasks(
-            { limit: PAGE_SIZE, ...(cursor ? { cursor } : {}) },
-            options,
-          ),
-        (entry: ArchivedTask) => toArchivedTaskItem(entry),
-        signal,
-      ),
-    ]);
+  public async read(
+    passive: boolean,
+    signal?: AbortSignal,
+    depth: ArchivesDepth = { lists: MAX_PAGES, tasks: MAX_PAGES },
+  ): Promise<ArchivesRead> {
+    const [lists, tasks]: [ArchivesMore<ArchivedListItem>, ArchivesMore<ArchivedTaskItem>] =
+      await Promise.all([
+        this.listPages(passive, depth.lists, undefined, signal),
+        this.taskPages(passive, depth.tasks, undefined, signal),
+      ]);
     return {
       lists: lists.items,
       listTotal: lists.total,
+      listCursor: lists.cursor,
       tasks: tasks.items,
       taskTotal: tasks.total,
+      taskCursor: tasks.cursor,
     };
+  }
+
+  /**
+   * Method moreLists
+   *
+   * @description
+   * Reads the next `MAX_PAGES` pages of archived lists from a cursor (`Show more`).
+   *
+   * @param {string} cursor - The cursor the tab stopped at.
+   * @returns {Promise<ArchivesMore<ArchivedListItem>>} The lists, the total and the next cursor.
+   */
+  public moreLists(cursor: string): Promise<ArchivesMore<ArchivedListItem>> {
+    return this.listPages(false, MAX_PAGES, cursor, undefined);
+  }
+
+  /**
+   * Method moreTasks
+   *
+   * @description
+   * Reads the next `MAX_PAGES` pages of archived roots from a cursor (`Show more`).
+   *
+   * @param {string} cursor - The cursor the tab stopped at.
+   * @returns {Promise<ArchivesMore<ArchivedTaskItem>>} The roots, the total and the next cursor.
+   */
+  public moreTasks(cursor: string): Promise<ArchivesMore<ArchivedTaskItem>> {
+    return this.taskPages(false, MAX_PAGES, cursor, undefined);
   }
 
   /**
@@ -427,6 +420,76 @@ export class ArchivesApi {
       if (error instanceof HttpErrorResponse && error.status === 404) return 'gone';
       throw error;
     }
+  }
+
+  /**
+   * Method listPages
+   *
+   * @description
+   * Reads pages of archived lists.
+   *
+   * @param {boolean} passive - Whether the read runs in the background.
+   * @param {number} pages - Pages to read at most.
+   * @param {string | undefined} from - Cursor to start from, or undefined for the first page.
+   * @param {AbortSignal | undefined} signal - Cancels the read.
+   * @returns {Promise<ArchivesMore<ArchivedListItem>>} The lists, the total and the next cursor.
+   */
+  private listPages(
+    passive: boolean,
+    pages: number,
+    from: string | undefined,
+    signal: AbortSignal | undefined,
+  ): Promise<ArchivesMore<ArchivedListItem>> {
+    const options: { context: HttpContext; timeout: number } = {
+      context: new HttpContext().set(PASSIVE_REQUEST, passive),
+      timeout: REQUEST_TIMEOUT_MS,
+    };
+    return readPages(
+      (cursor: string | undefined) =>
+        this.archives.listArchivedLists(
+          { limit: PAGE_SIZE, ...(cursor ? { cursor } : {}) },
+          options,
+        ),
+      (entry: ArchivedList) => toArchivedListItem(entry),
+      pages,
+      from,
+      signal,
+    );
+  }
+
+  /**
+   * Method taskPages
+   *
+   * @description
+   * Reads pages of archived roots.
+   *
+   * @param {boolean} passive - Whether the read runs in the background.
+   * @param {number} pages - Pages to read at most.
+   * @param {string | undefined} from - Cursor to start from, or undefined for the first page.
+   * @param {AbortSignal | undefined} signal - Cancels the read.
+   * @returns {Promise<ArchivesMore<ArchivedTaskItem>>} The roots, the total and the next cursor.
+   */
+  private taskPages(
+    passive: boolean,
+    pages: number,
+    from: string | undefined,
+    signal: AbortSignal | undefined,
+  ): Promise<ArchivesMore<ArchivedTaskItem>> {
+    const options: { context: HttpContext; timeout: number } = {
+      context: new HttpContext().set(PASSIVE_REQUEST, passive),
+      timeout: REQUEST_TIMEOUT_MS,
+    };
+    return readPages(
+      (cursor: string | undefined) =>
+        this.archives.listArchivedTasks(
+          { limit: PAGE_SIZE, ...(cursor ? { cursor } : {}) },
+          options,
+        ),
+      (entry: ArchivedTask) => toArchivedTaskItem(entry),
+      pages,
+      from,
+      signal,
+    );
   }
   // #endregion
 }
