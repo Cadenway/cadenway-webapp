@@ -70,6 +70,8 @@ The root transport provides Angular HTTP to the generated `@cadenway/api-client`
   screen offers the switch yet.
 - The resolved theme is reflected in `data-theme` on the document element.
 - After a path change, focus moves to the innermost route focus target or `main` without scrolling;
-  initial and query-only navigation leave focus alone.
+  initial and query-only navigation leave focus alone. While an `aria-modal` window holds the focus
+  (one kept open across the navigation, or one still closing), the move waits until no modal window
+  is left, then runs after the window restored its focus.
 - Shortcuts ignore editable targets unless allowed, repeated and composing events; single-key
   shortcuts can be disabled in memory. Registrations end with their owning scope.
