@@ -62,8 +62,40 @@
           <cw-plan-card
             [subscription]="subscription"
             [upgrading]="checkout.starting()"
+            [upgradeHidden]="checkout.confirming() || checkout.unconfirmed()"
             (upgradeRequested)="upgrade()"
           />
+        }
+        @if (checkout.unconfirmed()) {
+          <cw-alert variant="warning" data-testid="payment-unconfirmed">
+            <cw-alert-title i18n="@@organization.billing.unconfirmed"
+              >The payment is not confirmed yet</cw-alert-title
+            >
+            <cw-alert-description>{{ unconfirmedText }}</cw-alert-description>
+            <cw-alert-actions>
+              <button
+                cwButton
+                type="button"
+                variant="outline"
+                size="sm"
+                (click)="checkout.retryConfirmation()"
+                data-testid="payment-unconfirmed-retry"
+              >
+                <ng-container i18n="@@organization.billing.retry">Retry</ng-container>
+              </button>
+            </cw-alert-actions>
+          </cw-alert>
+        } @else if (checkout.confirming()) {
+          <p
+            class="flex items-center gap-1.5 text-xs text-muted-foreground"
+            role="status"
+            data-testid="payment-confirming"
+          >
+            <ng-icon name="phosphorClockBold" class="size-3.5 shrink-0" aria-hidden="true" />
+            <ng-container i18n="@@organization.billing.confirming"
+              >Confirming the payment…</ng-container
+            >
+          </p>
         }
       }
       @case ('reloading') {
@@ -162,6 +194,7 @@
           [loading]="invoices.loading()"
           [hasPrevious]="invoices.hasPrevious()"
           [hasNext]="invoices.hasNext()"
+          [paged]="invoices.paged()"
           (previousPage)="invoices.previous()"
           (nextPage)="invoices.next()"
         />

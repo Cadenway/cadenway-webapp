@@ -8,6 +8,12 @@ import {
   type Signal,
 } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
+import {
+  CwAlert,
+  CwAlertActions,
+  CwAlertDescription,
+  CwAlertTitle,
+} from '@cadenway/ui/components/alert';
 import { CwButton } from '@cadenway/ui/components/button';
 import {
   CwEmpty,
@@ -34,6 +40,7 @@ import {
 import { InvoicesStore } from '../../../state/invoices/invoices.store';
 import { SubscriptionStore } from '../../../state/subscription/subscription.store';
 import { InvoicesTable } from '../../components/invoices-table/invoices-table.component';
+import { planName } from '../../../utils/plan-label/plan-label.util';
 import { PlanCard } from '../../components/plan-card/plan-card.component';
 
 /**
@@ -82,12 +89,19 @@ const CHECKOUT_RETURN: string = 'checkout';
  * bound to the organization shown and to the page, and opens it in the same tab, toasting the
  * mockup's `Redirecting to the payment provider…`; a paid plan already in place, another Checkout
  * under way and any other refusal toast why. Back from Stripe, `?checkout=success` or
- * `?checkout=cancel` toasts the outcome once and leaves the address. The page's toasts are
- * dismissed when it is left or the organization changes.
+ * `?checkout=cancel` toasts the outcome once and leaves the address. After a success the store
+ * reads the plan again 2, 4 and 8 s later until it is no longer Free: `Upgrade` is withheld and
+ * `Confirming the payment…` shows meanwhile, and a plan still Free after the last read shows
+ * `The payment is not confirmed yet` with `Retry`. The page's toasts are dismissed when it is
+ * left or the organization changes.
  */
 @Component({
   selector: 'cw-billing-page',
   imports: [
+    CwAlert,
+    CwAlertActions,
+    CwAlertDescription,
+    CwAlertTitle,
     CwButton,
     CwEmpty,
     CwEmptyContent,
@@ -263,8 +277,19 @@ export class BillingPage {
    */
   protected readonly description: Signal<string> = computed(
     (): string =>
-      $localize`:@@organization.billing.description:Plan, seats and invoices of ${this.workspace.organization().name}:organization:. Visible to the owner only.`,
+      $localize`:@@organization.billing.description:Plan, seats and invoices of the organization ${this.workspace.organization().name}:organization:. Visible to the owner only.`,
   );
+
+  /**
+   * Property unconfirmedText
+   *
+   * @description
+   * The note of a payment Billing has not confirmed after the last read.
+   *
+   * @type {string}
+   * @readonly
+   */
+  protected readonly unconfirmedText: string = $localize`:@@organization.billing.unconfirmed-text:The plan still shows ${planName('free')}:plan:. The confirmation can take a few minutes.`;
   // #endregion
 
   // #region Constructor
@@ -272,13 +297,15 @@ export class BillingPage {
    * Constructor
    *
    * @description
-   * Toasts Stripe's return once and leaves its parameter, and dismisses the page's toasts when it
-   * is left or the organization changes.
+   * Toasts Stripe's return once and leaves its parameter, starting at once the confirmation of a
+   * successful payment, and dismisses the page's toasts when it is left or the organization
+   * changes.
    *
    * @constructor
    */
   public constructor() {
     const returned: string | null = this.route.snapshot.queryParamMap.get(CHECKOUT_RETURN);
+    if (returned === 'success') void this.checkout.confirmPayment();
     if (returned !== null) {
       afterNextRender((): void => {
         this.showReturn(returned);
@@ -366,8 +393,8 @@ export class BillingPage {
    * Method showReturn
    *
    * @description
-   * Toasts Stripe's return: a completed payment, whose plan shows once Billing confirms it, or a
-   * cancelled one. Another value toasts nothing.
+   * Toasts Stripe's return: a completed payment, whose plan the store confirms, or a cancelled
+   * one. Another value toasts nothing.
    *
    * @param {string} returned - Value of `checkout`.
    */

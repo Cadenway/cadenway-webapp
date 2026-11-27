@@ -1,12 +1,19 @@
 <cw-table-container class="rounded-lg border border-border">
   <table
     cwTable
-    aria-label="Invoices"
-    i18n-aria-label="@@organization.billing.invoices-table"
     class="min-w-[600px] max-md:block max-md:min-w-0"
     [attr.aria-busy]="loading() || null"
     data-testid="invoices-table"
   >
+    <caption
+      #caption
+      class="sr-only"
+      tabindex="-1"
+      data-testid="invoices-caption"
+      i18n="@@organization.billing.invoices-table"
+    >
+      Invoices
+    </caption>
     <thead cwTableHeader class="max-md:hidden">
       <tr cwTableRow>
         <th cwTableHead class="w-40" i18n="@@organization.billing.column-number">Number</th>
@@ -116,7 +123,7 @@
   </table>
 </cw-table-container>
 
-@if (hasPrevious() || hasNext()) {
+@if (paged()) {
   <nav
     class="flex items-center justify-end gap-1"
     aria-label="Invoices pagination"
@@ -128,7 +135,7 @@
       variant="outline"
       size="sm"
       [disabled]="!hasPrevious() || loading()"
-      (click)="previousPage.emit()"
+      (click)="openPrevious()"
       data-testid="invoices-previous"
     >
       <ng-container i18n="@@organization.billing.previous">Previous</ng-container>
@@ -139,7 +146,7 @@
       variant="outline"
       size="sm"
       [disabled]="!hasNext() || loading()"
-      (click)="nextPage.emit()"
+      (click)="openNext()"
       data-testid="invoices-next"
     >
       <ng-container i18n="@@organization.billing.next">Next</ng-container>

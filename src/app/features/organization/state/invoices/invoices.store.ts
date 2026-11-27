@@ -150,6 +150,18 @@ interface InvoicesState {
    * @readonly
    */
   readonly _answeredFor: string | null;
+
+  /**
+   * Property _paged
+   *
+   * @description
+   * Whether the person moved between pages of the organization, which keeps the pagination shown
+   * while a page is read.
+   *
+   * @type {boolean}
+   * @readonly
+   */
+  readonly _paged: boolean;
   // #endregion
 }
 
@@ -249,6 +261,18 @@ interface InvoicesStoreInstance {
    * @readonly
    */
   readonly hasNext: Signal<boolean>;
+
+  /**
+   * Property paged
+   *
+   * @description
+   * Whether the pagination shows: a page comes after, or the person moved between pages. It stays
+   * true while the page opened is read, so its buttons keep their place.
+   *
+   * @type {Signal<boolean>}
+   * @readonly
+   */
+  readonly paged: Signal<boolean>;
   // #endregion
 
   // #region Methods
@@ -288,7 +312,12 @@ interface InvoicesStoreInstance {
  */
 function createInvoicesStore(): Type<InvoicesStoreInstance> {
   return signalStore(
-    withState<InvoicesState>({ _organizationId: null, _cursors: [null], _answeredFor: null }),
+    withState<InvoicesState>({
+      _organizationId: null,
+      _cursors: [null],
+      _answeredFor: null,
+      _paged: false,
+    }),
     withProps((store) => {
       const api: BillingApi = inject(BillingApi);
       const workspace: WorkspaceContextPort = inject(WORKSPACE_CONTEXT);
@@ -351,45 +380,63 @@ function createInvoicesStore(): Type<InvoicesStoreInstance> {
         pageIndex: (): number => store._pages().length - 1,
         hasPrevious: (): boolean => store._pages().length > 1,
         hasNext: (): boolean => (current()?.page.nextCursor ?? null) !== null,
+        paged: (): boolean =>
+          store._pages().length > 1 ||
+          (current()?.page.nextCursor ?? null) !== null ||
+          (store._paged() && store._organizationId() === store._workspace.organization().id),
       };
     }),
-    withMethods((store) => ({
-      _remember: signalMethod<InvoicesSnapshot | null>(
-        (snapshot: InvoicesSnapshot | null): void => {
-          if (snapshot !== null && store._answeredFor() !== snapshot.read.organizationId) {
-            patchState(store, { _answeredFor: snapshot.read.organizationId });
+    withMethods((store) => {
+      // The organization last followed: every switch starts the next one over, its first read
+      // being again the primary read (skeleton, then the error boundary), even back to an
+      // organization answered before.
+      let followed: string | null = null;
+      return {
+        _remember: signalMethod<InvoicesSnapshot | null>(
+          (snapshot: InvoicesSnapshot | null): void => {
+            if (snapshot !== null && store._answeredFor() !== snapshot.read.organizationId) {
+              patchState(store, { _answeredFor: snapshot.read.organizationId });
+            }
+          },
+        ),
+
+        _follow: signalMethod<string>((organizationId: string): void => {
+          if (followed !== null && followed !== organizationId) {
+            patchState(store, {
+              _organizationId: null,
+              _cursors: [null],
+              _paged: false,
+              _answeredFor: store._answeredFor() === organizationId ? organizationId : null,
+            });
           }
+          followed = organizationId;
+        }),
+
+        next(): void {
+          const cursor: string | null = store._current()?.page.nextCursor ?? null;
+          if (cursor === null) return;
+          patchState(store, {
+            _organizationId: store._read().organizationId,
+            _cursors: [...store._pages(), cursor],
+            _paged: true,
+          });
         },
-      ),
 
-      _follow: signalMethod<string>((organizationId: string): void => {
-        if (store._organizationId() !== null && store._organizationId() !== organizationId) {
-          patchState(store, { _organizationId: null, _cursors: [null] });
-        }
-      }),
+        previous(): void {
+          const pages: readonly (string | null)[] = store._pages();
+          if (pages.length < 2) return;
+          patchState(store, {
+            _organizationId: store._read().organizationId,
+            _cursors: pages.slice(0, -1),
+            _paged: true,
+          });
+        },
 
-      next(): void {
-        const cursor: string | null = store._current()?.page.nextCursor ?? null;
-        if (cursor === null) return;
-        patchState(store, {
-          _organizationId: store._read().organizationId,
-          _cursors: [...store._pages(), cursor],
-        });
-      },
-
-      previous(): void {
-        const pages: readonly (string | null)[] = store._pages();
-        if (pages.length < 2) return;
-        patchState(store, {
-          _organizationId: store._read().organizationId,
-          _cursors: pages.slice(0, -1),
-        });
-      },
-
-      retry(): void {
-        store.invoices.reload();
-      },
-    })),
+        retry(): void {
+          store.invoices.reload();
+        },
+      };
+    }),
     withHooks({
       onInit(store): void {
         store._remember(store._current);

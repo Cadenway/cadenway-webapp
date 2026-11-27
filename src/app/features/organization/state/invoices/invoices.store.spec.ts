@@ -228,4 +228,47 @@ describe('InvoicesStore', () => {
       expect.any(AbortSignal),
     );
   });
+
+  it('treats the first read back to an organization answered before as the primary read', async () => {
+    const invoices: InstanceType<typeof InvoicesStore> = await store();
+    expect(invoices.shown()).toBe(true);
+    api.invoices.mockReturnValue(new Promise<InvoicePage>((): void => undefined));
+
+    shown.set(organization('org-lumen'));
+    TestBed.tick();
+    let refuse: (error: unknown) => void = (): void => undefined;
+    api.invoices.mockReturnValueOnce(
+      new Promise<InvoicePage>((_resolve: unknown, reject: (error: unknown) => void) => {
+        refuse = reject;
+      }),
+    );
+    shown.set(organization('org-nord'));
+    TestBed.tick();
+
+    expect(invoices.shown()).toBe(false);
+    expect(invoices.loading()).toBe(true);
+
+    refuse(new HttpErrorResponse({ status: 503 }));
+    await settle();
+
+    expect(invoices.shown()).toBe(false);
+    expect(invoices.failed()).toBe(false);
+    expect(() => invoices.invoices.value()).toThrow();
+  });
+
+  it('keeps the pagination shown while the page opened is read', async () => {
+    const invoices: InstanceType<typeof InvoicesStore> = await store();
+    expect(invoices.paged()).toBe(true);
+    invoices.next();
+    await settle();
+    api.invoices.mockReturnValueOnce(new Promise<InvoicePage>((): void => undefined));
+
+    invoices.previous();
+    TestBed.tick();
+
+    expect(invoices.loading()).toBe(true);
+    expect(invoices.hasPrevious()).toBe(false);
+    expect(invoices.hasNext()).toBe(false);
+    expect(invoices.paged()).toBe(true);
+  });
 });

@@ -1,6 +1,7 @@
 import {
   booleanAttribute,
   Component,
+  type ElementRef,
   inject,
   input,
   type InputSignal,
@@ -8,6 +9,8 @@ import {
   LOCALE_ID,
   output,
   type OutputEmitterRef,
+  type Signal,
+  viewChild,
 } from '@angular/core';
 import { CwButton } from '@cadenway/ui/components/button';
 import {
@@ -120,8 +123,10 @@ const STATUS_VIEWS: Readonly<Record<KnownInvoiceStatus, InvoiceStatusView>> = {
  * months in UTC and the amount follows the invoice's currency, both in `LOCALE_ID`. A status a
  * later contract adds shows its key. While a page is read the rows give way to skeleton rows; a
  * completed page without invoices shows `No invoices yet`. `Previous` and `Next` emit
- * `previousPage` and `nextPage`. Below 768 px the rows become cards: the header row is hidden,
- * the number takes the full width and the link goes to the right.
+ * `previousPage` and `nextPage` and move the focus to the table's caption (`Invoices`), since the
+ * pressed button is disabled while the page is read; the pagination stays while `paged`. Below
+ * 768 px the rows become cards: the header row is hidden, the number takes the full width and the
+ * link goes to the right.
  */
 @Component({
   selector: 'cw-invoices-table',
@@ -200,6 +205,20 @@ export class InvoicesTable {
   });
 
   /**
+   * Property paged
+   *
+   * @description
+   * Whether the pagination shows. The page keeps it true while a page it opened is read, so the
+   * buttons do not disappear under the keyboard focus.
+   *
+   * @type {InputSignalWithTransform<boolean, unknown>}
+   * @readonly
+   */
+  public readonly paged: InputSignalWithTransform<boolean, unknown> = input(false, {
+    transform: booleanAttribute,
+  });
+
+  /**
    * Property previousPage
    *
    * @description
@@ -233,6 +252,19 @@ export class InvoicesTable {
   protected readonly skeleton: readonly number[] = [0, 1, 2, 3];
 
   /**
+   * Property caption
+   *
+   * @description
+   * The table's caption, which takes the focus after a page change: the pressed button is
+   * disabled while the page is read, which would drop the focus to the document.
+   *
+   * @type {Signal<ElementRef<HTMLElement>>}
+   * @readonly
+   */
+  private readonly caption: Signal<ElementRef<HTMLElement>> =
+    viewChild.required<ElementRef<HTMLElement>>('caption');
+
+  /**
    * Property locale
    *
    * @description
@@ -245,6 +277,28 @@ export class InvoicesTable {
   // #endregion
 
   // #region Methods
+  /**
+   * Method openPrevious
+   *
+   * @description
+   * Asks for the previous page and moves the focus to the table's caption.
+   */
+  protected openPrevious(): void {
+    this.previousPage.emit();
+    this.caption().nativeElement.focus();
+  }
+
+  /**
+   * Method openNext
+   *
+   * @description
+   * Asks for the next page and moves the focus to the table's caption.
+   */
+  protected openNext(): void {
+    this.nextPage.emit();
+    this.caption().nativeElement.focus();
+  }
+
   /**
    * Method period
    *

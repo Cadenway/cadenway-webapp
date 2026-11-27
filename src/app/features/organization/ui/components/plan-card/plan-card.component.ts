@@ -23,9 +23,9 @@ import { planName } from '../../../utils/plan-label/plan-label.util';
  * what Billing serves: the `<plan> plan` title and the `Seats` tile, `<used> / <limit>` with
  * `<n> available`. The interval badge, `Manage seats`, the price and renewal line, the next
  * invoice, the payment method and the billing details have no contract yet (gap B14) and are not
- * rendered. On the Free plan the card offers `Upgrade to the Team plan`, which emits
- * `upgradeRequested` and shows its pending state while `upgrading`. Below 640 px the button
- * drops under the title.
+ * rendered. On the Free plan, unless `upgradeHidden`, the card offers `Upgrade to the Team plan`,
+ * which emits `upgradeRequested` and shows its pending state while `upgrading`. Below 640 px the
+ * button drops under the title.
  */
 @Component({
   selector: 'cw-plan-card',
@@ -60,6 +60,19 @@ export class PlanCard {
   });
 
   /**
+   * Property upgradeHidden
+   *
+   * @description
+   * Whether the upgrade is withheld while a payment is being confirmed.
+   *
+   * @type {InputSignalWithTransform<boolean, unknown>}
+   * @readonly
+   */
+  public readonly upgradeHidden: InputSignalWithTransform<boolean, unknown> = input(false, {
+    transform: booleanAttribute,
+  });
+
+  /**
    * Property upgradeRequested
    *
    * @description
@@ -88,13 +101,14 @@ export class PlanCard {
    * Property upgradable
    *
    * @description
-   * Whether the plan is Free, the only one Checkout upgrades.
+   * Whether the upgrade shows: the plan is Free, the only one Checkout upgrades, and no payment is
+   * being confirmed.
    *
    * @type {Signal<boolean>}
    * @readonly
    */
   protected readonly upgradable: Signal<boolean> = computed(
-    (): boolean => this.subscription().plan === 'free',
+    (): boolean => this.subscription().plan === 'free' && !this.upgradeHidden(),
   );
 
   /**

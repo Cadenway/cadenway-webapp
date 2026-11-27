@@ -280,7 +280,10 @@ be loaded.` with `Retry`, until a read or a save confirms the organization (anot
 - `listBillingInvoices` is read 10 per page by cursor, newest first; the store keeps the cursor of
   each page reached for `Previous`. The reads are keyed by the workspace organization: a switch
   starts at the next organization's first page, never with a cursor of the last one, and shows the
-  section skeleton again. The period names its months in UTC (`November 2026`, `March 2026 –
+  section skeleton again, even back to an organization answered before, whose first read is then
+  again the primary read. Once the person moved between pages, the pagination stays while the
+  page opened is read, and the focus moves to the table's caption (`Invoices`), since the pressed
+  button is disabled meanwhile. The period names its months in UTC (`November 2026`, `March 2026 –
 February 2027`; the contract's end is the start of the next period) and the amount uses the
   currency's own decimals, both in `LOCALE_ID`. A status a later contract adds shows its key. A
   PDF or Checkout address that is not HTTPS is dropped at the boundary; the PDF opens in a new tab.
@@ -292,11 +295,26 @@ February 2027`; the contract's end is the start of the next period) and the amou
   refusal drops the key. `409 billing.subscription-active` reads the subscription again. The
   Checkout opens in the same tab through `CHECKOUT_REDIRECT` (`state/billing-checkout`), which
   specs replace.
+- Billing keeps a Checkout open for two hours and answers `409 billing.checkout-in-progress` to
+  another key meanwhile, so the key outlives the page: `sessionStorage`
+  (`cadenway-billing-checkout-key`) holds `{ organizationId, userId, key, createdAt }`, which
+  survives the same-tab round trip to Stripe. A checkout of the same person and organization
+  within two hours sends that key again, so coming back from a cancelled Checkout replays the open
+  session. A definite refusal, `?checkout=success` and two hours drop it; a key of another person
+  or organization is never sent. A browser that refuses the storage keeps the key for the page
+  only. Follow-up (contract first, `cadenway-api-contracts` then Billing): the two-hour lifetime
+  is Billing's behaviour, not yet stated in `startBillingCheckout`; once the contract states it
+  (or answers the session's expiry), `CHECKOUT_KEY_LIFETIME_MS` follows it.
 - Stripe returns to Billing's configured `BILLING_STRIPE_CHECKOUT_SUCCESS_URL` and
   `BILLING_STRIPE_CHECKOUT_CANCEL_URL`, which carry no organization. The page expects
   `/org/billing?checkout=success` and `/org/billing?checkout=cancel`, which Workspace's slug
   redirect sends to the session's organization, toasts that return once and removes the
-  parameter. Settlement is asynchronous, so the plan may still read Free just after the return.
+  parameter. Settlement is asynchronous: after `?checkout=success` the page reads the
+  subscription again 2, 4 and 8 s later (`CHECKOUT_CONFIRM_DELAYS_MS`) until the plan is no
+  longer Free, writing each answer into the shared `SubscriptionStore`. Meanwhile `Upgrade` is
+  withheld and `Confirming the payment…` shows; a plan still Free after the last read shows
+  `The payment is not confirmed yet` with `Retry`, which reads it once more. The confirmation is
+  bound to its organization and page.
 - The page's toasts are dismissed when it is left or the organization changes.
 - Below 768 px the invoices become cards (header hidden, number full width, link right) and the
   upgrade button wraps under the plan title.
@@ -352,15 +370,16 @@ Members section (`organization.members.*`):
 
 Billing section (`organization.billing.*`):
 
-| Unit                                                                                                                                            | Reason                                                                                              |
-| ----------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
-| `description`                                                                                                                                   | The mockup's subtitle without the payment method, which is not shown, and with `de <organization>`. |
-| `upgrade`                                                                                                                                       | The mockup draws the Team plan as current; the upgrade from Free has no button there.               |
-| `seats-free-one`                                                                                                                                | Singular form of the mockup's `<n> disponibles`.                                                    |
-| `status-open`, `status-uncollectible`, `status-void`                                                                                            | The mockup draws paid invoices only; the contract has four statuses.                                |
-| `empty-title`, `empty-text`                                                                                                                     | The mockup draws no organization without invoices.                                                  |
-| `pagination`, `previous`, `next`                                                                                                                | The mockup's four invoices fit one page.                                                            |
-| `plan-loading`, `plan-failed`                                                                                                                   | The mockup draws no plan read apart from the section.                                               |
-| `loading`, `failed-title`, `failed-text`, `retry`                                                                                               | The mockup's section states (`Organisation.dc.html` lines 73-128), with this section's ids.         |
-| `already-subscribed`, `already-subscribed-text`, `checkout-in-progress`, `checkout-in-progress-text`, `checkout-failed`, `checkout-failed-text` | The mockup draws no refused checkout.                                                               |
-| `checkout-success`, `checkout-success-text`, `checkout-cancelled`, `checkout-cancelled-text`                                                    | The mockup draws no return from the payment provider.                                               |
+| Unit                                                                                                                                            | Reason                                                                                                                                                  |
+| ----------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `description`                                                                                                                                   | The mockup's subtitle without the payment method, which is not shown, and `de l’organisation <name>` for any name (the mockup elides `d'Atelier Nord`). |
+| `upgrade`                                                                                                                                       | The mockup draws the Team plan as current; the upgrade from Free has no button there.                                                                   |
+| `seats-free-one`                                                                                                                                | Singular form of the mockup's `<n> disponibles`.                                                                                                        |
+| `status-open`, `status-uncollectible`, `status-void`                                                                                            | The mockup draws paid invoices only; the contract has four statuses.                                                                                    |
+| `empty-title`, `empty-text`                                                                                                                     | The mockup draws no organization without invoices.                                                                                                      |
+| `pagination`, `previous`, `next`                                                                                                                | The mockup's four invoices fit one page.                                                                                                                |
+| `plan-loading`, `plan-failed`                                                                                                                   | The mockup draws no plan read apart from the section.                                                                                                   |
+| `loading`, `failed-title`, `failed-text`, `retry`                                                                                               | The mockup's section states (`Organisation.dc.html` lines 73-128), with this section's ids.                                                             |
+| `already-subscribed`, `already-subscribed-text`, `checkout-in-progress`, `checkout-in-progress-text`, `checkout-failed`, `checkout-failed-text` | The mockup draws no refused checkout.                                                                                                                   |
+| `checkout-success`, `checkout-success-text`, `checkout-cancelled`, `checkout-cancelled-text`                                                    | The mockup draws no return from the payment provider.                                                                                                   |
+| `confirming`, `unconfirmed`, `unconfirmed-text`                                                                                                 | The mockup draws no payment awaiting Billing's confirmation.                                                                                            |

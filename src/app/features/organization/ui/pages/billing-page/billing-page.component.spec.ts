@@ -17,6 +17,8 @@ import {
 import { BillingApi } from '../../../data-access/services/billing-api/billing-api.service';
 import type { InvoicePage, OrganizationInvoice } from '../../../models/invoice/invoice.interface';
 import type { OrganizationSubscription } from '../../../models/organization-subscription/organization-subscription.interface';
+import { CHECKOUT_CONFIRM_DELAYS_MS } from '../../../state/billing-checkout/checkout-confirm-delays.token';
+import { CHECKOUT_KEY_STORAGE } from '../../../state/billing-checkout/checkout-key.storage';
 import { CHECKOUT_REDIRECT } from '../../../state/billing-checkout/checkout-redirect.token';
 import { SubscriptionStore } from '../../../state/subscription/subscription.store';
 import { BillingPage } from './billing-page.component';
@@ -242,19 +244,25 @@ describe('BillingPage', () => {
         { provide: BillingApi, useValue: api },
         { provide: CwToastService, useValue: toasts },
         { provide: CHECKOUT_REDIRECT, useValue: redirect },
+        { provide: CHECKOUT_CONFIRM_DELAYS_MS, useValue: [0, 0, 0] },
         {
           provide: RuntimeConfigStore,
           useValue: { config: () => ({ apiUrl: 'http://api.test' }) },
         },
         {
           provide: WORKSPACE_CONTEXT,
-          useValue: { organization: shown, role: () => 'owner' },
+          useValue: {
+            organization: shown,
+            role: () => 'owner',
+            user: () => ({ id: 'user-camille' }),
+          },
         },
       ],
     });
   });
 
   afterEach(() => {
+    sessionStorage.clear();
     document.body.innerHTML = '';
   });
 
@@ -280,7 +288,7 @@ describe('BillingPage', () => {
 
     expect(page?.querySelector('h1')?.textContent.trim()).toBe('Billing');
     expect(byTestId(harness, 'billing-description')?.textContent.trim()).toBe(
-      'Plan, seats and invoices of Atelier Nord. Visible to the owner only.',
+      'Plan, seats and invoices of the organization Atelier Nord. Visible to the owner only.',
     );
     expect(byTestId(harness, 'plan-title')?.textContent.trim()).toBe('Team plan');
     expect(byTestId(harness, 'plan-seats')?.textContent).toContain('18 / 25');
@@ -463,6 +471,86 @@ describe('BillingPage', () => {
       expect(toasts[kind].mock.calls[0][0]).toBe(title);
     },
   );
+
+  it('reads the plan again after a successful payment until it is no longer Free', async () => {
+    sessionStorage.setItem(
+      CHECKOUT_KEY_STORAGE,
+      JSON.stringify({
+        organizationId: 'org-nord',
+        userId: 'user-camille',
+        key: 'key-nord',
+        createdAt: Date.now(),
+      }),
+    );
+    const confirmation: {
+      promise: Promise<OrganizationSubscription>;
+      resolve: (value: OrganizationSubscription) => void;
+    } = deferred<OrganizationSubscription>();
+    api.subscription
+      .mockResolvedValueOnce(FREE)
+      .mockResolvedValueOnce(FREE)
+      .mockReturnValueOnce(confirmation.promise);
+    const harness: RouterTestingHarness = await open('/billing?checkout=success');
+
+    expect(byTestId(harness, 'plan-title')?.textContent.trim()).toBe('Free plan');
+    expect(byTestId(harness, 'plan-upgrade')).toBeNull();
+    await expect.poll(() => byTestId(harness, 'payment-confirming') !== null).toBe(true);
+    expect(sessionStorage.getItem(CHECKOUT_KEY_STORAGE)).toBeNull();
+
+    confirmation.resolve(TEAM);
+
+    await expect.poll(() => byTestId(harness, 'plan-title')?.textContent.trim()).toBe('Team plan');
+    expect(byTestId(harness, 'payment-confirming')).toBeNull();
+    expect(byTestId(harness, 'payment-unconfirmed')).toBeNull();
+    expect(api.subscription).toHaveBeenCalledTimes(3);
+  });
+
+  it('notes a payment still unconfirmed after the last read, with Retry', async () => {
+    api.subscription.mockResolvedValue(FREE);
+    const harness: RouterTestingHarness = await open('/billing?checkout=success');
+
+    await expect.poll(() => byTestId(harness, 'payment-unconfirmed') !== null).toBe(true);
+    expect(byTestId(harness, 'payment-unconfirmed')?.textContent).toContain(
+      'The payment is not confirmed yet',
+    );
+    expect(byTestId(harness, 'payment-unconfirmed')?.textContent).toContain(
+      'The plan still shows Free. The confirmation can take a few minutes.',
+    );
+    expect(byTestId(harness, 'plan-upgrade')).toBeNull();
+    expect(api.subscription).toHaveBeenCalledTimes(4);
+
+    api.subscription.mockResolvedValue(TEAM);
+    byTestId(harness, 'payment-unconfirmed-retry')?.click();
+
+    await expect.poll(() => byTestId(harness, 'plan-title')?.textContent.trim()).toBe('Team plan');
+    expect(byTestId(harness, 'payment-unconfirmed')).toBeNull();
+    expect(api.subscription).toHaveBeenCalledTimes(5);
+  });
+
+  it('keeps the pagination and moves the focus to the table caption on a page change', async () => {
+    const harness: RouterTestingHarness = await open();
+    byTestId(harness, 'invoices-next')?.click();
+    await expect.poll(() => rows(harness)).toEqual(['FAC-2025-0019']);
+    const page: { promise: Promise<InvoicePage>; resolve: (value: InvoicePage) => void } =
+      deferred<InvoicePage>();
+    api.invoices.mockReturnValueOnce(page.promise);
+    const previous: HTMLButtonElement | null = byTestId(
+      harness,
+      'invoices-previous',
+    ) as HTMLButtonElement | null;
+    previous?.focus();
+
+    previous?.click();
+    harness.detectChanges();
+
+    expect(byTestId(harness, 'invoices-previous')).not.toBeNull();
+    expect(document.activeElement).toBe(byTestId(harness, 'invoices-caption'));
+    expect(byTestId(harness, 'invoices-caption')?.textContent.trim()).toBe('Invoices');
+
+    page.resolve(FIRST_PAGE);
+    await expect.poll(() => rows(harness)).toEqual(['FAC-2026-0011', 'FAC-2026-0010']);
+    expect(document.activeElement).toBe(byTestId(harness, 'invoices-caption'));
+  });
 
   it('dismisses its toasts once left', async () => {
     const harness: RouterTestingHarness = await open('/billing?checkout=cancel');
