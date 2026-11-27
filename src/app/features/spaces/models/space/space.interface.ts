@@ -1,3 +1,4 @@
+import type { ShareRole } from '../list-share/list-share.interface';
 import type { LookColor, LookIcon } from '../look/look.type';
 import type { StatusKey } from '../list-view-config/list-view-config.interface';
 
@@ -162,6 +163,19 @@ export interface SpaceDetails extends Space {
    * @readonly
    */
   readonly canEdit: boolean;
+
+  /**
+   * Property callerRole
+   *
+   * @description
+   * The caller's role on the space itself: `edit` when the gateway leaves it out (the rule
+   * before grants), `view` for a role this version does not know, and null when the caller sees
+   * only some of its lists through their grants, as a guest does.
+   *
+   * @type {ShareRole | null}
+   * @readonly
+   */
+  readonly callerRole: ShareRole | null;
 
   /**
    * Property canManage

@@ -11,6 +11,7 @@ import type {
 import type { Favorite, FavoriteKind } from '../../../models/favorite/favorite.interface';
 import { STATUS_ORDER } from '../../../constants/statuses/statuses.constants';
 import type { StatusKey } from '../../../models/list-view-config/list-view-config.interface';
+import type { ShareRole } from '../../../models/list-share/list-share.interface';
 import type { LookColor, LookIcon } from '../../../models/look/look.type';
 import type { Milestone, MilestonePage } from '../../../models/milestone/milestone.interface';
 import type { SpaceDetails, SpaceStatusOption } from '../../../models/space/space.interface';
@@ -113,6 +114,23 @@ export function isStatusKey(value: string): value is StatusKey {
 }
 
 /**
+ * Function toCallerRole
+ *
+ * @description
+ * Reads the caller's role on a space: absent is `edit` (the rule before grants existed), null
+ * stays null (the caller sees only some of its lists), and a role this version does not know reads
+ * as `view`, as the contract asks of an extensible role.
+ *
+ * @param {string | null | undefined} role - The gateway's `callerRole`.
+ * @returns {ShareRole | null} The role, or null.
+ */
+function toCallerRole(role: string | null | undefined): ShareRole | null {
+  if (role === undefined) return 'edit';
+  if (role === null) return null;
+  return role === 'edit' || role === 'comment' ? role : 'view';
+}
+
+/**
  * Function toSpace
  *
  * @description
@@ -129,6 +147,7 @@ export function toSpace(dto: SpaceDto): SpaceDetails {
     name: dto.name,
     prefix: dto.prefix,
     canEdit: dto.callerRole === undefined || dto.callerRole === 'edit',
+    callerRole: toCallerRole(dto.callerRole),
     canManage: dto.callerCanManage ?? true,
     version: dto.version,
     description: dto.description,

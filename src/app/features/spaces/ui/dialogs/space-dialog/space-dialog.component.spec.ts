@@ -75,6 +75,7 @@ const product: SpaceDetails = {
   name: 'Product',
   prefix: 'CAD',
   canEdit: true,
+  callerRole: 'edit',
   canManage: false,
   version: 3,
   description: 'The product team',

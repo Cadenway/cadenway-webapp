@@ -9,8 +9,16 @@ import type {
   ListDirectoryPort,
 } from '../../ports/list-directory/list-directory-port.interface';
 import { LIST_DIRECTORY } from '../../ports/list-directory/list-directory.token';
+import type { NavigationRefreshPort } from '../../ports/navigation-refresh/navigation-refresh-port.interface';
+import { NAVIGATION_REFRESH } from '../../ports/navigation-refresh/navigation-refresh.token';
+import type {
+  SpaceDirectoryEntry,
+  SpaceDirectoryPort,
+} from '../../ports/space-directory/space-directory-port.interface';
+import { SPACE_DIRECTORY } from '../../ports/space-directory/space-directory.token';
 import { SpacesNavigationStore } from '../../state/spaces-navigation/spaces-navigation.store';
-import { listIconName, lookTone } from '../../utils/look/look.util';
+import { listIconName, lookIconName, lookTone } from '../../utils/look/look.util';
+import { FavoriteSpacesRail } from '../../ui/components/favorite-spaces-rail/favorite-spaces-rail.component';
 import { SidebarFooterLinks } from '../../ui/components/sidebar-footer-links/sidebar-footer-links.component';
 import { SpacesRailItem } from '../../ui/components/spaces-rail-item/spaces-rail-item.component';
 import { SpacesSidebar } from '../../ui/components/spaces-sidebar/spaces-sidebar.component';
@@ -21,8 +29,9 @@ import { SprintProgress } from '../../ui/components/sprint-progress/sprint-progr
  *
  * @description
  * Provides the workspace's `SpacesNavigationStore`, shared by the sidebar, the sprint progress and
- * the spaces screens, and `LIST_DIRECTORY`, the lists it read, for the other features. Put it in
- * the providers of the `/:org` route that loads the shell.
+ * the spaces screens, and for the other features `LIST_DIRECTORY` and `SPACE_DIRECTORY`, the lists
+ * and spaces it read, and `NAVIGATION_REFRESH`, which reads them again after another feature's
+ * write. Put it in the providers of the `/:org` route that loads the shell.
  *
  * @returns {Provider[]} The store and port providers.
  */
@@ -56,6 +65,43 @@ export function provideSpacesNavigation(): Provider[] {
         };
       },
     },
+    {
+      provide: SPACE_DIRECTORY,
+      useFactory: (): SpaceDirectoryPort => {
+        const navigation: InstanceType<typeof SpacesNavigationStore> =
+          inject(SpacesNavigationStore);
+        return {
+          spaces: computed((): readonly SpaceDirectoryEntry[] =>
+            navigation.spaces.hasValue()
+              ? navigation.spaces.value().map((space: SpaceDetails): SpaceDirectoryEntry => ({
+                  id: space.id,
+                  name: space.name,
+                  icon: space.icon ? lookIconName(space.icon) : null,
+                  tone: lookTone(space.color),
+                  callerRole: space.callerRole,
+                }))
+              : [],
+          ),
+        };
+      },
+    },
+    {
+      provide: NAVIGATION_REFRESH,
+      useFactory: (): NavigationRefreshPort => {
+        const navigation: InstanceType<typeof SpacesNavigationStore> =
+          inject(SpacesNavigationStore);
+        return {
+          refresh: (): void => {
+            navigation.refresh();
+            navigation.refreshFavorites();
+            navigation.refreshCounts();
+          },
+          refreshCounts: (): void => {
+            navigation.refreshCounts();
+          },
+        };
+      },
+    },
   ];
 }
 
@@ -63,22 +109,43 @@ export function provideSpacesNavigation(): Provider[] {
  * Function withSpacesRailItem
  *
  * @description
- * Contributes `Spaces` to the shell's `railNavigation` slot, after `Inbox`: it
- * shows the spaces screen, and the favorite spaces follow it on desktop. In the settings shell,
- * pass `{ variant: 'settings' }`: there is no sidebar to host the space dialogs, so the favorite
- * spaces' menu keeps only `Open the overview` and `Remove from favorite spaces`.
+ * Contributes `Spaces` to the shell's `railNavigation` slot (order 30), between `My tasks` and
+ * `Dashboards`: it shows the spaces screen, in the application shell and in the settings shell
+ * alike.
  *
- * @param {{ readonly variant?: SpacesRailItemVariant }} [options] - Hosting shell, `app` by default.
  * @returns {SlotFeature<SlotContribution>} The slot contribution factory.
  */
-export function withSpacesRailItem(
-  options: { readonly variant?: SpacesRailItemVariant } = {},
-): SlotFeature<SlotContribution> {
+export function withSpacesRailItem(): SlotFeature<SlotContribution> {
   return {
     useFactory: (): SlotContribution => ({
       id: 'spaces.rail-item',
       order: 30,
       component: SpacesRailItem,
+    }),
+  };
+}
+
+/**
+ * Function withFavoriteSpacesRail
+ *
+ * @description
+ * Contributes the favorite spaces to the shell's `railNavigation` slot (order 90), after every
+ * application item, on desktop only. In the settings shell, pass `{ variant: 'settings' }`: there
+ * is no sidebar to host the space dialogs, so the favorite spaces' menu keeps only `Open the
+ * overview` and `Remove from favorite spaces`. Bind it on a route below `/:org`, together with
+ * `provideSpacesNavigation()`.
+ *
+ * @param {{ readonly variant?: SpacesRailItemVariant }} [options] - Hosting shell, `app` by default.
+ * @returns {SlotFeature<SlotContribution>} The slot contribution factory.
+ */
+export function withFavoriteSpacesRail(
+  options: { readonly variant?: SpacesRailItemVariant } = {},
+): SlotFeature<SlotContribution> {
+  return {
+    useFactory: (): SlotContribution => ({
+      id: 'spaces.favorite-spaces-rail',
+      order: 90,
+      component: FavoriteSpacesRail,
       inputs: { variant: options.variant ?? 'app' },
     }),
   };

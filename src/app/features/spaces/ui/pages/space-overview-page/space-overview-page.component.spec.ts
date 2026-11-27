@@ -36,6 +36,7 @@ const design: SpaceDetails = {
   name: 'Design',
   prefix: 'DES',
   canEdit: true,
+  callerRole: 'edit',
   canManage: true,
   version: 3,
   description: 'Design system and user research.',
