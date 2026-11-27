@@ -381,6 +381,17 @@ describe('GettingStartedStore', () => {
   }
 
   /**
+   * Function switchBack
+   *
+   * @description
+   * Commits Atelier Nord again, after `switchOrganization`.
+   */
+  function switchBack(): void {
+    organization.set(ATELIER_NORD);
+    pin.set(ATELIER_NORD.id);
+  }
+
+  /**
    * Function showTab
    *
    * @description
@@ -1144,6 +1155,37 @@ describe('GettingStartedStore', () => {
         answer();
         await sending;
 
+        expect(toasts.toasts()).toEqual([]);
+      });
+
+      it('stops the batches after a switch to another organization and back', async () => {
+        const answer: () => void = holdFirstBatch();
+        const store: GettingStartedStore = await setup();
+        store.start('invite');
+
+        const sending: Promise<void> = store.invite(many);
+        switchOrganization();
+        switchBack();
+        answer();
+        await sending;
+
+        expect(api.invite).toHaveBeenCalledTimes(1);
+        expect(toasts.toasts()).toEqual([]);
+      });
+
+      it('stops the batches of a destroyed host after a switch away and back, silently', async () => {
+        const answer: () => void = holdFirstBatch();
+        const store: GettingStartedStore = await setup();
+        store.start('invite');
+
+        const sending: Promise<void> = store.invite(many);
+        host.destroy();
+        switchOrganization();
+        switchBack();
+        answer();
+        await sending;
+
+        expect(api.invite).toHaveBeenCalledTimes(1);
         expect(toasts.toasts()).toEqual([]);
       });
 

@@ -310,7 +310,7 @@ route), `withGettingStarted()` and `withOnboardingWizard()` (the `overlays` cont
   members in batches of 50 (the `inviteMembers` limit), and an address a batch answered `invited`,
   `already-invited` or `already-member` is done. The batches go on while the organization is the
   one the dialog was opened in, even once its host is destroyed; an organization change stops
-  them, and so does a definite refusal (a `429 invitation.daily-limit-reached`, a `403`), which
+  them for good (a switch away and back included, heard until the last batch answers), and so does a definite refusal (a `429 invitation.daily-limit-reached`, a `403`), which
   would refuse the next ones too, so its addresses and the later ones stay unsent. When every
   address is done, it toasts the outcome (`{n} invitation(s) sent`, the addresses already members
   or invited as the description, or `No invitation sent` when none was invited) and closes.

@@ -20,7 +20,7 @@ import {
   withProps,
   withState,
 } from '@ngrx/signals';
-import { filter, fromEvent, map } from 'rxjs';
+import { filter, fromEvent, map, type Subscription } from 'rxjs';
 
 import { OrganizationPin, readProblem } from '@core/api';
 import { TaskCreate } from '@features/task';
@@ -870,7 +870,12 @@ function createGettingStartedStore(): Type<GettingStartedStoreInstance> {
           const dialog: number = store._dialog();
           if (store._sending() === dialog || emails.length === 0) return;
           const organization: string | null = store._inviteOrganization();
+          // Set once another organization is committed while the batches run, and never cleared:
+          // a switch away and back still stops them. It is heard until the loop ends, even once
+          // the host is destroyed.
+          let switched: boolean = false;
           const moved: () => boolean = (): boolean =>
+            switched ||
             organization === null ||
             store._workspace.organization().id !== organization ||
             store._pin.current() !== organization;
@@ -883,6 +888,9 @@ function createGettingStartedStore(): Type<GettingStartedStoreInstance> {
             return;
           }
           patchState(store, { _sending: dialog });
+          const changes: Subscription = store._pin.organizationChanges.subscribe((): void => {
+            switched = true;
+          });
           // Addresses a batch settled (invited, already invited or already a member), in lower
           // case: never sent again. Every other address of the list stays in the dialog.
           const settled: Set<string> = new Set<string>();
@@ -930,6 +938,7 @@ function createGettingStartedStore(): Type<GettingStartedStoreInstance> {
               break;
             }
           }
+          changes.unsubscribe();
           if (store._sending() === dialog) patchState(store, { _sending: null });
           // Another organization is shown: nothing about this one is said there.
           if (moved()) return;
