@@ -143,8 +143,11 @@ route), `withGettingStarted()` and `withOnboardingWizard()` (the `overlays` cont
   when the assistant finished (`wizard.status` `finished`) and provisioned the first space, the
   presentation is not `dismissed`, and the assistant is not the open `ShellOverlay`
   (`onboarding.wizard`). Nothing shows while the progress is unread, nor when its first read
-  failed (a shell widget for almost nobody: no error card); a later failed read keeps it. A failed
-  first read is read again when the tab becomes visible and after a `TaskCreate.created`.
+  failed; a later failed read keeps it. A failed first read is read again when the tab becomes
+  visible and after a `TaskCreate.created`. Showing nothing is a deliberate, accepted product
+  exception to the secondary-read rule of `docs/architecture.md` (Errors and loading: a shell
+  widget keeps an inline error with Retry): the checklist applies to almost nobody, so an error
+  card for every member would be noise.
 - It has the three items the contract records, in the mockup's order: `Create your first task`
   (`firstTaskCreated`, set by the gateway when the person creates a task in the space),
   `Invite a team member` (`invitationSent`; shown to an owner or administrator only, since
@@ -188,6 +191,10 @@ route), `withGettingStarted()` and `withOnboardingWizard()` (the `overlays` cont
   field has no error input. The addresses empty each time it opens.
 - The checklist records `invitationSent` when the batch invited an address or found one
   `already-invited` (an invitation is out for it, perhaps from a batch whose answer was lost).
-  When that marker write fails other than by a drop, the marker stays owed and is recorded again
-  on the next refresh (the tab shown again, a task created) or when the panel shows again, until
-  the progress shows it.
+  When that marker write fails other than by a drop, `OnboardingStore` keeps it owed
+  (`owesInvitation`): being route-scoped on `/:org`, it survives a change to a settings shell and
+  back. `GettingStartedStore` calls `retryOwedInvitation()` on its refresh occasions (the tab
+  shown again, a task created), when its host is created and when the panel shows again, until
+  the progress shows `invitationSent`. An organization change or leaving `/:org` clears the debt.
+  A full page reload forgets it, which is accepted: the next batch that invites an address, or
+  finds it `already-invited`, records the marker again.

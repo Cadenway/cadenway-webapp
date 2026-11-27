@@ -232,6 +232,18 @@ interface OnboardingStoreState {
    * @readonly
    */
   readonly _readFailed: boolean;
+
+  /**
+   * Property _invitationOwed
+   *
+   * @description
+   * Whether a `recordInvitation` write failed other than by a drop: an invitation is out, so the
+   * marker is still owed to the current organization.
+   *
+   * @type {boolean}
+   * @readonly
+   */
+  readonly _invitationOwed: boolean;
   // #endregion
 }
 
@@ -350,6 +362,20 @@ interface OnboardingStoreInstance {
    * @readonly
    */
   readonly failed: Signal<boolean>;
+
+  /**
+   * Property owesInvitation
+   *
+   * @description
+   * Whether the invitation marker is owed: a `recordInvitation` write failed other than by a drop,
+   * and the progress does not show `invitationSent` yet. An organization change clears it, as
+   * leaving `/:org` does; a full reload forgets it (the next invitation that reaches an address
+   * records the marker again).
+   *
+   * @type {Signal<boolean>}
+   * @readonly
+   */
+  readonly owesInvitation: Signal<boolean>;
   // #endregion
 
   // #region Methods
@@ -447,7 +473,8 @@ interface OnboardingStoreInstance {
    *
    * @description
    * Records the checklist's invitation marker after an invitation the gateway sent; allowed before
-   * provisioning. Nothing is sent when the marker is already recorded.
+   * provisioning. Nothing is sent when the marker is already recorded. A failure other than a drop
+   * keeps the marker owed (`owesInvitation`) for `retryOwedInvitation`.
    *
    * @returns {Promise<void>} Resolves once recorded.
    * @throws {OnboardingWriteDroppedError} When the organization changed, or the write was dropped
@@ -455,6 +482,17 @@ interface OnboardingStoreInstance {
    * @throws {unknown} The client's error otherwise.
    */
   recordInvitation(): Promise<void>;
+
+  /**
+   * Method retryOwedInvitation
+   *
+   * @description
+   * Records the invitation marker again while it is owed (`owesInvitation`), once the progress is
+   * read; does nothing otherwise. Screens call it on their refresh occasions; it never polls.
+   *
+   * @returns {Promise<void>} Resolves once settled; never rejects.
+   */
+  retryOwedInvitation(): Promise<void>;
 
   /**
    * Method recordBoardTried
@@ -489,6 +527,7 @@ function createOnboardingStore(): Type<OnboardingStoreInstance> {
       _requested: false,
       _reading: false,
       _readFailed: false,
+      _invitationOwed: false,
     }),
     withProps(() => {
       const api: OnboardingApi = inject(OnboardingApi);
@@ -515,6 +554,8 @@ function createOnboardingStore(): Type<OnboardingStoreInstance> {
       loading: (): boolean => store._confirmed() === null && store._reading(),
       failed: (): boolean =>
         store._confirmed() === null && !store._reading() && store._readFailed(),
+      owesInvitation: (): boolean =>
+        store._invitationOwed() && store._confirmed()?.checklist.invitationSent !== true,
     })),
     withMethods((store) => {
       const runs: OnboardingRuns = store._runs;
@@ -645,6 +686,28 @@ function createOnboardingStore(): Type<OnboardingStoreInstance> {
         return run;
       };
 
+      const recordInvitation: () => Promise<void> = async (): Promise<void> => {
+        if (store._confirmed()?.checklist.invitationSent === true) {
+          patchState(store, { _invitationOwed: false });
+          return;
+        }
+        const generation: number = runs.generation;
+        try {
+          await queue({
+            send: (version: number): Promise<OnboardingProgress> =>
+              store._api.updateChecklist({ invitationSent: true }, version),
+            settled: (progress: OnboardingProgress): boolean => progress.checklist.invitationSent,
+            recovers: true,
+          });
+        } catch (error: unknown) {
+          if (!(error instanceof OnboardingWriteDroppedError) && live(generation)) {
+            patchState(store, { _invitationOwed: true });
+          }
+          throw error;
+        }
+        if (live(generation)) patchState(store, { _invitationOwed: false });
+      };
+
       return {
         _followOrganization: signalMethod<string>((organizationId: string): void => {
           if (organizationId === store._organizationId()) return;
@@ -658,6 +721,7 @@ function createOnboardingStore(): Type<OnboardingStoreInstance> {
             _presentation: null,
             _reading: false,
             _readFailed: false,
+            _invitationOwed: false,
           });
           if (store._requested()) void read().catch((): null => null);
         }),
@@ -716,14 +780,10 @@ function createOnboardingStore(): Type<OnboardingStoreInstance> {
             }
           }
         },
-        async recordInvitation(): Promise<void> {
-          if (store._confirmed()?.checklist.invitationSent === true) return;
-          await queue({
-            send: (version: number): Promise<OnboardingProgress> =>
-              store._api.updateChecklist({ invitationSent: true }, version),
-            settled: (progress: OnboardingProgress): boolean => progress.checklist.invitationSent,
-            recovers: true,
-          });
+        recordInvitation,
+        async retryOwedInvitation(): Promise<void> {
+          if (!store.owesInvitation() || store._confirmed() === null) return;
+          await recordInvitation().catch((): undefined => undefined);
         },
         async recordBoardTried(): Promise<void> {
           const shown: OnboardingProgress | null = store._confirmed();

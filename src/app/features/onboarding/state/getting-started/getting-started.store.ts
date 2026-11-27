@@ -202,18 +202,6 @@ interface GettingStartedState {
    * @readonly
    */
   readonly _inviteOrganization: string | null;
-
-  /**
-   * Property _invitationOwed
-   *
-   * @description
-   * Whether an invitation went out but recording the checklist's invitation marker failed: the
-   * marker is recorded again on the next refresh or when the panel shows again.
-   *
-   * @type {boolean}
-   * @readonly
-   */
-  readonly _invitationOwed: boolean;
   // #endregion
 }
 
@@ -361,7 +349,6 @@ function createGettingStartedStore(): Type<GettingStartedStoreInstance> {
     withState<GettingStartedState>({
       _inviting: false,
       _inviteOrganization: null,
-      _invitationOwed: false,
     }),
     withProps(() => {
       const router: Router = inject(Router);
@@ -471,7 +458,6 @@ function createGettingStartedStore(): Type<GettingStartedStoreInstance> {
       const leaveOrganization: () => void = (): void => {
         setInviteOpen(false);
         dismissToasts();
-        patchState(store, { _invitationOwed: false });
       };
 
       const reportFailure: (error: unknown, title: string) => void = (
@@ -513,36 +499,11 @@ function createGettingStartedStore(): Type<GettingStartedStoreInstance> {
         );
       };
 
-      const recordInvitation: () => Promise<void> = async (): Promise<void> => {
-        patchState(store, { _invitationOwed: true });
-        try {
-          await store._onboarding.recordInvitation();
-          patchState(store, { _invitationOwed: false });
-        } catch (error: unknown) {
-          // The invitations are out: a refused or unknown marker write is owed and recorded again
-          // later; one dropped for another organization is not.
-          if (error instanceof OnboardingWriteDroppedError) {
-            patchState(store, { _invitationOwed: false });
-          }
-        }
-      };
-
-      const settleOwedInvitation: () => Promise<void> = async (): Promise<void> => {
-        if (!store._invitationOwed()) return;
-        const progress: OnboardingProgress | null = store._onboarding.progress();
-        if (progress === null) return;
-        if (progress.checklist.invitationSent) {
-          patchState(store, { _invitationOwed: false });
-          return;
-        }
-        await recordInvitation();
-      };
-
       const refresh: () => Promise<void> = async (): Promise<void> => {
         if (store._onboarding.failed() || store._taskToRefresh()) {
           await store._onboarding.reload();
         }
-        await settleOwedInvitation();
+        await store._onboarding.retryOwedInvitation();
       };
 
       return {
@@ -554,7 +515,7 @@ function createGettingStartedStore(): Type<GettingStartedStoreInstance> {
           }
         }),
         _settleOnShow: signalMethod<boolean>((visible: boolean): void => {
-          if (visible) void settleOwedInvitation();
+          if (visible) void store._onboarding.retryOwedInvitation();
         }),
         _followOrganization: signalMethod<string>((organizationId: string): void => {
           if (followed !== null && followed !== organizationId) leaveOrganization();
@@ -656,7 +617,12 @@ function createGettingStartedStore(): Type<GettingStartedStoreInstance> {
           if (moved()) return;
           toastOutcome(outcome);
           setInviteOpen(false);
-          if (outcome.invited > 0 || outcome.alreadyInvited > 0) await recordInvitation();
+          if (outcome.invited > 0 || outcome.alreadyInvited > 0) {
+            // The invitations are out: a failed marker write stays owed in the route's
+            // `OnboardingStore`, which survives a shell change, and is retried on this store's
+            // refresh occasions.
+            await store._onboarding.recordInvitation().catch((): undefined => undefined);
+          }
         },
       };
     }),
@@ -664,8 +630,9 @@ function createGettingStartedStore(): Type<GettingStartedStoreInstance> {
       onInit(store): void {
         store._onboarding.load();
         // The route's progress may be older than this host (a task created in a settings shell):
-        // read it again when it already shows a checklist waiting for the first task, or failed.
-        if (store._onboarding.failed() || store._taskToRefresh()) void store._onboarding.reload();
+        // read it again when it already shows a checklist waiting for the first task, or failed,
+        // and record an invitation marker still owed.
+        void store._refresh();
         store._followOrganization(store._organizationId);
         store._recordBoard(store._boardShown);
         store._settleOnShow(store.visible);

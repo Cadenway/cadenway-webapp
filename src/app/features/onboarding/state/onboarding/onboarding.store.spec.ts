@@ -642,6 +642,57 @@ describe('OnboardingStore', () => {
       expect(store.progress()?.checklist).toMatchObject({ invitationSent: true, boardTried: true });
     });
 
+    it('keeps a failed invitation marker owed until a retry records it', async () => {
+      const store: OnboardingStore = await provisioned();
+      api.updateChecklist.mockRejectedValueOnce(problem(403, 'auth.csrf-rejected'));
+
+      await expect(store.recordInvitation()).rejects.toBeInstanceOf(HttpErrorResponse);
+      expect(store.owesInvitation()).toBe(true);
+      api.updateChecklist.mockResolvedValueOnce({
+        ...progress(5, true),
+        checklist: { ...progress(5, true).checklist, invitationSent: true },
+      });
+
+      await store.retryOwedInvitation();
+
+      expect(api.updateChecklist).toHaveBeenCalledTimes(2);
+      expect(store.owesInvitation()).toBe(false);
+      await store.retryOwedInvitation();
+      expect(api.updateChecklist).toHaveBeenCalledTimes(2);
+    });
+
+    it('owes no invitation marker once the progress shows it, nor after a drop', async () => {
+      const store: OnboardingStore = await provisioned();
+      api.updateChecklist.mockRejectedValueOnce(problem(412, 'organization.context-changed'));
+      await expect(store.recordInvitation()).rejects.toBeInstanceOf(OnboardingWriteDroppedError);
+      expect(store.owesInvitation()).toBe(false);
+
+      api.updateChecklist.mockRejectedValueOnce(problem(403, 'auth.csrf-rejected'));
+      await expect(store.recordInvitation()).rejects.toBeInstanceOf(HttpErrorResponse);
+      api.get.mockResolvedValueOnce({
+        ...progress(6, true),
+        checklist: { ...progress(6, true).checklist, invitationSent: true },
+      });
+      await store.reload();
+
+      expect(store.owesInvitation()).toBe(false);
+      await store.retryOwedInvitation();
+      expect(api.updateChecklist).toHaveBeenCalledTimes(2);
+    });
+
+    it('forgets an owed invitation marker when the organization changes', async () => {
+      const store: OnboardingStore = await provisioned();
+      api.updateChecklist.mockRejectedValueOnce(problem(403, 'auth.csrf-rejected'));
+      await expect(store.recordInvitation()).rejects.toBeInstanceOf(HttpErrorResponse);
+
+      switchOrganization();
+      await store.reload();
+      await store.retryOwedInvitation();
+
+      expect(store.owesInvitation()).toBe(false);
+      expect(api.updateChecklist).toHaveBeenCalledTimes(1);
+    });
+
     it('does not send a marker queued behind the same marker once it is shown', async () => {
       const store: OnboardingStore = await provisioned();
       api.updateChecklist.mockResolvedValueOnce({

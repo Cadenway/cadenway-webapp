@@ -815,6 +815,22 @@ describe('GettingStartedStore', () => {
       expect(store.items()[1]).toEqual({ key: 'invite', done: true });
     });
 
+    it('keeps an owed marker across a new host and records it there', async () => {
+      const store: GettingStartedStore = await setup();
+      store.start('invite');
+      api.updateChecklist.mockRejectedValueOnce(problem(403, 'auth.csrf-rejected'));
+      await store.invite(['ines.robert@ateliernord.fr']);
+      expect(route.get(OnboardingStore).owesInvitation()).toBe(true);
+
+      host.destroy();
+      const again: GettingStartedStore = await createHost();
+
+      expect(api.updateChecklist).toHaveBeenCalledTimes(2);
+      expect(api.updateChecklist).toHaveBeenLastCalledWith({ invitationSent: true }, 4);
+      expect(again.items()[1]).toEqual({ key: 'invite', done: true });
+      expect(route.get(OnboardingStore).owesInvitation()).toBe(false);
+    });
+
     it('closes the dialog without a toast when the organization pin drops the batch', async () => {
       api.invite.mockRejectedValueOnce(problem(412, 'organization.context-changed'));
       const store: GettingStartedStore = await setup();
