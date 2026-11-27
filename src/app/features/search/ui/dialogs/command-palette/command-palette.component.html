@@ -100,28 +100,32 @@
           >Account</span
         >
       </cw-command-item>
-      <cw-command-item
-        value="Organization settings"
-        i18n-value="@@search.palette.organization"
-        (selected)="go(['organization', 'general'])"
-      >
-        <ng-icon name="phosphorGearSixBold" class="text-muted-foreground" aria-hidden="true" />
-        <span i18n="@@search.palette.organization">Organization settings</span>
-        <span class="ml-auto text-xs text-muted-foreground">{{
-          workspace.organization().name
-        }}</span>
-      </cw-command-item>
-      <cw-command-item
-        value="Billing and quotas"
-        i18n-value="@@search.palette.billing"
-        (selected)="go(['organization', 'billing'])"
-      >
-        <ng-icon name="phosphorCreditCardBold" class="text-muted-foreground" aria-hidden="true" />
-        <span i18n="@@search.palette.billing">Billing and quotas</span>
-        <span class="ml-auto text-xs text-muted-foreground">{{
-          workspace.organization().name
-        }}</span>
-      </cw-command-item>
+      @if (workspace.can('admin')) {
+        <cw-command-item
+          value="Organization settings"
+          i18n-value="@@search.palette.organization"
+          (selected)="go(['organization', 'general'])"
+        >
+          <ng-icon name="phosphorGearSixBold" class="text-muted-foreground" aria-hidden="true" />
+          <span i18n="@@search.palette.organization">Organization settings</span>
+          <span class="ml-auto text-xs text-muted-foreground">{{
+            workspace.organization().name
+          }}</span>
+        </cw-command-item>
+      }
+      @if (workspace.can('owner')) {
+        <cw-command-item
+          value="Billing and quotas"
+          i18n-value="@@search.palette.billing"
+          (selected)="go(['organization', 'billing'])"
+        >
+          <ng-icon name="phosphorCreditCardBold" class="text-muted-foreground" aria-hidden="true" />
+          <span i18n="@@search.palette.billing">Billing and quotas</span>
+          <span class="ml-auto text-xs text-muted-foreground">{{
+            workspace.organization().name
+          }}</span>
+        </cw-command-item>
+      }
       <cw-command-item
         value="Switch organization"
         i18n-value="@@search.palette.organizations"
