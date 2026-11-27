@@ -1251,6 +1251,8 @@
     "organization.quotas.meter-free": "Libre",
     "organization.quotas.meter-threshold": "Capacité",
     "organization.quotas.meter-unmeasured": "Aucune mesure",
+    "organization.quotas.refresh-failed": "Impossible de charger l’usage le plus récent. Les chiffres affichés peuvent être dépassés.",
+    "organization.quotas.refresh-retry": "Réessayer",
     "organization.quotas.retry": "Réessayer",
     "organization.quotas.seats": "Sièges",
     "organization.quotas.seats-note": "{$free} sièges libres. Les invités ne consomment pas de siège.",

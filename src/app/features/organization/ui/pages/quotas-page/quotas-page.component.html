@@ -15,6 +15,7 @@
         cwButton
         type="button"
         variant="outline"
+        [loading]="exporting()"
         (click)="exportUsage()"
         data-testid="quotas-export"
       >
@@ -22,6 +23,29 @@
         <ng-container i18n="@@organization.quotas.export">Export usage (CSV)</ng-container>
       </button>
     </header>
+
+    @if (store.refreshFailed()) {
+      <cw-alert variant="destructive" role="alert" data-testid="quotas-refresh-failed">
+        <cw-alert-description i18n="@@organization.quotas.refresh-failed"
+          >The latest usage could not be loaded. The figures shown may be out of
+          date.</cw-alert-description
+        >
+        <cw-alert-actions>
+          <button
+            cwButton
+            variant="outline"
+            size="sm"
+            type="button"
+            data-testid="quotas-refresh-retry"
+            [loading]="store.refreshing()"
+            (click)="store.refresh()"
+            i18n="@@organization.quotas.refresh-retry"
+          >
+            Retry
+          </button>
+        </cw-alert-actions>
+      </cw-alert>
+    }
 
     <cw-quota-meters [title]="limitsTitle()" [meters]="meters()" />
   } @else if (store.subscription.isLoading()) {

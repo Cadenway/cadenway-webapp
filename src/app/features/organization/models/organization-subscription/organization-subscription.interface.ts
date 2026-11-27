@@ -66,13 +66,11 @@ export interface OrganizationSubscription {
    * Property guestCount
    *
    * @description
-   * Active guests, who take no seat; the contract states no guest limit. Optional so that a
-   * subscription built without it (a spec fixture) stays valid; the adapter always sets it, and
-   * the quotas section leaves the guests row out without it.
+   * Active guests, who take no seat; the contract states no guest limit.
    *
-   * @type {number | undefined}
+   * @type {number}
    * @readonly
    */
-  readonly guestCount?: number;
+  readonly guestCount: number;
   // #endregion
 }

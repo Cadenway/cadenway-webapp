@@ -95,6 +95,11 @@ section has `organizationSectionGuard(<section>)` (`http/guards/organization-sec
   so nobody else sends it, and it is read again after an organization switch.
 - A `403` or `404` shows nothing. Any other failure shows, in the plan line, `The plan could not be
 loaded.` with `Retry`; the banner stays hidden until a retry succeeds.
+- `SubscriptionStore.refresh()` reads the subscription again while the one shown stays (the
+  quotas section, when it opens and before its export). It sends nothing for anyone but an owner
+  or while the first read is under way, shares a refresh under way, drops an answer for another
+  organization, and on a failure other than a `403` or `404` keeps the subscription shown and sets
+  `refreshFailed` until a newer subscription replaces it.
 - The banner shows from 90 % of the storage quota, in gigabytes of 10^9 bytes. `Later` and the
   close button hide it for the tab's session and the organization (`sessionStorage`,
   `cadenway-storage-banner-dismissed:<organizationId>`). `Manage quotas` opens
@@ -280,13 +285,18 @@ be loaded.` with `Retry`, until a read or a save confirms the organization (anot
   forces that zone on `cw-meter`, whose own critical zone starts at 95 %. The mockup's 80 % mark on
   each gauge is not drawn: `cw-meter` draws a mark only as a capacity whose overrun it colors and
   counts, so the card keeps the `alert threshold at 80%` legend without the mark glyph.
-- The store outlives the page: the section skeleton shows until its first answer; a failed read
-  (not a `403` or `404`) shows the section's error panel in place, whose `Retry` calls
-  `SubscriptionStore.retry()`; a reread (after a role change on Members) keeps the meters shown. A
-  `403` or `404` shows nothing, and the workspace recovery leaves the section.
+- The store outlives the page, so the page calls `SubscriptionStore.refresh()` when it opens over
+  figures read earlier. The section skeleton shows until the first answer; a failed read (not a
+  `403` or `404`) shows the section's error panel in place, whose `Retry` calls
+  `SubscriptionStore.retry()`; a reread keeps the meters shown; a failed refresh keeps them with the
+  note `The latest usage could not be loaded. The figures shown may be out of date.` and its own
+  `Retry`, which refreshes again. A `403` or `404` shows nothing, and the workspace recovery leaves
+  the section.
 - The export is built in the browser from the rows shown (`utils/usage-csv`): `Section`, `Metric`,
   `Value`, `Limit`, `Usage or change`, one row per meter (storage in gigabytes, guests without a
-  limit or share), with a UTF-8 byte order mark and CRLF rows, as the mockup's file. Numbers use
+  limit or share, a share above 100 % written as it is while the gauge stops at its end), with a
+  UTF-8 byte order mark and CRLF rows, as the mockup's file. The figures are refreshed first; when
+  that fails nothing is written and the refresh note shows. Numbers use
   the locale's decimal separator without grouping; the cells are separated by `;` where that
   separator is a comma (French) and by `,` otherwise. The file is `<slug>-usage-<yyyy>-<mm>.csv`
   for the current month; `Export ready` with `<file> downloaded.`, or `Export not possible`, toasts
@@ -409,6 +419,7 @@ Quotas section (`organization.quotas.*`):
 | `storage-value`, `storage-note`, `storage-note-high`, `storage-note-critical` | The mockup's texts with the contract's limit in place of its fixed 100 GB.                  |
 | `loading`, `failed-title`, `failed-text`, `retry`                             | The mockup's section states (`Organisation.dc.html` lines 73-128), with this section's ids. |
 | `meter-free`, `meter-unmeasured`, `meter-threshold`                           | Texts of the `cw-meter` brick, never shown here; the French keeps the brick's defaults.     |
+| `refresh-failed`, `refresh-retry`                                             | The mockup draws no failed reread of figures already shown.                                 |
 
 | Unit                                                                                                                                                                                                          | Reason                                                                                                            |
 | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |

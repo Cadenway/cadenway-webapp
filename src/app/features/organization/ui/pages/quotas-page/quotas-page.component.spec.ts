@@ -1,5 +1,5 @@
 import { HttpErrorResponse } from '@angular/common/http';
-import { signal } from '@angular/core';
+import { ApplicationRef, signal } from '@angular/core';
 import { type ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideCadenwayIcons } from '@cadenway/icons';
 import { CwToastService } from '@cadenway/ui/components/toast';
@@ -139,6 +139,36 @@ function render(subscription: Mock<() => Promise<OrganizationSubscription>>): Re
 }
 
 /**
+ * Function renderAfterRead
+ *
+ * @description
+ * Renders the page once the shared store already answered, as when the person comes from another
+ * page of the organization.
+ *
+ * @param {Mock<() => Promise<OrganizationSubscription>>} subscription - Fake of the Billing read.
+ * @returns {Promise<Rendered>} The page and its fakes, before its own refresh settled.
+ */
+async function renderAfterRead(
+  subscription: Mock<() => Promise<OrganizationSubscription>>,
+): Promise<Rendered> {
+  const toasts: { success: Mock; error: Mock } = { success: vi.fn(), error: vi.fn() };
+  TestBed.configureTestingModule({
+    providers: [
+      provideCadenwayIcons(),
+      { provide: WORKSPACE_CONTEXT, useValue: workspace },
+      { provide: BillingApi, useValue: { subscription } },
+      { provide: CwToastService, useValue: toasts },
+      SubscriptionStore,
+    ],
+  });
+  TestBed.inject(SubscriptionStore);
+  await TestBed.inject(ApplicationRef).whenStable();
+  const fixture: ComponentFixture<QuotasPage> = TestBed.createComponent(QuotasPage);
+  fixture.detectChanges();
+  return { fixture, toasts };
+}
+
+/**
  * Function settle
  *
  * @description
@@ -266,17 +296,65 @@ describe('QuotasPage', () => {
     expect(row(host, 'seats')).toBeNull();
   });
 
-  it('leaves the guests row out when the subscription carries no guest count', async () => {
-    const withoutGuests: OrganizationSubscription = { ...usage(18, 92_400_000_000) };
-    delete (withoutGuests as { guestCount?: number }).guestCount;
-    const { fixture }: Rendered = render(vi.fn(() => Promise.resolve(withoutGuests)));
-    const host: HTMLElement = await settle(fixture);
+  it('reads the figures again when the page opens over an earlier read', async () => {
+    const subscription: Mock<() => Promise<OrganizationSubscription>> = vi
+      .fn<() => Promise<OrganizationSubscription>>()
+      .mockResolvedValueOnce(usage(18, 92_400_000_000))
+      .mockResolvedValue(usage(20, 95_000_000_000));
+    const { fixture }: Rendered = await renderAfterRead(subscription);
+    const host: HTMLElement = fixture.nativeElement as HTMLElement;
 
-    expect(row(host, 'seats')).not.toBeNull();
-    expect(row(host, 'guests')).toBeNull();
+    expect(row(host, 'seats')?.textContent).toContain('18 / 25');
+    await vi.waitFor(async () => {
+      await settle(fixture);
+      expect(row(host, 'seats')?.textContent).toContain('20 / 25');
+    });
+    expect(subscription).toHaveBeenCalledTimes(2);
+    expect(row(host, 'storage')?.textContent).toContain('95 GB / 100 GB');
+    expect(host.querySelector('[data-testid="quotas-refresh-failed"]')).toBeNull();
   });
 
-  it('exports the usage shown as CSV and toasts the file name', async () => {
+  it('sends no second read when the page opens during the first one', async () => {
+    const subscription: Mock<() => Promise<OrganizationSubscription>> = vi.fn(() =>
+      Promise.resolve(usage(18, 92_400_000_000)),
+    );
+    const { fixture }: Rendered = render(subscription);
+    await settle(fixture);
+
+    expect(subscription).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps the figures with a note when the refresh fails, and refreshes on Retry', async () => {
+    const subscription: Mock<() => Promise<OrganizationSubscription>> = vi
+      .fn<() => Promise<OrganizationSubscription>>()
+      .mockResolvedValueOnce(usage(18, 92_400_000_000))
+      .mockRejectedValueOnce(httpError(503))
+      .mockResolvedValue(usage(19, 92_400_000_000));
+    const { fixture }: Rendered = await renderAfterRead(subscription);
+    const host: HTMLElement = fixture.nativeElement as HTMLElement;
+
+    await vi.waitFor(async () => {
+      await settle(fixture);
+      expect(host.querySelector('[data-testid="quotas-refresh-failed"]')?.textContent).toContain(
+        'The latest usage could not be loaded. The figures shown may be out of date.',
+      );
+    });
+    expect(host.querySelector('[data-testid="quotas-refresh-failed"]')?.getAttribute('role')).toBe(
+      'alert',
+    );
+    expect(host.querySelector('[data-testid="quotas-failed"]')).toBeNull();
+    expect(row(host, 'seats')?.textContent).toContain('18 / 25');
+
+    host.querySelector<HTMLButtonElement>('[data-testid="quotas-refresh-retry"]')?.click();
+    await vi.waitFor(async () => {
+      await settle(fixture);
+      expect(row(host, 'seats')?.textContent).toContain('19 / 25');
+    });
+    expect(subscription).toHaveBeenCalledTimes(3);
+    expect(host.querySelector('[data-testid="quotas-refresh-failed"]')).toBeNull();
+  });
+
+  it('exports the usage read again just before, and toasts the file name', async () => {
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(new Date(2026, 10, 27, 10, 0));
     vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => undefined);
@@ -286,13 +364,21 @@ describe('QuotasPage', () => {
       return 'blob:usage';
     });
     vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => undefined);
-    const { fixture, toasts }: Rendered = render(
-      vi.fn(() => Promise.resolve(usage(18, 92_400_000_000))),
-    );
+    const subscription: Mock<() => Promise<OrganizationSubscription>> = vi
+      .fn<() => Promise<OrganizationSubscription>>()
+      .mockResolvedValueOnce(usage(17, 90_000_000_000))
+      .mockResolvedValue(usage(18, 92_400_000_000));
+    const { fixture, toasts }: Rendered = render(subscription);
     const host: HTMLElement = await settle(fixture);
 
     host.querySelector<HTMLButtonElement>('[data-testid="quotas-export"]')?.click();
+    await vi.waitFor(() => {
+      expect(toasts.success).toHaveBeenCalledWith('Export ready', {
+        description: 'atelier-nord-usage-2026-11.csv downloaded.',
+      });
+    });
 
+    expect(subscription).toHaveBeenCalledTimes(2);
     expect(await saved?.text()).toBe(
       [
         'Section,Metric,Value,Limit,Usage or change',
@@ -302,9 +388,50 @@ describe('QuotasPage', () => {
         '',
       ].join('\r\n'),
     );
-    expect(toasts.success).toHaveBeenCalledWith('Export ready', {
-      description: 'atelier-nord-usage-2026-11.csv downloaded.',
+  });
+
+  it('writes the share above the limit as it is in the export', async () => {
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => undefined);
+    let saved: Blob | undefined;
+    vi.spyOn(URL, 'createObjectURL').mockImplementation((blob: Blob | MediaSource) => {
+      saved = blob as Blob;
+      return 'blob:usage';
     });
+    vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => undefined);
+    const { fixture, toasts }: Rendered = render(
+      vi.fn(() => Promise.resolve(usage(27, 105_000_000_000))),
+    );
+    const host: HTMLElement = await settle(fixture);
+
+    expect(row(host, 'seats')?.getAttribute('data-zone')).toBe('critical');
+    host.querySelector<HTMLButtonElement>('[data-testid="quotas-export"]')?.click();
+    await vi.waitFor(() => {
+      expect(toasts.success).toHaveBeenCalled();
+    });
+
+    const text: string = (await saved?.text()) ?? '';
+    expect(text).toContain('Team plan limits,Seats,27,25,108.0%');
+    expect(text).toContain('Team plan limits,Storage (GB),105,100,105.0%');
+  });
+
+  it('writes nothing when the figures cannot be read again before the export', async () => {
+    const createObjectURL: ReturnType<typeof vi.spyOn> = vi.spyOn(URL, 'createObjectURL');
+    const subscription: Mock<() => Promise<OrganizationSubscription>> = vi
+      .fn<() => Promise<OrganizationSubscription>>()
+      .mockResolvedValueOnce(usage(18, 92_400_000_000))
+      .mockRejectedValue(httpError(503));
+    const { fixture, toasts }: Rendered = render(subscription);
+    const host: HTMLElement = await settle(fixture);
+
+    host.querySelector<HTMLButtonElement>('[data-testid="quotas-export"]')?.click();
+    await vi.waitFor(async () => {
+      await settle(fixture);
+      expect(host.querySelector('[data-testid="quotas-refresh-failed"]')).not.toBeNull();
+    });
+
+    expect(createObjectURL).not.toHaveBeenCalled();
+    expect(toasts.success).not.toHaveBeenCalled();
+    expect(row(host, 'seats')?.textContent).toContain('18 / 25');
   });
 
   it('toasts why when the browser refuses the download', async () => {
@@ -318,9 +445,11 @@ describe('QuotasPage', () => {
 
     host.querySelector<HTMLButtonElement>('[data-testid="quotas-export"]')?.click();
 
-    expect(toasts.error).toHaveBeenCalledWith('Export not possible', {
-      description:
-        'The browser blocked the download. Allow downloads for this page, then try again.',
+    await vi.waitFor(() => {
+      expect(toasts.error).toHaveBeenCalledWith('Export not possible', {
+        description:
+          'The browser blocked the download. Allow downloads for this page, then try again.',
+      });
     });
     expect(toasts.success).not.toHaveBeenCalled();
   });

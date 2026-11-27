@@ -1,5 +1,15 @@
 import { formatNumber, formatPercent } from '@angular/common';
-import { Component, computed, DOCUMENT, inject, LOCALE_ID, type Signal } from '@angular/core';
+import {
+  Component,
+  computed,
+  DOCUMENT,
+  inject,
+  LOCALE_ID,
+  type Signal,
+  signal,
+  type WritableSignal,
+} from '@angular/core';
+import { CwAlert, CwAlertActions, CwAlertDescription } from '@cadenway/ui/components/alert';
 import { CwButton } from '@cadenway/ui/components/button';
 import {
   CwEmpty,
@@ -58,15 +68,21 @@ const GIGABYTE: number = 1_000_000_000;
  * cycle dates, the stat tiles, the API calls, automations and webhooks meters (gap B15), the
  * storage split, `See files` with the largest files dialog (gap B16) and the alerts card are not
  * rendered. It reads the shared `SubscriptionStore` of the `/:org` route, which outlives the
- * page: the section skeleton shows until its first answer, a failed read shows the section's
- * error panel in place with `Retry` (`SubscriptionStore.retry()`), and a reread keeps the meters
- * shown. A `403` or `404`, after which the workspace recovery leaves the section, shows nothing.
- * The export writes the rows shown, client side, as `<slug>-usage-<yyyy>-<mm>.csv`, and toasts
- * its outcome.
+ * page, so the page reads it again when it opens (`SubscriptionStore.refresh()`, which keeps the
+ * figures shown meanwhile; nothing more is sent while the first read is under way). The section
+ * skeleton shows until the first answer, a failed read shows the section's error panel in place
+ * with `Retry` (`SubscriptionStore.retry()`), and a failed refresh keeps the figures with the note
+ * `The latest usage could not be loaded.` and its own `Retry`. A `403` or `404`, after which the
+ * workspace recovery leaves the section, shows nothing. The export first refreshes the figures,
+ * then writes the rows shown, client side, as `<slug>-usage-<yyyy>-<mm>.csv`, and toasts its
+ * outcome; when the refresh fails it writes nothing and the note shows.
  */
 @Component({
   selector: 'cw-quotas-page',
   imports: [
+    CwAlert,
+    CwAlertActions,
+    CwAlertDescription,
     CwButton,
     CwEmpty,
     CwEmptyContent,
@@ -110,6 +126,17 @@ export class QuotasPage {
    * @readonly
    */
   protected readonly skeletonRows: readonly number[] = [0, 1, 2];
+
+  /**
+   * Property exporting
+   *
+   * @description
+   * Whether an export is refreshing the figures; another click meanwhile does nothing.
+   *
+   * @type {WritableSignal<boolean>}
+   * @readonly
+   */
+  protected readonly exporting: WritableSignal<boolean> = signal(false);
 
   /**
    * Property workspace
@@ -173,8 +200,8 @@ export class QuotasPage {
    * Property meters
    *
    * @description
-   * Rows of the limits card for the subscription read: seats, storage, and guests when the
-   * subscription carries them; empty while unread.
+   * Rows of the limits card for the subscription read: seats, storage and guests; empty while
+   * unread.
    *
    * @type {Signal<readonly QuotaMeter[]>}
    * @readonly
@@ -182,9 +209,10 @@ export class QuotasPage {
   protected readonly meters: Signal<readonly QuotaMeter[]> = computed((): readonly QuotaMeter[] => {
     const subscription: OrganizationSubscription | null = this.store.current();
     if (subscription === null) return [];
-    const meters: QuotaMeter[] = [this.seats(subscription), this.storage(subscription)];
-    if (subscription.guestCount !== undefined) {
-      meters.push({
+    return [
+      this.seats(subscription),
+      this.storage(subscription),
+      {
         id: 'guests',
         label: $localize`:@@organization.quotas.guests:Guests`,
         used: subscription.guestCount,
@@ -192,10 +220,23 @@ export class QuotasPage {
         text: this.count(subscription.guestCount),
         note: $localize`:@@organization.quotas.guests-note:Free, limited to specific lists.`,
         zone: 'normal',
-      });
-    }
-    return meters;
+      },
+    ];
   });
+  // #endregion
+
+  // #region Constructor
+  /**
+   * Constructor
+   *
+   * @description
+   * Reads the shared subscription again, since the figures shown may date from an earlier page.
+   *
+   * @constructor
+   */
+  public constructor() {
+    void this.store.refresh();
+  }
   // #endregion
 
   // #region Methods
@@ -205,13 +246,21 @@ export class QuotasPage {
    * @description
    * Downloads the usage shown as CSV (`Organisation.dc.html` lines 1943-1950): `Section`,
    * `Metric`, `Value`, `Limit` and `Usage or change`, one row per meter, the storage in
-   * gigabytes, the guests without a limit or a share. Numbers use the locale's decimal separator
-   * without grouping, and the cells its separator (`;` in French). Toasts `Export ready` with
-   * the file name, or `Export not possible` when the browser refuses the download.
+   * gigabytes, the guests without a limit or a share, and the share of the limit as it is, above
+   * 100 % too (only the gauge stops at its end). Numbers use the locale's decimal separator without
+   * grouping, and the cells its separator (`;` in French). The figures are read again first; when
+   * that read fails nothing is written and the refresh note shows. Toasts `Export ready` with the
+   * file name, or `Export not possible` when the browser refuses the download.
+   *
+   * @returns {Promise<void>} Resolves once the file was handed to the browser or given up.
    */
-  protected exportUsage(): void {
-    const subscription: OrganizationSubscription | null = this.store.current();
-    if (subscription === null) return;
+  protected async exportUsage(): Promise<void> {
+    if (this.exporting()) return;
+    this.exporting.set(true);
+    const fresh: boolean = await this.store.refresh().finally((): void => {
+      this.exporting.set(false);
+    });
+    if (!fresh || this.store.current() === null) return;
     const section: string = this.limitsTitle();
     const rows: string[][] = [
       [
@@ -233,7 +282,7 @@ export class QuotasPage {
         meter.limit === null ? '' : csvNumber(meter.limit / scale, this.locale, digits),
         meter.limit === null || meter.limit <= 0
           ? ''
-          : formatPercent(Math.min(1, meter.used / meter.limit), this.locale, '1.1-1'),
+          : formatPercent(meter.used / meter.limit, this.locale, '1.1-1'),
       ]);
     }
     const fileName: string = usageFileName(this.workspace.organization().slug, new Date());
