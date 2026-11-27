@@ -1,0 +1,138 @@
+<cw-card role="region" aria-labelledby="security-sessions-title" data-testid="sessions-card">
+  <cw-card-header>
+    <h2
+      id="security-sessions-title"
+      tabindex="-1"
+      data-focus="sessions-title"
+      class="text-base leading-5 font-semibold"
+      i18n="@@account.security.sessions-title"
+    >
+      Active sessions
+    </h2>
+    <cw-card-action>
+      <button
+        cwButton
+        type="button"
+        variant="outline"
+        size="sm"
+        [disabled]="!hasOthers() || (disabled() && !revokingOthers())"
+        [loading]="revokingOthers()"
+        data-testid="sessions-revoke-others"
+        data-focus="sessions-revoke-others"
+        (click)="revokeOthersRequested.emit()"
+        i18n="@@account.security.sessions-revoke-others"
+      >
+        Sign out the others
+      </button>
+    </cw-card-action>
+    @if (timeout(); as rule) {
+      @let count = rule.count;
+      <p class="text-sm text-muted-foreground" data-testid="sessions-timeout">
+        @switch (rule.unit) {
+          @case ('days') {
+            <ng-container i18n="@@account.security.sessions-timeout-days">{count, plural,
+              =1 {A session inactive for 1 day is closed automatically.}
+              other {A session inactive for {{ count }} days is closed automatically.}
+            }</ng-container>
+          }
+          @case ('hours') {
+            <ng-container i18n="@@account.security.sessions-timeout-hours">{count, plural,
+              =1 {A session inactive for 1 hour is closed automatically.}
+              other {A session inactive for {{ count }} hours is closed automatically.}
+            }</ng-container>
+          }
+          @default {
+            <ng-container i18n="@@account.security.sessions-timeout-minutes">{count, plural,
+              =1 {A session inactive for 1 minute is closed automatically.}
+              other {A session inactive for {{ count }} minutes is closed automatically.}
+            }</ng-container>
+          }
+        }
+      </p>
+    }
+  </cw-card-header>
+
+  <ul class="flex flex-col px-4">
+    @for (session of sessions(); track session.id) {
+      <li
+        class="flex flex-wrap items-center gap-3 border-b border-border py-2.5 first:pt-0 last:border-b-0 last:pb-0"
+        data-testid="session-row"
+      >
+        <div class="flex size-8 shrink-0 items-center justify-center rounded-lg bg-secondary">
+          <ng-icon [name]="iconOf(session)" aria-hidden="true" />
+        </div>
+        <div class="flex min-w-0 flex-1 flex-col gap-0.5">
+          <span class="flex flex-wrap items-center gap-2 leading-5 font-medium">
+            {{ session.device ?? unknownDevice() }}
+            @if (session.current) {
+              <span cwBadge variant="secondary" size="sm" i18n="@@account.security.session-current"
+                >This device</span
+              >
+            }
+          </span>
+          <span class="truncate font-mono text-sm text-muted-foreground">{{
+            session.ipAddress
+          }}</span>
+        </div>
+        @let activity = activityOf(session);
+        <span class="text-xs text-muted-foreground" data-testid="session-activity">
+          @switch (activity.kind) {
+            @case ('now') {
+              <ng-container i18n="@@account.security.session-active-now">Active now</ng-container>
+            }
+            @case ('minutes') {
+              @let minutes = countOf(activity);
+              <ng-container i18n="@@account.security.session-active-minutes"
+                >{{ minutes }} min ago</ng-container
+              >
+            }
+            @case ('hours') {
+              @let hours = countOf(activity);
+              <ng-container i18n="@@account.security.session-active-hours"
+                >{{ hours }} h ago</ng-container
+              >
+            }
+            @case ('yesterday') {
+              @let time = dateOf(activity) | date: 'shortTime';
+              <ng-container i18n="@@account.security.session-active-yesterday"
+                >Yesterday, {{ time }}</ng-container
+              >
+            }
+            @case ('days') {
+              @let days = countOf(activity);
+              <ng-container i18n="@@account.security.session-active-days">{days, plural,
+                =1 {1 day ago}
+                other {{{ days }} days ago}
+              }</ng-container>
+            }
+            @default {
+              {{ dateOf(activity) | date: 'mediumDate' }}
+            }
+          }
+        </span>
+        @if (!session.current) {
+          <button
+            cwButton
+            type="button"
+            variant="ghost"
+            size="sm"
+            class="text-destructive"
+            [attr.aria-label]="revokeLabel(session)"
+            [disabled]="disabled() && busyId() !== session.id"
+            [loading]="busyId() === session.id"
+            data-testid="session-revoke"
+            data-focus="revoke-session"
+            (click)="revokeRequested.emit(session)"
+            i18n="@@account.security.session-revoke"
+          >
+            Revoke
+          </button>
+        }
+      </li>
+    } @empty {
+      <li class="py-2.5 text-sm text-muted-foreground" i18n="@@account.security.sessions-empty">
+        No open session.
+      </li>
+    }
+  </ul>
+</cw-card>
