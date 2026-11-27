@@ -1,0 +1,72 @@
+<div class="flex flex-col gap-3">
+  <form class="flex flex-col gap-2" novalidate (submit)="add($event)">
+    <label
+      class="text-sm leading-none font-medium"
+      i18n="@@onboarding.invite.email-label"
+      [attr.for]="fieldId"
+      >Email address</label
+    >
+    <div class="flex gap-2">
+      <input
+        cwInput
+        type="text"
+        inputmode="email"
+        autocomplete="off"
+        class="min-w-0"
+        placeholder="ines.robert@ateliernord.fr"
+        [id]="fieldId"
+        [formField]="inviteForm.email"
+        [attr.aria-invalid]="error() ? 'true' : null"
+        [attr.aria-describedby]="error() ? errorId : null"
+        data-testid="onboarding-invite-email"
+      />
+      <button
+        cwButton
+        type="submit"
+        variant="outline"
+        class="shrink-0"
+        [disabled]="disabled()"
+        data-testid="onboarding-invite-add"
+      >
+        <ng-container i18n="@@onboarding.invite.add">Add</ng-container>
+      </button>
+    </div>
+    @if (error(); as message) {
+      <p
+        role="alert"
+        class="flex items-center gap-1 text-xs font-medium text-destructive"
+        data-testid="onboarding-invite-error"
+        [id]="errorId"
+      >
+        <ng-icon name="phosphorWarningCircleFill" class="size-3.5 shrink-0" aria-hidden="true" />
+        {{ message }}
+      </p>
+    }
+  </form>
+
+  @if (emails().length > 0) {
+    <ul class="flex flex-wrap gap-1.5" data-testid="onboarding-invite-list">
+      @for (email of emails(); track email.toLowerCase()) {
+        <li
+          class="inline-flex h-7 max-w-full items-center gap-1.5 rounded-full border border-border bg-background pr-1 pl-2.5 text-sm"
+          data-testid="onboarding-invite-pill"
+        >
+          <span class="truncate">{{ email }}</span>
+          <button
+            #removeButton
+            cwButton
+            type="button"
+            variant="ghost"
+            size="icon-xs"
+            class="shrink-0 text-muted-foreground"
+            [disabled]="disabled()"
+            [attr.aria-label]="removeLabel(email)"
+            (click)="remove($index)"
+          >
+            <ng-icon name="phosphorXBold" aria-hidden="true" />
+          </button>
+        </li>
+      }
+    </ul>
+  }
+</div>

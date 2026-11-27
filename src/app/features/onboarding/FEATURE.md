@@ -11,9 +11,17 @@ afterwards (step 9, wizard package); the space, lists and tasks the assistant cr
 Spaces and Task once they exist; the invitations are organization invitations, which
 Organization manages.
 
-What exists so far is the foundation: the state, the data access and two hosts that render
-nothing. The assistant comes with step 9's wizard package, the checklist with its getting-started
-package.
+What exists so far is the foundation: the state, the data access, two hosts that render
+nothing and the internal invitation field. The assistant comes with step 9's wizard package, the
+checklist with its getting-started package.
+
+`OnboardingInviteField` (`cw-onboarding-invite-field`, `ui/components/onboarding-invite-field/`) is
+internal, not a public entry: the presentational invitation field (`App.dc.html` lines 2694-2695)
+that both the assistant's `Team` step and the getting-started invite dialog render. It edits the
+list of addresses (`[(emails)]`, `disabled`) and sends nothing; the screen that renders it calls
+`inviteMembers`. No bundled file renders it yet, so its copy (`@@onboarding.invite.*`) enters
+`messages.json` and `messages.fr.json` with the first package that renders it (step 9, wizard
+package).
 
 ## Routes
 
@@ -104,6 +112,13 @@ route), `withGettingStarted()` and `withOnboardingWizard()` (the `overlays` cont
   invited at least one address; any other outcome, an unknown one included, counts as not sent.
 - A draft color a later contract adds reads as `gris`, as `LookColorValue` says; the assistant
   draws no `gris` swatch (step 9, wizard package, decides how to show it).
+- `OnboardingInviteField` is its own `<form>`, so a host never nests it in another form. `Add`
+  checks the trimmed address against the mockup's pattern (`^[^\s@]+@[^\s@]+\.[^\s@]{2,}$`, line
+  5258); an invalid one shows the error under the field with `aria-invalid` from that submit on,
+  not on blur, and an empty field adds nothing. A valid address is added once, compared without
+  regard to case (the mockup compares it as typed), and the field empties. The focus returns to
+  the field after an add, and after a removal goes to the remove button now at that place, else
+  the last one, else the field. The mockup's guest badge (line 2695) is not drawn (gap G5).
 - The checklist will have the three items the contract records (step 9, getting-started
   package): `firstTaskCreated`, set by the gateway; `invitationSent`; `boardTried`. The mockup's
   reminder and mobile items have no marker (gaps G2 and G3). A failed checklist read will show
