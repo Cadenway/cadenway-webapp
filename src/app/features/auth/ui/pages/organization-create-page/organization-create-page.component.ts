@@ -18,7 +18,7 @@ import {
   submit,
   validate,
 } from '@angular/forms/signals';
-import { Router, RouterLink } from '@angular/router';
+import { Router, RouterLink, UrlTree } from '@angular/router';
 import { CwAlert, CwAlertDescription } from '@cadenway/ui/components/alert';
 import { CwButton } from '@cadenway/ui/components/button';
 import { CwCard } from '@cadenway/ui/components/card';
@@ -148,9 +148,9 @@ interface CreateModel {
  * generated address preview `app.<domain>/<slug>`, team size, main use and invitations. The
  * gateway's address refusals (`organization.slug-invalid`, `organization.slug-reserved`,
  * `organization.slug-taken`) show on the name. Once created, the session moves to the new
- * organization, its logo is uploaded, and `/<slug>?onboarding=start` opens the onboarding
- * assistant; when the logo could not be uploaded the address also carries
- * `notice=logo-upload-failed`, which the home screen explains.
+ * organization, its logo is uploaded, and `/<slug>` opens; when the logo could not be uploaded
+ * the address also carries `notice=logo-upload-failed`, added to the query the destination
+ * already has, which the home screen explains.
  */
 @Component({
   selector: 'cw-organization-create-page',
@@ -537,10 +537,15 @@ export class OrganizationCreatePage {
           logo: this.logo()?.file ?? null,
         });
         if (result.ok) {
+          const destination: UrlTree = this.router.parseUrl(result.destination);
           await this.open(
             result.logoFailed && result.destination !== '/organizations'
-              ? `${result.destination}${result.destination.includes('?') ? '&' : '?'}notice=logo-upload-failed`
-              : result.destination,
+              ? new UrlTree(
+                  destination.root,
+                  { ...destination.queryParams, notice: 'logo-upload-failed' },
+                  destination.fragment,
+                )
+              : destination,
           );
           return undefined;
         }
@@ -584,10 +589,10 @@ export class OrganizationCreatePage {
    * @description
    * Opens a path unless the page closed meanwhile.
    *
-   * @param {string} path - The application path.
+   * @param {string | UrlTree} path - The application path.
    * @returns {Promise<void>} Resolves once navigated.
    */
-  private async open(path: string): Promise<void> {
+  private async open(path: string | UrlTree): Promise<void> {
     if (!this.destroyRef.destroyed) await this.router.navigateByUrl(path, { replaceUrl: true });
   }
 

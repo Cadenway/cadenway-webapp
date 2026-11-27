@@ -12,24 +12,11 @@ import type {
 } from '../../models/organization/organization.interface';
 
 /**
- * Constant CHOOSER_PATH
- *
- * @description
- * What `workspacePath` gives for a slug no workspace can open (a reserved one): the chooser, which
- * does not run the onboarding assistant.
- *
- * @type {string}
- */
-const CHOOSER_PATH: string = '/organizations';
-
-/**
  * Type CreationResult
  *
  * @description
- * Outcome of a creation: the new workspace address, or the refusal. The address opens the
- * onboarding assistant (`/<slug>?onboarding=start`), or is the chooser for a reserved slug.
- * `created` is the organization when the creation itself succeeded but moving the session to it
- * failed.
+ * Outcome of a creation: the new workspace path, or the refusal. `created` is the organization
+ * when the creation itself succeeded but moving the session to it failed.
  *
  * @type {{ readonly ok: true; readonly destination: string; readonly logoFailed: boolean } | { readonly ok: false; readonly problem: AuthProblem; readonly created: OrganizationChoice | null }}
  */
@@ -71,8 +58,7 @@ interface OrganizationCreateStoreInstance {
    * the creation: the result says so, for the next screen to tell the person.
    *
    * @param {OrganizationDraft} draft - The submitted form.
-   * @returns {Promise<CreationResult>} The address that opens the onboarding assistant, or the
-   * refusal.
+   * @returns {Promise<CreationResult>} The workspace path or the refusal.
    */
   create(draft: OrganizationDraft): Promise<CreationResult>;
   // #endregion
@@ -109,12 +95,7 @@ function createOrganizationCreateStore(): Type<OrganizationCreateStoreInstance> 
           return { ok: false, problem: authProblem(error), created };
         }
         patchState(store, { creating: false });
-        const workspace: string = workspacePath(created.slug);
-        return {
-          ok: true,
-          destination: workspace === CHOOSER_PATH ? workspace : `${workspace}?onboarding=start`,
-          logoFailed,
-        };
+        return { ok: true, destination: workspacePath(created.slug), logoFailed };
       },
     })),
   );

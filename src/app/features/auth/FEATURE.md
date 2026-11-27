@@ -87,10 +87,19 @@ was scheduled, whose session the gateway already ended.
   its own header action.
 - A sign-up replaced by a newer one (`auth.sign-up-replaced`) returns to
   `/signup?reason=sign-up-replaced`.
-- A creation opens `/<slug>?onboarding=start`, which asks Onboarding's assistant to open; the
-  assistant belongs to Onboarding, and a reserved slug opens `/organizations` without it. A
-  creation whose logo could not be uploaded appends `&notice=logo-upload-failed`, which the home
-  screen explains.
+- A creation opens `/<slug>` (`/organizations` for a reserved slug). It becomes
+  `/<slug>?onboarding=start`, which asks Onboarding's assistant to open, with step 9's wizard
+  package. A creation whose logo could not be uploaded adds `notice=logo-upload-failed` to the
+  destination's query (built as a `UrlTree`, so it joins `onboarding=start`), which the home screen
+  explains.
+
+## Known gaps
+
+- When the creation succeeds but moving the session to the new organization fails, the page opens
+  `/organizations`: the person reaches the workspace from the chooser, without
+  `?onboarding=start`, so the assistant (step 9, wizard package) never opens for that
+  organization. Contract gap G1 of step 9 (`getOnboarding` cannot tell who was offered the
+  assistant) keeps the client from offering it there.
 
 ## Copy not taken word for word from the mockup
 
