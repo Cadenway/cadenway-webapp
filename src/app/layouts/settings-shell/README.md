@@ -19,16 +19,20 @@ Without a label, the navigation has no `aria-label`.
 
 ## Slots
 
-| Slot                 | Token                                     | Rendered                                                        |
-| -------------------- | ----------------------------------------- | --------------------------------------------------------------- |
-| `railNavigation`     | `SETTINGS_SHELL_RAIL_NAVIGATION_SLOT`     | The rail; each contribution renders its own `cw-app-rail-group` |
-| `railFooter`         | `SETTINGS_SHELL_RAIL_FOOTER_SLOT`         | `cw-app-rail-footer` (search, theme, account avatar)            |
-| `settingsNavigation` | `SETTINGS_SHELL_SETTINGS_NAVIGATION_SLOT` | The settings `nav` (back link, account and organization groups) |
+| Slot                 | Token                                     | Rendered                                                                     |
+| -------------------- | ----------------------------------------- | ---------------------------------------------------------------------------- |
+| `railNavigation`     | `SETTINGS_SHELL_RAIL_NAVIGATION_SLOT`     | The rail; each contribution renders its own `cw-app-rail-group`              |
+| `railFooter`         | `SETTINGS_SHELL_RAIL_FOOTER_SLOT`         | `cw-app-rail-footer` (search, theme, account avatar)                         |
+| `settingsNavigation` | `SETTINGS_SHELL_SETTINGS_NAVIGATION_SLOT` | The settings `nav` (back link, account and organization groups)              |
+| `overlays`           | `SETTINGS_SHELL_OVERLAYS_SLOT`            | After the panel (command palette, shortcuts dialog, reauthentication dialog) |
+
+The shell renders one `cw-toaster` after the overlays, where the settings sections show their toasts (with Undo) through `CwToastService`; its texts use the `@@layouts.settings-shell.toast-*` ids. The rail's `Search` opens the command palette of the `overlays` slot, as in `Compte.dc.html` (lines 41-44).
 
 - Contributions render in ascending `order` through `NgComponentOutlet` with their `inputs`.
 - An empty slot renders nothing: without contributions there is no settings navigation landmark.
 - Every contribution goes in the `providers` of the route that loads `SettingsShell`, and a child route cannot add to a slot (see the [slot contract](../../shared/layout-slot/README.md#contract)).
 - A rail contribution gives its host `class: 'contents'`, so its items join the brick's flex layout.
+- Workspace binds the account and organization contributions on its `/:org/account` and `/:org/organization` routes (see its `FEATURE.md`).
 - The routed section owns its centred column: `max-w-3xl` for the account, `max-w-4xl` for the organization.
 
 ## Phones
@@ -46,4 +50,4 @@ The provider-only entry keeps the component behind the route's dynamic import. T
 
 ## Rules
 
-The layout provides `provideCwLocale(() => inject(LOCALE_ID))` and `provideCwPhoneSheets()` to its subtree, so `@cadenway/ui/core` stays out of the initial bundle. Its copy uses the `@@layouts.settings-shell.*` ids. It never calls the API or reads a feature store.
+The layout provides `provideCwLocale(() => inject(LOCALE_ID))`, `provideCwPhoneSheets()` and the toaster's English texts to its subtree, so `@cadenway/ui/core` stays out of the initial bundle. Its copy uses the `@@layouts.settings-shell.*` ids. It never calls the API or reads a feature store.
