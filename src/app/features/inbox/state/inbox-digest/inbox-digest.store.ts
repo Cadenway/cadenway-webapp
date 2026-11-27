@@ -48,8 +48,8 @@ export const NOTICE_AUDIT_MS: number = 300;
  * Interface InboxDigestState
  *
  * @description
- * The organization the digest reads, the notifications it shows read before the page says so and
- * whether the running read started from a failure.
+ * The organization the digest reads, the reads it shows before the page says so and whether the
+ * running read started from a failure.
  */
 interface InboxDigestState {
   // #region Properties
@@ -65,16 +65,29 @@ interface InboxDigestState {
   readonly _organizationId: string | null;
 
   /**
-   * Property _readIds
+   * Property _pending
    *
    * @description
-   * Notifications opened from the digest, while their write is pending or once it was recorded,
-   * and those the popover recorded read; a page read before those writes still shows them read.
+   * Notifications opened from the digest whose write has not settled; they show read on every page.
    *
    * @type {readonly string[]}
    * @readonly
    */
-  readonly _readIds: readonly string[];
+  readonly _pending: readonly string[];
+
+  /**
+   * Property _confirmed
+   *
+   * @description
+   * Reads the gateway recorded (the digest's own and those the popover relayed), each with the
+   * number of page reads started when it was recorded. Only a page whose read started before (a
+   * sequence up to that number) may predate it and shows it read; a later page is the server's
+   * word.
+   *
+   * @type {Readonly<Partial<Record<string, number>>>}
+   * @readonly
+   */
+  readonly _confirmed: Readonly<Partial<Record<string, number>>>;
 
   /**
    * Property _fromError
@@ -91,10 +104,43 @@ interface InboxDigestState {
 }
 
 /**
+ * Interface DigestPage
+ *
+ * @description
+ * A page as read, with the sequence of the read that brought it.
+ */
+interface DigestPage {
+  // #region Properties
+  /**
+   * Property page
+   *
+   * @description
+   * The notifications the gateway answered.
+   *
+   * @type {InboxNotificationPage}
+   * @readonly
+   */
+  readonly page: InboxNotificationPage;
+
+  /**
+   * Property sequence
+   *
+   * @description
+   * Sequence of the read, counted from 1 since the store was created.
+   *
+   * @type {number}
+   * @readonly
+   */
+  readonly sequence: number;
+  // #endregion
+}
+
+/**
  * Interface DigestLoads
  *
  * @description
- * How the next read of the page is sent and whether a refused passive read waits for verification.
+ * How the next read of the page is sent, which read and organization generation are current, and
+ * whether a refused passive read waits for verification.
  */
 interface DigestLoads {
   // #region Properties
@@ -124,12 +170,32 @@ interface DigestLoads {
    * Property refused
    *
    * @description
-   * Whether the last passive read was refused because the workspace organization was changing or
-   * stale, and waits for the next verified context.
+   * Whether the current read was refused, passively, because the workspace organization was
+   * changing or stale, and waits for the next verified context.
    *
    * @type {boolean}
    */
   refused: boolean;
+
+  /**
+   * Property sequence
+   *
+   * @description
+   * Page reads started so far; the last one is the only read whose outcome changes these flags.
+   *
+   * @type {number}
+   */
+  sequence: number;
+
+  /**
+   * Property generation
+   *
+   * @description
+   * Organization switches so far; reads and writes of an older generation change nothing.
+   *
+   * @type {number}
+   */
+  generation: number;
   // #endregion
 }
 
@@ -145,8 +211,8 @@ export interface InboxDigestStoreInstance {
    * Property items
    *
    * @description
-   * The notifications, the newest first, with those read in either inbox view shown read; empty
-   * while loading and after a failure.
+   * The notifications, the newest first, with the digest's pending reads and the reads recorded
+   * since the page was read shown read; empty while loading and after a failure.
    *
    * @type {Signal<readonly InboxNotification[]>}
    * @readonly
@@ -213,10 +279,13 @@ export interface InboxDigestStoreInstance {
    *
    * @description
    * Shows a notification read at once, then records it and tells the popover; a refusal shows it
-   * unread again.
+   * unread again, unless another recorded read covers it.
    *
    * @param {InboxNotification} notification - The opened notification.
-   * @returns {Promise<boolean>} Whether the gateway recorded it (true when it was already read).
+   * @returns {Promise<boolean>} False only when the gateway refused it in the current organization
+   * and no recorded read covers it, which the caller reports; true when it was recorded, already
+   * read, covered by a read the popover recorded, or answered for an organization the workspace
+   * has left.
    */
   markRead(notification: InboxNotification): Promise<boolean>;
   // #endregion
@@ -226,11 +295,16 @@ export interface InboxDigestStoreInstance {
  * Constant initialState
  *
  * @description
- * No organization, nothing opened and no failure yet.
+ * No organization, no read and no failure yet.
  *
  * @type {InboxDigestState}
  */
-const initialState: InboxDigestState = { _organizationId: null, _readIds: [], _fromError: false };
+const initialState: InboxDigestState = {
+  _organizationId: null,
+  _pending: [],
+  _confirmed: {},
+  _fromError: false,
+};
 
 /**
  * Function contextRefused
@@ -248,20 +322,6 @@ function contextRefused(error: unknown): boolean {
 }
 
 /**
- * Function withIds
- *
- * @description
- * The given ids added to a list of ids, each once.
- *
- * @param {readonly string[]} ids - Current ids.
- * @param {readonly string[]} added - Ids to add.
- * @returns {readonly string[]} The union.
- */
-function withIds(ids: readonly string[], added: readonly string[]): readonly string[] {
-  return [...new Set<string>([...ids, ...added])];
-}
-
-/**
  * Function createInboxDigestStore
  *
  * @description
@@ -276,7 +336,13 @@ function createInboxDigestStore(): Type<InboxDigestStoreInstance> {
       const api: InboxApi = inject(InboxApi);
       const pin: OrganizationPin = inject(OrganizationPin);
       const workspace: WorkspaceContextPort = inject(WORKSPACE_CONTEXT);
-      const loads: DigestLoads = { passive: null, queued: null, refused: false };
+      const loads: DigestLoads = {
+        passive: null,
+        queued: null,
+        refused: false,
+        sequence: 0,
+        generation: 0,
+      };
       let readOrganization: string | null = null;
       return {
         _api: api,
@@ -294,19 +360,25 @@ function createInboxDigestStore(): Type<InboxDigestStoreInstance> {
             params,
           }: {
             params: { organizationId: string };
-          }): Promise<InboxNotificationPage> => {
+          }): Promise<DigestPage> => {
             const passive: boolean =
               loads.passive ??
               (readOrganization !== null && readOrganization !== params.organizationId);
             readOrganization = params.organizationId;
             loads.passive = null;
+            const sequence: number = (loads.sequence += 1);
+            const generation: number = loads.generation;
             const revision: number = pin.revision();
+            const current: () => boolean = (): boolean =>
+              sequence === loads.sequence &&
+              generation === loads.generation &&
+              params.organizationId === store._organizationId();
             try {
               const page: InboxNotificationPage = await api.notifications(passive);
-              loads.refused = false;
-              return page;
+              if (current()) loads.refused = false;
+              return { page, sequence };
             } catch (error: unknown) {
-              if (passive && contextRefused(error)) {
+              if (passive && contextRefused(error) && current()) {
                 // A context verified while the read ran lets it through now; otherwise the read
                 // waits for the next verified context.
                 if (
@@ -332,12 +404,16 @@ function createInboxDigestStore(): Type<InboxDigestStoreInstance> {
         retrying,
         items: computed((): readonly InboxNotification[] => {
           if (!store._notifications.hasValue()) return [];
-          const read: ReadonlySet<string> = new Set<string>(store._readIds());
-          return store._notifications
-            .value()
-            .items.map((item: InboxNotification) =>
-              !item.read && read.has(item.id) ? { ...item, read: true } : item,
-            );
+          const { page, sequence }: DigestPage = store._notifications.value();
+          const pending: ReadonlySet<string> = new Set<string>(store._pending());
+          const confirmed: Readonly<Partial<Record<string, number>>> = store._confirmed();
+          return page.items.map((item: InboxNotification) => {
+            if (item.read) return item;
+            const recorded: number | undefined = confirmed[item.id];
+            const read: boolean =
+              pending.has(item.id) || (recorded !== undefined && sequence <= recorded);
+            return read ? { ...item, read: true } : item;
+          });
         }),
         loading: computed(
           (): boolean =>
@@ -346,12 +422,11 @@ function createInboxDigestStore(): Type<InboxDigestStoreInstance> {
         failed: computed((): boolean => store._notifications.status() === 'error' || retrying()),
         empty: computed(
           (): boolean =>
-            store._notifications.hasValue() && store._notifications.value().items.length === 0,
+            store._notifications.hasValue() && store._notifications.value().page.items.length === 0,
         ),
       };
     }),
     withMethods((store) => {
-      let generation: number = 0;
       const read: (passive: boolean) => void = (passive: boolean): void => {
         if (store._organizationId() === null) return;
         if (store._notifications.isLoading()) {
@@ -361,6 +436,11 @@ function createInboxDigestStore(): Type<InboxDigestStoreInstance> {
         if (store._notifications.status() === 'error') patchState(store, { _fromError: true });
         store._loads.passive = passive;
         store._notifications.reload();
+      };
+      const confirm: (ids: readonly string[]) => void = (ids: readonly string[]): void => {
+        const confirmed: Partial<Record<string, number>> = { ...store._confirmed() };
+        for (const id of ids) confirmed[id] = store._loads.sequence;
+        patchState(store, { _confirmed: confirmed });
       };
       return {
         _refresh(): void {
@@ -382,51 +462,53 @@ function createInboxDigestStore(): Type<InboxDigestStoreInstance> {
         _readElsewhere(change: InboxRead): void {
           if (change.source === 'digest' || change.organizationId !== store._organizationId())
             return;
-          const unread: string[] = change.all
-            ? store
-                .items()
-                .filter((item: InboxNotification) => !item.read)
-                .map((item: InboxNotification) => item.id)
-            : [];
-          patchState(store, { _readIds: withIds(store._readIds(), [...change.ids, ...unread]) });
-          // A page in flight, or rows the popover did not list, may predate `Mark all as read`.
+          // Only the listed ids are known to be covered; `Mark all as read` is reconciled from a
+          // fresh read, so a notification created meanwhile keeps the server's unread state.
+          confirm(change.ids);
           if (change.all) read(true);
         },
         _followOrganization: signalMethod<string>((organizationId: string): void => {
           if (organizationId === store._organizationId()) return;
-          generation += 1;
+          store._loads.generation += 1;
           store._loads.passive = null;
           store._loads.queued = null;
           store._loads.refused = false;
-          patchState(store, { _organizationId: organizationId, _readIds: [], _fromError: false });
+          patchState(store, {
+            _organizationId: organizationId,
+            _pending: [],
+            _confirmed: {},
+            _fromError: false,
+          });
         }),
         retry(): void {
           if (store._notifications.isLoading()) return;
           read(false);
         },
         async markRead(notification: InboxNotification): Promise<boolean> {
-          if (notification.read || store._readIds().includes(notification.id)) return true;
+          if (notification.read || store._pending().includes(notification.id)) return true;
           const organizationId: string | null = store._organizationId();
-          const started: number = generation;
-          patchState(store, { _readIds: withIds(store._readIds(), [notification.id]) });
+          const generation: number = store._loads.generation;
+          const others: () => readonly string[] = (): readonly string[] =>
+            store._pending().filter((id: string) => id !== notification.id);
+          patchState(store, { _pending: [...store._pending(), notification.id] });
           try {
             await store._api.markRead(notification.id);
-            if (started === generation && organizationId !== null) {
-              store._reads.publish({
-                organizationId,
-                source: 'digest',
-                ids: [notification.id],
-                all: false,
-              });
-            }
+            if (generation !== store._loads.generation || organizationId === null) return true;
+            patchState(store, {
+              _pending: others(),
+              _confirmed: { ...store._confirmed(), [notification.id]: store._loads.sequence },
+            });
+            store._reads.publish({
+              organizationId,
+              source: 'digest',
+              ids: [notification.id],
+              all: false,
+            });
             return true;
           } catch {
-            if (started === generation) {
-              patchState(store, {
-                _readIds: store._readIds().filter((id: string) => id !== notification.id),
-              });
-            }
-            return false;
+            if (generation !== store._loads.generation) return true;
+            patchState(store, { _pending: others() });
+            return store._confirmed()[notification.id] !== undefined;
           }
         },
       };
@@ -469,15 +551,18 @@ function createInboxDigestStore(): Type<InboxDigestStoreInstance> {
  * notification notice (`notification.created.v1`, once at the end of a 300 ms window opened by
  * the first notice of a burst), after a realtime reconnection (notices are not replayed) and after
  * an organization switch. A read asked for while another runs is sent once it settles. A switch
- * drops the previous organization's rows at once, and the results of writes sent before it are
- * ignored. A background refresh keeps the rows while it runs; a failed read is a state
- * (`failed`), never an empty page, and stays shown while a read sent after it runs (`retrying`).
- * A passive read refused while the workspace organization changes or is stale waits for the next
- * verified context; one refused by a context verified while it ran is sent again at once.
- * Opening a notification shows it read at once and records it; a refusal shows it unread again,
- * and a page read before the write settled still shows it read. Recorded reads go through
- * `InboxReads`: the digest publishes its own and shows the popover's read, reading the page again
- * after `Mark all as read`.
+ * drops the previous organization's rows at once; the reads, refusals and write results of an
+ * earlier organization generation change nothing, even after switching back, and only the last
+ * read changes the retry flags. A background refresh keeps the rows while it runs; a failed read
+ * is a state (`failed`), never an empty page, and stays shown while a read sent after it runs
+ * (`retrying`). A passive read refused while the workspace organization changes or is stale waits
+ * for the next verified context; one refused by a context verified while it ran is sent again at
+ * once. Opening a notification shows it read while its write is pending (`_pending`); once
+ * recorded, it joins the confirmed reads (`_confirmed`), which only pages whose read started
+ * before the confirmation show read, so a later page is the server's word. A refusal drops only
+ * that pending claim; a stale one is not reported. Recorded reads go through `InboxReads`: the
+ * digest publishes its own and confirms the ids the popover relays; `Mark all as read` is
+ * reconciled by a fresh read, never overlaid.
  *
  * @type {ReturnType<typeof createInboxDigestStore>}
  */

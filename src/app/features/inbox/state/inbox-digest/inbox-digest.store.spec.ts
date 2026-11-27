@@ -488,7 +488,7 @@ describe('InboxDigestStore', () => {
     expect(store.items()[0]?.read).toBe(true);
 
     first.reject(new Error('unavailable'));
-    await stale;
+    await expect(stale).resolves.toBe(true);
 
     expect(store.items()[0]?.read).toBe(true);
     second.resolve(undefined);
@@ -505,16 +505,108 @@ describe('InboxDigestStore', () => {
     reads.publish({ organizationId: 'atelier-nord', source: 'digest', ids: ['n1'], all: false });
     expect(store.items()[0]?.read).toBe(false);
     reads.publish({ organizationId: 'atelier-nord', source: 'popover', ids: ['n1'], all: false });
+
     expect(store.items().map((item: InboxNotification) => item.read)).toEqual([true, false, true]);
     expect(notifications).toHaveBeenCalledTimes(1);
+  });
 
-    notifications.mockResolvedValueOnce(page(mention, other, comment));
-    reads.publish({ organizationId: 'atelier-nord', source: 'popover', ids: [], all: true });
-    expect(store.items().every((item: InboxNotification) => item.read)).toBe(true);
+  it('reconciles a popover mark-all from a fresh read, keeping a newer notification unread', async () => {
+    const newer: InboxNotification = { ...mention, id: 'n5', taskKey: 'CAD-491' };
+    notifications.mockResolvedValueOnce(page(newer, mention, comment));
+    const store: InstanceType<typeof InboxDigestStore> = await loaded();
+    notifications.mockResolvedValueOnce(page(newer, { ...mention, read: true }, comment));
+
+    TestBed.inject(InboxReads).publish({
+      organizationId: 'atelier-nord',
+      source: 'popover',
+      ids: ['n1'],
+      all: true,
+    });
+
+    expect(store.items().map((item: InboxNotification) => item.read)).toEqual([false, true, true]);
     await settle(store);
     expect(notifications).toHaveBeenCalledTimes(2);
     expect(notifications).toHaveBeenLastCalledWith(true);
-    expect(store.items().every((item: InboxNotification) => item.read)).toBe(true);
+    expect(store.items().map((item: InboxNotification) => item.read)).toEqual([false, true, true]);
+  });
+
+  it('shows a recorded read on pages read before it, and the server state on later ones', async () => {
+    const store: InstanceType<typeof InboxDigestStore> = await loaded();
+    const before: ReturnType<typeof deferred<InboxNotificationPage>> =
+      deferred<InboxNotificationPage>();
+    notifications.mockReturnValueOnce(before.promise);
+    reconnects.next();
+    TestBed.tick();
+
+    TestBed.inject(InboxReads).publish({
+      organizationId: 'atelier-nord',
+      source: 'popover',
+      ids: ['n1'],
+      all: false,
+    });
+    before.resolve(page(mention, comment));
+    await settle(store);
+    expect(store.items()[0]?.read).toBe(true);
+
+    reconnects.next();
+    await settle(store);
+    expect(notifications).toHaveBeenCalledTimes(3);
+    expect(store.items()[0]?.read).toBe(false);
+  });
+
+  it('keeps a read the popover recorded when the digest write for it fails, without a toast', async () => {
+    const store: InstanceType<typeof InboxDigestStore> = await loaded();
+    const write: ReturnType<typeof deferred<undefined>> = deferred<undefined>();
+    markRead.mockReturnValueOnce(write.promise);
+    const done: Promise<boolean> = store.markRead(mention);
+
+    TestBed.inject(InboxReads).publish({
+      organizationId: 'atelier-nord',
+      source: 'popover',
+      ids: ['n1'],
+      all: false,
+    });
+    write.reject(new Error('unavailable'));
+
+    await expect(done).resolves.toBe(true);
+    expect(store.items()[0]?.read).toBe(true);
+  });
+
+  it('does not report the failure of a write sent before an organization switch', async () => {
+    const store: InstanceType<typeof InboxDigestStore> = await loaded();
+    const write: ReturnType<typeof deferred<undefined>> = deferred<undefined>();
+    markRead.mockReturnValueOnce(write.promise);
+    const done: Promise<boolean> = store.markRead(mention);
+    current.set(workspaceOrganization('lumen'));
+    await settle(store);
+
+    write.reject(new Error('unavailable'));
+
+    await expect(done).resolves.toBe(true);
+  });
+
+  it('keeps the current retry obligation when an older organization read settles late', async () => {
+    const pin: OrganizationPin = TestBed.inject(OrganizationPin);
+    pin.set('atelier-nord');
+    const old: ReturnType<typeof deferred<InboxNotificationPage>> =
+      deferred<InboxNotificationPage>();
+    notifications.mockReturnValueOnce(old.promise);
+    const store: InstanceType<typeof InboxDigestStore> = TestBed.inject(InboxDigestStore);
+    TestBed.tick();
+    expect(notifications).toHaveBeenCalledTimes(1);
+
+    notifications.mockRejectedValueOnce(new OrganizationSwitchPendingError());
+    current.set(workspaceOrganization('lumen'));
+    await settle(store);
+    expect(store.failed()).toBe(true);
+    old.resolve(page(mention));
+    await settle(store);
+
+    pin.set('lumen');
+    await settle(store);
+    expect(notifications).toHaveBeenCalledTimes(3);
+    expect(notifications).toHaveBeenLastCalledWith(true);
+    expect(store.failed()).toBe(false);
   });
 
   it('tells the popover about the reads it recorded, not the refused ones', async () => {

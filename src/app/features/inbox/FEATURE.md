@@ -39,22 +39,26 @@ and, when realtime is on, `RealtimeConnection`.
 ## Invariants
 
 - `InboxDigestStore` is provided by `InboxDigest` (component scope, so it dies with the page) and
-  keyed on the workspace's organization; a switch drops the previous rows at once and ignores the
-  results of writes sent before it, even after switching back. It reads the first page (30
-  notifications, read and unread) actively on opening and on `Retry`, and passively on a
-  `notification.created.v1` notice (once, at the end of a 300 ms window opened by the first notice
+  keyed on the workspace's organization; a switch drops the previous rows at once, and the reads,
+  refusals and write results of an earlier organization change nothing, even after switching back
+  (a stale write failure is not reported). Only the last read changes the retry state. It reads
+  the first page (30 notifications, read and unread) actively on opening and on `Retry`, and
+  passively on a `notification.created.v1` notice (once, at the end of a 300 ms window opened by the first notice
   of a burst), after a realtime reconnection and after a switch. A read asked for while another
   loads or reloads is sent once it settles. A passive read refused while the organization changes
   or is stale waits for the next verified context, in every stale period; one refused by a context
   verified while it ran is sent again at once. A background refresh keeps the rows; a failed read
   shows the inline error (an alert) with `Retry`, never the empty state, and keeps it with `Retry`
   busy while the next read runs; when rows replace it, focus that fell to the body moves to the
-  digest's container. Opening a row is optimistic, and a page read before the write settled still
-  shows it read; a refusal shows it unread again with the inbox's error toast.
+  digest's container. Opening a row is optimistic: the row shows read while its write is pending,
+  and once recorded it shows read only on pages whose read started before that, so a later page is
+  the server's word. A refusal drops only that pending claim and shows the inbox's error toast,
+  unless a read the popover recorded covers the row.
 - The rail's popover and the home screen's digest share no state; `InboxReads` (`services/`, root)
   relays the reads the gateway recorded, tagged with their organization and view. The digest shows
-  the popover's reads at once and reads its page again after `Mark all as read`; a read recorded by
-  the digest refreshes the badge and the open popover list.
+  the ids the popover recorded at once, like its own recorded reads; `Mark all as read` is never
+  applied beyond those ids but reconciled by a fresh read, so a notification created meanwhile
+  stays unread. A read recorded by the digest refreshes the badge and the open popover list.
 - `InboxStore` is provided by the rail item and keyed on the workspace's organization. A committed
   organization switch clears the count and the lists at once and restarts the poll; any answer or
   write result that belongs to the previous organization is ignored.
