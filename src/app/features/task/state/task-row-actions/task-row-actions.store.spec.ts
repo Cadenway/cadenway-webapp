@@ -727,4 +727,94 @@ describe('TaskRowActionsStore', () => {
     expect(show).not.toHaveBeenCalled();
     expect(error).not.toHaveBeenCalled();
   });
+
+  it('drops a status write queued behind a menu write once the organization changed', async () => {
+    vi.useFakeTimers();
+    const first: ReturnType<typeof deferred> = deferred();
+    bulk.mockImplementationOnce(() => first.promise);
+    const store: TaskRowActionsStoreInstance = setup();
+
+    const urgent: Promise<void> = store.setPriority(task, 'urgente');
+    store.setStatus(task, 'progress');
+    await vi.advanceTimersByTimeAsync(STATUS_SETTLE_MS);
+    organization.set({ id: 'o2', slug: 'other', name: 'Other' } as WorkspaceOrganization);
+    first.release(applied());
+    await urgent;
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(changeStatus).not.toHaveBeenCalled();
+    expect(store.displayedStatus(task)).toBe('todo');
+    expect(error).not.toHaveBeenCalled();
+  });
+
+  it('drops a status write queued behind a menu write when the page is left', async () => {
+    vi.useFakeTimers();
+    const first: ReturnType<typeof deferred> = deferred();
+    bulk.mockImplementationOnce(() => first.promise);
+    const store: TaskRowActionsStoreInstance = setup();
+
+    const urgent: Promise<void> = store.setPriority(task, 'urgente');
+    store.setStatus(task, 'progress');
+    await vi.advanceTimersByTimeAsync(STATUS_SETTLE_MS);
+    page.destroy();
+    first.release(applied());
+    await urgent;
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(changeStatus).not.toHaveBeenCalled();
+    expect(error).not.toHaveBeenCalled();
+  });
+
+  it('computes a queued assignee toggle from the confirmed assignees when it starts', async () => {
+    const first: ReturnType<typeof deferred> = deferred();
+    bulk.mockImplementationOnce(() => first.promise);
+    const store: TaskRowActionsStoreInstance = setup();
+
+    const ines: Promise<void> = store.toggleAssignee(task, personOf('u2', 'Inès Roy'));
+    const hugo: Promise<void> = store.toggleAssignee(task, personOf('u3', 'Hugo Durand'));
+    expect(store.displayedTask(task).assigneeIds).toEqual(['u1', 'u2', 'u3']);
+    first.release(refused);
+    await Promise.all([ines, hugo]);
+
+    expect(bulk.mock.calls[1][1]).toEqual({ type: 'assign', userId: 'u3' });
+    expect(store.displayedTask(task).assigneeIds).toEqual(['u1', 'u3']);
+  });
+
+  it('keeps an unconfirmed value without the failure toast when no read answers', async () => {
+    vi.useFakeTimers();
+    bulk.mockResolvedValueOnce(uncertain);
+    read.mockReturnValue(throwError(() => new HttpErrorResponse({ status: 503 })));
+    const store: TaskRowActionsStoreInstance = setup();
+
+    const moved: Promise<void> = store.moveTo(task, backlog);
+    for (const delay of ROW_RECONCILE_DELAYS_MS) await vi.advanceTimersByTimeAsync(delay);
+    await moved;
+
+    expect(error).not.toHaveBeenCalled();
+    expect(warning).toHaveBeenCalledWith('CAD-482 is not confirmed', {
+      description: 'The server did not answer. The next refresh shows the task as it is.',
+    });
+    expect(store.displayedTask(task).listId).toBe('backlog');
+    await store.setPriority(task, 'urgente');
+    expect(bulk.mock.calls[1][0]).toEqual([{ taskKey: 'CAD-482', version: 3 }]);
+    store.sync([{ ...task, version: 4 }]);
+    expect(store.displayedTask({ ...task, version: 4 }).listId).toBe('sprint-14');
+  });
+
+  it('leaves a deletion no read could settle to the next page read', async () => {
+    vi.useFakeTimers();
+    bulk.mockResolvedValueOnce(uncertain);
+    read.mockReturnValue(throwError(() => new HttpErrorResponse({ status: 503 })));
+    const store: TaskRowActionsStoreInstance = setup();
+
+    store.askDelete(task);
+    const trashed: Promise<void> = store.trash();
+    for (const delay of ROW_RECONCILE_DELAYS_MS) await vi.advanceTimersByTimeAsync(delay);
+    await trashed;
+
+    expect(store.rows([task])).toEqual([]);
+    expect(error).not.toHaveBeenCalled();
+    store.sync([task]);
+    expect(store.rows([task])).toHaveLength(1);
+  });
 });

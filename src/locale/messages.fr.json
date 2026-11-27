@@ -2060,6 +2060,8 @@
     "task.row-actions.reminded-text": "{$date}, 9 h · {$key}",
     "task.row-actions.restore-failed": "La tâche n’a pas pu être restaurée",
     "task.row-actions.unassigned": "{$name} retiré",
+    "task.row-actions.unconfirmed": "{$key} non confirmée",
+    "task.row-actions.unconfirmed-text": "Le serveur n’a pas répondu. La prochaine actualisation affiche la tâche telle qu’elle est.",
     "task.row-actions.undo-failed": "La modification n’a pas pu être annulée",
     "task.row-actions.unknown": "Le résultat est inconnu. La tâche est en cours d’actualisation.",
     "task.sections.avatar-add": "Assigner",

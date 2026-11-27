@@ -1689,6 +1689,8 @@
     "task.row-actions.unknown": "The outcome is unknown. The task is being refreshed.",
     "task.row-actions.conflict": "{$key} changed elsewhere",
     "task.row-actions.conflict-text": "Its latest version is shown.",
+    "task.row-actions.unconfirmed": "{$key} is not confirmed",
+    "task.row-actions.unconfirmed-text": "The server did not answer. The next refresh shows the task as it is.",
     "task.row-actions.copy-failed": "Could not copy",
     "task.row-actions.restore-failed": "The task could not be restored",
     "task.row-actions.priority-toast": "{$key} · {$priority} priority",

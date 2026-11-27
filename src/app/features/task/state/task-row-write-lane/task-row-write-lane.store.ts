@@ -1,13 +1,32 @@
 import { DestroyRef, inject, type Type } from '@angular/core';
 import { signalStore, withMethods, withProps } from '@ngrx/signals';
-import { firstValueFrom, type Observable, Subject } from 'rxjs';
+import { firstValueFrom, type Observable, Subject, takeUntil, timeout } from 'rxjs';
 
 import { readProblem } from '@core/api';
+import {
+  WORKSPACE_CONTEXT,
+  type WorkspaceContextPort,
+} from '@features/workspace/ports/workspace-context';
 
 import { TaskApi } from '../../data-access/services/task-api/task-api.service';
 import type { TaskSummary } from '../../models/task-summary/task-summary.interface';
-import { TaskVersionConflict } from '../../models/task-write-error/task-write-error.model';
+import {
+  TaskVersionConflict,
+  TaskWriteCancelled,
+} from '../../models/task-write-error/task-write-error.model';
 import type { TaskWriteLane } from '../../ports/task-write-lane';
+
+/**
+ * Constant LANE_READ_TIMEOUT_MS
+ *
+ * @description
+ * Longest wait, in milliseconds, for one read of a task by the lane: past it the read is aborted
+ * and counts as failed, so a request that never answers never holds the task's writes (as
+ * `READ_BACK_TIMEOUT_MS` in Spaces).
+ *
+ * @type {number}
+ */
+export const LANE_READ_TIMEOUT_MS: number = 10_000;
 
 /**
  * Type TaskLaneRead
@@ -84,11 +103,18 @@ function createTaskRowWriteLane(): Type<TaskRowWriteLaneInstance> {
   return signalStore(
     withProps(() => {
       const reads: Subject<TaskSummary> = new Subject<TaskSummary>();
-      inject(DestroyRef).onDestroy((): void => {
+      const destroyed: Subject<void> = new Subject<void>();
+      const destroyRef: DestroyRef = inject(DestroyRef);
+      destroyRef.onDestroy((): void => {
+        destroyed.next();
+        destroyed.complete();
         reads.complete();
       });
       return {
         _api: inject(TaskApi),
+        _workspace: inject<WorkspaceContextPort>(WORKSPACE_CONTEXT),
+        _destroyRef: destroyRef,
+        _destroyed: destroyed,
         _reads: reads,
         reads: reads.asObservable(),
         _lanes: new Map<string, Promise<void>>(),
@@ -111,7 +137,9 @@ function createTaskRowWriteLane(): Type<TaskRowWriteLaneInstance> {
         if (running) return running;
         const run: Promise<TaskLaneRead> = (async (): Promise<TaskLaneRead> => {
           try {
-            const task: TaskSummary = await firstValueFrom(store._api.read(key));
+            const task: TaskSummary = await firstValueFrom(
+              store._api.read(key).pipe(timeout(LANE_READ_TIMEOUT_MS), takeUntil(store._destroyed)),
+            );
             record(key, task.version);
             store._reads.next(task);
             return { kind: 'read', task };
@@ -135,10 +163,16 @@ function createTaskRowWriteLane(): Type<TaskRowWriteLaneInstance> {
           send: (version: number) => Promise<T>,
           fallback?: number,
         ): Promise<T> {
+          const organizationId: string = store._workspace.organization().id;
+          const queuedAlive: boolean = !store._destroyRef.destroyed;
+          const live: () => boolean = (): boolean =>
+            (!queuedAlive || !store._destroyRef.destroyed) &&
+            store._workspace.organization().id === organizationId;
           const before: Promise<void> = store._lanes.get(key) ?? Promise.resolve();
           const run: Promise<T> = before.then(async (): Promise<T> => {
             const reading: Promise<TaskLaneRead> | undefined = store._reconciling.get(key);
             if (reading) await reading;
+            if (!live()) throw new TaskWriteCancelled(key);
             const known: number | undefined = store._known.get(key);
             const version: number | undefined =
               known === undefined ? fallback : Math.max(known, fallback ?? known);
@@ -187,7 +221,13 @@ function createTaskRowWriteLane(): Type<TaskRowWriteLaneInstance> {
  * version this lane last sent at, returned or read, whichever is newer. A returned version is
  * adopted only when it follows the known one (known + 1, the rule of `TaskDetailStore`): the write
  * was then the only change; any other newer version reads the task again and the next write waits
- * for that read. A `TaskVersionConflict` reads the task again the same way. Since every write
+ * for that read. A `TaskVersionConflict` reads the task again the same way. A queued write is
+ * dropped with `TaskWriteCancelled` right before it would be sent when the page was left since it
+ * was queued, or the organization it was asked in is no longer the current one; a write asked
+ * while the page is being left (the status changes' flush of a last click) is still sent in its
+ * organization. A read waits
+ * `LANE_READ_TIMEOUT_MS` at most and is aborted when the page is left, so it never holds the
+ * task's writes for good. Since every write
  * of the page goes through the lane, the page's own changes never cause a `412`.
  *
  * @type {Type<TaskRowWriteLaneInstance>}

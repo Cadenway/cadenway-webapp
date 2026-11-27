@@ -178,7 +178,12 @@ the typed route error states belong to Errors.
     task's earlier writes and reads, at the newest known version: the page's copy, or the version
     the lane last sent at, returned or read. A returned version is adopted only at known + 1;
     another version, or a `TaskVersionConflict`, reads the task again and the next write waits for
-    that read. The page's own changes therefore never cause a `412`.
+    that read. The page's own changes therefore never cause a `412`. A lane read waits 10 s at most
+    (`LANE_READ_TIMEOUT_MS`) and is aborted when the page is left, so it never holds the task for
+    good. A queued write, status included, is dropped (`TaskWriteCancelled`, no failure toast, the
+    shown value put back) right before it would be sent when the page was left since it was queued
+    or its organization is no longer the current one; a last click flushed while the page is left
+    is still sent in its organization.
   - Priority, assignee, move, duplicate and deletion go through `TaskActionsApi.bulk` with that
     version. A refused chunk reads the task back: found past the version sent, it changed
     elsewhere (warning, its values shown); otherwise the failure toast.
@@ -186,10 +191,14 @@ the typed route error states belong to Errors.
     task is read back after `ROW_RECONCILE_DELAYS_MS` (2, 4 and 8 s): a read past the version sent
     settles the write (applied when it holds the written values), a deleted task settles a
     deletion; once the reads still find the version sent, the write is taken as not applied (a
-    late commit then refuses the next write, sent at that version). A copy is never held.
+    late commit then refuses the next write, sent at that version). When no read answers, the
+    outcome stays unknown: the value stays shown with the `is not confirmed` warning and no failure
+    toast, the hold goes, and the page's next read (`sync`) decides. A copy is never held.
   - Shown values: the confirmed ones (a write's answer, a read) over a page copy older than their
-    version, then each waiting write's own; a refusal drops only its write's values. `sync`
-    prunes the confirmed values a page copy at their version or later replaced.
+    version, then each waiting write's own; a refusal drops only its write's values. An assignee
+    toggle computes its assignees from the task as confirmed when it starts, never from an earlier
+    write still waiting. `sync` prunes the confirmed values a page copy at their version or later
+    replaced.
   - `Undo` is offered only when the returned version is the one sent + 1 (the write was the task's
     only change, the rule of `TaskDetailStore.acceptVersion`). It puts back the values confirmed
     when the write started, never an earlier optimistic value, and is sent against the returned
@@ -531,4 +540,5 @@ people`), and the due trigger shows the short date without `Tomorrow ·` or the
 | `task.row-actions.failed`, `task.row-actions.delete-failed`                                 | The mockup draws no refused write.                                 |
 | `task.row-actions.undo-failed`, `remind-failed`, `restore-failed`                           | The mockup draws no refused undo, reminder or restore.             |
 | `task.row-actions.conflict`, `task.row-actions.conflict-text`                               | The mockup draws no conflicting write.                             |
+| `task.row-actions.unconfirmed`, `task.row-actions.unconfirmed-text`                         | The mockup draws no unanswered write.                              |
 | `task.row-actions.unknown`, `task.row-actions.copy-failed`                                  | The mockup draws no uncertain write nor refused copy.              |
