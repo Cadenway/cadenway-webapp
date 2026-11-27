@@ -120,7 +120,7 @@ describe('ThemeService', () => {
       filter: ['blur(8px)', 'blur(0px)'],
     });
   });
-  it('does not write or transition for an unchanged resolved theme', () => {
+  it('stores the preference but does not transition for an unchanged resolved theme', () => {
     const transition: Mock = vi.fn();
     Object.defineProperty(document, 'startViewTransition', {
       configurable: true,
@@ -130,8 +130,19 @@ describe('ThemeService', () => {
     const service: ThemeService = TestBed.inject(ThemeService);
     service.set('light');
     expect(transition).not.toHaveBeenCalled();
-    expect(write).not.toHaveBeenCalled();
+    expect(write).toHaveBeenCalledWith('cadenway-theme', 'light');
     write.mockRestore();
+  });
+  it('stores System chosen while Light is shown on a light system, and restores it on reload', () => {
+    localStorage.setItem('cadenway-theme', 'light');
+    TestBed.inject(ThemeService).set('system');
+    expect(localStorage.getItem('cadenway-theme')).toBe('system');
+    expect(document.documentElement.dataset['theme']).toBe('light');
+
+    TestBed.resetTestingModule();
+    const reloaded: ThemeService = TestBed.inject(ThemeService);
+    expect(reloaded.preference()).toBe('system');
+    expect(reloaded.resolved()).toBe('light');
   });
   it('computes consecutive toggles before transition callbacks run', () => {
     const changes: (() => void)[] = [];

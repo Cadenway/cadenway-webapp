@@ -1,0 +1,136 @@
+<div class="mx-auto flex w-full max-w-3xl flex-col gap-6 px-4 py-6 sm:px-8 sm:py-8">
+  @if (loaded()) {
+    <header class="flex flex-col gap-1">
+      <h1 class="text-2xl font-semibold tracking-tight" i18n="@@account.preferences.title">
+        Preferences
+      </h1>
+      <p class="text-sm text-muted-foreground" i18n="@@account.preferences.lead">
+        Appearance and language. The theme applies to this device; the language is saved on your
+        account.
+      </p>
+    </header>
+    <cw-card class="px-4" role="region" aria-labelledby="account-preferences-theme">
+      <div class="flex flex-col gap-1">
+        <h2
+          id="account-preferences-theme"
+          class="text-base leading-5 font-semibold"
+          i18n="@@account.preferences.theme-title"
+        >
+          Theme
+        </h2>
+        <p class="text-sm text-muted-foreground" i18n="@@account.preferences.theme-text">
+          The dark theme lowers the brightness; the hierarchy reads through the lightness of the
+          surfaces.
+        </p>
+      </div>
+      <cw-theme-cards
+        labelledBy="account-preferences-theme"
+        [preference]="theme.preference()"
+        [shown]="theme.resolved()"
+        (picked)="chooseTheme($event)"
+      />
+    </cw-card>
+    <cw-card class="px-4" role="region" aria-labelledby="account-preferences-region">
+      <h2
+        id="account-preferences-region"
+        class="text-base leading-5 font-semibold"
+        i18n="@@account.preferences.region-title"
+      >
+        Language and region
+      </h2>
+      <div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <div class="flex flex-col gap-2">
+          <label
+            class="text-sm leading-none font-medium select-none"
+            for="account-preferences-language"
+            i18n="@@account.preferences.language"
+          >
+            Language
+          </label>
+          <cw-select
+            placeholder="Choose a language"
+            i18n-placeholder="@@account.preferences.language-unknown"
+            data-testid="account-language"
+            [id]="'account-preferences-language'"
+            [value]="language()"
+            (valueChange)="chooseLanguage($event)"
+          >
+            @for (option of languageOptions; track option.value) {
+              <cw-select-option [value]="option.value"
+                ><ng-icon aria-hidden="true" [name]="option.flag" />{{
+                  option.label
+                }}</cw-select-option
+              >
+            }
+          </cw-select>
+        </div>
+      </div>
+      @if (sync.unconfirmed()) {
+        <div
+          class="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-muted px-3 py-2"
+          role="status"
+          data-testid="account-language-unconfirmed"
+        >
+          <p class="flex items-start gap-2 text-sm">
+            <ng-icon
+              class="mt-0.5 shrink-0 text-muted-foreground"
+              name="phosphorInfoBold"
+              aria-hidden="true"
+            />
+            <span class="flex flex-col gap-0.5">
+              <span class="font-medium" i18n="@@account.preferences.unconfirmed"
+                >Could not confirm the language</span
+              >
+              <span class="text-muted-foreground" i18n="@@account.preferences.unconfirmed-text"
+                >The server did not answer. Your choice may already be saved.</span
+              >
+            </span>
+          </p>
+          <button
+            cwButton
+            type="button"
+            variant="outline"
+            size="sm"
+            (click)="sync.retry()"
+            i18n="@@account.preferences.unconfirmed-retry"
+          >
+            Retry
+          </button>
+        </div>
+      }
+    </cw-card>
+  } @else {
+    <div
+      class="flex flex-col gap-6"
+      role="status"
+      aria-busy="true"
+      aria-label="Loading the section"
+      i18n-aria-label="@@account.preferences.loading"
+    >
+      <div class="flex min-w-0 flex-1 flex-col gap-2" aria-hidden="true">
+        <div cwSkeleton class="h-7 w-56"></div>
+        <div cwSkeleton class="h-3 w-3/4"></div>
+      </div>
+      @for (card of skeletonCards; track $index) {
+        <div
+          class="flex flex-col gap-4 rounded-xl border border-border bg-card p-4"
+          aria-hidden="true"
+        >
+          <div class="flex flex-col gap-2">
+            <div cwSkeleton class="h-4 w-32"></div>
+            <div cwSkeleton class="h-3" [class]="card.title"></div>
+          </div>
+          @for (row of card.rows; track $index) {
+            <div class="flex items-center gap-4">
+              <div class="flex min-w-0 flex-1 flex-col gap-1.5">
+                <div cwSkeleton class="h-3" [class]="row.width"></div>
+                <div cwSkeleton class="h-2.5 w-1/2"></div>
+              </div>
+              <div cwSkeleton [class]="row.control"></div>
+            </div>
+          }
+        </div>
+      }
+    </div>
+  }
+</div>
