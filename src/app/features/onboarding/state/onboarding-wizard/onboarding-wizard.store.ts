@@ -672,8 +672,11 @@ interface OnboardingWizardStoreInstance {
    *
    * @description
    * `Set up later`: closes the assistant at once, then closes it for good on the gateway; a read in
-   * flight is awaited first (the shared store reads before it writes). Only a failed read closes
-   * without a write. A definite refusal, or an unknown outcome after which the progress still shows
+   * flight is awaited first (the shared store reads before it writes). Only a failed read, failed
+   * at the click or the read in flight failing then, closes without a write, with the toast saying
+   * the choice was not saved; `?onboarding=start` stays, so a reload reopens the assistant, as the
+   * toast says. A definite refusal, or an
+   * unknown outcome after which the progress still shows
    * the assistant `in-progress`, shows a toast saying the choice was not saved and the assistant
    * may come back; a dropped write shows nothing. Once settled, when a space exists (a finish whose
    * outcome was unknown did create it), it opens the first list.
@@ -979,6 +982,15 @@ function createOnboardingWizardStore(): Type<OnboardingWizardStoreInstance> {
         }
       };
 
+      const showSkipFailed: () => void = (): void => {
+        store._toasts.error(
+          $localize`:@@onboarding.wizard.toast.skip-failed:Your choice could not be saved`,
+          {
+            description: $localize`:@@onboarding.wizard.toast.skip-failed-text:The setup assistant may come back on your next visit.`,
+          },
+        );
+      };
+
       const dismiss: (organizationId: string) => Promise<void> = async (
         organizationId: string,
       ): Promise<void> => {
@@ -987,19 +999,16 @@ function createOnboardingWizardStore(): Type<OnboardingWizardStoreInstance> {
         } catch (error: unknown) {
           if (error instanceof OnboardingWriteDroppedError || !live(organizationId)) return;
           const shown: OnboardingProgress | null = store._onboarding.progress();
-          // No progress: the read the dismissal waited for failed, and nothing was written.
-          if (shown === null) return;
+          // No progress: the read the dismissal waited for failed, and nothing was written, so the
+          // choice is not saved.
+          if (shown === null) {
+            showSkipFailed();
+            return;
+          }
           const unsaved: boolean = isUncertainOnboardingWrite(error)
             ? shown.wizard.status === 'in-progress'
             : problemCode(error) !== 'onboarding.wizard-closed';
-          if (unsaved) {
-            store._toasts.error(
-              $localize`:@@onboarding.wizard.toast.skip-failed:Your choice could not be saved`,
-              {
-                description: $localize`:@@onboarding.wizard.toast.skip-failed-text:The setup assistant may come back on your next visit.`,
-              },
-            );
-          }
+          if (unsaved) showSkipFailed();
         }
         if (store._onboarding.progress()?.provisioning) openProvisioned(organizationId);
       };
@@ -1084,7 +1093,13 @@ function createOnboardingWizardStore(): Type<OnboardingWizardStoreInstance> {
           const readFailed: boolean =
             store._onboarding.progress() === null && store._onboarding.failed();
           patchState(store, { closed: true });
-          if (organizationId === null || readFailed) return;
+          if (organizationId === null) return;
+          if (readFailed) {
+            // Nothing can be written without a version: the choice is not saved, and the host keeps
+            // `?onboarding=start`, so a reload reopens the assistant.
+            showSkipFailed();
+            return;
+          }
           await dismiss(organizationId);
         },
         finish,

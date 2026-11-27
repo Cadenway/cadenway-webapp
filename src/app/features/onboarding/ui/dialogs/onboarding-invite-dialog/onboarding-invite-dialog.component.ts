@@ -2,6 +2,7 @@ import {
   booleanAttribute,
   Component,
   input,
+  type InputSignal,
   type InputSignalWithTransform,
   linkedSignal,
   model,
@@ -36,8 +37,9 @@ import { OnboardingInviteField } from '../../components/onboarding-invite-field/
  * dialog's (`App.dc.html` line 2987).
  *
  * Presentational: `[(open)]` opens it; the list of addresses empties and the field is created anew
- * (no text typed but not added survives) each time it opens or
- * closes. `Invite`, enabled once an address is added or typed, first commits the address still
+ * (no text typed but not added survives) each time it opens or closes. When the host gives a new
+ * `kept` list (the addresses a send left unsent), the list shows those addresses instead, so the
+ * next `Invite` sends only them. `Invite`, enabled once an address is added or typed, first commits the address still
  * typed in the field (`commitPending()`, as `Add` does): an invalid one shows the field's error and
  * sends nothing. It then emits `submitted` with the addresses, and the host sends them. While `pending`, the dialog cannot be closed, the field and its pills are
  * disabled and `Invite` shows its spinner.
@@ -88,6 +90,18 @@ export class OnboardingInviteDialog {
   );
 
   /**
+   * Property kept
+   *
+   * @description
+   * The addresses a send left unsent; each new array replaces the list of addresses. Empty by
+   * default.
+   *
+   * @type {InputSignal<readonly string[]>}
+   * @readonly
+   */
+  public readonly kept: InputSignal<readonly string[]> = input<readonly string[]>([]);
+
+  /**
    * Property submitted
    *
    * @description
@@ -102,17 +116,19 @@ export class OnboardingInviteDialog {
    * Property emails
    *
    * @description
-   * The addresses added in the field; emptied whenever the dialog opens or closes.
+   * The addresses added in the field; emptied whenever the dialog opens or closes, and replaced
+   * by `kept` whenever it changes while the dialog is open.
    *
    * @type {WritableSignal<readonly string[]>}
    * @readonly
    */
   protected readonly emails: WritableSignal<readonly string[]> = linkedSignal<
-    boolean,
+    { readonly open: boolean; readonly kept: readonly string[] },
     readonly string[]
   >({
-    source: this.open,
-    computation: (): readonly string[] => [],
+    source: () => ({ open: this.open(), kept: this.kept() }),
+    computation: (source: { readonly open: boolean; readonly kept: readonly string[] }) =>
+      source.open ? source.kept : [],
   });
 
   /**

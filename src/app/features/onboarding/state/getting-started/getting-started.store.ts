@@ -20,7 +20,7 @@ import {
   withProps,
   withState,
 } from '@ngrx/signals';
-import { filter, fromEvent, map } from 'rxjs';
+import { filter, fromEvent, map, type Subscription } from 'rxjs';
 
 import { OrganizationPin, readProblem } from '@core/api';
 import { TaskCreate } from '@features/task';
@@ -30,6 +30,10 @@ import {
 } from '@features/workspace/ports/workspace-context';
 import { ShellOverlay } from '@shared/layout-slot';
 
+import {
+  ONBOARDING_INVITE_DIALOG_OVERLAY,
+  ONBOARDING_WIZARD_OVERLAY,
+} from '../../constants/overlays/onboarding-overlays.constants';
 import {
   isDroppedOnboardingWrite,
   isUncertainOnboardingWrite,
@@ -47,27 +51,6 @@ import { OnboardingWriteDroppedError } from '../onboarding/onboarding-write-drop
 import { OnboardingStore } from '../onboarding/onboarding.store';
 
 /**
- * Constant ONBOARDING_WIZARD_OVERLAY
- *
- * @description
- * The `ShellOverlay` id the onboarding assistant holds while it covers the shell (its `overlays`
- * contribution id): the checklist stays hidden under it.
- *
- * @type {string}
- */
-const ONBOARDING_WIZARD_OVERLAY: string = 'onboarding.wizard';
-
-/**
- * Constant ONBOARDING_INVITE_OVERLAY
- *
- * @description
- * The `ShellOverlay` id of the checklist's invite dialog, so no other shell overlay opens over it.
- *
- * @type {string}
- */
-const ONBOARDING_INVITE_OVERLAY: string = 'onboarding.invite-dialog';
-
-/**
  * Constant BOARD_SEGMENT
  *
  * @description
@@ -77,6 +60,28 @@ const ONBOARDING_INVITE_OVERLAY: string = 'onboarding.invite-dialog';
  * @type {string}
  */
 const BOARD_SEGMENT: string = 'board';
+
+/**
+ * Constant INVITE_BATCH_SIZE
+ *
+ * @description
+ * Most addresses one `inviteMembers` call accepts; longer lists are sent in batches of this size,
+ * as the assistant's `Team` screen does.
+ *
+ * @type {number}
+ */
+const INVITE_BATCH_SIZE: number = 50;
+
+/**
+ * Constant SHOWN_REFRESH_INTERVAL
+ *
+ * @description
+ * Shortest time, in milliseconds, between two reads of the progress when the tab becomes visible
+ * while the checklist applies (a change made in another tab): 30 seconds.
+ *
+ * @type {number}
+ */
+const SHOWN_REFRESH_INTERVAL: number = 30_000;
 
 /**
  * Type ToastTone
@@ -173,6 +178,56 @@ function checklistApplies(progress: OnboardingProgress | null): progress is Onbo
 }
 
 /**
+ * Interface InviteSend
+ *
+ * @description
+ * What the batches of one send of the invite dialog did, for its toasts.
+ */
+interface InviteSend {
+  // #region Properties
+  /**
+   * Property invited
+   *
+   * @description
+   * Addresses invited.
+   *
+   * @type {number}
+   */
+  invited: number;
+
+  /**
+   * Property skipped
+   *
+   * @description
+   * Addresses already members or already invited, which leave the list.
+   *
+   * @type {number}
+   */
+  skipped: number;
+
+  /**
+   * Property notSent
+   *
+   * @description
+   * Addresses a batch answered with another outcome, which stay in the list.
+   *
+   * @type {number}
+   */
+  notSent: number;
+
+  /**
+   * Property refusal
+   *
+   * @description
+   * The definite refusal that stopped the batches, or null.
+   *
+   * @type {unknown}
+   */
+  refusal: unknown;
+  // #endregion
+}
+
+/**
  * Interface GettingStartedState
  *
  * @description
@@ -215,6 +270,20 @@ interface GettingStartedState {
    * @readonly
    */
   readonly _inviteOrganization: string | null;
+
+  /**
+   * Property inviteKept
+   *
+   * @description
+   * The addresses the open invite dialog keeps after a send left some unsent (a refused or
+   * unknown batch, or addresses the gateway answered with another outcome), in the order typed;
+   * a new array after each such send, empty whenever the dialog opens or closes. The dialog shows
+   * them in place of its list, so `Invite` sends only them again.
+   *
+   * @type {readonly string[]}
+   * @readonly
+   */
+  readonly inviteKept: readonly string[];
   // #endregion
 }
 
@@ -235,6 +304,28 @@ interface GettingStartedLifecycle {
    * @type {boolean}
    */
   destroyed: boolean;
+
+  /**
+   * Property shownReadAt
+   *
+   * @description
+   * When the tab becoming visible last read the progress while the checklist applied, as a
+   * `performance.now()` time in milliseconds; negative infinity before the first such read.
+   *
+   * @type {number}
+   */
+  shownReadAt: number;
+
+  /**
+   * Property trailingRead
+   *
+   * @description
+   * The read scheduled for the end of the throttle interval after a visible tab was throttled, or
+   * null; cleared on destruction and on an organization change.
+   *
+   * @type {ReturnType<typeof setTimeout> | null}
+   */
+  trailingRead: ReturnType<typeof setTimeout> | null;
   // #endregion
 }
 
@@ -303,6 +394,18 @@ interface GettingStartedStoreInstance {
    * @readonly
    */
   readonly inviting: Signal<boolean>;
+
+  /**
+   * Property inviteKept
+   *
+   * @description
+   * The addresses the open invite dialog keeps after a send left some unsent, so `Invite` sends
+   * only them again; empty whenever the dialog opens or closes.
+   *
+   * @type {Signal<readonly string[]>}
+   * @readonly
+   */
+  readonly inviteKept: Signal<readonly string[]>;
   // #endregion
 
   // #region Methods
@@ -355,12 +458,19 @@ interface GettingStartedStoreInstance {
    * Method invite
    *
    * @description
-   * Invites the addresses as members of the organization the dialog was opened in, toasts the
-   * outcome and closes the dialog, then records the checklist's invitation marker when an
-   * invitation is out for at least one address (invited now, or already invited). Nothing is sent
-   * once the organization changed; a write the organization pin dropped closes the dialog
-   * silently. A refusal keeps the dialog open with a failure toast, an unknown outcome with a toast
-   * saying that sending again is safe.
+   * Invites the addresses as members of the organization the dialog was opened in, in batches of
+   * 50 (the `inviteMembers` limit), toasts the outcome and closes the dialog. Right after the first
+   * batch that reaches an address (invited now, or already invited), it records the checklist's
+   * invitation marker. The batches go on while the organization is the one the dialog was opened
+   * in, even once the host is destroyed; an organization change, a batch the organization pin
+   * dropped and a definite refusal stop them. Only the dialog that sent them, still shown, is
+   * closed, emptied or toasted. When addresses are left unsent (a refused batch and the ones after
+   * it, a batch whose outcome is unknown, or addresses a batch answered with another outcome), the
+   * dialog stays open with only those (`inviteKept`), so `Invite` sends only them again, and one
+   * failure summary says why; a sent summary counts the invited ones. When the host was destroyed
+   * meanwhile, in the same organization, the summaries still show, outliving the store, and the
+   * failure one counts the addresses not invited and says where to invite them again. An
+   * organization change says nothing.
    *
    * @param {readonly string[]} emails - The addresses.
    * @returns {Promise<void>} Resolves once settled; never rejects.
@@ -383,10 +493,15 @@ function createGettingStartedStore(): Type<GettingStartedStoreInstance> {
       _dialog: 0,
       _sending: null,
       _inviteOrganization: null,
+      inviteKept: [],
     }),
     withProps(() => {
       const router: Router = inject(Router);
-      const lifecycle: GettingStartedLifecycle = { destroyed: false };
+      const lifecycle: GettingStartedLifecycle = {
+        destroyed: false,
+        shownReadAt: Number.NEGATIVE_INFINITY,
+        trailingRead: null,
+      };
       return {
         _onboarding: inject(OnboardingStore),
         _workspace: inject<WorkspaceContextPort>(WORKSPACE_CONTEXT),
@@ -440,7 +555,7 @@ function createGettingStartedStore(): Type<GettingStartedStoreInstance> {
         visible,
         expanded: (): boolean => checklist()?.checklist.presentation === 'expanded',
         items,
-        inviteOpen: (): boolean => store._overlay.isOpen(ONBOARDING_INVITE_OVERLAY),
+        inviteOpen: (): boolean => store._overlay.isOpen(ONBOARDING_INVITE_DIALOG_OVERLAY),
         inviting: (): boolean => store._sending() === store._dialog(),
         _boardShown: (): ShownAddress | null => {
           const progress: OnboardingProgress | null = checklist();
@@ -461,11 +576,24 @@ function createGettingStartedStore(): Type<GettingStartedStoreInstance> {
     withMethods((store) => {
       let followed: string | null = null;
 
-      const show: (tone: ToastTone, title: string, options?: CwToastOptions) => void = (
+      // `tracked` toasts are dismissed with the store (an organization change, its destruction); a
+      // toast shown once the host is gone is not.
+      const show: (
         tone: ToastTone,
         title: string,
         options?: CwToastOptions,
+        tracked?: boolean,
+      ) => void = (
+        tone: ToastTone,
+        title: string,
+        options?: CwToastOptions,
+        tracked: boolean = true,
       ): void => {
+        if (!tracked) {
+          if (options) store._toasts[tone](title, options);
+          else store._toasts[tone](title);
+          return;
+        }
         const live: ReadonlySet<string> = new Set(
           store._toasts.toasts().map((item: { readonly id: string }): string => item.id),
         );
@@ -482,20 +610,31 @@ function createGettingStartedStore(): Type<GettingStartedStoreInstance> {
 
       const setInviteOpen: (open: boolean) => void = (open: boolean): void => {
         if (open) {
-          if (store._overlay.isOpen(ONBOARDING_INVITE_OVERLAY)) return;
-          if (store._overlay.open(ONBOARDING_INVITE_OVERLAY)) {
+          if (store._overlay.isOpen(ONBOARDING_INVITE_DIALOG_OVERLAY)) return;
+          if (store._overlay.open(ONBOARDING_INVITE_DIALOG_OVERLAY)) {
             patchState(store, {
               _dialog: store._dialog() + 1,
               _inviteOrganization: store._workspace.organization().id,
+              inviteKept: [],
             });
           }
           return;
         }
-        store._overlay.close(ONBOARDING_INVITE_OVERLAY);
-        patchState(store, { _dialog: store._dialog() + 1, _inviteOrganization: null });
+        store._overlay.close(ONBOARDING_INVITE_DIALOG_OVERLAY);
+        patchState(store, {
+          _dialog: store._dialog() + 1,
+          _inviteOrganization: null,
+          inviteKept: [],
+        });
+      };
+
+      const clearTrailingRead: () => void = (): void => {
+        if (store._lifecycle.trailingRead !== null) clearTimeout(store._lifecycle.trailingRead);
+        store._lifecycle.trailingRead = null;
       };
 
       const leaveOrganization: () => void = (): void => {
+        clearTrailingRead();
         setInviteOpen(false);
         dismissToasts();
       };
@@ -515,8 +654,14 @@ function createGettingStartedStore(): Type<GettingStartedStoreInstance> {
         show('error', title);
       };
 
-      const toastOutcome: (outcome: OnboardingInvitationOutcome) => void = (
-        outcome: OnboardingInvitationOutcome,
+      // `skipped` counts the addresses already members or already invited only: the ones a batch
+      // left unsent have their own toast.
+      const toastOutcome: (
+        outcome: Pick<OnboardingInvitationOutcome, 'invited' | 'skipped'>,
+        tracked?: boolean,
+      ) => void = (
+        outcome: Pick<OnboardingInvitationOutcome, 'invited' | 'skipped'>,
+        tracked: boolean = true,
       ): void => {
         const skipped: string =
           outcome.skipped === 0
@@ -525,9 +670,12 @@ function createGettingStartedStore(): Type<GettingStartedStoreInstance> {
               ? $localize`:@@onboarding.getting-started.invite-skipped-one:${outcome.skipped}:count: address skipped: already a member or invited.`
               : $localize`:@@onboarding.getting-started.invite-skipped:${outcome.skipped}:count: addresses skipped: already members or invited.`;
         if (outcome.invited === 0) {
-          show('info', $localize`:@@onboarding.getting-started.invite-none:No invitation sent`, {
-            description: skipped,
-          });
+          show(
+            'info',
+            $localize`:@@onboarding.getting-started.invite-none:No invitation sent`,
+            { description: skipped },
+            tracked,
+          );
           return;
         }
         show(
@@ -536,14 +684,120 @@ function createGettingStartedStore(): Type<GettingStartedStoreInstance> {
             ? $localize`:@@onboarding.getting-started.invite-sent-one:${outcome.invited}:count: invitation sent`
             : $localize`:@@onboarding.getting-started.invite-sent:${outcome.invited}:count: invitations sent`,
           { description: skipped },
+          tracked,
         );
       };
 
-      const refresh: () => Promise<void> = async (): Promise<void> => {
-        if (store._onboarding.failed() || store._taskToRefresh()) {
+      // The summary of a send whose host was destroyed while its batches went on: the dialog is
+      // gone and cannot keep the addresses left unsent, so the failure toast counts them and says
+      // where to invite them again. These toasts outlive the store.
+      const toastDetached: (send: InviteSend, unsent: number) => void = (
+        send: InviteSend,
+        unsent: number,
+      ): void => {
+        if (send.invited > 0 || unsent === 0) {
+          toastOutcome({ invited: send.invited, skipped: send.skipped }, false);
+        }
+        if (unsent === 0) return;
+        const lines: string[] = [];
+        if (send.invited === 0 && send.skipped > 0) {
+          lines.push(
+            takesSingular(send.skipped)
+              ? $localize`:@@onboarding.getting-started.invite-skipped-one:${send.skipped}:count: address skipped: already a member or invited.`
+              : $localize`:@@onboarding.getting-started.invite-skipped:${send.skipped}:count: addresses skipped: already members or invited.`,
+          );
+        }
+        if (readProblem(send.refusal)?.code === 'invitation.daily-limit-reached') {
+          lines.push(
+            $localize`:@@onboarding.getting-started.invite-failed-limit:The daily invitation limit is reached: try again later.`,
+          );
+        }
+        lines.push(
+          $localize`:@@onboarding.getting-started.invite-not-sent-later:Invite them again from “Getting started” or the Members page.`,
+        );
+        show(
+          'error',
+          takesSingular(unsent)
+            ? $localize`:@@onboarding.getting-started.invite-not-sent-one:${unsent}:count: address could not be invited`
+            : $localize`:@@onboarding.getting-started.invite-not-sent-other:${unsent}:count: addresses could not be invited`,
+          { description: lines.join(' ') },
+          false,
+        );
+      };
+
+      // `shown` is the tab becoming visible: while the checklist applies, it also reads a progress
+      // whose first task is recorded, so a dismissal, an invitation or a board visit made in
+      // another tab shows here; at most once per `SHOWN_REFRESH_INTERVAL`, and never by polling. A
+      // visible tab inside the interval schedules one read at its end, made only if the tab is
+      // still visible and the checklist still applies then.
+      const refresh: (shown?: boolean) => Promise<void> = async (
+        shown: boolean = false,
+      ): Promise<void> => {
+        const due: boolean = store._onboarding.failed() || store._taskToRefresh();
+        if (shown && store._checklist() !== null) {
+          const now: number = performance.now();
+          const wait: number = store._lifecycle.shownReadAt + SHOWN_REFRESH_INTERVAL - now;
+          if (due || wait <= 0) {
+            clearTrailingRead();
+            store._lifecycle.shownReadAt = now;
+            await store._onboarding.reload();
+          } else {
+            store._lifecycle.trailingRead ??= setTimeout((): void => {
+              store._lifecycle.trailingRead = null;
+              if (store._lifecycle.destroyed) return;
+              if (store._document.visibilityState !== 'visible' || store._checklist() === null) {
+                return;
+              }
+              store._lifecycle.shownReadAt = performance.now();
+              void store._onboarding
+                .reload()
+                .then((): Promise<void> => store._onboarding.retryOwedInvitation());
+            }, wait);
+          }
+        } else if (due) {
           await store._onboarding.reload();
         }
         await store._onboarding.retryOwedInvitation();
+      };
+
+      // The summary of a send that left addresses in the dialog: the invited ones when there are
+      // some, then one failure summary. When nothing was invited, the addresses already members or
+      // invited, which leave the list, are counted in the failure summary.
+      const toastKept: (send: InviteSend) => void = (send: InviteSend): void => {
+        if (send.invited > 0) toastOutcome({ invited: send.invited, skipped: send.skipped });
+        const lines: string[] = [];
+        if (send.invited === 0 && send.skipped > 0) {
+          lines.push(
+            takesSingular(send.skipped)
+              ? $localize`:@@onboarding.getting-started.invite-skipped-one:${send.skipped}:count: address skipped: already a member or invited.`
+              : $localize`:@@onboarding.getting-started.invite-skipped:${send.skipped}:count: addresses skipped: already members or invited.`,
+          );
+        }
+        let tone: ToastTone = 'error';
+        let title: string;
+        if (send.refusal !== null) {
+          title = $localize`:@@onboarding.getting-started.invite-failed:The invitations could not be sent`;
+          if (readProblem(send.refusal)?.code === 'invitation.daily-limit-reached') {
+            lines.push(
+              $localize`:@@onboarding.getting-started.invite-failed-limit:The daily invitation limit is reached: try again later.`,
+            );
+          }
+        } else if (send.notSent > 0) {
+          title = takesSingular(send.notSent)
+            ? $localize`:@@onboarding.getting-started.invite-not-sent-one:${send.notSent}:count: address could not be invited`
+            : $localize`:@@onboarding.getting-started.invite-not-sent-other:${send.notSent}:count: addresses could not be invited`;
+          lines.push(
+            $localize`:@@onboarding.getting-started.invite-not-sent-text:The addresses stay in the list: press Invite to try again.`,
+          );
+        } else {
+          tone = 'warning';
+          title = $localize`:@@onboarding.getting-started.invite-uncertain:The invitations may not have been sent`;
+          lines.push(
+            $localize`:@@onboarding.getting-started.invite-uncertain-text:Sending again is safe.`,
+          );
+        }
+        if (lines.length === 0) show(tone, title);
+        else show(tone, title, { description: lines.join(' ') });
       };
 
       return {
@@ -562,6 +816,7 @@ function createGettingStartedStore(): Type<GettingStartedStoreInstance> {
           followed = organizationId;
         }),
         _leaveOrganization: leaveOrganization,
+        _clearTrailingRead: clearTrailingRead,
         _refresh: refresh,
         _dismissToasts: dismissToasts,
         async toggle(): Promise<void> {
@@ -615,7 +870,12 @@ function createGettingStartedStore(): Type<GettingStartedStoreInstance> {
           const dialog: number = store._dialog();
           if (store._sending() === dialog || emails.length === 0) return;
           const organization: string | null = store._inviteOrganization();
+          // Set once another organization is committed while the batches run, and never cleared:
+          // a switch away and back still stops them. It is heard until the loop ends, even once
+          // the host is destroyed.
+          let switched: boolean = false;
           const moved: () => boolean = (): boolean =>
+            switched ||
             organization === null ||
             store._workspace.organization().id !== organization ||
             store._pin.current() !== organization;
@@ -628,49 +888,79 @@ function createGettingStartedStore(): Type<GettingStartedStoreInstance> {
             return;
           }
           patchState(store, { _sending: dialog });
-          let outcome: OnboardingInvitationOutcome;
-          try {
-            outcome = await store._api.invite(emails);
-          } catch (error: unknown) {
-            if (!current()) return;
-            if (isDroppedOnboardingWrite(error)) {
-              setInviteOpen(false);
-              return;
-            }
-            if (isUncertainOnboardingWrite(error)) {
-              show(
-                'warning',
-                $localize`:@@onboarding.getting-started.invite-uncertain:The invitations may not have been sent`,
-                {
-                  description: $localize`:@@onboarding.getting-started.invite-uncertain-text:Sending again is safe.`,
-                },
+          const changes: Subscription = store._pin.organizationChanges.subscribe((): void => {
+            switched = true;
+          });
+          // Addresses a batch settled (invited, already invited or already a member), in lower
+          // case: never sent again. Every other address of the list stays in the dialog.
+          const settled: Set<string> = new Set<string>();
+          const send: InviteSend = { invited: 0, skipped: 0, notSent: 0, refusal: null };
+          let uncertain: boolean = false;
+          let dropped: boolean = false;
+          let recorded: boolean = false;
+          for (let start: number = 0; start < emails.length; start += INVITE_BATCH_SIZE) {
+            // Never sent to another organization; a destroyed host does not stop the batches the
+            // person asked for.
+            if (moved()) break;
+            const batch: readonly string[] = emails.slice(start, start + INVITE_BATCH_SIZE);
+            try {
+              const outcome: OnboardingInvitationOutcome = await store._api.invite(batch);
+              const unsent: ReadonlySet<string> = new Set(
+                (outcome.notSent ?? []).map((email: string): string => email.toLowerCase()),
               );
-              return;
+              for (const email of batch) {
+                const address: string = email.toLowerCase();
+                if (!unsent.has(address)) settled.add(address);
+              }
+              send.invited += outcome.invited;
+              send.notSent += unsent.size;
+              send.skipped += Math.max(0, outcome.skipped - unsent.size);
+              if (!recorded && !moved() && outcome.invited + outcome.alreadyInvited > 0) {
+                // The invitations are out, whatever becomes of the dialog: the route's
+                // `OnboardingStore` records the marker for the organization they went to (never
+                // for one shown since), and a failed write stays owed there, surviving a shell
+                // change, for this store's refresh occasions. It is not awaited: a slow marker
+                // write never holds the next batches back.
+                recorded = true;
+                void store._onboarding.recordInvitation().catch((): undefined => undefined);
+              }
+            } catch (error: unknown) {
+              if (isDroppedOnboardingWrite(error)) {
+                dropped = true;
+                break;
+              }
+              if (isUncertainOnboardingWrite(error)) {
+                uncertain = true;
+                continue;
+              }
+              // A definite refusal (a daily limit, a role) would refuse the next batches too.
+              send.refusal = error;
+              break;
             }
-            show(
-              'error',
-              $localize`:@@onboarding.getting-started.invite-failed:The invitations could not be sent`,
-              readProblem(error)?.code === 'invitation.daily-limit-reached'
-                ? {
-                    description: $localize`:@@onboarding.getting-started.invite-failed-limit:The daily invitation limit is reached: try again later.`,
-                  }
-                : undefined,
-            );
+          }
+          changes.unsubscribe();
+          if (store._sending() === dialog) patchState(store, { _sending: null });
+          // Another organization is shown: nothing about this one is said there.
+          if (moved()) return;
+          const kept: readonly string[] = emails.filter(
+            (email: string): boolean => !settled.has(email.toLowerCase()),
+          );
+          if (store._lifecycle.destroyed) {
+            if (!dropped) toastDetached(send, kept.length);
             return;
-          } finally {
-            if (store._sending() === dialog) patchState(store, { _sending: null });
           }
-          if (current()) {
-            toastOutcome(outcome);
+          if (!current()) return;
+          if (dropped) {
             setInviteOpen(false);
+            return;
           }
-          if (!moved() && (outcome.invited > 0 || outcome.alreadyInvited > 0)) {
-            // The invitations are out, whatever became of the dialog: the route's `OnboardingStore`
-            // records the marker for the organization they went to (never for one shown since),
-            // and a failed write stays owed there, surviving a shell change, for this store's
-            // refresh occasions.
-            await store._onboarding.recordInvitation().catch((): undefined => undefined);
+          if (kept.length === 0 && !uncertain) {
+            toastOutcome({ invited: send.invited, skipped: send.skipped });
+            setInviteOpen(false);
+            return;
           }
+          toastKept(send);
+          patchState(store, { inviteKept: kept });
         },
       };
     }),
@@ -696,12 +986,13 @@ function createGettingStartedStore(): Type<GettingStartedStoreInstance> {
             takeUntilDestroyed(),
           )
           .subscribe((): void => {
-            void store._refresh();
+            void store._refresh(true);
           });
       },
       onDestroy(store): void {
         store._lifecycle.destroyed = true;
-        store._overlay.close(ONBOARDING_INVITE_OVERLAY);
+        store._clearTrailingRead();
+        store._overlay.close(ONBOARDING_INVITE_DIALOG_OVERLAY);
         store._dismissToasts();
       },
     }),
@@ -721,7 +1012,9 @@ function createGettingStartedStore(): Type<GettingStartedStoreInstance> {
  * `boardTried` on each navigation to a list's `Board` view (and for the address shown when the
  * progress arrives) while the marker is not recorded, and reads the progress again after a task
  * is created through `TaskCreate` and when the tab shows again, while `firstTaskCreated` is not
- * set or the first read failed (no realtime fact exists, gap G8). An organization change closes
+ * set or the first read failed (no realtime fact exists, gap G8). While the checklist applies, the
+ * tab showing again also reads it once `firstTaskCreated` is set, at most once every 30 seconds,
+ * so a change made in another tab shows; it never polls. An organization change closes
  * the invite dialog and dismisses the toasts it showed, as its destruction does.
  *
  * @type {Type<GettingStartedStoreInstance>}

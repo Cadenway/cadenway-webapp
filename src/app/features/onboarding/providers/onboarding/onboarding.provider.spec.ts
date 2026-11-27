@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
+import { ONBOARDING_WIZARD_OVERLAY } from '../../constants/overlays/onboarding-overlays.constants';
 import { OnboardingStore } from '../../state/onboarding/onboarding.store';
 import { GettingStartedHost } from '../../ui/components/getting-started-host/getting-started-host.component';
 import { OnboardingWizardHost } from '../../ui/components/onboarding-wizard-host/onboarding-wizard-host.component';
@@ -17,7 +18,7 @@ describe('onboarding providers', () => {
       component: GettingStartedHost,
     });
     expect(withOnboardingWizard().useFactory()).toEqual({
-      id: 'onboarding.wizard',
+      id: ONBOARDING_WIZARD_OVERLAY,
       order: 50,
       component: OnboardingWizardHost,
     });

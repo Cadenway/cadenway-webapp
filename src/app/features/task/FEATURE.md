@@ -50,8 +50,8 @@ shells, so the palette's `Create a task`, task results and `?task=<KEY>` work in
   `?task=<KEY>` (loaded in its own chunk) on every workspace page and removes the parameter, keeping
   the others, once the dialog closes.
 
-Onboarding is a declared consumer of `.` ahead of its use: its checklist opens `TaskCreate` for
-`Create your first task` (step 9, getting-started package).
+Onboarding's getting-started checklist opens `TaskCreate` on the provisioned space's first list
+for `Create your first task`, and reads its progress again after each `created`.
 
 `.` publishes:
 

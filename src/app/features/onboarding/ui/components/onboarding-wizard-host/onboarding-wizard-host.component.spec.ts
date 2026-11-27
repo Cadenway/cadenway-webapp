@@ -15,6 +15,7 @@ import {
 } from '@features/workspace/ports/workspace-context';
 import { ShellOverlay } from '@shared/layout-slot';
 
+import { ONBOARDING_WIZARD_OVERLAY } from '../../../constants/overlays/onboarding-overlays.constants';
 import { OnboardingApi } from '../../../data-access/services/onboarding-api/onboarding-api.service';
 import type { OnboardingProgress } from '../../../models/onboarding/onboarding.interface';
 import type { OnboardingWizardStatus } from '../../../models/onboarding/onboarding.type';
@@ -29,6 +30,16 @@ import { OnboardingWizardHost } from './onboarding-wizard-host.component';
  */
 @Component({ selector: 'cw-blank-page', template: '' })
 class BlankPage {}
+
+/**
+ * Constant held
+ *
+ * @description
+ * The answer of the guard on `/:org/held`, which a test holds to keep a navigation under way.
+ *
+ * @type {{ answer: Promise<boolean> }}
+ */
+const held: { answer: Promise<boolean> } = { answer: Promise.resolve(true) };
 
 /**
  * Constant ATELIER_NORD
@@ -211,6 +222,11 @@ async function render(
           children: [
             { path: '', component: BlankPage },
             { path: 'l/:listId', component: BlankPage },
+            {
+              path: 'held',
+              component: BlankPage,
+              canActivate: [(): Promise<boolean> => held.answer],
+            },
           ],
         },
       ]),
@@ -392,6 +408,39 @@ describe('OnboardingWizardHost', () => {
     expect(wizard()).not.toBeNull();
   });
 
+  it('removes the parameter once a navigation under way during the settlement is cancelled', async () => {
+    const {
+      fixture,
+      router,
+      progress: shown,
+    }: Harness = await render('/atelier-nord?onboarding=start', null);
+    let answer: (allowed: boolean) => void = (): void => undefined;
+    held.answer = new Promise<boolean>((resolve: (allowed: boolean) => void) => {
+      answer = resolve;
+    });
+    // `whenStable` would wait for the held navigation: let the effects run by hand meanwhile.
+    const turn: () => Promise<void> = async (): Promise<void> => {
+      for (let round: number = 0; round < 3; round += 1) {
+        await new Promise<void>((resolve: () => void) => setTimeout(resolve));
+        TestBed.tick();
+      }
+    };
+    const leaving: Promise<boolean> = router.navigateByUrl('/atelier-nord/held');
+    await turn();
+    expect(router.currentNavigation()).not.toBeNull();
+
+    shown.set(progress(3));
+    await turn();
+    expect(router.url).toBe('/atelier-nord?onboarding=start');
+
+    answer(false);
+    expect(await leaving).toBe(false);
+    await settle(fixture);
+
+    expect(router.url).toBe('/atelier-nord');
+    held.answer = Promise.resolve(true);
+  });
+
   it('opens when a later navigation carries ?onboarding=start', async () => {
     const { fixture, router }: Harness = await render('/atelier-nord/l/l-backlog', progress(1));
     expect(wizard()).toBeNull();
@@ -471,13 +520,13 @@ describe('OnboardingWizardHost', () => {
     const { fixture }: Harness = await render('/atelier-nord', progress(3));
     const overlay: ShellOverlay = TestBed.inject(ShellOverlay);
 
-    expect(overlay.isOpen('onboarding.wizard')).toBe(true);
+    expect(overlay.isOpen(ONBOARDING_WIZARD_OVERLAY)).toBe(true);
     expect(overlay.open('search.command-palette')).toBe(false);
 
     document.querySelector<HTMLButtonElement>('[data-testid="onboarding-skip"]')?.click();
     await settle(fixture);
 
-    expect(overlay.isOpen('onboarding.wizard')).toBe(false);
+    expect(overlay.isOpen(ONBOARDING_WIZARD_OVERLAY)).toBe(false);
     expect(overlay.anyOpen()).toBe(false);
   });
 
@@ -486,12 +535,12 @@ describe('OnboardingWizardHost', () => {
       TestBed.inject(ShellOverlay).open('search.command-palette');
     });
     const overlay: ShellOverlay = TestBed.inject(ShellOverlay);
-    expect(overlay.isOpen('onboarding.wizard')).toBe(false);
+    expect(overlay.isOpen(ONBOARDING_WIZARD_OVERLAY)).toBe(false);
     expect(wizard()).toBeNull();
 
     overlay.close('search.command-palette');
     await settle(fixture);
-    expect(overlay.isOpen('onboarding.wizard')).toBe(true);
+    expect(overlay.isOpen(ONBOARDING_WIZARD_OVERLAY)).toBe(true);
     expect(wizard()).not.toBeNull();
 
     fixture.destroy();
@@ -506,5 +555,101 @@ describe('OnboardingWizardHost', () => {
 
     expect(dismiss).toHaveBeenCalledTimes(1);
     expect(wizard()).toBeNull();
+  });
+
+  /**
+   * Function reopen
+   *
+   * @description
+   * Renders a new host over the same address and onboarding store, as a reload does.
+   *
+   * @returns {Promise<ComponentFixture<OnboardingWizardHost>>} The new host.
+   */
+  async function reopen(): Promise<ComponentFixture<OnboardingWizardHost>> {
+    const again: ComponentFixture<OnboardingWizardHost> =
+      TestBed.createComponent(OnboardingWizardHost);
+    await settle(again);
+    return again;
+  }
+
+  it('keeps ?onboarding=start on Set up later after a failed read, so a reload reopens it', async () => {
+    const { fixture, router, dismiss }: Harness = await render(
+      '/atelier-nord?onboarding=start&notice=logo-upload-failed',
+      null,
+      'owner',
+      (): void => {
+        (TestBed.inject(OnboardingStore).failed as WritableSignal<boolean>).set(true);
+      },
+    );
+    expect(wizard()).not.toBeNull();
+
+    document.querySelector<HTMLButtonElement>('[data-testid="onboarding-skip"]')?.click();
+    await settle(fixture);
+
+    expect(wizard()).toBeNull();
+    expect(dismiss).not.toHaveBeenCalled();
+    expect(router.url).toBe('/atelier-nord?onboarding=start&notice=logo-upload-failed');
+    const toasts: { error: Mock } = TestBed.inject(CwToastService) as unknown as { error: Mock };
+    expect(toasts.error).toHaveBeenCalledWith('Your choice could not be saved', {
+      description: 'The setup assistant may come back on your next visit.',
+    });
+
+    fixture.destroy();
+    await reopen();
+    expect(wizard()).not.toBeNull();
+  });
+
+  it('keeps ?onboarding=start when the read in flight fails after Set up later', async () => {
+    let fail: (error: unknown) => void = (): void => undefined;
+    const { fixture, router, dismiss }: Harness = await render(
+      '/atelier-nord?onboarding=start',
+      null,
+    );
+    dismiss.mockImplementationOnce(
+      () =>
+        new Promise((_resolve: unknown, reject: (error: unknown) => void) => {
+          fail = reject;
+        }),
+    );
+
+    document.querySelector<HTMLButtonElement>('[data-testid="onboarding-skip"]')?.click();
+    await settle(fixture);
+    expect(wizard()).toBeNull();
+    expect(router.url).toBe('/atelier-nord?onboarding=start');
+
+    (TestBed.inject(OnboardingStore).failed as WritableSignal<boolean>).set(true);
+    fail(new HttpErrorResponse({ status: 503 }));
+    await settle(fixture);
+
+    expect(router.url).toBe('/atelier-nord?onboarding=start');
+    const toasts: { error: Mock } = TestBed.inject(CwToastService) as unknown as { error: Mock };
+    expect(toasts.error).toHaveBeenCalledWith('Your choice could not be saved', {
+      description: 'The setup assistant may come back on your next visit.',
+    });
+
+    fixture.destroy();
+    await reopen();
+    expect(wizard()).not.toBeNull();
+  });
+
+  it('removes ?onboarding=start once the read in flight succeeds and the dismissal is saved', async () => {
+    const {
+      fixture,
+      router,
+      dismiss,
+      progress: shown,
+    }: Harness = await render('/atelier-nord?onboarding=start', null);
+    dismiss.mockImplementationOnce(() => {
+      shown.set(progress(2, 'dismissed'));
+      return Promise.resolve(progress(2, 'dismissed'));
+    });
+
+    document.querySelector<HTMLButtonElement>('[data-testid="onboarding-skip"]')?.click();
+    await settle(fixture);
+
+    expect(dismiss).toHaveBeenCalledTimes(1);
+    expect(router.url).toBe('/atelier-nord');
+    const toasts: { error: Mock } = TestBed.inject(CwToastService) as unknown as { error: Mock };
+    expect(toasts.error).not.toHaveBeenCalled();
   });
 });

@@ -37,6 +37,10 @@ the application shell's `overlays` slot (not in the settings shells):
 | `withGettingStarted()`   | `onboarding.getting-started` | 40    | `GettingStartedHost` (`cw-getting-started-host`)     |
 | `withOnboardingWizard()` | `onboarding.wizard`          | 50    | `OnboardingWizardHost` (`cw-onboarding-wizard-host`) |
 
+Both ids, and the invite dialog's `ShellOverlay` id `onboarding.invite-dialog`, are the constants
+`ONBOARDING_WIZARD_OVERLAY` and `ONBOARDING_INVITE_DIALOG_OVERLAY` (`constants/overlays/`), which
+the provider, the hosts and `GettingStartedStore` share.
+
 `GettingStartedHost` renders the checklist, in its own chunk, and its invite dialog, in the
 host's chunk so that a chunk failing to load never leaves its `ShellOverlay` held.
 `OnboardingWizardHost` renders the assistant in its own chunk, only while it holds the
@@ -86,9 +90,10 @@ route), `withGettingStarted()` and `withOnboardingWizard()` (the `overlays` cont
   once, with a skeleton card until the progress is known, then keeps it while the assistant is
   `in-progress`. The parameter stays in the address until the launch is durable: at version 1
   `OnboardingWizardStore.saveStart()` saves the initial draft (the screen, the default name, its
-  prefix, the color and the template), and once the progress is past version 1, or the assistant
-  is closed, the host removes the parameter with `replaceUrl`, keeping the path and the other
-  parameters (`notice=` included). A reload before that save reopens the assistant from the
+  prefix, the color and the template), and once the progress is past version 1 or shows the
+  assistant closed, the host removes the parameter with `replaceUrl` (never while a navigation is
+  under way, whose end settles it again), keeping the path and the other parameters (`notice=`
+  included). A reload before that save reopens the assistant from the
   parameter; a failed first save keeps it, the assistant stays usable, and the next draft save
   makes the launch durable; a dropped one does nothing. Otherwise the assistant opens by itself
   only on the workspace root (`/<slug>`, without `?task=`) once the progress shows `in-progress`
@@ -122,9 +127,13 @@ route), `withGettingStarted()` and `withOnboardingWizard()` (the `overlays` cont
   is destroyed, or the workspace or `OrganizationPin` shows another organization than the one it
   started in, nothing more is sent, applied, refreshed, navigated or toasted.
 - `Set up later` closes at once, then sends the dismissal; a read in flight is awaited first (the
-  shared store reads before it writes), and only a failed read closes without a write. A definite
-  refusal, or an unknown outcome after which the progress still shows the assistant `in-progress`,
-  shows a failure toast (the choice was not saved, the assistant may come back); a dropped write
+  shared store reads before it writes). When the read fails, already failed at the click or
+  failing while awaited, nothing is written: it shows `Your choice could not be saved` /
+  `The setup assistant may come back on your next visit.`, and `?onboarding=start` stays, since
+  at version 1 the resume rule never reopens the assistant: a reload reopens it, as the toast
+  says. When the read in flight succeeds, the dismissal is sent and the parameter goes once the
+  progress shows it. A definite refusal, or an unknown outcome after which the
+  progress still shows the assistant `in-progress`, shows the same failure toast; a dropped write
   or `409 onboarding.wizard-closed` shows none. Once settled, when a space exists (a finish whose
   outcome was unknown did create it), it refreshes the navigation and opens the first list. A
   failed read shows an inline error in the card whose Retry calls `reload()`.
@@ -224,7 +233,7 @@ route), `withGettingStarted()` and `withOnboardingWizard()` (the `overlays` cont
   or a `409` it reads the progress and rejects, and the caller chooses a new key for a new body.
 - `setPresentation` shows the presentation at once, keeps it when the read after an uncertain
   outcome shows it, and restores the confirmed one after a refusal, rejecting for the caller's
-  toast (step 9, getting-started package). Only the latest call clears what it showed.
+  toast. Only the latest call clears what it showed.
   Presentation and `boardTried` are sent only once a space is provisioned; a marker already
   recorded is not sent again, nor a write queued behind another once the progress shows its
   change (any write but `finish`). `invitationSent` is to be recorded only once `inviteMembers`
@@ -286,34 +295,58 @@ route), `withGettingStarted()` and `withOnboardingWizard()` (the `overlays` cont
   on the next board navigation.
 - With no realtime fact for onboarding (gap G8), the checklist reads the progress again after
   each `TaskCreate.created`, when the tab becomes visible and when the host is created over a
-  progress already read (a task created from a settings shell), only while `firstTaskCreated` is
-  not set. It does not poll.
+  progress already read (a task created from a settings shell), while `firstTaskCreated` is not
+  set. While the checklist applies (finished, provisioned, not dismissed), the tab becoming visible
+  also reads it once `firstTaskCreated` is set, at most once every 30 seconds (`performance.now()`),
+  so a dismissal, an invitation or a board visit made in another tab shows. A visible tab inside
+  the interval is not lost: it schedules one read at the interval's end, made only if the tab is
+  still visible and the checklist still applies then; destruction and an organization change
+  clear it. It does not poll.
 - The invite dialog (titled `Invite a team member`, with `Cancel` and `Invite`) belongs to the
   organization it was opened in: an organization change (the workspace's, or
   `OrganizationPin.organizationChanges`) closes it, which empties its addresses, and dismisses
   the toasts the checklist showed; `Invite` sends nothing once the workspace or the pin shows
-  another organization. It invites the addresses as members, then toasts the outcome
-  (`{n} invitation(s) sent`, the skipped addresses as the description, or `No invitation sent`
-  when none was invited) and closes. A batch the organization pin dropped
-  (`OrganizationSwitchPendingError`, `412 organization.context-changed`) closes it with no
-  toast. A refusal keeps the dialog and its addresses with `The invitations could not be sent`
-  (and the daily-limit line for `429 invitation.daily-limit-reached`); an unknown outcome
-  (`isUncertainOnboardingWrite`) keeps them with `The invitations may not have been sent` /
-  `Sending again is safe.`, since a second batch answers `already-invited` for an address the
-  first one reached. A `400 request.invalid` naming addresses is not mapped back to them: the
-  field has no error input. The addresses empty each time it opens. `Invite`, enabled once an
-  address is added or typed, first commits the typed one (`commitPending()`); an invalid typed
-  address blocks the batch with the field's error.
+  another organization. It follows the assistant's invitation rules: it invites the addresses as
+  members in batches of 50 (the `inviteMembers` limit), and an address a batch answered `invited`,
+  `already-invited` or `already-member` is done. The batches go on while the organization is the
+  one the dialog was opened in, even once its host is destroyed; an organization change stops
+  them for good (a switch away and back included, heard until the last batch answers), and so does a definite refusal (a `429 invitation.daily-limit-reached`, a `403`), which
+  would refuse the next ones too, so its addresses and the later ones stay unsent. When every
+  address is done, it toasts the outcome (`{n} invitation(s) sent`, the addresses already members
+  or invited as the description, or `No invitation sent` when none was invited) and closes.
+  Otherwise it stays open with only the addresses left unsent (`inviteKept`, which replaces the
+  dialog's list), so `Invite` sends only them again, and shows at most two toasts: the invited
+  ones when there are some, then one failure summary, which counts the addresses already members
+  or invited when none was invited, so no address leaves the list unsaid. The summary is
+  `The invitations could not be sent` after a refusal (with the daily-limit line for
+  `429 invitation.daily-limit-reached`), else `{n} address(es) could not be invited` /
+  `The addresses stay in the list: press Invite to try again.` for the addresses a batch answered
+  with another outcome (`notSent`), else `The invitations may not have been sent` /
+  `Sending again is safe.` for batches whose outcome is unknown (`isUncertainOnboardingWrite`),
+  since a second batch answers `already-invited` for an address the first one reached. A batch
+  the organization pin dropped (`OrganizationSwitchPendingError`, `412 organization.context-changed`)
+  stops the sending and closes the dialog with no toast. When the host was destroyed while the
+  batches went on (a settings shell opened), the send still ends with its toasts, which outlive
+  the store: the sent count, and, since no dialog can keep the addresses left unsent, a failure
+  toast counting them (`{n} address(es) could not be invited`) with
+  `Invite them again from “Getting started” or the Members page.` An organization change still
+  says nothing. A `400 request.invalid` naming addresses
+  is not mapped back to them: the field has no error input. The addresses empty each time it
+  opens or closes. `Invite`, enabled once an address is added or typed, first commits the typed one
+  (`commitPending()`); an invalid typed address blocks the batch with the field's error.
 - Each opening of the invite dialog has its own generation, which closing it, an organization
   change and the store's destruction move on. A batch's answer closes the dialog, empties it or
   toasts only while the dialog that sent it is still the one shown, in its organization, and its
   store alive: an earlier batch answering after the dialog was closed and opened again, after a
   switch to another organization, or after a new host replaced its own, leaves the dialog shown
-  and its addresses alone, and shows no toast. Its `Invite` is not busy with that earlier batch.
+  and its addresses alone, and shows no toast, except the outcome toasts of a send whose own host
+  was destroyed (above). Its `Invite` is not busy with that earlier batch.
   Recording the marker does not depend on the dialog: it follows the batch, for the organization
   the batch went to only.
-- The checklist records `invitationSent` when the batch invited an address or found one
-  `already-invited` (an invitation is out for it, perhaps from a batch whose answer was lost).
+- The checklist records `invitationSent` once per send, right after the first batch that invited
+  an address or found one `already-invited` (an invitation is out for it, perhaps from a batch
+  whose answer was lost), without waiting for that write: a slow marker never holds the next
+  batches back.
   When that marker write fails other than by a drop, `OnboardingStore` keeps it owed
   (`owesInvitation`): being route-scoped on `/:org`, it survives a change to a settings shell and
   back. `GettingStartedStore` calls `retryOwedInvitation()` on its refresh occasions (the tab
@@ -324,15 +357,20 @@ route), `withGettingStarted()` and `withOnboardingWizard()` (the `overlays` cont
 
 ## Copy not taken word for word from the mockup
 
-These assistant units have no mockup wording (step 9 spec, A.6), pending product approval.
+These assistant and checklist units have no mockup wording, pending product approval.
 
-| Unit                                                                                                                                           | Reason                                                                                                                         |
-| ---------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| `onboarding.wizard.load-failed`, `onboarding.wizard.retry`                                                                                     | The progress read failed; the mockup has no read.                                                                              |
-| `onboarding.wizard.finish-unknown`, `onboarding.wizard.finish-failed`, `onboarding.wizard.finish-forbidden`, `onboarding.wizard.finish-prefix` | `finishOnboarding` failures the mockup does not draw.                                                                          |
-| `onboarding.wizard.toast.invitations-failed`, `onboarding.wizard.toast.invitations-failed-text`                                                | A refused `inviteMembers` on leaving the `Team` screen.                                                                        |
-| `onboarding.wizard.toast.invitations-unknown`, `onboarding.wizard.toast.invitations-unknown-text`                                              | An `inviteMembers` whose outcome is unknown on leaving the `Team` screen.                                                      |
-| `onboarding.wizard.toast.not-invited-one`, `onboarding.wizard.toast.not-invited-other`                                                         | Addresses a batch answered with an outcome other than invited, already invited or already a member.                            |
-| `onboarding.wizard.toast.skip-failed`, `onboarding.wizard.toast.skip-failed-text`                                                              | A refused or unconfirmed `Set up later`.                                                                                       |
-| `onboarding.wizard.announcement`, `onboarding.wizard.stepper.*`                                                                                | Screen reader text of the step change and of the step bar.                                                                     |
-| `onboarding.wizard.preset.*.lists` (English)                                                                                                   | The gateway creates the contract's French list names for every template (gap G7); the English source previews them in English. |
+| Unit                                                                                                                                                                                                                                                                                                                                                                                                         | Reason                                                                                                                         |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------ |
+| `onboarding.wizard.load-failed`, `onboarding.wizard.retry`                                                                                                                                                                                                                                                                                                                                                   | The progress read failed; the mockup has no read.                                                                              |
+| `onboarding.wizard.finish-unknown`, `onboarding.wizard.finish-failed`, `onboarding.wizard.finish-forbidden`, `onboarding.wizard.finish-prefix`                                                                                                                                                                                                                                                               | `finishOnboarding` failures the mockup does not draw.                                                                          |
+| `onboarding.wizard.toast.invitations-failed`, `onboarding.wizard.toast.invitations-failed-text`                                                                                                                                                                                                                                                                                                              | A refused `inviteMembers` on leaving the `Team` screen.                                                                        |
+| `onboarding.wizard.toast.invitations-unknown`, `onboarding.wizard.toast.invitations-unknown-text`                                                                                                                                                                                                                                                                                                            | An `inviteMembers` whose outcome is unknown on leaving the `Team` screen.                                                      |
+| `onboarding.wizard.toast.not-invited-one`, `onboarding.wizard.toast.not-invited-other`                                                                                                                                                                                                                                                                                                                       | Addresses a batch answered with an outcome other than invited, already invited or already a member, on the `Team` screen.      |
+| `onboarding.wizard.toast.skip-failed`, `onboarding.wizard.toast.skip-failed-text`                                                                                                                                                                                                                                                                                                                            | A refused or unconfirmed `Set up later`, or one after a failed progress read.                                                  |
+| `onboarding.wizard.announcement`, `onboarding.wizard.stepper.*`                                                                                                                                                                                                                                                                                                                                              | Screen reader text of the step change and of the step bar.                                                                     |
+| `onboarding.wizard.preset.*.lists` (English)                                                                                                                                                                                                                                                                                                                                                                 | The gateway creates the contract's French list names for every template (gap G7); the English source previews them in English. |
+| `onboarding.getting-started.item-done`                                                                                                                                                                                                                                                                                                                                                                       | Screen reader name of a done item.                                                                                             |
+| `onboarding.getting-started.toggle-failed`, `onboarding.getting-started.dismiss-failed`, `onboarding.getting-started.presentation-uncertain`                                                                                                                                                                                                                                                                 | A refused or unconfirmed collapse, expansion or dismissal of the checklist.                                                    |
+| `onboarding.getting-started.invite-title`, `onboarding.getting-started.invite-cancel`, `onboarding.getting-started.invite-close`                                                                                                                                                                                                                                                                             | The invite dialog, which replaces the mockup's list share dialog (`Invite` is the share dialog's word).                        |
+| `onboarding.getting-started.invite-sent-one`, `onboarding.getting-started.invite-sent`, `onboarding.getting-started.invite-none`, `onboarding.getting-started.invite-skipped-one`, `onboarding.getting-started.invite-skipped`                                                                                                                                                                               | The outcome of the invite dialog's batches.                                                                                    |
+| `onboarding.getting-started.invite-failed`, `onboarding.getting-started.invite-failed-limit`, `onboarding.getting-started.invite-uncertain`, `onboarding.getting-started.invite-uncertain-text`, `onboarding.getting-started.invite-not-sent-one`, `onboarding.getting-started.invite-not-sent-other`, `onboarding.getting-started.invite-not-sent-text`, `onboarding.getting-started.invite-not-sent-later` | A refused, unknown or partial send of the invite dialog, whose unsent addresses stay in the list.                              |

@@ -151,6 +151,23 @@ describe('OnboardingInviteDialog', () => {
     expect(submitButton().disabled).toBe(true);
   });
 
+  it('keeps only the addresses the host kept after a send, and sends only those again', async () => {
+    const [fixture, submitted]: [ComponentFixture<OnboardingInviteDialog>, Mock] = await open();
+    await add(fixture, 'ines.robert@ateliernord.fr');
+    await add(fixture, 'marc.roux@ateliernord.fr');
+
+    fixture.componentRef.setInput('kept', ['marc.roux@ateliernord.fr']);
+    await fixture.whenStable();
+
+    expect(
+      [...document.querySelectorAll('[data-testid="onboarding-invite-pill"]')].map(
+        (pill: Element): string => pill.textContent.trim(),
+      ),
+    ).toEqual([expect.stringContaining('marc.roux@ateliernord.fr')]);
+    submitButton().click();
+    expect(submitted).toHaveBeenCalledWith(['marc.roux@ateliernord.fr']);
+  });
+
   it('forgets an address typed but not added once it closes', async () => {
     const [fixture, submitted]: [ComponentFixture<OnboardingInviteDialog>, Mock] = await open();
     await typeOnly(fixture, 'marc.roux@ateliernord.fr');

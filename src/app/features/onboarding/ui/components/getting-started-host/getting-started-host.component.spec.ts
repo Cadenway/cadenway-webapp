@@ -71,6 +71,17 @@ interface FakeGettingStartedStore {
   readonly inviting: WritableSignal<boolean>;
 
   /**
+   * Property inviteKept
+   *
+   * @description
+   * The addresses the dialog keeps after a send left some unsent.
+   *
+   * @type {WritableSignal<readonly string[]>}
+   * @readonly
+   */
+  readonly inviteKept: WritableSignal<readonly string[]>;
+
+  /**
    * Property toggle
    *
    * @description
@@ -162,6 +173,7 @@ describe('GettingStartedHost', () => {
       ]),
       inviteOpen: signal(false),
       inviting: signal(false),
+      inviteKept: signal<readonly string[]>([]),
       toggle: vi.fn(),
       dismiss: vi.fn(),
       start: vi.fn(),
@@ -259,5 +271,10 @@ describe('GettingStartedHost', () => {
     find('onboarding-invite-submit')?.click();
 
     expect(store.invite).toHaveBeenCalledWith(['ines.robert@ateliernord.fr']);
+
+    store.inviteKept.set(['ines.robert@ateliernord.fr']);
+    await fixture.whenStable();
+
+    expect(find('onboarding-invite-pill')?.textContent).toContain('ines.robert@ateliernord.fr');
   });
 });

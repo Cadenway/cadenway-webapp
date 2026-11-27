@@ -12,7 +12,9 @@ import {
 import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
 import {
   type Event,
+  NavigationCancel,
   NavigationEnd,
+  NavigationError,
   PRIMARY_OUTLET,
   Router,
   type UrlSegmentGroup,
@@ -26,6 +28,7 @@ import {
 } from '@features/workspace/ports/workspace-context';
 import { ShellOverlay } from '@shared/layout-slot';
 
+import { ONBOARDING_WIZARD_OVERLAY } from '../../../constants/overlays/onboarding-overlays.constants';
 import type { OnboardingProgress } from '../../../models/onboarding/onboarding.interface';
 import { OnboardingStore } from '../../../state/onboarding/onboarding.store';
 import { OnboardingWizardStore } from '../../../state/onboarding-wizard/onboarding-wizard.store';
@@ -50,17 +53,6 @@ const ONBOARDING_PARAM: string = 'onboarding';
  * @type {string}
  */
 const ONBOARDING_START: string = 'start';
-
-/**
- * Constant ONBOARDING_WIZARD_OVERLAY
- *
- * @description
- * Id the assistant holds in `ShellOverlay` while it shows; the getting-started checklist stays
- * hidden while it is open, and the other shell overlays (palette, shortcuts) cannot open over it.
- *
- * @type {string}
- */
-const ONBOARDING_WIZARD_OVERLAY: string = 'onboarding.wizard';
 
 /**
  * Function hasStart
@@ -88,8 +80,9 @@ function hasStart(tree: UrlTree): boolean {
  *   at version 1 the store saves the initial draft, and once the progress is past version 1 (or
  *   the assistant closed) the host removes the parameter with `replaceUrl`, keeping the path and
  *   the other parameters. A reload before that reopens the assistant; a failed first save keeps
- *   the parameter, and the next draft save makes the launch durable; a guest's parameter is
- *   removed at once;
+ *   the parameter, and the next draft save makes the launch durable; `Set up later` after a failed
+ *   read keeps it too, since nothing was saved and a reload is the only way back; a guest's
+ *   parameter is removed at once;
  * - otherwise it opens by itself only on the workspace root (`/<slug>`, Home, without `?task=`),
  *   once the progress shows `in-progress` past version 1 (a step was saved), so it never covers a
  *   deep link;
@@ -233,6 +226,27 @@ export class OnboardingWizardHost {
   );
 
   /**
+   * Property unfinished
+   *
+   * @description
+   * Id of the last navigation that was cancelled or failed (0 before any): a launch whose
+   * settlement waited for a navigation is settled again once it ends without changing the address.
+   *
+   * @type {Signal<number>}
+   * @readonly
+   */
+  private readonly unfinished: Signal<number> = toSignal(
+    this.router.events.pipe(
+      filter(
+        (event: Event): event is NavigationCancel | NavigationError =>
+          event instanceof NavigationCancel || event instanceof NavigationError,
+      ),
+      map((event: NavigationCancel | NavigationError): number => event.id),
+    ),
+    { initialValue: 0 },
+  );
+
+  /**
    * Property atRoot
    *
    * @description
@@ -298,6 +312,7 @@ export class OnboardingWizardHost {
     effect((): void => {
       const organizationId: string = this.workspace.organization().id;
       const progress: OnboardingProgress | null = this.onboarding.progress();
+      this.unfinished();
       if (this.startedFor() !== organizationId || progress === null || !hasStart(this.address())) {
         return;
       }
@@ -364,7 +379,9 @@ export class OnboardingWizardHost {
    * @description
    * Once the progress of a launch from `?onboarding=start` is known: removes the parameter when the
    * launch is durable (the progress is past version 1, or the assistant is no longer
-   * `in-progress`); at version 1 it asks the store, once per organization, to save the initial
+   * `in-progress`), unless a navigation is under way, whose end (completed, cancelled or failed)
+   * settles it again; at version 1
+   * it asks the store, once per organization, to save the initial
    * draft, whose answer moves the version on and comes back here.
    *
    * @param {string} organizationId - The current organization.
@@ -372,7 +389,10 @@ export class OnboardingWizardHost {
    */
   private settleStart(organizationId: string, progress: OnboardingProgress): void {
     if (progress.wizard.status !== 'in-progress' || progress.version > 1) {
-      this.removeStart();
+      // A navigation under way (the finish opening the first list) would be cut short by the
+      // removal; its end settles the launch again: a completed one changes the address, a
+      // cancelled or failed one moves `unfinished` on.
+      if (this.router.currentNavigation() === null) this.removeStart();
       return;
     }
     if (this.startSavedFor === organizationId) return;
