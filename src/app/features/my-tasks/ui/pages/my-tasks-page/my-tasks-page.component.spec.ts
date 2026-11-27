@@ -1,0 +1,450 @@
+import { signal, type WritableSignal } from '@angular/core';
+import { TestBed } from '@angular/core/testing';
+import {
+  provideRouter,
+  Router,
+  withComponentInputBinding,
+  withErrorBoundaries,
+  withRouterConfig,
+} from '@angular/router';
+import { By } from '@angular/platform-browser';
+import { RouterTestingHarness } from '@angular/router/testing';
+import type { StatusKey } from '@cadenway/contracts';
+import { provideCadenwayIcons } from '@cadenway/icons';
+import { Subject } from 'rxjs';
+import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
+
+import { RuntimeConfigStore } from '@core/config';
+import { RouteErrorBoundary } from '@features/errors';
+import { LIST_DIRECTORY, type ListDirectoryEntry } from '@features/spaces/ports/list-directory';
+import {
+  type CreatedTask,
+  TaskCreate,
+  TaskDetailOpener,
+  TaskMenu,
+  TaskRowActionsStore,
+  type TaskSummary,
+} from '@features/task';
+import {
+  WORKSPACE_CONTEXT,
+  type WorkspaceOrganization,
+} from '@features/workspace/ports/workspace-context';
+
+import {
+  MyTasksApi,
+  type MyTasksReadOptions,
+} from '../../../data-access/services/my-tasks-api/my-tasks-api.service';
+import type {
+  MyTasksPage as MyTasksPageModel,
+  MyTasksTab,
+} from '../../../models/my-tasks-read/my-tasks-read.interface';
+import { MyTasksPage } from './my-tasks-page.component';
+
+/**
+ * Function myTask
+ *
+ * @description
+ * A task of Camille Martin in Atelier Nord's `Sprint 14`, open and due on 12 November 2026 unless
+ * the overrides say otherwise.
+ *
+ * @param {Partial<TaskSummary>} overrides - The fields that differ.
+ * @returns {TaskSummary} The task.
+ */
+function myTask(overrides: Partial<TaskSummary> = {}): TaskSummary {
+  const key: string = overrides.key ?? 'CAD-482';
+  return {
+    id: key,
+    key,
+    name: 'Review of the SSO flow',
+    status: 'todo',
+    cancelReason: null,
+    priority: 'haute',
+    assigneeIds: ['u-camille'],
+    due: '2026-11-12',
+    start: null,
+    labels: [],
+    subtasks: { closed: 0, total: 0 },
+    checklist: { closed: 0, total: 0 },
+    comments: null,
+    parentKey: null,
+    milestone: false,
+    recurrence: 'none',
+    listId: 'l-sprint-14',
+    spaceId: 'sp-product',
+    version: 3,
+    ...overrides,
+  };
+}
+
+/**
+ * Function pageOf
+ *
+ * @description
+ * A complete read holding the given tasks.
+ *
+ * @param {readonly TaskSummary[]} tasks - The tasks.
+ * @param {number} closed - The `Done` count.
+ * @returns {MyTasksPageModel} The read.
+ */
+function pageOf(tasks: readonly TaskSummary[], closed: number = 2): MyTasksPageModel {
+  return { tasks, counts: { open: tasks.length, closed }, complete: true };
+}
+
+/**
+ * Constant sprint
+ *
+ * @description
+ * The `Sprint 14` list of the `Product` space, as the sidebar knows it.
+ *
+ * @type {ListDirectoryEntry}
+ */
+const sprint: ListDirectoryEntry = {
+  id: 'l-sprint-14',
+  name: 'Sprint 14',
+  spaceId: 'sp-product',
+  spaceName: 'Product',
+  icon: 'phosphorRocketBold',
+  tone: 'text-violet-text',
+};
+
+/**
+ * Constant organization
+ *
+ * @description
+ * Atelier Nord.
+ *
+ * @type {WorkspaceOrganization}
+ */
+const organization: WorkspaceOrganization = {
+  id: 'o-atelier-nord',
+  slug: 'atelier-nord',
+  name: 'Atelier Nord',
+  initials: 'AN',
+  role: 'owner',
+  plan: 'team',
+};
+
+describe('MyTasksPage', () => {
+  let read: Mock<(tab: MyTasksTab, options: MyTasksReadOptions) => Promise<MyTasksPageModel>>;
+  let changed: Subject<string>;
+  let rowActions: Record<string, unknown> & {
+    open: Mock;
+    setStatus: Mock;
+    sync: Mock;
+    hidden: WritableSignal<readonly string[]>;
+  };
+  let taskCreate: { created: Subject<CreatedTask>; open: Mock };
+
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date(2026, 10, 12, 9, 30));
+    read = vi.fn((tab: MyTasksTab) =>
+      Promise.resolve(
+        tab === 'open'
+          ? pageOf([
+              myTask({ key: 'CAD-470', name: 'Fix the login redirect', due: '2026-11-10' }),
+              myTask({ key: 'CAD-482' }),
+              myTask({ key: 'CAD-475', name: 'Write the release notes', due: '2026-11-15' }),
+              myTask({
+                key: 'CAD-401',
+                name: 'Archive the old flows',
+                due: null,
+                listId: 'l-sprint-12',
+              }),
+            ])
+          : pageOf([myTask({ key: 'CAD-460', name: 'Ship the SSO screen', status: 'done' })], 1),
+      ),
+    );
+    changed = new Subject<string>();
+    const hidden: WritableSignal<readonly string[]> = signal<readonly string[]>([]);
+    rowActions = {
+      hidden,
+      changed,
+      userId: signal('u-camille'),
+      cancelKeys: signal(null),
+      deleteOpen: signal(false),
+      deleting: signal(false),
+      deleteTitle: signal(''),
+      deleteText: signal(''),
+      deleteAction: signal(''),
+      deleteItems: signal([]),
+      sync: vi.fn(),
+      rows: (tasks: readonly TaskSummary[]): readonly TaskSummary[] =>
+        tasks.filter((task: TaskSummary): boolean => !hidden().includes(task.key)),
+      displayedTask: (task: TaskSummary): TaskSummary => task,
+      displayedStatus: (task: TaskSummary): StatusKey => task.status,
+      open: vi.fn(),
+      setStatus: vi.fn(),
+      confirmCancel: vi.fn(),
+      keepCancel: vi.fn(),
+      setDeleteOpen: vi.fn(),
+      trash: vi.fn(),
+    };
+    taskCreate = { created: new Subject<CreatedTask>(), open: vi.fn() };
+    TestBed.configureTestingModule({
+      providers: [
+        provideCadenwayIcons(),
+        provideRouter(
+          [
+            {
+              path: ':org',
+              children: [
+                {
+                  path: 'my-tasks',
+                  component: MyTasksPage,
+                  errorComponent: RouteErrorBoundary,
+                  providers: [{ provide: TaskRowActionsStore, useValue: rowActions }],
+                },
+              ],
+            },
+          ],
+          withComponentInputBinding(),
+          withErrorBoundaries({ defaultErrorComponent: RouteErrorBoundary }),
+          withRouterConfig({ paramsInheritanceStrategy: 'always' }),
+        ),
+        {
+          provide: RuntimeConfigStore,
+          useValue: { config: () => ({ apiUrl: 'http://api.test' }) },
+        },
+        {
+          provide: MyTasksApi,
+          useValue: { read, people: vi.fn(() => Promise.resolve([])) },
+        },
+        { provide: WORKSPACE_CONTEXT, useValue: { organization: signal(organization) } },
+        { provide: LIST_DIRECTORY, useValue: { lists: signal([sprint]) } },
+        {
+          provide: TaskDetailOpener,
+          useValue: { closed: new Subject<string>(), changed: new Subject<string>() },
+        },
+        { provide: TaskCreate, useValue: taskCreate },
+      ],
+    });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  /**
+   * Function settle
+   *
+   * @description
+   * Waits until the page or its error state rendered.
+   *
+   * @param {RouterTestingHarness} harness - The harness.
+   * @returns {Promise<void>} Resolves once stable.
+   */
+  async function settle(harness: RouterTestingHarness): Promise<void> {
+    for (let round: number = 0; round < 3; round += 1) {
+      await harness.fixture.whenStable();
+      harness.detectChanges();
+    }
+  }
+
+  /**
+   * Function open
+   *
+   * @description
+   * Opens an address of the page and waits until it rendered.
+   *
+   * @param {string} url - The address.
+   * @returns {Promise<{ harness: RouterTestingHarness; element: HTMLElement }>} The harness and
+   * its root element.
+   */
+  async function open(
+    url: string,
+  ): Promise<{ harness: RouterTestingHarness; element: HTMLElement }> {
+    const harness: RouterTestingHarness = await RouterTestingHarness.create();
+    await harness.navigateByUrl(url);
+    await settle(harness);
+    return { harness, element: harness.fixture.nativeElement as HTMLElement };
+  }
+
+  /**
+   * Function groups
+   *
+   * @description
+   * Each group's name with the keys of its lines.
+   *
+   * @param {HTMLElement} element - The page.
+   * @returns {readonly string[]} One `Name: KEY, KEY` entry per group.
+   */
+  function groups(element: HTMLElement): readonly string[] {
+    return Array.from(element.querySelectorAll('section')).map((section: HTMLElement) => {
+      const keys: string = Array.from(section.querySelectorAll('cw-task-line'))
+        .map((line: Element) => line.querySelector('.font-mono')?.textContent.trim() ?? '')
+        .join(', ');
+      return `${section.getAttribute('aria-label') ?? ''}: ${keys}`;
+    });
+  }
+
+  /**
+   * Function button
+   *
+   * @description
+   * A button or tab by its text.
+   *
+   * @param {HTMLElement} element - The page.
+   * @param {string} name - Its text, from its start.
+   * @returns {HTMLElement | undefined} The control.
+   */
+  function button(element: HTMLElement, name: string): HTMLElement | undefined {
+    return Array.from(element.querySelectorAll<HTMLElement>('button')).find(
+      (control: HTMLElement) => control.textContent.trim().startsWith(name),
+    );
+  }
+
+  it('groups the open tasks by due date, in the mockup order, with their counts', async () => {
+    const { element }: { element: HTMLElement } = await open('/atelier-nord/my-tasks');
+
+    expect(element.querySelector('h1')?.textContent.trim()).toBe('My tasks');
+    expect(groups(element)).toEqual([
+      'Late: CAD-470',
+      'Today: CAD-482',
+      'Next seven days: CAD-475',
+      'No due date: CAD-401',
+    ]);
+    expect(
+      Array.from(element.querySelectorAll('[data-testid="my-tasks-group-count"]')).map(
+        (count: Element) => count.textContent.trim(),
+      ),
+    ).toEqual(['1', '1', '1', '1']);
+    const tablist: HTMLElement | null = element.querySelector('[role="tablist"]');
+    expect(tablist?.getAttribute('aria-label')).toBe('Filter my tasks');
+    expect(button(element, 'To do')?.textContent.replace(/\s+/gu, ' ').trim()).toBe('To do, 4');
+    expect(button(element, 'Done')?.textContent.replace(/\s+/gu, ' ').trim()).toBe('Done, 2');
+    expect(read).toHaveBeenCalledWith('open', expect.objectContaining({ passive: false }));
+    expect(rowActions.sync).toHaveBeenCalledTimes(1);
+  });
+
+  it('names the list of each line and labels a list the sidebar does not hold as archived', async () => {
+    const { element }: { element: HTMLElement } = await open('/atelier-nord/my-tasks');
+
+    const texts: readonly string[] = Array.from(element.querySelectorAll('cw-task-line')).map(
+      (line: Element) => line.textContent.replace(/\s+/gu, ' '),
+    );
+    expect(texts[1]).toContain('Sprint 14');
+    expect(texts[3]).toContain('Archived list');
+  });
+
+  it('shows the closed tab from the address and switches tabs through it', async () => {
+    const { harness, element }: { harness: RouterTestingHarness; element: HTMLElement } =
+      await open('/atelier-nord/my-tasks?tab=closed');
+
+    expect(groups(element)).toEqual(['Done and cancelled: CAD-460']);
+    expect(read).toHaveBeenCalledWith('closed', expect.objectContaining({ passive: false }));
+
+    button(element, 'To do')?.click();
+    await settle(harness);
+
+    expect(TestBed.inject(Router).url).toBe('/atelier-nord/my-tasks');
+    expect(groups(element)[0]).toBe('Late: CAD-470');
+  });
+
+  it('opens a line in the task detail and creates a task from the header', async () => {
+    const { element }: { element: HTMLElement } = await open('/atelier-nord/my-tasks');
+
+    element.querySelector<HTMLButtonElement>('cw-task-line button')?.click();
+    button(element, 'Create a task')?.click();
+
+    expect(rowActions.open).toHaveBeenCalledWith(expect.objectContaining({ key: 'CAD-470' }));
+    expect(taskCreate.open).toHaveBeenCalledTimes(1);
+  });
+
+  it('opens the task menu on a line and sends its status through the row writes', async () => {
+    const { harness, element }: { harness: RouterTestingHarness; element: HTMLElement } =
+      await open('/atelier-nord/my-tasks');
+
+    const line: HTMLElement | null = element.querySelector('li');
+    line?.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, clientX: 10, clientY: 10 }));
+    await settle(harness);
+    const menu: TaskMenu = harness.fixture.debugElement.query(By.directive(TaskMenu))
+      .componentInstance as TaskMenu;
+    expect(menu.tasks().map((task: TaskSummary) => task.key)).toEqual(['CAD-470']);
+    menu.statusPicked.emit('done');
+
+    expect(rowActions.setStatus).toHaveBeenCalledWith(
+      expect.objectContaining({ key: 'CAD-470' }),
+      'done',
+    );
+  });
+
+  it('reads the rows again once a write of the menu settled, keeping them meanwhile', async () => {
+    const { harness, element }: { harness: RouterTestingHarness; element: HTMLElement } =
+      await open('/atelier-nord/my-tasks');
+
+    changed.next('CAD-470');
+    await settle(harness);
+
+    expect(read).toHaveBeenCalledTimes(2);
+    expect(read.mock.calls[1][1].passive).toBe(true);
+    expect(groups(element)).toHaveLength(4);
+  });
+
+  it('shows a successful empty tab as empty, not as a failure', async () => {
+    read.mockResolvedValueOnce(pageOf([], 0));
+    const { element }: { element: HTMLElement } = await open('/atelier-nord/my-tasks');
+
+    const empty: Element | null = element.querySelector('[data-testid="my-tasks-empty"]');
+    expect(empty?.textContent).toContain('Nothing here');
+    expect(empty?.textContent).toContain('No task in this tab.');
+    expect(element.textContent).not.toContain('Could not load this page');
+  });
+
+  it('hands a failed first read to the error boundary, whose Retry reads again', async () => {
+    read.mockRejectedValueOnce(new Error('unavailable'));
+    const { harness, element }: { harness: RouterTestingHarness; element: HTMLElement } =
+      await open('/atelier-nord/my-tasks?tab=closed');
+
+    expect(element.querySelector('h1')?.textContent.trim()).toBe('Could not load this page');
+    expect(element.querySelector('[data-testid="my-tasks-empty"]')).toBeNull();
+
+    button(element, 'Retry')?.click();
+    await settle(harness);
+
+    expect(read).toHaveBeenCalledTimes(2);
+    expect(groups(element)).toEqual(['Done and cancelled: CAD-460']);
+  });
+
+  it('keeps the rows read before a failed later page, with Retry', async () => {
+    read.mockResolvedValueOnce({ ...pageOf([myTask()]), complete: false });
+    const { harness, element }: { harness: RouterTestingHarness; element: HTMLElement } =
+      await open('/atelier-nord/my-tasks');
+
+    const partial: HTMLElement | null = element.querySelector('[data-testid="my-tasks-partial"]');
+    expect(partial?.getAttribute('role')).toBe('alert');
+    expect(partial?.textContent).toContain('Some of your tasks could not be loaded.');
+    expect(groups(element)).toEqual(['Today: CAD-482']);
+
+    button(element, 'Retry')?.click();
+    await settle(harness);
+
+    expect(read).toHaveBeenCalledTimes(2);
+    expect(read.mock.calls[1][1].passive).toBe(false);
+    expect(element.querySelector('[data-testid="my-tasks-partial"]')).toBeNull();
+  });
+
+  it('shows the skeleton while the first read runs', async () => {
+    read.mockReturnValueOnce(new Promise<MyTasksPageModel>(() => undefined));
+    const harness: RouterTestingHarness = await RouterTestingHarness.create();
+    await harness.navigateByUrl('/atelier-nord/my-tasks');
+    harness.detectChanges();
+    const element: HTMLElement = harness.fixture.nativeElement as HTMLElement;
+
+    const loading: HTMLElement | null = element.querySelector('[data-testid="my-tasks-loading"]');
+    expect(loading?.getAttribute('aria-label')).toBe('Loading your tasks');
+    expect(loading?.getAttribute('aria-busy')).toBe('true');
+    expect(element.querySelector('h1')?.textContent.trim()).toBe('My tasks');
+    expect(element.querySelector('section')).toBeNull();
+  });
+
+  it('hides a line the menu deleted at once', async () => {
+    const { harness, element }: { harness: RouterTestingHarness; element: HTMLElement } =
+      await open('/atelier-nord/my-tasks');
+
+    rowActions.hidden.set(['CAD-470']);
+    await settle(harness);
+
+    expect(groups(element)[0]).toBe('Today: CAD-482');
+  });
+});
