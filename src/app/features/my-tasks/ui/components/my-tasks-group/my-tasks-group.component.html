@@ -1,7 +1,7 @@
 <section class="flex flex-col gap-2" [attr.aria-label]="label()">
   <h2 class="flex items-center gap-2 text-sm font-medium" [class.text-grenat-text]="late()">
-    {{ label()
-    }}<span
+    {{ label() }}<span class="sr-only">, </span
+    ><span
       class="text-xs font-normal whitespace-nowrap text-muted-foreground tabular-nums"
       data-testid="my-tasks-group-count"
       >{{ rows().length }}</span
@@ -10,9 +10,11 @@
   <ul class="flex flex-col overflow-hidden rounded-lg border border-border">
     @for (row of rows(); track row.task.key) {
       <li
-        class="border-b border-border last:border-b-0"
+        class="border-b border-border last:border-b-0 focus:outline-none"
+        tabindex="-1"
         [cwContextMenuTriggerFor]="menu()"
         (opened)="menuOpened.emit(row.task)"
+        (focus)="forwardFocus($event)"
       >
         <cw-task-line
           variant="mine"

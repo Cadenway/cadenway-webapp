@@ -1,3 +1,4 @@
+import { NgTemplateOutlet } from '@angular/common';
 import {
   Component,
   computed,
@@ -27,7 +28,7 @@ import {
   CwEmptyTitle,
 } from '@cadenway/ui/components/empty';
 import { CwSkeleton } from '@cadenway/ui/components/skeleton';
-import { CwTab, CwTabs, CwTabsList } from '@cadenway/ui/components/tabs';
+import { CwTab, CwTabPanel, CwTabs, CwTabsList } from '@cadenway/ui/components/tabs';
 import { NgIcon } from '@ng-icons/core';
 
 import {
@@ -75,8 +76,9 @@ const GROUP_LABELS: Readonly<Record<MyTasksGroupKey, string>> = {
  * Constant ARCHIVED_LIST
  *
  * @description
- * The list cell of a task whose list is not in the sidebar, which holds every live list: it was
- * archived (gap G-T1, until `TaskSummary` carries its list's name).
+ * The list cell of a task whose list is not in the sidebar although the sidebar holds lists of
+ * its space, which it reads with all their live lists: it was archived (gap G-T1, until
+ * `TaskSummary` carries its list's name).
  *
  * @type {string}
  */
@@ -103,10 +105,10 @@ const SKELETON_GROUPS: readonly (readonly string[])[] = [
  * @description
  * The `My tasks` screen at `/:org/my-tasks` (`App.dc.html` lines 1749-1789): its header with
  * `Create a task` (the create dialog with its defaults: the caller assigned, `To do`), the `To do`
- * and `Done` tabs with their counts (`?tab=closed` selects the second, kept in the address), then
- * the tab's groups: on `To do` the late, today, next seven days, later and undated tasks (only
- * non-empty groups, in that order, against the local day of the read), on `Done` one `Done and
- * cancelled` group. Each line is Task's `cw-task-line`: a click opens the task detail, the context
+ * and `Done` tabs with their counts (`?tab=closed` selects the second, kept in the address), then,
+ * in the selected tab's panel, its groups: on `To do` the late, today, next seven days, later and
+ * undated tasks (only non-empty groups, in that order, against the local day of the read), on
+ * `Done` one `Done and cancelled` group, read a page at a time with `Show more`. Each line is Task's `cw-task-line`: a click opens the task detail, the context
  * gestures open Task's `cw-task-menu`, whose writes run through the route's `TaskRowActionsStore`
  * with the cancel reason dialog and the deletion confirmation rendered here. The page reads its
  * rows again after each settled write (`changed`); `MyTasksStore` also reads them on focus, on a
@@ -132,10 +134,12 @@ const SKELETON_GROUPS: readonly (readonly string[])[] = [
     CwEmptyTitle,
     CwSkeleton,
     CwTab,
+    CwTabPanel,
     CwTabs,
     CwTabsList,
     MyTasksGroup,
     NgIcon,
+    NgTemplateOutlet,
     TaskCancelDialog,
     TaskMenu,
   ],
@@ -234,7 +238,7 @@ export class MyTasksPage {
         .map((task: TaskSummary): MyTaskRow => ({
           task,
           status: this.rowActions.displayedStatus(task),
-          listName: this.listName(task.listId),
+          listName: this.listName(task),
         }));
       if (read.tab === 'closed') return rows.length > 0 ? [{ key: 'closed', rows }] : [];
       return OPEN_BUCKETS.map((key: MyTasksGroupKey): MyTasksGroupModel => ({
@@ -492,16 +496,17 @@ export class MyTasksPage {
    * Method listName
    *
    * @description
-   * The list cell of a task: the list's name, `Archived list` when the sidebar's lists are known
-   * and do not hold it, empty while they are not.
+   * The list cell of a task: the list's name, `Archived list` when the sidebar holds lists of
+   * the task's space but not this one, empty when it holds none of that space (its overview
+   * failed or is still read, so a live list may be missing).
    *
-   * @param {string} listId - The task's list.
+   * @param {TaskSummary} task - The task.
    * @returns {string} The cell's text.
    */
-  private listName(listId: string): string {
-    const name: string | undefined = this.store.listNames().get(listId);
+  private listName(task: TaskSummary): string {
+    const name: string | undefined = this.store.listNames().get(task.listId);
     if (name !== undefined) return name;
-    return this.store.listsKnown() ? ARCHIVED_LIST : '';
+    return this.store.listedSpaces().has(task.spaceId) ? ARCHIVED_LIST : '';
   }
   // #endregion
 }

@@ -34,99 +34,19 @@
           <ng-container i18n="@@my-tasks.tabs.closed">Done</ng-container>
         </button>
       </cw-tabs-list>
+      <cw-tab-panel value="open">
+        @if (shownTab() === 'open') {
+          <ng-container [ngTemplateOutlet]="content" />
+        }
+      </cw-tab-panel>
+      <cw-tab-panel value="closed">
+        @if (shownTab() === 'closed') {
+          <ng-container [ngTemplateOutlet]="content" />
+        }
+      </cw-tab-panel>
     </cw-tabs>
-  }
-
-  @if (read) {
-    @if (!read.complete || read.refreshFailed) {
-      <div
-        class="flex flex-wrap items-center gap-3 rounded-lg border border-border px-3 py-2 text-sm"
-        role="alert"
-        data-testid="my-tasks-partial"
-      >
-        <span class="min-w-0 flex-1">
-          @if (read.complete) {
-            <ng-container i18n="@@my-tasks.partial.stale"
-              >Your tasks could not be refreshed.</ng-container
-            >
-          } @else {
-            <ng-container i18n="@@my-tasks.partial.incomplete"
-              >Some of your tasks could not be loaded.</ng-container
-            >
-          }
-        </span>
-        <button
-          cwButton
-          type="button"
-          variant="outline"
-          size="sm"
-          [loading]="store.reloading()"
-          (click)="store.retry()"
-          i18n="@@my-tasks.partial.retry"
-        >
-          Retry
-        </button>
-      </div>
-    }
-
-    @for (group of groups(); track group.key) {
-      <cw-my-tasks-group
-        [label]="groupLabels[group.key]"
-        [late]="group.key === 'late'"
-        [rows]="group.rows"
-        [menu]="taskMenu.menu()"
-        (opened)="rowActions.open($event)"
-        (menuOpened)="openMenu($event)"
-      />
-    } @empty {
-      <cw-empty variant="outline" data-testid="my-tasks-empty">
-        <cw-empty-header>
-          <cw-empty-media>
-            <ng-icon name="phosphorCheckCircleBold" aria-hidden="true" />
-          </cw-empty-media>
-          <cw-empty-title i18n="@@my-tasks.empty.title">Nothing here</cw-empty-title>
-          <cw-empty-description i18n="@@my-tasks.empty.text"
-            >No task in this tab.</cw-empty-description
-          >
-        </cw-empty-header>
-      </cw-empty>
-    }
-  } @else {
-    <div
-      class="flex flex-col gap-6"
-      role="status"
-      aria-busy="true"
-      aria-label="Loading your tasks"
-      i18n-aria-label="@@my-tasks.loading"
-      data-testid="my-tasks-loading"
-    >
-      <div class="flex flex-col gap-6" aria-hidden="true">
-        @if (!counts) {
-          <div class="flex gap-1">
-            <div cwSkeleton class="h-8 w-32 rounded-lg"></div>
-            <div cwSkeleton class="h-8 w-28 rounded-lg"></div>
-          </div>
-        }
-        @for (widths of skeletonGroups; track $index) {
-          <div class="flex flex-col gap-2">
-            <div cwSkeleton class="h-3.5 w-28"></div>
-            <ul class="flex flex-col overflow-hidden rounded-lg border border-border">
-              @for (width of widths; track $index) {
-                <li
-                  class="flex h-11 items-center gap-3 border-b border-border px-3 last:border-b-0"
-                >
-                  <div cwSkeleton class="size-4 rounded-full"></div>
-                  <div cwSkeleton class="h-2.5 w-14"></div>
-                  <div cwSkeleton class="h-3" [class]="width"></div>
-                  <div cwSkeleton class="ml-auto h-5 w-16 rounded-full"></div>
-                  <div cwSkeleton class="size-6 rounded-full"></div>
-                </li>
-              }
-            </ul>
-          </div>
-        }
-      </div>
-    </div>
+  } @else if (!read) {
+    <ng-container [ngTemplateOutlet]="loading" [ngTemplateOutletContext]="{ tabs: true }" />
   }
 </div>
 
@@ -173,3 +93,127 @@
     {{ rowActions.deleteAction() }}
   </button>
 </cw-alert-dialog>
+
+<ng-template #content>
+  <div class="flex flex-col gap-5">
+    @if (read) {
+      @if (!read.complete || read.refreshFailed) {
+        <div
+          class="flex flex-wrap items-center gap-3 rounded-lg border border-border px-3 py-2 text-sm"
+          role="alert"
+          data-testid="my-tasks-partial"
+        >
+          <span class="min-w-0 flex-1">
+            @if (read.complete) {
+              <ng-container i18n="@@my-tasks.partial.stale"
+                >Your tasks could not be refreshed.</ng-container
+              >
+            } @else {
+              <ng-container i18n="@@my-tasks.partial.incomplete"
+                >Some of your tasks could not be loaded.</ng-container
+              >
+            }
+          </span>
+          <button
+            cwButton
+            type="button"
+            variant="outline"
+            size="sm"
+            [loading]="store.reloading()"
+            (click)="store.retry()"
+            i18n="@@my-tasks.partial.retry"
+          >
+            Retry
+          </button>
+        </div>
+      }
+
+      @for (group of groups(); track group.key) {
+        <cw-my-tasks-group
+          [label]="groupLabels[group.key]"
+          [late]="group.key === 'late'"
+          [rows]="group.rows"
+          [menu]="taskMenu.menu()"
+          (opened)="rowActions.open($event)"
+          (menuOpened)="openMenu($event)"
+        />
+      } @empty {
+        <cw-empty variant="outline" data-testid="my-tasks-empty">
+          <cw-empty-header>
+            <cw-empty-media>
+              <ng-icon name="phosphorCheckCircleBold" aria-hidden="true" />
+            </cw-empty-media>
+            <cw-empty-title i18n="@@my-tasks.empty.title">Nothing here</cw-empty-title>
+            <cw-empty-description i18n="@@my-tasks.empty.text"
+              >No task in this tab.</cw-empty-description
+            >
+          </cw-empty-header>
+        </cw-empty>
+      }
+
+      @if (store.canShowMore()) {
+        <div class="flex flex-wrap items-center justify-center gap-3">
+          @if (store.moreFailed()) {
+            <p
+              class="text-sm text-muted-foreground"
+              role="alert"
+              data-testid="my-tasks-more-failed"
+              i18n="@@my-tasks.closed.more-failed"
+            >
+              The next tasks could not be loaded.
+            </p>
+          }
+          <button
+            cwButton
+            type="button"
+            variant="outline"
+            size="sm"
+            [loading]="store.loadingMore()"
+            (click)="store.showMore()"
+            i18n="@@my-tasks.closed.more"
+          >
+            Show more
+          </button>
+        </div>
+      }
+    } @else {
+      <ng-container [ngTemplateOutlet]="loading" [ngTemplateOutletContext]="{ tabs: false }" />
+    }
+  </div>
+</ng-template>
+
+<ng-template #loading let-tabs="tabs">
+  <div
+    class="flex flex-col gap-6"
+    role="status"
+    aria-busy="true"
+    aria-label="Loading your tasks"
+    i18n-aria-label="@@my-tasks.loading"
+    data-testid="my-tasks-loading"
+  >
+    <div class="flex flex-col gap-6" aria-hidden="true">
+      @if (tabs) {
+        <div class="flex gap-1">
+          <div cwSkeleton class="h-8 w-32 rounded-lg"></div>
+          <div cwSkeleton class="h-8 w-28 rounded-lg"></div>
+        </div>
+      }
+      @for (widths of skeletonGroups; track $index) {
+        <div class="flex flex-col gap-2">
+          <div cwSkeleton class="h-3.5 w-28"></div>
+          <ul class="flex flex-col overflow-hidden rounded-lg border border-border">
+            @for (width of widths; track $index) {
+              <li class="flex h-11 items-center gap-3 border-b border-border px-3 last:border-b-0">
+                <div cwSkeleton class="size-4 rounded-full"></div>
+                <div cwSkeleton class="h-2.5 w-14"></div>
+                <div cwSkeleton class="h-3" [class]="width"></div>
+                <div cwSkeleton class="ml-auto h-5 w-16 rounded-full"></div>
+                <div cwSkeleton class="size-6 rounded-full"></div>
+              </li>
+            }
+          </ul>
+        </div>
+      }
+    </div>
+  </div>
+</ng-template>

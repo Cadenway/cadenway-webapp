@@ -616,6 +616,8 @@
     "layouts.settings-shell.toast-older": "+{$count} plus anciennes",
     "layouts.settings-shell.toast-region": "Notifications (F8)",
     "layouts.settings-shell.toast-undo": "Annuler",
+    "my-tasks.closed.more": "Afficher plus",
+    "my-tasks.closed.more-failed": "Les tâches suivantes n’ont pas pu être chargées.",
     "my-tasks.delete.cancel": "Annuler",
     "my-tasks.empty.text": "Aucune tâche dans cet onglet.",
     "my-tasks.empty.title": "Rien ici",

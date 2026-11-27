@@ -47,8 +47,8 @@ export interface MyTasksCounts {
  * Interface MyTasksPage
  *
  * @description
- * One tab of the caller's assigned tasks as the data-access service reads it: every page up to the
- * last cursor, in the gateway's order (by due date, undated last).
+ * One tab of the caller's assigned tasks as the data-access service reads it: its pages from the
+ * start to the depth asked for, in the gateway's order (by due date, undated last).
  */
 export interface MyTasksPage {
   // #region Properties
@@ -84,6 +84,29 @@ export interface MyTasksPage {
    * @readonly
    */
   readonly complete: boolean;
+
+  /**
+   * Property nextCursor
+   *
+   * @description
+   * The page after the ones read (`Show more` of the `Done` tab), or the page that failed when
+   * `complete` is false; null once the last page was read.
+   *
+   * @type {string | null}
+   * @readonly
+   */
+  readonly nextCursor: string | null;
+
+  /**
+   * Property pages
+   *
+   * @description
+   * How many pages `tasks` holds, the depth a refresh reads again.
+   *
+   * @type {number}
+   * @readonly
+   */
+  readonly pages: number;
   // #endregion
 }
 
@@ -122,7 +145,8 @@ export interface MyTasksRead extends MyTasksPage {
    * Property refreshFailed
    *
    * @description
-   * Whether the latest background refresh or `Retry` failed, so these rows are the previous read.
+   * Whether the latest background refresh or `Retry` failed, on its first page or a later one, so
+   * these rows are the previous read.
    *
    * @type {boolean}
    * @readonly

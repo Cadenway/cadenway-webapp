@@ -19,6 +19,9 @@ import { RouteErrorBoundary } from '@features/errors';
 import { LIST_DIRECTORY, type ListDirectoryEntry } from '@features/spaces/ports/list-directory';
 import {
   type CreatedTask,
+  type Person,
+  personOf,
+  TaskCancelDialog,
   TaskCreate,
   TaskDetailOpener,
   TaskMenu,
@@ -32,6 +35,7 @@ import {
 
 import {
   MyTasksApi,
+  MyTasksPartialReadError,
   type MyTasksReadOptions,
 } from '../../../data-access/services/my-tasks-api/my-tasks-api.service';
 import type {
@@ -80,14 +84,19 @@ function myTask(overrides: Partial<TaskSummary> = {}): TaskSummary {
  * Function pageOf
  *
  * @description
- * A complete read holding the given tasks.
+ * A complete read of one page holding the given tasks, the last one unless a next cursor is given.
  *
  * @param {readonly TaskSummary[]} tasks - The tasks.
  * @param {number} closed - The `Done` count.
+ * @param {string | null} nextCursor - The page after it, if any.
  * @returns {MyTasksPageModel} The read.
  */
-function pageOf(tasks: readonly TaskSummary[], closed: number = 2): MyTasksPageModel {
-  return { tasks, counts: { open: tasks.length, closed }, complete: true };
+function pageOf(
+  tasks: readonly TaskSummary[],
+  closed: number = 2,
+  nextCursor: string | null = null,
+): MyTasksPageModel {
+  return { tasks, counts: { open: tasks.length, closed }, complete: true, nextCursor, pages: 1 };
 }
 
 /**
@@ -131,8 +140,18 @@ describe('MyTasksPage', () => {
     open: Mock;
     setStatus: Mock;
     sync: Mock;
+    toggleAssignee: Mock;
+    moveTo: Mock;
+    askDelete: Mock;
+    setDeleteOpen: Mock;
+    trash: Mock;
+    confirmCancel: Mock;
+    keepCancel: Mock;
     hidden: WritableSignal<readonly string[]>;
+    cancelKeys: WritableSignal<readonly string[] | null>;
+    deleteOpen: WritableSignal<boolean>;
   };
+  let people: Mock<() => Promise<readonly Person[]>>;
   let taskCreate: { created: Subject<CreatedTask>; open: Mock };
 
   beforeEach(() => {
@@ -151,6 +170,13 @@ describe('MyTasksPage', () => {
                 due: null,
                 listId: 'l-sprint-12',
               }),
+              myTask({
+                key: 'DES-12',
+                name: 'Draw the empty states',
+                due: '2026-12-20',
+                listId: 'l-research',
+                spaceId: 'sp-design',
+              }),
             ])
           : pageOf([myTask({ key: 'CAD-460', name: 'Ship the SSO screen', status: 'done' })], 1),
       ),
@@ -161,13 +187,13 @@ describe('MyTasksPage', () => {
       hidden,
       changed,
       userId: signal('u-camille'),
-      cancelKeys: signal(null),
+      cancelKeys: signal<readonly string[] | null>(null),
       deleteOpen: signal(false),
       deleting: signal(false),
-      deleteTitle: signal(''),
-      deleteText: signal(''),
-      deleteAction: signal(''),
-      deleteItems: signal([]),
+      deleteTitle: signal('Delete “Fix the login redirect”?'),
+      deleteText: signal('The task moves to the trash for 30 days.'),
+      deleteAction: signal('Delete the task'),
+      deleteItems: signal(['CAD-470 · Fix the login redirect']),
       sync: vi.fn(),
       rows: (tasks: readonly TaskSummary[]): readonly TaskSummary[] =>
         tasks.filter((task: TaskSummary): boolean => !hidden().includes(task.key)),
@@ -179,7 +205,13 @@ describe('MyTasksPage', () => {
       keepCancel: vi.fn(),
       setDeleteOpen: vi.fn(),
       trash: vi.fn(),
+      toggleAssignee: vi.fn(),
+      moveTo: vi.fn(),
+      askDelete: vi.fn(),
     };
+    people = vi.fn(() =>
+      Promise.resolve([personOf('u-camille', 'Camille Martin'), personOf('u-ines', 'Inès Robert')]),
+    );
     taskCreate = { created: new Subject<CreatedTask>(), open: vi.fn() };
     TestBed.configureTestingModule({
       providers: [
@@ -208,7 +240,7 @@ describe('MyTasksPage', () => {
         },
         {
           provide: MyTasksApi,
-          useValue: { read, people: vi.fn(() => Promise.resolve([])) },
+          useValue: { read, people },
         },
         { provide: WORKSPACE_CONTEXT, useValue: { organization: signal(organization) } },
         { provide: LIST_DIRECTORY, useValue: { lists: signal([sprint]) } },
@@ -264,18 +296,38 @@ describe('MyTasksPage', () => {
    * Function groups
    *
    * @description
-   * Each group's name with the keys of its lines.
+   * Each group's name with the task names of its lines.
    *
    * @param {HTMLElement} element - The page.
-   * @returns {readonly string[]} One `Name: KEY, KEY` entry per group.
+   * @returns {readonly string[]} One `Group: name, name` entry per group.
    */
   function groups(element: HTMLElement): readonly string[] {
     return Array.from(element.querySelectorAll('section')).map((section: HTMLElement) => {
-      const keys: string = Array.from(section.querySelectorAll('cw-task-line'))
-        .map((line: Element) => line.querySelector('.font-mono')?.textContent.trim() ?? '')
+      const names: string = Array.from(section.querySelectorAll('[data-testid="task-line-name"]'))
+        .map((name: Element) => name.textContent.trim())
         .join(', ');
-      return `${section.getAttribute('aria-label') ?? ''}: ${keys}`;
+      return `${section.getAttribute('aria-label') ?? ''}: ${names}`;
     });
+  }
+
+  /**
+   * Function menuOf
+   *
+   * @description
+   * Opens the task menu on a line with a right click and returns it.
+   *
+   * @param {RouterTestingHarness} harness - The harness.
+   * @param {number} index - The line, from the top.
+   * @returns {Promise<TaskMenu>} The page's task menu.
+   */
+  async function menuOf(harness: RouterTestingHarness, index: number): Promise<TaskMenu> {
+    const element: HTMLElement = harness.fixture.nativeElement as HTMLElement;
+    const items: readonly Element[] = Array.from(element.querySelectorAll('li[tabindex]'));
+    items
+      .at(index)
+      ?.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, clientX: 8, clientY: 8 }));
+    await settle(harness);
+    return harness.fixture.debugElement.query(By.directive(TaskMenu)).componentInstance as TaskMenu;
   }
 
   /**
@@ -299,46 +351,60 @@ describe('MyTasksPage', () => {
 
     expect(element.querySelector('h1')?.textContent.trim()).toBe('My tasks');
     expect(groups(element)).toEqual([
-      'Late: CAD-470',
-      'Today: CAD-482',
-      'Next seven days: CAD-475',
-      'No due date: CAD-401',
+      'Late: Fix the login redirect',
+      'Today: Review of the SSO flow',
+      'Next seven days: Write the release notes',
+      'Later: Draw the empty states',
+      'No due date: Archive the old flows',
     ]);
     expect(
-      Array.from(element.querySelectorAll('[data-testid="my-tasks-group-count"]')).map(
-        (count: Element) => count.textContent.trim(),
+      Array.from(element.querySelectorAll('h2')).map((heading: Element) =>
+        heading.textContent.replace(/\s+/gu, ' ').trim(),
       ),
-    ).toEqual(['1', '1', '1', '1']);
+    ).toEqual(['Late, 1', 'Today, 1', 'Next seven days, 1', 'Later, 1', 'No due date, 1']);
     const tablist: HTMLElement | null = element.querySelector('[role="tablist"]');
     expect(tablist?.getAttribute('aria-label')).toBe('Filter my tasks');
-    expect(button(element, 'To do')?.textContent.replace(/\s+/gu, ' ').trim()).toBe('To do, 4');
+    expect(button(element, 'To do')?.textContent.replace(/\s+/gu, ' ').trim()).toBe('To do, 5');
     expect(button(element, 'Done')?.textContent.replace(/\s+/gu, ' ').trim()).toBe('Done, 2');
     expect(read).toHaveBeenCalledWith('open', expect.objectContaining({ passive: false }));
     expect(rowActions.sync).toHaveBeenCalledTimes(1);
   });
 
-  it('names the list of each line and labels a list the sidebar does not hold as archived', async () => {
+  it('labels as archived only a list missing from a space whose lists the sidebar holds', async () => {
     const { element }: { element: HTMLElement } = await open('/atelier-nord/my-tasks');
 
     const texts: readonly string[] = Array.from(element.querySelectorAll('cw-task-line')).map(
       (line: Element) => line.textContent.replace(/\s+/gu, ' '),
     );
     expect(texts[1]).toContain('Sprint 14');
-    expect(texts[3]).toContain('Archived list');
+    expect(texts[4]).toContain('Archived list');
+    expect(texts[3]).toContain('Draw the empty states');
+    expect(texts[3]).not.toContain('Archived list');
+  });
+
+  it('puts the selected tab content in its tab panel', async () => {
+    const { element }: { element: HTMLElement } = await open('/atelier-nord/my-tasks');
+
+    const panel: HTMLElement | null = element.querySelector('[role="tabpanel"]:not([hidden])');
+    const tab: HTMLElement | null = element.querySelector('[role="tab"][aria-selected="true"]');
+    expect(tab?.textContent).toContain('To do');
+    expect(panel?.getAttribute('aria-labelledby')).toBe(tab?.id);
+    expect(panel?.querySelectorAll('section')).toHaveLength(5);
+    expect(element.querySelectorAll('[role="tabpanel"][hidden] section')).toHaveLength(0);
   });
 
   it('shows the closed tab from the address and switches tabs through it', async () => {
     const { harness, element }: { harness: RouterTestingHarness; element: HTMLElement } =
       await open('/atelier-nord/my-tasks?tab=closed');
 
-    expect(groups(element)).toEqual(['Done and cancelled: CAD-460']);
+    expect(groups(element)).toEqual(['Done and cancelled: Ship the SSO screen']);
     expect(read).toHaveBeenCalledWith('closed', expect.objectContaining({ passive: false }));
 
     button(element, 'To do')?.click();
     await settle(harness);
 
     expect(TestBed.inject(Router).url).toBe('/atelier-nord/my-tasks');
-    expect(groups(element)[0]).toBe('Late: CAD-470');
+    expect(groups(element)[0]).toBe('Late: Fix the login redirect');
   });
 
   it('opens a line in the task detail and creates a task from the header', async () => {
@@ -355,11 +421,8 @@ describe('MyTasksPage', () => {
     const { harness, element }: { harness: RouterTestingHarness; element: HTMLElement } =
       await open('/atelier-nord/my-tasks');
 
-    const line: HTMLElement | null = element.querySelector('li');
-    line?.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, clientX: 10, clientY: 10 }));
-    await settle(harness);
-    const menu: TaskMenu = harness.fixture.debugElement.query(By.directive(TaskMenu))
-      .componentInstance as TaskMenu;
+    expect(element.querySelector('section')).not.toBeNull();
+    const menu: TaskMenu = await menuOf(harness, 0);
     expect(menu.tasks().map((task: TaskSummary) => task.key)).toEqual(['CAD-470']);
     menu.statusPicked.emit('done');
 
@@ -378,7 +441,7 @@ describe('MyTasksPage', () => {
 
     expect(read).toHaveBeenCalledTimes(2);
     expect(read.mock.calls[1][1].passive).toBe(true);
-    expect(groups(element)).toHaveLength(4);
+    expect(groups(element)).toHaveLength(5);
   });
 
   it('shows a successful empty tab as empty, not as a failure', async () => {
@@ -403,18 +466,23 @@ describe('MyTasksPage', () => {
     await settle(harness);
 
     expect(read).toHaveBeenCalledTimes(2);
-    expect(groups(element)).toEqual(['Done and cancelled: CAD-460']);
+    expect(groups(element)).toEqual(['Done and cancelled: Ship the SSO screen']);
   });
 
   it('keeps the rows read before a failed later page, with Retry', async () => {
-    read.mockResolvedValueOnce({ ...pageOf([myTask()]), complete: false });
+    read.mockRejectedValueOnce(
+      new MyTasksPartialReadError(
+        { ...pageOf([myTask()]), complete: false, nextCursor: 'c2' },
+        new Error('unavailable'),
+      ),
+    );
     const { harness, element }: { harness: RouterTestingHarness; element: HTMLElement } =
       await open('/atelier-nord/my-tasks');
 
     const partial: HTMLElement | null = element.querySelector('[data-testid="my-tasks-partial"]');
     expect(partial?.getAttribute('role')).toBe('alert');
     expect(partial?.textContent).toContain('Some of your tasks could not be loaded.');
-    expect(groups(element)).toEqual(['Today: CAD-482']);
+    expect(groups(element)).toEqual(['Today: Review of the SSO flow']);
 
     button(element, 'Retry')?.click();
     await settle(harness);
@@ -445,6 +513,117 @@ describe('MyTasksPage', () => {
     rowActions.hidden.set(['CAD-470']);
     await settle(harness);
 
-    expect(groups(element)[0]).toBe('Today: CAD-482');
+    expect(groups(element)[0]).toBe('Today: Review of the SSO flow');
+  });
+
+  it('reads the members on the first menu opening and assigns the person picked', async () => {
+    const { harness }: { harness: RouterTestingHarness } = await open('/atelier-nord/my-tasks');
+    expect(people).not.toHaveBeenCalled();
+
+    const menu: TaskMenu = await menuOf(harness, 0);
+    await settle(harness);
+
+    expect(people).toHaveBeenCalledTimes(1);
+    expect(menu.people().map((person: Person) => person.name)).toEqual([
+      'Camille Martin',
+      'Inès Robert',
+    ]);
+    menu.assigneeToggled.emit('u-ines');
+    menu.assigneeToggled.emit('u-unknown');
+
+    expect(rowActions.toggleAssignee).toHaveBeenCalledTimes(1);
+    expect(rowActions.toggleAssignee).toHaveBeenCalledWith(
+      expect.objectContaining({ key: 'CAD-470' }),
+      expect.objectContaining({ id: 'u-ines', name: 'Inès Robert' }),
+    );
+  });
+
+  it('moves the task of the menu to a list of the sidebar', async () => {
+    const { harness }: { harness: RouterTestingHarness } = await open('/atelier-nord/my-tasks');
+
+    const menu: TaskMenu = await menuOf(harness, 1);
+    expect(menu.lists().map((list) => list.name)).toEqual(['Sprint 14']);
+    menu.moved.emit('l-sprint-14');
+    menu.moved.emit('l-gone');
+
+    expect(rowActions.moveTo).toHaveBeenCalledTimes(1);
+    expect(rowActions.moveTo).toHaveBeenCalledWith(
+      expect.objectContaining({ key: 'CAD-482' }),
+      expect.objectContaining({ listId: 'l-sprint-14', spaceName: 'Product' }),
+    );
+  });
+
+  it('confirms a deletion of the menu in the alert dialog', async () => {
+    const { harness }: { harness: RouterTestingHarness } = await open('/atelier-nord/my-tasks');
+
+    const menu: TaskMenu = await menuOf(harness, 0);
+    menu.deleteRequested.emit();
+    expect(rowActions.askDelete).toHaveBeenCalledWith(expect.objectContaining({ key: 'CAD-470' }));
+
+    rowActions.deleteOpen.set(true);
+    await settle(harness);
+    const dialog: HTMLElement | null = document.querySelector('[role="alertdialog"]');
+    expect(dialog?.textContent).toContain('Delete “Fix the login redirect”?');
+    Array.from(dialog?.querySelectorAll<HTMLElement>('button') ?? [])
+      .find((control: HTMLElement) => control.textContent.trim() === 'Delete the task')
+      ?.click();
+    expect(rowActions.trash).toHaveBeenCalledTimes(1);
+
+    Array.from(dialog?.querySelectorAll<HTMLElement>('button') ?? [])
+      .find((control: HTMLElement) => control.textContent.trim() === 'Cancel')
+      ?.click();
+    await settle(harness);
+    expect(rowActions.setDeleteOpen).toHaveBeenCalledWith(false);
+  });
+
+  it('binds the cancel reason dialog to the row writes', async () => {
+    const { harness }: { harness: RouterTestingHarness } = await open('/atelier-nord/my-tasks');
+
+    rowActions.cancelKeys.set(['CAD-470']);
+    await settle(harness);
+    const dialog: TaskCancelDialog = harness.fixture.debugElement.query(
+      By.directive(TaskCancelDialog),
+    ).componentInstance as TaskCancelDialog;
+    expect(dialog.taskKeys()).toEqual(['CAD-470']);
+
+    dialog.confirmed.emit({ reason: 'duplicate', note: '' });
+    dialog.kept.emit();
+
+    expect(rowActions.confirmCancel).toHaveBeenCalledWith({ reason: 'duplicate', note: '' });
+    expect(rowActions.keepCancel).toHaveBeenCalledTimes(1);
+  });
+
+  it('adds the next Done page with Show more and says when it failed', async () => {
+    read.mockImplementation((tab: MyTasksTab, options: MyTasksReadOptions) =>
+      Promise.resolve(
+        options.cursor === 'c2'
+          ? pageOf([myTask({ key: 'CAD-455', name: 'Drop the beta flag', status: 'cancelled' })], 2)
+          : pageOf(
+              [myTask({ key: 'CAD-460', name: 'Ship the SSO screen', status: 'done' })],
+              2,
+              'c2',
+            ),
+      ),
+    );
+    const { harness, element }: { harness: RouterTestingHarness; element: HTMLElement } =
+      await open('/atelier-nord/my-tasks?tab=closed');
+
+    read.mockRejectedValueOnce(new Error('unavailable'));
+    button(element, 'Show more')?.click();
+    await settle(harness);
+    expect(element.querySelector('[data-testid="my-tasks-more-failed"]')?.textContent).toContain(
+      'The next tasks could not be loaded.',
+    );
+    expect(groups(element)).toEqual(['Done and cancelled: Ship the SSO screen']);
+
+    button(element, 'Show more')?.click();
+    await settle(harness);
+
+    expect(read).toHaveBeenLastCalledWith('closed', { passive: false, cursor: 'c2', pages: 1 });
+    expect(groups(element)).toEqual([
+      'Done and cancelled: Ship the SSO screen, Drop the beta flag',
+    ]);
+    expect(button(element, 'Show more')).toBeUndefined();
+    expect(element.querySelector('[data-testid="my-tasks-more-failed"]')).toBeNull();
   });
 });

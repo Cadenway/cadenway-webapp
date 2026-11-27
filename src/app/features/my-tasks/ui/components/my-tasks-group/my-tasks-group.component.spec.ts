@@ -1,7 +1,7 @@
 import { Component, signal, type WritableSignal } from '@angular/core';
 import { type ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideCadenwayIcons } from '@cadenway/icons';
-import { CwMenu } from '@cadenway/ui/components/menu';
+import { CwMenu, CwMenuItem } from '@cadenway/ui/components/menu';
 import { describe, expect, it } from 'vitest';
 
 import type { TaskSummary } from '@features/task';
@@ -51,7 +51,7 @@ function row(key: string): MyTaskRow {
  */
 @Component({
   selector: 'cw-group-host',
-  imports: [CwMenu, MyTasksGroup],
+  imports: [CwMenu, CwMenuItem, MyTasksGroup],
   template: `
     <cw-my-tasks-group
       label="Late"
@@ -61,7 +61,9 @@ function row(key: string): MyTaskRow {
       (opened)="opened.set($event.key)"
       (menuOpened)="menuFor.set($event.key)"
     />
-    <cw-menu #menu ariaLabel="Task" />
+    <cw-menu #menu ariaLabel="Task">
+      <button cwMenuItem type="button">Open</button>
+    </cw-menu>
   `,
 })
 class GroupHost {
@@ -123,7 +125,7 @@ describe('MyTasksGroup', () => {
     const section: HTMLElement | null = element.querySelector('section');
     expect(section?.getAttribute('aria-label')).toBe('Late');
     const heading: HTMLElement | null = element.querySelector('h2');
-    expect(heading?.textContent.replace(/\s+/gu, ' ').trim()).toBe('Late2');
+    expect(heading?.textContent.replace(/\s+/gu, ' ').trim()).toBe('Late, 2');
     expect(heading?.classList.contains('text-grenat-text')).toBe(true);
     expect(element.querySelectorAll('li cw-task-line')).toHaveLength(2);
   });
@@ -140,5 +142,24 @@ describe('MyTasksGroup', () => {
 
     expect(fixture.componentInstance.opened()).toBe('CAD-470');
     expect(fixture.componentInstance.menuFor()).toBe('CAD-482');
+  });
+
+  it('gives the focus back to the line after a menu opened with a right click closes', async () => {
+    const fixture: ComponentFixture<GroupHost> = render();
+    const element: HTMLElement = fixture.nativeElement as HTMLElement;
+    const item: HTMLElement = element.querySelectorAll<HTMLElement>('li')[1];
+
+    item.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, clientX: 4, clientY: 4 }));
+    fixture.detectChanges();
+    await fixture.whenStable();
+    const focused: Element | null = document.activeElement;
+    expect(item.contains(focused)).toBe(false);
+    (focused ?? document.body).dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }),
+    );
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(document.activeElement).toBe(item.querySelector('button'));
   });
 });

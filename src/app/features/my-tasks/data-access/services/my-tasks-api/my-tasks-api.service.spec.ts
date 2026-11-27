@@ -15,7 +15,7 @@ import type { Person, TaskSummary } from '@features/task';
 import type { MyTasksPage } from '../../../models/my-tasks-read/my-tasks-read.interface';
 
 import type { MyTaskDto } from '../../adapters/my-task/my-task.adapter';
-import { MyTasksApi } from './my-tasks-api.service';
+import { MyTasksApi, MyTasksPartialReadError } from './my-tasks-api.service';
 
 /**
  * Function dto
@@ -101,7 +101,7 @@ describe('MyTasksApi', () => {
       'CAD-470',
     ]);
     expect(read.counts).toEqual({ open: 4, closed: 12 });
-    expect(read.complete).toBe(true);
+    expect(read).toMatchObject({ complete: true, nextCursor: null, pages: 2 });
     expect(listMyTasks.mock.calls[0][0]).toMatchObject({ state: 'open', limit: 100 });
     expect(listMyTasks.mock.calls[1][0]).toMatchObject({ state: 'open', cursor: 'c2' });
     expect(listMyTasks.mock.calls[0][1].context.get(PASSIVE_REQUEST)).toBe(true);
@@ -115,15 +115,38 @@ describe('MyTasksApi', () => {
     );
   });
 
-  it('keeps the pages read before a failed later page and says it is incomplete', async () => {
+  it('rejects a failed later page with the pages read before it and the failure', async () => {
+    const failure: Error = new Error('unavailable');
     listMyTasks
       .mockReturnValueOnce(of(page(['CAD-482'], 'c2')))
-      .mockReturnValueOnce(throwError(() => new Error('unavailable')));
+      .mockReturnValueOnce(throwError(() => failure));
 
-    const read: MyTasksPage = await TestBed.inject(MyTasksApi).read('open', { passive: false });
+    const error: unknown = await TestBed.inject(MyTasksApi)
+      .read('open', { passive: false })
+      .catch((rejection: unknown) => rejection);
 
-    expect(read.tasks.map((task: TaskSummary) => task.key)).toEqual(['CAD-482']);
-    expect(read.complete).toBe(false);
+    expect(error).toBeInstanceOf(MyTasksPartialReadError);
+    const partial: MyTasksPartialReadError = error as MyTasksPartialReadError;
+    expect(partial.cause).toBe(failure);
+    expect(partial.page.tasks.map((task: TaskSummary) => task.key)).toEqual(['CAD-482']);
+    expect(partial.page).toMatchObject({ complete: false, nextCursor: 'c2', pages: 1 });
+  });
+
+  it('reads the pages asked for from a cursor and gives the next cursor', async () => {
+    listMyTasks
+      .mockReturnValueOnce(of(page(['CAD-460'], 'c3')))
+      .mockReturnValueOnce(of(page(['CAD-455'], 'c4')));
+
+    const read: MyTasksPage = await TestBed.inject(MyTasksApi).read('closed', {
+      passive: false,
+      cursor: 'c2',
+      pages: 2,
+    });
+
+    expect(listMyTasks).toHaveBeenCalledTimes(2);
+    expect(listMyTasks.mock.calls[0][0]).toMatchObject({ state: 'closed', cursor: 'c2' });
+    expect(listMyTasks.mock.calls[1][0]).toMatchObject({ state: 'closed', cursor: 'c3' });
+    expect(read).toMatchObject({ complete: true, nextCursor: 'c4', pages: 2 });
   });
 
   it('rejects an aborted read', async () => {

@@ -3,7 +3,7 @@ import { TestBed } from '@angular/core/testing';
 import { Subject } from 'rxjs';
 import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 
-import { OrganizationSwitchPendingError } from '@core/api';
+import { OrganizationPin, OrganizationSwitchPendingError } from '@core/api';
 import { RealtimeConnection } from '@core/realtime';
 import { LIST_DIRECTORY, type ListDirectoryEntry } from '@features/spaces/ports/list-directory';
 import {
@@ -21,10 +21,11 @@ import {
 
 import {
   MyTasksApi,
+  MyTasksPartialReadError,
   type MyTasksReadOptions,
 } from '../../data-access/services/my-tasks-api/my-tasks-api.service';
 import type { MyTasksPage, MyTasksTab } from '../../models/my-tasks-read/my-tasks-read.interface';
-import { MyTasksStore, type MyTasksStoreInstance } from './my-tasks.store';
+import { FOCUS_REFRESH_MS, MyTasksStore, type MyTasksStoreInstance } from './my-tasks.store';
 
 /**
  * Function myTask
@@ -66,14 +67,36 @@ function myTask(overrides: Partial<TaskSummary> = {}): TaskSummary {
  * Function pageOf
  *
  * @description
- * A complete read holding the given tasks.
+ * A complete read of one page holding the given tasks, the last one unless a next cursor is given.
  *
  * @param {readonly TaskSummary[]} tasks - The tasks.
  * @param {number} closed - The `Done` count.
+ * @param {string | null} nextCursor - The page after it, if any.
  * @returns {MyTasksPage} The read.
  */
-function pageOf(tasks: readonly TaskSummary[], closed: number = 0): MyTasksPage {
-  return { tasks, counts: { open: tasks.length, closed }, complete: true };
+function pageOf(
+  tasks: readonly TaskSummary[],
+  closed: number = 0,
+  nextCursor: string | null = null,
+): MyTasksPage {
+  return { tasks, counts: { open: tasks.length, closed }, complete: true, nextCursor, pages: 1 };
+}
+
+/**
+ * Function partial
+ *
+ * @description
+ * A read whose later page failed with `cause` after the given tasks.
+ *
+ * @param {readonly TaskSummary[]} tasks - The tasks read before the failure.
+ * @param {unknown} cause - The failure of the later page.
+ * @returns {MyTasksPartialReadError} The rejection of the read.
+ */
+function partial(tasks: readonly TaskSummary[], cause: unknown): MyTasksPartialReadError {
+  return new MyTasksPartialReadError(
+    { tasks, counts: { open: 9, closed: 0 }, complete: false, nextCursor: 'c2', pages: 1 },
+    cause,
+  );
 }
 
 /**
@@ -140,6 +163,7 @@ describe('MyTasksStore', () => {
   let detailClosed: Subject<string>;
   let detailChanged: Subject<string>;
   let created: Subject<CreatedTask>;
+  let verified: Subject<void>;
 
   beforeEach(() => {
     vi.useFakeTimers({ toFake: ['Date'] });
@@ -152,6 +176,7 @@ describe('MyTasksStore', () => {
     detailClosed = new Subject<string>();
     detailChanged = new Subject<string>();
     created = new Subject<CreatedTask>();
+    verified = new Subject<void>();
     TestBed.configureTestingModule({
       providers: [
         MyTasksStore,
@@ -161,6 +186,7 @@ describe('MyTasksStore', () => {
         { provide: RealtimeConnection, useValue: { reconnected: reconnects } },
         { provide: TaskDetailOpener, useValue: { closed: detailClosed, changed: detailChanged } },
         { provide: TaskCreate, useValue: { created } },
+        { provide: OrganizationPin, useValue: { organizationVerified: verified } },
       ],
     });
   });
@@ -322,13 +348,23 @@ describe('MyTasksStore', () => {
     ).toBe(true);
   });
 
-  it('reads again when the window gets the focus back', async () => {
+  it('reads again on the window focus only when no read settled in the last 30 s', async () => {
     await loaded();
 
     window.dispatchEvent(new Event('focus'));
     await settle();
+    expect(read).toHaveBeenCalledTimes(1);
 
+    vi.setSystemTime(Date.now() + FOCUS_REFRESH_MS - 1);
+    window.dispatchEvent(new Event('focus'));
+    await settle();
+    expect(read).toHaveBeenCalledTimes(1);
+
+    vi.setSystemTime(Date.now() + 1);
+    window.dispatchEvent(new Event('focus'));
+    await settle();
     expect(read).toHaveBeenCalledTimes(2);
+    expect(read.mock.calls[1][1].passive).toBe(true);
   });
 
   it('never shows a read of the previous organization after a switch', async () => {
@@ -366,9 +402,14 @@ describe('MyTasksStore', () => {
     expect(() => store.read()).toThrow();
   });
 
-  it('reads the members again after their read failed', async () => {
+  it('reads the members on the first menu opening, and again after their read failed', async () => {
     people.mockRejectedValueOnce(new Error('unavailable'));
     const store: MyTasksStoreInstance = await loaded();
+    expect(people).not.toHaveBeenCalled();
+
+    store.loadPeople();
+    await settle();
+    expect(people).toHaveBeenCalledTimes(1);
     expect(store.people()).toEqual([]);
 
     store.loadPeople();
@@ -376,13 +417,16 @@ describe('MyTasksStore', () => {
 
     expect(people).toHaveBeenCalledTimes(2);
     expect(store.people().map((person: Person) => person.name)).toEqual(['Camille Martin']);
+    store.loadPeople();
+    await settle();
+    expect(people).toHaveBeenCalledTimes(2);
   });
 
   it('names the lists of the sidebar and offers them to Move to', async () => {
     const store: MyTasksStoreInstance = await loaded();
 
     expect(store.listNames().get('l-sprint-14')).toBe('Sprint 14');
-    expect(store.listsKnown()).toBe(true);
+    expect([...store.listedSpaces()]).toEqual(['sp-product']);
     expect(store.moveTargets()).toEqual([
       {
         listId: 'l-sprint-14',
@@ -394,6 +438,136 @@ describe('MyTasksStore', () => {
     ]);
 
     lists.set([]);
-    expect(store.listsKnown()).toBe(false);
+    expect(store.listedSpaces().size).toBe(0);
+  });
+
+  it('shows the pages read before a later page failed on a first read', async () => {
+    read.mockRejectedValueOnce(partial([myTask()], new Error('unavailable')));
+    const store: MyTasksStoreInstance = await loaded();
+
+    expect(store.read()).toMatchObject({ complete: false, refreshFailed: false });
+    expect(store.tasks().map((task: TaskSummary) => task.key)).toEqual(['CAD-482']);
+    expect(store.counts()).toEqual({ open: 9, closed: 0 });
+  });
+
+  it('keeps every row of the previous read when a later page of a refresh fails', async () => {
+    read.mockResolvedValueOnce(
+      pageOf([myTask(), myTask({ key: 'CAD-475' }), myTask({ key: 'CAD-470' })], 4),
+    );
+    const store: MyTasksStoreInstance = await loaded();
+
+    read.mockRejectedValueOnce(partial([myTask()], new Error('unavailable')));
+    store.refresh();
+    await settle();
+
+    expect(store.read()).toMatchObject({ complete: true, refreshFailed: true });
+    expect(store.tasks()).toHaveLength(3);
+    expect(store.counts()).toEqual({ open: 3, closed: 4 });
+
+    read.mockRejectedValueOnce(new Error('unavailable'));
+    store.refresh();
+    await settle();
+
+    expect(store.tasks()).toHaveLength(3);
+    expect(store.read()?.complete).toBe(true);
+  });
+
+  it('sends a refresh refused on a later page again once the organization is verified', async () => {
+    const store: MyTasksStoreInstance = await loaded();
+    read.mockRejectedValueOnce(partial([], new OrganizationSwitchPendingError()));
+
+    store.refresh();
+    await settle();
+
+    expect(store.read()?.refreshFailed).toBe(false);
+    expect(store.tasks()).toHaveLength(1);
+
+    read.mockResolvedValueOnce(pageOf([myTask(), myTask({ key: 'CAD-475' })]));
+    verified.next();
+    await settle();
+
+    expect(read).toHaveBeenCalledTimes(3);
+    expect(read.mock.calls[2][1].passive).toBe(true);
+    expect(store.tasks()).toHaveLength(2);
+
+    verified.next();
+    await settle();
+    expect(read).toHaveBeenCalledTimes(3);
+  });
+
+  it('reads Done one page at a time, adds the next page and refreshes to the depth shown', async () => {
+    const store: MyTasksStoreInstance = await loaded();
+    read.mockResolvedValueOnce(pageOf([myTask({ key: 'CAD-460', status: 'done' })], 2, 'c2'));
+    store.show('closed');
+    await settle();
+
+    expect(read.mock.calls[1][1]).toMatchObject({ passive: false, pages: 1 });
+    expect(store.canShowMore()).toBe(true);
+
+    read.mockResolvedValueOnce(pageOf([myTask({ key: 'CAD-455', status: 'cancelled' })], 2));
+    await store.showMore();
+    await settle();
+
+    expect(read.mock.calls[2]).toEqual(['closed', { passive: false, cursor: 'c2', pages: 1 }]);
+    expect(store.tasks().map((task: TaskSummary) => task.key)).toEqual(['CAD-460', 'CAD-455']);
+    expect(store.canShowMore()).toBe(false);
+
+    read.mockResolvedValueOnce({
+      ...pageOf([myTask({ key: 'CAD-460', status: 'done' })], 2),
+      pages: 2,
+    });
+    store.refresh();
+    await settle();
+
+    expect(read.mock.calls[3][1]).toMatchObject({ passive: true, pages: 2 });
+  });
+
+  it('keeps the Done rows when Show more fails, and drops a page answered after a tab change', async () => {
+    const store: MyTasksStoreInstance = await loaded();
+    read.mockResolvedValueOnce(pageOf([myTask({ key: 'CAD-460', status: 'done' })], 2, 'c2'));
+    store.show('closed');
+    await settle();
+
+    read.mockRejectedValueOnce(new Error('unavailable'));
+    await store.showMore();
+
+    expect(store.moreFailed()).toBe(true);
+    expect(store.tasks()).toHaveLength(1);
+    expect(store.canShowMore()).toBe(true);
+
+    const late: ReturnType<typeof deferred<MyTasksPage>> = deferred<MyTasksPage>();
+    read.mockReturnValueOnce(late.promise);
+    const more: Promise<void> = store.showMore();
+    expect(store.loadingMore()).toBe(true);
+    expect(store.moreFailed()).toBe(false);
+    store.show('open');
+    await settle();
+    late.resolve(pageOf([myTask({ key: 'CAD-455', status: 'done' })], 2));
+    await more;
+    await settle();
+
+    expect(store.read()?.tab).toBe('open');
+    expect(store.tasks().map((task: TaskSummary) => task.key)).toEqual(['CAD-482']);
+  });
+
+  it('drops a refresh still running when the tab changes and shows the new tab only', async () => {
+    const store: MyTasksStoreInstance = await loaded();
+    const refresh: ReturnType<typeof deferred<MyTasksPage>> = deferred<MyTasksPage>();
+    read.mockReturnValueOnce(refresh.promise);
+    store.refresh();
+    await settle();
+
+    read.mockResolvedValueOnce(pageOf([myTask({ key: 'CAD-460', status: 'done' })], 2));
+    store.show('closed');
+    await settle();
+
+    expect(read.mock.calls[1][1].signal?.aborted).toBe(true);
+    expect(read.mock.calls[2][0]).toBe('closed');
+    refresh.resolve(pageOf([myTask({ key: 'CAD-999' })]));
+    await settle();
+
+    expect(store.read()?.tab).toBe('closed');
+    expect(store.tasks().map((task: TaskSummary) => task.key)).toEqual(['CAD-460']);
+    expect(read).toHaveBeenCalledTimes(3);
   });
 });

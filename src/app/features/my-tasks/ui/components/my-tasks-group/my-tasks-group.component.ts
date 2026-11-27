@@ -11,11 +11,14 @@ import type { MyTaskRow } from '../../../models/my-tasks-group/my-tasks-group.in
  *
  * @description
  * One group of `My tasks` (`App.dc.html` lines 1761-1779): a section named by its label, an `h2`
- * with the label and the number of lines (`late` paints it grenat), then one Task `cw-task-line`
+ * with the label, a separator read by screen readers and the number of lines (`late` paints it
+ * grenat), then one Task `cw-task-line`
  * (`mine` variant) per row in a bordered list. Each list item opens the page's task menu on right
  * click, Shift F10, the Menu key or a long press (`[cwContextMenuTriggerFor]`), and says which
  * task it opened it for (`menuOpened`); the trigger sits on the item rather than on the line,
- * whose own `opened` output would otherwise receive the menu's. Below 768 px the key is hidden,
+ * whose own `opened` output would otherwise receive the menu's. A menu opened with the mouse or
+ * a long press gives the focus back to its trigger, the item: the item takes it (`tabindex=-1`) and
+ * hands it to the line's button, so the focus is never lost. Below 768 px the key is hidden,
  * below 640 px the list and the priority (Task's line). Presentational: inputs and outputs only.
  */
 @Component({
@@ -91,5 +94,22 @@ export class MyTasksGroup {
    * @readonly
    */
   public readonly menuOpened: OutputEmitterRef<TaskSummary> = output<TaskSummary>();
+  // #endregion
+
+  // #region Methods
+  /**
+   * Method forwardFocus
+   *
+   * @description
+   * Hands the focus an item received itself (the menu closing) to the line's button; the focus
+   * of the button bubbling through the item is left alone.
+   *
+   * @param {FocusEvent} event - The item's focus event.
+   */
+  protected forwardFocus(event: FocusEvent): void {
+    if (event.target !== event.currentTarget || !(event.currentTarget instanceof HTMLElement))
+      return;
+    event.currentTarget.querySelector<HTMLButtonElement>('button')?.focus();
+  }
   // #endregion
 }
