@@ -1,4 +1,14 @@
-import { Component, inject, type Signal } from '@angular/core';
+import {
+  afterRenderEffect,
+  Component,
+  DOCUMENT,
+  ElementRef,
+  inject,
+  type Signal,
+  signal,
+  viewChild,
+  type WritableSignal,
+} from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { CwButton } from '@cadenway/ui/components/button';
 import {
@@ -38,13 +48,16 @@ const CLOCK_MS: number = 60_000;
  * 1725-1734): the first page of the person's notifications in `NotificationRow`, in a bordered
  * list, with relative times renewed every minute. The heading stays with the page that hosts it.
  * While the first read runs it shows three skeleton rows (`role="status"`, `Loading the
- * notifications`); a failed read shows an inline error with `Retry`, which reads again; a page
- * without notifications shows the inbox's empty state. It follows the person's notification
- * notices and realtime reconnections. Opening a row marks it read at once and opens its task's
- * detail over the current page (`TaskDetailOpener`, `?task=<key>`); a refused read shows the
- * row unread again and the inbox's error toast. It provides its own `InboxDigestStore` and
- * acts as a page widget; the host page needs `WORKSPACE_CONTEXT`, the shell's toaster and,
- * optionally, `RealtimeConnection`.
+ * notifications`). A failed read shows an inline error announced as an alert, with `Retry`: the
+ * error stays in place with `Retry` busy (focus kept) while the read runs, and once the rows
+ * replace it focus moves to the digest's container, unless it went elsewhere. A page without
+ * notifications shows the inbox's empty state. It follows the person's notification notices,
+ * realtime reconnections and the reads recorded in the rail's popover. Opening a row marks it
+ * read at once and opens its task's detail over the current page (`TaskDetailOpener`,
+ * `?task=<key>`); a refused read shows the row unread again and the inbox's error toast. It
+ * provides its own `InboxDigestStore` and acts as a page widget; the host page needs
+ * `WORKSPACE_CONTEXT`, `TaskDetailOpener`, the shell's toaster and, optionally,
+ * `RealtimeConnection`.
  */
 @Component({
   selector: 'cw-inbox-digest',
@@ -111,9 +124,78 @@ export class InboxDigest {
    * @readonly
    */
   private readonly toasts: CwToastService = inject(CwToastService);
+
+  /**
+   * Property document
+   *
+   * @description
+   * Document whose focused element tells whether focus was lost with the error.
+   *
+   * @type {Document}
+   * @readonly
+   */
+  private readonly document: Document = inject(DOCUMENT);
+
+  /**
+   * Property region
+   *
+   * @description
+   * The digest's focusable container, where focus lands when the error it was in disappears.
+   *
+   * @type {Signal<ElementRef<HTMLElement>>}
+   * @readonly
+   */
+  private readonly region: Signal<ElementRef<HTMLElement>> = viewChild.required<
+    string,
+    ElementRef<HTMLElement>
+  >('region', { read: ElementRef });
+
+  /**
+   * Property refocus
+   *
+   * @description
+   * Whether `Retry` was activated and its read has not settled yet.
+   *
+   * @type {WritableSignal<boolean>}
+   * @readonly
+   */
+  private readonly refocus: WritableSignal<boolean> = signal(false);
+  // #endregion
+
+  // #region Constructor
+  /**
+   * Constructor
+   *
+   * @description
+   * Once a read sent by `Retry` settles and the error is gone, moves focus that fell to the
+   * document body to the digest's container; a new failure keeps focus on `Retry`.
+   *
+   * @constructor
+   */
+  public constructor() {
+    afterRenderEffect((): void => {
+      if (!this.refocus() || this.store.retrying()) return;
+      this.refocus.set(false);
+      if (this.store.failed()) return;
+      const focused: Element | null = this.document.activeElement;
+      if (focused === null || focused === this.document.body) this.region().nativeElement.focus();
+    });
+  }
   // #endregion
 
   // #region Methods
+  /**
+   * Method retry
+   *
+   * @description
+   * Reads the page again after a failure; focus is restored once the rows replace the error.
+   */
+  protected retry(): void {
+    if (this.store.retrying()) return;
+    this.refocus.set(true);
+    this.store.retry();
+  }
+
   /**
    * Method open
    *

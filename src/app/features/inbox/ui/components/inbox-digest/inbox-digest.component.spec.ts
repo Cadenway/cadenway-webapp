@@ -84,6 +84,17 @@ interface DigestStoreFake {
   readonly empty: WritableSignal<boolean>;
 
   /**
+   * Property retrying
+   *
+   * @description
+   * Whether a read sent after a failure runs.
+   *
+   * @type {WritableSignal<boolean>}
+   * @readonly
+   */
+  readonly retrying: WritableSignal<boolean>;
+
+  /**
    * Property retry
    *
    * @description
@@ -121,6 +132,7 @@ describe('InboxDigest', () => {
       loading: signal(false),
       failed: signal(false),
       empty: signal(false),
+      retrying: signal(false),
       retry: vi.fn(),
       markRead: vi.fn(() => Promise.resolve(true)),
     };
@@ -142,6 +154,7 @@ describe('InboxDigest', () => {
   });
 
   afterEach(() => {
+    host().remove();
     vi.useRealTimers();
   });
 
@@ -245,5 +258,70 @@ describe('InboxDigest', () => {
 
     expect(store.markRead).toHaveBeenCalledTimes(1);
     expect(openTask).not.toHaveBeenCalled();
+  });
+
+  /**
+   * Function failRead
+   *
+   * @description
+   * Attaches the digest to the document, shows a failed read and focuses its `Retry`.
+   *
+   * @returns {Promise<HTMLButtonElement>} The focused `Retry`.
+   */
+  async function failRead(): Promise<HTMLButtonElement> {
+    document.body.append(host());
+    store.items.set([]);
+    store.failed.set(true);
+    await fixture.whenStable();
+    const retry: HTMLButtonElement | undefined = button('Retry');
+    if (!retry) throw new Error('No Retry');
+    retry.focus();
+    return retry;
+  }
+
+  it('announces a failed read as an alert', async () => {
+    await failRead();
+
+    expect(host().querySelector('[role="alert"]')?.textContent).toContain(
+      'The notifications could not be loaded',
+    );
+  });
+
+  it('keeps the error and focus on a busy Retry while it reads, then focuses the digest', async () => {
+    const retry: HTMLButtonElement = await failRead();
+    store.retry.mockImplementation(() => {
+      store.retrying.set(true);
+    });
+
+    retry.click();
+    await fixture.whenStable();
+    expect(store.retry).toHaveBeenCalledTimes(1);
+    expect(button('Retry')).toBe(retry);
+    expect(retry.getAttribute('aria-busy')).toBe('true');
+    expect(document.activeElement).toBe(retry);
+
+    store.retrying.set(false);
+    store.failed.set(false);
+    store.items.set([mention]);
+    await fixture.whenStable();
+
+    expect(host().querySelector('[data-testid="notification-row"]')).not.toBeNull();
+    expect(document.activeElement?.getAttribute('tabindex')).toBe('-1');
+    expect(host().contains(document.activeElement)).toBe(true);
+  });
+
+  it('keeps focus on Retry when the read fails again', async () => {
+    const retry: HTMLButtonElement = await failRead();
+    store.retry.mockImplementation(() => {
+      store.retrying.set(true);
+    });
+
+    retry.click();
+    await fixture.whenStable();
+    store.retrying.set(false);
+    await fixture.whenStable();
+
+    expect(document.activeElement).toBe(retry);
+    expect(retry.getAttribute('aria-busy')).toBeNull();
   });
 });

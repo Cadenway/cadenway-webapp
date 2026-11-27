@@ -16,6 +16,8 @@ import type {
   InboxNotification,
   InboxNotificationPage,
 } from '../../models/inbox-notification/inbox-notification.interface';
+import type { InboxRead } from '../../models/inbox-read/inbox-read.interface';
+import { InboxReads } from '../../services/inbox-reads/inbox-reads.service';
 import { InboxDigestStore, NOTICE_AUDIT_MS } from './inbox-digest.store';
 
 /**
@@ -166,8 +168,10 @@ describe('InboxDigestStore', () => {
       TestBed.tick();
       expect(store.loading()).toBe(false);
     });
-    await vi.advanceTimersByTimeAsync(0);
-    TestBed.tick();
+    for (let round: number = 0; round < 3; round += 1) {
+      await vi.advanceTimersByTimeAsync(0);
+      TestBed.tick();
+    }
   }
 
   it('reads the first page actively and shows it', async () => {
@@ -332,5 +336,198 @@ describe('InboxDigestStore', () => {
     pin.set('atelier-nord');
     await settle(store);
     expect(notifications).toHaveBeenCalledTimes(3);
+  });
+
+  it('reads again a notice that arrives during a background refresh', async () => {
+    const store: InstanceType<typeof InboxDigestStore> = await loaded();
+    const refresh: ReturnType<typeof deferred<InboxNotificationPage>> =
+      deferred<InboxNotificationPage>();
+    notifications.mockReturnValueOnce(refresh.promise);
+    notices.next({ type: 'notification.created.v1' });
+    await vi.advanceTimersByTimeAsync(NOTICE_AUDIT_MS);
+    TestBed.tick();
+    expect(notifications).toHaveBeenCalledTimes(2);
+
+    notices.next({ type: 'notification.created.v1' });
+    await vi.advanceTimersByTimeAsync(NOTICE_AUDIT_MS);
+    TestBed.tick();
+    expect(notifications).toHaveBeenCalledTimes(2);
+    refresh.resolve(page(mention));
+    await settle(store);
+
+    expect(notifications).toHaveBeenCalledTimes(3);
+    expect(notifications).toHaveBeenLastCalledWith(true);
+    expect(store.items()).toEqual([mention, comment]);
+  });
+
+  it('keeps the failure shown with Retry busy while a retry runs, and ignores a second Retry', async () => {
+    notifications.mockRejectedValueOnce(new Error('unavailable'));
+    const store: InstanceType<typeof InboxDigestStore> = await loaded();
+    expect(store.failed()).toBe(true);
+    const retried: ReturnType<typeof deferred<InboxNotificationPage>> =
+      deferred<InboxNotificationPage>();
+    notifications.mockReturnValueOnce(retried.promise);
+
+    store.retry();
+    TestBed.tick();
+    store.retry();
+
+    expect(store.retrying()).toBe(true);
+    expect(store.failed()).toBe(true);
+    expect(store.loading()).toBe(false);
+    expect(notifications).toHaveBeenCalledTimes(2);
+    retried.resolve(page(mention));
+    await settle(store);
+    expect(store.retrying()).toBe(false);
+    expect(store.failed()).toBe(false);
+    expect(store.items()).toEqual([mention]);
+    expect(notifications).toHaveBeenCalledTimes(2);
+  });
+
+  it('reads again after a verification that arrives during Retry', async () => {
+    const pin: OrganizationPin = TestBed.inject(OrganizationPin);
+    pin.set('atelier-nord');
+    const store: InstanceType<typeof InboxDigestStore> = await loaded();
+    notifications.mockRejectedValueOnce(new OrganizationSwitchPendingError());
+    reconnects.next();
+    await settle(store);
+    expect(store.failed()).toBe(true);
+    const retried: ReturnType<typeof deferred<InboxNotificationPage>> =
+      deferred<InboxNotificationPage>();
+    notifications.mockReturnValueOnce(retried.promise);
+
+    store.retry();
+    TestBed.tick();
+    pin.set('atelier-nord');
+    retried.reject(new Error('unavailable'));
+    await settle(store);
+
+    expect(notifications).toHaveBeenCalledTimes(4);
+    expect(notifications).toHaveBeenLastCalledWith(true);
+    expect(store.failed()).toBe(false);
+  });
+
+  it('retries a second stale period of the same verified context', async () => {
+    const pin: OrganizationPin = TestBed.inject(OrganizationPin);
+    pin.set('atelier-nord');
+    const store: InstanceType<typeof InboxDigestStore> = await loaded();
+    notifications.mockRejectedValueOnce(new OrganizationSwitchPendingError());
+    reconnects.next();
+    await settle(store);
+    pin.set('atelier-nord');
+    await settle(store);
+    expect(notifications).toHaveBeenCalledTimes(3);
+    expect(store.failed()).toBe(false);
+
+    pin.markStale();
+    notifications.mockRejectedValueOnce(new OrganizationSwitchPendingError());
+    reconnects.next();
+    await settle(store);
+    expect(store.failed()).toBe(true);
+    pin.set('atelier-nord');
+    await settle(store);
+
+    expect(notifications).toHaveBeenCalledTimes(5);
+    expect(store.failed()).toBe(false);
+  });
+
+  it('resumes a read refused by a switch that starts after a verified retry', async () => {
+    const pin: OrganizationPin = TestBed.inject(OrganizationPin);
+    pin.set('atelier-nord');
+    const store: InstanceType<typeof InboxDigestStore> = await loaded();
+    notifications.mockRejectedValueOnce(new OrganizationSwitchPendingError());
+    reconnects.next();
+    await settle(store);
+    pin.set('atelier-nord');
+    await settle(store);
+
+    pin.beginSwitch();
+    notifications.mockRejectedValueOnce(new OrganizationSwitchPendingError());
+    notices.next({ type: 'notification.created.v1' });
+    await vi.advanceTimersByTimeAsync(NOTICE_AUDIT_MS);
+    await settle(store);
+    expect(notifications).toHaveBeenCalledTimes(4);
+    pin.set('atelier-nord');
+    await settle(store);
+
+    expect(notifications).toHaveBeenCalledTimes(5);
+    expect(store.failed()).toBe(false);
+  });
+
+  it('reads again at once a refusal that lands after the context was verified', async () => {
+    const pin: OrganizationPin = TestBed.inject(OrganizationPin);
+    pin.set('atelier-nord');
+    const store: InstanceType<typeof InboxDigestStore> = await loaded();
+    const refused: ReturnType<typeof deferred<InboxNotificationPage>> =
+      deferred<InboxNotificationPage>();
+    notifications.mockReturnValueOnce(refused.promise);
+    reconnects.next();
+    TestBed.tick();
+
+    pin.set('atelier-nord');
+    refused.reject(new OrganizationSwitchPendingError());
+    await settle(store);
+
+    expect(notifications).toHaveBeenCalledTimes(3);
+    expect(notifications).toHaveBeenLastCalledWith(true);
+    expect(store.failed()).toBe(false);
+  });
+
+  it('ignores the failure of a write sent before switching away and back', async () => {
+    const store: InstanceType<typeof InboxDigestStore> = await loaded();
+    const first: ReturnType<typeof deferred<undefined>> = deferred<undefined>();
+    markRead.mockReturnValueOnce(first.promise);
+    const stale: Promise<boolean> = store.markRead(mention);
+    current.set(workspaceOrganization('lumen'));
+    await settle(store);
+    current.set(workspaceOrganization('atelier-nord'));
+    await settle(store);
+    const second: ReturnType<typeof deferred<undefined>> = deferred<undefined>();
+    markRead.mockReturnValueOnce(second.promise);
+    const fresh: Promise<boolean> = store.markRead(mention);
+    expect(store.items()[0]?.read).toBe(true);
+
+    first.reject(new Error('unavailable'));
+    await stale;
+
+    expect(store.items()[0]?.read).toBe(true);
+    second.resolve(undefined);
+    await expect(fresh).resolves.toBe(true);
+  });
+
+  it('shows the reads recorded in the popover of the same organization', async () => {
+    const other: InboxNotification = { ...mention, id: 'n3' };
+    notifications.mockResolvedValueOnce(page(mention, other, comment));
+    const store: InstanceType<typeof InboxDigestStore> = await loaded();
+    const reads: InboxReads = TestBed.inject(InboxReads);
+
+    reads.publish({ organizationId: 'lumen', source: 'popover', ids: ['n1'], all: false });
+    reads.publish({ organizationId: 'atelier-nord', source: 'digest', ids: ['n1'], all: false });
+    expect(store.items()[0]?.read).toBe(false);
+    reads.publish({ organizationId: 'atelier-nord', source: 'popover', ids: ['n1'], all: false });
+    expect(store.items().map((item: InboxNotification) => item.read)).toEqual([true, false, true]);
+    expect(notifications).toHaveBeenCalledTimes(1);
+
+    notifications.mockResolvedValueOnce(page(mention, other, comment));
+    reads.publish({ organizationId: 'atelier-nord', source: 'popover', ids: [], all: true });
+    expect(store.items().every((item: InboxNotification) => item.read)).toBe(true);
+    await settle(store);
+    expect(notifications).toHaveBeenCalledTimes(2);
+    expect(notifications).toHaveBeenLastCalledWith(true);
+    expect(store.items().every((item: InboxNotification) => item.read)).toBe(true);
+  });
+
+  it('tells the popover about the reads it recorded, not the refused ones', async () => {
+    const store: InstanceType<typeof InboxDigestStore> = await loaded();
+    const published: InboxRead[] = [];
+    TestBed.inject(InboxReads).changes.subscribe((read: InboxRead) => published.push(read));
+    markRead.mockRejectedValueOnce(new Error('unavailable'));
+
+    await store.markRead(mention);
+    await store.markRead(mention);
+
+    expect(published).toEqual([
+      { organizationId: 'atelier-nord', source: 'digest', ids: ['n1'], all: false },
+    ]);
   });
 });
