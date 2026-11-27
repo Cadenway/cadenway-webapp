@@ -1,6 +1,7 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { signal } from '@angular/core';
 import { type ComponentFixture, TestBed } from '@angular/core/testing';
+import { By } from '@angular/platform-browser';
 import { provideCadenwayIcons } from '@cadenway/icons';
 import { CwToastService } from '@cadenway/ui/components/toast';
 import { afterEach, describe, expect, it, type Mock, vi } from 'vitest';
@@ -17,6 +18,7 @@ import { MembersApi } from '../../../data-access/services/members-api/members-ap
 import type { InvitationList } from '../../../models/invitation/invitation.interface';
 import type { MemberPage, OrganizationMember } from '../../../models/member/member.interface';
 import { SubscriptionStore } from '../../../state/subscription/subscription.store';
+import { MembersTable } from '../../components/members-table/members-table.component';
 import { MembersPage } from './members-page.component';
 
 /**
@@ -69,6 +71,7 @@ function members(known: boolean): MemberPage {
     total: 4,
     counts: { owner: 1, admin: 1, member: 1, guest: 1 },
     nextCursor: null,
+    truncated: false,
   };
 }
 
@@ -138,10 +141,10 @@ interface Fakes {
    * @description
    * Fake of the toast service.
    *
-   * @type {Record<'success' | 'error' | 'info', Mock>}
+   * @type {Record<'success' | 'error' | 'info' | 'warning', Mock>}
    * @readonly
    */
-  readonly toasts: Record<'success' | 'error' | 'info', Mock>;
+  readonly toasts: Record<'success' | 'error' | 'info' | 'warning', Mock>;
   // #endregion
 }
 
@@ -174,7 +177,7 @@ async function render(
       resend: vi.fn(),
       revoke: vi.fn(),
     },
-    toasts: { success: vi.fn(), error: vi.fn(), info: vi.fn() },
+    toasts: { success: vi.fn(), error: vi.fn(), info: vi.fn(), warning: vi.fn() },
   };
   const workspace: WorkspaceContextPort = {
     user: signal({
@@ -283,6 +286,12 @@ describe('MembersPage', () => {
     expect(page.querySelector('th')?.parentElement?.textContent).toContain('Two-step');
     expect(text(find('members-range'))).toBe('1–4 of 4 people');
     expect(text(find('members-online'))).toBe('0 online');
+    expect(all('member-status').map(text)).toEqual([
+      'Status: Offline',
+      'Status: Offline',
+      'Status: Offline',
+      'Status: Offline',
+    ]);
     expect(all('invitation-expiry').map(text)).toEqual(['Expires in 5 days', 'Expired on 2 Nov']);
     expect(find('members-invite')).not.toBeNull();
   });
@@ -332,6 +341,22 @@ describe('MembersPage', () => {
     expect(find('members-clear-filters')).not.toBeNull();
   });
 
+  it('keeps the role select focusable and marks it busy while its change is sent', async () => {
+    const [fixture, fakes]: [ComponentFixture<MembersPage>, Fakes] = await render('owner', {
+      changeRole: vi.fn(() => new Promise<never>(() => undefined)),
+    });
+    const table: MembersTable = fixture.debugElement.query(By.directive(MembersTable))
+      .componentInstance as MembersTable;
+
+    table.roleChanged.emit({ member: table.rows()[2], role: 'admin' });
+    await fixture.whenStable();
+
+    const select: HTMLElement = all('member-role')[1];
+    expect(fakes.members.changeRole).toHaveBeenCalledWith('tb', 'admin', 1);
+    expect(select.getAttribute('aria-busy')).toBe('true');
+    expect(select.querySelector('[disabled]')).toBeNull();
+  });
+
   it('removes a member after the confirmation', async () => {
     const [fixture, fakes]: [ComponentFixture<MembersPage>, Fakes] = await render('owner');
 
@@ -340,11 +365,21 @@ describe('MembersPage', () => {
     expect(text(document.querySelector<HTMLElement>('[role="alertdialog"]'))).toContain(
       'Remove Théo Bernard from the organization?',
     );
+    const remaining: MemberPage = members(true);
+    fakes.members.page.mockResolvedValue({
+      ...remaining,
+      items: remaining.items.filter((item: OrganizationMember) => item.id !== 'tb'),
+      total: 3,
+    });
     find('member-remove-confirm')?.click();
     await fixture.whenStable();
 
     expect(fakes.members.remove).toHaveBeenCalledWith('tb');
     expect(all('member-row')).toHaveLength(3);
+    expect(document.activeElement).toBe(all('member-remove')[1]);
+    expect(document.activeElement?.getAttribute('aria-label')).toBe(
+      'Remove Nadia Garnier from the organization',
+    );
     expect(fakes.toasts.success).toHaveBeenCalledWith('Théo Bernard removed', {
       description: 'Their tasks stay assigned; a seat is freed.',
     });

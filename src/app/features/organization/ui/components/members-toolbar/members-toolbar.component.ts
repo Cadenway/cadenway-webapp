@@ -1,11 +1,13 @@
 import {
   Component,
   computed,
+  type ElementRef,
   input,
   type InputSignal,
   output,
   type OutputEmitterRef,
   type Signal,
+  viewChild,
 } from '@angular/core';
 import {
   CwInputGroup,
@@ -206,6 +208,18 @@ export class MembersToolbar {
   });
 
   /**
+   * Property searchField
+   *
+   * @description
+   * The search field, focused after a removal emptied the table.
+   *
+   * @type {Signal<ElementRef<HTMLInputElement> | undefined>}
+   * @readonly
+   */
+  private readonly searchField: Signal<ElementRef<HTMLInputElement> | undefined> =
+    viewChild<ElementRef<HTMLInputElement>>('searchField');
+
+  /**
    * Property onlineSummary
    *
    * @description
@@ -221,6 +235,16 @@ export class MembersToolbar {
   // #endregion
 
   // #region Methods
+  /**
+   * Method focusSearch
+   *
+   * @description
+   * Focuses the search field, after a removal emptied the table.
+   */
+  public focusSearch(): void {
+    this.searchField()?.nativeElement.focus();
+  }
+
   /**
    * Method typed
    *

@@ -28,7 +28,10 @@
         >
           <td cwTableCell class="max-md:block max-md:min-w-0 max-md:basis-full max-md:px-0">
             <span class="flex min-w-0 items-center gap-2.5">
-              <cw-avatar [name]="member.name" [presence]="avatarPresence(member)" />
+              <span class="inline-flex shrink-0" aria-hidden="true">
+                <cw-avatar [name]="member.name" [presence]="avatarPresence(member)" />
+              </span>
+              <span class="sr-only" data-testid="member-status">{{ statusLabel(member) }}</span>
               <span class="flex min-w-0 flex-col">
                 <span class="flex items-center gap-1.5 truncate leading-5 font-medium"
                   >{{ member.name }}
@@ -56,7 +59,8 @@
                 class="w-36"
                 [ariaLabel]="roleLabel(member)"
                 [value]="member.role"
-                [disabled]="member.pending"
+                [attr.aria-busy]="member.pending || null"
+                [class.opacity-60]="member.pending"
                 (valueChange)="pickRole(member, $event)"
                 data-testid="member-role"
               >
@@ -104,8 +108,8 @@
                   class="text-muted-foreground md:opacity-0 md:group-hover/row:opacity-100 md:focus-visible:opacity-100"
                   [attr.aria-label]="removeLabel(member)"
                   [cwTooltip]="removeLabel(member)"
-                  [disabled]="member.pending"
-                  (click)="removeRequested.emit(member)"
+                  [attr.aria-disabled]="member.pending || null"
+                  (click)="member.pending || removeRequested.emit(member)"
                   data-testid="member-remove"
                 >
                   <ng-icon name="phosphorUserMinusBold" aria-hidden="true" />

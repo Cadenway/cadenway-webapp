@@ -243,6 +243,17 @@ export interface MemberPage {
    * @readonly
    */
   readonly nextCursor: string | null;
+
+  /**
+   * Property truncated
+   *
+   * @description
+   * Whether a complete read stopped at its member limit before the last page; false for a page.
+   *
+   * @type {boolean}
+   * @readonly
+   */
+  readonly truncated: boolean;
   // #endregion
 }
 

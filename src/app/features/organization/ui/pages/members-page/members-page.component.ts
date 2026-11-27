@@ -1,9 +1,12 @@
 import {
+  afterNextRender,
   Component,
   computed,
   inject,
+  Injector,
   type Signal,
   signal,
+  viewChild,
   type WritableSignal,
 } from '@angular/core';
 import {
@@ -35,13 +38,10 @@ import {
   type WorkspaceContextPort,
 } from '@features/workspace/ports/workspace-context';
 
-import type {
-  MemberPage,
-  MemberRoleCounts,
-  MemberRow,
-} from '../../../models/member/member.interface';
+import type { MemberRoleCounts, MemberRow } from '../../../models/member/member.interface';
 import type { OrganizationSubscription } from '../../../models/organization-subscription/organization-subscription.interface';
-import { InvitationsStore } from '../../../state/invitations/invitations.store';
+import { takesSingular } from '../../../models/member/plural-form.util';
+import { type InviteResult, InvitationsStore } from '../../../state/invitations/invitations.store';
 import { MembersStore } from '../../../state/members/members.store';
 import { SubscriptionStore } from '../../../state/subscription/subscription.store';
 import { planName } from '../../../utils/plan-label';
@@ -233,16 +233,60 @@ export class MembersPage {
    * Property primary
    *
    * @description
-   * The first read while nothing is shown. Reading it after a failed first read throws the
-   * resource's error, which the route's error boundary renders; once a read resolved it is null
-   * and later failures stay in place.
+   * Whether the first read answered while nothing is shown yet. Reading it after a failed first
+   * read throws the resource's error, which the route's error boundary renders; once a read
+   * resolved it reads nothing and later failures stay in place.
    *
-   * @type {Signal<MemberPage | null | undefined>}
+   * @type {Signal<boolean>}
    * @readonly
    */
-  protected readonly primary: Signal<MemberPage | null | undefined> = computed(
-    (): MemberPage | null | undefined => (this.store.shown() ? null : this.store.members.value()),
+  protected readonly primary: Signal<boolean> = computed(
+    (): boolean => !this.store.shown() && this.store.members.value() !== undefined,
   );
+
+  /**
+   * Property refused
+   *
+   * @description
+   * Addresses the API refused as invalid on the last invite, which the dialog names.
+   *
+   * @type {WritableSignal<readonly string[]>}
+   * @readonly
+   */
+  protected readonly refused: WritableSignal<readonly string[]> = signal<readonly string[]>([]);
+
+  /**
+   * Property table
+   *
+   * @description
+   * The members table, which takes the focus back after a removal.
+   *
+   * @type {Signal<MembersTable | undefined>}
+   * @readonly
+   */
+  private readonly table: Signal<MembersTable | undefined> = viewChild(MembersTable);
+
+  /**
+   * Property toolbar
+   *
+   * @description
+   * The toolbar, whose search takes the focus when a removal empties the table.
+   *
+   * @type {Signal<MembersToolbar | undefined>}
+   * @readonly
+   */
+  private readonly toolbar: Signal<MembersToolbar | undefined> = viewChild(MembersToolbar);
+
+  /**
+   * Property injector
+   *
+   * @description
+   * The page's injector, for the focus moved after the next render.
+   *
+   * @type {Injector}
+   * @readonly
+   */
+  private readonly injector: Injector = inject(Injector);
 
   /**
    * Property seatsFree
@@ -285,30 +329,28 @@ export class MembersPage {
     const counts: MemberRoleCounts | null = this.store.counts();
     if (counts === null) return '';
     const seated: number = counts.owner + counts.admin + counts.member;
-    const members: string =
-      seated === 1
-        ? $localize`:@@organization.members.summary-member:1 member`
-        : $localize`:@@organization.members.summary-members:${seated}:count: members`;
-    const guests: string =
-      counts.guest === 1
-        ? $localize`:@@organization.members.summary-guest:1 guest`
-        : $localize`:@@organization.members.summary-guests:${counts.guest}:count: guests`;
+    const members: string = takesSingular(seated)
+      ? $localize`:@@organization.members.summary-member:${seated}:count: member`
+      : $localize`:@@organization.members.summary-members:${seated}:count: members`;
+    const guests: string = takesSingular(counts.guest)
+      ? $localize`:@@organization.members.summary-guest:${counts.guest}:count: guest`
+      : $localize`:@@organization.members.summary-guests:${counts.guest}:count: guests`;
     const parts: string[] = [
       $localize`:@@organization.members.summary-people:${members}:members: and ${guests}:guests:`,
     ];
     const free: number | null = this.seatsFree();
     if (free !== null) {
       parts.push(
-        free === 1
-          ? $localize`:@@organization.members.summary-seat:1 free seat`
+        takesSingular(free)
+          ? $localize`:@@organization.members.summary-seat:${free}:count: free seat`
           : $localize`:@@organization.members.summary-seats:${free}:count: free seats`,
       );
     }
     const pending: number | null = this.invitations.readable() ? this.invitations.total() : null;
     if (pending !== null) {
       parts.push(
-        pending === 1
-          ? $localize`:@@organization.members.summary-invitation:1 pending invitation`
+        takesSingular(pending)
+          ? $localize`:@@organization.members.summary-invitation:${pending}:count: pending invitation`
           : $localize`:@@organization.members.summary-invitations:${pending}:count: pending invitations`,
       );
     }
@@ -348,14 +390,26 @@ export class MembersPage {
    * Method confirmRemove
    *
    * @description
-   * Removes the confirmed member; a confirmed removal reads the seats again.
+   * Removes the confirmed member, whose row hides at once, and moves the focus to the row now at
+   * its place, or to the search when the table is empty; a confirmed removal reads the seats
+   * again.
    *
    * @param {MemberRow} member - The member.
    * @returns {Promise<void>} Resolves once the removal is settled.
    */
   protected async confirmRemove(member: MemberRow): Promise<void> {
+    const index: number = this.store
+      .rows()
+      .findIndex((row: MemberRow): boolean => row.id === member.id);
     this.confirmOpen.set(false);
-    if (await this.store.remove(member)) this.refreshSeats();
+    const removal: Promise<boolean> = this.store.remove(member);
+    afterNextRender(
+      (): void => {
+        if (!(this.table()?.focusRow(Math.max(0, index)) ?? false)) this.toolbar()?.focusSearch();
+      },
+      { injector: this.injector },
+    );
+    if (await removal) this.refreshSeats();
   }
 
   /**
@@ -389,13 +443,20 @@ export class MembersPage {
    * Method invite
    *
    * @description
-   * Sends the dialog's invitations and closes it once they are accepted; a refusal keeps it open.
+   * Sends the dialog's invitations and closes it once they are accepted; a refusal keeps it open,
+   * and addresses the API refused as invalid are named on its field.
    *
    * @param {InviteRequest} request - Addresses and role.
    * @returns {Promise<void>} Resolves once the batch is settled.
    */
   protected async invite(request: InviteRequest): Promise<void> {
-    if (await this.invitations.invite(request.emails, request.role)) this.inviteOpen.set(false);
+    this.refused.set([]);
+    const result: InviteResult = await this.invitations.invite(request.emails, request.role);
+    if (result === 'sent') {
+      this.inviteOpen.set(false);
+    } else if (result !== 'failed') {
+      this.refused.set(result.refused);
+    }
   }
 
   /**

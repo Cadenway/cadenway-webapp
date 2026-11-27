@@ -1,6 +1,8 @@
 import {
   Component,
   computed,
+  ElementRef,
+  inject,
   input,
   type InputSignal,
   output,
@@ -33,6 +35,7 @@ import { CwTooltip } from '@cadenway/ui/components/tooltip';
 import { NgIcon } from '@ng-icons/core';
 
 import { memberRoleLabel } from '../../../models/member/member-role-label.util';
+import { takesSingular } from '../../../models/member/plural-form.util';
 import type {
   AssignableMemberRole,
   MemberRole,
@@ -107,8 +110,10 @@ const AVATAR_PRESENCE: Readonly<Record<MemberRow['presence'], CwAvatarPresence>>
  * `Owner` badge; for an editor a select `Administrator | Member | Guest` named `Role of <name>`,
  * otherwise the role as text), `Two-step` (`Set up` / `Not set up`, only with `showTwoStep`) and
  * the remove button `Remove <name> from the organization`, shown on row hover or focus from
- * 768 px and always on a phone. The owner's and the person's own rows cannot be edited; a row with
- * a write being sent is disabled. Below 768 px the header is hidden and each row becomes a card:
+ * 768 px and always on a phone. The avatar is hidden from screen readers, which hear
+ * `Status: <presence>` then the name once. The owner's and the person's own rows cannot be
+ * edited; a row with a write being sent is marked `aria-busy` and keeps its focus (the store
+ * ignores its picks). `focusRow` moves the focus to another row after a removal. Below 768 px the header is hidden and each row becomes a card:
  * the member cell takes the full width, the actions go right. While `loading` without rows it
  * shows eight skeleton rows; a completed read without rows shows `No member matches`, with
  * `Clear filters` when `filtered`. The last-activity column of the mockup is left out: the
@@ -332,6 +337,17 @@ export class MembersTable {
   protected readonly skeleton: readonly number[] = [0, 1, 2, 3, 4, 5, 6, 7];
 
   /**
+   * Property host
+   *
+   * @description
+   * The table's element, to move the focus between rows.
+   *
+   * @type {ElementRef<HTMLElement>}
+   * @readonly
+   */
+  private readonly host: ElementRef<HTMLElement> = inject<ElementRef<HTMLElement>>(ElementRef);
+
+  /**
    * Property columns
    *
    * @description
@@ -358,8 +374,8 @@ export class MembersTable {
     if (total === 0 || first === 0) {
       return $localize`:@@organization.members.range-none:0 people`;
     }
-    return total === 1
-      ? $localize`:@@organization.members.range-one:${first}:first:–${last}:last: of 1 person`
+    return takesSingular(total)
+      ? $localize`:@@organization.members.range-one:${first}:first:–${last}:last: of ${total}:total: person`
       : $localize`:@@organization.members.range:${first}:first:–${last}:last: of ${total}:total: people`;
   });
   // #endregion
@@ -390,6 +406,49 @@ export class MembersTable {
    */
   protected avatarPresence(member: MemberRow): CwAvatarPresence {
     return AVATAR_PRESENCE[member.presence];
+  }
+
+  /**
+   * Method statusLabel
+   *
+   * @description
+   * What a screen reader hears of a row's presence dot (`Organisation.dc.html` line 1843), the
+   * name being read once, in the member cell.
+   *
+   * @param {MemberRow} member - The row.
+   * @returns {string} `Status: Active`, `Away`, `Do not disturb` or `Offline`.
+   */
+  protected statusLabel(member: MemberRow): string {
+    const status: string = {
+      online: $localize`:@@organization.members.status-online:Active`,
+      away: $localize`:@@organization.members.status-away:Away`,
+      'do-not-disturb': $localize`:@@organization.members.status-dnd:Do not disturb`,
+      offline: $localize`:@@organization.members.status-offline:Offline`,
+    }[member.presence];
+    return $localize`:@@organization.members.status:Status: ${status}:status:`;
+  }
+
+  /**
+   * Method focusRow
+   *
+   * @description
+   * Focuses the remove button of the row at a position (its first control when it has none), or
+   * of the last row when fewer remain, after a removal took the focused row away.
+   *
+   * @param {number} index - Zero-based position of the row.
+   * @returns {boolean} Whether a control took the focus; false without rows or controls.
+   */
+  public focusRow(index: number): boolean {
+    const rows: HTMLElement[] = [
+      ...this.host.nativeElement.querySelectorAll<HTMLElement>('[data-testid="member-row"]'),
+    ];
+    if (rows.length === 0) return false;
+    const row: HTMLElement = rows[Math.min(index, rows.length - 1)];
+    const control: HTMLElement | null =
+      row.querySelector<HTMLElement>('[data-testid="member-remove"]') ??
+      row.querySelector<HTMLElement>('button, [tabindex="0"]');
+    control?.focus();
+    return control !== null;
   }
 
   /**

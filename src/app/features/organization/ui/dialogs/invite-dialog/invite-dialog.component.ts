@@ -36,17 +36,29 @@ import { CwTextarea } from '@cadenway/ui/components/textarea';
 import { NgIcon } from '@ng-icons/core';
 
 import type { AssignableMemberRole } from '../../../models/member/member.interface';
+import { takesSingular } from '../../../models/member/plural-form.util';
 
 /**
  * Constant EMAIL_PATTERN
  *
  * @description
- * A complete address, as the mockup checks it (`Organisation.dc.html` line 1544): something, `@`,
- * a domain with a dot.
+ * A valid address as the contract checks it: the pattern of zod 4's `email()`, which
+ * `@cadenway/contracts` applies to `InvitationBatch.emails` (`validators/public/members.js`).
  *
  * @type {RegExp}
  */
-const EMAIL_PATTERN: RegExp = /^[^@\s]+@[^@\s]+\.[^@\s]+$/u;
+const EMAIL_PATTERN: RegExp =
+  /^(?:[A-Za-z0-9_'+-]+\.)*[A-Za-z0-9_'+-]*[A-Za-z0-9_+-]@(?:[A-Za-z0-9][A-Za-z0-9-]*\.)+[A-Za-z]{2,}$/u;
+
+/**
+ * Constant EMAIL_MAX_LENGTH
+ *
+ * @description
+ * Longest address the contract accepts (`Email`, 254 characters).
+ *
+ * @type {number}
+ */
+const EMAIL_MAX_LENGTH: number = 254;
 
 /**
  * Constant MAX_ADDRESSES
@@ -100,7 +112,7 @@ interface ParsedAddresses {
    * Property valid
    *
    * @description
-   * Complete addresses, each once (compared without regard to case), in the order typed.
+   * Valid addresses, each once (compared without regard to case), in the order typed.
    *
    * @type {readonly string[]}
    * @readonly
@@ -111,7 +123,7 @@ interface ParsedAddresses {
    * Property invalid
    *
    * @description
-   * Parts that are not a complete address.
+   * Parts that are not a valid address.
    *
    * @type {readonly string[]}
    * @readonly
@@ -132,7 +144,7 @@ export interface InviteRequest {
    * Property emails
    *
    * @description
-   * Distinct complete addresses, 1 to 50.
+   * Distinct valid addresses, 1 to 50.
    *
    * @type {readonly string[]}
    * @readonly
@@ -189,7 +201,7 @@ interface RoleOption {
  *
  * @description
  * Splits what is typed on spaces, commas and semicolons, as the contract asks, and sorts the
- * complete addresses from the rest.
+ * addresses the contract accepts (zod's `email()`, at most 254 characters) from the rest.
  *
  * @param {string} text - The typed text.
  * @returns {ParsedAddresses} The addresses.
@@ -200,7 +212,7 @@ export function parseAddresses(text: string): ParsedAddresses {
   const seen: Set<string> = new Set<string>();
   for (const part of text.split(/[\s,;]+/u)) {
     if (part === '') continue;
-    if (!EMAIL_PATTERN.test(part)) {
+    if (part.length > EMAIL_MAX_LENGTH || !EMAIL_PATTERN.test(part)) {
       invalid.push(part);
       continue;
     }
@@ -236,9 +248,10 @@ function focusFirstError<T>(fields: FieldTree<T>): void {
  * with a comma or a line break.`, then `<n> valid addresses ·` and the seats left, `guests do not
  * take a seat`, or the shortage), the `Role` select (`Member`, `Administrator`, `Guest`, each with
  * what it gives) and `Cancel` / `Invite`. `Invite` stays enabled: an invalid submit shows the error
- * (no address, an incomplete one, more than 50, or more members than free seats) and focuses the
- * field. While `pending` the dialog cannot be closed and `Invite` shows its spinner. The form
- * starts empty, as a member, each time the dialog opens. Presentational: a valid submit emits
+ * (no address, an invalid or refused one, more than 50, or more members than free seats) and
+ * focuses the field. While `pending` the dialog cannot be closed and `Invite` shows its spinner.
+ * The form starts empty, as a member, each time the dialog opens. Presentational: a valid submit
+ * emits
  * `submitted`; the page sends it and closes the dialog on success.
  */
 @Component({
@@ -306,6 +319,17 @@ export class InviteDialog {
   public readonly pending: InputSignal<boolean> = input<boolean>(false);
 
   /**
+   * Property refused
+   *
+   * @description
+   * Addresses the API refused as invalid on the last submit; the field names them while they stay.
+   *
+   * @type {InputSignal<readonly string[]>}
+   * @readonly
+   */
+  public readonly refused: InputSignal<readonly string[]> = input<readonly string[]>([]);
+
+  /**
    * Property submitted
    *
    * @description
@@ -371,8 +395,9 @@ export class InviteDialog {
    * Property inviteForm
    *
    * @description
-   * The form: the addresses must hold at least one complete address, no incomplete one, at most
-   * 50, and, when the seats are known, no more members or administrators than free seats.
+   * The form: the addresses must hold at least one valid address (the contract's e-mail check, 254
+   * characters at most), no invalid or refused one, at most 50, and, when the seats are known, no
+   * more members or administrators than free seats.
    *
    * @type {FieldTree<InviteModel>}
    * @readonly
@@ -380,8 +405,15 @@ export class InviteDialog {
   protected readonly inviteForm: FieldTree<InviteModel> = form(this.model, (path) => {
     validate(path.emails, (context: FieldContext<string>) => {
       const { valid, invalid }: ParsedAddresses = parseAddresses(context.value());
-      if (invalid.length > 0) {
-        const list: string = invalid.join(', ');
+      const refused: ReadonlySet<string> = new Set<string>(
+        this.refused().map((email: string): string => email.toLowerCase()),
+      );
+      const wrong: readonly string[] = [
+        ...invalid,
+        ...valid.filter((email: string): boolean => refused.has(email.toLowerCase())),
+      ];
+      if (wrong.length > 0) {
+        const list: string = wrong.join(', ');
         return {
           kind: 'incomplete',
           message: $localize`:@@organization.members.invite-invalid:Check these addresses: ${list}:list:.`,
@@ -423,8 +455,8 @@ export class InviteDialog {
     const free: number | null = this.seatsFree();
     const plan: string | null = this.planName();
     if (free === null || plan === null) return null;
-    return free === 1
-      ? $localize`:@@organization.members.invite-seats-one:1 seat available on the ${plan}:plan: plan.`
+    return takesSingular(free)
+      ? $localize`:@@organization.members.invite-seats-one:${free}:count: seat available on the ${plan}:plan: plan.`
       : $localize`:@@organization.members.invite-seats:${free}:count: seats available on the ${plan}:plan: plan.`;
   });
 
@@ -443,10 +475,9 @@ export class InviteDialog {
     if (count === 0) {
       return $localize`:@@organization.members.invite-hint:Separate the addresses with a comma or a line break.`;
     }
-    const valid: string =
-      count === 1
-        ? $localize`:@@organization.members.invite-valid-one:1 valid address`
-        : $localize`:@@organization.members.invite-valid:${count}:count: valid addresses`;
+    const valid: string = takesSingular(count)
+      ? $localize`:@@organization.members.invite-valid-one:${count}:count: valid address`
+      : $localize`:@@organization.members.invite-valid:${count}:count: valid addresses`;
     if (this.model().role === 'guest') {
       const guests: string = $localize`:@@organization.members.invite-guests-free:guests do not take a seat`;
       return `${valid} · ${guests}`;
@@ -454,17 +485,15 @@ export class InviteDialog {
     const free: number | null = this.seatsFree();
     if (free === null) return valid;
     if (count > free) {
-      const only: string =
-        free === 1
-          ? $localize`:@@organization.members.invite-only-one:only 1 free seat: add some from Billing`
-          : $localize`:@@organization.members.invite-only:only ${free}:count: free seats: add some from Billing`;
+      const only: string = takesSingular(free)
+        ? $localize`:@@organization.members.invite-only-one:only ${free}:count: free seat: add some from Billing`
+        : $localize`:@@organization.members.invite-only:only ${free}:count: free seats: add some from Billing`;
       return `${valid} · ${only}`;
     }
     const left: number = free - count;
-    const after: string =
-      left === 1
-        ? $localize`:@@organization.members.invite-left-one:1 seat left afterwards`
-        : $localize`:@@organization.members.invite-left:${left}:count: seats left afterwards`;
+    const after: string = takesSingular(left)
+      ? $localize`:@@organization.members.invite-left-one:${left}:count: seat left afterwards`
+      : $localize`:@@organization.members.invite-left:${left}:count: seats left afterwards`;
     return `${valid} · ${after}`;
   });
 

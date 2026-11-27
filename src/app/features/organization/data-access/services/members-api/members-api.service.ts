@@ -114,6 +114,7 @@ export class MembersApi {
     cursor: string | null,
     signal?: AbortSignal,
   ): Promise<MemberPage> {
+    signal?.throwIfAborted();
     const page: MemberPageDto = await abortable(
       this.members.listMembers(paramsOf(query, limit, cursor)),
       signal,
@@ -125,41 +126,54 @@ export class MembersApi {
    * Method all
    *
    * @description
-   * Reads every member matching the query, page after page, for a filter the API does not offer
-   * (presence). Its `nextCursor` is null.
+   * Reads the members matching the query, page after page, for a filter the API does not offer
+   * (presence), up to `limit` members: the read then stops and is flagged `truncated`. Its
+   * `nextCursor` is null. Aborting the signal stops between pages and rejects.
    *
    * @param {MemberQuery} query - Search and roles.
+   * @param {number} limit - Most members read.
    * @param {AbortSignal} [signal] - Abort signal of the resource.
-   * @returns {Promise<MemberPage>} Every matching member, the total and the counts by role.
+   * @returns {Promise<MemberPage>} The members read, the total and the counts by role.
    */
-  public async all(query: MemberQuery, signal?: AbortSignal): Promise<MemberPage> {
+  public async all(query: MemberQuery, limit: number, signal?: AbortSignal): Promise<MemberPage> {
     const items: OrganizationMember[] = [];
     let cursor: string | null = null;
     let last: MemberPage;
     do {
-      last = await this.page(query, COMPLETE_READ_LIMIT, cursor, signal);
+      const size: number = Math.min(COMPLETE_READ_LIMIT, limit - items.length);
+      last = await this.page(query, size, cursor, signal);
       items.push(...last.items);
       cursor = last.nextCursor;
-    } while (cursor !== null);
-    return { ...last, items, nextCursor: null };
+    } while (cursor !== null && items.length < limit);
+    return { ...last, items, nextCursor: null, truncated: cursor !== null };
   }
 
   /**
    * Method changeRole
    *
    * @description
-   * Gives a member another role. Rejects with `409 organization.seat-quota-exceeded` when a guest
-   * would take a seat beyond the plan, and `422 member.owner-protected` for the owner.
+   * Gives a member another role, sending the version shown as `If-Match`. Rejects with
+   * `412 request.version-mismatch` when the member changed meanwhile, `409
+   * organization.seat-quota-exceeded` when a guest would take a seat beyond the plan, and `422
+   * member.owner-protected` for the owner.
    *
    * @param {string} memberId - The membership.
    * @param {AssignableMemberRole} role - The new role.
+   * @param {number} version - Version of the membership shown.
    * @returns {Promise<OrganizationMember>} The membership as the API now holds it.
    */
   public async changeRole(
     memberId: string,
     role: AssignableMemberRole,
+    version: number,
   ): Promise<OrganizationMember> {
-    const member: Member = await firstValueFrom(this.members.changeMemberRole(memberId, { role }));
+    const member: Member = await firstValueFrom(
+      this.members.changeMemberRole(
+        memberId,
+        { role },
+        { headers: { 'If-Match': `"${String(version)}"` } },
+      ),
+    );
     return toOrganizationMember(member);
   }
 

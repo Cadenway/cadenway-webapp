@@ -1,5 +1,5 @@
 import { HttpErrorResponse } from '@angular/common/http';
-import { ApplicationRef, signal } from '@angular/core';
+import { ApplicationRef, signal, type WritableSignal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { CwToastService } from '@cadenway/ui/components/toast';
 import { describe, expect, it, type Mock, vi } from 'vitest';
@@ -7,6 +7,7 @@ import { describe, expect, it, type Mock, vi } from 'vitest';
 import {
   WORKSPACE_CONTEXT,
   type WorkspaceContextPort,
+  type WorkspaceOrganization,
   type WorkspaceRole,
 } from '@features/workspace/ports/workspace-context';
 
@@ -16,6 +17,16 @@ import type {
   PendingInvitation,
 } from '../../models/invitation/invitation.interface';
 import { InvitationsStore, type InvitationsStoreInstance } from './invitations.store';
+
+/**
+ * Type ApiFake
+ *
+ * @description
+ * Fake of the invitations data access, one mock per method.
+ *
+ * @type {Record<'list' | 'invite' | 'resend' | 'revoke', Mock>}
+ */
+type ApiFake = Record<'list' | 'invite' | 'resend' | 'revoke', Mock>;
 
 /**
  * Constant MARC
@@ -62,6 +73,37 @@ const STUDIO: PendingInvitation = {
 const LIST: InvitationList = { items: [MARC, STUDIO], total: 2 };
 
 /**
+ * Constant ATELIER_NORD
+ *
+ * @description
+ * The organization of the workspace.
+ *
+ * @type {WorkspaceOrganization}
+ */
+const ATELIER_NORD: WorkspaceOrganization = {
+  id: 'o1',
+  slug: 'atelier-nord',
+  name: 'Atelier Nord',
+  initials: 'AN',
+  role: 'admin',
+  plan: 'team',
+};
+
+/**
+ * Function refusal
+ *
+ * @description
+ * An API refusal as the generated client rejects it.
+ *
+ * @param {number} status - HTTP status.
+ * @param {Record<string, unknown>} body - Problem body.
+ * @returns {HttpErrorResponse} The refusal.
+ */
+function refusal(status: number, body: Record<string, unknown>): HttpErrorResponse {
+  return new HttpErrorResponse({ status, error: body });
+}
+
+/**
  * Interface Harness
  *
  * @description
@@ -86,10 +128,10 @@ interface Harness {
    * @description
    * Fake of the invitations data access.
    *
-   * @type {Record<'list' | 'invite' | 'resend' | 'revoke', Mock>}
+   * @type {ApiFake}
    * @readonly
    */
-  readonly api: Record<'list' | 'invite' | 'resend' | 'revoke', Mock>;
+  readonly api: ApiFake;
 
   /**
    * Property toasts
@@ -101,6 +143,17 @@ interface Harness {
    * @readonly
    */
   readonly toasts: Record<'success' | 'error' | 'info', Mock>;
+
+  /**
+   * Property organization
+   *
+   * @description
+   * The workspace organization, switchable.
+   *
+   * @type {WritableSignal<WorkspaceOrganization>}
+   * @readonly
+   */
+  readonly organization: WritableSignal<WorkspaceOrganization>;
   // #endregion
 }
 
@@ -110,15 +163,12 @@ interface Harness {
  * @description
  * Creates the store for a role over a fake data access and waits for its read.
  *
- * @param {Partial<Record<'list' | 'invite' | 'resend' | 'revoke', Mock>>} overrides - Fakes.
+ * @param {Partial<ApiFake>} overrides - Fakes.
  * @param {WorkspaceRole} [role] - The person's role.
  * @returns {Promise<Harness>} The store and its fakes.
  */
-async function setup(
-  overrides: Partial<Record<'list' | 'invite' | 'resend' | 'revoke', Mock>>,
-  role: WorkspaceRole = 'admin',
-): Promise<Harness> {
-  const api: Record<'list' | 'invite' | 'resend' | 'revoke', Mock> = {
+async function setup(overrides: Partial<ApiFake>, role: WorkspaceRole = 'admin'): Promise<Harness> {
+  const api: ApiFake = {
     list: vi.fn(() => Promise.resolve(LIST)),
     invite: vi.fn(() => Promise.resolve({ invited: 2, skipped: 0 })),
     resend: vi.fn((): Promise<PendingInvitation> => Promise.resolve({ ...STUDIO, expired: false })),
@@ -130,6 +180,7 @@ async function setup(
     error: vi.fn(),
     info: vi.fn(),
   };
+  const organization: WritableSignal<WorkspaceOrganization> = signal({ ...ATELIER_NORD, role });
   const workspace: WorkspaceContextPort = {
     user: signal({
       id: 'u-ir',
@@ -139,14 +190,7 @@ async function setup(
       email: 'ines.robert@ateliernord.fr',
       initials: 'IR',
     }),
-    organization: signal({
-      id: 'o1',
-      slug: 'atelier-nord',
-      name: 'Atelier Nord',
-      initials: 'AN',
-      role,
-      plan: 'team',
-    }),
+    organization,
     role: signal(role),
     can: (): boolean => role === 'owner' || role === 'admin',
   };
@@ -159,8 +203,36 @@ async function setup(
     ],
   });
   const store: InvitationsStoreInstance = TestBed.inject(InvitationsStore);
+  await stable();
+  return { store, api, toasts, organization };
+}
+
+/**
+ * Function stable
+ *
+ * @description
+ * Waits for the reads and the effects.
+ *
+ * @returns {Promise<void>} Resolves once stable.
+ */
+async function stable(): Promise<void> {
   await TestBed.inject(ApplicationRef).whenStable();
-  return { store, api, toasts };
+}
+
+/**
+ * Function flush
+ *
+ * @description
+ * Runs the effects and the microtasks while a read is still pending.
+ *
+ * @returns {Promise<void>} Resolves once flushed.
+ */
+async function flush(): Promise<void> {
+  TestBed.tick();
+  await new Promise<void>((done: () => void) => {
+    setTimeout(done, 0);
+  });
+  TestBed.tick();
 }
 
 describe('InvitationsStore', () => {
@@ -189,11 +261,7 @@ describe('InvitationsStore', () => {
 
   it('restores an invitation whose resend is throttled', async () => {
     const { store, toasts }: Harness = await setup({
-      resend: vi
-        .fn()
-        .mockRejectedValue(
-          new HttpErrorResponse({ status: 429, error: { code: 'invitation.resend-throttled' } }),
-        ),
+      resend: vi.fn().mockRejectedValue(refusal(429, { code: 'invitation.resend-throttled' })),
     });
 
     await expect(store.resend(STUDIO)).resolves.toBe(false);
@@ -204,12 +272,45 @@ describe('InvitationsStore', () => {
     });
   });
 
+  it('tells a resend refused by the daily limit apart', async () => {
+    const { store, toasts }: Harness = await setup({
+      resend: vi.fn().mockRejectedValue(refusal(429, { code: 'invitation.daily-limit-reached' })),
+    });
+
+    await store.resend(STUDIO);
+
+    expect(toasts.error).toHaveBeenCalledWith('The invitation could not be resent', {
+      description: 'The daily invitation limit is reached: try again later.',
+    });
+  });
+
+  it('drops an invitation answered meanwhile and reads the list again', async () => {
+    const { store, api, toasts }: Harness = await setup({
+      resend: vi.fn().mockRejectedValue(refusal(409, { code: 'invitation.answered' })),
+      revoke: vi.fn().mockRejectedValue(refusal(409, { code: 'invitation.answered' })),
+    });
+
+    await expect(store.resend(STUDIO)).resolves.toBe(false);
+    expect(store.items()).toEqual([MARC]);
+    await stable();
+    api.list.mockResolvedValue({ items: [], total: 0 });
+    await expect(store.revoke(MARC)).resolves.toBe(false);
+    await stable();
+
+    expect(api.list).toHaveBeenCalledTimes(3);
+    expect(store.items()).toEqual([]);
+    expect(toasts.info).toHaveBeenCalledWith('This invitation is no longer pending', {
+      description: 'marc.roux@ateliernord.fr',
+    });
+    expect(toasts.error).not.toHaveBeenCalled();
+  });
+
   it('hides a cancelled invitation and shows it again when the cancellation fails', async () => {
-    let refuse: (error: unknown) => void = () => undefined;
+    let refuse: (error: Error) => void = () => undefined;
     const { store, toasts }: Harness = await setup({
       revoke: vi.fn(
         () =>
-          new Promise<void>((_resolve: () => void, reject: (error: unknown) => void) => {
+          new Promise<void>((_resolve: () => void, reject: (error: Error) => void) => {
             refuse = reject;
           }),
       ),
@@ -218,43 +319,117 @@ describe('InvitationsStore', () => {
     const done: Promise<boolean> = store.revoke(MARC);
     expect(store.items()).toEqual([STUDIO]);
     expect(store.total()).toBe(1);
-    refuse(new HttpErrorResponse({ status: 500 }));
+    refuse(new Error('Server error'));
 
     await expect(done).resolves.toBe(false);
     expect(store.items()).toEqual([MARC, STUDIO]);
     expect(toasts.error).toHaveBeenCalledWith('The invitation could not be cancelled');
   });
 
-  it('sends a batch, reads the list again and counts the invitations sent', async () => {
+  it('keeps a confirmed cancellation over a read issued before it settled', async () => {
+    let answer: () => void = () => undefined;
+    let stale: (list: InvitationList) => void = () => undefined;
+    const { store, api }: Harness = await setup({
+      revoke: vi.fn(
+        () =>
+          new Promise<void>((resolve: () => void) => {
+            answer = resolve;
+          }),
+      ),
+    });
+
+    const done: Promise<boolean> = store.revoke(MARC);
+    api.list.mockReturnValueOnce(
+      new Promise<InvitationList>((resolve: (list: InvitationList) => void) => {
+        stale = resolve;
+      }),
+    );
+    store.retry();
+    await flush();
+    answer();
+    await done;
+    stale(LIST);
+    await stable();
+
+    expect(store.items()).toEqual([STUDIO]);
+    expect(store.total()).toBe(1);
+    store.retry();
+    await stable();
+    expect(store.items()).toEqual([MARC, STUDIO]);
+  });
+
+  it('reads the list again after a batch, even while a read is under way', async () => {
+    let first: (list: InvitationList) => void = () => undefined;
     const { store, api, toasts }: Harness = await setup({
       invite: vi.fn(() => Promise.resolve({ invited: 2, skipped: 1 })),
     });
+    api.list.mockReturnValueOnce(
+      new Promise<InvitationList>((resolve: (list: InvitationList) => void) => {
+        first = resolve;
+      }),
+    );
+    store.retry();
+    await flush();
 
     await expect(
       store.invite(['lucie@example.com', 'marc.roux@ateliernord.fr', 'paul@example.com'], 'member'),
-    ).resolves.toBe(true);
-    await TestBed.inject(ApplicationRef).whenStable();
+    ).resolves.toBe('sent');
+    first(LIST);
+    await stable();
 
-    expect(api.list).toHaveBeenCalledTimes(2);
+    expect(api.list).toHaveBeenCalledTimes(3);
     expect(toasts.success).toHaveBeenCalledWith('2 invitations sent', {
       description: 'They expire in 7 days. 1 address skipped: already a member or invited.',
     });
   });
 
-  it('keeps the dialog data when the daily limit refuses the batch', async () => {
+  it('answers the addresses a 400 names, without a toast', async () => {
     const { store, toasts }: Harness = await setup({
-      invite: vi
-        .fn()
-        .mockRejectedValue(
-          new HttpErrorResponse({ status: 429, error: { code: 'invitation.daily-limit-reached' } }),
-        ),
+      invite: vi.fn().mockRejectedValue(
+        refusal(400, {
+          code: 'request.invalid',
+          details: { issues: [{ path: 'emails.1', message: 'Invalid email' }] },
+        }),
+      ),
     });
 
-    await expect(store.invite(['lucie@example.com'], 'guest')).resolves.toBe(false);
+    await expect(store.invite(['lucie@example.com', 'bad@x.y'], 'member')).resolves.toEqual({
+      refused: ['bad@x.y'],
+    });
+    expect(toasts.error).not.toHaveBeenCalled();
+  });
+
+  it('shows the daily limit when it refuses the batch', async () => {
+    const { store, toasts }: Harness = await setup({
+      invite: vi.fn().mockRejectedValue(refusal(429, { code: 'invitation.daily-limit-reached' })),
+    });
+
+    await expect(store.invite(['lucie@example.com'], 'guest')).resolves.toBe('failed');
 
     expect(store.inviting()).toBe(false);
     expect(toasts.error).toHaveBeenCalledWith('The invitations could not be sent', {
       description: 'The daily invitation limit is reached: try again later.',
     });
+  });
+
+  it('forgets a write that settles after an organization switch', async () => {
+    let answer: () => void = () => undefined;
+    const { store, toasts, organization }: Harness = await setup({
+      revoke: vi.fn(
+        () =>
+          new Promise<void>((resolve: () => void) => {
+            answer = resolve;
+          }),
+      ),
+    });
+
+    const done: Promise<boolean> = store.revoke(MARC);
+    organization.set({ ...ATELIER_NORD, id: 'o2', slug: 'lumen', name: 'Lumen' });
+    await stable();
+    answer();
+
+    await expect(done).resolves.toBe(false);
+    expect(store.pendingIds().size).toBe(0);
+    expect(toasts.success).not.toHaveBeenCalled();
   });
 });

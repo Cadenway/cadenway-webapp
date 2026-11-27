@@ -22,6 +22,7 @@ import { NgIcon } from '@ng-icons/core';
 
 import type { PendingInvitation } from '../../../models/invitation/invitation.interface';
 import { memberRoleLabel } from '../../../models/member/member-role-label.util';
+import { takesSingular } from '../../../models/member/plural-form.util';
 
 /**
  * Constant DAY_MS
@@ -211,8 +212,8 @@ export class InvitationsList {
       1,
       Math.ceil((Date.parse(invitation.expiresAt) - Date.now()) / DAY_MS),
     );
-    return days === 1
-      ? $localize`:@@organization.members.expires-in-one:Expires in 1 day`
+    return takesSingular(days)
+      ? $localize`:@@organization.members.expires-in-one:Expires in ${days}:count: day`
       : $localize`:@@organization.members.expires-in:Expires in ${days}:count: days`;
   }
   // #endregion

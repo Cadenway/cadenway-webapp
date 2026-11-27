@@ -71,5 +71,6 @@ export function toMemberPage(page: MemberPageDto): MemberPage {
       guest: page.counts.guest,
     },
     nextCursor: page.nextCursor ?? null,
+    truncated: false,
   };
 }

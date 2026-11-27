@@ -3,7 +3,7 @@
     <div
       class="flex flex-col gap-6"
       role="status"
-      [attr.aria-busy]="primary() === undefined"
+      [attr.aria-busy]="!primary()"
       aria-label="Loading the section"
       i18n-aria-label="@@organization.members.loading"
       data-testid="members-skeleton"
@@ -98,6 +98,19 @@
         </cw-empty>
       </div>
     } @else {
+      @if (store.truncated()) {
+        <p
+          class="flex items-center gap-1.5 text-xs text-muted-foreground"
+          role="status"
+          data-testid="members-truncated"
+        >
+          <ng-icon name="phosphorInfoBold" class="size-3.5 shrink-0" aria-hidden="true" />
+          <ng-container i18n="@@organization.members.presence-truncated"
+            >Only the first 2,000 members are filtered by presence: choose a role to narrow the
+            list.</ng-container
+          >
+        </p>
+      }
       <cw-members-table
         [rows]="store.rows()"
         [total]="store.total()"
@@ -122,8 +135,8 @@
         [invitations]="invitations.items()"
         [total]="invitations.total()"
         [pendingIds]="invitations.pendingIds()"
-        [loading]="invitations.invitations.isLoading()"
-        [failed]="invitations.invitations.status() === 'error'"
+        [loading]="invitations.loading()"
+        [failed]="invitations.failed()"
         (resent)="invitations.resend($event)"
         (cancelled)="invitations.revoke($event)"
         (retried)="invitations.retry()"
@@ -138,6 +151,7 @@
     [seatsFree]="seatsFree()"
     [planName]="planLabel()"
     [pending]="invitations.inviting()"
+    [refused]="refused()"
     (submitted)="invite($event)"
   />
 }

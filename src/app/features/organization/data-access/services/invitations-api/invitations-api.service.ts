@@ -20,14 +20,14 @@ import {
 } from '../../adapters/invitation/invitation.adapter';
 
 /**
- * Constant LIST_LIMIT
+ * Constant PAGE_LIMIT
  *
  * @description
- * Invitations read for the list: the most recent 100, the largest page; `total` counts them all.
+ * Invitations read per page, the largest the contract accepts.
  *
  * @type {number}
  */
-const LIST_LIMIT: number = 100;
+const PAGE_LIMIT: number = 100;
 
 /**
  * Function abortable
@@ -72,17 +72,30 @@ export class InvitationsApi {
    * Method list
    *
    * @description
-   * Reads the pending invitations, expired ones included, the most recently sent first.
+   * Reads every pending invitation, expired ones included, the most recently sent first, following
+   * the cursor page after page. Aborting the signal stops between pages and rejects.
    *
    * @param {AbortSignal} [signal] - Abort signal of the resource.
    * @returns {Promise<InvitationList>} The invitations and their total.
    */
   public async list(signal?: AbortSignal): Promise<InvitationList> {
-    const page: InvitationPage = await abortable(
-      this.invitations.listInvitations({ limit: LIST_LIMIT }),
-      signal,
-    );
-    return toInvitationList(page);
+    const items: PendingInvitation[] = [];
+    let cursor: string | null = null;
+    let total: number;
+    do {
+      const page: InvitationPage = await abortable(
+        this.invitations.listInvitations({
+          limit: PAGE_LIMIT,
+          ...(cursor === null ? {} : { cursor }),
+        }),
+        signal,
+      );
+      const list: InvitationList = toInvitationList(page);
+      items.push(...list.items);
+      total = list.total;
+      cursor = page.nextCursor ?? null;
+    } while (cursor !== null);
+    return { items, total };
   }
 
   /**
