@@ -4,13 +4,18 @@ import {
   type ArchivedList,
   type ArchivedTask,
   ArchivesService,
+  type GetListClientResult,
+  type GetTaskClientResult,
   type ListMembersClientResult,
+  ListsService,
   MembersService,
+  TasksService,
 } from '@cadenway/api-client';
 import { firstValueFrom, fromEvent, type Observable, takeUntil } from 'rxjs';
 
-import { OrganizationSwitchPendingError, PASSIVE_REQUEST } from '@core/api';
+import { hasProblemCode, OrganizationSwitchPendingError, PASSIVE_REQUEST } from '@core/api';
 
+import type { ArchiveCheck } from '../../../models/archive-check/archive-check.type';
 import type { ArchivedListItem } from '../../../models/archived-list/archived-list.interface';
 import type { ArchivedTaskItem } from '../../../models/archived-task/archived-task.interface';
 import type { ArchivesRead } from '../../../models/archives-read/archives-read.interface';
@@ -31,15 +36,36 @@ import {
 const PAGE_SIZE: number = 100;
 
 /**
+ * Constant MAX_PAGES
+ *
+ * @description
+ * Pages read per collection at most, so a read costs at most 1,000 items per tab however large
+ * the archives grow (they never expire). The tab says when it shows fewer than its total.
+ *
+ * @type {number}
+ */
+export const MAX_PAGES: number = 10;
+
+/**
  * Constant REQUEST_TIMEOUT_MS
  *
  * @description
- * Time given to each request, in milliseconds. A read past it fails (the page offers `Retry`); a
- * write past it has an unknown outcome, settled by reading the archives again.
+ * Time given to each read, in milliseconds. A first read past it fails (the page offers `Retry`).
  *
  * @type {number}
  */
 export const REQUEST_TIMEOUT_MS: number = 10_000;
+
+/**
+ * Constant RESTORE_TIMEOUT_MS
+ *
+ * @description
+ * Time given to an unarchive, in milliseconds, longer than a read's: restoring a task restores
+ * its whole subtree, and its list with it. A write past it has an unknown outcome.
+ *
+ * @type {number}
+ */
+export const RESTORE_TIMEOUT_MS: number = 30_000;
 
 /**
  * Function isUncertainRestore
@@ -56,6 +82,24 @@ export function isUncertainRestore(error: unknown): boolean {
   if (error instanceof OrganizationSwitchPendingError) return false;
   if (!(error instanceof HttpErrorResponse)) return true;
   return error.status === 0 || error.status === 408 || error.status >= 500;
+}
+
+/**
+ * Function isForbiddenRestore
+ *
+ * @description
+ * Whether an unarchive was refused because the caller lacks `edit` on the list
+ * (`403 access.role-insufficient`).
+ *
+ * @param {unknown} error - The failure.
+ * @returns {boolean} Whether the role was insufficient.
+ */
+export function isForbiddenRestore(error: unknown): boolean {
+  return (
+    error instanceof HttpErrorResponse &&
+    error.status === 403 &&
+    hasProblemCode(error, 'access.role-insufficient')
+  );
 }
 
 /**
@@ -149,13 +193,14 @@ interface Paged<T> {
  * Function readAll
  *
  * @description
- * Reads a paged archives collection to its last cursor, one page after the other.
+ * Reads a paged archives collection one page after the other, to its last cursor or to
+ * `MAX_PAGES` pages, whichever comes first; the total stays the gateway's.
  *
  * @param {(cursor: string | undefined) => Observable<PageAnswer<E>>} page - Reads one page after
  * a cursor.
  * @param {(entry: E) => T} map - Maps an entry to its display model.
  * @param {AbortSignal | undefined} signal - Resource cancellation signal.
- * @returns {Promise<Paged<T>>} Every item and the last total.
+ * @returns {Promise<Paged<T>>} The items read and the last total.
  */
 async function readAll<E, T>(
   page: (cursor: string | undefined) => Observable<PageAnswer<E>>,
@@ -164,11 +209,11 @@ async function readAll<E, T>(
 ): Promise<Paged<T>> {
   const items: T[] = [];
   let cursor: string | undefined;
-  for (;;) {
+  for (let read: number = 1; ; read += 1) {
     const answer: PageAnswer<E> = await untilAborted(page(cursor), signal);
     items.push(...answer.items.map(map));
     cursor = answer.nextCursor ?? undefined;
-    if (!cursor) return { items, total: answer.total };
+    if (!cursor || read >= MAX_PAGES) return { items, total: answer.total };
   }
 }
 
@@ -176,10 +221,10 @@ async function readAll<E, T>(
  * Service ArchivesApi
  *
  * @description
- * The archives page's access to `archives` and `members` of the gateway, mapped to display
- * models: both tabs read to their last page, the names of the members, and the unarchiving of a
- * list or a task. Every operation needs the session's current organization, which the
- * organization pin attaches.
+ * The archives page's access to `archives`, `members`, `lists` and `tasks` of the gateway, mapped
+ * to display models: both tabs (up to `MAX_PAGES` pages each), the names of the members, the
+ * unarchiving of a list or a task, and the read of one item that settles an unknown outcome.
+ * Every operation needs the session's current organization, which the organization pin attaches.
  */
 @Service()
 export class ArchivesApi {
@@ -205,6 +250,28 @@ export class ArchivesApi {
    * @readonly
    */
   private readonly members: MembersService = inject(MembersService);
+
+  /**
+   * Property lists
+   *
+   * @description
+   * Generated lists operations, to read one list after an unknown outcome.
+   *
+   * @type {ListsService}
+   * @readonly
+   */
+  private readonly lists: ListsService = inject(ListsService);
+
+  /**
+   * Property tasks
+   *
+   * @description
+   * Generated tasks operations, to read one task after an unknown outcome.
+   *
+   * @type {TasksService}
+   * @readonly
+   */
+  private readonly tasks: TasksService = inject(TasksService);
   // #endregion
 
   // #region Methods
@@ -212,7 +279,8 @@ export class ArchivesApi {
    * Method read
    *
    * @description
-   * Reads the archived lists and the archived tasks, both to their last page, side by side.
+   * Reads the archived lists and the archived tasks side by side, each to its last page or to
+   * `MAX_PAGES` pages, with the gateway's totals.
    *
    * @param {boolean} passive - Whether the read was triggered in the background (focus,
    * reconnection, after a write), which waits for a verified workspace context.
@@ -292,7 +360,7 @@ export class ArchivesApi {
    * @returns {Promise<void>} Resolves once the gateway confirmed it.
    */
   public async unarchiveList(listId: string): Promise<void> {
-    await firstValueFrom(this.archives.unarchiveList(listId, {}, { timeout: REQUEST_TIMEOUT_MS }));
+    await firstValueFrom(this.archives.unarchiveList(listId, {}, { timeout: RESTORE_TIMEOUT_MS }));
   }
 
   /**
@@ -306,7 +374,59 @@ export class ArchivesApi {
    * @returns {Promise<void>} Resolves once the gateway confirmed it.
    */
   public async unarchiveTask(taskKey: string): Promise<void> {
-    await firstValueFrom(this.archives.unarchiveTask(taskKey, {}, { timeout: REQUEST_TIMEOUT_MS }));
+    await firstValueFrom(this.archives.unarchiveTask(taskKey, {}, { timeout: RESTORE_TIMEOUT_MS }));
+  }
+
+  /**
+   * Method checkList
+   *
+   * @description
+   * Reads one list by its id, passively and bypassing the HTTP cache, to tell whether an
+   * unarchive with an unknown outcome was applied.
+   *
+   * @param {string} listId - The list.
+   * @returns {Promise<ArchiveCheck>} Its state; rejects when the read itself fails.
+   */
+  public async checkList(listId: string): Promise<ArchiveCheck> {
+    try {
+      const list: GetListClientResult = await firstValueFrom(
+        this.lists.getList(listId, {
+          cache: 'no-store',
+          context: new HttpContext().set(PASSIVE_REQUEST, true),
+          timeout: REQUEST_TIMEOUT_MS,
+        }),
+      );
+      return list.archivedAt ? 'archived' : 'restored';
+    } catch (error: unknown) {
+      if (error instanceof HttpErrorResponse && error.status === 404) return 'gone';
+      throw error;
+    }
+  }
+
+  /**
+   * Method checkTask
+   *
+   * @description
+   * Reads one task by its key, passively and bypassing the HTTP cache, to tell whether an
+   * unarchive with an unknown outcome was applied.
+   *
+   * @param {string} taskKey - The task.
+   * @returns {Promise<ArchiveCheck>} Its state; rejects when the read itself fails.
+   */
+  public async checkTask(taskKey: string): Promise<ArchiveCheck> {
+    try {
+      const task: GetTaskClientResult = await firstValueFrom(
+        this.tasks.getTask(taskKey, {
+          cache: 'no-store',
+          context: new HttpContext().set(PASSIVE_REQUEST, true),
+          timeout: REQUEST_TIMEOUT_MS,
+        }),
+      );
+      return task.archivedAt ? 'archived' : 'restored';
+    } catch (error: unknown) {
+      if (error instanceof HttpErrorResponse && error.status === 404) return 'gone';
+      throw error;
+    }
   }
   // #endregion
 }

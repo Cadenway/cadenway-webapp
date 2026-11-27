@@ -13,15 +13,20 @@
   </p>
   <p class="truncate text-xs text-muted-foreground" data-testid="archive-meta">{{ meta() }}</p>
 </div>
-<button
-  cwButton
-  type="button"
-  variant="outline"
-  size="xs"
-  [disabled]="pending()"
-  [attr.aria-label]="restoreLabel()"
-  (click)="restored.emit()"
->
-  <ng-icon name="phosphorArrowCounterClockwiseBold" class="size-3.5" aria-hidden="true" />
-  <ng-container i18n="@@archives.row.restore">Restore</ng-container>
-</button>
+@if (restorable()) {
+  <button
+    cwButton
+    type="button"
+    variant="outline"
+    size="xs"
+    class="aria-disabled:cursor-default aria-disabled:opacity-50"
+    [attr.aria-disabled]="pending() || null"
+    [attr.aria-busy]="pending() || null"
+    [attr.aria-label]="restoreLabel()"
+    data-archive-restore
+    (click)="restore()"
+  >
+    <ng-icon name="phosphorArrowCounterClockwiseBold" class="size-3.5" aria-hidden="true" />
+    <ng-container i18n="@@archives.row.restore">Restore</ng-container>
+  </button>
+}

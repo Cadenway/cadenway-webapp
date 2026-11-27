@@ -1,5 +1,5 @@
 import { HttpErrorResponse } from '@angular/common/http';
-import { computed, signal } from '@angular/core';
+import { Component, computed, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import {
   provideRouter,
@@ -23,6 +23,7 @@ import { WORKSPACE_CONTEXT } from '@features/workspace/ports/workspace-context';
 
 import { ARCHIVES_ROUTES } from '../../../archives.routes';
 import { ArchivesApi } from '../../../data-access/services/archives-api/archives-api.service';
+import { ARCHIVES_CONFIRM_DELAYS_MS } from '../../../state/archives/archives-confirm-delays.token';
 import type { ArchivedListItem } from '../../../models/archived-list/archived-list.interface';
 import type { ArchivedTaskItem } from '../../../models/archived-task/archived-task.interface';
 import type { ArchivesRead } from '../../../models/archives-read/archives-read.interface';
@@ -43,6 +44,7 @@ const sprint13: ArchivedListItem = {
   taskCount: 14,
   archivedAt: '2026-11-03T09:00:00Z',
   archivedBy: 'u-camille',
+  restorable: true,
 };
 
 /**
@@ -61,6 +63,7 @@ const campaign: ArchivedListItem = {
   taskCount: 1,
   archivedAt: '2026-10-12T09:00:00Z',
   archivedBy: 'u-former',
+  restorable: true,
 };
 
 /**
@@ -115,9 +118,21 @@ function archives(
   return { lists, listTotal: lists.length, tasks, taskTotal: tasks.length };
 }
 
+/**
+ * Component ElsewhereStub
+ *
+ * @description
+ * Another page of the workspace, to leave the archives for.
+ */
+@Component({ selector: 'cw-elsewhere-stub', template: '' })
+class ElsewhereStub {}
+
 describe('ArchivesPage', () => {
-  let api: Record<'read' | 'memberNames' | 'unarchiveList' | 'unarchiveTask', Mock>;
-  let toasts: { show: Mock; error: Mock };
+  let api: Record<
+    'read' | 'memberNames' | 'unarchiveList' | 'unarchiveTask' | 'checkList' | 'checkTask',
+    Mock
+  >;
+  let toasts: { show: Mock; error: Mock; dismiss: Mock };
   let navigation: { refresh: Mock; refreshCounts: Mock };
 
   beforeEach(() => {
@@ -133,14 +148,21 @@ describe('ArchivesPage', () => {
       ),
       unarchiveList: vi.fn(() => Promise.resolve()),
       unarchiveTask: vi.fn(() => Promise.resolve()),
+      checkList: vi.fn(() => Promise.resolve('archived')),
+      checkTask: vi.fn(() => Promise.resolve('archived')),
     };
-    toasts = { show: vi.fn(() => 't1'), error: vi.fn(() => 't2') };
+    toasts = { show: vi.fn(() => 't1'), error: vi.fn(() => 't2'), dismiss: vi.fn() };
     navigation = { refresh: vi.fn(), refreshCounts: vi.fn() };
     TestBed.configureTestingModule({
       providers: [
         provideCadenwayIcons(),
         provideRouter(
-          [{ path: ':org', children: ARCHIVES_ROUTES }],
+          [
+            {
+              path: ':org',
+              children: [...ARCHIVES_ROUTES, { path: '', component: ElsewhereStub }],
+            },
+          ],
           withComponentInputBinding(),
           withRouterConfig({ paramsInheritanceStrategy: 'always' }),
           withErrorBoundaries({ defaultErrorComponent: RouteErrorBoundary }),
@@ -148,6 +170,7 @@ describe('ArchivesPage', () => {
         { provide: ArchivesApi, useValue: api },
         { provide: CwToastService, useValue: toasts },
         { provide: NAVIGATION_REFRESH, useValue: navigation },
+        { provide: ARCHIVES_CONFIRM_DELAYS_MS, useValue: [1, 1, 1] },
         { provide: SPACE_DIRECTORY, useValue: { spaces: signal([product]) } },
         {
           provide: RuntimeConfigStore,
@@ -405,21 +428,163 @@ describe('ArchivesPage', () => {
     button(harness, 'Restore CAD-430')?.click();
 
     await expect.poll(() => toasts.error.mock.calls.length).toBe(1);
-    expect(toasts.error).toHaveBeenCalledWith('CAD-430 could not be restored');
+    expect(toasts.error).toHaveBeenCalledWith('CAD-430 could not be restored', undefined);
     expect(toasts.show).not.toHaveBeenCalled();
     expect(text(harness, 'archives-tasks')).toContain('CAD-430');
   });
 
-  it('reports nothing for an unknown outcome and reads again', async () => {
+  it('keeps Restore pending through an unknown outcome, then shows a neutral notice', async () => {
     api.unarchiveTask.mockRejectedValueOnce(new HttpErrorResponse({ status: 0 }));
+    const harness: RouterTestingHarness = await open('/atelier-nord/archives?tab=tasks');
+    await expect.poll(() => button(harness, 'Restore CAD-430')).toBeDefined();
+
+    button(harness, 'Restore CAD-430')?.click();
+
+    await expect.poll(() => toasts.show.mock.calls.length).toBe(1);
+    expect(toasts.show).toHaveBeenCalledWith('The restore of CAD-430 could not be confirmed', {
+      description: 'The archives were read again: check whether it is back.',
+    });
+    expect(toasts.error).not.toHaveBeenCalled();
+    expect(api.checkTask).toHaveBeenCalledTimes(3);
+  });
+
+  it('shows the restored toast once a later read confirms an unknown outcome', async () => {
+    api.unarchiveTask.mockRejectedValueOnce(new HttpErrorResponse({ status: 503 }));
+    api.checkTask.mockResolvedValueOnce('restored');
     const harness: RouterTestingHarness = await open('/atelier-nord/archives?tab=tasks');
     await expect.poll(() => button(harness, 'Restore CAD-430')).toBeDefined();
     api.read.mockResolvedValue(archives([sprint13, campaign], []));
 
     button(harness, 'Restore CAD-430')?.click();
 
+    await expect.poll(() => toasts.show.mock.calls.length).toBe(1);
+    expect(toasts.show.mock.calls[0][0]).toBe('CAD-430 restored');
     await expect.poll(() => text(harness, 'archives-empty')).toContain('No archived task');
-    expect(toasts.error).not.toHaveBeenCalled();
-    expect(toasts.show).not.toHaveBeenCalled();
+  });
+
+  it('keeps a pending Restore focusable, marked busy, and ignores more clicks', async () => {
+    let finish: () => void = () => undefined;
+    api.unarchiveList.mockReturnValueOnce(
+      new Promise<void>((resolve: () => void) => {
+        finish = resolve;
+      }),
+    );
+    const harness: RouterTestingHarness = await open('/atelier-nord/archives');
+    await expect.poll(() => button(harness, 'Restore the list Sprint 13')).toBeDefined();
+
+    button(harness, 'Restore the list Sprint 13')?.click();
+    button(harness, 'Restore the list Sprint 13')?.click();
+
+    const pending: HTMLButtonElement | undefined = button(harness, 'Restore the list Sprint 13');
+    expect(pending?.hasAttribute('disabled')).toBe(false);
+    expect(pending?.getAttribute('aria-disabled')).toBe('true');
+    expect(pending?.getAttribute('aria-busy')).toBe('true');
+    expect(api.unarchiveList).toHaveBeenCalledOnce();
+    finish();
+    await expect.poll(() => toasts.show.mock.calls.length).toBe(1);
+  });
+
+  it('moves focus to the next Restore before a restored row leaves, then to the panel', async () => {
+    const harness: RouterTestingHarness = await open('/atelier-nord/archives');
+    document.body.appendChild(harness.fixture.nativeElement as HTMLElement);
+    await expect.poll(() => button(harness, 'Restore the list Sprint 13')).toBeDefined();
+    api.read.mockResolvedValue(archives([campaign], [cad430]));
+
+    button(harness, 'Restore the list Sprint 13')?.focus();
+    button(harness, 'Restore the list Sprint 13')?.click();
+
+    await expect.poll(() => toasts.show.mock.calls.length).toBe(1);
+    expect(document.activeElement?.getAttribute('aria-label')).toBe(
+      'Restore the list Back-to-school campaign',
+    );
+
+    await expect.poll(() => api.read.mock.calls.length).toBe(2);
+    await expect.poll(() => metas(harness, 'archives-lists').length).toBe(1);
+    api.read.mockResolvedValue(archives([], [cad430]));
+    button(harness, 'Restore the list Back-to-school campaign')?.click();
+
+    await expect.poll(() => toasts.show.mock.calls.length).toBe(2);
+    expect(document.activeElement?.getAttribute('data-testid')).toBe('archives-lists-panel');
+    await expect.poll(() => text(harness, 'archives-empty')).toContain('No archived list');
+    (harness.fixture.nativeElement as HTMLElement).remove();
+  });
+
+  it('offers no Restore on a list the caller cannot edit', async () => {
+    api.read.mockResolvedValue(archives([{ ...sprint13, restorable: false }, campaign], []));
+    const harness: RouterTestingHarness = await open('/atelier-nord/archives');
+
+    await expect.poll(() => text(harness, 'archives-lists')).toContain('Sprint 13');
+    expect(button(harness, 'Restore the list Sprint 13')).toBeUndefined();
+    expect(button(harness, 'Restore the list Back-to-school campaign')).toBeDefined();
+  });
+
+  it('tells a missing edit right with its own toast', async () => {
+    api.unarchiveTask.mockRejectedValueOnce(
+      new HttpErrorResponse({ status: 403, error: { code: 'access.role-insufficient' } }),
+    );
+    const harness: RouterTestingHarness = await open('/atelier-nord/archives?tab=tasks');
+    await expect.poll(() => button(harness, 'Restore CAD-430')).toBeDefined();
+
+    button(harness, 'Restore CAD-430')?.click();
+
+    await expect.poll(() => toasts.error.mock.calls.length).toBe(1);
+    expect(toasts.error).toHaveBeenCalledWith('You cannot restore CAD-430', {
+      description: 'Restoring takes the edit right on the list.',
+    });
+  });
+
+  it('says when a tab shows fewer rows than its total', async () => {
+    api.read.mockResolvedValue({ ...archives([sprint13, campaign], []), listTotal: 1_204 });
+    const harness: RouterTestingHarness = await open('/atelier-nord/archives');
+
+    await expect
+      .poll(() => text(harness, 'archives-lists-truncated'))
+      .toBe('Only the 2 most recently archived are shown, out of 1204.');
+    expect(text(harness, 'archives-summary')).toContain('1204 lists');
+  });
+
+  it('shows no toast when the page left while the restore ran, and dismisses its toasts', async () => {
+    let finish: () => void = () => undefined;
+    api.unarchiveList.mockResolvedValueOnce(undefined).mockReturnValueOnce(
+      new Promise<void>((resolve: () => void) => {
+        finish = resolve;
+      }),
+    );
+    const harness: RouterTestingHarness = await open('/atelier-nord/archives');
+    await expect.poll(() => button(harness, 'Restore the list Sprint 13')).toBeDefined();
+    button(harness, 'Restore the list Sprint 13')?.click();
+    await expect.poll(() => toasts.show.mock.calls.length).toBe(1);
+    button(harness, 'Restore the list Back-to-school campaign')?.click();
+
+    await harness.navigateByUrl('/atelier-nord');
+    finish();
+
+    await expect.poll(() => toasts.dismiss.mock.calls.length).toBe(1);
+    expect(toasts.dismiss).toHaveBeenCalledWith('t1');
+    await new Promise<void>((resolve: () => void) => {
+      setTimeout(resolve, 20);
+    });
+    expect(toasts.show).toHaveBeenCalledOnce();
+    expect(navigation.refresh).toHaveBeenCalledOnce();
+  });
+
+  it('dismisses its toasts on an organization change, and Open stays in its organization', async () => {
+    const opener: TaskDetailOpener = TestBed.inject(TaskDetailOpener);
+    const opening: MockInstance<TaskDetailOpener['open']> = vi
+      .spyOn(opener, 'open')
+      .mockResolvedValue(true);
+    const harness: RouterTestingHarness = await open('/atelier-nord/archives?tab=tasks');
+    await expect.poll(() => button(harness, 'Restore CAD-430')).toBeDefined();
+    button(harness, 'Restore CAD-430')?.click();
+    await expect.poll(() => toasts.show.mock.calls.length).toBe(1);
+    const options: { action: { run: () => void } } = toasts.show.mock.calls[0][1] as {
+      action: { run: () => void };
+    };
+
+    TestBed.inject(OrganizationPin).set('org-2');
+    options.action.run();
+
+    expect(toasts.dismiss).toHaveBeenCalledWith('t1');
+    expect(opening).not.toHaveBeenCalled();
   });
 });

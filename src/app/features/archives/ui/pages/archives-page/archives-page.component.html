@@ -29,72 +29,100 @@
       </cw-tabs-list>
 
       <cw-tab-panel value="lists">
-        @if (listRows().length > 0) {
-          <div
-            class="mt-5 overflow-hidden rounded-lg border border-border"
-            role="list"
-            data-testid="archives-lists"
-          >
-            @for (row of listRows(); track row.item.id) {
-              <cw-archive-row
-                [icon]="row.icon"
-                [name]="row.item.name"
-                [meta]="row.meta"
-                [restoreLabel]="row.restoreLabel"
-                [pending]="store.listPending(row.item.id)"
-                (restored)="restoreList(row.item)"
-              />
+        <div
+          class="mt-5 flex flex-col gap-3 outline-none"
+          tabindex="-1"
+          data-archives-panel="lists"
+          data-testid="archives-lists-panel"
+        >
+          @if (listRows().length > 0) {
+            <div
+              class="overflow-hidden rounded-lg border border-border"
+              role="list"
+              data-testid="archives-lists"
+            >
+              @for (row of listRows(); track row.item.id) {
+                <cw-archive-row
+                  [attr.data-archive-key]="row.key"
+                  [icon]="row.icon"
+                  [name]="row.item.name"
+                  [meta]="row.meta"
+                  [restoreLabel]="row.restoreLabel"
+                  [restorable]="row.restorable"
+                  [pending]="store.listPending(row.item.id)"
+                  (restored)="restoreList(row.item, row.key)"
+                />
+              }
+            </div>
+            @if (store.listCount() > listRows().length) {
+              <p class="text-xs text-muted-foreground" data-testid="archives-lists-truncated">
+                {{ truncated(listRows().length, store.listCount()) }}
+              </p>
             }
-          </div>
-        } @else {
-          <cw-empty variant="outline" class="mt-5" data-testid="archives-empty">
-            <cw-empty-header>
-              <cw-empty-media>
-                <ng-icon name="phosphorArchiveBold" aria-hidden="true" />
-              </cw-empty-media>
-              <cw-empty-title i18n="@@archives.empty.lists">No archived list</cw-empty-title>
-              <cw-empty-description i18n="@@archives.empty.text"
-                >Archive a list or a completed task to lighten the sidebar without losing
-                anything.</cw-empty-description
-              >
-            </cw-empty-header>
-          </cw-empty>
-        }
+          } @else {
+            <cw-empty variant="outline" data-testid="archives-empty">
+              <cw-empty-header>
+                <cw-empty-media>
+                  <ng-icon name="phosphorArchiveBold" aria-hidden="true" />
+                </cw-empty-media>
+                <cw-empty-title i18n="@@archives.empty.lists">No archived list</cw-empty-title>
+                <cw-empty-description i18n="@@archives.empty.text"
+                  >Archive a list or a completed task to lighten the sidebar without losing
+                  anything.</cw-empty-description
+                >
+              </cw-empty-header>
+            </cw-empty>
+          }
+        </div>
       </cw-tab-panel>
 
       <cw-tab-panel value="tasks">
-        @if (taskRows().length > 0) {
-          <div
-            class="mt-5 overflow-hidden rounded-lg border border-border"
-            role="list"
-            data-testid="archives-tasks"
-          >
-            @for (row of taskRows(); track row.item.key) {
-              <cw-archive-row
-                [icon]="row.icon"
-                [name]="row.item.name"
-                [taskKey]="row.item.key"
-                [meta]="row.meta"
-                [restoreLabel]="row.restoreLabel"
-                [pending]="store.taskPending(row.item.key)"
-                (restored)="restoreTask(row.item)"
-              />
+        <div
+          class="mt-5 flex flex-col gap-3 outline-none"
+          tabindex="-1"
+          data-archives-panel="tasks"
+          data-testid="archives-tasks-panel"
+        >
+          @if (taskRows().length > 0) {
+            <div
+              class="overflow-hidden rounded-lg border border-border"
+              role="list"
+              data-testid="archives-tasks"
+            >
+              @for (row of taskRows(); track row.item.key) {
+                <cw-archive-row
+                  [attr.data-archive-key]="row.key"
+                  [icon]="row.icon"
+                  [name]="row.item.name"
+                  [taskKey]="row.item.key"
+                  [meta]="row.meta"
+                  [restoreLabel]="row.restoreLabel"
+                  [restorable]="row.restorable"
+                  [pending]="store.taskPending(row.item.key)"
+                  (restored)="restoreTask(row.item, row.key)"
+                />
+              }
+            </div>
+            @if (store.taskCount() > taskRows().length) {
+              <p class="text-xs text-muted-foreground" data-testid="archives-tasks-truncated">
+                {{ truncated(taskRows().length, store.taskCount()) }}
+              </p>
             }
-          </div>
-        } @else {
-          <cw-empty variant="outline" class="mt-5" data-testid="archives-empty">
-            <cw-empty-header>
-              <cw-empty-media>
-                <ng-icon name="phosphorArchiveBold" aria-hidden="true" />
-              </cw-empty-media>
-              <cw-empty-title i18n="@@archives.empty.tasks">No archived task</cw-empty-title>
-              <cw-empty-description i18n="@@archives.empty.text"
-                >Archive a list or a completed task to lighten the sidebar without losing
-                anything.</cw-empty-description
-              >
-            </cw-empty-header>
-          </cw-empty>
-        }
+          } @else {
+            <cw-empty variant="outline" data-testid="archives-empty">
+              <cw-empty-header>
+                <cw-empty-media>
+                  <ng-icon name="phosphorArchiveBold" aria-hidden="true" />
+                </cw-empty-media>
+                <cw-empty-title i18n="@@archives.empty.tasks">No archived task</cw-empty-title>
+                <cw-empty-description i18n="@@archives.empty.text"
+                  >Archive a list or a completed task to lighten the sidebar without losing
+                  anything.</cw-empty-description
+                >
+              </cw-empty-header>
+            </cw-empty>
+          }
+        </div>
       </cw-tab-panel>
     </cw-tabs>
   } @else {

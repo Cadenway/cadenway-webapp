@@ -20,7 +20,7 @@ import {
 } from '@ngrx/signals';
 import { auditTime, EMPTY, filter, fromEvent, merge, type Observable } from 'rxjs';
 
-import { OrganizationPin } from '@core/api';
+import { OrganizationPin, OrganizationSwitchPendingError } from '@core/api';
 import { RealtimeConnection } from '@core/realtime';
 
 import { NAVIGATION_REFRESH } from '@features/spaces/ports/navigation-refresh';
@@ -28,8 +28,11 @@ import { TaskDetailOpener } from '@features/task';
 
 import {
   ArchivesApi,
+  isForbiddenRestore,
   isUncertainRestore,
 } from '../../data-access/services/archives-api/archives-api.service';
+import type { ArchiveCheck } from '../../models/archive-check/archive-check.type';
+import { ARCHIVES_CONFIRM_DELAYS_MS } from './archives-confirm-delays.token';
 import type { ArchivedListItem } from '../../models/archived-list/archived-list.interface';
 import type { ArchivedTaskItem } from '../../models/archived-task/archived-task.interface';
 import type { ArchivesRead } from '../../models/archives-read/archives-read.interface';
@@ -45,6 +48,21 @@ import type { RestoreOutcome } from '../../models/restore-outcome/restore-outcom
  * @type {number}
  */
 export const REFRESH_AUDIT_MS: number = 300;
+
+/**
+ * Function wait
+ *
+ * @description
+ * Resolves after a delay.
+ *
+ * @param {number} ms - Delay in milliseconds.
+ * @returns {Promise<void>} Resolves once it elapsed.
+ */
+function wait(ms: number): Promise<void> {
+  return new Promise<void>((resolve: () => void) => {
+    setTimeout(resolve, ms);
+  });
+}
 
 /**
  * Interface ArchivesSnapshot
@@ -194,6 +212,16 @@ interface ArchivesLoads {
    * @type {ArchivesSnapshot | null}
    */
   last: ArchivesSnapshot | null;
+
+  /**
+   * Property destroyed
+   *
+   * @description
+   * Whether the store (and so its page) is gone; a restore that ends afterwards reports `stale`.
+   *
+   * @type {boolean}
+   */
+  destroyed: boolean;
   // #endregion
 }
 
@@ -293,7 +321,7 @@ export interface ArchivesStoreInstance {
    * Method listPending
    *
    * @description
-   * Whether the restore of a list runs.
+   * Whether the restore of a list runs, confirmation reads included.
    *
    * @param {string} listId - The list.
    * @returns {boolean} Whether its `Restore` is busy.
@@ -304,7 +332,7 @@ export interface ArchivesStoreInstance {
    * Method taskPending
    *
    * @description
-   * Whether the restore of a task runs.
+   * Whether the restore of a task runs, confirmation reads included.
    *
    * @param {string} taskKey - The task.
    * @returns {boolean} Whether its `Restore` is busy.
@@ -315,26 +343,29 @@ export interface ArchivesStoreInstance {
    * Method restoreList
    *
    * @description
-   * Unarchives a list. Once confirmed in the organization where it started, the list leaves the
-   * tab, the sidebar is read again and so are the archives (a task of that list now names it).
+   * Unarchives a list. Once confirmed in the organization where it started, `beforeLeave` runs
+   * (the page moves focus off the row), the list leaves the tab, the sidebar is read again and so
+   * are the archives (a task of that list now names it).
    *
    * @param {ArchivedListItem} list - The archived list.
+   * @param {() => void} [beforeLeave] - Runs just before the row leaves the tab.
    * @returns {Promise<RestoreOutcome>} How it ended.
    */
-  restoreList(list: ArchivedListItem): Promise<RestoreOutcome>;
+  restoreList(list: ArchivedListItem, beforeLeave?: () => void): Promise<RestoreOutcome>;
 
   /**
    * Method restoreTask
    *
    * @description
    * Unarchives a task with its subtree (and its list when archived too). Once confirmed in the
-   * organization where it started, the task leaves the tab, the sidebar is read again and so are
-   * the archives (its list may have left the `Lists` tab).
+   * organization where it started, `beforeLeave` runs, the task leaves the tab, the sidebar is
+   * read again and so are the archives (its list may have left the `Lists` tab).
    *
    * @param {ArchivedTaskItem} task - The archived root.
+   * @param {() => void} [beforeLeave] - Runs just before the row leaves the tab.
    * @returns {Promise<RestoreOutcome>} How it ended.
    */
-  restoreTask(task: ArchivedTaskItem): Promise<RestoreOutcome>;
+  restoreTask(task: ArchivedTaskItem, beforeLeave?: () => void): Promise<RestoreOutcome>;
   // #endregion
 }
 
@@ -393,6 +424,7 @@ function createArchivesStore(): Type<ArchivesStoreInstance> {
         sequence: 0,
         generation: 0,
         last: null,
+        destroyed: false,
       };
       const byOrganization: () => { organizationId: string } | undefined = () => {
         const organizationId: string | null = store._organizationId();
@@ -401,6 +433,7 @@ function createArchivesStore(): Type<ArchivesStoreInstance> {
       return {
         _api: api,
         _loads: loads,
+        _delays: inject(ARCHIVES_CONFIRM_DELAYS_MS),
         _pin: inject(OrganizationPin),
         _navigation: inject(NAVIGATION_REFRESH, { optional: true }),
         _opener: inject(TaskDetailOpener),
@@ -506,29 +539,11 @@ function createArchivesStore(): Type<ArchivesStoreInstance> {
           _pending: store._pending().filter((pending: string) => pending !== key),
         });
       };
-      const restore: (key: string, write: () => Promise<void>) => Promise<RestoreOutcome> = async (
+      const confirmed: (key: string, beforeLeave: (() => void) | undefined) => RestoreOutcome = (
         key: string,
-        write: () => Promise<void>,
-      ): Promise<RestoreOutcome> => {
-        const organizationId: string | null = store._organizationId();
-        if (organizationId === null || store._pending().includes(key)) return 'stale';
-        const generation: number = store._loads.generation;
-        const current: () => boolean = (): boolean =>
-          generation === store._loads.generation && store._pin.current() === organizationId;
-        patchState(store, { _pending: [...store._pending(), key] });
-        try {
-          await write();
-        } catch (error: unknown) {
-          if (!current()) return 'stale';
-          settle(key);
-          const uncertain: boolean = isUncertainRestore(error);
-          // The write may have been applied: the sidebar and the archives are read again, and
-          // whatever they say settles it.
-          if (uncertain) store._navigation?.refresh();
-          read();
-          return uncertain ? 'unknown' : 'refused';
-        }
-        if (!current()) return 'stale';
+        beforeLeave: (() => void) | undefined,
+      ): RestoreOutcome => {
+        beforeLeave?.();
         patchState(store, {
           _pending: store._pending().filter((pending: string) => pending !== key),
           _restored: { ...store._restored(), [key]: store._loads.sequence },
@@ -536,6 +551,62 @@ function createArchivesStore(): Type<ArchivesStoreInstance> {
         store._navigation?.refresh();
         read();
         return 'restored';
+      };
+      const restore: (
+        key: string,
+        write: () => Promise<void>,
+        check: () => Promise<ArchiveCheck>,
+        beforeLeave: (() => void) | undefined,
+      ) => Promise<RestoreOutcome> = async (
+        key: string,
+        write: () => Promise<void>,
+        check: () => Promise<ArchiveCheck>,
+        beforeLeave: (() => void) | undefined,
+      ): Promise<RestoreOutcome> => {
+        const organizationId: string | null = store._organizationId();
+        if (organizationId === null || store._pending().includes(key)) return 'stale';
+        const generation: number = store._loads.generation;
+        const current: () => boolean = (): boolean =>
+          !store._loads.destroyed &&
+          generation === store._loads.generation &&
+          store._pin.current() === organizationId;
+        patchState(store, { _pending: [...store._pending(), key] });
+        try {
+          await write();
+        } catch (error: unknown) {
+          if (!current()) return 'stale';
+          if (error instanceof OrganizationSwitchPendingError) {
+            // Refused before it left: nothing changed, and the organization switch reads again.
+            settle(key);
+            return 'stale';
+          }
+          if (!isUncertainRestore(error)) {
+            settle(key);
+            read();
+            return isForbiddenRestore(error) ? 'forbidden' : 'refused';
+          }
+          // The write may have been applied: the row stays pending while the item itself is read
+          // again after each delay, until it reads live again.
+          for (const delay of store._delays) {
+            await wait(delay);
+            if (!current()) return 'stale';
+            let state: ArchiveCheck | null;
+            try {
+              state = await check();
+            } catch {
+              state = null;
+            }
+            if (!current()) return 'stale';
+            if (state === 'restored') return confirmed(key, beforeLeave);
+            if (state === 'gone') break;
+          }
+          settle(key);
+          store._navigation?.refresh();
+          read();
+          return 'unconfirmed';
+        }
+        if (!current()) return 'stale';
+        return confirmed(key, beforeLeave);
       };
       return {
         _refresh: read,
@@ -558,11 +629,21 @@ function createArchivesStore(): Type<ArchivesStoreInstance> {
         taskPending(key: string): boolean {
           return store._pending().includes(taskKey(key));
         },
-        restoreList(list: ArchivedListItem): Promise<RestoreOutcome> {
-          return restore(listKey(list.id), () => store._api.unarchiveList(list.id));
+        restoreList(list: ArchivedListItem, beforeLeave?: () => void): Promise<RestoreOutcome> {
+          return restore(
+            listKey(list.id),
+            () => store._api.unarchiveList(list.id),
+            () => store._api.checkList(list.id),
+            beforeLeave,
+          );
         },
-        restoreTask(task: ArchivedTaskItem): Promise<RestoreOutcome> {
-          return restore(taskKey(task.key), () => store._api.unarchiveTask(task.key));
+        restoreTask(task: ArchivedTaskItem, beforeLeave?: () => void): Promise<RestoreOutcome> {
+          return restore(
+            taskKey(task.key),
+            () => store._api.unarchiveTask(task.key),
+            () => store._api.checkTask(task.key),
+            beforeLeave,
+          );
         },
       };
     }),
@@ -589,6 +670,9 @@ function createArchivesStore(): Type<ArchivesStoreInstance> {
             store._refresh();
           });
       },
+      onDestroy(store): void {
+        store._loads.destroyed = true;
+      },
     }),
   );
 }
@@ -598,7 +682,8 @@ function createArchivesStore(): Type<ArchivesStoreInstance> {
  *
  * @description
  * Page-scoped on `ArchivesPage`. It reads both tabs of the archives of the organization the
- * organization pin holds, each to its last page, side by side, with the members' names: actively
+ * organization pin holds, side by side, each up to `MAX_PAGES` pages, with the members' names:
+ * actively
  * when the page opens (a failure reaches the route's error boundary), passively (in the background)
  * on focus, on a visible tab, after a realtime reconnection, after a task detail closes and after
  * each restore; no organization-wide notice exists (gap G-R2). A read asked for while another
@@ -607,8 +692,12 @@ function createArchivesStore(): Type<ArchivesStoreInstance> {
  * started in an earlier organization changes nothing and reports `stale`. A confirmed restore
  * hides its item from every read that began before the confirmation, so an older read still in
  * flight cannot bring it back; a later read is the gateway's word. An unknown outcome (no answer,
- * a timeout, `408`, `5xx`) reads the sidebar and the archives again and is never reported as a
- * failure. A confirmed restore reads the sidebar again through Spaces' `NAVIGATION_REFRESH`.
+ * a timeout, `408`, `5xx`) is never reported as a failure: the row stays pending while the item
+ * itself is read again after each of `ARCHIVES_CONFIRM_DELAYS_MS`; it reports `restored` once the
+ * item reads live, else `unconfirmed` (and reads the sidebar and the archives again). A write
+ * refused because the organization was switching reports `stale` and reads nothing. A restore
+ * that ends after the store is destroyed reports `stale`. A confirmed restore reads the sidebar
+ * again through Spaces' `NAVIGATION_REFRESH`.
  *
  * @type {ReturnType<typeof createArchivesStore>}
  */

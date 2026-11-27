@@ -31,12 +31,14 @@ function personId(actor: ArchiveActor): string | null {
  * Function toArchivedListItem
  *
  * @description
- * Maps an archived list of the gateway to the row of the `Lists` tab.
+ * Maps an archived list of the gateway to the row of the `Lists` tab. Restoring needs `edit` on
+ * the list; a list sent without `callerRole` reads as `edit`, any other role as not restorable.
  *
  * @param {ArchivedList} entry - The gateway's archived list.
  * @returns {ArchivedListItem} The display model.
  */
 export function toArchivedListItem(entry: ArchivedList): ArchivedListItem {
+  const role: string | undefined = entry.list.callerRole;
   return {
     id: entry.list.id,
     name: entry.list.name,
@@ -45,6 +47,7 @@ export function toArchivedListItem(entry: ArchivedList): ArchivedListItem {
     taskCount: entry.taskCount,
     archivedAt: entry.list.archivedAt ?? null,
     archivedBy: personId(entry.list.archivedBy),
+    restorable: role === undefined || role === 'edit',
   };
 }
 

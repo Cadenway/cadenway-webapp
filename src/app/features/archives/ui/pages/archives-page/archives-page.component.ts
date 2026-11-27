@@ -1,6 +1,9 @@
 import {
   Component,
   computed,
+  DestroyRef,
+  DOCUMENT,
+  ElementRef,
   inject,
   input,
   type InputSignal,
@@ -19,8 +22,11 @@ import {
 } from '@cadenway/ui/components/empty';
 import { CwSkeleton } from '@cadenway/ui/components/skeleton';
 import { CwTab, CwTabPanel, CwTabs, CwTabsList } from '@cadenway/ui/components/tabs';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { CwToastService } from '@cadenway/ui/components/toast';
 import { NgIcon } from '@ng-icons/core';
+
+import { OrganizationPin } from '@core/api';
 
 import {
   SPACE_DIRECTORY,
@@ -63,6 +69,28 @@ interface ArchiveRowView<T> {
    * @readonly
    */
   readonly item: T;
+
+  /**
+   * Property key
+   *
+   * @description
+   * The row's key (`list:<id>`, `task:<KEY>`), written on its element so focus can leave it.
+   *
+   * @type {string}
+   * @readonly
+   */
+  readonly key: string;
+
+  /**
+   * Property restorable
+   *
+   * @description
+   * Whether `Restore` is offered.
+   *
+   * @type {boolean}
+   * @readonly
+   */
+  readonly restorable: boolean;
 
   /**
    * Property icon
@@ -120,10 +148,16 @@ const SEPARATOR: string = ' · ';
  * directory (gap G-A1), or no space while it is unknown; the `by` names a member, or is left out
  * for another actor or while the names are not known. The mockup draws no loading state: rows
  * skeletons stand in while the first read runs. A failed first read throws into the route's
- * `RouteErrorBoundary` (the unavailable state with `Retry`). Each restore shows the mockup's toast
- * once confirmed (`Open` opens a restored task's detail), a failure toast for a refusal, and
- * nothing for an unknown outcome or a restore that started in another organization. The `h1` is
- * the route focus target. The page provides its `ArchivesStore`.
+ * `RouteErrorBoundary` (the unavailable state with `Retry`). A tab holding fewer rows than its
+ * total (the read stops at 1,000 items) says so under its rows. `Restore` is offered only on the
+ * lists the caller may edit. Each restore shows the mockup's toast once confirmed (`Open` opens a
+ * restored task's detail, only in the organization it was restored in), a neutral notice when its
+ * outcome could not be confirmed, a toast for a missing `edit` right, a failure toast for another
+ * refusal, and nothing when the organization changed or the page left meanwhile. Before a
+ * restored row leaves, focus moves from it to the nearest following `Restore`, else the nearest
+ * preceding one, else the tab's panel. The page's toasts are dismissed when it is destroyed and
+ * when the organization changes. The `h1` is the route focus target. The page provides its
+ * `ArchivesStore`.
  */
 @Component({
   selector: 'cw-archives-page',
@@ -201,6 +235,60 @@ export class ArchivesPage {
    * @readonly
    */
   private readonly toasts: CwToastService = inject(CwToastService);
+
+  /**
+   * Property pin
+   *
+   * @description
+   * The workspace organization, which each restore and its toast are bound to.
+   *
+   * @type {OrganizationPin}
+   * @readonly
+   */
+  private readonly pin: OrganizationPin = inject(OrganizationPin);
+
+  /**
+   * Property host
+   *
+   * @description
+   * The page element, where focus is moved off a leaving row.
+   *
+   * @type {ElementRef<HTMLElement>}
+   * @readonly
+   */
+  private readonly host: ElementRef<HTMLElement> = inject<ElementRef<HTMLElement>>(ElementRef);
+
+  /**
+   * Property document
+   *
+   * @description
+   * The document, whose active element tells whether focus is on a leaving row.
+   *
+   * @type {Document}
+   * @readonly
+   */
+  private readonly document: Document = inject(DOCUMENT);
+
+  /**
+   * Property shownToasts
+   *
+   * @description
+   * Ids of the toasts this page raised, dismissed with the page or the organization.
+   *
+   * @type {Set<string>}
+   * @readonly
+   */
+  private readonly shownToasts: Set<string> = new Set<string>();
+
+  /**
+   * Property destroyed
+   *
+   * @description
+   * Whether the page is gone; a restore ending afterwards shows nothing.
+   *
+   * @type {boolean}
+   */
+  private destroyed: boolean = false;
 
   /**
    * Property router
@@ -338,6 +426,8 @@ export class ArchivesPage {
         if (archived !== null) parts.push(archived);
         return {
           item: list,
+          key: `list:${list.id}`,
+          restorable: list.restorable,
           icon: list.sprint ? 'phosphorLightningBold' : 'phosphorListBulletsBold',
           meta: parts.join(SEPARATOR),
           restoreLabel: $localize`:@@archives.list.restore-label:Restore the list ${list.name}:name:`,
@@ -368,6 +458,8 @@ export class ArchivesPage {
         if (archived !== null) parts.push(archived);
         return {
           item: task,
+          key: `task:${task.key}`,
+          restorable: true,
           icon: 'phosphorCheckSquareBold',
           meta: parts.join(SEPARATOR),
           restoreLabel: $localize`:@@archives.task.restore-label:Restore ${task.key}:key:`,
@@ -375,6 +467,26 @@ export class ArchivesPage {
       });
     },
   );
+  // #endregion
+
+  // #region Constructor
+  /**
+   * Constructor
+   *
+   * @description
+   * Dismisses the page's toasts when the organization changes and when the page is destroyed.
+   *
+   * @constructor
+   */
+  public constructor() {
+    this.pin.organizationChanges.pipe(takeUntilDestroyed()).subscribe((): void => {
+      this.dismissToasts();
+    });
+    inject(DestroyRef).onDestroy((): void => {
+      this.destroyed = true;
+      this.dismissToasts();
+    });
+  }
   // #endregion
 
   // #region Methods
@@ -398,36 +510,77 @@ export class ArchivesPage {
   }
 
   /**
+   * Method truncated
+   *
+   * @description
+   * The notice of a tab holding fewer rows than its total.
+   *
+   * @param {number} shown - Rows shown.
+   * @param {number} total - Items the gateway counted.
+   * @returns {string} The notice.
+   */
+  protected truncated(shown: number, total: number): string {
+    return $localize`:@@archives.tabs.truncated:Only the ${shown}:shown: most recently archived are shown, out of ${total}:total:.`;
+  }
+
+  /**
    * Method restoreList
    *
    * @description
    * Restores a list, then shows `Sprint restored` or `List restored` with the space it is back in
-   * (`App.dc.html` line 5487), or the failure of a refusal.
+   * (`App.dc.html` line 5487), or the notice of an unconfirmed outcome, a missing right or a
+   * refusal.
    *
    * @param {ArchivedListItem} list - The archived list.
+   * @param {string} key - Its row's key.
    * @returns {Promise<void>} Resolves once handled.
    */
-  protected async restoreList(list: ArchivedListItem): Promise<void> {
+  protected async restoreList(list: ArchivedListItem, key: string): Promise<void> {
+    const organizationId: string | null = this.pin.current();
     const space: string | undefined = this.spaceNames().get(list.spaceId);
-    const outcome: RestoreOutcome = await this.store.restoreList(list);
-    if (outcome === 'restored') {
-      this.toasts.show(
-        list.sprint
-          ? $localize`:@@archives.list.sprint-restored:Sprint restored`
-          : $localize`:@@archives.list.list-restored:List restored`,
-        {
-          description:
-            space === undefined
-              ? $localize`:@@archives.list.back-in-own-space:${list.name}:name: is back in its space.`
-              : $localize`:@@archives.list.back-in-space:${list.name}:name: is back in ${space}:space:.`,
-        },
-      );
-    } else if (outcome === 'refused') {
-      this.toasts.error(
-        list.sprint
-          ? $localize`:@@archives.list.sprint-restore-failed:The sprint could not be restored`
-          : $localize`:@@archives.list.restore-failed:The list could not be restored`,
-      );
+    const outcome: RestoreOutcome = await this.store.restoreList(list, (): void => {
+      this.handOffFocus(key);
+    });
+    if (!this.stillHere(organizationId)) return;
+    switch (outcome) {
+      case 'restored':
+        this.toast(
+          'show',
+          list.sprint
+            ? $localize`:@@archives.list.sprint-restored:Sprint restored`
+            : $localize`:@@archives.list.list-restored:List restored`,
+          {
+            description:
+              space === undefined
+                ? $localize`:@@archives.list.back-in-own-space:${list.name}:name: is back in its space.`
+                : $localize`:@@archives.list.back-in-space:${list.name}:name: is back in ${space}:space:.`,
+          },
+        );
+        return;
+      case 'unconfirmed':
+        this.toast(
+          'show',
+          $localize`:@@archives.list.unconfirmed:The restore of ${list.name}:name: could not be confirmed`,
+          { description: this.unconfirmedDetail() },
+        );
+        return;
+      case 'forbidden':
+        this.toast(
+          'error',
+          $localize`:@@archives.list.forbidden:You cannot restore ${list.name}:name:`,
+          { description: this.forbiddenDetail() },
+        );
+        return;
+      case 'refused':
+        this.toast(
+          'error',
+          list.sprint
+            ? $localize`:@@archives.list.sprint-restore-failed:The sprint could not be restored`
+            : $localize`:@@archives.list.restore-failed:The list could not be restored`,
+        );
+        return;
+      case 'stale':
+        return;
     }
   }
 
@@ -436,33 +589,159 @@ export class ArchivesPage {
    *
    * @description
    * Restores a task, then shows `<KEY> restored` / `Back in its list.` with `Open`, which opens
-   * its detail (`App.dc.html` line 5498), or the failure of a refusal.
+   * its detail (`App.dc.html` line 5498) while the organization is the one it was restored in, or
+   * the notice of an unconfirmed outcome, a missing right or a refusal.
    *
    * @param {ArchivedTaskItem} task - The archived root.
+   * @param {string} key - Its row's key.
    * @returns {Promise<void>} Resolves once handled.
    */
-  protected async restoreTask(task: ArchivedTaskItem): Promise<void> {
-    const outcome: RestoreOutcome = await this.store.restoreTask(task);
-    if (outcome === 'restored') {
-      this.toasts.show($localize`:@@archives.task.restored:${task.key}:key: restored`, {
-        description: $localize`:@@archives.task.back-in-list:Back in its list.`,
-        action: {
-          label: $localize`:@@archives.task.open:Open`,
-          run: (): void => {
-            void this.opener.open(task.key, {
-              key: task.key,
-              name: task.name,
-              status: task.status,
-              milestone: task.milestone,
-            });
+  protected async restoreTask(task: ArchivedTaskItem, key: string): Promise<void> {
+    const organizationId: string | null = this.pin.current();
+    const outcome: RestoreOutcome = await this.store.restoreTask(task, (): void => {
+      this.handOffFocus(key);
+    });
+    if (!this.stillHere(organizationId)) return;
+    switch (outcome) {
+      case 'restored':
+        this.toast('show', $localize`:@@archives.task.restored:${task.key}:key: restored`, {
+          description: $localize`:@@archives.task.back-in-list:Back in its list.`,
+          action: {
+            label: $localize`:@@archives.task.open:Open`,
+            run: (): void => {
+              if (this.pin.current() !== organizationId) return;
+              void this.opener.open(task.key, {
+                key: task.key,
+                name: task.name,
+                status: task.status,
+                milestone: task.milestone,
+              });
+            },
           },
-        },
-      });
-    } else if (outcome === 'refused') {
-      this.toasts.error(
-        $localize`:@@archives.task.restore-failed:${task.key}:key: could not be restored`,
-      );
+        });
+        return;
+      case 'unconfirmed':
+        this.toast(
+          'show',
+          $localize`:@@archives.task.unconfirmed:The restore of ${task.key}:key: could not be confirmed`,
+          { description: this.unconfirmedDetail() },
+        );
+        return;
+      case 'forbidden':
+        this.toast(
+          'error',
+          $localize`:@@archives.task.forbidden:You cannot restore ${task.key}:key:`,
+          {
+            description: this.forbiddenDetail(),
+          },
+        );
+        return;
+      case 'refused':
+        this.toast(
+          'error',
+          $localize`:@@archives.task.restore-failed:${task.key}:key: could not be restored`,
+        );
+        return;
+      case 'stale':
+        return;
     }
+  }
+
+  /**
+   * Method stillHere
+   *
+   * @description
+   * Whether a restore's answer may still be shown: the page is alive and the organization is the
+   * one the restore started in.
+   *
+   * @param {string | null} organizationId - Organization when the restore started.
+   * @returns {boolean} Whether to show it.
+   */
+  private stillHere(organizationId: string | null): boolean {
+    return !this.destroyed && organizationId !== null && this.pin.current() === organizationId;
+  }
+
+  /**
+   * Method toast
+   *
+   * @description
+   * Raises a toast and remembers it, so it goes with the page or the organization.
+   *
+   * @param {'show' | 'error'} tone - Neutral or failure.
+   * @param {string} title - Its title.
+   * @param {Parameters<CwToastService['show']>[1]} [options] - Its description and action.
+   */
+  private toast(
+    tone: 'show' | 'error',
+    title: string,
+    options?: Parameters<CwToastService['show']>[1],
+  ): void {
+    this.shownToasts.add(
+      tone === 'show' ? this.toasts.show(title, options) : this.toasts.error(title, options),
+    );
+  }
+
+  /**
+   * Method dismissToasts
+   *
+   * @description
+   * Dismisses every toast the page raised.
+   */
+  private dismissToasts(): void {
+    for (const id of this.shownToasts) this.toasts.dismiss(id);
+    this.shownToasts.clear();
+  }
+
+  /**
+   * Method unconfirmedDetail
+   *
+   * @description
+   * Description of the notice of an unconfirmed restore.
+   *
+   * @returns {string} The description.
+   */
+  private unconfirmedDetail(): string {
+    return $localize`:@@archives.restore.unconfirmed-detail:The archives were read again: check whether it is back.`;
+  }
+
+  /**
+   * Method forbiddenDetail
+   *
+   * @description
+   * Description of the toast of a restore refused for a missing right.
+   *
+   * @returns {string} The description.
+   */
+  private forbiddenDetail(): string {
+    return $localize`:@@archives.restore.forbidden-detail:Restoring takes the edit right on the list.`;
+  }
+
+  /**
+   * Method handOffFocus
+   *
+   * @description
+   * Moves focus off a row about to leave, when focus is inside it: to the nearest following
+   * `Restore`, else the nearest preceding one, else the tab's panel (which then holds the empty
+   * state). Focus elsewhere is left alone.
+   *
+   * @param {string} key - The leaving row's key.
+   */
+  private handOffFocus(key: string): void {
+    const row: Element | undefined = Array.from(
+      this.host.nativeElement.querySelectorAll('[data-archive-key]'),
+    ).find((element: Element) => element.getAttribute('data-archive-key') === key);
+    const active: Element | null = this.document.activeElement;
+    if (!row || !active || !row.contains(active)) return;
+    let target: HTMLElement | null = null;
+    for (let next: Element | null = row.nextElementSibling; next && !target;) {
+      target = next.querySelector<HTMLElement>('[data-archive-restore]');
+      next = next.nextElementSibling;
+    }
+    for (let previous: Element | null = row.previousElementSibling; previous && !target;) {
+      target = previous.querySelector<HTMLElement>('[data-archive-restore]');
+      previous = previous.previousElementSibling;
+    }
+    (target ?? row.closest<HTMLElement>('[data-archives-panel]'))?.focus();
   }
 
   /**

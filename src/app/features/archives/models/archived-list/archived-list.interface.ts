@@ -83,5 +83,17 @@ export interface ArchivedListItem {
    * @readonly
    */
   readonly archivedBy: string | null;
+
+  /**
+   * Property restorable
+   *
+   * @description
+   * Whether the caller may restore it: `edit` on the list, or no role sent by the gateway (read
+   * as `edit`, as Spaces does). The gateway still answers `403` when the role does not allow it.
+   *
+   * @type {boolean}
+   * @readonly
+   */
+  readonly restorable: boolean;
   // #endregion
 }

@@ -9,8 +9,11 @@ import { NgIcon } from '@ng-icons/core';
  * One row of the archives (`App.dc.html` lines 2009-2013): the kind icon in its muted tile, the
  * name with the task key when there is one, the meta line, and `Restore`. The row wraps below
  * 640 px so `Restore` drops under the text on a phone. Its host is a `listitem`, so it lives in
- * the page's `role="list"` container. `Restore` is disabled while its write runs (`pending`) and
- * emits `restored` on click; the page owns the write and its toast.
+ * the page's `role="list"` container. `Restore` shows only when the caller may restore the item
+ * (`restorable`). While its write runs (`pending`) it stays focusable, marked `aria-disabled` and
+ * `aria-busy`, and ignores clicks, so focus is never dropped by a natively disabled button;
+ * otherwise a click emits `restored`. The page owns the write, the toast and where focus goes
+ * when the row leaves.
  */
 @Component({
   selector: 'cw-archive-row',
@@ -92,6 +95,17 @@ export class ArchiveRow {
   public readonly pending: InputSignal<boolean> = input<boolean>(false);
 
   /**
+   * Property restorable
+   *
+   * @description
+   * Whether `Restore` is offered (the caller may restore the item).
+   *
+   * @type {InputSignal<boolean>}
+   * @readonly
+   */
+  public readonly restorable: InputSignal<boolean> = input<boolean>(true);
+
+  /**
    * Property restored
    *
    * @description
@@ -101,5 +115,17 @@ export class ArchiveRow {
    * @readonly
    */
   public readonly restored: OutputEmitterRef<void> = output();
+  // #endregion
+
+  // #region Methods
+  /**
+   * Method restore
+   *
+   * @description
+   * Emits `restored`, unless the restore of this item already runs.
+   */
+  protected restore(): void {
+    if (!this.pending()) this.restored.emit();
+  }
   // #endregion
 }

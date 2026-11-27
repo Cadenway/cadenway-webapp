@@ -73,7 +73,21 @@ describe('archives adapter', () => {
       taskCount: 14,
       archivedAt: '2026-11-03T09:00:00Z',
       archivedBy: 'u-camille',
+      restorable: true,
     });
+  });
+
+  it('offers the restore of a list only with the edit right, or without a role sent', () => {
+    const viewer: ArchivedList = { ...sprint13, list: { ...sprint13.list, callerRole: 'view' } };
+    const commenter: ArchivedList = {
+      ...sprint13,
+      list: { ...sprint13.list, callerRole: 'comment' },
+    };
+    const withoutRole: ArchivedList['list'] = { ...sprint13.list };
+    delete withoutRole.callerRole;
+    expect(toArchivedListItem(viewer).restorable).toBe(false);
+    expect(toArchivedListItem(commenter).restorable).toBe(false);
+    expect(toArchivedListItem({ ...sprint13, list: withoutRole }).restorable).toBe(true);
   });
 
   it('keeps no author for an actor that is not a person', () => {
