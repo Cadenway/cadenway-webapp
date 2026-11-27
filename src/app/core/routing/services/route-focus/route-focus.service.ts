@@ -77,6 +77,16 @@ export class RouteFocusService {
    * @type {MutationObserver | null}
    */
   private deferred: MutationObserver | null = null;
+
+  /**
+   * Property queued
+   *
+   * @description
+   * Clears the focus move queued once the last modal window closed; `null` when none is queued.
+   *
+   * @type {(() => void) | null}
+   */
+  private queued: (() => void) | null = null;
   // #endregion
 
   // #region Constructor
@@ -152,9 +162,13 @@ export class RouteFocusService {
     const observer: MutationObserver = new view.MutationObserver((): void => {
       if (this.document.querySelector('[aria-modal="true"]') !== null) return;
       this.stopWaiting();
-      view.setTimeout((): void => {
-        if (this.deferred === null) this.focus();
+      const timer: number = view.setTimeout((): void => {
+        this.queued = null;
+        this.focus();
       });
+      this.queued = (): void => {
+        view.clearTimeout(timer);
+      };
     });
     observer.observe(this.document.body, { childList: true, subtree: true });
     this.deferred = observer;
@@ -164,11 +178,14 @@ export class RouteFocusService {
    * Method stopWaiting
    *
    * @description
-   * Stops a route focus move waiting for the modal windows to close.
+   * Stops a route focus move waiting for the modal windows to close, or already queued after they
+   * closed.
    */
   private stopWaiting(): void {
     this.deferred?.disconnect();
     this.deferred = null;
+    this.queued?.();
+    this.queued = null;
   }
   // #endregion
 }

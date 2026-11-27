@@ -154,6 +154,37 @@ describe('route infrastructure', () => {
     expect(focus.mock.contexts.at(-1)).toBe(document.querySelector('h1[data-route-focus]'));
     focus.mockRestore();
   });
+  it('drops the focus move queued after the modal windows closed once destroyed', async () => {
+    TestBed.configureTestingModule({
+      providers: [
+        provideRouter([
+          { path: 'one', component: RouteFixture },
+          { path: 'two', component: RouteFixture },
+        ]),
+        provideAppRouting(),
+      ],
+    });
+    TestBed.inject(RouteFocusService);
+    const modal: HTMLElement = openModal();
+    const harness: RouterTestingHarness = await RouterTestingHarness.create();
+    await harness.navigateByUrl('/one');
+    modal.querySelector('h2')?.focus();
+    const focus: MockInstance = vi.spyOn(HTMLElement.prototype, 'focus');
+    await harness.navigateByUrl('/two');
+    harness.detectChanges();
+    TestBed.tick();
+    modal.remove();
+    await new Promise<void>((resolve: () => void): void => {
+      setTimeout(resolve);
+    });
+    const main: HTMLElement = document.createElement('main');
+    document.body.append(main);
+    TestBed.resetTestingModule();
+    await settle();
+    expect(focus).not.toHaveBeenCalled();
+    focus.mockRestore();
+    main.remove();
+  });
   it('prefers the innermost route target and falls back to main', async () => {
     TestBed.configureTestingModule({
       providers: [
