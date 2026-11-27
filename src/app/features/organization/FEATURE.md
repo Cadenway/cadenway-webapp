@@ -68,6 +68,12 @@ section has `organizationSectionGuard(<section>)` (`http/guards/organization-sec
 - Workspace's `ports/workspace-context` and `http/guards/organization-role`, Errors' `errors.routes`,
   `@shared/unsaved-changes`.
 - `@cadenway/ui` (`banner`, `button`) and `@cadenway/icons`.
+- Members section: `MembersService` (`listMembers`, `changeMemberRole`, `removeMember`) and
+  `InvitationsService` (`listInvitations`, `inviteMembers`, `resendInvitation`, `revokeInvitation`)
+  through `data-access/services/{members-api,invitations-api}`; Core's `RealtimeConnection.presences`
+  (optional) for the presence dots and tabs; `@cadenway/ui` `alert-dialog`, `avatar`, `badge`,
+  `dialog`, `empty`, `input-group`, `select`, `skeleton`, `table`, `tabs`, `textarea`, `toast` and
+  `tooltip`.
 
 ## Invariants
 
@@ -127,7 +133,87 @@ loaded.` with `Retry`; the banner stays hidden until a retry succeeds.
   handles, keep them silently. A recovery reruns the route on the same URL, which
   `unsavedChangesGuard` lets through without asking.
 
+### Members (`members`, package O2)
+
+- `MembersPage` provides the page-scoped `MembersStore` and `InvitationsStore`. Everyone from a
+  member up reads the list; the owner and administrators (`can('admin')`) also change roles,
+  remove members (after `Remove <name> from the organization?`), invite, and see `Two-step`
+  and `Pending invitations`, which the API answers them only. A member gets a read-only table. The
+  owner's row and the person's own row are never editable.
+- Both stores follow the workspace organization: a switch resets the filters, the pages, the
+  writes and the section skeleton (the next organization's first read failing reaches the error
+  boundary), and a write that settles after it changes nothing and shows no toast. The page binds
+  the invite dialog and the removal confirmation to the organization they were opened for: a
+  switch closes and empties them, and a submission for another organization sends nothing.
+- `MembersStore` subscribes to `RealtimeConnection.presenceChanges` for its lifetime, which starts
+  the connection on a direct visit; the presence dots and tabs read `presences`. A presence tab's
+  page that live changes leave without rows goes back to the last page with rows.
+- Search and the role tabs go to `listMembers` (`Administrators` is `role=owner,admin`), 8 per page
+  by cursor; the store keeps the cursor of each page reached for `Previous`. The search is sent
+  250 ms after the last keystroke; `Clear filters` drops a search still waiting. A presence tab,
+  which the API does not offer, reads every member of the role tab once (pages of 100, at most
+  2,000, with a notice when the limit is reached), then searches and pages them in the browser
+  against the live presence; an absent member is offline. The role tab counts come from `counts`,
+  whatever the filters. While a read is under way the counts, the summary and the range keep
+  their last values, and the rows of the same view stay.
+- The first read shows the section skeleton; its failure throws into the route's error boundary
+  (`Could not load this section`, Retry runs the route again). A later failed read shows the
+  same panel in place with `Retry`; a completed read without rows shows `No member matches`, with
+  `Clear filters` when filtered. A failed invitations read keeps an inline error with `Retry`.
+  The invitations list reads every page.
+- Role changes, removals, resends and cancellations are optimistic: the row changes at once and
+  is marked busy while sent (the role select keeps its focus); a refusal restores the confirmed
+  state with the failure toast. A confirmed write is applied to every read issued before it
+  settled, until a read issued after it lands, so an in-flight read cannot bring the old state
+  back. The current view is read again when its answer cannot hold the write: the member is not
+  on it, a role change moved them out of the role tab, or a removal on a cursor page (whose later
+  cursors are dropped). A removal that empties a page opens the previous one once that read
+  settles. The focus moves to the next row's remove button, or to the search when no row is left.
+- A role change sends `If-Match: "<version>"`; `412 request.version-mismatch` reads the view again
+  with a warning. A resend or a cancellation answered `409 invitation.answered` or
+  `invitation.revoked` drops the row and reads the list again. The server has no undo, so the
+  removal and cancellation toasts have none. A confirmed role change or removal reads the
+  subscription again for the owner's free seats.
+- `<n> free seats` (summary) and `<n> seats available on the <plan> plan.` (dialog) show to the
+  owner only, who alone reads billing (gap Q1); the invite dialog then refuses more members than
+  free seats. The last-activity column (gap M1) and the invitation link card (B12) are left out.
+- Invite splits the addresses on spaces, commas and semicolons, keeps each once, and checks them as
+  the contract does (zod's `email()`, 254 characters at most); it refuses an invalid one, none, or
+  more than 50, then reads the invitations again. A `400` whose `details.issues[].path` is
+  `emails.<n>` names those addresses on the field until they change or the dialog opens again. The toast counts the addresses invited and
+  those skipped (already a member or invited). The dialog stays open on a refusal.
+- Counts pick their singular or plural text with `Intl.PluralRules($localize.locale)`, so French
+  reads `0 membre` as the mockup does.
+- Screen readers hear a row's presence as `Status: Active | Away | Do not disturb | Offline`
+  (`Organisation.dc.html` line 1843), then the name once; the avatar is hidden from them.
+- Below 768 px both tables become cards (header hidden, member cell full width, actions right)
+  and the remove button stays visible; the search takes the full width and the toolbar wraps.
+
 ## Copy not taken word for word from the mockup
+
+| Unit                               | Reason                                                                       |
+| ---------------------------------- | ---------------------------------------------------------------------------- |
+| `organization.plan-summary.failed` | The mockup draws no failed billing read.                                     |
+| `organization.retry`               | `Retry` is the mockup's word, used for a new state.                          |
+| `organization.navigation.plan`     | The identity row without the member count, for whoever may not read billing. |
+
+Members section (`organization.members.*`):
+
+| Unit                                                                                                                                                                                                    | Reason                                                                                       |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| `role-failed`, `role-failed-seats`, `remove-failed`, `resend-failed`, `resend-failed-limit`, `cancel-failed`, `invite-failed`, `invite-failed-limit`                                                    | The mockup draws no refused write.                                                           |
+| `role-stale`, `role-stale-text`, `invitation-closed`                                                                                                                                                    | The mockup draws no write overtaken by another person's.                                     |
+| `resend-throttled`                                                                                                                                                                                      | Copy of the contract (`resendInvitation`); the mockup draws no throttled resend.             |
+| `invite-none`, `invite-skipped`, `invite-skipped-one`                                                                                                                                                   | The mockup draws no address already a member or invited.                                     |
+| `invite-invalid`, `invite-required`, `invite-too-many`, `invite-no-seats`                                                                                                                               | The mockup disables `Invite`; the forms rule keeps it enabled and shows an error.            |
+| `invite-seats-one`, `invite-valid-one`, `invite-only-one`, `invite-left-one`, `invite-sent-one`, `summary-member`, `summary-guest`, `summary-seat`, `summary-invitation`, `range-one`, `expires-in-one` | Singular forms of the mockup's `plural()` texts, with the count.                             |
+| `expires-in`, `expired-on`                                                                                                                                                                              | The mockup's fixed texts with the dates of the contract.                                     |
+| `invitations-failed`                                                                                                                                                                                    | The mockup draws no failed invitations read.                                                 |
+| `presence-truncated`                                                                                                                                                                                    | The mockup filters its 22 members; the read stops at 2,000.                                  |
+| `loading`, `failed-title`, `failed-text`, `retry`                                                                                                                                                       | The mockup's section states (`Organisation.dc.html` lines 73-128), with this section's ids.  |
+| `remove-text`                                                                                                                                                                                           | `de <organization>` rather than the mockup's `d’Atelier Nord`, for any name.                 |
+| `invite-placeholder`                                                                                                                                                                                    | English source with `example.com`; the French keeps the mockup's `exemple.fr`.               |
+| `avatar-*`, `alert-*`, `dialog-close`, `select-*`                                                                                                                                                       | Texts of the bricks (the avatar's title, hidden from screen readers); the mockup draws none. |
 
 | Unit                                                                                                                                                                                                          | Reason                                                                                                            |
 | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |

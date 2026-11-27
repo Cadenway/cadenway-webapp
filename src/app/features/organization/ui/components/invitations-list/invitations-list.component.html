@@ -1,0 +1,149 @@
+<h2 id="members-invitations" class="text-base font-semibold">
+  <ng-container i18n="@@organization.members.invitations-title">Pending invitations</ng-container>
+  @if (total() !== null) {
+    <span
+      class="text-sm font-normal whitespace-nowrap text-muted-foreground tabular-nums"
+      data-testid="invitations-count"
+      >{{ total() }}</span
+    >
+  }
+</h2>
+
+@if (failed()) {
+  <div
+    class="flex items-center gap-2 rounded-lg border border-dashed border-border p-3 text-sm"
+    role="alert"
+    data-testid="invitations-failed"
+  >
+    <ng-icon
+      name="phosphorWarningCircleBold"
+      class="size-4 shrink-0 text-destructive"
+      aria-hidden="true"
+    />
+    <span
+      class="min-w-0 flex-1 text-muted-foreground"
+      i18n="@@organization.members.invitations-failed"
+      >The pending invitations could not be loaded.</span
+    >
+    <button
+      cwButton
+      type="button"
+      variant="outline"
+      size="sm"
+      (click)="retried.emit()"
+      data-testid="invitations-retry"
+    >
+      <ng-icon name="phosphorArrowClockwiseBold" aria-hidden="true" />
+      <ng-container i18n="@@organization.members.retry">Retry</ng-container>
+    </button>
+  </div>
+} @else {
+  <cw-table-container class="rounded-lg border border-border">
+    <table
+      cwTable
+      aria-labelledby="members-invitations"
+      class="min-w-[640px] max-md:block max-md:min-w-0"
+      [attr.aria-busy]="loading() || null"
+      data-testid="invitations-table"
+    >
+      <tbody cwTableBody class="max-md:block">
+        @for (invitation of invitations(); track invitation.id) {
+          <tr
+            cwTableRow
+            class="h-11 max-md:flex max-md:h-auto max-md:flex-wrap max-md:items-center max-md:gap-x-3 max-md:gap-y-1.5 max-md:p-3"
+            data-testid="invitation-row"
+          >
+            <td cwTableCell class="max-md:block max-md:min-w-0 max-md:basis-full max-md:px-0">
+              <span class="flex min-w-0 items-center gap-2.5">
+                <span
+                  class="flex size-8 shrink-0 items-center justify-center rounded-full border border-dashed border-input text-muted-foreground"
+                  aria-hidden="true"
+                >
+                  <ng-icon name="phosphorEnvelopeSimpleBold" class="size-3.5" />
+                </span>
+                <span class="flex min-w-0 flex-col">
+                  <span class="truncate leading-5">{{ invitation.email }}</span>
+                  <span class="truncate text-xs text-muted-foreground">{{
+                    invitedBy(invitation)
+                  }}</span>
+                </span>
+              </span>
+            </td>
+            <td cwTableCell class="w-28 text-xs max-md:block max-md:w-auto max-md:px-0">
+              {{ roleName(invitation) }}
+            </td>
+            <td cwTableCell class="w-36 max-md:block max-md:w-auto max-md:px-0">
+              <span
+                class="flex items-center gap-1 text-xs"
+                [class.text-grenat-text]="invitation.expired"
+                [class.text-muted-foreground]="!invitation.expired"
+                data-testid="invitation-expiry"
+              >
+                @if (invitation.expired) {
+                  <ng-icon
+                    name="phosphorWarningCircleFill"
+                    class="size-3.5 shrink-0 text-destructive"
+                    aria-hidden="true"
+                  />
+                }
+                {{ expiry(invitation) }}
+              </span>
+            </td>
+            <td cwTableCell class="max-md:ml-auto max-md:block max-md:px-0">
+              <span class="flex justify-end gap-1">
+                <button
+                  cwButton
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  [disabled]="pendingIds().has(invitation.id)"
+                  (click)="resent.emit(invitation)"
+                  data-testid="invitation-resend"
+                >
+                  <ng-container i18n="@@organization.members.resend">Resend</ng-container>
+                </button>
+                <button
+                  cwButton
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  class="text-destructive"
+                  [disabled]="pendingIds().has(invitation.id)"
+                  (click)="cancelled.emit(invitation)"
+                  data-testid="invitation-cancel"
+                >
+                  <ng-container i18n="@@organization.members.cancel-invitation"
+                    >Cancel</ng-container
+                  >
+                </button>
+              </span>
+            </td>
+          </tr>
+        } @empty {
+          @if (loading()) {
+            <tr class="max-md:block" aria-hidden="true">
+              <td class="p-3 max-md:block">
+                <span class="flex flex-col gap-2">
+                  <div cwSkeleton class="h-3 w-2/5"></div>
+                  <div cwSkeleton class="h-3 w-1/3"></div>
+                </span>
+              </td>
+            </tr>
+          } @else {
+            <tr class="max-md:block">
+              <td
+                cwTableEmpty
+                colspan="4"
+                class="max-md:block"
+                i18n="@@organization.members.invitations-empty"
+                data-testid="invitations-empty"
+              >
+                No pending invitation.
+              </td>
+            </tr>
+          }
+        }
+      </tbody>
+    </table>
+  </cw-table-container>
+}
