@@ -40,12 +40,16 @@ export const appConfig: ApplicationConfig = {
     // parameters. Leaving a route destroys the environment injector of its providers, so the
     // route-scoped stores (AuthFlowStore, WorkspaceContextStore) die with it. A routed page that
     // fails renders `RouteErrorBoundary` in its outlet; the failure is still reported to the
-    // application's error handler.
+    // application's error handler. A navigation a guard cancels (Back, then `Keep editing` on
+    // unsaved settings) restores the history entry it left instead of overwriting the previous one.
     provideRouter(
       APP_ROUTES,
       withComponentInputBinding(),
       withAutoCleanupInjectors(),
-      withRouterConfig({ paramsInheritanceStrategy: 'always' }),
+      withRouterConfig({
+        paramsInheritanceStrategy: 'always',
+        canceledNavigationResolution: 'computed',
+      }),
       withErrorBoundaries({
         defaultErrorComponent: RouteErrorBoundary,
         onError: (error: Error): void => {
