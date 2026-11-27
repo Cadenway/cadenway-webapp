@@ -14,7 +14,12 @@ import {
 import { auditTime, EMPTY, filter, fromEvent, merge, type Observable } from 'rxjs';
 
 import { RealtimeConnection } from '@core/realtime';
-import { type Person, TaskDetailOpener, type TaskSummary } from '@features/task';
+import {
+  type Person,
+  TaskDetailOpener,
+  type TaskMenuPeopleState,
+  type TaskSummary,
+} from '@features/task';
 import {
   WORKSPACE_CONTEXT,
   type WorkspaceContextPort,
@@ -300,6 +305,19 @@ export interface DashboardStoreInstance {
   readonly people: Signal<readonly Person[]>;
 
   /**
+   * Property peopleState
+   *
+   * @description
+   * Where the read of `people` stands for the task menu's `Assign`: `loading` until the
+   * organization's members answer, `failed` once their read failed, `ready` once read (a read
+   * again keeps them `ready`).
+   *
+   * @type {Signal<TaskMenuPeopleState>}
+   * @readonly
+   */
+  readonly peopleState: Signal<TaskMenuPeopleState>;
+
+  /**
    * Property lateTasks
    *
    * @description
@@ -353,6 +371,14 @@ export interface DashboardStoreInstance {
    * it is sent once that read settles. Members that could not be read are read again.
    */
   refresh(): void;
+
+  /**
+   * Method retryPeople
+   *
+   * @description
+   * `Retry` of the task menu's `Assign`: reads the members again when their read failed.
+   */
+  retryPeople(): void;
 
   /**
    * Method personOf
@@ -498,6 +524,10 @@ function createDashboardStore(): Type<DashboardStoreInstance> {
       return {
         dashboard,
         people,
+        peopleState: computed((): TaskMenuPeopleState => {
+          if (members() !== null) return 'ready';
+          return store._members.status() === 'error' ? 'failed' : 'loading';
+        }),
         _directory: directory,
         loading: computed((): boolean => {
           if (shown()?.key !== store._read().key) store._dashboard.value();
@@ -556,6 +586,9 @@ function createDashboardStore(): Type<DashboardStoreInstance> {
         if (!store._dashboard.reload()) store._loads.passive = false;
       };
       return {
+        retryPeople(): void {
+          if (store._members.error() !== undefined) store._members.reload();
+        },
         personOf(userId: string): Person {
           return store._directory().get(userId) ?? unknownPerson(userId);
         },

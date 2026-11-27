@@ -1,5 +1,13 @@
 import { HttpErrorResponse } from '@angular/common/http';
-import { signal } from '@angular/core';
+import {
+  Component,
+  input,
+  type InputSignal,
+  type InputSignalWithTransform,
+  output,
+  type OutputEmitterRef,
+  signal,
+} from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import {
   provideRouter,
@@ -25,7 +33,12 @@ import { type RuntimeConfig, RuntimeConfigStore } from '@core/config';
 import { RouteErrorBoundary } from '@features/errors';
 import { NAVIGATION_REFRESH } from '@features/spaces/ports/navigation-refresh';
 
+import { trashRestoreLabel } from './constants/trash-copy/trash-copy.constants';
+import type { TrashEntry } from './models/trash-entry/trash-entry.interface';
+import type { TrashRow as TrashRowModel } from './models/trash-row/trash-row.interface';
 import { TRASH_ROUTES } from './trash.routes';
+import { TrashRow } from './ui/components/trash-row/trash-row.component';
+import { TrashPage } from './ui/pages/trash-page/trash-page.component';
 
 /**
  * Function dto
@@ -77,6 +90,97 @@ const ENTRIES: readonly TrashEntryDto[] = [
   dto('entry-447', 'CAD-447', 'Dashboard PDF export (prototype)'),
 ];
 
+/**
+ * Component TrashRowStub
+ *
+ * @description
+ * A bare `cw-trash-row`: the list item and its `Restore` button only (with the real row's test id,
+ * which the page's focus move looks for), for a page of a thousand rows whose rendering would
+ * otherwise dominate the spec; the real row is covered by the other specs. It takes the inputs the
+ * page binds and emits the entry on `Restore`.
+ */
+@Component({
+  selector: 'cw-trash-row',
+  host: { role: 'listitem', 'data-testid': 'trash-row', '[attr.data-entry-id]': 'row().entry.id' },
+  template: `<button
+    type="button"
+    data-testid="trash-row-restore"
+    [attr.aria-label]="restoreLabel(row().entry.taskKey)"
+    (click)="restoreRequested.emit(row().entry)"
+  ></button>`,
+})
+class TrashRowStub {
+  // #region Properties
+  /**
+   * Property row
+   *
+   * @description
+   * The entry of the row.
+   *
+   * @type {InputSignal<TrashRowModel>}
+   * @readonly
+   */
+  public readonly row: InputSignal<TrashRowModel> = input.required<TrashRowModel>();
+
+  /**
+   * Property now
+   *
+   * @description
+   * The instant of the read, unused.
+   *
+   * @type {InputSignal<number>}
+   * @readonly
+   */
+  public readonly now: InputSignal<number> = input.required<number>();
+
+  /**
+   * Property disabled
+   *
+   * @description
+   * Whether the trash is being emptied, unused.
+   *
+   * @type {InputSignalWithTransform<boolean, unknown>}
+   * @readonly
+   */
+  public readonly disabled: InputSignalWithTransform<boolean, unknown> = input(false, {
+    transform: (value: unknown): boolean => value !== false,
+  });
+
+  /**
+   * Property restoreRequested
+   *
+   * @description
+   * `Restore` of the row.
+   *
+   * @type {OutputEmitterRef<TrashEntry>}
+   * @readonly
+   */
+  public readonly restoreRequested: OutputEmitterRef<TrashEntry> = output<TrashEntry>();
+
+  /**
+   * Property purgeRequested
+   *
+   * @description
+   * Never emitted.
+   *
+   * @type {OutputEmitterRef<TrashEntry>}
+   * @readonly
+   */
+  public readonly purgeRequested: OutputEmitterRef<TrashEntry> = output<TrashEntry>();
+
+  /**
+   * Property restoreLabel
+   *
+   * @description
+   * The accessible name of `Restore`, as the real row words it.
+   *
+   * @type {(key: string) => string}
+   * @readonly
+   */
+  protected readonly restoreLabel: (key: string) => string = trashRestoreLabel;
+  // #endregion
+}
+
 describe('TRASH_ROUTES', () => {
   let listTrash: Mock<(params?: { cursor?: string }) => Observable<TrashEntryPage>>;
   let purgeTrashEntry: Mock<(entryId: string) => Observable<void>>;
@@ -126,7 +230,6 @@ describe('TRASH_ROUTES', () => {
         },
       ],
     });
-    TestBed.inject(OrganizationPin).set('org-atelier-nord');
   });
 
   afterEach(() => {
@@ -158,6 +261,22 @@ describe('TRASH_ROUTES', () => {
   }
 
   /**
+   * Function navigate
+   *
+   * @description
+   * Pins Atelier Nord, then navigates to its trash without waiting for the read. The pin is set
+   * here, not in the set-up, so a spec may still override a component before the module starts.
+   *
+   * @returns {Promise<RouterTestingHarness>} The harness.
+   */
+  async function navigate(): Promise<RouterTestingHarness> {
+    TestBed.inject(OrganizationPin).set('org-atelier-nord');
+    const harness: RouterTestingHarness = await RouterTestingHarness.create();
+    await harness.navigateByUrl('/atelier-nord/trash');
+    return harness;
+  }
+
+  /**
    * Function open
    *
    * @description
@@ -166,8 +285,7 @@ describe('TRASH_ROUTES', () => {
    * @returns {Promise<{ harness: RouterTestingHarness; element: HTMLElement }>} The harness and its element.
    */
   async function open(): Promise<{ harness: RouterTestingHarness; element: HTMLElement }> {
-    const harness: RouterTestingHarness = await RouterTestingHarness.create();
-    await harness.navigateByUrl('/atelier-nord/trash');
+    const harness: RouterTestingHarness = await navigate();
     await settle(harness);
     return { harness, element: harness.fixture.nativeElement as HTMLElement };
   }
@@ -345,8 +463,7 @@ describe('TRASH_ROUTES', () => {
 
   it('keeps the h1 as the route focus target while the trash loads', async () => {
     listTrash.mockReturnValue(NEVER);
-    const harness: RouterTestingHarness = await RouterTestingHarness.create();
-    await harness.navigateByUrl('/atelier-nord/trash');
+    const harness: RouterTestingHarness = await navigate();
     harness.detectChanges();
     const element: HTMLElement = harness.fixture.nativeElement as HTMLElement;
 
@@ -359,6 +476,10 @@ describe('TRASH_ROUTES', () => {
   });
 
   it('reaches and restores an entry past the first 1,000 with Show more', async () => {
+    TestBed.overrideComponent(TrashPage, {
+      remove: { imports: [TrashRow] },
+      add: { imports: [TrashRowStub] },
+    });
     const all: readonly TrashEntryDto[] = Array.from(
       { length: 1_001 },
       (_: unknown, index: number) =>

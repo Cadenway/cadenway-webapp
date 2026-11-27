@@ -51,6 +51,17 @@ import { isMilestoneStatus, pickableStatuses } from '../../../utils/task-status/
 const PRIORITY_ORDER: readonly PriorityKey[] = ['urgente', 'haute', 'moyenne', 'basse'];
 
 /**
+ * Type TaskMenuPeopleState
+ *
+ * @description
+ * Where the read of the people offered under `Assign` stands: `ready` (read, or not read by the
+ * view), `loading` or `failed`.
+ *
+ * @type {'ready' | 'loading' | 'failed'}
+ */
+export type TaskMenuPeopleState = 'ready' | 'loading' | 'failed';
+
+/**
  * Interface StatusMenuGroup
  *
  * @description
@@ -168,12 +179,27 @@ export class TaskMenu {
    * Property people
    *
    * @description
-   * The members offered under `Assign`; `Assign` is disabled without any.
+   * The members offered under `Assign`; once read (`peopleState` `ready`), `Assign` is disabled
+   * without any.
    *
    * @type {InputSignal<readonly Person[]>}
    * @readonly
    */
   public readonly people: InputSignal<readonly Person[]> = input<readonly Person[]>([]);
+
+  /**
+   * Property peopleState
+   *
+   * @description
+   * Where the view's read of `people` stands: while it is `loading`, `Assign` opens on a loading
+   * row; once it `failed`, on the failure with `Retry` (`peopleRetried`). `ready` by default, for
+   * a view whose people are always known.
+   *
+   * @type {InputSignal<TaskMenuPeopleState>}
+   * @readonly
+   */
+  public readonly peopleState: InputSignal<TaskMenuPeopleState> =
+    input<TaskMenuPeopleState>('ready');
 
   /**
    * Property userId
@@ -243,6 +269,17 @@ export class TaskMenu {
    * @readonly
    */
   public readonly assigneeToggled: OutputEmitterRef<string> = output<string>();
+
+  /**
+   * Property peopleRetried
+   *
+   * @description
+   * `Retry` of `Assign` after the people could not be read.
+   *
+   * @type {OutputEmitterRef<void>}
+   * @readonly
+   */
+  public readonly peopleRetried: OutputEmitterRef<void> = output();
 
   /**
    * Property moved
@@ -331,6 +368,32 @@ export class TaskMenu {
    * @readonly
    */
   protected readonly priorities: readonly PriorityKey[] = PRIORITY_ORDER;
+
+  /**
+   * Property assignDisabled
+   *
+   * @description
+   * Whether `Assign` is disabled: the people are read and there is none.
+   *
+   * @type {Signal<boolean>}
+   * @readonly
+   */
+  protected readonly assignDisabled: Signal<boolean> = computed(
+    (): boolean => this.peopleState() === 'ready' && this.people().length === 0,
+  );
+
+  /**
+   * Property shownPeople
+   *
+   * @description
+   * The people `Assign` lists: none while they load or after their read failed.
+   *
+   * @type {Signal<readonly Person[]>}
+   * @readonly
+   */
+  protected readonly shownPeople: Signal<readonly Person[]> = computed((): readonly Person[] =>
+    this.peopleState() === 'ready' ? this.people() : [],
+  );
 
   /**
    * Property title

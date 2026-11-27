@@ -44,7 +44,7 @@ export {
 export { TaskDueDate } from './ui/components/task-due-date/task-due-date.component';
 export { TaskLabelChips } from './ui/components/task-label-chips/task-label-chips.component';
 export { TaskLine, type TaskLineVariant } from './ui/components/task-line/task-line.component';
-export { TaskMenu } from './ui/components/task-menu/task-menu.component';
+export { TaskMenu, type TaskMenuPeopleState } from './ui/components/task-menu/task-menu.component';
 export { TaskLabelPicker } from './ui/components/task-label-picker/task-label-picker.component';
 export { TaskPeoplePicker } from './ui/components/task-people-picker/task-people-picker.component';
 export { TaskPriorityPicker } from './ui/components/task-priority-picker/task-priority-picker.component';
