@@ -1333,4 +1333,67 @@ describe('GoalsStore', () => {
     await store.create(SUPPORT);
     expect(new Set(api.create.mock.calls.map((call: unknown[]) => call[3])).size).toBe(2);
   });
+
+  it('reads the goals again when a write completes during a switch away and back', async () => {
+    const pending: Subject<KeyResultWrite> = new Subject<KeyResultWrite>();
+    api.updateResult.mockReturnValueOnce(firstValueFrom(pending));
+    const store: InstanceType<typeof GoalsStore> = await loaded();
+    store.step('g1', 'k6', 1);
+    await burst();
+    const reads: number = api.list.mock.calls.length;
+    api.list.mockResolvedValue(list([goal({ version: 4, results: [signups(177)] })]));
+
+    commit(STUDIO_SUD);
+    commit(ATELIER_NORD);
+    pending.next({ result: signups(177), version: 4 });
+    pending.complete();
+    await flush();
+    TestBed.tick();
+    await settle();
+
+    expect(api.list.mock.calls.length).toBeGreaterThan(reads);
+    expect(shownValue(store)).toBe(177);
+    expect(api.updateResult).toHaveBeenCalledTimes(1);
+    expect(api.get).not.toHaveBeenCalled();
+  });
+
+  it('reads the goals once more when a write of before a switch away and back settles after its read', async () => {
+    const pending: Subject<KeyResultWrite> = new Subject<KeyResultWrite>();
+    api.updateResult.mockReturnValueOnce(firstValueFrom(pending));
+    const store: InstanceType<typeof GoalsStore> = await loaded();
+    store.step('g1', 'k6', 1);
+    await burst();
+    api.list
+      .mockResolvedValueOnce(list([goal()]))
+      .mockResolvedValue(list([goal({ version: 4, results: [signups(177)] })]));
+
+    commit(STUDIO_SUD);
+    commit(ATELIER_NORD);
+    TestBed.tick();
+    await settle();
+    expect(shownValue(store)).toBe(168);
+    pending.next({ result: signups(177), version: 4 });
+    pending.complete();
+    await settle();
+
+    expect(shownValue(store)).toBe(177);
+    expect(api.get).not.toHaveBeenCalled();
+  });
+
+  it('reuses the idempotency key of a creation still running across a switch away and back', async () => {
+    api.create.mockReturnValueOnce(deferred<Goal>().promise);
+    const store: InstanceType<typeof GoalsStore> = await loaded();
+    void store.create(SUPPORT);
+    await flush();
+
+    commit(STUDIO_SUD);
+    commit(ATELIER_NORD);
+    TestBed.tick();
+    await settle();
+    expect(store.creating()).toBe(false);
+    await store.create(SUPPORT);
+
+    expect(api.create).toHaveBeenCalledTimes(2);
+    expect(api.create.mock.calls[1][3]).toBe(api.create.mock.calls[0][3]);
+  });
 });

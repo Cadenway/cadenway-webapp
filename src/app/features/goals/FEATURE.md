@@ -85,9 +85,9 @@ elsewhere`. Values show at once and return to the confirmed ones after a refusal
   while that read is retried after 2, 4 and 8 s (`GOAL_SETTLE_BACKOFF_MS`); when it still fails,
   the later edits of that key result are dropped, never rebased on an unknown value, `The key
 result change could not be confirmed` shows and the goals are read again. A creation (goal or key
-  result) keeps one idempotency key per draft until a definitive answer and is sent again with it
-  after an unknown outcome or `409 idempotency.request-in-progress`, one second apart, three sends
-  in all; still unknown, `The goal could not be confirmed` or `The key result could not be
+  result) keeps one idempotency key per draft and organization, across a switch and back, until a
+  definitive answer and is sent again with it after an unknown outcome or
+  `409 idempotency.request-in-progress`, one second apart, three sends in all; still unknown, `The goal could not be confirmed` or `The key result could not be
 confirmed` asks to submit again, which reuses the key. A deletion of unknown outcome whose goal is
   still there, or cannot be read, shows `The deletion could not be confirmed`, and the goals are
   read again. Confirmed writes stay over the read
@@ -95,7 +95,8 @@ confirmed` asks to submit again, which reuses the key. A deletion of unknown out
   and is not kept once a newer read landed. A superseded read is aborted between its pages. Each
   write is bound to the organization generation it started in: after a switch, even back to the
   same organization, nothing more is sent, patched or toasted, and the forms and the confirmation
-  close. A write is also sent, and its answer applied, only while the workspace and
+  close; after a switch away and back the goals are read again, and once more when a write started
+  before it settles, so what that write completed shows. A write is also sent, and its answer applied, only while the workspace and
   `OrganizationPin` both name the organization the goals were read for and the pin was not
   committed to another organization, or cleared, since (the resolver commits both synchronously,
   before the store reacts; `organizationChanges` is heard until the page is gone and its writes

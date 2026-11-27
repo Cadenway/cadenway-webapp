@@ -1284,6 +1284,17 @@ function createGoalsStore(): Type<GoalsStoreInstance> {
         store.goals.reload();
       };
 
+      // A write of an older generation of the organization the store is back on (a switch away and
+      // back) may have been recorded after the read the switch sent: its answer is not applied, and
+      // the goals are read once more instead, coalesced with a read in flight.
+      const settledBefore: (generation: number, origin: string) => void = (
+        generation: number,
+        origin: string,
+      ): void => {
+        if (!current(generation) && alive(context.generation) && origin === context.organizationId)
+          refresh();
+      };
+
       const lanes: Map<string, GoalLane> = new Map<string, GoalLane>();
       const scheduled: Set<string> = new Set<string>();
       const bursts: Map<string, PendingEdit> = new Map<string, PendingEdit>();
@@ -1341,11 +1352,13 @@ function createGoalsStore(): Type<GoalsStoreInstance> {
         task: () => Promise<void>,
       ): Promise<void> => {
         const lane: GoalLane = laneOf(goalId);
+        const origin: string = context.organizationId;
         hold();
         const run: Promise<void> = lane.tail.then(task);
         const tail: Promise<void> = run.then(free, free);
         lane.tail = tail;
         void tail.then((): void => {
+          settledBefore(generation, origin);
           if (lane.tail !== tail || !lane.dirty || !alive(generation)) return;
           for (const pending of bursts.values()) if (pending.goalId === goalId) return;
           lane.dirty = false;
@@ -1605,7 +1618,8 @@ function createGoalsStore(): Type<GoalsStoreInstance> {
           const quarter: Quarter | null = store.quarter();
           if (store.creating() || quarter === null) return null;
           const generation: number = context.generation;
-          const draftKey: string = JSON.stringify([quarter.key, draft]);
+          const origin: string = context.organizationId;
+          const draftKey: string = JSON.stringify([origin, quarter.key, draft]);
           const idempotencyKey: string = keyOf(draftKey);
           patchState(store, { creating: true });
           hold();
@@ -1646,6 +1660,7 @@ function createGoalsStore(): Type<GoalsStoreInstance> {
           } finally {
             if (current(generation)) patchState(store, { creating: false });
             free();
+            settledBefore(generation, origin);
           }
         },
         async remove(goalId: string, version: number): Promise<boolean> {
@@ -1747,7 +1762,7 @@ function createGoalsStore(): Type<GoalsStoreInstance> {
         async addResult(goalId: string, draft: KeyResultDraft): Promise<boolean> {
           if (store.addingTo() !== null || shown(goalId) === undefined) return false;
           const generation: number = context.generation;
-          const draftKey: string = JSON.stringify([goalId, draft]);
+          const draftKey: string = JSON.stringify([context.organizationId, goalId, draft]);
           let idempotencyKey: string = keyOf(draftKey);
           let outcome: boolean = false;
           const creation: (version: number) => Promise<KeyResultWrite> = (version: number) =>
@@ -1867,7 +1882,6 @@ function createGoalsStore(): Type<GoalsStoreInstance> {
             scheduled.clear();
             for (const pending of bursts.values()) clearTimeout(pending.handle);
             bursts.clear();
-            createKeys.clear();
             store._loads.queued = false;
             patchState(store, {
               _edits: {},
@@ -1947,7 +1961,9 @@ function createGoalsStore(): Type<GoalsStoreInstance> {
  * nothing). So a write queued or answered once the resolver committed another organization,
  * before the store reacts, after the page is gone, after a switch and back, or once the workspace
  * is left (the pin cleared), is dropped instead of reaching the gateway under another
- * `If-Organization-Match`. A creation keeps its idempotency key until a definitive
+ * `If-Organization-Match`. After a switch away and back the goals are read again, and once more
+ * when a write started before it settles, so what it completed shows. A creation keeps its
+ * idempotency key, per organization and across a switch and back, until a definitive
  * answer and is sent again with it after an unknown outcome or
  * `409 idempotency.request-in-progress`, up to three times, then reported as unconfirmed; a resubmitted
  * identical draft reuses the key. The members are read again after a failure and for owners they
