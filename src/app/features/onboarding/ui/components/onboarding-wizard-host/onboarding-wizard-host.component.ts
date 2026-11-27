@@ -26,6 +26,7 @@ import {
 } from '@features/workspace/ports/workspace-context';
 import { ShellOverlay } from '@shared/layout-slot';
 
+import { ONBOARDING_WIZARD_OVERLAY } from '../../../constants/overlays/onboarding-overlays.constants';
 import type { OnboardingProgress } from '../../../models/onboarding/onboarding.interface';
 import { OnboardingStore } from '../../../state/onboarding/onboarding.store';
 import { OnboardingWizardStore } from '../../../state/onboarding-wizard/onboarding-wizard.store';
@@ -50,17 +51,6 @@ const ONBOARDING_PARAM: string = 'onboarding';
  * @type {string}
  */
 const ONBOARDING_START: string = 'start';
-
-/**
- * Constant ONBOARDING_WIZARD_OVERLAY
- *
- * @description
- * Id the assistant holds in `ShellOverlay` while it shows; the getting-started checklist stays
- * hidden while it is open, and the other shell overlays (palette, shortcuts) cannot open over it.
- *
- * @type {string}
- */
-const ONBOARDING_WIZARD_OVERLAY: string = 'onboarding.wizard';
 
 /**
  * Function hasStart

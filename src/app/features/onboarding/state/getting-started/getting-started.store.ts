@@ -31,6 +31,10 @@ import {
 import { ShellOverlay } from '@shared/layout-slot';
 
 import {
+  ONBOARDING_INVITE_DIALOG_OVERLAY,
+  ONBOARDING_WIZARD_OVERLAY,
+} from '../../constants/overlays/onboarding-overlays.constants';
+import {
   isDroppedOnboardingWrite,
   isUncertainOnboardingWrite,
   OnboardingApi,
@@ -45,27 +49,6 @@ import type {
 } from '../../models/onboarding/onboarding.interface';
 import { OnboardingWriteDroppedError } from '../onboarding/onboarding-write-dropped.error';
 import { OnboardingStore } from '../onboarding/onboarding.store';
-
-/**
- * Constant ONBOARDING_WIZARD_OVERLAY
- *
- * @description
- * The `ShellOverlay` id the onboarding assistant holds while it covers the shell (its `overlays`
- * contribution id): the checklist stays hidden under it.
- *
- * @type {string}
- */
-const ONBOARDING_WIZARD_OVERLAY: string = 'onboarding.wizard';
-
-/**
- * Constant ONBOARDING_INVITE_OVERLAY
- *
- * @description
- * The `ShellOverlay` id of the checklist's invite dialog, so no other shell overlay opens over it.
- *
- * @type {string}
- */
-const ONBOARDING_INVITE_OVERLAY: string = 'onboarding.invite-dialog';
 
 /**
  * Constant BOARD_SEGMENT
@@ -440,7 +423,7 @@ function createGettingStartedStore(): Type<GettingStartedStoreInstance> {
         visible,
         expanded: (): boolean => checklist()?.checklist.presentation === 'expanded',
         items,
-        inviteOpen: (): boolean => store._overlay.isOpen(ONBOARDING_INVITE_OVERLAY),
+        inviteOpen: (): boolean => store._overlay.isOpen(ONBOARDING_INVITE_DIALOG_OVERLAY),
         inviting: (): boolean => store._sending() === store._dialog(),
         _boardShown: (): ShownAddress | null => {
           const progress: OnboardingProgress | null = checklist();
@@ -482,8 +465,8 @@ function createGettingStartedStore(): Type<GettingStartedStoreInstance> {
 
       const setInviteOpen: (open: boolean) => void = (open: boolean): void => {
         if (open) {
-          if (store._overlay.isOpen(ONBOARDING_INVITE_OVERLAY)) return;
-          if (store._overlay.open(ONBOARDING_INVITE_OVERLAY)) {
+          if (store._overlay.isOpen(ONBOARDING_INVITE_DIALOG_OVERLAY)) return;
+          if (store._overlay.open(ONBOARDING_INVITE_DIALOG_OVERLAY)) {
             patchState(store, {
               _dialog: store._dialog() + 1,
               _inviteOrganization: store._workspace.organization().id,
@@ -491,7 +474,7 @@ function createGettingStartedStore(): Type<GettingStartedStoreInstance> {
           }
           return;
         }
-        store._overlay.close(ONBOARDING_INVITE_OVERLAY);
+        store._overlay.close(ONBOARDING_INVITE_DIALOG_OVERLAY);
         patchState(store, { _dialog: store._dialog() + 1, _inviteOrganization: null });
       };
 
@@ -701,7 +684,7 @@ function createGettingStartedStore(): Type<GettingStartedStoreInstance> {
       },
       onDestroy(store): void {
         store._lifecycle.destroyed = true;
-        store._overlay.close(ONBOARDING_INVITE_OVERLAY);
+        store._overlay.close(ONBOARDING_INVITE_DIALOG_OVERLAY);
         store._dismissToasts();
       },
     }),

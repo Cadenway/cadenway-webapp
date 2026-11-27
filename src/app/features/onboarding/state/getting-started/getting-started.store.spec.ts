@@ -23,6 +23,10 @@ import type {
 import { WORKSPACE_CONTEXT } from '@features/workspace/ports/workspace-context';
 import { ShellOverlay } from '@shared/layout-slot';
 
+import {
+  ONBOARDING_INVITE_DIALOG_OVERLAY,
+  ONBOARDING_WIZARD_OVERLAY,
+} from '../../constants/overlays/onboarding-overlays.constants';
 import { OnboardingApi } from '../../data-access/services/onboarding-api/onboarding-api.service';
 import type {
   OnboardingChecklist,
@@ -434,7 +438,7 @@ describe('GettingStartedStore', () => {
     it('shows nothing while the assistant covers the shell', async () => {
       const store: GettingStartedStore = await setup();
 
-      TestBed.inject(ShellOverlay).open('onboarding.wizard');
+      TestBed.inject(ShellOverlay).open(ONBOARDING_WIZARD_OVERLAY);
 
       expect(store.visible()).toBe(false);
     });
@@ -1023,7 +1027,7 @@ describe('GettingStartedStore', () => {
       await TestBed.inject(Router).navigateByUrl('/atelier-nord/l/l-sprint/board');
       await settle();
 
-      expect(TestBed.inject(ShellOverlay).isOpen('onboarding.invite-dialog')).toBe(false);
+      expect(TestBed.inject(ShellOverlay).isOpen(ONBOARDING_INVITE_DIALOG_OVERLAY)).toBe(false);
       expect(toasts.toasts()).toEqual([]);
       expect(api.get).toHaveBeenCalledTimes(1);
       expect(api.updateChecklist).not.toHaveBeenCalled();

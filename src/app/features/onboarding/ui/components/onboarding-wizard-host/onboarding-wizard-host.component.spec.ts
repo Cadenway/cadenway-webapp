@@ -15,6 +15,7 @@ import {
 } from '@features/workspace/ports/workspace-context';
 import { ShellOverlay } from '@shared/layout-slot';
 
+import { ONBOARDING_WIZARD_OVERLAY } from '../../../constants/overlays/onboarding-overlays.constants';
 import { OnboardingApi } from '../../../data-access/services/onboarding-api/onboarding-api.service';
 import type { OnboardingProgress } from '../../../models/onboarding/onboarding.interface';
 import type { OnboardingWizardStatus } from '../../../models/onboarding/onboarding.type';
@@ -471,13 +472,13 @@ describe('OnboardingWizardHost', () => {
     const { fixture }: Harness = await render('/atelier-nord', progress(3));
     const overlay: ShellOverlay = TestBed.inject(ShellOverlay);
 
-    expect(overlay.isOpen('onboarding.wizard')).toBe(true);
+    expect(overlay.isOpen(ONBOARDING_WIZARD_OVERLAY)).toBe(true);
     expect(overlay.open('search.command-palette')).toBe(false);
 
     document.querySelector<HTMLButtonElement>('[data-testid="onboarding-skip"]')?.click();
     await settle(fixture);
 
-    expect(overlay.isOpen('onboarding.wizard')).toBe(false);
+    expect(overlay.isOpen(ONBOARDING_WIZARD_OVERLAY)).toBe(false);
     expect(overlay.anyOpen()).toBe(false);
   });
 
@@ -486,12 +487,12 @@ describe('OnboardingWizardHost', () => {
       TestBed.inject(ShellOverlay).open('search.command-palette');
     });
     const overlay: ShellOverlay = TestBed.inject(ShellOverlay);
-    expect(overlay.isOpen('onboarding.wizard')).toBe(false);
+    expect(overlay.isOpen(ONBOARDING_WIZARD_OVERLAY)).toBe(false);
     expect(wizard()).toBeNull();
 
     overlay.close('search.command-palette');
     await settle(fixture);
-    expect(overlay.isOpen('onboarding.wizard')).toBe(true);
+    expect(overlay.isOpen(ONBOARDING_WIZARD_OVERLAY)).toBe(true);
     expect(wizard()).not.toBeNull();
 
     fixture.destroy();
