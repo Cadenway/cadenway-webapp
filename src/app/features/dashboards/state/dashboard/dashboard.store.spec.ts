@@ -368,6 +368,8 @@ describe('DashboardStore', () => {
     expect(store.dashboard()).toBeNull();
     organization.set({ id: 'org-atelier', slug: 'atelier-nord' });
     await expect.poll(() => dashboard.mock.calls.length).toBe(3);
+    expect(store.dashboard()).toBeNull();
+    expect(store.loading()).toBe(true);
 
     lumen.resolve(dashboardOf({ openCount: 4 }));
     await new Promise((resolve) => setTimeout(resolve));
@@ -377,6 +379,30 @@ describe('DashboardStore', () => {
     await expect.poll(() => store.dashboard()?.openCount).toBe(25);
     await new Promise((resolve) => setTimeout(resolve));
     expect(store.dashboard()?.openCount).toBe(25);
+  });
+
+  it('sends a failed read after switching away and back to the error boundary', async () => {
+    const store: DashboardStoreInstance = TestBed.inject(DashboardStore);
+    await expect.poll(() => store.dashboard()?.openCount).toBe(24);
+    const lumen: Deferred<TeamDashboard> = deferred<TeamDashboard>();
+    dashboard.mockReturnValueOnce(lumen.promise).mockRejectedValueOnce(new Error('unavailable'));
+
+    organization.set({ id: 'org-lumen', slug: 'lumen' });
+    await expect.poll(() => dashboard.mock.calls.length).toBe(2);
+    organization.set({ id: 'org-atelier', slug: 'atelier-nord' });
+    await expect.poll(() => dashboard.mock.calls.length).toBe(3);
+
+    await expect
+      .poll(() => {
+        try {
+          store.loading();
+          return null;
+        } catch (error: unknown) {
+          return error;
+        }
+      })
+      .toBeInstanceOf(Error);
+    expect(store.dashboard()).toBeNull();
   });
 
   it('never shows an answer of the previous organization after a switch', async () => {

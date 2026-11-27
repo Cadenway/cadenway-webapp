@@ -58,7 +58,9 @@ dashboard is shown, whatever its query parameters.
   300 ms burst), and when a write of the late rows' menu settles (`TaskRowActionsStore.changed`).
   They are passive and keep the shown dashboard when they fail. A refresh asked while a read runs
   is sent once that read settles.
-- Another organization drops the shown dashboard and members at once; an answer for an
+- Each organization change drops the kept dashboard, also after switching away and back (A, B,
+  then A again), so only a read made since the switch shows and its failure reaches the error
+  boundary; the members of another organization are never shown, and an answer for an
   organization or a period no longer current is never kept.
 - The page never waits for the members: their people read `Unknown member` (`?`) until the
   members answer, then their names. A members read that fails, or runs again, never brings the

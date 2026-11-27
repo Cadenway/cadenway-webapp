@@ -186,6 +186,17 @@ interface DashboardLoads {
    * @readonly
    */
   readonly named: Set<string>;
+
+  /**
+   * Property organizationId
+   *
+   * @description
+   * The organization the kept answer belongs to; each change drops it, so after switching away
+   * and back the page never shows the earlier answer as current.
+   *
+   * @type {string | null}
+   */
+  organizationId: string | null;
   // #endregion
 }
 
@@ -405,7 +416,12 @@ function createDashboardStore(): Type<DashboardStoreInstance> {
     withProps((store) => {
       const api: DashboardApi = inject(DashboardApi);
       const workspace: WorkspaceContextPort = inject(WORKSPACE_CONTEXT);
-      const loads: DashboardLoads = { passive: false, queued: false, named: new Set<string>() };
+      const loads: DashboardLoads = {
+        passive: false,
+        queued: false,
+        named: new Set<string>(),
+        organizationId: null,
+      };
       const organizationId: Signal<string> = computed((): string => workspace.organization().id);
       const read: Signal<DashboardRead> = computed(
         (): DashboardRead => {
@@ -553,6 +569,13 @@ function createDashboardStore(): Type<DashboardStoreInstance> {
             patchState(store, { _snapshot: snapshot });
           },
         ),
+        _followOrganization: signalMethod<string>((organizationId: string): void => {
+          if (store._loads.organizationId === organizationId) return;
+          const first: boolean = store._loads.organizationId === null;
+          store._loads.organizationId = organizationId;
+          store._loads.queued = false;
+          if (!first) patchState(store, { _snapshot: null });
+        }),
         _nameUnknown: signalMethod<string>((ids: string): void => {
           if (ids === '') return;
           const asked: string = `${store._organizationId()}\u0000${ids}`;
@@ -575,6 +598,7 @@ function createDashboardStore(): Type<DashboardStoreInstance> {
           ),
         );
         store._settled(computed((): boolean => store._dashboard.isLoading()));
+        store._followOrganization(store._organizationId);
         store._nameUnknown(store._unknownIds);
         const view: Window | null = store._document.defaultView;
         const triggers: Observable<unknown>[] = [
@@ -610,8 +634,9 @@ function createDashboardStore(): Type<DashboardStoreInstance> {
  * the tab becoming visible, when a task detail closes or changed a task, on a realtime
  * reconnection (no organization-wide notice exists, gap G-R2), once at the end of a 300 ms
  * burst, and when the page's own menu writes settle. A refresh asked while a read runs is sent
- * once it settles. Another organization drops the shown dashboard and members at once, and an
- * answer for an organization or period no longer current is never kept. The page never waits
+ * once it settles. Each organization change drops the kept dashboard, also after switching away and
+ * back, so only a read made since the switch shows; an answer for an organization or period no
+ * longer current is never kept. The page never waits
  * for the members: their people read `Unknown member` until the members answer, then their
  * names, and a members read that fails or runs again never brings the skeleton back. A
  * dashboard naming user ids the members do not hold reads the members again, once per new set
