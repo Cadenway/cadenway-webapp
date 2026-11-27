@@ -81,6 +81,9 @@ section has `organizationSectionGuard(<section>)` (`http/guards/organization-sec
   (optional) for the presence dots and tabs; `@cadenway/ui` `alert-dialog`, `avatar`, `badge`,
   `dialog`, `empty`, `input-group`, `select`, `skeleton`, `table`, `tabs`, `textarea`, `toast` and
   `tooltip`.
+- Quotas section: the shared `SubscriptionStore` (no request of its own); `@cadenway/ui` `button`,
+  `card`, `empty`, `meter`, `skeleton` and `toast`.
+
 - Billing section: `BillingService` (`listBillingInvoices`, `startBillingCheckout`) through
   `data-access/services/billing-api`; `@cadenway/ui` `button`, `empty`, `skeleton`, `table`,
   `toast` and `tooltip`.
@@ -92,6 +95,16 @@ section has `organizationSectionGuard(<section>)` (`http/guards/organization-sec
   so nobody else sends it, and it is read again after an organization switch.
 - A `403` or `404` shows nothing. Any other failure shows, in the plan line, `The plan could not be
 loaded.` with `Retry`; the banner stays hidden until a retry succeeds.
+- `SubscriptionStore.refresh()` reads the subscription again while the one shown stays (the
+  quotas section, when it opens and before its export). It sends nothing for anyone but an owner
+  or while the first read is under way, and shares a refresh under way only with the same
+  organization. A generation of the subscription, moved by every read, `retry()`, `set()` (Billing's
+  payment confirmation) and refresh, binds each refresh: its outcome is dropped once the
+  subscription changed after it was sent, or the organization or the owner role did. A `403` or
+  `404` clears the subscription shown for that organization (`current` null and `failed` false, as
+  for a first read refused so, which hides the plan line, the banner and the quota alert) until a
+  newer subscription; any other failure keeps it and sets `refreshFailed` until a newer one
+  replaces it.
 - The banner shows from 90 % of the storage quota, in gigabytes of 10^9 bytes. `Later` and the
   close button hide it for the tab's session and the organization (`sessionStorage`,
   `cadenway-storage-banner-dismissed:<organizationId>`). `Manage quotas` opens
@@ -262,6 +275,39 @@ be loaded.` with `Retry`, until a read or a save confirms the organization (anot
 - Below 768 px both tables become cards (header hidden, member cell full width, actions right)
   and the remove button stays visible; the search takes the full width and the toolbar wraps.
 
+### Quotas (`quotas`, package O4)
+
+- `QuotasPage` reads the shared `SubscriptionStore` and shows only what `getBillingSubscription`
+  serves: the title, `Export usage (CSV)` and the `<plan> plan limits` card with `Seats`
+  (`<used> / <limit>`, `<n> free seats. Guests do not take a seat.`), `Storage` (attachments only,
+  `<used> GB / <limit> GB` in gigabytes of 10^9 bytes, with the free room, the room left before
+  refusal, or the refusal beyond the limit) and `Guests` (the count and its note, without a gauge:
+  the contract states no guest limit). The cycle dates, the stat tiles, the API calls, automations
+  and webhooks meters (gap B15), the storage split card with `See files`, `Increase the quota` and
+  the largest files dialog (gap B16), and the alerts and overage card are not rendered.
+- A meter is high (balise) from 80 % of its limit and critical (grenat) from 90 %, the share the
+  navigation's `Critical quota` alert uses (`quotaZone`, `ui/components/quota-meters`); the page
+  forces that zone on `cw-meter`, whose own critical zone starts at 95 %. The mockup's 80 % mark on
+  each gauge is not drawn: `cw-meter` draws a mark only as a capacity whose overrun it colors and
+  counts, so the card keeps the `alert threshold at 80%` legend without the mark glyph.
+- The store outlives the page, so the page calls `SubscriptionStore.refresh()` when it opens over
+  figures read earlier. The section skeleton shows until the first answer; a failed read (not a
+  `403` or `404`) shows the section's error panel in place, whose `Retry` calls
+  `SubscriptionStore.retry()`; a reread keeps the meters shown; a failed refresh keeps them with the
+  note `The latest usage could not be loaded. The figures shown may be out of date.` and its own
+  `Retry`, which refreshes again. A `403` or `404`, on the first read or on a refresh, shows
+  nothing (the figures go), and the workspace recovery leaves the section.
+- The export is built in the browser from the rows shown (`utils/usage-csv`): `Section`, `Metric`,
+  `Value`, `Limit`, `Usage or change`, one row per meter (storage in gigabytes, guests without a
+  limit or share, a share above 100 % written as it is while the gauge stops at its end), with a
+  UTF-8 byte order mark and CRLF rows, as the mockup's file. The figures are refreshed first; when
+  that fails nothing is written and the refresh note shows. Numbers use
+  the locale's decimal separator without grouping; the cells are separated by `;` where that
+  separator is a comma (French) and by `,` otherwise. The file is `<slug>-usage-<yyyy>-<mm>.csv`
+  for the current month; `Export ready` with `<file> downloaded.`, or `Export not possible`, toasts
+  the outcome.
+- Below 768 px the header wraps the export button under the title.
+
 ### Billing (`billing`, package O3)
 
 - `BillingPage` provides the page-scoped `InvoicesStore` and `BillingCheckoutStore` and reads the
@@ -369,6 +415,16 @@ Members section (`organization.members.*`):
 | `remove-text`                                                                                                                                                                                           | `de <organization>` rather than the mockup's `d’Atelier Nord`, for any name.                 |
 | `invite-placeholder`                                                                                                                                                                                    | English source with `example.com`; the French keeps the mockup's `exemple.fr`.               |
 | `avatar-*`, `alert-*`, `dialog-close`, `select-*`                                                                                                                                                       | Texts of the bricks (the avatar's title, hidden from screen readers); the mockup draws none. |
+
+Quotas section (`organization.quotas.*`):
+
+| Unit                                                                          | Reason                                                                                      |
+| ----------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| `seats-note-one`                                                              | Singular form of the mockup's plural free seats note.                                       |
+| `storage-value`, `storage-note`, `storage-note-high`, `storage-note-critical` | The mockup's texts with the contract's limit in place of its fixed 100 GB.                  |
+| `loading`, `failed-title`, `failed-text`, `retry`                             | The mockup's section states (`Organisation.dc.html` lines 73-128), with this section's ids. |
+| `meter-free`, `meter-unmeasured`, `meter-threshold`                           | Texts of the `cw-meter` brick, never shown here; the French keeps the brick's defaults.     |
+| `refresh-failed`, `refresh-retry`                                             | The mockup draws no failed reread of figures already shown.                                 |
 
 | Unit                                                                                                                                                                                                          | Reason                                                                                                            |
 | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |

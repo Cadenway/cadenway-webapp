@@ -65,6 +65,7 @@ function usage(usedBytes: number): OrganizationSubscription {
     seatsLimit: 25,
     storageUsedBytes: usedBytes,
     storageLimitBytes: 100_000_000_000,
+    guestCount: 4,
   };
 }
 
