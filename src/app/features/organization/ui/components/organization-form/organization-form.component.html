@@ -1,0 +1,209 @@
+<form class="contents" novalidate (submit)="submit($event)">
+  <cw-card-content class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+    <div class="flex flex-col gap-2">
+      <label
+        for="organization-name"
+        class="text-sm leading-none font-medium"
+        i18n="@@organization.general.name"
+        >Name</label
+      >
+      <input
+        cwInput
+        id="organization-name"
+        type="text"
+        autocomplete="organization"
+        data-testid="organization-name"
+        [formField]="form().name"
+        [attr.aria-describedby]="shown(form().name) ? 'organization-name-error' : null"
+      />
+      @if (shown(form().name)) {
+        <p
+          id="organization-name-error"
+          role="alert"
+          class="flex items-center gap-1 text-xs font-medium text-destructive"
+          data-testid="organization-name-error"
+        >
+          <ng-icon name="phosphorWarningCircleFill" class="size-3.5 shrink-0" aria-hidden="true" />
+          {{ form().name().errors()[0]?.message }}
+        </p>
+      }
+    </div>
+
+    <div class="flex flex-col gap-2">
+      <label
+        for="organization-slug"
+        class="text-sm leading-none font-medium"
+        i18n="@@organization.general.slug"
+        >Address</label
+      >
+      <cw-input-group>
+        <cw-input-group-addon>
+          <cw-input-group-text aria-hidden="true">{{ host() }}/</cw-input-group-text>
+        </cw-input-group-addon>
+        <input
+          cwInputGroupInput
+          id="organization-slug"
+          type="text"
+          autocomplete="off"
+          spellcheck="false"
+          class="font-mono text-xs"
+          data-testid="organization-slug"
+          [formField]="form().slug"
+          [attr.aria-describedby]="shown(form().slug) ? 'organization-slug-error' : null"
+        />
+      </cw-input-group>
+      @if (shown(form().slug)) {
+        <p
+          id="organization-slug-error"
+          role="alert"
+          class="flex items-center gap-1 text-xs font-medium text-destructive"
+          data-testid="organization-slug-error"
+        >
+          <ng-icon name="phosphorWarningCircleFill" class="size-3.5 shrink-0" aria-hidden="true" />
+          {{ form().slug().errors()[0]?.message }}
+        </p>
+      }
+    </div>
+
+    <div class="flex flex-col gap-2 sm:col-span-2">
+      <label
+        for="organization-description"
+        class="flex items-center gap-2 text-sm leading-none font-medium"
+        ><span i18n="@@organization.general.description">Description</span>&ngsp;
+        <span class="font-normal text-muted-foreground" i18n="@@organization.general.optional"
+          >(optional)</span
+        ></label
+      >
+      <textarea
+        cwTextarea
+        id="organization-description"
+        rows="2"
+        class="max-h-60 min-h-16 resize-none"
+        data-testid="organization-description"
+        [formField]="form().description"
+        [attr.aria-describedby]="
+          shown(form().description)
+            ? 'organization-description-error organization-description-hint'
+            : 'organization-description-hint'
+        "
+      ></textarea>
+      @if (shown(form().description)) {
+        <p
+          id="organization-description-error"
+          role="alert"
+          class="flex items-center gap-1 text-xs font-medium text-destructive"
+          data-testid="organization-description-error"
+        >
+          <ng-icon name="phosphorWarningCircleFill" class="size-3.5 shrink-0" aria-hidden="true" />
+          {{ form().description().errors()[0]?.message }}
+        </p>
+      }
+      <div class="flex justify-between gap-2 text-xs text-muted-foreground">
+        <span id="organization-description-hint" i18n="@@organization.general.description-hint"
+          >Shown on the invitation page.</span
+        >
+        <span class="tabular-nums whitespace-nowrap" data-testid="organization-description-count"
+          >{{ descriptionLength() }} / {{ descriptionLimit() }}</span
+        >
+      </div>
+    </div>
+
+    <div class="flex flex-col gap-2">
+      <label
+        for="organization-website"
+        class="text-sm leading-none font-medium"
+        i18n="@@organization.general.website"
+        >Website</label
+      >
+      <input
+        cwInput
+        id="organization-website"
+        type="url"
+        autocomplete="url"
+        data-testid="organization-website"
+        [formField]="form().website"
+        [attr.aria-describedby]="shown(form().website) ? 'organization-website-error' : null"
+      />
+      @if (shown(form().website)) {
+        <p
+          id="organization-website-error"
+          role="alert"
+          class="flex items-center gap-1 text-xs font-medium text-destructive"
+          data-testid="organization-website-error"
+        >
+          <ng-icon name="phosphorWarningCircleFill" class="size-3.5 shrink-0" aria-hidden="true" />
+          {{ form().website().errors()[0]?.message }}
+        </p>
+      }
+    </div>
+
+    <div class="flex flex-col gap-2">
+      <span
+        id="organization-language-label"
+        class="text-sm leading-none font-medium"
+        i18n="@@organization.general.language"
+        >Default language</span
+      >
+      <cw-select
+        ariaLabel="Default language"
+        i18n-ariaLabel="@@organization.general.language"
+        placeholder="Choose a language"
+        i18n-placeholder="@@organization.general.language-unknown"
+        data-testid="organization-language"
+        [id]="'organization-language'"
+        [formField]="form().defaultLanguage"
+      >
+        @for (option of languages(); track option.value) {
+          <cw-select-option [value]="option.value"
+            ><ng-icon [name]="option.flag" aria-hidden="true" />{{ option.label }}</cw-select-option
+          >
+        }
+      </cw-select>
+      @if (shown(form().defaultLanguage)) {
+        <p
+          role="alert"
+          class="flex items-center gap-1 text-xs font-medium text-destructive"
+          data-testid="organization-language-error"
+        >
+          <ng-icon name="phosphorWarningCircleFill" class="size-3.5 shrink-0" aria-hidden="true" />
+          {{ form().defaultLanguage().errors()[0]?.message }}
+        </p>
+      }
+    </div>
+  </cw-card-content>
+
+  <cw-card-footer class="flex-wrap">
+    @if (dirty()) {
+      <p
+        class="flex items-center gap-1.5 text-xs text-muted-foreground"
+        data-testid="organization-unsaved"
+      >
+        <span class="size-1.5 rounded-full bg-foreground" aria-hidden="true"></span>
+        <ng-container i18n="@@organization.general.unsaved">Unsaved changes</ng-container>
+      </p>
+    }
+    <div class="ml-auto flex items-center gap-2">
+      <button
+        cwButton
+        variant="outline"
+        type="button"
+        data-testid="organization-cancel"
+        [disabled]="!dirty() || saving()"
+        (click)="cancelled.emit()"
+        i18n="@@organization.general.cancel"
+      >
+        Cancel
+      </button>
+      <button
+        cwButton
+        type="submit"
+        data-testid="organization-save"
+        [disabled]="!dirty() || blocked()"
+        [loading]="saving()"
+        i18n="@@organization.general.save"
+      >
+        Save
+      </button>
+    </div>
+  </cw-card-footer>
+</form>

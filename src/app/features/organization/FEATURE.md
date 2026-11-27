@@ -38,7 +38,7 @@ section has `organizationSectionGuard(<section>)` (`http/guards/organization-sec
 - Billing and Quotas are owner only because `billing.yaml` answers the owner only
   (`Organisation.dc.html` line 321); Quotas reads the same `getBillingSubscription`.
 - Each page is a stub (WP0 of steps 7 and 8) showing the mockup's section title in the
-  organization column (`max-w-4xl`); packages O1 to O6 replace them. Security (O5) is built. Integrations and the Audit
+  organization column (`max-w-4xl`); packages O1 to O6 replace them. General (O1) and Security (O5) are built. Integrations and the Audit
   log stay stubs until their backends exist (B7, B11). The stubs read no data, so they have no
   loading, error or empty state yet.
 - A failed primary read of a section renders the default error boundary in the shell, titled
@@ -65,6 +65,12 @@ section has `organizationSectionGuard(<section>)` (`http/guards/organization-sec
 - `@cadenway/api-client`: `BillingService.getBillingSubscription` and
   `AuthenticationPolicyService.getAuthenticationPolicy` / `updateAuthenticationPolicy` through
   `data-access/`.
+- General section: `OrganizationsService` (`getCurrentOrganization`, `updateCurrentOrganization`)
+  and the logo operations of `ProfileMediaService` (`getOrganizationLogo`,
+  `startOrganizationLogoUpload`, `setOrganizationLogo`, `deleteOrganizationLogo`) through
+  `data-access/services/organization-api`, plus Angular's `HttpClient` for the signed storage
+  transfer only (never the API); `@cadenway/ui` `card`, `input`, `input-group`, `select`,
+  `skeleton`, `spinner`, `textarea` and `toast`.
 - Workspace's `ports/workspace-context` and `http/guards/organization-role`, Errors' `errors.routes`,
   `@shared/unsaved-changes`.
 - `@cadenway/ui` (`banner`, `button`) and `@cadenway/icons`.
@@ -100,8 +106,7 @@ loaded.` with `Retry`; the banner stays hidden until a retry succeeds.
   The settings shell has no `cw-sidebar`, so the items are links styled as the mockup draws them,
   not `cwSidebarItem`, which requires one.
 - `general` keeps unsaved edits through `unsavedChangesGuard`; its page asks with Workspace's
-  `cw-discard-changes-dialog`. The stub has no form, so it never asks yet; package O1 reports its
-  form's dirty state.
+  `cw-discard-changes-dialog` while its form differs from the saved organization (see General).
 - A write the gateway guards with a recent authentication (`updateAuthenticationPolicy`, package
   O5) runs through Account's `ReauthenticationService` (`reauthentication` entry), which Workspace
   provides on the organization settings route with its dialog.
@@ -132,6 +137,48 @@ loaded.` with `Retry`; the banner stays hidden until a retry succeeds.
   `412 organization.context-changed` (or a switch in progress), which the workspace recovery
   handles, keep them silently. A recovery reruns the route on the same URL, which
   `unsavedChangesGuard` lets through without asking.
+
+### General (`general`, package O1)
+
+- `GeneralPage` provides the page-scoped `OrganizationProfileStore`. It shows only the `Identity`
+  card the contract serves: the logo, `Name`, `Address` (the page host, then the slug),
+  `Description (optional)` with its `N / 280` count, `Website` and `Default language` (Français,
+  English, Deutsch with their flags), and the `Unsaved changes` footer with `Cancel` and `Save`.
+  The verified domains card (gap B10) and the danger zone, transfer and deletion (gap B12), are
+  not rendered.
+- The read of the current organization is the primary read, keyed by the workspace
+  organization: a switch reads the next one and resets the form; its failure reaches the route's
+  error boundary. The logo image is a secondary read keyed by the logo reference, shown through an
+  object URL revoked once replaced and with the page; without a logo, or when its image cannot be
+  read, the tile shows the initials of the saved name.
+- `Save` sends only what changed (names and addresses trimmed, an empty description or website
+  as `null`) from the version read (`If-Match`). The form checks the contract's rules before
+  sending (a name of 1 to 120 characters, a slug of 2 to 63 lowercase letters, digits and single
+  dashes, a description of 280 characters at most, an absolute `https` or `http` website); an
+  invalid submit shows the errors and focuses the first. `409 organization.slug-taken`,
+  `422 organization.slug-reserved` and a `400 request.invalid` issue on a form field show on that
+  field. `412 request.version-mismatch` reads the organization again, shows it and toasts the
+  conflict; any other refusal toasts the failure and keeps the edits; a
+  `412 organization.context-changed` (or a switch in progress) keeps them silently for the
+  workspace recovery. A saved new slug opens `/<new slug>/organization/general`, replacing the old
+  address in the history and keeping the query; the `/:org` guards then verify and commit the
+  organization again. A save of the name alone does not refresh the workspace context, so the
+  settings identity row and the application shell show the new name after the next verification.
+- The logo applies at once, as the mockup does: a PNG or SVG of 1 byte to 5 MiB is reserved
+  (`Idempotency-Key`), sent to its signed destination with its fields first and no credentials,
+  then published with `If-Match`; `Remove` deletes it with `If-Match`. Each then reads the
+  organization again for its reference and version, which keeps the form's edits when only those
+  change. Another file type, an empty or too large file and an image storage refuses
+  (`media.unsupported-type`, `media.file-too-large`, `media.invalid-image`) toast why; a stale
+  version reads the organization again.
+- One write runs at a time: `Save` is disabled while a logo change runs, and the logo actions
+  while a save runs. Every write is bound to the organization shown when it starts and to the
+  page: after a switch or once the page is gone it sends nothing more, drops any late answer and
+  toasts nothing. Leaving while a save is on its way never offers `Discard`: the page waits for
+  it, then leaves once it is saved or asks once it is refused.
+- A default language a later contract adds shows `Choose a language` and is sent only once another
+  option is picked.
+- Below 768 px the fields take one column, the logo row and the footer wrap.
 
 ### Members (`members`, package O2)
 
@@ -196,6 +243,18 @@ loaded.` with `Retry`; the banner stays hidden until a retry succeeds.
 | `organization.plan-summary.failed` | The mockup draws no failed billing read.                                     |
 | `organization.retry`               | `Retry` is the mockup's word, used for a new state.                          |
 | `organization.navigation.plan`     | The identity row without the member count, for whoever may not read billing. |
+
+General section (`organization.general.*`):
+
+| Unit                                                                                                            | Reason                                                                                  |
+| --------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| `name-required`, `name-too-long`, `slug-invalid`, `description-too-long`, `website-invalid`, `language-invalid` | The mockup checks no field.                                                             |
+| `slug-taken`, `slug-reserved`                                                                                   | Copy of the contract's problems (`organizations.yaml`); the mockup refuses no address.  |
+| `conflict`, `conflict-text`, `logo-conflict-text`, `save-failed`                                                | The mockup draws no refused or overtaken save.                                          |
+| `logo-too-large`, `logo-too-large-text`, `logo-invalid`, `logo-invalid-text`, `logo-failed`, `logo-failed-text` | Limits of the contract (`profile-media.yaml`); the mockup draws no refused upload.      |
+| `logo-removed-text`                                                                                             | The organization's own initials rather than the mockup's fixed `AN`.                    |
+| `language-unknown`                                                                                              | A language a later contract adds needs its own state.                                   |
+| `loading`                                                                                                       | The mockup's `Chargement de la section` (`Organisation.dc.html` line 74), with this id. |
 
 Members section (`organization.members.*`):
 

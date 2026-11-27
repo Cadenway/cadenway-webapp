@@ -1,0 +1,88 @@
+@let organization = store.organization.value();
+<div class="mx-auto flex w-full max-w-4xl flex-col gap-6 px-4 py-6 sm:px-8 sm:py-8">
+  @if (organization) {
+    <header class="flex flex-col gap-1">
+      <h1
+        class="text-2xl font-semibold tracking-tight"
+        tabindex="-1"
+        data-route-focus
+        i18n="@@organization.general.title"
+      >
+        Organization profile
+      </h1>
+      <p class="text-sm text-muted-foreground" i18n="@@organization.general.description-lead">
+        Name, address and identity seen by members and in invitation emails.
+      </p>
+    </header>
+
+    <cw-card role="region" aria-labelledby="general-identity-title">
+      <cw-card-header>
+        <cw-card-title>
+          <h2 id="general-identity-title" i18n="@@organization.general.identity">Identity</h2>
+        </cw-card-title>
+      </cw-card-header>
+      <cw-card-content>
+        <cw-organization-logo
+          [logoUrl]="store.logoUrl()"
+          [hasLogo]="organization.logoId !== null"
+          [initials]="organization.initials"
+          [busy]="store.logoChange()"
+          [disabled]="store.saving()"
+          (picked)="pickLogo($event)"
+          (removed)="removeLogo()"
+        />
+      </cw-card-content>
+      <cw-organization-form
+        [form]="profileForm"
+        [host]="host"
+        [languages]="languages"
+        [descriptionLimit]="descriptionLimit"
+        [dirty]="dirty()"
+        [saving]="store.saving()"
+        [blocked]="store.logoChange() !== null"
+        (submitted)="save()"
+        (cancelled)="cancel()"
+      />
+    </cw-card>
+  } @else {
+    <div
+      class="flex flex-col gap-6"
+      role="status"
+      aria-busy="true"
+      aria-label="Loading the section"
+      i18n-aria-label="@@organization.general.loading"
+    >
+      <div class="flex flex-col gap-2" aria-hidden="true">
+        <div cwSkeleton class="h-7 w-56"></div>
+        <div cwSkeleton class="h-3 w-3/4"></div>
+      </div>
+      <cw-card aria-hidden="true">
+        <cw-card-content class="flex flex-col gap-4">
+          <div cwSkeleton class="h-4 w-32"></div>
+          <div class="flex items-center gap-4">
+            <div cwSkeleton class="size-16 rounded-lg"></div>
+            <div class="flex min-w-0 flex-1 flex-col gap-1.5">
+              <div cwSkeleton class="h-8 w-40 rounded-lg"></div>
+              <div cwSkeleton class="h-2.5 w-1/2"></div>
+            </div>
+          </div>
+          <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div class="flex flex-col gap-2">
+              <div cwSkeleton class="h-3 w-1/3"></div>
+              <div cwSkeleton class="h-8 w-full rounded-lg"></div>
+            </div>
+            <div class="flex flex-col gap-2">
+              <div cwSkeleton class="h-3 w-1/3"></div>
+              <div cwSkeleton class="h-8 w-full rounded-lg"></div>
+            </div>
+            <div class="flex flex-col gap-2 sm:col-span-2">
+              <div cwSkeleton class="h-3 w-1/4"></div>
+              <div cwSkeleton class="h-16 w-full rounded-lg"></div>
+            </div>
+          </div>
+        </cw-card-content>
+      </cw-card>
+    </div>
+  }
+</div>
+<cw-discard-changes-dialog />
