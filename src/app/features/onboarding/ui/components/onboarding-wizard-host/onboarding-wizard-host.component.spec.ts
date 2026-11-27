@@ -531,4 +531,54 @@ describe('OnboardingWizardHost', () => {
       description: 'The setup assistant may come back on your next visit.',
     });
   });
+
+  it('keeps ?onboarding=start while the read is in flight, then removes it once the read fails', async () => {
+    let fail: (error: unknown) => void = (): void => undefined;
+    const { fixture, router, dismiss }: Harness = await render(
+      '/atelier-nord?onboarding=start',
+      null,
+    );
+    dismiss.mockImplementationOnce(
+      () =>
+        new Promise((_resolve: unknown, reject: (error: unknown) => void) => {
+          fail = reject;
+        }),
+    );
+
+    document.querySelector<HTMLButtonElement>('[data-testid="onboarding-skip"]')?.click();
+    await settle(fixture);
+    expect(wizard()).toBeNull();
+    expect(router.url).toBe('/atelier-nord?onboarding=start');
+
+    (TestBed.inject(OnboardingStore).failed as WritableSignal<boolean>).set(true);
+    fail(new HttpErrorResponse({ status: 503 }));
+    await settle(fixture);
+
+    expect(router.url).toBe('/atelier-nord');
+    const toasts: { error: Mock } = TestBed.inject(CwToastService) as unknown as { error: Mock };
+    expect(toasts.error).toHaveBeenCalledWith('Your choice could not be saved', {
+      description: 'The setup assistant may come back on your next visit.',
+    });
+  });
+
+  it('removes ?onboarding=start once the read in flight succeeds and the dismissal is saved', async () => {
+    const {
+      fixture,
+      router,
+      dismiss,
+      progress: shown,
+    }: Harness = await render('/atelier-nord?onboarding=start', null);
+    dismiss.mockImplementationOnce(() => {
+      shown.set(progress(2, 'dismissed'));
+      return Promise.resolve(progress(2, 'dismissed'));
+    });
+
+    document.querySelector<HTMLButtonElement>('[data-testid="onboarding-skip"]')?.click();
+    await settle(fixture);
+
+    expect(dismiss).toHaveBeenCalledTimes(1);
+    expect(router.url).toBe('/atelier-nord');
+    const toasts: { error: Mock } = TestBed.inject(CwToastService) as unknown as { error: Mock };
+    expect(toasts.error).not.toHaveBeenCalled();
+  });
 });

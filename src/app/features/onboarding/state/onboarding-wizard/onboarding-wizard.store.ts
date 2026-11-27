@@ -672,9 +672,10 @@ interface OnboardingWizardStoreInstance {
    *
    * @description
    * `Set up later`: closes the assistant at once, then closes it for good on the gateway; a read in
-   * flight is awaited first (the shared store reads before it writes). Only a failed read closes
-   * without a write, with the toast saying the choice was not saved (the host then removes
-   * `?onboarding=start`). A definite refusal, or an unknown outcome after which the progress still shows
+   * flight is awaited first (the shared store reads before it writes). Only a failed read, failed
+   * at the click or the read in flight failing then, closes without a write, with the toast saying
+   * the choice was not saved (the host then removes `?onboarding=start`). A definite refusal, or an
+   * unknown outcome after which the progress still shows
    * the assistant `in-progress`, shows a toast saying the choice was not saved and the assistant
    * may come back; a dropped write shows nothing. Once settled, when a space exists (a finish whose
    * outcome was unknown did create it), it opens the first list.
@@ -997,8 +998,12 @@ function createOnboardingWizardStore(): Type<OnboardingWizardStoreInstance> {
         } catch (error: unknown) {
           if (error instanceof OnboardingWriteDroppedError || !live(organizationId)) return;
           const shown: OnboardingProgress | null = store._onboarding.progress();
-          // No progress: the read the dismissal waited for failed, and nothing was written.
-          if (shown === null) return;
+          // No progress: the read the dismissal waited for failed, and nothing was written, so the
+          // choice is not saved.
+          if (shown === null) {
+            showSkipFailed();
+            return;
+          }
           const unsaved: boolean = isUncertainOnboardingWrite(error)
             ? shown.wizard.status === 'in-progress'
             : problemCode(error) !== 'onboarding.wizard-closed';

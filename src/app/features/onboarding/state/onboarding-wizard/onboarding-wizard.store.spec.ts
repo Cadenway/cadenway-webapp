@@ -1165,6 +1165,22 @@ describe('OnboardingWizardStore', () => {
 
     expect(store.closed()).toBe(true);
     expect(fakes.dismiss).toHaveBeenCalledTimes(1);
+    expect(fakes.error).not.toHaveBeenCalled();
+  });
+
+  it('says the choice was not saved when the read in flight fails after Set up later', async () => {
+    const { store, fakes }: Setup = setup(null);
+    fakes.dismiss.mockImplementationOnce(() => {
+      fakes.failed.set(true);
+      return rejected(new HttpErrorResponse({ status: 503 }));
+    });
+
+    await store.skip();
+
+    expect(store.closed()).toBe(true);
+    expect(fakes.error).toHaveBeenCalledWith('Your choice could not be saved', {
+      description: 'The setup assistant may come back on your next visit.',
+    });
   });
 
   it('only closes on Set up later when the progress read failed, saying the choice was not saved', async () => {

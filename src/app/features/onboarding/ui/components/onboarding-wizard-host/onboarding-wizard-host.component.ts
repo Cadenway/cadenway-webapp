@@ -296,20 +296,22 @@ export class OnboardingWizardHost {
       });
     });
     effect((): void => {
-      // `Set up later` after a failed read closes with nothing written and no progress to settle
-      // the launch: the parameter goes, so a reload does not reopen the assistant. A close with a
-      // progress is settled above once the dismissal answers.
+      // `Set up later` after a failed read (failed at the click, or the read in flight failing
+      // then) closes with nothing written and no progress to settle the launch: once the read has
+      // failed, the parameter goes, so a reload does not reopen the assistant. While the read is in
+      // flight it stays; a close with a progress is settled above once the dismissal answers.
       const organizationId: string = this.workspace.organization().id;
       if (
         !this.wizard.closed() ||
         this.onboarding.progress() !== null ||
+        !this.onboarding.failed() ||
         this.startedFor() !== organizationId ||
         !hasStart(this.address())
       ) {
         return;
       }
       untracked((): void => {
-        this.removeStart();
+        if (this.router.currentNavigation() === null) this.removeStart();
       });
     });
     if (this.router.currentNavigation() === null) this.takeStart();
@@ -371,7 +373,8 @@ export class OnboardingWizardHost {
    * @description
    * Once the progress of a launch from `?onboarding=start` is known: removes the parameter when the
    * launch is durable (the progress is past version 1, or the assistant is no longer
-   * `in-progress`); at version 1 it asks the store, once per organization, to save the initial
+   * `in-progress`), unless a navigation is under way, whose end settles it again; at version 1
+   * it asks the store, once per organization, to save the initial
    * draft, whose answer moves the version on and comes back here.
    *
    * @param {string} organizationId - The current organization.
@@ -379,7 +382,9 @@ export class OnboardingWizardHost {
    */
   private settleStart(organizationId: string, progress: OnboardingProgress): void {
     if (progress.wizard.status !== 'in-progress' || progress.version > 1) {
-      this.removeStart();
+      // A navigation under way (the finish opening the first list) would be cut short by the
+      // removal; its end changes the address, which settles the launch again.
+      if (this.router.currentNavigation() === null) this.removeStart();
       return;
     }
     if (this.startSavedFor === organizationId) return;
