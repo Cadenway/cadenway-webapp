@@ -1,0 +1,95 @@
+<form
+  class="flex flex-wrap items-start gap-2 px-3 py-3 sm:pl-14"
+  aria-label="New key result"
+  i18n-aria-label="@@goals.result-form.label"
+  novalidate
+  data-testid="key-result-form"
+  (submit)="send($event)"
+  (keydown.escape)="cancelled.emit()"
+>
+  <div class="flex min-w-48 flex-1 flex-col gap-1.5">
+    <label
+      class="text-xs font-medium text-muted-foreground"
+      [for]="fieldId('label')"
+      i18n="@@goals.result-form.label-field"
+      >Key result</label
+    >
+    <input
+      #labelField
+      cwInput
+      type="text"
+      autocomplete="off"
+      placeholder="Customer demos held"
+      i18n-placeholder="@@goals.result-form.label-placeholder"
+      [id]="fieldId('label')"
+      [formField]="resultForm.label"
+      [attr.aria-describedby]="
+        resultForm.label().touched() && resultForm.label().invalid() ? fieldId('label-error') : null
+      "
+    />
+    @if (resultForm.label().touched() && resultForm.label().invalid()) {
+      <p
+        role="alert"
+        class="flex items-center gap-1 text-xs font-medium text-destructive"
+        [id]="fieldId('label-error')"
+      >
+        <ng-icon name="phosphorWarningCircleFill" class="size-3.5 shrink-0" aria-hidden="true" />
+        {{ resultForm.label().errors()[0]?.message }}
+      </p>
+    }
+  </div>
+  <div class="flex w-24 flex-col gap-1.5">
+    <label
+      class="text-xs font-medium text-muted-foreground"
+      [for]="fieldId('target')"
+      i18n="@@goals.result-form.target-field"
+      >Target</label
+    >
+    <input
+      cwInput
+      type="text"
+      inputmode="numeric"
+      autocomplete="off"
+      placeholder="12"
+      class="tabular-nums"
+      [id]="fieldId('target')"
+      [formField]="resultForm.target"
+      [attr.aria-describedby]="
+        resultForm.target().touched() && resultForm.target().invalid()
+          ? fieldId('target-error')
+          : null
+      "
+    />
+    @if (resultForm.target().touched() && resultForm.target().invalid()) {
+      <p
+        role="alert"
+        class="flex items-center gap-1 text-xs font-medium text-destructive"
+        [id]="fieldId('target-error')"
+      >
+        <ng-icon name="phosphorWarningCircleFill" class="size-3.5 shrink-0" aria-hidden="true" />
+        {{ resultForm.target().errors()[0]?.message }}
+      </p>
+    }
+  </div>
+  <div class="flex gap-2 pt-5">
+    <button
+      cwButton
+      type="submit"
+      [loading]="pending()"
+      data-testid="key-result-add"
+      i18n="@@goals.result-form.add"
+    >
+      Add
+    </button>
+    <button
+      cwButton
+      type="button"
+      variant="ghost"
+      data-testid="key-result-cancel"
+      (click)="cancelled.emit()"
+      i18n="@@goals.result-form.cancel"
+    >
+      Cancel
+    </button>
+  </div>
+</form>

@@ -35,6 +35,7 @@ import {
   TasksService,
   TeamReportsService,
   DocumentsService,
+  GoalsService,
   TrashService,
 } from '@cadenway/api-client';
 import { filter, firstValueFrom, NEVER, Observable, of, Subject, throwError } from 'rxjs';
@@ -268,6 +269,24 @@ describe('WORKSPACE_ROUTES', () => {
         { provide: RuntimeConfigStore, useValue: { config: () => ({}) } },
         { provide: InboxService, useValue: { getInboxUnreadCount: () => of({ unreadCount: 2 }) } },
         {
+          provide: GoalsService,
+          useValue: {
+            listGoals: () =>
+              of({
+                items: [],
+                nextCursor: null,
+                summary: {
+                  goalCount: 0,
+                  expectedProgressPercent: 0,
+                  averageProgressPercent: 0,
+                  onTrackOrAchievedCount: 0,
+                  achievedCount: 0,
+                  atRiskOrBehindCount: 0,
+                },
+              }),
+          },
+        },
+        {
           provide: TeamReportsService,
           useValue: {
             getTeamDashboard: () =>
@@ -309,6 +328,13 @@ describe('WORKSPACE_ROUTES', () => {
           provide: MyTasksService,
           useValue: {
             listMyTasks: () => of({ items: [], nextCursor: null, counts: { open: 0, closed: 0 } }),
+            getHome: () =>
+              of({
+                stats: { assigned: 0, late: 0, dueToday: 0, done: 0 },
+                priorities: [],
+                sprints: [],
+                lists: [],
+              }),
           },
         },
         {

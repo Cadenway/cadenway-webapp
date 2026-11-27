@@ -1,0 +1,249 @@
+@let goals = store.list();
+@if (goals) {
+  <div class="mx-auto flex w-full max-w-5xl flex-col gap-5 px-4 py-6 sm:px-6">
+    <header class="flex flex-wrap items-start gap-3">
+      <div class="flex min-w-0 flex-1 flex-col gap-1">
+        <h1
+          #title
+          class="text-2xl font-semibold tracking-tight"
+          tabindex="-1"
+          data-route-focus
+          i18n="@@goals.header.title"
+        >
+          Goals
+        </h1>
+        <p class="text-sm text-muted-foreground" data-testid="goals-subtitle">{{ subtitle() }}</p>
+      </div>
+      @if (store.canCreate()) {
+        <button cwButton type="button" data-testid="goal-new" (click)="openForm()">
+          <ng-icon name="phosphorPlusBold" aria-hidden="true" />
+          <ng-container i18n="@@goals.header.new">New goal</ng-container>
+        </button>
+      }
+    </header>
+
+    <cw-goal-stats [stats]="store.stats()" [quarterLabel]="quarterLabel()" />
+
+    @if (formOpen()) {
+      <cw-goal-form
+        [owners]="store.owners()"
+        [userId]="store.userId()"
+        [spaces]="store.spaceOptions()"
+        [pending]="store.creating()"
+        (submitted)="create($event)"
+        (cancelled)="closeForm()"
+      />
+    }
+
+    @if (goals.length > 0) {
+      <cw-accordion type="multiple" class="gap-3" [(value)]="openGoals">
+        @for (view of goals; track view.goal.id) {
+          @let goal = view.goal;
+          <cw-accordion-item
+            class="flex! flex-wrap items-center gap-x-3 overflow-hidden rounded-xl border border-border bg-card last:border-b [&>h3]:min-w-0 [&>h3]:flex-1 [&>h3]:py-2 [&>h3]:pl-2 sm:[&>h3]:py-3 sm:[&>h3]:pl-3"
+            data-testid="goal-row"
+            [attr.data-goal-id]="goal.id"
+            [value]="goal.id"
+          >
+            <button
+              cwAccordionTrigger
+              type="button"
+              class="min-w-0 gap-3"
+              data-testid="goal-toggle"
+            >
+              <span
+                class="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary"
+                aria-hidden="true"
+              >
+                <ng-icon name="phosphorTargetBold" class="size-[18px]" />
+              </span>
+              <span class="flex min-w-0 flex-col">
+                <span class="truncate font-medium">{{ goal.name }}</span>
+                <span
+                  class="truncate text-xs font-normal text-muted-foreground"
+                  data-testid="goal-meta"
+                >
+                  @if (view.ownerName) {
+                    {{ view.ownerName }} ·
+                  }
+                  {{ dueText(view) }} · {{ countText(view) }}</span
+                >
+              </span>
+            </button>
+            <cw-goal-progress
+              [health]="goal.health"
+              [percent]="percent(view)"
+              [expected]="store.stats().expectedPercent"
+            />
+            @if (view.canWrite) {
+              <button
+                cwButton
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                class="mr-2 text-muted-foreground sm:mr-3"
+                title="Delete"
+                i18n-title="@@goals.goal.delete-title"
+                [attr.aria-label]="deleteLabel(view)"
+                data-testid="goal-delete"
+                (click)="askDelete(view)"
+              >
+                <ng-icon name="phosphorTrashBold" aria-hidden="true" />
+              </button>
+            } @else {
+              <span class="mr-2 sm:mr-3" aria-hidden="true"></span>
+            }
+            <cw-accordion-content class="order-last basis-full [&_[role=region]]:p-0">
+              <div role="list" class="mt-2 flex flex-col border-t border-border sm:mt-3">
+                @for (result of goal.results; track result.id; let index = $index) {
+                  <cw-key-result-row
+                    [result]="result"
+                    [canWrite]="view.canWrite"
+                    [listName]="
+                      result.kind === 'list-progress'
+                        ? (store.listNames().get(result.listId) ?? null)
+                        : null
+                    "
+                    [milestone]="
+                      result.kind === 'milestone'
+                        ? (milestones.milestones()[result.taskKey] ?? 'unknown')
+                        : 'unknown'
+                    "
+                    [today]="today"
+                    (stepped)="store.step(goal.id, result.id, $event)"
+                    (toggled)="store.toggle(goal.id, result.id)"
+                    (milestoneOpened)="openMilestone($event)"
+                    (listOpened)="openList($event)"
+                    (removed)="removeResult(goal.id, result.id, index)"
+                  />
+                }
+              </div>
+              @if (view.canWrite) {
+                @if (resultFormFor() === goal.id) {
+                  <cw-key-result-form
+                    [formId]="'key-result-' + goal.id"
+                    [pending]="store.addingTo() === goal.id"
+                    (submitted)="addResult(goal.id, $event)"
+                    (cancelled)="closeResultForm(goal.id)"
+                  />
+                } @else {
+                  <div class="px-3 py-2 sm:pl-12">
+                    <button
+                      cwButton
+                      type="button"
+                      variant="ghost"
+                      class="text-muted-foreground"
+                      data-testid="key-result-start"
+                      (click)="resultFormFor.set(goal.id)"
+                    >
+                      <ng-icon name="phosphorPlusBold" aria-hidden="true" />
+                      <ng-container i18n="@@goals.goal.add-result">Add a key result</ng-container>
+                    </button>
+                  </div>
+                }
+              }
+            </cw-accordion-content>
+          </cw-accordion-item>
+        }
+      </cw-accordion>
+    } @else {
+      <cw-empty variant="outline" data-testid="goals-empty">
+        <cw-empty-header>
+          <cw-empty-media>
+            <ng-icon name="phosphorTargetBold" aria-hidden="true" />
+          </cw-empty-media>
+          <cw-empty-title i18n="@@goals.empty.title">No goals this quarter</cw-empty-title>
+          <cw-empty-description i18n="@@goals.empty.description"
+            >Set a course for the team and measure it with key results.</cw-empty-description
+          >
+        </cw-empty-header>
+        @if (store.canCreate()) {
+          <cw-empty-content>
+            <button
+              cwButton
+              type="button"
+              variant="outline"
+              data-testid="goal-new-empty"
+              (click)="openForm()"
+              i18n="@@goals.empty.create"
+            >
+              Create a goal
+            </button>
+          </cw-empty-content>
+        }
+      </cw-empty>
+    }
+  </div>
+} @else {
+  <div
+    class="min-h-0 flex-1 overflow-hidden"
+    role="status"
+    aria-busy="true"
+    aria-label="Loading the goals"
+    i18n-aria-label="@@goals.loading"
+    data-testid="goals-loading"
+  >
+    <div class="mx-auto flex w-full max-w-5xl flex-col gap-6 px-4 py-6 sm:px-6" aria-hidden="true">
+      <div class="flex items-end gap-3">
+        <div class="flex min-w-0 flex-1 flex-col gap-2">
+          <div cwSkeleton class="h-3 w-40"></div>
+          <div cwSkeleton class="h-7 w-64"></div>
+        </div>
+        <div cwSkeleton class="h-8 w-32 rounded-lg"></div>
+      </div>
+      <div
+        class="grid grid-cols-2 divide-x divide-border rounded-xl border border-border bg-card lg:grid-cols-4"
+      >
+        @for (cell of [1, 2, 3, 4]; track cell) {
+          <div class="flex flex-col gap-2 p-4">
+            <div cwSkeleton class="h-3 w-24"></div>
+            <div cwSkeleton class="h-7 w-16"></div>
+            <div cwSkeleton class="h-2.5 w-28"></div>
+          </div>
+        }
+      </div>
+      @for (group of skeletonRows; track $index) {
+        <div class="flex flex-col overflow-hidden rounded-lg border border-border">
+          @for (width of group; track $index) {
+            <div class="flex h-11 items-center gap-3 border-b border-border px-3 last:border-b-0">
+              <div cwSkeleton class="size-4 rounded-full"></div>
+              <div cwSkeleton class="h-2.5 w-14"></div>
+              <div cwSkeleton class="h-3" [class]="width"></div>
+              <div cwSkeleton class="ml-auto h-5 w-16 rounded-full"></div>
+              <div cwSkeleton class="size-6 rounded-full"></div>
+            </div>
+          }
+        </div>
+      }
+    </div>
+  </div>
+}
+
+@let target = deleteTarget();
+<cw-alert-dialog
+  variant="destructive"
+  [(open)]="deleteOpen"
+  [pending]="deleting()"
+  data-testid="goal-delete-dialog"
+  (confirm)="confirmDelete()"
+>
+  <cw-alert-dialog-media>
+    <ng-icon name="phosphorTrashBold" aria-hidden="true" />
+  </cw-alert-dialog-media>
+  <h2 cwAlertDialogTitle>{{ target ? deleteTitle(target) : '' }}</h2>
+  <p cwAlertDialogDescription i18n="@@goals.delete.description">
+    Its key results are deleted with it. This cannot be undone.
+  </p>
+  <button cwButton cwAlertDialogCancel variant="outline" i18n="@@goals.delete.cancel">
+    Cancel
+  </button>
+  <button
+    cwButton
+    cwAlertDialogAction
+    variant="destructive"
+    [loading]="deleting()"
+    data-testid="goal-delete-confirm"
+  >
+    <ng-container i18n="@@goals.delete.confirm">Delete the goal</ng-container>
+  </button>
+</cw-alert-dialog>
