@@ -1,0 +1,32 @@
+<span
+  class="flex size-8 shrink-0 items-center justify-center rounded-lg bg-muted"
+  aria-hidden="true"
+>
+  <ng-icon [name]="icon()" class="size-4 text-muted-foreground" />
+</span>
+<div class="flex min-w-0 flex-1 flex-col gap-0.5">
+  <p class="flex min-w-0 items-center gap-2 text-sm">
+    <span class="truncate font-medium">{{ name() }}</span>
+    @if (taskKey(); as key) {
+      <span class="shrink-0 font-mono text-xs text-muted-foreground">{{ key }}</span>
+    }
+  </p>
+  <p class="truncate text-xs text-muted-foreground" data-testid="archive-meta">{{ meta() }}</p>
+</div>
+@if (restorable()) {
+  <button
+    cwButton
+    type="button"
+    variant="outline"
+    size="xs"
+    class="aria-disabled:cursor-default aria-disabled:opacity-50"
+    [attr.aria-disabled]="pending() || null"
+    [attr.aria-busy]="pending() || null"
+    [attr.aria-label]="restoreLabel()"
+    data-archive-restore
+    (click)="restore()"
+  >
+    <ng-icon name="phosphorArrowCounterClockwiseBold" class="size-3.5" aria-hidden="true" />
+    <ng-container i18n="@@archives.row.restore">Restore</ng-container>
+  </button>
+}

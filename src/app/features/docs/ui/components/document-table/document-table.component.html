@@ -1,0 +1,92 @@
+<div class="relative w-full overflow-x-auto rounded-lg border border-border">
+  <div
+    role="table"
+    aria-label="Documents"
+    i18n-aria-label="@@docs.table.label"
+    class="min-w-[640px]"
+    [attr.aria-busy]="searching() ? 'true' : null"
+    data-testid="document-table"
+  >
+    <div
+      role="row"
+      class="grid h-9 grid-cols-[minmax(14rem,1fr)_8rem_10rem_8rem] items-center border-b border-border px-3 text-xs font-medium text-muted-foreground"
+    >
+      <span role="columnheader" i18n="@@docs.table.title">Title</span>
+      <span role="columnheader" i18n="@@docs.table.space">Space</span>
+      <span role="columnheader" i18n="@@docs.table.author">Author</span>
+      <span role="columnheader" i18n="@@docs.table.updated">Modified</span>
+    </div>
+    @for (row of rows(); track row.document.id) {
+      <div
+        role="row"
+        class="relative grid min-h-10 grid-cols-[minmax(14rem,1fr)_8rem_10rem_8rem] items-center border-b border-border px-3 text-sm transition-colors last:border-b-0 hover:bg-muted has-[[data-state=open]]:bg-selected"
+        [class.opacity-60]="row.document.id === deletingId()"
+        data-testid="document-row"
+      >
+        <span role="cell" class="flex min-w-0 items-center gap-2">
+          <ng-icon
+            name="phosphorFileTextBold"
+            class="shrink-0 text-muted-foreground"
+            aria-hidden="true"
+          />
+          <button
+            type="button"
+            class="min-w-0 truncate text-left font-medium after:absolute after:inset-0 after:content-[''] focus-visible:outline-none focus-visible:after:ring-2 focus-visible:after:ring-ring focus-visible:after:ring-inset"
+            data-testid="document-open"
+            [cwContextMenuTriggerFor]="documentMenu"
+            [cwContextMenuData]="row"
+            (click)="opened.emit(row)"
+          >
+            {{ row.document.title }}
+          </button>
+        </span>
+        <span role="cell" class="truncate text-muted-foreground">{{ row.spaceName ?? '—' }}</span>
+        <span role="cell" class="flex min-w-0 items-center gap-2">
+          <cw-avatar size="xs" [name]="row.authorName" aria-hidden="true" />
+          <span class="truncate">{{ row.authorName ?? '—' }}</span>
+        </span>
+        <span role="cell" class="text-xs text-muted-foreground">{{ updated(row) }}</span>
+      </div>
+    } @empty {
+      <p
+        class="px-3 py-6 text-center text-sm text-muted-foreground"
+        data-testid="documents-empty"
+        i18n="@@docs.table.empty"
+      >
+        No document matches.
+      </p>
+    }
+  </div>
+</div>
+
+@let menuRow = rowOf(documentMenu.data());
+<cw-menu #documentMenu [ariaLabel]="menuRow?.document?.title ?? ''">
+  @if (menuRow) {
+    <button cwMenuItem type="button" (triggered)="opened.emit(menuRow)">
+      <ng-icon name="phosphorArrowSquareOutBold" aria-hidden="true" />
+      <ng-container i18n="@@docs.menu.open">Open</ng-container>
+    </button>
+    @if (menuRow.canEdit) {
+      <button cwMenuItem type="button" (triggered)="editRequested.emit(menuRow)">
+        <ng-icon name="phosphorPencilSimpleBold" aria-hidden="true" />
+        <ng-container i18n="@@docs.menu.edit">Edit</ng-container>
+      </button>
+    }
+    <button cwMenuItem type="button" (triggered)="linkCopyRequested.emit(menuRow)">
+      <ng-icon name="phosphorLinkSimpleBold" aria-hidden="true" />
+      <ng-container i18n="@@docs.menu.copy-link">Copy the link</ng-container>
+    </button>
+    @if (menuRow.canEdit) {
+      <cw-menu-separator />
+      <button
+        cwMenuItem
+        type="button"
+        variant="destructive"
+        (triggered)="deleteRequested.emit(menuRow)"
+      >
+        <ng-icon name="phosphorTrashBold" aria-hidden="true" />
+        <ng-container i18n="@@docs.menu.delete">Delete</ng-container>
+      </button>
+    }
+  }
+</cw-menu>
