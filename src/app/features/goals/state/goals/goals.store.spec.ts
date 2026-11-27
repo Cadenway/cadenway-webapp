@@ -1209,4 +1209,84 @@ describe('GoalsStore', () => {
     expect(api.updateResult).toHaveBeenCalledTimes(1);
     expect(api.get).not.toHaveBeenCalled();
   });
+
+  it('never sends a queued write once the page is gone and the workspace switched away and back', async () => {
+    const first: Subject<KeyResultWrite> = new Subject<KeyResultWrite>();
+    api.updateResult.mockReturnValueOnce(firstValueFrom(first));
+    const store: InstanceType<typeof GoalsStore> = await loaded();
+
+    store.step('g1', 'k6', 1);
+    await burst();
+    store.step('g1', 'k6', 1);
+    TestBed.resetTestingModule();
+    commit(STUDIO_SUD);
+    commit(ATELIER_NORD);
+    first.next({ result: signups(177), version: 4 });
+    first.complete();
+    await flush();
+
+    expect(api.updateResult).toHaveBeenCalledTimes(1);
+    expect(api.get).not.toHaveBeenCalled();
+  });
+
+  it('resets instead of sending a queued write when the workspace switches away and back within one tick', async () => {
+    const store: InstanceType<typeof GoalsStore> = await loaded();
+    const first: Subject<KeyResultWrite> = await queued(store);
+    await burst();
+
+    commit(STUDIO_SUD);
+    commit(ATELIER_NORD);
+    first.next({ result: signups(177), version: 4 });
+    first.complete();
+    await flush();
+    TestBed.tick();
+    await settle();
+
+    expect(api.updateResult).toHaveBeenCalledTimes(1);
+    expect(shownValue(store)).toBe(168);
+    expect(toasts.error).not.toHaveBeenCalled();
+  });
+
+  it('keeps sending writes after the same organization is verified again', async () => {
+    const store: InstanceType<typeof GoalsStore> = await loaded();
+
+    commit(ATELIER_NORD);
+    TestBed.tick();
+    store.step('g1', 'k6', 1);
+    await settle();
+
+    expect(api.updateResult.mock.calls).toEqual([['g1', 'k6', 3, { currentValue: 177 }]]);
+    expect(api.get).toHaveBeenCalledTimes(1);
+  });
+
+  it('drops the value of a burst still waiting when the workspace is left', async () => {
+    TestBed.overrideProvider(GOAL_EDIT_BURST_MS, { useValue: 10_000 });
+    const store: InstanceType<typeof GoalsStore> = await loaded();
+
+    store.step('g1', 'k6', 1);
+    TestBed.resetTestingModule();
+    pin.set(null);
+    await flush();
+
+    expect(api.updateResult).not.toHaveBeenCalled();
+  });
+
+  it('neither records nor toasts a deletion answered once another organization is committed', async () => {
+    const answer: Deferred<undefined> = deferred<undefined>();
+    api.delete.mockReturnValueOnce(answer.promise);
+    const store: InstanceType<typeof GoalsStore> = await loaded();
+    const removing: Promise<boolean> = store.remove('g1', 3);
+    await flush();
+    expect(api.delete).toHaveBeenCalledWith('g1', 3);
+
+    commit(STUDIO_SUD);
+    answer.resolve(undefined);
+
+    await expect(removing).resolves.toBe(false);
+    expect(store.deletingId()).toBeNull();
+    TestBed.tick();
+    await settle();
+    expect(store.list()?.map((view: GoalView) => view.goal.id)).toEqual(['g1']);
+    expect(toasts.success).not.toHaveBeenCalled();
+  });
 });

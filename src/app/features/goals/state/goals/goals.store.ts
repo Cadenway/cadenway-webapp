@@ -207,7 +207,8 @@ export const CREATE_ATTEMPTS: number = 3;
  * Interface GoalsContext
  *
  * @description
- * Which organization generation the writes belong to and whether the page is gone.
+ * Which organization, pin revision and generation the writes belong to, and whether the page
+ * is gone.
  */
 interface GoalsContext {
   // #region Properties
@@ -234,11 +235,37 @@ interface GoalsContext {
   organizationId: string;
 
   /**
+   * Property revision
+   *
+   * @description
+   * The `OrganizationPin` revision the store adopted with its organization. The pin moves it on
+   * every commit, a switch back included, so once the page is gone (and nothing adopts a newer
+   * one) a write is never sent again after the workspace left its organization, even back to it.
+   *
+   * @type {number}
+   */
+  revision: number;
+
+  /**
+   * Property left
+   *
+   * @description
+   * Whether the pin was committed to another organization, or cleared, since the store adopted
+   * its organization; set synchronously by `OrganizationPin.organizationChanges`, so a switch and
+   * back within one tick still resets the store instead of only re-verifying it.
+   *
+   * @type {boolean}
+   */
+  left: boolean;
+
+  /**
    * Property destroyed
    *
    * @description
-   * Whether the page that provided the store is gone: the writes already queued are still sent
-   * while the workspace and the pin still name its organization, but nothing is read again.
+   * Whether the page that provided the store is gone: the writes already queued are still sent,
+   * with the reads of one goal they need (after a `412` or an unknown outcome), while the
+   * workspace and the pin still name its organization and revision; the goals and a goal whose
+   * queue went idle are not read again, and no background read is sent.
    *
    * @type {boolean}
    */
@@ -925,20 +952,26 @@ function createGoalsStore(): Type<GoalsStoreInstance> {
     withProps((store) => {
       const api: GoalsApi = inject(GoalsApi);
       const workspace: WorkspaceContextPort = inject(WORKSPACE_CONTEXT);
+      const pin: OrganizationPin = inject(OrganizationPin);
       const loads: GoalsLoads = { background: false, queued: false, last: null, landed: 0 };
       const context: GoalsContext = {
         generation: 0,
         organizationId: workspace.organization().id,
+        revision: pin.revision(),
+        left: false,
         destroyed: false,
       };
       inject(DestroyRef).onDestroy((): void => {
         context.destroyed = true;
       });
+      pin.organizationChanges.pipe(takeUntilDestroyed()).subscribe((): void => {
+        context.left = true;
+      });
       let ownersAsked: readonly string[] = [];
       return {
         _api: api,
         _workspace: workspace,
-        _pin: inject(OrganizationPin),
+        _pin: pin,
         _loads: loads,
         _context: context,
         _toasts: inject(CwToastService),
@@ -1168,15 +1201,17 @@ function createGoalsStore(): Type<GoalsStoreInstance> {
       // `current` only says whether `_followOrganization` has yet to reset a generation, so it
       // guards the flags that reset owns. The resolver commits another organization (workspace
       // context and pin) synchronously, before that effect moves the generation, and a destroyed
-      // store keeps its generation while the global pin moves on: `live` also checks both against
-      // the organization the store read, so nothing is sent under another organization's pin or
-      // applied in between.
+      // store keeps its generation while the global pin moves on: `live` also checks both, and the
+      // pin's revision, against what the store adopted, so nothing is sent under another
+      // organization's pin or applied in between, nor after a switch and back.
       const current: (generation: number) => boolean = (generation: number): boolean =>
         generation === context.generation;
       const live: (generation: number) => boolean = (generation: number): boolean =>
         current(generation) &&
+        !context.left &&
         store._workspace.organization().id === context.organizationId &&
-        store._pin.current() === context.organizationId;
+        store._pin.current() === context.organizationId &&
+        store._pin.revision() === context.revision;
       const alive: (generation: number) => boolean = (generation: number): boolean =>
         live(generation) && !context.destroyed;
       const guard: (generation: number) => void = (generation: number): void => {
@@ -1385,6 +1420,7 @@ function createGoalsStore(): Type<GoalsStoreInstance> {
             await wait(backoff[attempt]);
           }
         }
+        if (!live(generation)) return;
         if (value === null) {
           dropEdit(resultId);
           return;
@@ -1442,6 +1478,7 @@ function createGoalsStore(): Type<GoalsStoreInstance> {
           } catch (error: unknown) {
             if (!isVersionMismatch(error)) throw error;
             const goal: Goal = await fresh(goalId, generation);
+            if (!live(generation)) return;
             const value: number | boolean | null = valueOf(
               goal.results.find((result: KeyResult): boolean => result.id === resultId),
             );
@@ -1651,6 +1688,7 @@ function createGoalsStore(): Type<GoalsStoreInstance> {
               }
               try {
                 await fresh(goalId, generation);
+                if (!live(generation)) return;
                 store._toasts.warning(
                   $localize`:@@goals.toast.delete-unknown:The deletion could not be confirmed`,
                   {
@@ -1807,29 +1845,42 @@ function createGoalsStore(): Type<GoalsStoreInstance> {
           store._askOwners(ids.split(' '));
           patchState(store, { _peopleRequest: store._peopleRequest() + 1 });
         }),
-        _followOrganization: signalMethod<string>((organizationId: string): void => {
-          context.generation += 1;
-          context.organizationId = organizationId;
-          lastAsked = null;
-          records.clear();
-          scheduled.clear();
-          for (const pending of bursts.values()) clearTimeout(pending.handle);
-          bursts.clear();
-          createKeys.clear();
-          store._loads.queued = false;
-          patchState(store, {
-            _edits: {},
-            _hidden: [],
-            deletingId: null,
-            addingTo: null,
-            creating: false,
-          });
-        }),
+        _followOrganization: signalMethod<{ organizationId: string; revision: number }>(
+          ({ organizationId, revision }: { organizationId: string; revision: number }): void => {
+            if (organizationId === context.organizationId && !context.left) {
+              context.revision = revision;
+              return;
+            }
+            context.generation += 1;
+            context.organizationId = organizationId;
+            context.revision = revision;
+            context.left = false;
+            lastAsked = null;
+            records.clear();
+            scheduled.clear();
+            for (const pending of bursts.values()) clearTimeout(pending.handle);
+            bursts.clear();
+            createKeys.clear();
+            store._loads.queued = false;
+            patchState(store, {
+              _edits: {},
+              _hidden: [],
+              deletingId: null,
+              addingTo: null,
+              creating: false,
+            });
+          },
+        ),
       };
     }),
     withHooks({
       onInit(store): void {
-        store._followOrganization(computed((): string => store._workspace.organization().id));
+        store._followOrganization(
+          computed((): { organizationId: string; revision: number } => ({
+            organizationId: store._workspace.organization().id,
+            revision: store._pin.revision(),
+          })),
+        );
         store._settled(computed((): boolean => store.goals.isLoading()));
         store._checkOwners(store._unknownOwners);
         const view: Window | null = store._document.defaultView;
@@ -1868,7 +1919,8 @@ function createGoalsStore(): Type<GoalsStoreInstance> {
  * (`If-Match`), kept once the page is gone so the last value of a burst is still sent; a key
  * result's value enters that queue once its burst of clicks ends (`GOAL_EDIT_BURST_MS`), at once
  * when the page is left; once a
- * goal's writes settle, it is read again for its progress and health, unless the page is gone. A
+ * goal's writes settle, it is read again for its progress and health, unless the page is gone
+ * (the reads of one goal a queued write needs, after a `412` or an unknown outcome, still run). A
  * `412` reads the goal: an edit is sent again only while the goal still shows the value it started
  * from, a number moves by the same steps from a newer value, and a checkbox changed elsewhere is
  * dropped with a warning. A confirmed write moves the value an edit counts its steps from, so a
@@ -1880,10 +1932,12 @@ function createGoalsStore(): Type<GoalsStoreInstance> {
  * goal, warns and reads it again, so deleting it takes a new confirmation. Every write is bound to
  * the organization generation it started in: after a switch, even back to the same organization,
  * nothing more is sent, patched or toasted. It is also sent, and its answer applied, only while the
- * workspace and `OrganizationPin` both name the organization the goals were read for, so a write
- * queued or answered once the resolver committed another organization, before the store reacts or
- * after the page is gone, is dropped instead of reaching the gateway under the new organization's
- * `If-Organization-Match`. A creation keeps its idempotency key until a definitive
+ * workspace and `OrganizationPin` both name the organization the goals were read for, no other
+ * organization was committed meanwhile, and the pin's revision is the one the store adopted (a
+ * live store adopts a new revision of the same organization, a re-verification). So a write queued
+ * or answered once the resolver committed another organization, before the store reacts, after the
+ * page is gone, after a switch and back, or once the workspace is left (the pin cleared), is
+ * dropped instead of reaching the gateway under another `If-Organization-Match`. A creation keeps its idempotency key until a definitive
  * answer and is sent again with it after an unknown outcome or
  * `409 idempotency.request-in-progress`, up to three times, then reported as unconfirmed; a resubmitted
  * identical draft reuses the key. The members are read again after a failure and for owners they
