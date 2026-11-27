@@ -16,7 +16,7 @@ import { NgIcon } from '@ng-icons/core';
 import type {
   GettingStartedItem,
   GettingStartedItemKey,
-} from '../../../state/getting-started/getting-started-item.interface';
+} from '../../../models/getting-started/getting-started-item.interface';
 
 /**
  * Component GettingStartedPanel

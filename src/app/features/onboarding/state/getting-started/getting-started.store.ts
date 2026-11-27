@@ -9,7 +9,7 @@ import {
   type UrlSegment,
   type UrlSegmentGroup,
 } from '@angular/router';
-import { CwToastService } from '@cadenway/ui/components/toast';
+import { CwToastService, type CwToastOptions } from '@cadenway/ui/components/toast';
 import {
   patchState,
   signalMethod,
@@ -22,7 +22,7 @@ import {
 } from '@ngrx/signals';
 import { filter, fromEvent, map } from 'rxjs';
 
-import { readProblem } from '@core/api';
+import { OrganizationPin, readProblem } from '@core/api';
 import { TaskCreate } from '@features/task';
 import {
   WORKSPACE_CONTEXT,
@@ -32,15 +32,19 @@ import { ShellOverlay } from '@shared/layout-slot';
 
 import {
   isDroppedOnboardingWrite,
+  isUncertainOnboardingWrite,
   OnboardingApi,
 } from '../../data-access/services/onboarding-api/onboarding-api.service';
+import type {
+  GettingStartedItem,
+  GettingStartedItemKey,
+} from '../../models/getting-started/getting-started-item.interface';
 import type {
   OnboardingInvitationOutcome,
   OnboardingProgress,
 } from '../../models/onboarding/onboarding.interface';
 import { OnboardingWriteDroppedError } from '../onboarding/onboarding-write-dropped.error';
 import { OnboardingStore } from '../onboarding/onboarding.store';
-import type { GettingStartedItem, GettingStartedItemKey } from './getting-started-item.interface';
 
 /**
  * Constant ONBOARDING_WIZARD_OVERLAY
@@ -73,6 +77,49 @@ const ONBOARDING_INVITE_OVERLAY: string = 'onboarding.invite-dialog';
  * @type {string}
  */
 const BOARD_SEGMENT: string = 'board';
+
+/**
+ * Type ToastTone
+ *
+ * @description
+ * The toast methods the store shows.
+ *
+ * @type {'success' | 'info' | 'warning' | 'error'}
+ */
+type ToastTone = 'success' | 'info' | 'warning' | 'error';
+
+/**
+ * Interface ShownAddress
+ *
+ * @description
+ * One address the router showed: each `NavigationEnd` gives a new one, so the board watcher reacts
+ * to a navigation even to the same board.
+ */
+interface ShownAddress {
+  // #region Properties
+  /**
+   * Property id
+   *
+   * @description
+   * Id of the navigation that showed it; 0 for the address shown when the store was created.
+   *
+   * @type {number}
+   * @readonly
+   */
+  readonly id: number;
+
+  /**
+   * Property url
+   *
+   * @description
+   * The address, after redirects.
+   *
+   * @type {string}
+   * @readonly
+   */
+  readonly url: string;
+  // #endregion
+}
 
 /**
  * Function isBoardAddress
@@ -143,6 +190,30 @@ interface GettingStartedState {
    * @readonly
    */
   readonly _inviting: boolean;
+
+  /**
+   * Property _inviteOrganization
+   *
+   * @description
+   * Organization the open invite dialog was opened in, or null while it is closed: its addresses
+   * are never sent to another one.
+   *
+   * @type {string | null}
+   * @readonly
+   */
+  readonly _inviteOrganization: string | null;
+
+  /**
+   * Property _invitationOwed
+   *
+   * @description
+   * Whether an invitation went out but recording the checklist's invitation marker failed: the
+   * marker is recorded again on the next refresh or when the panel shows again.
+   *
+   * @type {boolean}
+   * @readonly
+   */
+  readonly _invitationOwed: boolean;
   // #endregion
 }
 
@@ -218,8 +289,9 @@ interface GettingStartedStoreInstance {
    * Method toggle
    *
    * @description
-   * Collapses or expands the list at once and saves it; a refusal restores it with a failure toast,
-   * a write dropped for a changed organization stays silent.
+   * Collapses or expands the list at once and saves it. A refusal restores it with a failure toast,
+   * an unknown outcome the read did not settle with a neutral one; a write dropped for a changed
+   * organization stays silent.
    *
    * @returns {Promise<void>} Resolves once settled; never rejects.
    */
@@ -229,8 +301,8 @@ interface GettingStartedStoreInstance {
    * Method dismiss
    *
    * @description
-   * Hides the checklist for good, at once, and saves it; a refusal shows it again with a failure
-   * toast, a write dropped for a changed organization stays silent.
+   * Hides the checklist for good, at once, and saves it; failures are reported as `toggle` does,
+   * and a refusal shows the checklist again.
    *
    * @returns {Promise<void>} Resolves once settled; never rejects.
    */
@@ -251,7 +323,8 @@ interface GettingStartedStoreInstance {
    * Method setInviteOpen
    *
    * @description
-   * Opens or closes the invite dialog; it does not open over another shell overlay.
+   * Opens the invite dialog in the current organization (not over another shell overlay), or
+   * closes it.
    *
    * @param {boolean} open - Whether it is open.
    */
@@ -261,9 +334,12 @@ interface GettingStartedStoreInstance {
    * Method invite
    *
    * @description
-   * Invites the addresses as members, toasts the outcome and closes the dialog, then records the
-   * checklist's invitation marker when at least one address was invited. A failure keeps the
-   * dialog open with a failure toast; nothing shows when the organization changed meanwhile.
+   * Invites the addresses as members of the organization the dialog was opened in, toasts the
+   * outcome and closes the dialog, then records the checklist's invitation marker when an
+   * invitation is out for at least one address (invited now, or already invited). Nothing is sent
+   * once the organization changed; a write the organization pin dropped closes the dialog
+   * silently. A refusal keeps the dialog open with a failure toast, an unknown outcome with a toast
+   * saying that sending again is safe.
    *
    * @param {readonly string[]} emails - The addresses.
    * @returns {Promise<void>} Resolves once settled; never rejects.
@@ -282,24 +358,33 @@ interface GettingStartedStoreInstance {
  */
 function createGettingStartedStore(): Type<GettingStartedStoreInstance> {
   return signalStore(
-    withState<GettingStartedState>({ _inviting: false }),
+    withState<GettingStartedState>({
+      _inviting: false,
+      _inviteOrganization: null,
+      _invitationOwed: false,
+    }),
     withProps(() => {
       const router: Router = inject(Router);
       return {
         _onboarding: inject(OnboardingStore),
         _workspace: inject<WorkspaceContextPort>(WORKSPACE_CONTEXT),
+        _pin: inject(OrganizationPin),
         _api: inject(OnboardingApi),
         _overlay: inject(ShellOverlay),
         _taskCreate: inject(TaskCreate),
         _toasts: inject(CwToastService),
+        _shownToasts: new Set<string>(),
         _document: inject(DOCUMENT),
         _router: router,
-        _url: toSignal(
+        _address: toSignal(
           router.events.pipe(
             filter((event: RouterEvent): event is NavigationEnd => event instanceof NavigationEnd),
-            map((event: NavigationEnd): string => event.urlAfterRedirects),
+            map((event: NavigationEnd): ShownAddress => ({
+              id: event.id,
+              url: event.urlAfterRedirects,
+            })),
           ),
-          { initialValue: router.url },
+          { initialValue: { id: 0, url: router.url } satisfies ShownAddress },
         ),
       };
     }),
@@ -324,35 +409,84 @@ function createGettingStartedStore(): Type<GettingStartedStoreInstance> {
           ];
         },
       );
+      const visible: Signal<boolean> = computed(
+        (): boolean => checklist() !== null && !store._overlay.isOpen(ONBOARDING_WIZARD_OVERLAY),
+      );
       return {
         _checklist: checklist,
-        visible: (): boolean =>
-          checklist() !== null && !store._overlay.isOpen(ONBOARDING_WIZARD_OVERLAY),
+        visible,
         expanded: (): boolean => checklist()?.checklist.presentation === 'expanded',
         items,
         inviteOpen: (): boolean => store._overlay.isOpen(ONBOARDING_INVITE_OVERLAY),
         inviting: (): boolean => store._inviting(),
-        _boardToRecord: (): boolean => {
+        _boardShown: (): ShownAddress | null => {
           const progress: OnboardingProgress | null = checklist();
-          return (
-            progress !== null &&
+          const address: ShownAddress = store._address();
+          return progress !== null &&
             !progress.checklist.boardTried &&
-            isBoardAddress(store._router, store._url())
-          );
+            isBoardAddress(store._router, address.url)
+            ? address
+            : null;
         },
         _taskToRefresh: (): boolean => {
           const progress: OnboardingProgress | null = checklist();
           return progress !== null && !progress.checklist.firstTaskCreated;
         },
+        _organizationId: (): string => store._workspace.organization().id,
       };
     }),
     withMethods((store) => {
+      let followed: string | null = null;
+
+      const show: (tone: ToastTone, title: string, options?: CwToastOptions) => void = (
+        tone: ToastTone,
+        title: string,
+        options?: CwToastOptions,
+      ): void => {
+        const live: ReadonlySet<string> = new Set(
+          store._toasts.toasts().map((item: { readonly id: string }): string => item.id),
+        );
+        for (const kept of store._shownToasts) if (!live.has(kept)) store._shownToasts.delete(kept);
+        store._shownToasts.add(
+          options ? store._toasts[tone](title, options) : store._toasts[tone](title),
+        );
+      };
+
+      const dismissToasts: () => void = (): void => {
+        for (const id of store._shownToasts) store._toasts.dismiss(id);
+        store._shownToasts.clear();
+      };
+
+      const setInviteOpen: (open: boolean) => void = (open: boolean): void => {
+        if (open) {
+          if (store._overlay.open(ONBOARDING_INVITE_OVERLAY)) {
+            patchState(store, { _inviteOrganization: store._workspace.organization().id });
+          }
+          return;
+        }
+        store._overlay.close(ONBOARDING_INVITE_OVERLAY);
+        patchState(store, { _inviteOrganization: null });
+      };
+
+      const leaveOrganization: () => void = (): void => {
+        setInviteOpen(false);
+        dismissToasts();
+        patchState(store, { _invitationOwed: false });
+      };
+
       const reportFailure: (error: unknown, title: string) => void = (
         error: unknown,
         title: string,
       ): void => {
         if (error instanceof OnboardingWriteDroppedError) return;
-        store._toasts.error(title);
+        if (isUncertainOnboardingWrite(error)) {
+          show(
+            'warning',
+            $localize`:@@onboarding.getting-started.presentation-uncertain:Your change to “Getting started” may not have been saved`,
+          );
+          return;
+        }
+        show('error', title);
       };
 
       const toastOutcome: (outcome: OnboardingInvitationOutcome) => void = (
@@ -365,13 +499,13 @@ function createGettingStartedStore(): Type<GettingStartedStoreInstance> {
               ? $localize`:@@onboarding.getting-started.invite-skipped-one:${outcome.skipped}:count: address skipped: already a member or invited.`
               : $localize`:@@onboarding.getting-started.invite-skipped:${outcome.skipped}:count: addresses skipped: already members or invited.`;
         if (outcome.invited === 0) {
-          store._toasts.info(
-            $localize`:@@onboarding.getting-started.invite-none:No invitation sent`,
-            { description: skipped },
-          );
+          show('info', $localize`:@@onboarding.getting-started.invite-none:No invitation sent`, {
+            description: skipped,
+          });
           return;
         }
-        store._toasts.success(
+        show(
+          'success',
           takesSingular(outcome.invited)
             ? $localize`:@@onboarding.getting-started.invite-sent-one:${outcome.invited}:count: invitation sent`
             : $localize`:@@onboarding.getting-started.invite-sent:${outcome.invited}:count: invitations sent`,
@@ -379,17 +513,56 @@ function createGettingStartedStore(): Type<GettingStartedStoreInstance> {
         );
       };
 
-      const setInviteOpen: (open: boolean) => void = (open: boolean): void => {
-        if (open) store._overlay.open(ONBOARDING_INVITE_OVERLAY);
-        else store._overlay.close(ONBOARDING_INVITE_OVERLAY);
+      const recordInvitation: () => Promise<void> = async (): Promise<void> => {
+        patchState(store, { _invitationOwed: true });
+        try {
+          await store._onboarding.recordInvitation();
+          patchState(store, { _invitationOwed: false });
+        } catch (error: unknown) {
+          // The invitations are out: a refused or unknown marker write is owed and recorded again
+          // later; one dropped for another organization is not.
+          if (error instanceof OnboardingWriteDroppedError) {
+            patchState(store, { _invitationOwed: false });
+          }
+        }
+      };
+
+      const settleOwedInvitation: () => Promise<void> = async (): Promise<void> => {
+        if (!store._invitationOwed()) return;
+        const progress: OnboardingProgress | null = store._onboarding.progress();
+        if (progress === null) return;
+        if (progress.checklist.invitationSent) {
+          patchState(store, { _invitationOwed: false });
+          return;
+        }
+        await recordInvitation();
+      };
+
+      const refresh: () => Promise<void> = async (): Promise<void> => {
+        if (store._onboarding.failed() || store._taskToRefresh()) {
+          await store._onboarding.reload();
+        }
+        await settleOwedInvitation();
       };
 
       return {
-        _recordBoard: signalMethod<boolean>((onBoard: boolean): void => {
-          // A dropped write (the organization changed with this navigation) or a refusal stays
-          // silent: the marker is a background fact, recorded again on the next board visit.
-          if (onBoard) void store._onboarding.recordBoardTried().catch((): undefined => undefined);
+        _recordBoard: signalMethod<ShownAddress | null>((address: ShownAddress | null): void => {
+          // Silent: a write dropped because this navigation changed the organization is not this
+          // organization's, and a refused one is sent again on the next board navigation.
+          if (address !== null) {
+            void store._onboarding.recordBoardTried().catch((): undefined => undefined);
+          }
         }),
+        _settleOnShow: signalMethod<boolean>((visible: boolean): void => {
+          if (visible) void settleOwedInvitation();
+        }),
+        _followOrganization: signalMethod<string>((organizationId: string): void => {
+          if (followed !== null && followed !== organizationId) leaveOrganization();
+          followed = organizationId;
+        }),
+        _leaveOrganization: leaveOrganization,
+        _refresh: refresh,
+        _dismissToasts: dismissToasts,
         async toggle(): Promise<void> {
           const progress: OnboardingProgress | null = store._checklist();
           if (progress === null) return;
@@ -439,22 +612,42 @@ function createGettingStartedStore(): Type<GettingStartedStoreInstance> {
         setInviteOpen,
         async invite(emails: readonly string[]): Promise<void> {
           if (store._inviting() || emails.length === 0) return;
-          const organization: string = store._workspace.organization().id;
+          const organization: string | null = store._inviteOrganization();
           const moved: () => boolean = (): boolean =>
-            store._workspace.organization().id !== organization;
+            organization === null ||
+            store._workspace.organization().id !== organization ||
+            store._pin.current() !== organization;
+          if (moved()) {
+            setInviteOpen(false);
+            return;
+          }
           patchState(store, { _inviting: true });
           let outcome: OnboardingInvitationOutcome;
           try {
             outcome = await store._api.invite(emails);
           } catch (error: unknown) {
-            if (moved() || isDroppedOnboardingWrite(error)) return;
-            store._toasts.error(
+            if (moved() || isDroppedOnboardingWrite(error)) {
+              setInviteOpen(false);
+              return;
+            }
+            if (isUncertainOnboardingWrite(error)) {
+              show(
+                'warning',
+                $localize`:@@onboarding.getting-started.invite-uncertain:The invitations may not have been sent`,
+                {
+                  description: $localize`:@@onboarding.getting-started.invite-uncertain-text:Sending again is safe.`,
+                },
+              );
+              return;
+            }
+            show(
+              'error',
               $localize`:@@onboarding.getting-started.invite-failed:The invitations could not be sent`,
               readProblem(error)?.code === 'invitation.daily-limit-reached'
                 ? {
                     description: $localize`:@@onboarding.getting-started.invite-failed-limit:The daily invitation limit is reached: try again later.`,
                   }
-                : {},
+                : undefined,
             );
             return;
           } finally {
@@ -463,19 +656,24 @@ function createGettingStartedStore(): Type<GettingStartedStoreInstance> {
           if (moved()) return;
           toastOutcome(outcome);
           setInviteOpen(false);
-          if (outcome.invited > 0) {
-            // The invitations are sent: a marker write that fails or is dropped shows nothing more.
-            await store._onboarding.recordInvitation().catch((): undefined => undefined);
-          }
+          if (outcome.invited > 0 || outcome.alreadyInvited > 0) await recordInvitation();
         },
       };
     }),
     withHooks({
       onInit(store): void {
         store._onboarding.load();
-        store._recordBoard(store._boardToRecord);
+        // The route's progress may be older than this host (a task created in a settings shell):
+        // read it again when it already shows a checklist waiting for the first task, or failed.
+        if (store._onboarding.failed() || store._taskToRefresh()) void store._onboarding.reload();
+        store._followOrganization(store._organizationId);
+        store._recordBoard(store._boardShown);
+        store._settleOnShow(store.visible);
+        store._pin.organizationChanges.pipe(takeUntilDestroyed()).subscribe((): void => {
+          store._leaveOrganization();
+        });
         store._taskCreate.created.pipe(takeUntilDestroyed()).subscribe((): void => {
-          if (store._taskToRefresh()) void store._onboarding.reload();
+          void store._refresh();
         });
         fromEvent(store._document, 'visibilitychange')
           .pipe(
@@ -483,11 +681,12 @@ function createGettingStartedStore(): Type<GettingStartedStoreInstance> {
             takeUntilDestroyed(),
           )
           .subscribe((): void => {
-            if (store._taskToRefresh()) void store._onboarding.reload();
+            void store._refresh();
           });
       },
       onDestroy(store): void {
         store._overlay.close(ONBOARDING_INVITE_OVERLAY);
+        store._dismissToasts();
       },
     }),
   );
@@ -498,14 +697,16 @@ function createGettingStartedStore(): Type<GettingStartedStoreInstance> {
  *
  * @description
  * The `Getting started` checklist (`App.dc.html` lines 2712-2727, behaviour 5299-5319), provided
- * by `GettingStartedHost` and reading the route's `OnboardingStore`, which it asks to load. It
- * derives the panel's visibility, items and counter from the progress, saves the presentation
- * (optimistic, rolled back with a toast on a refusal, silent when the write was dropped for a
- * changed organization), acts on the items, sends the invite dialog's invitations, records
- * `boardTried` when the address is a list's `Board` view (on each `NavigationEnd`, and the
- * address shown when the progress arrives) while the marker is not recorded, and reads the
- * progress again after a task is created through `TaskCreate` and when the tab shows again, while
- * `firstTaskCreated` is not set (no realtime fact exists, gap G8). A failed read shows nothing.
+ * by `GettingStartedHost` (component scope: it lives with the application shell) and reading the
+ * route's `OnboardingStore`, which it asks to load. It derives the panel's visibility, items and
+ * counter from the progress, saves the presentation (optimistic, rolled back with a toast on a
+ * refusal, silent when the write was dropped for a changed organization), acts on the items,
+ * sends the invite dialog's invitations to the organization it was opened in, records
+ * `boardTried` on each navigation to a list's `Board` view (and for the address shown when the
+ * progress arrives) while the marker is not recorded, and reads the progress again after a task
+ * is created through `TaskCreate` and when the tab shows again, while `firstTaskCreated` is not
+ * set or the first read failed (no realtime fact exists, gap G8). An organization change closes
+ * the invite dialog and dismisses the toasts it showed, as its destruction does.
  *
  * @type {Type<GettingStartedStoreInstance>}
  */

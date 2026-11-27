@@ -3,7 +3,7 @@ import { type ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideCadenwayIcons } from '@cadenway/icons';
 import { afterEach, describe, expect, it, type Mock, vi } from 'vitest';
 
-import type { GettingStartedItem } from '../../../state/getting-started/getting-started-item.interface';
+import type { GettingStartedItem } from '../../../models/getting-started/getting-started-item.interface';
 import { GettingStartedStore } from '../../../state/getting-started/getting-started.store';
 import { GettingStartedHost } from './getting-started-host.component';
 
@@ -190,7 +190,7 @@ describe('GettingStartedHost', () => {
     await render();
 
     expect(find('getting-started-panel')).toBeNull();
-    expect(find('onboarding-invite-dialog')).toBeNull();
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
   });
 
   it('renders the panel and hands its events to the store', async () => {
@@ -199,20 +199,44 @@ describe('GettingStartedHost', () => {
     store.visible.set(true);
     await fixture.whenStable();
     await fixture.whenStable();
-    find('getting-started-toggle')?.click();
-    find('getting-started-dismiss')?.click();
-    find('getting-started-item-invite')?.click();
-
     expect(find('getting-started-panel')).not.toBeNull();
+    find('getting-started-toggle')?.click();
+    find('getting-started-item-invite')?.click();
+    find('getting-started-dismiss')?.click();
+
     expect(store.toggle).toHaveBeenCalledTimes(1);
-    expect(store.dismiss).toHaveBeenCalledTimes(1);
     expect(store.start).toHaveBeenCalledWith('invite');
+    expect(store.dismiss).toHaveBeenCalledTimes(1);
+  });
+
+  it('moves the focus to the main landmark once the panel is hidden', async () => {
+    const main: HTMLElement = document.createElement('main');
+    document.body.append(main);
+    const fixture: ComponentFixture<GettingStartedHost> = await render();
+    store.visible.set(true);
+    await fixture.whenStable();
+    await fixture.whenStable();
+    find('getting-started-dismiss')?.focus();
+    store.dismiss.mockImplementation((): Promise<void> => {
+      store.visible.set(false);
+      return Promise.resolve();
+    });
+
+    find('getting-started-dismiss')?.click();
+    await fixture.whenStable();
+
+    expect(find('getting-started-panel')).toBeNull();
+    expect(document.activeElement).toBe(main);
+    expect(main.getAttribute('tabindex')).toBe('-1');
+    main.remove();
   });
 
   it('removes the panel once it no longer shows', async () => {
     const fixture: ComponentFixture<GettingStartedHost> = await render();
     store.visible.set(true);
     await fixture.whenStable();
+    await fixture.whenStable();
+    expect(find('getting-started-panel')).not.toBeNull();
 
     store.visible.set(false);
     await fixture.whenStable();

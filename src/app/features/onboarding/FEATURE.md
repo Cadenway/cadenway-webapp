@@ -37,7 +37,8 @@ the application shell's `overlays` slot (not in the settings shells):
 | `withGettingStarted()`   | `onboarding.getting-started` | 40    | `GettingStartedHost` (`cw-getting-started-host`)     |
 | `withOnboardingWizard()` | `onboarding.wizard`          | 50    | `OnboardingWizardHost` (`cw-onboarding-wizard-host`) |
 
-`GettingStartedHost` renders the checklist and its invite dialog, each in its own chunk;
+`GettingStartedHost` renders the checklist, in its own chunk, and its invite dialog, in the
+host's chunk so that a chunk failing to load never leaves its `ShellOverlay` held;
 `OnboardingWizardHost` renders nothing yet (step 9, wizard package).
 
 ## Public entry points
@@ -56,8 +57,8 @@ route), `withGettingStarted()` and `withOnboardingWizard()` (the `overlays` cont
   write with `If-Match: "<version>"`, `finishOnboarding` with an `Idempotency-Key` too) and
   `InvitationsService.inviteMembers` (role `member`; called from step 9, wizard and
   getting-started packages). Core's `OrganizationPin` adds `If-Organization-Match` to the four
-  onboarding operations.
-- `@core/api` (`readProblem`, `OrganizationSwitchPendingError`).
+  onboarding operations and to `POST /v1/invitations`.
+- `@core/api` (`readProblem`, `OrganizationSwitchPendingError`, `OrganizationPin`).
 - Workspace's `ports/workspace-context` (the current organization, which fences every write;
   `can('admin')` shows the checklist's invitation item; the assistant's role checks come with
   step 9, wizard package).
@@ -117,8 +118,10 @@ route), `withGettingStarted()` and `withOnboardingWizard()` (the `overlays` cont
   outcome shows it, and restores the confirmed one after a refusal, rejecting for the caller's
   toast (step 9, getting-started package). Only the latest call clears what it showed.
   Presentation and `boardTried` are sent only once a space is provisioned; a marker already
-  recorded is not sent again. `invitationSent` is to be recorded only after `inviteMembers`
-  invited at least one address; any other outcome, an unknown one included, counts as not sent.
+  recorded is not sent again, nor a write queued behind another once the progress shows its
+  change (any write but `finish`). `invitationSent` is to be recorded only once `inviteMembers`
+  answered `invited` or `already-invited` for at least one address; any other outcome, an unknown
+  one included, counts as not sent.
 - A draft color a later contract adds reads as `gris`, as `LookColorValue` says; the assistant
   draws no `gris` swatch (step 9, wizard package, decides how to show it).
 - `OnboardingInviteField` is its own `<form>`, so a host never nests it in another form. Any text,
@@ -130,11 +133,18 @@ route), `withGettingStarted()` and `withOnboardingWizard()` (the `overlays` cont
   compares it as typed), and the field empties and is untouched again. The focus returns to
   the field after an add, and after a removal goes to the remove button now at that place, else
   the last one, else the field. The mockup's guest badge (line 2695) is not drawn (gap G5).
+- `GettingStartedStore` is component-scoped: `GettingStartedHost` provides it, so it lives with
+  the application shell (a settings shell destroys it) and reads the route's `OnboardingStore`.
+  Its invite dialog, toasts and listeners end with it: destroying it closes the dialog's
+  `ShellOverlay` and dismisses the toasts it showed.
+- While the assistant covers the shell, it holds the `ShellOverlay` id `onboarding.wizard` (step
+  9, wizard package); the checklist reads that id to stay hidden under it.
 - The `Getting started` checklist (`App.dc.html` lines 2712-2727, behaviour 5299-5319) shows
   when the assistant finished (`wizard.status` `finished`) and provisioned the first space, the
   presentation is not `dismissed`, and the assistant is not the open `ShellOverlay`
   (`onboarding.wizard`). Nothing shows while the progress is unread, nor when its first read
-  failed (a shell widget for almost nobody: no error card); a later failed read keeps it.
+  failed (a shell widget for almost nobody: no error card); a later failed read keeps it. A failed
+  first read is read again when the tab becomes visible and after a `TaskCreate.created`.
 - It has the three items the contract records, in the mockup's order: `Create your first task`
   (`firstTaskCreated`, set by the gateway when the person creates a task in the space),
   `Invite a team member` (`invitationSent`; shown to an owner or administrator only, since
@@ -146,23 +156,38 @@ route), `withGettingStarted()` and `withOnboardingWizard()` (the `overlays` cont
   list's share dialog the mockup opens (sharing a list sends no organization invitation, so it
   could not record the marker).
 - The collapse toggle and `Hide “Getting started”` change the presentation at once through
-  `setPresentation`; a refusal restores the confirmed one with a failure toast
-  (`The list could not be updated`, `“Getting started” could not be hidden`, not in the
-  mockup), and a write
-  dropped for a changed organization (`OnboardingWriteDroppedError`) shows nothing. The
-  dismissal is final.
-- The board watcher records `boardTried` when the address is a list's `Board` view
-  (`/<slug>/l/<id>/board`, any list), on each `NavigationEnd` and for the address shown when the
-  progress arrives, only while the checklist applies and the marker is not recorded. Its write
-  stays silent: a navigation into another organization's board is dropped by the store's
-  organization fence, and a refusal is retried on the next board visit.
+  `setPresentation`. A refusal restores the confirmed one with a failure toast
+  (`The list could not be updated`, `“Getting started” could not be hidden`); an unknown outcome
+  the store's read did not settle shows
+  `Your change to “Getting started” may not have been saved`; a write dropped for a changed
+  organization (`OnboardingWriteDroppedError`) shows nothing. None of these toasts is in the mockup. The dismissal is final; once the panel leaves,
+  the focus moves to the page's `main` landmark (given `tabindex="-1"` when it has none).
+- The board watcher records `boardTried` on each `NavigationEnd` (keyed by the navigation, so
+  board to board counts) whose address is a list's `Board` view (`/<slug>/l/<id>/board`, any
+  list), and for the address shown when the progress arrives, only while the checklist applies
+  and the marker is not recorded. Its write stays silent: a navigation into another
+  organization's board is dropped by the store's organization fence, and a refusal is sent again
+  on the next board navigation.
 - With no realtime fact for onboarding (gap G8), the checklist reads the progress again after
-  each `TaskCreate.created` and when the tab becomes visible, only while `firstTaskCreated` is
+  each `TaskCreate.created`, when the tab becomes visible and when the host is created over a
+  progress already read (a task created from a settings shell), only while `firstTaskCreated` is
   not set. It does not poll.
-- The invite dialog (titled `Invite a team member`, with `Cancel` and `Invite`) invites the
-  addresses as members, then toasts the outcome (`{n} invitation(s) sent`, the skipped addresses
-  as the description, or `No invitation sent` when every address was skipped) and closes; it then
-  records `invitationSent` when at least one address was invited, silently. A failure keeps the
-  dialog and its addresses with `The invitations could not be sent` (and the daily-limit line for
-  `429 invitation.daily-limit-reached`); nothing shows when the organization changed meanwhile.
-  The addresses empty each time it opens.
+- The invite dialog (titled `Invite a team member`, with `Cancel` and `Invite`) belongs to the
+  organization it was opened in: an organization change (the workspace's, or
+  `OrganizationPin.organizationChanges`) closes it, which empties its addresses, and dismisses
+  the toasts the checklist showed; `Invite` sends nothing once the workspace or the pin shows
+  another organization. It invites the addresses as members, then toasts the outcome
+  (`{n} invitation(s) sent`, the skipped addresses as the description, or `No invitation sent`
+  when none was invited) and closes. A batch the organization pin dropped
+  (`OrganizationSwitchPendingError`, `412 organization.context-changed`) closes it with no
+  toast. A refusal keeps the dialog and its addresses with `The invitations could not be sent`
+  (and the daily-limit line for `429 invitation.daily-limit-reached`); an unknown outcome
+  (`isUncertainOnboardingWrite`) keeps them with `The invitations may not have been sent` /
+  `Sending again is safe.`, since a second batch answers `already-invited` for an address the
+  first one reached. A `400 request.invalid` naming addresses is not mapped back to them: the
+  field has no error input. The addresses empty each time it opens.
+- The checklist records `invitationSent` when the batch invited an address or found one
+  `already-invited` (an invitation is out for it, perhaps from a batch whose answer was lost).
+  When that marker write fails other than by a drop, the marker stays owed and is recorded again
+  on the next refresh (the tab shown again, a task created) or when the panel shows again, until
+  the progress shows it.

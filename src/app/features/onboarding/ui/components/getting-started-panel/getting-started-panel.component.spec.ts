@@ -5,7 +5,7 @@ import { describe, expect, it, type Mock, vi } from 'vitest';
 import type {
   GettingStartedItem,
   GettingStartedItemKey,
-} from '../../../state/getting-started/getting-started-item.interface';
+} from '../../../models/getting-started/getting-started-item.interface';
 import { GettingStartedPanel } from './getting-started-panel.component';
 
 /**

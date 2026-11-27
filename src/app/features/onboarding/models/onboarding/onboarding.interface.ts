@@ -412,11 +412,25 @@ export interface OnboardingInvitationOutcome {
    * Property skipped
    *
    * @description
-   * Addresses already members or already invited, and outcomes a later contract adds.
+   * Addresses not invited by this batch: already members, already invited, refused, and outcomes
+   * a later contract adds.
    *
    * @type {number}
    * @readonly
    */
   readonly skipped: number;
+
+  /**
+   * Property alreadyInvited
+   *
+   * @description
+   * The skipped addresses that already had a pending invitation (`already-invited`), for example
+   * from an earlier batch whose answer was lost: an invitation is out for them, so they count for
+   * the checklist's invitation marker, not for the `sent` toast.
+   *
+   * @type {number}
+   * @readonly
+   */
+  readonly alreadyInvited: number;
   // #endregion
 }

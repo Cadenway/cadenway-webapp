@@ -139,7 +139,7 @@ interface FakeOnboardingApi {
    * Property get
    *
    * @description
-   * Read of the progress.
+   * Read of the progress; answers `shown`.
    *
    * @type {Mock}
    */
@@ -171,10 +171,21 @@ interface FakeOnboardingApi {
  * Interface FakeToasts
  *
  * @description
- * The toast methods the store calls.
+ * The toast service the store calls, keeping the toasts shown so a dismissal is observable.
  */
 interface FakeToasts {
   // #region Properties
+  /**
+   * Property toasts
+   *
+   * @description
+   * The toasts shown, by id.
+   *
+   * @type {WritableSignal<readonly { id: string; tone: string; title: string }[]>}
+   * @readonly
+   */
+  readonly toasts: WritableSignal<readonly { id: string; tone: string; title: string }[]>;
+
   /**
    * Property success
    *
@@ -182,8 +193,9 @@ interface FakeToasts {
    * Success toast.
    *
    * @type {Mock}
+   * @readonly
    */
-  success: Mock;
+  readonly success: Mock;
 
   /**
    * Property info
@@ -192,8 +204,20 @@ interface FakeToasts {
    * Information toast.
    *
    * @type {Mock}
+   * @readonly
    */
-  info: Mock;
+  readonly info: Mock;
+
+  /**
+   * Property warning
+   *
+   * @description
+   * Warning toast.
+   *
+   * @type {Mock}
+   * @readonly
+   */
+  readonly warning: Mock;
 
   /**
    * Property error
@@ -202,9 +226,53 @@ interface FakeToasts {
    * Failure toast.
    *
    * @type {Mock}
+   * @readonly
    */
-  error: Mock;
+  readonly error: Mock;
+
+  /**
+   * Property dismiss
+   *
+   * @description
+   * Dismissal of a toast.
+   *
+   * @type {Mock}
+   * @readonly
+   */
+  readonly dismiss: Mock;
   // #endregion
+}
+
+/**
+ * Function fakeToasts
+ *
+ * @description
+ * A toast service that keeps what it shows until it is dismissed.
+ *
+ * @returns {FakeToasts} The service.
+ */
+function fakeToasts(): FakeToasts {
+  const toasts: WritableSignal<readonly { id: string; tone: string; title: string }[]> = signal<
+    readonly { id: string; tone: string; title: string }[]
+  >([]);
+  let next: number = 0;
+  const tone: (name: string) => Mock = (name: string): Mock =>
+    vi.fn((title: string): string => {
+      next += 1;
+      const id: string = `toast-${String(next)}`;
+      toasts.update((shown) => [...shown, { id, tone: name, title }]);
+      return id;
+    });
+  return {
+    toasts,
+    success: tone('success'),
+    info: tone('info'),
+    warning: tone('warning'),
+    error: tone('error'),
+    dismiss: vi.fn((id: string): void => {
+      toasts.update((shown) => shown.filter((toast: { id: string }): boolean => toast.id !== id));
+    }),
+  };
 }
 
 describe('GettingStartedStore', () => {
@@ -216,6 +284,44 @@ describe('GettingStartedStore', () => {
   let created: Subject<CreatedTask>;
   let taskCreate: { open: Mock; created: Subject<CreatedTask> };
   let shown: OnboardingProgress;
+  let route: EnvironmentInjector;
+  let host: EnvironmentInjector;
+
+  /**
+   * Function settle
+   *
+   * @description
+   * Lets the pending promises and the stores' reactions run.
+   *
+   * @returns {Promise<void>} Resolves once settled.
+   */
+  async function settle(): Promise<void> {
+    for (let turn: number = 0; turn < 5; turn += 1) {
+      await Promise.resolve();
+      TestBed.tick();
+    }
+    await new Promise<void>((resolve: () => void): void => {
+      setTimeout(resolve, 0);
+    });
+    TestBed.tick();
+  }
+
+  /**
+   * Function createHost
+   *
+   * @description
+   * Creates the checklist's store in its own injector below the route's, as the application shell
+   * creates `GettingStartedHost`, then lets its reads settle.
+   *
+   * @returns {Promise<GettingStartedStore>} The checklist's store.
+   */
+  async function createHost(): Promise<GettingStartedStore> {
+    host = createEnvironmentInjector([GettingStartedStore], route);
+    const store: GettingStartedStore = host.get(GettingStartedStore);
+    TestBed.tick();
+    await settle();
+    return store;
+  }
 
   /**
    * Function setup
@@ -250,12 +356,8 @@ describe('GettingStartedStore', () => {
     await TestBed.inject(Router).navigateByUrl(url);
     pin = TestBed.inject(OrganizationPin);
     pin.set(ATELIER_NORD.id);
-    const route: EnvironmentInjector = createEnvironmentInjector(
-      [OnboardingStore, GettingStartedStore],
-      TestBed.inject(EnvironmentInjector),
-    );
-    const store: GettingStartedStore = route.get(GettingStartedStore);
-    TestBed.tick();
+    route = createEnvironmentInjector([OnboardingStore], TestBed.inject(EnvironmentInjector));
+    const store: GettingStartedStore = await createHost();
     await vi.waitFor(() => {
       expect(api.get).toHaveBeenCalled();
     });
@@ -264,22 +366,24 @@ describe('GettingStartedStore', () => {
   }
 
   /**
-   * Function settle
+   * Function switchOrganization
    *
    * @description
-   * Lets the pending promises and the stores' reactions run.
-   *
-   * @returns {Promise<void>} Resolves once settled.
+   * Commits Studio Pixel in the workspace and the pin, as the resolver does.
    */
-  async function settle(): Promise<void> {
-    for (let turn: number = 0; turn < 5; turn += 1) {
-      await Promise.resolve();
-      TestBed.tick();
-    }
-    await new Promise<void>((resolve: () => void): void => {
-      setTimeout(resolve, 0);
-    });
-    TestBed.tick();
+  function switchOrganization(): void {
+    organization.set(STUDIO_PIXEL);
+    pin.set(STUDIO_PIXEL.id);
+  }
+
+  /**
+   * Function showTab
+   *
+   * @description
+   * Makes the tab visible again.
+   */
+  function showTab(): void {
+    document.dispatchEvent(new Event('visibilitychange'));
   }
 
   beforeEach(() => {
@@ -290,9 +394,9 @@ describe('GettingStartedStore', () => {
         shown = progress(version + 1, { ...shown.checklist, ...change }, shown.wizard.status);
         return Promise.resolve(shown);
       }),
-      invite: vi.fn(() => Promise.resolve({ invited: 1, skipped: 0 })),
+      invite: vi.fn(() => Promise.resolve({ invited: 1, skipped: 0, alreadyInvited: 0 })),
     };
-    toasts = { success: vi.fn(), info: vi.fn(), error: vi.fn() };
+    toasts = fakeToasts();
     created = new Subject<CreatedTask>();
     taskCreate = { open: vi.fn(() => true), created };
   });
@@ -341,6 +445,29 @@ describe('GettingStartedStore', () => {
 
       expect(store.visible()).toBe(false);
       expect(toasts.error).not.toHaveBeenCalled();
+    });
+
+    it('reads again after a failed first read when the tab shows again', async () => {
+      api.get.mockRejectedValueOnce(problem(503, 'service.unavailable'));
+      const store: GettingStartedStore = await setup();
+      expect(store.visible()).toBe(false);
+
+      showTab();
+      await settle();
+
+      expect(api.get).toHaveBeenCalledTimes(2);
+      expect(store.visible()).toBe(true);
+    });
+
+    it('reads again after a failed first read once a task is created', async () => {
+      api.get.mockRejectedValueOnce(problem(503, 'service.unavailable'));
+      const store: GettingStartedStore = await setup();
+
+      created.next({} as CreatedTask);
+      await settle();
+
+      expect(api.get).toHaveBeenCalledTimes(2);
+      expect(store.visible()).toBe(true);
     });
   });
 
@@ -397,6 +524,18 @@ describe('GettingStartedStore', () => {
       expect(toasts.error).toHaveBeenCalledWith('The list could not be updated');
     });
 
+    it('says the change may not have been saved after an unknown outcome', async () => {
+      const store: GettingStartedStore = await setup();
+      api.updateChecklist.mockRejectedValueOnce(problem(503, 'service.unavailable'));
+
+      await store.toggle();
+
+      expect(toasts.error).not.toHaveBeenCalled();
+      expect(toasts.warning).toHaveBeenCalledWith(
+        'Your change to “Getting started” may not have been saved',
+      );
+    });
+
     it('hides the checklist at once and saves it', async () => {
       const store: GettingStartedStore = await setup();
 
@@ -425,6 +564,7 @@ describe('GettingStartedStore', () => {
       await store.toggle();
 
       expect(toasts.error).not.toHaveBeenCalled();
+      expect(toasts.warning).not.toHaveBeenCalled();
     });
   });
 
@@ -437,7 +577,7 @@ describe('GettingStartedStore', () => {
       expect(taskCreate.open).toHaveBeenCalledWith({ listId: 'l-backlog' });
     });
 
-    it('opens the invite dialog', async () => {
+    it('opens and closes the invite dialog', async () => {
       const store: GettingStartedStore = await setup();
 
       store.start('invite');
@@ -478,6 +618,20 @@ describe('GettingStartedStore', () => {
       expect(api.updateChecklist).toHaveBeenCalledWith({ boardTried: true }, 4);
     });
 
+    it('sends the marker again on the next board navigation after a refusal', async () => {
+      await setup();
+      const router: Router = TestBed.inject(Router);
+      api.updateChecklist.mockRejectedValueOnce(problem(403, 'auth.csrf-rejected'));
+
+      await router.navigateByUrl('/atelier-nord/l/l-sprint/board');
+      await settle();
+      await router.navigateByUrl('/atelier-nord/l/l-backlog/board');
+      await settle();
+
+      expect(api.updateChecklist).toHaveBeenCalledTimes(2);
+      expect(toasts.error).not.toHaveBeenCalled();
+    });
+
     it('sends nothing once the Board view is recorded', async () => {
       shown = progress(5, { boardTried: true });
       await setup();
@@ -498,22 +652,22 @@ describe('GettingStartedStore', () => {
       expect(api.updateChecklist).not.toHaveBeenCalled();
     });
 
-    it('drops the marker silently for the board of another organization', async () => {
+    it('records the board for the new organization only, from its own progress', async () => {
       await setup();
       const router: Router = TestBed.inject(Router);
-      shown = progress(3, { boardTried: true });
+      shown = progress(2);
 
-      organization.set(STUDIO_PIXEL);
-      pin.set(STUDIO_PIXEL.id);
+      switchOrganization();
       await router.navigateByUrl('/studio-pixel/l/l-other/board');
       await settle();
 
-      expect(api.updateChecklist).not.toHaveBeenCalled();
+      expect(api.updateChecklist).toHaveBeenCalledTimes(1);
+      expect(api.updateChecklist).toHaveBeenCalledWith({ boardTried: true }, 2);
       expect(toasts.error).not.toHaveBeenCalled();
     });
   });
 
-  describe('first task refresh', () => {
+  describe('refresh', () => {
     it('reads the progress again after a task is created', async () => {
       const store: GettingStartedStore = await setup();
       shown = progress(5, { firstTaskCreated: true });
@@ -530,7 +684,7 @@ describe('GettingStartedStore', () => {
       await setup();
 
       created.next({} as CreatedTask);
-      document.dispatchEvent(new Event('visibilitychange'));
+      showTab();
       await settle();
 
       expect(api.get).toHaveBeenCalledTimes(1);
@@ -539,10 +693,21 @@ describe('GettingStartedStore', () => {
     it('reads the progress again when the tab shows again', async () => {
       await setup();
 
-      document.dispatchEvent(new Event('visibilitychange'));
+      showTab();
       await settle();
 
       expect(api.get).toHaveBeenCalledTimes(2);
+    });
+
+    it('reads the progress again when the host is created over a progress already read', async () => {
+      await setup();
+      host.destroy();
+      shown = progress(5, { firstTaskCreated: true });
+
+      const store: GettingStartedStore = await createHost();
+
+      expect(api.get).toHaveBeenCalledTimes(2);
+      expect(store.items()[0]).toEqual({ key: 'task', done: true });
     });
   });
 
@@ -564,8 +729,9 @@ describe('GettingStartedStore', () => {
     });
 
     it('counts the skipped addresses', async () => {
-      api.invite.mockResolvedValueOnce({ invited: 2, skipped: 1 });
+      api.invite.mockResolvedValueOnce({ invited: 2, skipped: 1, alreadyInvited: 0 });
       const store: GettingStartedStore = await setup();
+      store.start('invite');
 
       await store.invite(['a@ateliernord.fr', 'b@ateliernord.fr', 'c@ateliernord.fr']);
 
@@ -574,8 +740,8 @@ describe('GettingStartedStore', () => {
       });
     });
 
-    it('records nothing when every address was skipped', async () => {
-      api.invite.mockResolvedValueOnce({ invited: 0, skipped: 2 });
+    it('records nothing when every address was already a member', async () => {
+      api.invite.mockResolvedValueOnce({ invited: 0, skipped: 2, alreadyInvited: 0 });
       const store: GettingStartedStore = await setup();
       store.start('invite');
 
@@ -588,14 +754,14 @@ describe('GettingStartedStore', () => {
       expect(api.updateChecklist).not.toHaveBeenCalled();
     });
 
-    it('keeps the dialog open with a toast when the invitations fail', async () => {
-      api.invite.mockRejectedValueOnce(problem(503, 'service.unavailable'));
+    it('keeps the dialog open with a toast when the invitations are refused', async () => {
+      api.invite.mockRejectedValueOnce(problem(403, 'organization.role-forbidden'));
       const store: GettingStartedStore = await setup();
       store.start('invite');
 
       await store.invite(['ines.robert@ateliernord.fr']);
 
-      expect(toasts.error).toHaveBeenCalledWith('The invitations could not be sent', {});
+      expect(toasts.error).toHaveBeenCalledWith('The invitations could not be sent');
       expect(store.inviteOpen()).toBe(true);
       expect(store.inviting()).toBe(false);
       expect(api.updateChecklist).not.toHaveBeenCalled();
@@ -604,6 +770,7 @@ describe('GettingStartedStore', () => {
     it('explains the daily limit', async () => {
       api.invite.mockRejectedValueOnce(problem(429, 'invitation.daily-limit-reached'));
       const store: GettingStartedStore = await setup();
+      store.start('invite');
 
       await store.invite(['ines.robert@ateliernord.fr']);
 
@@ -612,23 +779,130 @@ describe('GettingStartedStore', () => {
       });
     });
 
-    it('shows nothing when the organization changed meanwhile', async () => {
-      let answer: (outcome: { invited: number; skipped: number }) => void = (): void => undefined;
+    it('says an unknown outcome may be sent again, then records the invitation already out', async () => {
+      api.invite.mockRejectedValueOnce(problem(503, 'service.unavailable'));
+      const store: GettingStartedStore = await setup();
+      store.start('invite');
+
+      await store.invite(['ines.robert@ateliernord.fr']);
+
+      expect(toasts.error).not.toHaveBeenCalled();
+      expect(toasts.warning).toHaveBeenCalledWith('The invitations may not have been sent', {
+        description: 'Sending again is safe.',
+      });
+      expect(store.inviteOpen()).toBe(true);
+
+      api.invite.mockResolvedValueOnce({ invited: 0, skipped: 1, alreadyInvited: 1 });
+      await store.invite(['ines.robert@ateliernord.fr']);
+
+      expect(api.updateChecklist).toHaveBeenCalledWith({ invitationSent: true }, 4);
+      expect(store.items()[1]).toEqual({ key: 'invite', done: true });
+    });
+
+    it('records the invitation marker again after its write failed', async () => {
+      const store: GettingStartedStore = await setup();
+      store.start('invite');
+      api.updateChecklist.mockRejectedValueOnce(problem(403, 'auth.csrf-rejected'));
+
+      await store.invite(['ines.robert@ateliernord.fr']);
+      expect(store.items()[1]).toEqual({ key: 'invite', done: false });
+
+      showTab();
+      await settle();
+
+      expect(api.updateChecklist).toHaveBeenCalledTimes(2);
+      expect(api.updateChecklist).toHaveBeenLastCalledWith({ invitationSent: true }, 4);
+      expect(store.items()[1]).toEqual({ key: 'invite', done: true });
+    });
+
+    it('closes the dialog without a toast when the organization pin drops the batch', async () => {
+      api.invite.mockRejectedValueOnce(problem(412, 'organization.context-changed'));
+      const store: GettingStartedStore = await setup();
+      store.start('invite');
+
+      await store.invite(['ines.robert@ateliernord.fr']);
+
+      expect(store.inviteOpen()).toBe(false);
+      expect(toasts.error).not.toHaveBeenCalled();
+      expect(toasts.warning).not.toHaveBeenCalled();
+    });
+
+    it('closes the dialog when the organization changes and sends nothing to the new one', async () => {
+      const store: GettingStartedStore = await setup();
+      store.start('invite');
+      expect(store.inviteOpen()).toBe(true);
+
+      switchOrganization();
+      TestBed.tick();
+      expect(store.inviteOpen()).toBe(false);
+      await store.invite(['ines.robert@ateliernord.fr']);
+
+      expect(api.invite).not.toHaveBeenCalled();
+    });
+
+    it('shows nothing when the organization changed during the batch', async () => {
+      let answer: (outcome: {
+        invited: number;
+        skipped: number;
+        alreadyInvited: number;
+      }) => void = (): void => undefined;
       api.invite.mockReturnValueOnce(
-        new Promise((resolve: (outcome: { invited: number; skipped: number }) => void) => {
-          answer = resolve;
-        }),
+        new Promise(
+          (
+            resolve: (outcome: {
+              invited: number;
+              skipped: number;
+              alreadyInvited: number;
+            }) => void,
+          ) => {
+            answer = resolve;
+          },
+        ),
       );
       const store: GettingStartedStore = await setup();
+      store.start('invite');
 
       const sending: Promise<void> = store.invite(['ines.robert@ateliernord.fr']);
-      organization.set(STUDIO_PIXEL);
-      answer({ invited: 1, skipped: 0 });
+      switchOrganization();
+      answer({ invited: 1, skipped: 0, alreadyInvited: 0 });
       await sending;
 
       expect(toasts.success).not.toHaveBeenCalled();
       expect(api.updateChecklist).not.toHaveBeenCalled();
       expect(store.inviting()).toBe(false);
+    });
+  });
+
+  describe('organization change and destruction', () => {
+    it('dismisses the toasts it showed when the organization changes', async () => {
+      const store: GettingStartedStore = await setup();
+      api.updateChecklist.mockRejectedValueOnce(problem(403, 'auth.csrf-rejected'));
+      await store.toggle();
+      expect(toasts.toasts()).toHaveLength(1);
+
+      switchOrganization();
+      TestBed.tick();
+
+      expect(toasts.toasts()).toEqual([]);
+    });
+
+    it('closes the dialog, dismisses its toasts and stops listening once destroyed', async () => {
+      const store: GettingStartedStore = await setup();
+      store.start('invite');
+      api.invite.mockRejectedValueOnce(problem(403, 'organization.role-forbidden'));
+      await store.invite(['ines.robert@ateliernord.fr']);
+      expect(toasts.toasts()).toHaveLength(1);
+
+      host.destroy();
+      showTab();
+      created.next({} as CreatedTask);
+      await TestBed.inject(Router).navigateByUrl('/atelier-nord/l/l-sprint/board');
+      await settle();
+
+      expect(TestBed.inject(ShellOverlay).isOpen('onboarding.invite-dialog')).toBe(false);
+      expect(toasts.toasts()).toEqual([]);
+      expect(api.get).toHaveBeenCalledTimes(1);
+      expect(api.updateChecklist).not.toHaveBeenCalled();
     });
   });
 });
