@@ -23,6 +23,7 @@ import { Title } from '@angular/platform-browser';
 import {
   AccessService,
   ArchivesService,
+  AuthService,
   BillingService,
   InboxService,
   InvitationsService,
@@ -269,6 +270,23 @@ describe('WORKSPACE_ROUTES', () => {
         { provide: RuntimeConfigStore, useValue: { config: () => ({}) } },
         { provide: InboxService, useValue: { getInboxUnreadCount: () => of({ unreadCount: 2 }) } },
         {
+          provide: AuthService,
+          useValue: {
+            getCurrentUser: () =>
+              of({
+                id: camille.id,
+                name: 'Camille Martin',
+                email: 'camille.martin@ateliernord.fr',
+                language: 'fr',
+                displayName: null,
+                jobTitle: null,
+                timeZone: 'Europe/Paris',
+                avatarId: null,
+                version: 1,
+              }),
+          },
+        },
+        {
           provide: GoalsService,
           useValue: {
             listGoals: () =>
@@ -371,6 +389,12 @@ describe('WORKSPACE_ROUTES', () => {
         },
       ],
     });
+    Object.defineProperty(navigator, 'locks', {
+      configurable: true,
+      value: {
+        request: (_name: string, _options: LockOptions, run: () => Promise<unknown>) => run(),
+      },
+    });
     vi.stubGlobal(
       'matchMedia',
       vi.fn(() => ({
@@ -384,6 +408,7 @@ describe('WORKSPACE_ROUTES', () => {
   });
 
   afterEach(() => {
+    Reflect.deleteProperty(navigator, 'locks');
     vi.unstubAllGlobals();
   });
 
