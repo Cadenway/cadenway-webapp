@@ -134,14 +134,22 @@ route), `withGettingStarted()` and `withOnboardingWizard()` (the `overlays` cont
   error, so a typed address is never lost. The `Import` screen shows `Trello`, `Jira` and
   `CSV file` disabled and `Later` checked (gap B18): the screen keeps its place, so the counter
   stays `of 4` as in the mockup and the contract's `import` step.
+- Invitations go out on the `Team` screen, then the finish provisions the space. `Continue` on
+  `Team` commits the typed address, then invites the addresses not sent yet as members, in
+  batches of 50 (the `inviteMembers` limit), when the person is an owner or an administrator
+  (`OnboardingApi.invite`), and only then saves the step and moves on; it shows its loading state
+  meanwhile, with `Back`, `Set up later` and the field disabled. Organization invitations hold on
+  their own and the draft does not keep the addresses (gap G6), so sending them there means a
+  reload resuming at `Import` loses none, and the finish invites no one (nor invents any). An
+  address sent is never sent again: going back to `Team` keeps it as a pill, and `Continue`
+  sends only the new ones. A batch whose outcome is unknown keeps its addresses unsent, keeps
+  the screen and shows `The invitations may not have been sent` / `Press Continue to send them
+again: it is safe.` (an address the lost batch reached then answers `already-invited`); a
+  refused batch (a `429` daily limit included) shows `The invitations could not be sent` and
+  the screen still changes.
 - `Create the space` (`App.dc.html` lines 5276-5298), with `Back` and `Set up later` disabled and a
   second click ignored while it runs:
-  1. invites the addresses not sent yet as members, in batches of 50 (the `inviteMembers` limit),
-     when the person is an owner or an administrator (`OnboardingApi.invite`). Organization
-     invitations hold even if the finish later fails, so they go first; an accepted batch is never
-     sent again by a retried finish, and a failed batch (a `429` daily limit included) shows a
-     failure toast, is sent again by the next finish, and the finish goes on;
-  2. sends `finishOnboarding` with the trimmed name, the derived prefix, the template and the
+  1. sends `finishOnboarding` with the trimmed name, the derived prefix, the template and the
      color. After `409 space.prefix-taken` it tries the first two letters followed by `A` to `Z`,
      each prefix once (a fallback equal to the base is skipped) and each with a new key, silently,
      then asks for another name. An unknown outcome (`isUncertainOnboardingWrite`) shows an inline
@@ -149,12 +157,16 @@ route), `withGettingStarted()` and `withOnboardingWizard()` (the `overlays` cont
      only after a definite refusal or a changed body. A stale version is retried once with a new
      key; `403 organization.role-forbidden` and other refusals show an inline error. A dropped
      write (`OnboardingWriteDroppedError`) shows nothing;
-  3. once provisioned, records `invitationSent` when an address was invited or found
-     `already-invited`, the checklist's rule (the checklist exists only then; a failed marker
-     write stays owed in `OnboardingStore`), refreshes the navigation, opens
+  2. once provisioned, records `invitationSent` when an address sent in this session was invited
+     or found `already-invited`, the checklist's rule (the checklist exists only then; a failed
+     marker write stays owed in `OnboardingStore`), refreshes the navigation, opens
      `/<slug>/l/<firstListId>`, then shows the toast `Space “<name>” created` with `<n> lists`
-     and `<n> invitations sent` (invited outcomes only; never the mockup's import part, gap B18),
-     and closes.
+     and `<n> invitations sent` (this session's invited outcomes only; never the mockup's import
+     part, gap B18), and closes.
+- The contract reports no seat outcome for an invitation (`InvitationResult.outcome` is
+  `invited`, `already-member` or `already-invited`; "sending an invitation does not consume a
+  seat", `members.yaml`), so the assistant has no seat-limit message; any other outcome counts
+  as not sent.
 - The template cards and the import cards are written out instead of repeated with `@for`
   (`@cadenway/ui` 0.11.0 bug). Under `@for`, `cw-radio-group`'s `tabStop` computed reads every
   item's `value()` while the first item renders, before the later repeated items have their
@@ -309,7 +321,8 @@ These assistant units have no mockup wording (step 9 spec, A.6), pending product
 | ---------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
 | `onboarding.wizard.load-failed`, `onboarding.wizard.retry`                                                                                     | The progress read failed; the mockup has no read.                                                                              |
 | `onboarding.wizard.finish-unknown`, `onboarding.wizard.finish-failed`, `onboarding.wizard.finish-forbidden`, `onboarding.wizard.finish-prefix` | `finishOnboarding` failures the mockup does not draw.                                                                          |
-| `onboarding.wizard.toast.invitations-failed`, `onboarding.wizard.toast.invitations-failed-text`                                                | A failed `inviteMembers` before the space is created.                                                                          |
+| `onboarding.wizard.toast.invitations-failed`, `onboarding.wizard.toast.invitations-failed-text`                                                | A refused `inviteMembers` on leaving the `Team` screen.                                                                        |
+| `onboarding.wizard.toast.invitations-unknown`, `onboarding.wizard.toast.invitations-unknown-text`                                              | An `inviteMembers` whose outcome is unknown on leaving the `Team` screen.                                                      |
 | `onboarding.wizard.toast.skip-failed`, `onboarding.wizard.toast.skip-failed-text`                                                              | A refused or unconfirmed `Set up later`.                                                                                       |
 | `onboarding.wizard.announcement`, `onboarding.wizard.stepper.*`                                                                                | Screen reader text of the step change and of the step bar.                                                                     |
 | `onboarding.wizard.preset.*.lists` (English)                                                                                                   | The gateway creates the contract's French list names for every template (gap G7); the English source previews them in English. |

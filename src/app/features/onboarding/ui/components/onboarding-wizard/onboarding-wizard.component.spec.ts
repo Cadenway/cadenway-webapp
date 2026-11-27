@@ -481,7 +481,7 @@ describe('OnboardingWizard', () => {
     expect(title()?.textContent.trim()).toBe('Welcome to Atelier Nord');
   });
 
-  it('invites the team from the team screen once the space is created', async () => {
+  it('invites the team when leaving the team screen, then creates the space', async () => {
     const { fixture, finish, invite, recordInvitation }: Harness = await render(
       progress(2, { step: 'team' }),
     );

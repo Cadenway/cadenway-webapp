@@ -1390,6 +1390,8 @@
     "onboarding.wizard.toast.invitations-failed-text": "Vous pourrez inviter votre équipe plus tard.",
     "onboarding.wizard.toast.invitations-one": "{$count} invitation envoyée",
     "onboarding.wizard.toast.invitations-other": "{$count} invitations envoyées",
+    "onboarding.wizard.toast.invitations-unknown": "Les invitations n’ont peut-être pas été envoyées",
+    "onboarding.wizard.toast.invitations-unknown-text": "Appuyez de nouveau sur Continuer pour les renvoyer, sans risque.",
     "onboarding.wizard.toast.lists-one": "{$count} liste",
     "onboarding.wizard.toast.lists-other": "{$count} listes",
     "onboarding.wizard.toast.skip-failed": "Votre choix n’a pas pu être enregistré",

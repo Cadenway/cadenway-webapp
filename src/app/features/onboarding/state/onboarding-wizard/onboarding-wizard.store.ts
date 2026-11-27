@@ -281,8 +281,8 @@ interface OnboardingWizardState {
    * Property emails
    *
    * @description
-   * The addresses to invite, sent just before the space is created; kept in memory only
-   * (contract gap G6).
+   * The addresses to invite, sent when the person leaves the `Team` screen; kept in memory only
+   * (contract gap G6), which is why they are sent then rather than with the finish.
    *
    * @type {readonly string[]}
    * @readonly
@@ -360,6 +360,17 @@ interface OnboardingWizardState {
   readonly failure: OnboardingFinishFailure | null;
 
   /**
+   * Property inviting
+   *
+   * @description
+   * Whether `Continue` on the `Team` screen is sending the invitations.
+   *
+   * @type {boolean}
+   * @readonly
+   */
+  readonly inviting: boolean;
+
+  /**
    * Property closed
    *
    * @description
@@ -414,6 +425,7 @@ const initialState: OnboardingWizardState = {
   seeded: false,
   finishing: false,
   failure: null,
+  inviting: false,
   closed: false,
   _attempt: null,
   _organizationId: null,
@@ -550,6 +562,17 @@ interface OnboardingWizardStoreInstance {
   readonly failure: Signal<OnboardingFinishFailure | null>;
 
   /**
+   * Property inviting
+   *
+   * @description
+   * Whether `Continue` on the `Team` screen is sending the invitations; the screens wait meanwhile.
+   *
+   * @type {Signal<boolean>}
+   * @readonly
+   */
+  readonly inviting: Signal<boolean>;
+
+  /**
    * Property closed
    *
    * @description
@@ -633,7 +656,13 @@ interface OnboardingWizardStoreInstance {
    *
    * @description
    * Moves to the next screen and saves the draft without waiting, or creates the space on the last
-   * screen. Does nothing on the `Space` screen while the name is blank, nor while finishing.
+   * screen. Does nothing on the `Space` screen while the name is blank, nor while finishing or
+   * inviting. Leaving the `Team` screen first invites the addresses not sent yet as members, in
+   * batches of 50, when the person may invite: organization invitations hold on their own, so a
+   * reload afterwards loses none (the addresses are not part of the draft, gap G6). An address
+   * sent is never sent again. A batch whose outcome is unknown keeps its addresses unsent, shows a
+   * toast and keeps the screen, so `Continue` sends them again safely; a refused batch (a `429`
+   * daily limit included) shows the failure toast and the screen still changes.
    *
    * @returns {Promise<void>} Resolves once the screen changed, or the finish settled.
    */
@@ -666,15 +695,14 @@ interface OnboardingWizardStoreInstance {
    * Method finish
    *
    * @description
-   * `Create the space`: first invites the addresses not sent yet as members, in batches of 50, when
-   * the person may invite (organization invitations hold even if the finish fails; a failed batch
-   * shows a toast and is sent again by the next finish, which still goes on). It then provisions
-   * the space with the template (`finishOnboarding`), tries each other prefix after
+   * `Create the space`: provisions the space with the template (`finishOnboarding`); it invites
+   * no one, since the `Team` screen did. It tries each other prefix after
    * `409 space.prefix-taken` with a new key, retries once with a new key after a stale version, and
    * sends the same key again after an unknown outcome. Once provisioned it records the invitation
-   * marker when an address was invited or already had a pending invitation, refreshes the
-   * navigation, opens the first list, shows the toast and closes. After `409 onboarding.wizard-closed` (another tab finished or dismissed), it opens
-   * the first list when a space exists and closes. Nothing more is applied once the organization
+   * marker when an address of this session was invited or already had a pending invitation,
+   * refreshes the navigation, opens the first list, shows the toast (with this session's
+   * invitation count) and closes. After `409 onboarding.wizard-closed` (another tab finished or
+   * dismissed), it opens the first list when a space exists and closes. Nothing more is applied once the organization
    * changed, the store was destroyed or the write was dropped. A second call while one runs does
    * nothing.
    *
@@ -766,30 +794,44 @@ function createOnboardingWizardStore(): Type<OnboardingWizardStoreInstance> {
           });
       };
 
-      const invite: (organizationId: string) => Promise<void> = async (
+      // Returns whether the person may move on: false only when a batch's outcome is unknown, so
+      // its addresses stay unsent and a second Continue sends them again (an address the lost
+      // batch reached then answers `already-invited`, so nothing is invited twice).
+      const invite: (organizationId: string) => Promise<boolean> = async (
         organizationId: string,
-      ): Promise<void> => {
-        if (!store._workspace.can('admin')) return;
+      ): Promise<boolean> => {
+        if (!store._workspace.can('admin')) return true;
         const sent: ReadonlySet<string> = new Set(store._sent());
         const pending: readonly string[] = store
           .emails()
           .filter((email: string): boolean => !sent.has(email.toLowerCase()));
         let failed: boolean = false;
+        let uncertain: boolean = false;
         for (let start: number = 0; start < pending.length; start += INVITE_BATCH_SIZE) {
-          if (!live(organizationId)) return;
+          if (!live(organizationId)) return false;
           const batch: readonly string[] = pending.slice(start, start + INVITE_BATCH_SIZE);
           try {
             const outcome: OnboardingInvitationOutcome = await store._api.invite(batch);
-            if (!live(organizationId)) return;
+            if (!live(organizationId)) return false;
             patchState(store, (state: OnboardingWizardState) => ({
               _sent: [...state._sent, ...batch.map((email: string): string => email.toLowerCase())],
               _invited: state._invited + outcome.invited,
               _alreadyInvited: state._alreadyInvited + outcome.alreadyInvited,
             }));
-          } catch {
-            if (!live(organizationId)) return;
-            failed = true;
+          } catch (error: unknown) {
+            if (!live(organizationId)) return false;
+            if (isUncertainOnboardingWrite(error)) uncertain = true;
+            else failed = true;
           }
+        }
+        if (uncertain) {
+          store._toasts.error(
+            $localize`:@@onboarding.wizard.toast.invitations-unknown:The invitations may not have been sent`,
+            {
+              description: $localize`:@@onboarding.wizard.toast.invitations-unknown-text:Press Continue to send them again: it is safe.`,
+            },
+          );
+          return false;
         }
         if (failed) {
           store._toasts.error(
@@ -799,6 +841,7 @@ function createOnboardingWizardStore(): Type<OnboardingWizardStoreInstance> {
             },
           );
         }
+        return true;
       };
 
       const announce: (space: OnboardingSpace) => void = (space: OnboardingSpace): void => {
@@ -871,8 +914,6 @@ function createOnboardingWizardStore(): Type<OnboardingWizardStoreInstance> {
         let key: string = resumed?.key ?? crypto.randomUUID();
         let staleRetried: boolean = false;
         patchState(store, { finishing: true, failure: null });
-        await invite(organization.id);
-        if (!live(organization.id)) return;
         for (;;) {
           try {
             const progress: OnboardingProgress = await store._onboarding.finish(space, key);
@@ -997,7 +1038,7 @@ function createOnboardingWizardStore(): Type<OnboardingWizardStoreInstance> {
             .catch((): undefined => undefined);
         },
         async next(): Promise<void> {
-          if (store.finishing()) return;
+          if (store.finishing() || store.inviting()) return;
           const index: number = store.stepIndex();
           if (store.step() === 'space' && store.nameBlank()) return;
           const following: OnboardingStep | undefined = ONBOARDING_STEPS.at(index + 1);
@@ -1005,11 +1046,19 @@ function createOnboardingWizardStore(): Type<OnboardingWizardStoreInstance> {
             await finish();
             return;
           }
+          const organizationId: string | null = store._organizationId();
+          if (store.step() === 'team' && organizationId !== null) {
+            patchState(store, { inviting: true });
+            const proceed: boolean = await invite(organizationId);
+            if (!live(organizationId)) return;
+            patchState(store, { inviting: false });
+            if (!proceed) return;
+          }
           patchState(store, { step: following });
           saveDraft();
         },
         back(): void {
-          if (store.finishing()) return;
+          if (store.finishing() || store.inviting()) return;
           const index: number = store.stepIndex();
           const previous: OnboardingStep | undefined =
             index > 0 ? ONBOARDING_STEPS.at(index - 1) : undefined;
@@ -1018,7 +1067,7 @@ function createOnboardingWizardStore(): Type<OnboardingWizardStoreInstance> {
           saveDraft();
         },
         async skip(): Promise<void> {
-          if (store.finishing() || store.closed()) return;
+          if (store.finishing() || store.inviting() || store.closed()) return;
           const organizationId: string | null = store._organizationId();
           const readFailed: boolean =
             store._onboarding.progress() === null && store._onboarding.failed();
@@ -1049,9 +1098,10 @@ function createOnboardingWizardStore(): Type<OnboardingWizardStoreInstance> {
  * `OnboardingWizardHost` so a finish keeps running while the assistant shows its result. It takes
  * the draft from `OnboardingStore`'s progress once (a null name reads as the default name, a `gris`
  * color as `violet`), changes screens locally and saves the draft after each move without blocking
- * (a failed save is sent again in full by the next one). `Create the space` sends the invitations
- * first (they hold even if the finish fails, and are not sent twice), then provisions the space
- * through `OnboardingStore.finish`, which never retries by itself: an unknown outcome keeps the
+ * (a failed save is sent again in full by the next one). Leaving the `Team` screen sends the
+ * invitations (they hold on their own, survive a reload and are not sent twice); `Create the
+ * space` then provisions the space through `OnboardingStore.finish`, which never retries by
+ * itself: an unknown outcome keeps the
  * body and its idempotency key for the retry, and any definite refusal takes a new key. Every
  * step is fenced like `OnboardingStore`'s writes: once the workspace or `OrganizationPin` shows
  * another organization, or the store is destroyed, nothing more is applied, refreshed, navigated

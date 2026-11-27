@@ -21,7 +21,7 @@
           variant="ghost"
           size="sm"
           class="ml-auto text-muted-foreground"
-          [disabled]="store.finishing()"
+          [disabled]="store.finishing() || store.inviting()"
           (click)="store.skip()"
           data-testid="onboarding-skip"
         >
@@ -85,7 +85,7 @@
               <cw-onboarding-team-step
                 [emails]="store.emails()"
                 [canInvite]="store.canInvite()"
-                [disabled]="store.finishing()"
+                [disabled]="store.finishing() || store.inviting()"
                 (emailsChange)="store.changeEmails($event)"
               />
             }
@@ -127,7 +127,7 @@
                 cwButton
                 type="button"
                 variant="ghost"
-                [disabled]="store.finishing()"
+                [disabled]="store.finishing() || store.inviting()"
                 (click)="back()"
                 data-testid="onboarding-back"
               >
@@ -139,7 +139,7 @@
             <button
               cwButton
               type="button"
-              [loading]="store.finishing()"
+              [loading]="store.finishing() || store.inviting()"
               [disabled]="store.step() === 'space' && store.nameBlank()"
               (click)="next()"
               data-testid="onboarding-next"

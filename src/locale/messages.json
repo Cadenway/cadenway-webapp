@@ -1315,6 +1315,8 @@
     "onboarding.getting-started.invite-failed": "The invitations could not be sent",
     "onboarding.getting-started.invite-failed-limit": "The daily invitation limit is reached: try again later.",
     "onboarding.wizard.space.default-name": "Product",
+    "onboarding.wizard.toast.invitations-unknown": "The invitations may not have been sent",
+    "onboarding.wizard.toast.invitations-unknown-text": "Press Continue to send them again: it is safe.",
     "onboarding.wizard.toast.invitations-failed": "The invitations could not be sent",
     "onboarding.wizard.toast.invitations-failed-text": "You can invite your team later.",
     "onboarding.wizard.toast.lists-one": "{$count} list",

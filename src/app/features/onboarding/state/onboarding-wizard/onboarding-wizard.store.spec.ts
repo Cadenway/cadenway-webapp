@@ -620,11 +620,11 @@ describe('OnboardingWizardStore', () => {
     expect(store.nextAction()).toBe('create');
   });
 
-  it('invites first, then creates the space, records the invitation, refreshes, navigates, toasts and closes', async () => {
+  it('invites on leaving the team screen, then saves the step; the finish only records and toasts', async () => {
     const { store, fakes }: Setup = setup();
     await moveTo(store, 'team');
+    fakes.saveDraft.mockClear();
     store.changeEmails(['ines.robert@ateliernord.fr', 'marc.roux@ateliernord.fr']);
-    await moveTo(store, 'import');
 
     await store.next();
 
@@ -632,6 +632,14 @@ describe('OnboardingWizardStore', () => {
       'ines.robert@ateliernord.fr',
       'marc.roux@ateliernord.fr',
     ]);
+    expect(fakes.saveDraft).toHaveBeenCalledWith(expect.objectContaining({ step: 'import' }));
+    expect(order(fakes.invite, fakes.saveDraft)).toBe(true);
+    expect(store.step()).toBe('import');
+    expect(store.inviting()).toBe(false);
+
+    await store.next();
+
+    expect(fakes.invite).toHaveBeenCalledTimes(1);
     expect(sentSpaces(fakes.finish)).toEqual([
       { name: 'Product', prefix: 'PRO', preset: 'dev', color: 'violet' },
     ]);
@@ -645,6 +653,52 @@ describe('OnboardingWizardStore', () => {
     expect(fakes.error).not.toHaveBeenCalled();
     expect(store.closed()).toBe(true);
     expect(store.finishing()).toBe(false);
+  });
+
+  it('shows the team screen as busy while the invitations are sent', async () => {
+    const { store, fakes }: Setup = setup(progress(2, { step: 'team' }));
+    const pending: Deferred<OnboardingInvitationOutcome> = deferred<OnboardingInvitationOutcome>();
+    fakes.invite.mockReturnValueOnce(pending.promise);
+    store.changeEmails(['ines.robert@ateliernord.fr']);
+
+    const moving: Promise<void> = store.next();
+    expect(store.inviting()).toBe(true);
+    store.back();
+    await store.next();
+    pending.resolve({ invited: 1, skipped: 0, alreadyInvited: 0 });
+    await moving;
+
+    expect(fakes.invite).toHaveBeenCalledTimes(1);
+    expect(store.inviting()).toBe(false);
+    expect(store.step()).toBe('import');
+  });
+
+  it('sends no invitation on a reload resuming past the team screen, and invents none', async () => {
+    const { store, fakes }: Setup = setup(progress(4, { step: 'import', name: 'Product' }));
+
+    await store.next();
+
+    expect(fakes.invite).not.toHaveBeenCalled();
+    expect(fakes.recordInvitation).not.toHaveBeenCalled();
+    expect(fakes.show).toHaveBeenCalledWith('Space “Product” created', {
+      description: '3 lists',
+    });
+  });
+
+  it('keeps sent addresses after going back to the team screen, and does not send them again', async () => {
+    const { store, fakes }: Setup = setup(progress(2, { step: 'team' }));
+    store.changeEmails(['ines.robert@ateliernord.fr']);
+    await store.next();
+    store.back();
+
+    expect(store.emails()).toEqual(['ines.robert@ateliernord.fr']);
+    store.changeEmails(['ines.robert@ateliernord.fr', 'marc.roux@ateliernord.fr']);
+    await store.next();
+
+    expect(fakes.invite.mock.calls.map((call: unknown[]) => call[0])).toEqual([
+      ['ines.robert@ateliernord.fr'],
+      ['marc.roux@ateliernord.fr'],
+    ]);
   });
 
   it('sends nothing more while a finish runs', async () => {
@@ -668,11 +722,12 @@ describe('OnboardingWizardStore', () => {
   });
 
   it('counts only the invited addresses and records nothing when none was invited', async () => {
-    const { store, fakes }: Setup = setup();
+    const { store, fakes }: Setup = setup(progress(2, { step: 'team' }));
     fakes.invite.mockResolvedValue({ invited: 0, skipped: 1, alreadyInvited: 0 });
     store.pickPreset('blank');
     store.changeEmails(['ines.robert@ateliernord.fr']);
 
+    await store.next();
     await store.finish();
 
     expect(fakes.recordInvitation).not.toHaveBeenCalled();
@@ -680,10 +735,11 @@ describe('OnboardingWizardStore', () => {
   });
 
   it('records the invitation marker for an address already invited, without counting it as sent', async () => {
-    const { store, fakes }: Setup = setup();
+    const { store, fakes }: Setup = setup(progress(2, { step: 'team' }));
     fakes.invite.mockResolvedValue({ invited: 0, skipped: 1, alreadyInvited: 1 });
     store.changeEmails(['ines.robert@ateliernord.fr']);
 
+    await store.next();
     await store.finish();
 
     expect(fakes.recordInvitation).toHaveBeenCalledTimes(1);
@@ -716,13 +772,14 @@ describe('OnboardingWizardStore', () => {
   });
 
   it('sends more than 50 addresses in batches of 50', async () => {
-    const { store, fakes }: Setup = setup();
+    const { store, fakes }: Setup = setup(progress(2, { step: 'team' }));
     const emails: string[] = Array.from(
       { length: 120 },
       (_email: unknown, index: number) => `member${String(index)}@ateliernord.fr`,
     );
     store.changeEmails(emails);
 
+    await store.next();
     await store.finish();
 
     expect(fakes.invite.mock.calls.map((call: unknown[]) => (call[0] as string[]).length)).toEqual([
@@ -733,18 +790,21 @@ describe('OnboardingWizardStore', () => {
     });
   });
 
-  it('still creates the space when the invitations fail, and says so', async () => {
-    const { store, fakes }: Setup = setup();
+  it('moves on when the invitations are refused, and says so', async () => {
+    const { store, fakes }: Setup = setup(progress(2, { step: 'team' }));
     fakes.invite.mockRejectedValue(problem(429, 'invitation.daily-limit-reached'));
     store.changeEmails(['ines.robert@ateliernord.fr']);
 
-    await store.finish();
+    await store.next();
 
     expect(fakes.error).toHaveBeenCalledWith('The invitations could not be sent', {
       description: 'You can invite your team later.',
     });
+    expect(store.step()).toBe('import');
+
+    await store.finish();
+
     expect(fakes.finish).toHaveBeenCalledTimes(1);
-    expect(fakes.navigate).toHaveBeenCalledWith(['/', 'atelier-nord', 'l', 'l-backlog']);
     expect(fakes.show).toHaveBeenCalledWith('Space “Product” created', {
       description: '3 lists',
     });
@@ -752,41 +812,53 @@ describe('OnboardingWizardStore', () => {
     expect(store.closed()).toBe(true);
   });
 
-  it('does not invite again when the finish is retried, but sends a failed batch again', async () => {
-    const { store, fakes }: Setup = setup();
+  it('keeps the team screen after an unknown outcome, then sends only the unsent addresses again', async () => {
+    const { store, fakes }: Setup = setup(progress(2, { step: 'team' }));
     const emails: string[] = Array.from(
       { length: 60 },
       (_email: unknown, index: number) => `member${String(index)}@ateliernord.fr`,
     );
     fakes.invite
       .mockResolvedValueOnce({ invited: 50, skipped: 0, alreadyInvited: 0 })
-      .mockRejectedValueOnce(new HttpErrorResponse({ status: 503 }));
-    fakes.finish.mockRejectedValueOnce(new HttpErrorResponse({ status: 0 }));
+      .mockRejectedValueOnce(new HttpErrorResponse({ status: 503 }))
+      .mockResolvedValueOnce({ invited: 0, skipped: 10, alreadyInvited: 10 });
     store.changeEmails(emails);
 
-    await store.finish();
-    expect(store.failure()).toBe('unknown');
+    await store.next();
 
-    await store.finish();
+    expect(store.step()).toBe('team');
+    expect(fakes.saveDraft).not.toHaveBeenCalled();
+    expect(fakes.error).toHaveBeenCalledWith('The invitations may not have been sent', {
+      description: 'Press Continue to send them again: it is safe.',
+    });
 
+    await store.next();
+
+    expect(store.step()).toBe('import');
     expect(fakes.invite.mock.calls.map((call: unknown[]) => (call[0] as string[]).length)).toEqual([
       50, 10, 10,
     ]);
     expect(fakes.invite.mock.calls[2]?.[0]).toEqual(emails.slice(50));
+
+    await store.finish();
+
+    expect(fakes.recordInvitation).toHaveBeenCalledTimes(1);
     expect(fakes.show).toHaveBeenCalledWith('Space “Product” created', {
-      description: '3 lists · 60 invitations sent',
+      description: '3 lists · 50 invitations sent',
     });
   });
 
   it('sends no invitation for a person who may not invite', async () => {
-    const { store, fakes }: Setup = setup();
+    const { store, fakes }: Setup = setup(progress(2, { step: 'team' }));
     fakes.role.set('member');
     store.changeEmails(['ines.robert@ateliernord.fr']);
 
     expect(store.canInvite()).toBe(false);
+    await store.next();
     await store.finish();
 
     expect(fakes.invite).not.toHaveBeenCalled();
+    expect(store.step()).toBe('import');
   });
 
   it('sends the same key again after an unknown outcome', async () => {
@@ -951,13 +1023,13 @@ describe('OnboardingWizardStore', () => {
     expect(fakes.show).not.toHaveBeenCalled();
   });
 
-  it('sends, refreshes, navigates and toasts nothing once destroyed while inviting', async () => {
-    const { store, fakes }: Setup = setup();
+  it('saves, refreshes, navigates and toasts nothing once destroyed while inviting', async () => {
+    const { store, fakes }: Setup = setup(progress(2, { step: 'team' }));
     const pending: Deferred<OnboardingInvitationOutcome> = deferred<OnboardingInvitationOutcome>();
     fakes.invite.mockReturnValueOnce(pending.promise);
     store.changeEmails(['ines.robert@ateliernord.fr']);
 
-    const running: Promise<void> = store.finish();
+    const running: Promise<void> = store.next();
     await vi.waitFor(() => {
       expect(fakes.invite).toHaveBeenCalledTimes(1);
     });
@@ -965,6 +1037,7 @@ describe('OnboardingWizardStore', () => {
     pending.resolve({ invited: 1, skipped: 0, alreadyInvited: 0 });
     await running;
 
+    expect(fakes.saveDraft).not.toHaveBeenCalled();
     expect(fakes.finish).not.toHaveBeenCalled();
     expect(fakes.refresh).not.toHaveBeenCalled();
     expect(fakes.navigate).not.toHaveBeenCalled();
