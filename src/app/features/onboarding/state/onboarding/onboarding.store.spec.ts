@@ -764,6 +764,70 @@ describe('OnboardingStore', () => {
     });
   });
 
+  describe('a write before the first read', () => {
+    /**
+     * Function abortableRead
+     *
+     * @description
+     * Makes the next read hang until its signal aborts, then reject as an aborted read does.
+     */
+    function abortableRead(): void {
+      api.get.mockImplementationOnce(
+        (signal: AbortSignal) =>
+          new Promise<OnboardingProgress>((_resolve: unknown, reject: (error: unknown) => void) => {
+            signal.addEventListener('abort', () => {
+              reject(new DOMException('The read was aborted.', 'AbortError'));
+            });
+          }),
+      );
+    }
+
+    it('drops the write when the organization changes during its read', async () => {
+      const store: OnboardingStore = setup();
+      abortableRead();
+      const saving: Promise<OnboardingProgress> = store.saveDraft({ step: 'preset' });
+      await vi.waitFor(() => {
+        expect(api.get).toHaveBeenCalledTimes(1);
+      });
+
+      switchOrganization();
+
+      await expect(saving).rejects.toBeInstanceOf(OnboardingWriteDroppedError);
+      expect(api.saveDraft).not.toHaveBeenCalled();
+    });
+
+    it('drops the write when the store is destroyed during its read', async () => {
+      const store: OnboardingStore = setup();
+      abortableRead();
+      const saving: Promise<OnboardingProgress> = store.saveDraft({ step: 'preset' });
+      await vi.waitFor(() => {
+        expect(api.get).toHaveBeenCalledTimes(1);
+      });
+
+      route.destroy();
+
+      await expect(saving).rejects.toBeInstanceOf(OnboardingWriteDroppedError);
+      expect(api.saveDraft).not.toHaveBeenCalled();
+    });
+
+    it('drops the write when the organization pin blocks its read', async () => {
+      const store: OnboardingStore = setup();
+      api.get.mockRejectedValueOnce(new OrganizationSwitchPendingError());
+
+      await expect(store.recordInvitation()).rejects.toBeInstanceOf(OnboardingWriteDroppedError);
+      expect(api.updateChecklist).not.toHaveBeenCalled();
+    });
+
+    it('rejects with the read failure when nothing changed', async () => {
+      const store: OnboardingStore = setup();
+      const lost: HttpErrorResponse = problem(503, 'service.unavailable');
+      api.get.mockRejectedValueOnce(lost);
+
+      await expect(store.saveDraft({ step: 'preset' })).rejects.toBe(lost);
+      expect(api.saveDraft).not.toHaveBeenCalled();
+    });
+  });
+
   describe('leaving the workspace', () => {
     it('never sends a queued write once the store is destroyed and the pin moved on', async () => {
       const store: OnboardingStore = setup();

@@ -621,7 +621,18 @@ function createOnboardingStore(): Type<OnboardingStoreInstance> {
         const generation: number = runs.generation;
         const task: () => Promise<OnboardingProgress> = async (): Promise<OnboardingProgress> => {
           if (!live(generation)) throw new OnboardingWriteDroppedError();
-          const base: OnboardingProgress | null = store._confirmed() ?? (await read());
+          let base: OnboardingProgress | null = store._confirmed();
+          if (base === null) {
+            try {
+              base = await read();
+            } catch (error: unknown) {
+              // Reads are aborted only by a switch or a destruction, which also end `live()`.
+              if (!live(generation) || isDroppedOnboardingWrite(error)) {
+                throw new OnboardingWriteDroppedError(error);
+              }
+              throw error;
+            }
+          }
           if (base === null || !live(generation)) throw new OnboardingWriteDroppedError();
           return attempt(write, base.version, generation, true);
         };
