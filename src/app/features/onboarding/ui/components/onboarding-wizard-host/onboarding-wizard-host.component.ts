@@ -78,8 +78,9 @@ function hasStart(tree: UrlTree): boolean {
  *   at version 1 the store saves the initial draft, and once the progress is past version 1 (or
  *   the assistant closed) the host removes the parameter with `replaceUrl`, keeping the path and
  *   the other parameters. A reload before that reopens the assistant; a failed first save keeps
- *   the parameter, and the next draft save makes the launch durable; a guest's parameter is
- *   removed at once;
+ *   the parameter, and the next draft save makes the launch durable; `Set up later` after a failed
+ *   read keeps it too, since nothing was saved and a reload is the only way back; a guest's
+ *   parameter is removed at once;
  * - otherwise it opens by itself only on the workspace root (`/<slug>`, Home, without `?task=`),
  *   once the progress shows `in-progress` past version 1 (a step was saved), so it never covers a
  *   deep link;
@@ -293,25 +294,6 @@ export class OnboardingWizardHost {
       }
       untracked((): void => {
         this.settleStart(organizationId, progress);
-      });
-    });
-    effect((): void => {
-      // `Set up later` after a failed read (failed at the click, or the read in flight failing
-      // then) closes with nothing written and no progress to settle the launch: once the read has
-      // failed, the parameter goes, so a reload does not reopen the assistant. While the read is in
-      // flight it stays; a close with a progress is settled above once the dismissal answers.
-      const organizationId: string = this.workspace.organization().id;
-      if (
-        !this.wizard.closed() ||
-        this.onboarding.progress() !== null ||
-        !this.onboarding.failed() ||
-        this.startedFor() !== organizationId ||
-        !hasStart(this.address())
-      ) {
-        return;
-      }
-      untracked((): void => {
-        if (this.router.currentNavigation() === null) this.removeStart();
       });
     });
     if (this.router.currentNavigation() === null) this.takeStart();

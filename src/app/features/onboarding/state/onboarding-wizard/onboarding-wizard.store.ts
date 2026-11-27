@@ -674,7 +674,8 @@ interface OnboardingWizardStoreInstance {
    * `Set up later`: closes the assistant at once, then closes it for good on the gateway; a read in
    * flight is awaited first (the shared store reads before it writes). Only a failed read, failed
    * at the click or the read in flight failing then, closes without a write, with the toast saying
-   * the choice was not saved (the host then removes `?onboarding=start`). A definite refusal, or an
+   * the choice was not saved; `?onboarding=start` stays, so a reload reopens the assistant, as the
+   * toast says. A definite refusal, or an
    * unknown outcome after which the progress still shows
    * the assistant `in-progress`, shows a toast saying the choice was not saved and the assistant
    * may come back; a dropped write shows nothing. Once settled, when a space exists (a finish whose
@@ -1094,8 +1095,8 @@ function createOnboardingWizardStore(): Type<OnboardingWizardStoreInstance> {
           patchState(store, { closed: true });
           if (organizationId === null) return;
           if (readFailed) {
-            // Nothing can be written without a version: the choice is not saved, and the assistant
-            // comes back once a saved draft reopens it on the workspace root.
+            // Nothing can be written without a version: the choice is not saved, and the host keeps
+            // `?onboarding=start`, so a reload reopens the assistant.
             showSkipFailed();
             return;
           }

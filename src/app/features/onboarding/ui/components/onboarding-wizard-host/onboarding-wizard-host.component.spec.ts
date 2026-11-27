@@ -509,7 +509,22 @@ describe('OnboardingWizardHost', () => {
     expect(wizard()).toBeNull();
   });
 
-  it('removes ?onboarding=start on Set up later after a failed read, with the failure toast', async () => {
+  /**
+   * Function reopen
+   *
+   * @description
+   * Renders a new host over the same address and onboarding store, as a reload does.
+   *
+   * @returns {Promise<ComponentFixture<OnboardingWizardHost>>} The new host.
+   */
+  async function reopen(): Promise<ComponentFixture<OnboardingWizardHost>> {
+    const again: ComponentFixture<OnboardingWizardHost> =
+      TestBed.createComponent(OnboardingWizardHost);
+    await settle(again);
+    return again;
+  }
+
+  it('keeps ?onboarding=start on Set up later after a failed read, so a reload reopens it', async () => {
     const { fixture, router, dismiss }: Harness = await render(
       '/atelier-nord?onboarding=start&notice=logo-upload-failed',
       null,
@@ -525,14 +540,18 @@ describe('OnboardingWizardHost', () => {
 
     expect(wizard()).toBeNull();
     expect(dismiss).not.toHaveBeenCalled();
-    expect(router.url).toBe('/atelier-nord?notice=logo-upload-failed');
+    expect(router.url).toBe('/atelier-nord?onboarding=start&notice=logo-upload-failed');
     const toasts: { error: Mock } = TestBed.inject(CwToastService) as unknown as { error: Mock };
     expect(toasts.error).toHaveBeenCalledWith('Your choice could not be saved', {
       description: 'The setup assistant may come back on your next visit.',
     });
+
+    fixture.destroy();
+    await reopen();
+    expect(wizard()).not.toBeNull();
   });
 
-  it('keeps ?onboarding=start while the read is in flight, then removes it once the read fails', async () => {
+  it('keeps ?onboarding=start when the read in flight fails after Set up later', async () => {
     let fail: (error: unknown) => void = (): void => undefined;
     const { fixture, router, dismiss }: Harness = await render(
       '/atelier-nord?onboarding=start',
@@ -554,11 +573,15 @@ describe('OnboardingWizardHost', () => {
     fail(new HttpErrorResponse({ status: 503 }));
     await settle(fixture);
 
-    expect(router.url).toBe('/atelier-nord');
+    expect(router.url).toBe('/atelier-nord?onboarding=start');
     const toasts: { error: Mock } = TestBed.inject(CwToastService) as unknown as { error: Mock };
     expect(toasts.error).toHaveBeenCalledWith('Your choice could not be saved', {
       description: 'The setup assistant may come back on your next visit.',
     });
+
+    fixture.destroy();
+    await reopen();
+    expect(wizard()).not.toBeNull();
   });
 
   it('removes ?onboarding=start once the read in flight succeeds and the dismissal is saved', async () => {
