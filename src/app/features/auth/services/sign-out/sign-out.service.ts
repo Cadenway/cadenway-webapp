@@ -78,9 +78,24 @@ export class SignOut {
     } catch {
       return false;
     }
+    await this.leaveLocally();
+    return true;
+  }
+
+  /**
+   * Method leaveLocally
+   *
+   * @description
+   * Does on this device what `run()` does once the session is closed, without asking the gateway:
+   * forgets the person's device data listed in `PERSONAL_STORAGE_PREFIXES`, then opens the
+   * signed-out screen with a replacing navigation. For a caller whose session the gateway already
+   * ended (Account, once the account's deletion is scheduled and the sign-out request failed).
+   *
+   * @returns {Promise<void>} Resolves once the navigation to the signed-out screen settled.
+   */
+  public async leaveLocally(): Promise<void> {
     this.forgetPersonalData();
     await this.router.navigateByUrl('/logged-out?reason=signed-out', { replaceUrl: true });
-    return true;
   }
 
   /**
