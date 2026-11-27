@@ -65,8 +65,9 @@ export interface CardOrganization {
  * other organizations requiring it. While a requirement is listed, `Turn off` is disabled and
  * described by that line, since the gateway refuses it. When on, three rows: the authenticator
  * app (`Configured on …`, ` · primary method` when it is) with `Reconfigure`; the security keys
- * (their count and names, the list with `Remove`, and `Add a key`), left out when this browser
- * has no WebAuthn (`keysSupported`); the backup codes left with `Generate new codes`. When off, a
+ * (their count and names, the list with `Remove`, and `Add a key`); without WebAuthn
+ * (`keysSupported`) only `Add a key` is left out, so registered keys can still be removed, and the
+ * row shows only when keys exist; the backup codes left with `Generate new codes`. When off, a
  * grenat alert says only a password protects the account, and asks to set it up now when the
  * workspace organization requires it. The button of the write under way (`busy`) spins and the
  * others are disabled meanwhile. It only emits.

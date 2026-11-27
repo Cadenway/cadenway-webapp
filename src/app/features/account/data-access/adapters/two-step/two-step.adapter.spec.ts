@@ -43,7 +43,7 @@ describe('two-step adapter', () => {
       appIsPrimary: true,
       appConfiguredAt: '2026-03-03T09:00:00Z',
       securityKeys: ENABLED.securityKeys,
-      backupCodes: { remaining: 7, total: 10 },
+      backupCodes: { remaining: 7, total: 10, generatedAt: '2026-03-03T09:00:00Z' },
       requiredBy: [
         { organizationId: 'org-nord', requiredFor: 'admins' },
         { organizationId: 'org-sud', requiredFor: 'unknown' },

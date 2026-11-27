@@ -125,6 +125,17 @@ export interface BackupCodesSummary {
    * @readonly
    */
   readonly total: number;
+
+  /**
+   * Property generatedAt
+   *
+   * @description
+   * When they were generated (ISO 8601); a newer date means they were replaced.
+   *
+   * @type {string}
+   * @readonly
+   */
+  readonly generatedAt: string;
   // #endregion
 }
 

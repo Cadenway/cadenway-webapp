@@ -1,7 +1,9 @@
+import { Dialog, type DialogRef } from '@angular/cdk/dialog';
 import { DatePipe, DOCUMENT, formatDate } from '@angular/common';
 import {
   Component,
   computed,
+  ElementRef,
   inject,
   LOCALE_ID,
   type Signal,
@@ -21,6 +23,7 @@ import { CwCard, CwCardContent } from '@cadenway/ui/components/card';
 import { CwSkeleton } from '@cadenway/ui/components/skeleton';
 import { CwToastService } from '@cadenway/ui/components/toast';
 import { NgIcon } from '@ng-icons/core';
+import { take } from 'rxjs';
 
 import {
   WORKSPACE_CONTEXT,
@@ -37,6 +40,7 @@ import type {
   RevokeOthersOutcome,
   SecurityAction,
   SecurityKeyAddOutcome,
+  SecurityOverview,
   SetupConfirmOutcome,
   SetupStartOutcome,
 } from '../../../models/two-step/security-overview.interface';
@@ -363,6 +367,50 @@ export class SecurityPage implements UnsavedChanges {
     const action: SecurityAction | null = this.store.busy();
     return action !== null && CONFIRMED_ACTIONS.has(action);
   });
+
+  /**
+   * Property dialogs
+   *
+   * @description
+   * The CDK dialogs under `cw-alert-dialog`, watched to learn when the confirmation has closed and
+   * given focus back, since the brick reports no such moment.
+   *
+   * @type {Dialog}
+   * @readonly
+   */
+  private readonly dialogs: Dialog = inject(Dialog);
+
+  /**
+   * Property host
+   *
+   * @description
+   * The page's element, where focus moves after a removal.
+   *
+   * @type {ElementRef<HTMLElement>}
+   * @readonly
+   */
+  private readonly host: ElementRef<HTMLElement> = inject<ElementRef<HTMLElement>>(ElementRef);
+
+  /**
+   * Property confirmRef
+   *
+   * @description
+   * The open confirmation, or null.
+   *
+   * @type {DialogRef | null}
+   */
+  private confirmRef: DialogRef | null = null;
+
+  /**
+   * Property codesDelivery
+   *
+   * @description
+   * The page's own generation or confirmation in progress, which may bring backup codes to show
+   * once; leaving waits for it once its write is settled.
+   *
+   * @type {Promise<void> | null}
+   */
+  private codesDelivery: Promise<void> | null = null;
   // #endregion
 
   // #region Constructor
@@ -384,24 +432,35 @@ export class SecurityPage implements UnsavedChanges {
    * Method hasUnsavedChanges
    *
    * @description
-   * Whether leaving now could lose something: a write on its way, or backup codes shown once.
+   * Whether leaving now could lose something: a write on its way, a generation or confirmation
+   * that may bring backup codes, or backup codes shown once.
    *
    * @returns {boolean} Whether to hold the navigation.
    */
   public hasUnsavedChanges(): boolean {
-    return this.store.sending() || this.setupCodes() !== null || this.backupCodes() !== null;
+    return (
+      this.store.sending() ||
+      this.codesDelivery !== null ||
+      this.setupCodes() !== null ||
+      this.backupCodes() !== null
+    );
   }
 
   /**
    * Method confirmDiscard
    *
    * @description
-   * Waits for the write on its way, then lets the person leave unless backup codes show.
+   * Waits for the write on its way, then for the page to receive what it brought: backup codes
+   * reach the page only after the store settled the write. It then lets the person leave unless
+   * backup codes show. A write that waits only for the reauthentication dialog sent nothing; it
+   * is not waited for, and leaving abandons it.
    *
    * @returns {Promise<boolean>} Whether to leave.
    */
   public async confirmDiscard(): Promise<boolean> {
-    await this.store.sent();
+    if (this.store.sending()) await this.store.sent();
+    const delivery: Promise<void> | null = this.codesDelivery;
+    if (delivery !== null && this.store.busy() === null) await delivery;
     return this.setupCodes() === null && this.backupCodes() === null;
   }
 
@@ -460,6 +519,15 @@ export class SecurityPage implements UnsavedChanges {
       case 'locked':
         this.passwordFailure.set(outcome);
         return;
+      case 'unconfirmed':
+        this.passwordOpen.set(false);
+        this.toasts.warning(
+          $localize`:@@account.security.password-unconfirmed:The password change could not be confirmed`,
+          {
+            description: $localize`:@@account.security.password-unconfirmed-text:Reload the page to see whether your password changed before you try again.`,
+          },
+        );
+        return;
       case 'failed':
         this.toasts.error(
           $localize`:@@account.security.password-failed:Could not change the password`,
@@ -503,9 +571,23 @@ export class SecurityPage implements UnsavedChanges {
    * @param {string} code - The 6 digits.
    * @returns {Promise<void>} Resolves once settled.
    */
-  protected async confirmCode(code: string): Promise<void> {
-    this.setupCodeFailure.set(false);
-    const outcome: SetupConfirmOutcome = await this.store.confirmSetup(code);
+  protected confirmCode(code: string): Promise<void> {
+    return this.deliverCodes(async (): Promise<void> => {
+      this.setupCodeFailure.set(false);
+      this.confirmed(await this.store.confirmSetup(code));
+    });
+  }
+
+  /**
+   * Method confirmed
+   *
+   * @description
+   * Shows how the setup's code ended. A lost answer that turned two-step verification on brought
+   * codes that were never shown: the dialog closes and a warning offers `Generate new codes`.
+   *
+   * @param {SetupConfirmOutcome} outcome - The outcome.
+   */
+  private confirmed(outcome: SetupConfirmOutcome): void {
     switch (outcome.kind) {
       case 'confirmed':
         if (outcome.backupCodes !== null) {
@@ -528,6 +610,25 @@ export class SecurityPage implements UnsavedChanges {
         this.toasts.error($localize`:@@account.security.setup-expired:The setup expired`, {
           description: $localize`:@@account.security.setup-expired-text:Start the setup again.`,
         });
+        return;
+      case 'enabled-without-codes':
+        this.setupOpen.set(false);
+        this.toasts.warning(
+          $localize`:@@account.security.two-step-enabled-unseen:Two-step verification is on`,
+          {
+            description: $localize`:@@account.security.two-step-enabled-unseen-text:Its backup codes could not be shown: generate new ones to keep a set offline.`,
+            action: this.generateAction(),
+          },
+        );
+        return;
+      case 'unconfirmed':
+        this.setupOpen.set(false);
+        this.toasts.warning(
+          $localize`:@@account.security.setup-unconfirmed:The setup could not be confirmed`,
+          {
+            description: $localize`:@@account.security.setup-unconfirmed-text:Reload the page to check it. If two-step verification is on, generate new backup codes.`,
+          },
+        );
         return;
       case 'failed':
         this.toasts.error(
@@ -652,17 +753,79 @@ export class SecurityPage implements UnsavedChanges {
    *
    * @returns {Promise<void>} Resolves once settled.
    */
-  protected async generateCodes(): Promise<void> {
-    const outcome: BackupCodesOutcome = await this.store.regenerateBackupCodes();
-    if (outcome.kind === 'generated') {
-      this.backupCodes.set(outcome.codes);
-      this.backupReplaced.set(outcome.replaced);
-      this.backupOpen.set(true);
-    } else if (outcome.kind === 'failed' || outcome.kind === 'not-enabled') {
-      this.toasts.error($localize`:@@account.security.codes-failed:Could not generate new codes`, {
-        description: this.tryAgain(),
-      });
-    }
+  protected generateCodes(): Promise<void> {
+    return this.deliverCodes(async (): Promise<void> => {
+      const outcome: BackupCodesOutcome = await this.store.regenerateBackupCodes();
+      switch (outcome.kind) {
+        case 'generated':
+          this.backupCodes.set(outcome.codes);
+          this.backupReplaced.set(outcome.replaced);
+          this.backupOpen.set(true);
+          return;
+        case 'codes-unseen':
+          this.toasts.warning(
+            $localize`:@@account.security.codes-unseen:New backup codes were not shown`,
+            {
+              description: $localize`:@@account.security.codes-unseen-text:Your previous codes no longer work: generate new ones to keep a set offline.`,
+              action: this.generateAction(),
+            },
+          );
+          return;
+        case 'unconfirmed':
+          this.toasts.warning(
+            $localize`:@@account.security.codes-unconfirmed:Your backup codes may have changed`,
+            {
+              description: $localize`:@@account.security.codes-unconfirmed-text:Generate new codes to be sure you keep a set that works.`,
+              action: this.generateAction(),
+            },
+          );
+          return;
+        case 'failed':
+        case 'not-enabled':
+          this.toasts.error(
+            $localize`:@@account.security.codes-failed:Could not generate new codes`,
+            { description: this.tryAgain() },
+          );
+          return;
+        default:
+          return;
+      }
+    });
+  }
+
+  /**
+   * Method generateAction
+   *
+   * @description
+   * The `Generate new codes` action of a warning about backup codes that were not shown.
+   *
+   * @returns {{ readonly label: string; readonly run: () => void }} The action.
+   */
+  private generateAction(): { readonly label: string; readonly run: () => void } {
+    return {
+      label: $localize`:@@account.security.backup-generate:Generate new codes`,
+      run: (): void => {
+        void this.generateCodes();
+      },
+    };
+  }
+
+  /**
+   * Method deliverCodes
+   *
+   * @description
+   * Runs a write that may bring backup codes and remembers it until it settled, so leaving the
+   * page waits for its codes to show.
+   *
+   * @param {() => Promise<void>} work - The write and what the page does with its outcome.
+   * @returns {Promise<void>} Resolves once settled.
+   */
+  private deliverCodes(work: () => Promise<void>): Promise<void> {
+    const delivery: Promise<void> = work().finally((): void => {
+      if (this.codesDelivery === delivery) this.codesDelivery = null;
+    });
+    this.codesDelivery = delivery;
+    return delivery;
   }
 
   /**
@@ -750,6 +913,10 @@ export class SecurityPage implements UnsavedChanges {
    */
   protected ask(confirmation: Confirmation): void {
     this.confirmation.set(confirmation);
+    this.confirmRef = null;
+    this.dialogs.afterOpened.pipe(take(1)).subscribe((ref: DialogRef): void => {
+      this.confirmRef = ref;
+    });
     this.confirmOpen.set(true);
   }
 
@@ -758,28 +925,94 @@ export class SecurityPage implements UnsavedChanges {
    *
    * @description
    * Runs the confirmed write, then closes the confirmation whatever the gateway answered, and
-   * toasts the result. A closed reauthentication dialog closes it silently.
+   * toasts the result. A closed reauthentication dialog closes it silently. Once a removed key or
+   * a revoked session left and the confirmation closed, focus moves to the action now at its
+   * place (or the one before it), otherwise to its card's header action (`Add a key`, or the
+   * card's own button; the sessions card's title when `Sign out the others` is disabled).
    *
    * @returns {Promise<void>} Resolves once settled.
    */
   protected async confirm(): Promise<void> {
     const confirmation: Confirmation | null = this.confirmation();
     if (confirmation === null) return;
+    const overview: SecurityOverview | undefined = this.store.overview();
+    let focus: (() => void) | null = null;
     switch (confirmation.kind) {
       case 'disable':
         this.disabled(await this.store.disable());
         break;
-      case 'remove-key':
-        this.removed(confirmation.key, await this.store.removeSecurityKey(confirmation.key));
+      case 'remove-key': {
+        const index: number = (overview?.twoStep.securityKeys ?? []).findIndex(
+          (key: SecurityKey): boolean => key.id === confirmation.key.id,
+        );
+        const outcome: RemovalOutcome = await this.store.removeSecurityKey(confirmation.key);
+        this.removed(confirmation.key, outcome);
+        if (outcome.kind === 'done') {
+          focus = (): void => {
+            this.focusAfter('remove-key', index, ['add-key', 'two-step-action']);
+          };
+        }
         break;
-      case 'revoke':
-        this.revoked(confirmation.session, await this.store.revokeSession(confirmation.session));
+      }
+      case 'revoke': {
+        const index: number = (overview?.sessions ?? [])
+          .filter((session: AccountSession): boolean => !session.current)
+          .findIndex((session: AccountSession): boolean => session.id === confirmation.session.id);
+        const outcome: RemovalOutcome = await this.store.revokeSession(confirmation.session);
+        this.revoked(confirmation.session, outcome);
+        if (outcome.kind === 'done') {
+          focus = (): void => {
+            this.focusAfter('revoke-session', index, ['sessions-revoke-others', 'sessions-title']);
+          };
+        }
         break;
-      case 'revoke-others':
-        this.revokedOthers(await this.store.revokeOtherSessions());
+      }
+      case 'revoke-others': {
+        const outcome: RevokeOthersOutcome = await this.store.revokeOtherSessions();
+        this.revokedOthers(outcome);
+        if (outcome.kind === 'done') {
+          focus = (): void => {
+            this.focusAfter('revoke-session', 0, ['sessions-revoke-others', 'sessions-title']);
+          };
+        }
         break;
+      }
     }
+    const ref: DialogRef | null = this.confirmRef;
+    if (focus !== null && ref !== null) ref.closed.pipe(take(1)).subscribe(focus);
     this.confirmOpen.set(false);
+  }
+
+  /**
+   * Method focusAfter
+   *
+   * @description
+   * Gives focus to the enabled action of a list at a place (or the last one before it), else to
+   * the first enabled fallback, in the page's own markup (`data-focus`).
+   *
+   * @param {string} action - The `data-focus` of the list's actions.
+   * @param {number} index - Where the removed row was.
+   * @param {readonly string[]} fallbacks - The `data-focus` of the fallbacks, in order.
+   */
+  private focusAfter(action: string, index: number, fallbacks: readonly string[]): void {
+    const root: HTMLElement = this.host.nativeElement;
+    const usable: (element: HTMLElement) => boolean = (element: HTMLElement): boolean =>
+      !(element instanceof HTMLButtonElement && element.disabled);
+    const actions: HTMLElement[] = [
+      ...root.querySelectorAll<HTMLElement>(`[data-focus="${action}"]`),
+    ].filter(usable);
+    const target: HTMLElement | undefined =
+      actions.length > 0
+        ? actions[Math.min(Math.max(index, 0), actions.length - 1)]
+        : fallbacks
+            .map((name: string): HTMLElement | null =>
+              root.querySelector<HTMLElement>(`[data-focus="${name}"]`),
+            )
+            .find(
+              (element: HTMLElement | null): element is HTMLElement =>
+                element !== null && usable(element),
+            );
+    target?.focus();
   }
 
   /**
@@ -873,6 +1106,14 @@ export class SecurityPage implements UnsavedChanges {
    */
   private disabled(outcome: DisableOutcome): void {
     switch (outcome.kind) {
+      case 'unconfirmed':
+        this.toasts.warning(
+          $localize`:@@account.security.two-step-disable-unconfirmed:Turning off could not be confirmed`,
+          {
+            description: $localize`:@@account.security.two-step-disable-unconfirmed-text:Reload the page to see whether two-step verification is still on.`,
+          },
+        );
+        return;
       case 'disabled':
         this.toasts.success(
           $localize`:@@account.security.two-step-disabled:Two-step verification turned off`,

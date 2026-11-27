@@ -31,6 +31,7 @@
           [loading]="busy() === 'disable'"
           [attr.aria-describedby]="required ? 'security-two-step-required' : null"
           data-testid="two-step-disable"
+          data-focus="two-step-action"
           (click)="disableRequested.emit()"
           i18n="@@account.security.two-step-disable"
         >
@@ -45,6 +46,7 @@
           [disabled]="anyBusy && busy() !== 'setup'"
           [loading]="busy() === 'setup'"
           data-testid="two-step-enable"
+          data-focus="two-step-action"
           (click)="enableRequested.emit()"
           i18n="@@account.security.two-step-enable"
         >
@@ -130,7 +132,7 @@
           Reconfigure
         </button>
       </li>
-      @if (keysSupported()) {
+      @if (keysSupported() || state.securityKeys.length > 0) {
         <li
           class="flex flex-wrap items-center gap-3 border-b border-border py-3"
           data-testid="two-step-keys"
@@ -154,19 +156,22 @@
               }</span
             >
           </div>
-          <button
-            cwButton
-            type="button"
-            variant="outline"
-            size="sm"
-            [disabled]="anyBusy && busy() !== 'add-key'"
-            [loading]="busy() === 'add-key'"
-            data-testid="two-step-add-key"
-            (click)="addKeyRequested.emit()"
-          >
-            <ng-icon name="phosphorPlusBold" aria-hidden="true" />
-            <ng-container i18n="@@account.security.keys-add">Add a key</ng-container>
-          </button>
+          @if (keysSupported()) {
+            <button
+              cwButton
+              type="button"
+              variant="outline"
+              size="sm"
+              [disabled]="anyBusy && busy() !== 'add-key'"
+              [loading]="busy() === 'add-key'"
+              data-testid="two-step-add-key"
+              data-focus="add-key"
+              (click)="addKeyRequested.emit()"
+            >
+              <ng-icon name="phosphorPlusBold" aria-hidden="true" />
+              <ng-container i18n="@@account.security.keys-add">Add a key</ng-container>
+            </button>
+          }
           <cw-security-key-list
             class="w-full empty:hidden"
             [keys]="state.securityKeys"
@@ -204,9 +209,8 @@
           [loading]="busy() === 'backup-codes'"
           data-testid="two-step-backup-generate"
           (click)="backupCodesRequested.emit()"
-          i18n="@@account.security.backup-generate"
         >
-          Generate new codes
+          <ng-container i18n="@@account.security.backup-generate">Generate new codes</ng-container>
         </button>
       </li>
     </ul>

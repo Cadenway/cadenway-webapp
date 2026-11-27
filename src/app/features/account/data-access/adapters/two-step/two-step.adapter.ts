@@ -62,7 +62,11 @@ export function toTwoStepOverview(dto: TwoStepVerificationDto): TwoStepOverview 
     backupCodes:
       dto.backupCodes === null
         ? null
-        : { remaining: dto.backupCodes.remaining, total: dto.backupCodes.total },
+        : {
+            remaining: dto.backupCodes.remaining,
+            total: dto.backupCodes.total,
+            generatedAt: dto.backupCodes.generatedAt,
+          },
     requiredBy: dto.requiredBy.map(toRequirement),
   };
 }

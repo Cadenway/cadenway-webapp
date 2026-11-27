@@ -30,8 +30,25 @@ const TWO_STEP_ON: TwoStepOverview = {
   securityKeys: [
     { id: 'k1', name: 'YubiKey 5C NFC', createdAt: '2026-03-04T09:00:00Z', lastUsedAt: null },
   ],
-  backupCodes: { remaining: 7, total: 10 },
+  backupCodes: { remaining: 7, total: 10, generatedAt: '2026-03-03T09:00:00Z' },
   requiredBy: [{ organizationId: 'org-nord', requiredFor: 'admins' }],
+};
+
+/**
+ * Constant TWO_STEP_OFF
+ *
+ * @description
+ * Two-step verification off and required by nobody.
+ *
+ * @type {TwoStepOverview}
+ */
+const TWO_STEP_OFF: TwoStepOverview = {
+  enabled: false,
+  appIsPrimary: false,
+  appConfiguredAt: null,
+  securityKeys: [],
+  backupCodes: null,
+  requiredBy: [],
 };
 
 /**
@@ -354,7 +371,11 @@ describe('SecurityStore', () => {
       codes: CODES,
       replaced: 7,
     });
-    expect(instance.overview()?.twoStep.backupCodes).toEqual({ remaining: 10, total: 10 });
+    expect(instance.overview()?.twoStep.backupCodes).toEqual({
+      remaining: 10,
+      total: 10,
+      generatedAt: '2026-11-08T09:00:00Z',
+    });
   });
 
   it('registers a key through the browser prompt', async () => {
@@ -390,5 +411,119 @@ describe('SecurityStore', () => {
     await expect(instance.removeSecurityKey(key)).resolves.toEqual({ kind: 'done' });
     expect(api['removeSecurityKey']).toHaveBeenCalledWith('u-camille', 'k1');
     expect(instance.overview()?.twoStep.securityKeys).toEqual([]);
+  });
+
+  describe('when the answer of a write is lost', () => {
+    /**
+     * Constant LOST
+     *
+     * @description
+     * An answer that never arrived (no status).
+     *
+     * @type {HttpErrorResponse}
+     */
+    const LOST: HttpErrorResponse = new HttpErrorResponse({ status: 0 });
+
+    it('counts a password change as saved when the date read again is newer, and never resends it', async () => {
+      const instance: InstanceType<typeof SecurityStore> = await store();
+      api['changePassword'].mockRejectedValueOnce(LOST);
+      api['overview'].mockResolvedValueOnce({
+        ...OVERVIEW,
+        passwordChangedAt: '2026-11-08T10:00:00Z',
+      });
+      await expect(instance.changePassword('old secret', 'a new long secret')).resolves.toEqual({
+        kind: 'saved',
+      });
+      expect(api['changePassword']).toHaveBeenCalledOnce();
+      expect(instance.overview()?.passwordChangedAt).toBe('2026-11-08T10:00:00Z');
+    });
+
+    it('counts a password change as failed when the date read again is the same', async () => {
+      const instance: InstanceType<typeof SecurityStore> = await store();
+      api['changePassword'].mockRejectedValueOnce(problem(503, 'gateway.unavailable'));
+      await expect(instance.changePassword('old secret', 'a new long secret')).resolves.toEqual({
+        kind: 'failed',
+      });
+      expect(api['changePassword']).toHaveBeenCalledOnce();
+    });
+
+    it('stays unconfirmed, outside the error boundary, when the read fails too', async () => {
+      const instance: InstanceType<typeof SecurityStore> = await store();
+      api['changePassword'].mockRejectedValueOnce(LOST);
+      api['overview'].mockRejectedValueOnce(LOST);
+      await expect(instance.changePassword('old secret', 'a new long secret')).resolves.toEqual({
+        kind: 'unconfirmed',
+      });
+      expect(instance.security.status()).toBe('resolved');
+      expect(instance.overview()?.passwordChangedAt).toBe('2026-08-12T09:00:00Z');
+    });
+
+    it('stays sending until the read again settled the write', async () => {
+      let finish: (value: SecurityOverview) => void = (): void => undefined;
+      const instance: InstanceType<typeof SecurityStore> = await store();
+      api['regenerateBackupCodes'].mockRejectedValueOnce(LOST);
+      api['overview'].mockReturnValueOnce(
+        new Promise<SecurityOverview>((resolve: (value: SecurityOverview) => void): void => {
+          finish = resolve;
+        }),
+      );
+      const pending: Promise<unknown> = instance.regenerateBackupCodes();
+      await vi.waitFor(() => {
+        expect(api['overview']).toHaveBeenCalledTimes(2);
+      });
+      expect(instance.sending()).toBe(true);
+      finish(OVERVIEW);
+      await expect(pending).resolves.toEqual({ kind: 'failed' });
+      expect(instance.sending()).toBe(false);
+    });
+
+    it('says codes went unseen when the generation date read again is newer', async () => {
+      const instance: InstanceType<typeof SecurityStore> = await store();
+      api['regenerateBackupCodes'].mockRejectedValueOnce(problem(502, 'gateway.unavailable'));
+      api['overview'].mockResolvedValueOnce({
+        ...OVERVIEW,
+        twoStep: {
+          ...TWO_STEP_ON,
+          backupCodes: { remaining: 10, total: 10, generatedAt: '2026-11-08T09:00:00Z' },
+        },
+      });
+      await expect(instance.regenerateBackupCodes()).resolves.toEqual({ kind: 'codes-unseen' });
+      expect(instance.overview()?.twoStep.backupCodes?.remaining).toBe(10);
+    });
+
+    it('says a setup turned two-step verification on without showing its codes', async () => {
+      api['overview'].mockResolvedValueOnce({ ...OVERVIEW, twoStep: TWO_STEP_OFF });
+      const instance: InstanceType<typeof SecurityStore> = await store();
+      api['confirmAuthenticatorSetup'].mockRejectedValueOnce(LOST);
+      api['overview'].mockResolvedValueOnce(OVERVIEW);
+      await expect(instance.confirmSetup('123456')).resolves.toEqual({
+        kind: 'enabled-without-codes',
+      });
+      expect(instance.overview()?.twoStep.enabled).toBe(true);
+    });
+
+    it('keeps a setup pending when two-step verification is still off', async () => {
+      api['overview'].mockResolvedValue({ ...OVERVIEW, twoStep: TWO_STEP_OFF });
+      const instance: InstanceType<typeof SecurityStore> = await store();
+      api['confirmAuthenticatorSetup'].mockRejectedValueOnce(problem(408, 'request.timeout'));
+      await expect(instance.confirmSetup('123456')).resolves.toEqual({ kind: 'failed' });
+    });
+
+    it('counts turning off as done when the read again shows it off', async () => {
+      const instance: InstanceType<typeof SecurityStore> = await store();
+      api['disableTwoStep'].mockRejectedValueOnce(LOST);
+      api['overview'].mockResolvedValueOnce({ ...OVERVIEW, twoStep: TWO_STEP_OFF });
+      await expect(instance.disable()).resolves.toEqual({ kind: 'disabled' });
+      expect(instance.overview()?.twoStep.enabled).toBe(false);
+    });
+
+    it('does not read again after a refusal', async () => {
+      const instance: InstanceType<typeof SecurityStore> = await store();
+      api['disableTwoStep'].mockRejectedValueOnce(
+        problem(409, 'auth.mfa-required-by-organization'),
+      );
+      await expect(instance.disable()).resolves.toEqual({ kind: 'required' });
+      expect(api['overview']).toHaveBeenCalledOnce();
+    });
   });
 });

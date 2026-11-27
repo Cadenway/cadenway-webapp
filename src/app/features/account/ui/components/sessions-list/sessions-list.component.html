@@ -2,6 +2,8 @@
   <cw-card-header>
     <h2
       id="security-sessions-title"
+      tabindex="-1"
+      data-focus="sessions-title"
       class="text-base leading-5 font-semibold"
       i18n="@@account.security.sessions-title"
     >
@@ -16,6 +18,7 @@
         [disabled]="!hasOthers() || (disabled() && !revokingOthers())"
         [loading]="revokingOthers()"
         data-testid="sessions-revoke-others"
+        data-focus="sessions-revoke-others"
         (click)="revokeOthersRequested.emit()"
         i18n="@@account.security.sessions-revoke-others"
       >
@@ -118,6 +121,7 @@
             [disabled]="disabled() && busyId() !== session.id"
             [loading]="busyId() === session.id"
             data-testid="session-revoke"
+            data-focus="revoke-session"
             (click)="revokeRequested.emit(session)"
             i18n="@@account.security.session-revoke"
           >

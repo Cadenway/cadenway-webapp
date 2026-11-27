@@ -104,14 +104,17 @@ export interface SecurityWriteEnd {
  * @description
  * How a password change ended. The refusals of the contract keep the dialog open on the field
  * they concern: `password-incorrect` (with the attempts left when known), `password-too-short`,
- * `password-compromised` and `locked` (too many failures).
+ * `password-compromised` and `locked` (too many failures). An answer that was lost (no status,
+ * `408`, `5xx`) is settled by reading the account again: a newer password date is `saved`, the
+ * same one `failed`, and `unconfirmed` when that read fails too. It is never sent again.
  *
- * @type {{ readonly kind: 'saved' } | { readonly kind: 'password-incorrect'; readonly remainingAttempts: number | null } | { readonly kind: 'password-too-short' | 'password-compromised' | 'locked' } | SecurityWriteEnd}
+ * @type {{ readonly kind: 'saved' } | { readonly kind: 'password-incorrect'; readonly remainingAttempts: number | null } | { readonly kind: 'password-too-short' | 'password-compromised' | 'locked' } | { readonly kind: 'unconfirmed' } | SecurityWriteEnd}
  */
 export type PasswordChangeOutcome =
   | { readonly kind: 'saved' }
   | { readonly kind: 'password-incorrect'; readonly remainingAttempts: number | null }
   | { readonly kind: 'password-too-short' | 'password-compromised' | 'locked' }
+  | { readonly kind: 'unconfirmed' }
   | SecurityWriteEnd;
 
 /**
@@ -131,13 +134,16 @@ export type SetupStartOutcome =
  * @description
  * How the confirmation of the app with one of its codes ended: `confirmed` with the first backup
  * codes (null for a reconfiguration), `code-invalid` (the setup stays pending) or `expired` (the
- * person starts again).
+ * person starts again). A lost answer is settled by reading the section again: two-step
+ * verification now on is `enabled-without-codes` (its codes were never shown), a new app date
+ * after a reconfiguration is `confirmed` without codes, nothing changed is `failed`, and
+ * `unconfirmed` when that read fails too.
  *
- * @type {{ readonly kind: 'confirmed'; readonly backupCodes: BackupCodeSet | null } | { readonly kind: 'code-invalid' | 'expired' } | SecurityWriteEnd}
+ * @type {{ readonly kind: 'confirmed'; readonly backupCodes: BackupCodeSet | null } | { readonly kind: 'code-invalid' | 'expired' | 'enabled-without-codes' | 'unconfirmed' } | SecurityWriteEnd}
  */
 export type SetupConfirmOutcome =
   | { readonly kind: 'confirmed'; readonly backupCodes: BackupCodeSet | null }
-  | { readonly kind: 'code-invalid' | 'expired' }
+  | { readonly kind: 'code-invalid' | 'expired' | 'enabled-without-codes' | 'unconfirmed' }
   | SecurityWriteEnd;
 
 /**
@@ -145,24 +151,29 @@ export type SetupConfirmOutcome =
  *
  * @description
  * How turning two-step verification off ended; `required` when an organization's policy still
- * requires it.
+ * requires it. A lost answer is settled by reading the section again: off is `disabled`, still on
+ * is `failed`, and `unconfirmed` when that read fails too.
  *
- * @type {{ readonly kind: 'disabled' | 'required' } | SecurityWriteEnd}
+ * @type {{ readonly kind: 'disabled' | 'required' | 'unconfirmed' } | SecurityWriteEnd}
  */
-export type DisableOutcome = { readonly kind: 'disabled' | 'required' } | SecurityWriteEnd;
+export type DisableOutcome =
+  { readonly kind: 'disabled' | 'required' | 'unconfirmed' } | SecurityWriteEnd;
 
 /**
  * Type BackupCodesOutcome
  *
  * @description
  * How the generation of new backup codes ended: `generated` with the codes to show once and how
- * many unused codes they replaced, or `not-enabled` when two-step verification is off.
+ * many unused codes they replaced, or `not-enabled` when two-step verification is off. A lost
+ * answer is settled by reading the section again: a newer generation date is `codes-unseen` (the
+ * previous codes stopped working and the new ones were never shown), the same one `failed`, and
+ * `unconfirmed` when that read fails too (the codes may have changed).
  *
- * @type {{ readonly kind: 'generated'; readonly codes: BackupCodeSet; readonly replaced: number } | { readonly kind: 'not-enabled' } | SecurityWriteEnd}
+ * @type {{ readonly kind: 'generated'; readonly codes: BackupCodeSet; readonly replaced: number } | { readonly kind: 'not-enabled' | 'codes-unseen' | 'unconfirmed' } | SecurityWriteEnd}
  */
 export type BackupCodesOutcome =
   | { readonly kind: 'generated'; readonly codes: BackupCodeSet; readonly replaced: number }
-  | { readonly kind: 'not-enabled' }
+  | { readonly kind: 'not-enabled' | 'codes-unseen' | 'unconfirmed' }
   | SecurityWriteEnd;
 
 /**

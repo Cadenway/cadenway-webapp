@@ -60,6 +60,7 @@ import type { SecurityKey } from '../../../models/two-step/two-step.interface';
               [disabled]="disabled() && busyId() !== key.id"
               [loading]="busyId() === key.id"
               data-testid="security-key-remove"
+              data-focus="remove-key"
               (click)="removeRequested.emit(key)"
             >
               <ng-container i18n="@@account.security.key-remove">Remove</ng-container>

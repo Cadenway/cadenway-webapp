@@ -58,7 +58,7 @@ const TWO_STEP_ON: TwoStepOverview = {
   securityKeys: [
     { id: 'k1', name: 'YubiKey 5C NFC', createdAt: '2026-03-04T09:00:00Z', lastUsedAt: null },
   ],
-  backupCodes: { remaining: 7, total: 10 },
+  backupCodes: { remaining: 7, total: 10, generatedAt: '2026-03-03T09:00:00Z' },
   requiredBy: [{ organizationId: 'org-nord', requiredFor: 'admins' }],
 };
 
@@ -163,7 +163,7 @@ function overview(twoStep: TwoStepOverview): SecurityOverview {
 describe('SecurityPage', () => {
   let api: Record<string, Mock>;
   let keys: { supported: Mock; create: Mock };
-  let toasts: { success: Mock; error: Mock };
+  let toasts: { success: Mock; error: Mock; warning: Mock };
   let writeText: Mock;
 
   /**
@@ -216,7 +216,7 @@ describe('SecurityPage', () => {
       disableTwoStep: vi.fn(() => Promise.resolve()),
     };
     keys = { supported: vi.fn(() => true), create: vi.fn() };
-    toasts = { success: vi.fn(), error: vi.fn() };
+    toasts = { success: vi.fn(), error: vi.fn(), warning: vi.fn() };
     writeText = vi.fn(() => Promise.resolve());
     Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
     configure();
@@ -351,8 +351,20 @@ describe('SecurityPage', () => {
     expect(view(harness).querySelector('[data-testid="boundary"]')).toBeNull();
   });
 
-  it('hides the security keys where the browser has no WebAuthn', async () => {
+  it('keeps the registered keys removable where the browser has no WebAuthn', async () => {
     keys.supported.mockReturnValue(false);
+    const harness: RouterTestingHarness = await open();
+
+    expect(text(byTestId('two-step-keys'))).toContain('1 key: YubiKey 5C NFC');
+    expect(view(harness).querySelector('[data-testid="two-step-add-key"]')).toBeNull();
+    expect(
+      view(harness).querySelector('[aria-label="Remove the key “YubiKey 5C NFC”"]'),
+    ).not.toBeNull();
+  });
+
+  it('leaves the keys out without WebAuthn when the account has none', async () => {
+    keys.supported.mockReturnValue(false);
+    api['overview'].mockResolvedValue(overview({ ...TWO_STEP_ON, securityKeys: [] }));
     const harness: RouterTestingHarness = await open();
 
     expect(view(harness).querySelector('[data-testid="two-step-keys"]')).toBeNull();
@@ -553,6 +565,35 @@ describe('SecurityPage', () => {
       description: 'Cadenway · iPhone 15 is signed out.',
     });
     expect(byTestId('sessions-revoke-others')?.hasAttribute('disabled')).toBe(true);
+    await vi.waitFor(async () => {
+      await harness.fixture.whenStable();
+      expect(document.querySelector('[role="alertdialog"]')).toBeNull();
+      expect(document.activeElement?.id).toBe('security-sessions-title');
+    });
+  });
+
+  it('gives focus to the Revoke now at the revoked row', async () => {
+    api['overview'].mockResolvedValue({
+      ...overview(TWO_STEP_ON),
+      sessions: [
+        ...SESSIONS,
+        { ...SESSIONS[1], id: 's3', device: 'Chrome 131 · macOS 15', ipAddress: '203.0.113.52' },
+      ],
+    });
+    const harness: RouterTestingHarness = await open();
+    view(harness)
+      .querySelector<HTMLButtonElement>('[aria-label="Revoke the session of Cadenway · iPhone 15"]')
+      ?.click();
+    await harness.fixture.whenStable();
+    byTestId('security-confirm-action')?.click();
+
+    await vi.waitFor(async () => {
+      await harness.fixture.whenStable();
+      expect(document.querySelector('[role="alertdialog"]')).toBeNull();
+      expect(document.activeElement?.getAttribute('aria-label')).toBe(
+        'Revoke the session of Chrome 131 · macOS 15',
+      );
+    });
   });
 
   it('asks for a key name, registers the key, then removes it once confirmed', async () => {
@@ -606,6 +647,200 @@ describe('SecurityPage', () => {
       expect(text(byTestId('two-step-keys'))).toContain('1 key: Touch ID (MacBook Air)');
     });
     expect(api['removeSecurityKey']).toHaveBeenCalledWith('u-camille', 'k1');
+    await vi.waitFor(async () => {
+      await harness.fixture.whenStable();
+      expect(document.querySelector('[role="alertdialog"]')).toBeNull();
+      expect(document.activeElement?.getAttribute('aria-label')).toBe(
+        'Remove the key “Touch ID (MacBook Air)”',
+      );
+    });
+  });
+
+  /**
+   * Function settleWrite
+   *
+   * @description
+   * A promise the test settles by hand, for a write left in flight.
+   *
+   * @returns {{ promise: Promise<T>; resolve: (value: T) => void; reject: (error: unknown) => void }} The promise and its settlers.
+   */
+  function settleWrite<T>(): {
+    promise: Promise<T>;
+    resolve: (value: T) => void;
+    reject: (error: unknown) => void;
+  } {
+    let resolve: (value: T) => void = (): void => undefined;
+    let reject: (error: unknown) => void = (): void => undefined;
+    const promise: Promise<T> = new Promise<T>(
+      (done: (value: T) => void, fail: (error: unknown) => void): void => {
+        resolve = done;
+        reject = fail;
+      },
+    );
+    return { promise, resolve, reject };
+  }
+
+  /**
+   * Function leave
+   *
+   * @description
+   * Starts a navigation away from the section and reports its result once it settles.
+   *
+   * @returns {{ result: () => boolean | null }} The navigation's result, null while pending.
+   */
+  function leave(): { result: () => boolean | null } {
+    let left: boolean | null = null;
+    void TestBed.inject(Router)
+      .navigateByUrl('/profile')
+      .then((value: boolean): void => {
+        left = value;
+      });
+    return { result: (): boolean | null => left };
+  }
+
+  it('refuses to leave while a regeneration brings codes, then shows them', async () => {
+    const write: ReturnType<typeof settleWrite<BackupCodeSet>> = settleWrite<BackupCodeSet>();
+    api['regenerateBackupCodes'].mockReturnValueOnce(write.promise);
+    const harness: RouterTestingHarness = await open();
+    byTestId('two-step-backup-generate')?.click();
+    await vi.waitFor(() => {
+      expect(api['regenerateBackupCodes']).toHaveBeenCalledOnce();
+    });
+
+    const navigation: { result: () => boolean | null } = leave();
+    await new Promise<void>((resolve: () => void): void => {
+      setTimeout(resolve, 50);
+    });
+    expect(navigation.result()).toBeNull();
+    write.resolve(CODES);
+
+    await vi.waitFor(() => {
+      expect(navigation.result()).toBe(false);
+    });
+    await vi.waitFor(async () => {
+      await harness.fixture.whenStable();
+      expect(text(dialog())).toContain('4F7K-2M9Q');
+    });
+    expect(document.querySelector('[data-testid="elsewhere"]')).toBeNull();
+  });
+
+  it('refuses to leave while a confirmation brings the first codes, then shows them', async () => {
+    api['overview'].mockResolvedValue(overview(TWO_STEP_OFF));
+    const write: ReturnType<typeof settleWrite<unknown>> = settleWrite<unknown>();
+    api['confirmAuthenticatorSetup'].mockReturnValueOnce(write.promise);
+    const harness: RouterTestingHarness = await open();
+    byTestId('two-step-enable')?.click();
+    await vi.waitFor(async () => {
+      await harness.fixture.whenStable();
+      expect(byTestId('setup-next')).not.toBeNull();
+    });
+    byTestId('setup-next')?.click();
+    await harness.fixture.whenStable();
+    type('#setup-code', '123456');
+    byTestId('setup-next')?.click();
+    await vi.waitFor(() => {
+      expect(api['confirmAuthenticatorSetup']).toHaveBeenCalledOnce();
+    });
+
+    const navigation: { result: () => boolean | null } = leave();
+    await new Promise<void>((resolve: () => void): void => {
+      setTimeout(resolve, 50);
+    });
+    expect(navigation.result()).toBeNull();
+    write.resolve({ twoStep: TWO_STEP_ON, backupCodes: CODES });
+
+    await vi.waitFor(() => {
+      expect(navigation.result()).toBe(false);
+    });
+    await vi.waitFor(async () => {
+      await harness.fixture.whenStable();
+      expect(text(byTestId('setup-codes'))).toContain('4F7K-2M9Q');
+    });
+  });
+
+  it('settles a lost password answer by reading again, without sending it twice', async () => {
+    const harness: RouterTestingHarness = await open();
+    api['changePassword'].mockRejectedValueOnce(new HttpErrorResponse({ status: 0 }));
+    api['overview'].mockResolvedValueOnce({
+      ...overview(TWO_STEP_ON),
+      passwordChangedAt: new Date().toISOString(),
+    });
+    byTestId('password-open')?.click();
+    await harness.fixture.whenStable();
+    type('#password-current', 'old secret');
+    type('#password-new', 'correct horse battery');
+    type('#password-confirm', 'correct horse battery');
+    byTestId('password-submit')?.click();
+
+    await vi.waitFor(async () => {
+      await harness.fixture.whenStable();
+      expect(dialog()).toBeNull();
+    });
+    expect(api['changePassword']).toHaveBeenCalledOnce();
+    expect(toasts.success).toHaveBeenCalledWith('Password changed', {
+      description: 'A confirmation email was just sent to camille.martin@atelier-nord.fr.',
+    });
+    expect(text(byTestId('password-changed'))).toMatch(/^Changed today, /u);
+    expect(view(harness).querySelector('[data-testid="boundary"]')).toBeNull();
+  });
+
+  it('closes the password dialog and warns when a lost answer cannot be checked', async () => {
+    const harness: RouterTestingHarness = await open();
+    api['changePassword'].mockRejectedValueOnce(new HttpErrorResponse({ status: 503 }));
+    api['overview'].mockRejectedValueOnce(new HttpErrorResponse({ status: 503 }));
+    byTestId('password-open')?.click();
+    await harness.fixture.whenStable();
+    type('#password-current', 'old secret');
+    type('#password-new', 'correct horse battery');
+    type('#password-confirm', 'correct horse battery');
+    byTestId('password-submit')?.click();
+
+    await vi.waitFor(async () => {
+      await harness.fixture.whenStable();
+      expect(dialog()).toBeNull();
+    });
+    expect(api['changePassword']).toHaveBeenCalledOnce();
+    expect(toasts.warning).toHaveBeenCalledWith('The password change could not be confirmed', {
+      description: 'Reload the page to see whether your password changed before you try again.',
+    });
+    expect(text(byTestId('password-changed'))).toBe('Changed on August 12, 2026.');
+    expect(view(harness).querySelector('[data-testid="boundary"]')).toBeNull();
+  });
+
+  it('warns when a lost regeneration replaced the codes, and offers new ones', async () => {
+    const harness: RouterTestingHarness = await open();
+    api['regenerateBackupCodes'].mockRejectedValueOnce(new HttpErrorResponse({ status: 504 }));
+    api['overview'].mockResolvedValueOnce(
+      overview({
+        ...TWO_STEP_ON,
+        backupCodes: { remaining: 10, total: 10, generatedAt: '2026-11-08T09:00:00Z' },
+      }),
+    );
+    byTestId('two-step-backup-generate')?.click();
+
+    await vi.waitFor(() => {
+      expect(toasts.warning).toHaveBeenCalledOnce();
+    });
+    const [title, options]: [
+      string,
+      { description: string; action: { label: string; run: () => void } },
+    ] = toasts.warning.mock.calls[0] as [
+      string,
+      { description: string; action: { label: string; run: () => void } },
+    ];
+    expect(title).toBe('New backup codes were not shown');
+    expect(options.description).toBe(
+      'Your previous codes no longer work: generate new ones to keep a set offline.',
+    );
+    expect(options.action.label).toBe('Generate new codes');
+    expect(dialog()).toBeNull();
+
+    options.action.run();
+    await vi.waitFor(async () => {
+      await harness.fixture.whenStable();
+      expect(text(dialog())).toContain('4F7K-2M9Q');
+    });
+    expect(api['regenerateBackupCodes']).toHaveBeenCalledTimes(2);
   });
 
   it('waits for a write on its way before leaving', async () => {
