@@ -43,7 +43,10 @@ its children matches falls through to the next application route.
 `.` exports `withSessionLock`, the cross-tab session lock that serializes organization switches with
 the session cookie, and `SignOut`, which closes the session under that lock and opens
 `/logged-out?reason=signed-out` with a replacing navigation (the account menu and the command
-palette use it; a refusal resolves `false` and leaves the page as it was).
+palette use it; a refusal resolves `false` and leaves the page as it was). `SignOut.leaveLocally()`
+does the same on the device without the request: it forgets the person's device data and opens the
+signed-out screen; Account calls it when the sign-out request fails after the account's deletion
+was scheduled, whose session the gateway already ended.
 
 ## Dependencies
 

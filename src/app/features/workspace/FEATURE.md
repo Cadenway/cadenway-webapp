@@ -74,7 +74,7 @@ belong to Auth.
 | `ports/workspace-context`           | home, errors, account, search, inbox, organization, spaces, task, my-tasks, dashboards, goals, docs |
 | `http/guards/organization-role`     | organization                                                                                        |
 | `ui/dialogs/discard-changes-dialog` | account, organization                                                                               |
-| `ports/workspace-refresh`           | organization                                                                                        |
+| `ports/workspace-refresh`           | organization, account                                                                               |
 
 `ports/workspace-context` publishes `WORKSPACE_CONTEXT` (`WorkspaceContextPort`: `user`,
 `organization`, `role` and `can(role)`) and the `WorkspaceUser`, `WorkspaceOrganization` and

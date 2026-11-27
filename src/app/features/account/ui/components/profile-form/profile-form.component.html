@@ -1,0 +1,205 @@
+<form class="contents" novalidate (submit)="submit($event)">
+  <cw-card-content class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+    <div class="flex flex-col gap-2">
+      <label
+        for="profile-name"
+        class="flex items-center gap-2 text-sm leading-none font-medium select-none"
+        i18n="@@account.profile.name"
+        >Full name</label
+      >
+      <input
+        cwInput
+        id="profile-name"
+        type="text"
+        autocomplete="name"
+        data-testid="profile-name"
+        [formField]="form().name"
+        [attr.aria-describedby]="shown(form().name) ? 'profile-name-error' : null"
+      />
+      @if (shown(form().name)) {
+        <p
+          id="profile-name-error"
+          role="alert"
+          class="flex items-center gap-1 text-xs font-medium text-destructive"
+          data-testid="profile-name-error"
+        >
+          <ng-icon name="phosphorWarningCircleFill" class="size-3.5 shrink-0" aria-hidden="true" />
+          {{ form().name().errors()[0]?.message }}
+        </p>
+      }
+    </div>
+
+    <div class="flex flex-col gap-2">
+      <label
+        for="profile-display-name"
+        class="flex items-center gap-2 text-sm leading-none font-medium select-none"
+        i18n="@@account.profile.display-name"
+        >Display name</label
+      >
+      <input
+        cwInput
+        id="profile-display-name"
+        type="text"
+        autocomplete="nickname"
+        data-testid="profile-display-name"
+        [formField]="form().displayName"
+        [attr.aria-describedby]="
+          shown(form().displayName)
+            ? 'profile-display-name-error profile-display-name-help'
+            : 'profile-display-name-help'
+        "
+      />
+      <p
+        id="profile-display-name-help"
+        class="text-xs text-muted-foreground"
+        data-testid="profile-display-name-help"
+        i18n="@@account.profile.display-name-help"
+      >
+        Used for mentions: &#64;{{ mention() }}
+      </p>
+      @if (shown(form().displayName)) {
+        <p
+          id="profile-display-name-error"
+          role="alert"
+          class="flex items-center gap-1 text-xs font-medium text-destructive"
+          data-testid="profile-display-name-error"
+        >
+          <ng-icon name="phosphorWarningCircleFill" class="size-3.5 shrink-0" aria-hidden="true" />
+          {{ form().displayName().errors()[0]?.message }}
+        </p>
+      }
+    </div>
+
+    <div class="flex flex-col gap-2 sm:col-span-2">
+      <label
+        for="profile-email"
+        class="flex items-center gap-2 text-sm leading-none font-medium select-none"
+        i18n="@@account.profile.email"
+        >Email address</label
+      >
+      <div class="flex flex-wrap items-center gap-2">
+        <cw-input-group class="min-w-0 flex-1 bg-muted">
+          <input
+            cwInputGroupInput
+            id="profile-email"
+            type="email"
+            readonly
+            data-testid="profile-email"
+            [value]="email()"
+          />
+          <cw-input-group-addon align="inline-end">
+            <span class="inline-flex items-center gap-1 text-xs font-medium text-jade-text">
+              <ng-icon name="phosphorCheckCircleFill" class="size-3.5" aria-hidden="true" />
+              <ng-container i18n="@@account.profile.email-verified">Verified</ng-container>
+            </span>
+          </cw-input-group-addon>
+        </cw-input-group>
+        <button
+          cwButton
+          variant="outline"
+          type="button"
+          data-testid="profile-email-change"
+          [attr.aria-disabled]="saving() ? 'true' : null"
+          (click)="requestEmailChange()"
+          i18n="@@account.profile.email-change"
+        >
+          Change the address
+        </button>
+      </div>
+    </div>
+
+    <div class="flex flex-col gap-2">
+      <label
+        for="profile-job-title"
+        class="flex items-center gap-2 text-sm leading-none font-medium select-none"
+        ><span i18n="@@account.profile.job-title">Job title</span>&ngsp;
+        <span class="font-normal text-muted-foreground" i18n="@@account.profile.optional"
+          >(optional)</span
+        ></label
+      >
+      <input
+        cwInput
+        id="profile-job-title"
+        type="text"
+        autocomplete="organization-title"
+        data-testid="profile-job-title"
+        [formField]="form().jobTitle"
+        [attr.aria-describedby]="shown(form().jobTitle) ? 'profile-job-title-error' : null"
+      />
+      @if (shown(form().jobTitle)) {
+        <p
+          id="profile-job-title-error"
+          role="alert"
+          class="flex items-center gap-1 text-xs font-medium text-destructive"
+          data-testid="profile-job-title-error"
+        >
+          <ng-icon name="phosphorWarningCircleFill" class="size-3.5 shrink-0" aria-hidden="true" />
+          {{ form().jobTitle().errors()[0]?.message }}
+        </p>
+      }
+    </div>
+
+    <div class="flex flex-col gap-2">
+      <label
+        for="profile-time-zone"
+        class="flex items-center gap-2 text-sm leading-none font-medium select-none"
+        i18n="@@account.profile.time-zone"
+        >Time zone</label
+      >
+      <cw-combobox
+        data-testid="profile-time-zone"
+        [id]="'profile-time-zone'"
+        [formField]="form().timeZone"
+      >
+        @for (option of timeZones(); track option.value) {
+          <cw-combobox-option [value]="option.value">{{ option.label }}</cw-combobox-option>
+        }
+      </cw-combobox>
+      @if (shown(form().timeZone)) {
+        <p
+          role="alert"
+          class="flex items-center gap-1 text-xs font-medium text-destructive"
+          data-testid="profile-time-zone-error"
+        >
+          <ng-icon name="phosphorWarningCircleFill" class="size-3.5 shrink-0" aria-hidden="true" />
+          {{ form().timeZone().errors()[0]?.message }}
+        </p>
+      }
+    </div>
+  </cw-card-content>
+
+  <cw-card-footer class="flex-wrap">
+    @if (dirty()) {
+      <p
+        class="flex items-center gap-1.5 text-xs text-muted-foreground"
+        data-testid="profile-unsaved"
+      >
+        <span class="size-1.5 rounded-full bg-foreground" aria-hidden="true"></span>
+        <ng-container i18n="@@account.profile.unsaved">Unsaved changes</ng-container>
+      </p>
+    }
+    <div class="ml-auto flex items-center gap-2">
+      <button
+        cwButton
+        variant="outline"
+        type="button"
+        data-testid="profile-cancel"
+        [disabled]="!dirty() || saving()"
+        (click)="cancelled.emit()"
+        i18n="@@account.profile.cancel"
+      >
+        Cancel
+      </button>
+      <button
+        cwButton
+        type="submit"
+        data-testid="profile-save"
+        [disabled]="!dirty() || blocked()"
+        [loading]="saving()"
+        i18n="@@account.profile.save"
+      >
+        Save
+      </button>
+    </div>
+  </cw-card-footer>
+</form>
