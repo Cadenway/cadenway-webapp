@@ -141,7 +141,9 @@ export class ThemeService {
    * Method set
    *
    * @description
-   * Persists and applies a user preference.
+   * Persists and applies a user preference. The preference is stored even when the effective
+   * theme does not change (System chosen while its theme is shown), so a reload restores it;
+   * only the document update and its transition are skipped then.
    * @param {ThemePreference} preference - Preference to apply.
    * @param {{ readonly x: number; readonly y: number } | undefined} origin - Optional animation origin.
    */
@@ -151,15 +153,9 @@ export class ThemeService {
   ): void {
     const previous: ResolvedTheme = this.resolved();
     this.selected.set(preference);
+    this.persist(preference);
     if (this.resolved() === previous) return;
     const change: () => void = (): void => {
-      try {
-        if (preference === 'system')
-          this.document.defaultView?.localStorage.removeItem('cadenway-theme');
-        else this.document.defaultView?.localStorage.setItem('cadenway-theme', preference);
-      } catch {
-        /* Storage may be unavailable. */
-      }
       this.apply();
     };
     const view: Window | null = this.document.defaultView;
@@ -215,6 +211,22 @@ export class ThemeService {
       return value === 'light' || value === 'dark' ? value : 'system';
     } catch {
       return 'system';
+    }
+  }
+
+  /**
+   * Method persist
+   *
+   * @description
+   * Stores a preference on the device (`cadenway-theme`: `light`, `dark` or `system`),
+   * tolerating inaccessible storage. `read` takes any other value or none as System.
+   * @param {ThemePreference} preference - Preference to store.
+   */
+  private persist(preference: ThemePreference): void {
+    try {
+      this.document.defaultView?.localStorage.setItem('cadenway-theme', preference);
+    } catch {
+      /* Storage may be unavailable: the preference still applies to this load. */
     }
   }
 
