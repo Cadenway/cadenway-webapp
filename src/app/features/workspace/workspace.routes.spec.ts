@@ -353,6 +353,25 @@ describe('WORKSPACE_ROUTES', () => {
                 sprints: [],
                 lists: [],
               }),
+            getOnboarding: () =>
+              of({
+                version: 1,
+                wizard: {
+                  status: 'in-progress',
+                  step: 'space',
+                  preset: 'dev',
+                  name: null,
+                  prefix: null,
+                  color: 'violet',
+                },
+                provisioning: null,
+                checklist: {
+                  presentation: 'expanded',
+                  firstTaskCreated: false,
+                  invitationSent: false,
+                  boardTried: false,
+                },
+              }),
           },
         },
         {

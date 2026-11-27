@@ -189,6 +189,20 @@ export class OnboardingInviteField {
   );
 
   /**
+   * Property hasText
+   *
+   * @description
+   * Whether text is typed in the field and not added yet, so a host can enable its own submit
+   * button and commit it with `commitPending()`.
+   *
+   * @type {Signal<boolean>}
+   * @readonly
+   */
+  public readonly hasText: Signal<boolean> = computed(
+    (): boolean => this.model().email.trim() !== '',
+  );
+
+  /**
    * Property removeButtons
    *
    * @description
@@ -216,6 +230,28 @@ export class OnboardingInviteField {
 
   // #region Methods
   /**
+   * Method commitPending
+   *
+   * @description
+   * Commits the text still typed in the field, as `Add` does, for a host about to send the list
+   * (its own submit button): an empty field commits nothing; a valid address is added once and the
+   * field empties; an invalid one marks the field touched, which shows the error, and moves the
+   * focus to it. Synchronous, since the field's validation is. A disabled field commits nothing.
+   *
+   * @returns {boolean} Whether the host may send the list: false only for an invalid address.
+   */
+  public commitPending(): boolean {
+    if (this.disabled()) return true;
+    if (this.inviteForm.email().invalid()) {
+      this.inviteForm.email().markAsTouched();
+      this.inviteForm.email().focusBoundControl();
+      return false;
+    }
+    this.accept();
+    return true;
+  }
+
+  /**
    * Method add
    *
    * @description
@@ -230,15 +266,7 @@ export class OnboardingInviteField {
     if (this.disabled()) return;
     await submit(this.inviteForm, {
       action: (): Promise<undefined> => {
-        const email: string = this.model().email.trim();
-        if (email !== '') {
-          const key: string = email.toLowerCase();
-          if (!this.emails().some((added: string): boolean => added.toLowerCase() === key)) {
-            this.emails.update((added: readonly string[]): readonly string[] => [...added, email]);
-          }
-          this.model.set({ email: '' });
-        }
-        this.inviteForm().reset();
+        this.accept();
         this.inviteForm.email().focusBoundControl();
         return Promise.resolve(undefined);
       },
@@ -273,6 +301,25 @@ export class OnboardingInviteField {
       },
       { injector: this.injector },
     );
+  }
+
+  /**
+   * Method accept
+   *
+   * @description
+   * Adds the trimmed address, valid, once (compared without regard to case), then empties the
+   * field and makes it untouched again; an empty field adds nothing.
+   */
+  private accept(): void {
+    const email: string = this.model().email.trim();
+    if (email !== '') {
+      const key: string = email.toLowerCase();
+      if (!this.emails().some((added: string): boolean => added.toLowerCase() === key)) {
+        this.emails.update((added: readonly string[]): readonly string[] => [...added, email]);
+      }
+      this.model.set({ email: '' });
+    }
+    this.inviteForm().reset();
   }
 
   /**

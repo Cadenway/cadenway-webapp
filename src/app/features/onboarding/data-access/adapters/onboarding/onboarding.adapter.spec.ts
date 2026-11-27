@@ -108,7 +108,18 @@ describe('onboarding adapter', () => {
           { email: 'lea.bernard@ateliernord.fr', outcome: 'seat-limit', invitationId: null },
         ],
       }),
-    ).toEqual({ invited: 1, skipped: 2 });
+    ).toEqual({ invited: 1, skipped: 2, alreadyInvited: 0 });
+  });
+
+  it('counts the addresses already invited apart', () => {
+    expect(
+      toInvitationOutcome({
+        invitations: [
+          { email: 'ines.robert@ateliernord.fr', outcome: 'already-invited', invitationId: null },
+          { email: 'hugo.martin@ateliernord.fr', outcome: 'already-member', invitationId: null },
+        ],
+      }),
+    ).toEqual({ invited: 0, skipped: 2, alreadyInvited: 1 });
   });
 
   it('quotes the version as the precondition', () => {
