@@ -30,6 +30,9 @@ parent provides the English texts of `cw-password-strength` and `cw-input-otp` t
   loading, error or empty state yet.
 - A failed primary read of a section renders the default error boundary in the shell, titled
   `Could not load this section` by the mounting route's `data`.
+- `api-tokens` (package A5) replaces its stub: the page provides `ApiTokensStore` and reads the
+  person's tokens of the current organization, with the section skeleton while loading, the
+  route's error boundary for a failed read and `No active token` for an empty list.
 
 ## Public entry points
 
@@ -64,6 +67,9 @@ parent provides the English texts of `cw-password-strength` and `cw-input-otp` t
   `@core/api` (problem reader), `@core/realtime`, `@core/theme`, `@shared/unsaved-changes`.
 - `@cadenway/ui` (`app-rail`, `avatar`, `button`, `dialog`, `input`, `input-otp`, `menu`,
   `password-strength`, `toast`) and `@cadenway/icons`.
+- API tokens: `@cadenway/api-client` `ApiTokensService` (`listApiTokens`, `createApiToken`,
+  `revokeApiToken`) through `data-access/`, and `@cadenway/ui` `alert-dialog`, `badge`,
+  `checkbox`, `empty`, `field`, `input-group`, `select`, `skeleton` and `table`.
 
 ## Invariants
 
@@ -98,6 +104,16 @@ parent provides the English texts of `cw-password-strength` and `cw-input-otp` t
 - `profile` keeps unsaved edits through `unsavedChangesGuard`; its page asks with Workspace's
   `cw-discard-changes-dialog`. The stub has no form, so it never asks yet; package A1 reports its
   form's dirty state.
+- API tokens: the list follows the cursor and is read again after an organization switch; the
+  store then keeps it in step with its own writes, so a write never sends the page to the error
+  boundary. `Create the token` stays enabled while the form is invalid (blank name, more than 100
+  characters, no scope) and runs through `ReauthenticationService.run`; a closed reauthentication
+  dialog creates nothing and shows nothing. The secret is held only in the store's memory, shown
+  once read-only with `Copy the token`, never logged, persisted or put in a toast, and cleared
+  when the dialog closes; in that step a backdrop click does not close the dialog. `Revoke` asks
+  through `cw-alert-dialog`, typing the token's name; a `404` counts as revoked. Expiries within
+  7 days show in grenat. Below 768 px the table becomes cards. Known gap: the API usage strip
+  (`Compte.dc.html` lines 535-540) is hidden until billing counts API calls (B15).
 - Known gap: the mockup's `Set a status message` item and the status message under the header are left out,
   since the backend has no status message yet.
 
@@ -111,4 +127,8 @@ parent provides the English texts of `cw-password-strength` and `cw-input-otp` t
 | `account.user-menu.sign-out-failed`, `account.user-menu.sign-out-failed-text`                                                                                                                                     | The mockup draws no refused sign-out.                                                          |
 | `account.reauthentication.*`                                                                                                                                                                                      | The mockup draws no reauthentication dialog (`auth.yaml` "Recent authentication").             |
 | `account.labels.*`                                                                                                                                                                                                | Texts of the password strength and one-time code bricks, worded as Auth's.                     |
+| `account.api-tokens.name-required`, `account.api-tokens.name-too-long`, `account.api-tokens.scopes-required`                                                                                                      | The mockup disables `Create the token` instead of showing field errors.                        |
+| `account.api-tokens.create-failed`, `account.api-tokens.create-failed-text`, `account.api-tokens.revoke-failed`, `account.api-tokens.revoke-failed-text`                                                          | The mockup draws no refused creation or revocation.                                            |
+| `account.api-tokens.revoke-label`                                                                                                                                                                                 | Accessible name of each row's `Revoke`, naming its token.                                      |
+| `account.api-tokens.used-days`, `account.api-tokens.expires-days`, `account.api-tokens.used-minutes`, `account.api-tokens.used-hours`                                                                             | The mockup shows fixed samples; the singular and generic forms follow its wording.             |
 | `account.user-menu.avatar-unknown`, `account.user-menu.avatar-online`, `account.user-menu.avatar-away`, `account.user-menu.avatar-dnd`, `account.user-menu.avatar-invisible`, `account.user-menu.avatar-disabled` | Texts of the avatar brick, taken from its defaults.                                            |
