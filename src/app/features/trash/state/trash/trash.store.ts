@@ -35,6 +35,7 @@ import {
   TRASH_EMPTIED,
   TRASH_EMPTY_FAILED,
   TRASH_FORMER_MEMBER,
+  TRASH_MORE_FAILED,
   TRASH_NOT_READY_TEXT,
   TRASH_PURGED_TEXT,
   TRASH_TOAST_OPEN,
@@ -54,6 +55,7 @@ import {
   isTrashEntryNotReady,
   isTrashWriteNotSent,
   isUncertainTrashWrite,
+  TRASH_READ_DEPTH,
   TrashApi,
 } from '../../data-access/services/trash-api/trash-api.service';
 import type { TrashEntry } from '../../models/trash-entry/trash-entry.interface';
@@ -136,6 +138,17 @@ interface TrashSnapshot {
    * @readonly
    */
   readonly total: number;
+
+  /**
+   * Property nextCursor
+   *
+   * @description
+   * Where `Show more` continues the read, or null when it listed the whole trash.
+   *
+   * @type {string | null}
+   * @readonly
+   */
+  readonly nextCursor: string | null;
   // #endregion
 }
 
@@ -300,6 +313,29 @@ interface TrashState {
    * @readonly
    */
   readonly _emptying: boolean;
+
+  /**
+   * Property _loadingMore
+   *
+   * @description
+   * Whether a `Show more` read is in flight.
+   *
+   * @type {boolean}
+   * @readonly
+   */
+  readonly _loadingMore: boolean;
+
+  /**
+   * Property _depth
+   *
+   * @description
+   * Entries the person asked to see with `Show more`, or 0: every read of the store's own lists
+   * at least that deep, so a background read never takes back what `Show more` listed.
+   *
+   * @type {number}
+   * @readonly
+   */
+  readonly _depth: number;
   // #endregion
 }
 
@@ -349,7 +385,7 @@ export interface TrashStoreInstance {
    * Property hiddenCount
    *
    * @description
-   * Entries in the trash past the read's cap, which the page does not list.
+   * Entries in the trash past those listed, which `Show more` reads.
    *
    * @type {Signal<number>}
    * @readonly
@@ -400,9 +436,44 @@ export interface TrashStoreInstance {
    * @readonly
    */
   readonly writing: Signal<boolean>;
+
+  /**
+   * Property hasMore
+   *
+   * @description
+   * Whether `Show more` can read entries past those listed.
+   *
+   * @type {Signal<boolean>}
+   * @readonly
+   */
+  readonly hasMore: Signal<boolean>;
+
+  /**
+   * Property loadingMore
+   *
+   * @description
+   * Whether a `Show more` read is in flight.
+   *
+   * @type {Signal<boolean>}
+   * @readonly
+   */
+  readonly loadingMore: Signal<boolean>;
   // #endregion
 
   // #region Methods
+  /**
+   * Method showMore
+   *
+   * @description
+   * Reads up to 1,000 more entries from where the shown read stopped and lists them after the
+   * others. Ignored while one runs. Dropped when the organization changes meanwhile, or when a
+   * newer read replaced the one it continues (which then lists at least as deep); a failure toasts
+   * `The next items could not be loaded.`.
+   *
+   * @returns {Promise<void>} Settles once the entries are listed or the failure shown.
+   */
+  showMore(): Promise<void>;
+
   /**
    * Method isPending
    *
@@ -469,6 +540,8 @@ const initialState: TrashState = {
   _emptiedAt: -1,
   _pending: {},
   _emptying: false,
+  _loadingMore: false,
+  _depth: 0,
 };
 
 /**
@@ -598,6 +671,7 @@ function createTrashStore(): Type<TrashStoreInstance> {
               readAt: Date.now(),
               entries: listing.entries,
               total: listing.total,
+              nextCursor: listing.nextCursor,
             };
           },
         }),
@@ -616,7 +690,7 @@ function createTrashStore(): Type<TrashStoreInstance> {
         let newest: TrashSnapshot | undefined;
         for (const candidate of [primary, latest]) {
           if (candidate?.organizationId !== organizationId || candidate.epoch !== epoch) continue;
-          if (!newest || candidate.seq > newest.seq) newest = candidate;
+          if (!newest || candidate.seq >= newest.seq) newest = candidate;
         }
         return newest;
       });
@@ -647,6 +721,9 @@ function createTrashStore(): Type<TrashStoreInstance> {
       };
       return {
         _visible: visible,
+        _snapshot: snapshot,
+        hasMore: computed((): boolean => !emptied() && (snapshot()?.nextCursor ?? null) !== null),
+        loadingMore: computed((): boolean => store._loadingMore()),
         loading: computed((): boolean => visible() === undefined),
         count: computed((): number => (visible()?.length ?? 0) + hidden()),
         hiddenCount: hidden,
@@ -713,11 +790,31 @@ function createTrashStore(): Type<TrashStoreInstance> {
         store._reads.seq += 1;
         const seq: number = store._reads.seq;
         try {
+          // Refresh as deep as what is shown, and as deep as a `Show more` in flight asks.
+          const depth: number = Math.max(
+            TRASH_READ_DEPTH,
+            store._depth(),
+            store._snapshot()?.entries.length ?? 0,
+          );
           const listing: TrashListing = await store._api.entries({
             passive,
             signal: store._lane.controller.signal,
+            depth,
           });
           if (!current(epoch, organizationId)) return null;
+          if (listing.nextCursor !== null && depth < store._depth()) {
+            // A `Show more` asked for more while this read ran: read again, deep enough.
+            void read(passive);
+            return {
+              organizationId,
+              epoch,
+              seq,
+              readAt: Date.now(),
+              entries: listing.entries,
+              total: listing.total,
+              nextCursor: listing.nextCursor,
+            };
+          }
           const snapshot: TrashSnapshot = {
             organizationId,
             epoch,
@@ -725,6 +822,7 @@ function createTrashStore(): Type<TrashStoreInstance> {
             readAt: Date.now(),
             entries: listing.entries,
             total: listing.total,
+            nextCursor: listing.nextCursor,
           };
           const latest: TrashSnapshot | null = store._latest();
           if (latest?.epoch !== epoch || latest.seq < seq) patchState(store, { _latest: snapshot });
@@ -804,6 +902,44 @@ function createTrashStore(): Type<TrashStoreInstance> {
       };
 
       return {
+        async showMore(): Promise<void> {
+          const organizationId: string | null = store._pin.current();
+          const base: TrashSnapshot | undefined = store._snapshot();
+          if (!organizationId || !base?.nextCursor || store._loadingMore()) return;
+          const epoch: number = store.epoch();
+          patchState(store, {
+            _loadingMore: true,
+            _depth: Math.max(store._depth(), base.entries.length) + TRASH_READ_DEPTH,
+          });
+          try {
+            const more: TrashListing = await store._api.entries({
+              cursor: base.nextCursor,
+              signal: store._lane.controller.signal,
+            });
+            if (!current(epoch, organizationId)) return;
+            // A newer read replaced the one this continues: it already reads as deep.
+            if (store._snapshot()?.seq !== base.seq) return;
+            const known: ReadonlySet<string> = new Set(
+              base.entries.map((entry: TrashEntry) => entry.id),
+            );
+            patchState(store, {
+              _latest: {
+                ...base,
+                entries: [
+                  ...base.entries,
+                  ...more.entries.filter((entry: TrashEntry) => !known.has(entry.id)),
+                ],
+                total: more.total,
+                nextCursor: more.nextCursor,
+              },
+            });
+          } catch {
+            if (current(epoch, organizationId)) show('error', TRASH_MORE_FAILED);
+          } finally {
+            if (current(epoch, organizationId)) patchState(store, { _loadingMore: false });
+          }
+        },
+
         isPending(entryId: string): boolean {
           return store._pending()[entryId] !== undefined;
         },
@@ -923,9 +1059,10 @@ function createTrashStore(): Type<TrashStoreInstance> {
           if (!organizationId || expected !== store.epoch() || store.writing()) return;
           const epoch: number = store.epoch();
           const shown: readonly TrashEntry[] = store._visible() ?? [];
+          const known: number = store.count();
           patchState(store, { _emptying: true });
           let outcome: WriteOutcome;
-          let count: number = shown.length;
+          let count: number = known;
           try {
             count = await store._api.empty();
             outcome = 'done';
@@ -948,19 +1085,17 @@ function createTrashStore(): Type<TrashStoreInstance> {
             return;
           }
           if (outcome === 'unknown') {
-            // With nothing shown to look for, only an empty trash proves the emptying.
+            // Only an empty trash proves the emptying: a partial listing without the entries shown
+            // may still hold others, and entries past the cap are never listed.
             const verdict: Verdict = await reconcile(
-              (snapshot: TrashSnapshot) =>
-                shown.length === 0
-                  ? snapshot.total === 0
-                  : shown.every((entry: TrashEntry) => !listed(snapshot, entry)),
+              (snapshot: TrashSnapshot) => snapshot.total === 0,
               epoch,
               organizationId,
             );
             if (verdict === null) return;
             patchState(store, { _emptying: false });
             if (verdict === 'applied') {
-              show('success', TRASH_EMPTIED, { description: trashEmptiedText(shown.length) });
+              show('success', TRASH_EMPTIED, { description: trashEmptiedText(known) });
               store._navigation?.refreshCounts();
             } else unconfirmed();
             return;
@@ -1018,21 +1153,23 @@ function createTrashStore(): Type<TrashStoreInstance> {
  *
  * @description
  * The trash page of the current organization (`App.dc.html` lines 1965-1997 and 8371-8419),
- * page-scoped. Its primary read (`listTrash`, up to 1,000 entries) follows the pinned organization
- * and its epoch; its failure reaches the route's error boundary through `rows`, `count` and
- * `loading`. The member directory names who deleted each entry; its failure only leaves the names
- * out.
+ * page-scoped. Its primary read (`listTrash`, the first 1,000 entries) follows the pinned
+ * organization and its epoch; its failure reaches the route's error boundary through `rows`,
+ * `count` and `loading`. `showMore` lists the next 1,000 from the read's cursor. The member
+ * directory names who deleted each entry; its failure only leaves the names out.
  *
  * The store's own reads (on window focus, on realtime reconnection, when a task detail closes over
- * the page, after each write) run one at a time with one more queued, and abort on an organization
- * change and on destroy. Reads are ranked by start: a read never replaces one that started after
- * it, and a write confirmed by a success hides what an older read still shows.
+ * the page, after each write) run one at a time with one more queued, list as deep as what is
+ * shown, and abort on an organization change and on destroy. Reads are ranked by start: a read
+ * never replaces one that started after it, and a write confirmed by a success hides what an
+ * older read still shows.
  *
  * Each write is bound to the organization and the epoch it started in, on a live page: otherwise
  * its answer patches nothing and raises no toast. A write blocked by an organization switch is
  * dropped silently. A write without an answer (no status, a timeout, a `5xx`) keeps its entry
  * pending while the trash is read again after 2, 4 and 8 seconds: the expected absence gives a
- * neutral `KEY is no longer in the trash` (or `Trash emptied`), and no proof gives
+ * neutral `KEY is no longer in the trash` (or, for an emptying, `Trash emptied` once a read finds
+ * the trash empty), and no proof gives
  * `Could not confirm the change` and frees the entry. A `404` never hides an entry by itself: the
  * read that follows decides. A restore asks `reportNotReady`, so a list still being deleted
  * answers `KEY cannot be restored yet`. After a restore the sidebar reads its spaces and lists

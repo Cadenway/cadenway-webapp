@@ -321,12 +321,22 @@ export function trashNotReadyTitle(key: string): string {
  * Function trashCappedText
  *
  * @description
- * The notice under the rows when the trash holds more entries than a read lists.
+ * The notice under the rows when the trash holds more entries than are listed, above `Show more`.
  *
  * @param {number} shown - Entries listed.
  * @param {number} total - Entries in the trash.
  * @returns {string} The notice.
  */
 export function trashCappedText(shown: number, total: number): string {
-  return $localize`:@@trash.capped:Showing the ${shown}:shown: most recently deleted items of ${total}:total:. Restore or delete some to see the others.`;
+  return $localize`:@@trash.capped:Showing the ${shown}:shown: most recently deleted items of ${total}:total:.`;
 }
+
+/**
+ * Constant TRASH_MORE_FAILED
+ *
+ * @description
+ * The title of the toast when `Show more` cannot read the next entries.
+ *
+ * @type {string}
+ */
+export const TRASH_MORE_FAILED: string = $localize`:@@trash.toast.more-failed:The next items could not be loaded.`;

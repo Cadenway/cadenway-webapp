@@ -135,14 +135,19 @@ const SECOND: TrashEntry = entry({
  * Function listing
  *
  * @description
- * A complete read of the trash.
+ * A read of the trash, complete unless a cursor continues it.
  *
  * @param {readonly TrashEntry[]} entries - Its entries.
  * @param {number} total - Entries in the trash; the entry count by default.
+ * @param {string | null} nextCursor - Where the read continues, or null.
  * @returns {TrashListing} The read.
  */
-function listing(entries: readonly TrashEntry[], total: number = entries.length): TrashListing {
-  return { entries, total };
+function listing(
+  entries: readonly TrashEntry[],
+  total: number = entries.length,
+  nextCursor: string | null = null,
+): TrashListing {
+  return { entries, total, nextCursor };
 }
 
 /**
@@ -717,7 +722,114 @@ describe('TrashStore', () => {
     });
   });
 
+  describe('show more', () => {
+    /**
+     * Function many
+     *
+     * @description
+     * Entries `CAD-<from>` to `CAD-<from + count - 1>`, each deleted a minute before the previous.
+     *
+     * @param {number} from - First number.
+     * @param {number} count - How many.
+     * @returns {readonly TrashEntry[]} The entries.
+     */
+    function many(from: number, count: number): readonly TrashEntry[] {
+      return Array.from({ length: count }, (_: unknown, index: number) => {
+        const number: string = String(from + index);
+        return entry({
+          id: `entry-${number}`,
+          taskKey: `CAD-${number}`,
+          trashedAt: new Date(Date.UTC(2026, 10, 20) - (from + index) * 60_000).toISOString(),
+        });
+      });
+    }
+
+    it('reaches and restores an entry past the first 1,000', async () => {
+      const first: readonly TrashEntry[] = many(1, 1_000);
+      const deep: TrashEntry = many(1_001, 1)[0] ?? entry();
+      api.entries.mockResolvedValue(listing(first, 1_001, 'cursor-1000'));
+      const store: TrashStoreInstance = await loaded();
+      expect(store.hasMore()).toBe(true);
+      expect(store.hiddenCount()).toBe(1);
+      api.entries.mockResolvedValueOnce(listing([deep], 1_001));
+
+      await store.showMore();
+
+      expect(api.entries).toHaveBeenLastCalledWith(
+        expect.objectContaining({ cursor: 'cursor-1000' }),
+      );
+      expect(store.rows()).toHaveLength(1_001);
+      expect(store.hasMore()).toBe(false);
+      expect(store.hiddenCount()).toBe(0);
+      api.restore.mockResolvedValueOnce({ ...RESTORED, taskKey: deep.taskKey });
+      api.entries.mockResolvedValueOnce(listing(first, 1_000));
+
+      await store.restore(deep);
+
+      expect(api.restore).toHaveBeenCalledWith('entry-1001');
+      expect(keys(store)).not.toContain('CAD-1001');
+    });
+
+    it('reads again as deep as the entries shown', async () => {
+      api.entries.mockResolvedValue(listing(many(1, 1_000), 1_500, 'cursor-1000'));
+      const store: TrashStoreInstance = await loaded();
+      api.entries.mockResolvedValueOnce(listing(many(1_001, 500), 1_500));
+      await store.showMore();
+      api.entries.mockResolvedValue(listing(many(1, 1_500), 1_500));
+
+      window.dispatchEvent(new Event('focus'));
+      await flush();
+
+      const depth: number | undefined = (
+        api.entries.mock.lastCall?.[0] as { readonly depth?: number } | undefined
+      )?.depth;
+      expect(depth).toBeGreaterThanOrEqual(1_500);
+      expect(store.rows()).toHaveLength(1_500);
+    });
+
+    it('keeps what Show more listed when an older background read lands after it', async () => {
+      api.entries.mockResolvedValue(listing(many(1, 1_000), 1_200, 'cursor-1000'));
+      const store: TrashStoreInstance = await loaded();
+      const older: Deferred<TrashListing> = deferred<TrashListing>();
+      api.entries.mockReturnValueOnce(older.promise);
+      window.dispatchEvent(new Event('focus'));
+      api.entries.mockResolvedValueOnce(listing(many(1_001, 200), 1_200));
+
+      await store.showMore();
+      api.entries.mockResolvedValue(listing(many(1, 1_200), 1_200));
+      older.resolve(listing(many(1, 1_000), 1_200, 'cursor-1000'));
+      await flush();
+
+      expect(store.rows()).toHaveLength(1_200);
+    });
+
+    it('toasts a failed Show more and keeps the rows', async () => {
+      api.entries.mockResolvedValue(listing([entry(), SECOND], 1_100, 'cursor-2'));
+      const store: TrashStoreInstance = await loaded();
+      api.entries.mockRejectedValueOnce(problem(503));
+
+      await store.showMore();
+
+      expect(error).toHaveBeenCalledWith('The next items could not be loaded.');
+      expect(keys(store)).toEqual(['CAD-452', 'CAD-447']);
+      expect(store.loadingMore()).toBe(false);
+    });
+  });
+
   describe('empty', () => {
+    it('does not confirm an emptying without an answer on a read that still holds entries', async () => {
+      const store: TrashStoreInstance = await loaded();
+      api.empty.mockRejectedValueOnce(problem(504));
+      api.entries.mockResolvedValue(listing([entry({ id: 'entry-500', taskKey: 'CAD-500' })], 1));
+
+      await store.empty(store.epoch());
+
+      expect(success).not.toHaveBeenCalled();
+      expect(warning).toHaveBeenCalledWith('Could not confirm the change', {
+        description: 'Check the trash again in a moment.',
+      });
+    });
+
     it('empties the trash, even over an older read in flight', async () => {
       const store: TrashStoreInstance = await loaded();
       const older: Deferred<TrashListing> = deferred<TrashListing>();
@@ -801,7 +913,7 @@ describe('TrashStore', () => {
       api.entries.mockResolvedValue(listing([]));
       await store.empty(store.epoch());
       expect(success).toHaveBeenCalledWith('Trash emptied', {
-        description: '0 items erased for good.',
+        description: '3 items erased for good.',
       });
     });
   });

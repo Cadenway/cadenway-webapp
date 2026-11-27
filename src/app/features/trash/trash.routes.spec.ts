@@ -78,7 +78,7 @@ const ENTRIES: readonly TrashEntryDto[] = [
 ];
 
 describe('TRASH_ROUTES', () => {
-  let listTrash: Mock<() => Observable<TrashEntryPage>>;
+  let listTrash: Mock<(params?: { cursor?: string }) => Observable<TrashEntryPage>>;
   let purgeTrashEntry: Mock<(entryId: string) => Observable<void>>;
   let emptyTrash: Mock<() => Observable<{ entryCount: number }>>;
   let restoreTrashEntry: Mock<(entryId: string) => Observable<unknown>>;
@@ -343,13 +343,73 @@ describe('TRASH_ROUTES', () => {
     expect(emptyTrash).not.toHaveBeenCalled();
   });
 
+  it('keeps the h1 as the route focus target while the trash loads', async () => {
+    listTrash.mockReturnValue(NEVER);
+    const harness: RouterTestingHarness = await RouterTestingHarness.create();
+    await harness.navigateByUrl('/atelier-nord/trash');
+    harness.detectChanges();
+    const element: HTMLElement = harness.fixture.nativeElement as HTMLElement;
+
+    const heading: Element | null = element.querySelector('h1[data-route-focus]');
+    expect(text(heading)).toBe('Trash');
+    expect(element.querySelector('[data-testid="trash-loading"]')?.getAttribute('aria-label')).toBe(
+      'Loading the trash',
+    );
+    expect(element.querySelector('[data-testid="trash-summary"]')).toBeNull();
+  });
+
+  it('reaches and restores an entry past the first 1,000 with Show more', async () => {
+    const all: readonly TrashEntryDto[] = Array.from(
+      { length: 1_001 },
+      (_: unknown, index: number) =>
+        dto(`entry-${String(index + 1)}`, `CAD-${String(index + 1)}`, `Task ${String(index + 1)}`),
+    );
+    listTrash.mockImplementation((params?: { cursor?: string }) => {
+      const start: number = Number(params?.cursor ?? '0');
+      const next: number = start + 100;
+      return of({
+        items: all.slice(start, next),
+        nextCursor: next < all.length ? String(next) : null,
+        total: all.length,
+      });
+    });
+    const { harness, element }: { harness: RouterTestingHarness; element: HTMLElement } =
+      await open();
+    expect(element.querySelectorAll('[data-testid="trash-row"]')).toHaveLength(1_000);
+    expect(button(element, 'Restore CAD-1001')).toBeUndefined();
+
+    element.querySelector<HTMLButtonElement>('[data-testid="trash-show-more"]')?.click();
+    await settle(harness);
+    await expect
+      .poll(() => {
+        harness.detectChanges();
+        return element.querySelectorAll('[data-testid="trash-row"]').length;
+      })
+      .toBe(1_001);
+    expect(element.querySelector('[data-testid="trash-show-more"]')).toBeNull();
+    restoreTrashEntry.mockReturnValueOnce(
+      of({
+        task: { key: 'CAD-1001', name: 'Task 1001', status: 'cancelled' },
+        list: { name: 'Sprint 14' },
+        subtaskCount: 0,
+        detached: false,
+        listRestored: false,
+        spaceRestored: false,
+      }),
+    );
+    button(element, 'Restore CAD-1001')?.click();
+    await settle(harness);
+
+    expect(restoreTrashEntry).toHaveBeenCalledWith('entry-1001', {}, { reportNotReady: true });
+  });
+
   it('says how many entries a capped read does not list', async () => {
     listTrash.mockReturnValue(of({ items: [...ENTRIES], nextCursor: null, total: 1_200 }));
 
     const { element }: { element: HTMLElement } = await open();
 
     expect(text(element.querySelector('[data-testid="trash-capped"]'))).toBe(
-      'Showing the 2 most recently deleted items of 1200. Restore or delete some to see the others.',
+      'Showing the 2 most recently deleted items of 1200.',
     );
     expect(text(element.querySelector('[data-testid="trash-summary"]'))).toBe(
       '1200 items · erased for good after 30 days',

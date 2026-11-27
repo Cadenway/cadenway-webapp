@@ -21,8 +21,9 @@ footer and Errors' `Open the trash` link to it.
 
 ## Dependencies
 
-- `@cadenway/api-client` through `data-access/` (`TrashApi`): `TrashService.listTrash` (up to 10
-  pages of 100, `cache: 'no-store'`, passive on focus and reconnection), `restoreTrashEntry` (with
+- `@cadenway/api-client` through `data-access/` (`TrashApi`): `TrashService.listTrash` (pages of
+  100, 1,000 entries per read and per `Show more`, `cache: 'no-store'`, passive on focus and
+  reconnection), `restoreTrashEntry` (with
   `reportNotReady: true`), `purgeTrashEntry`, `emptyTrash`, and `MembersService.listMembers` (to
   the last page) for the names of who deleted each entry.
 - `@core/api` (`OrganizationPin`, `OrganizationSwitchPendingError`, `PASSIVE_REQUEST`,
@@ -39,13 +40,18 @@ footer and Errors' `Open the trash` link to it.
 - The page's `h1` is its route focus target (`data-route-focus`).
 - `TrashStore` is page-scoped (component providers). Its primary read follows the pinned
   organization and the organization epoch, which rises on each organization change (A, then B,
-  then A again gives three epochs). While the read runs the page shows the mockup's skeleton
+  then A again gives three epochs). While the read runs the `h1` stays rendered (the route focus
+  target) and the summary, the action and the rows show the mockup's skeleton
   (`Loading the trash`, one group of five rows). A failure renders `RouteErrorBoundary` in place of
   the page (`Could not load this page`, whose `Retry` runs the route again), so the shell stays. A
   successful read without entries shows `The trash is empty`. A failed member read only leaves
   `by <name>` out.
-- A read lists at most the 1,000 most recently deleted entries; the summary counts the whole trash
-  (`total`) and a notice says how many entries are not listed.
+- The first read lists the 1,000 most recently deleted entries; the summary counts the whole trash
+  (`total`), and while entries are not listed a notice says so above `Show more`, which reads the
+  next 1,000 from the read's cursor. The store's later reads list as deep as what is shown, so a
+  background read never takes back what `Show more` listed; a `Show more` that a newer read
+  overtook is dropped, since that read is as deep. A failed `Show more` toasts
+  `The next items could not be loaded.`.
 - Rows show the status icon (with the status word for screen readers), the name, the key, the parent
   key of a subtask, `<list> · Deleted <today|yesterday|N days ago> by <name>` (`Deleted list` for a
   list in the `deleted` state, `Former member` for a person no longer in the directory,
@@ -72,9 +78,9 @@ footer and Errors' `Open the trash` link to it.
   started before a successful emptying show nothing.
 - A write without an answer (no status, `408`, `5xx`, a client timeout) is not taken as failed. Its
   entry stays pending (the emptying stays running) while the trash is read again after 2, 4 and 8
-  seconds. The first read that no longer lists it (for the emptying: lists none of the entries
-  shown, or an empty trash when none was shown) gives a neutral `KEY is no longer in the trash`
-  (`Trash emptied`). When no read proves it, `Could not confirm the change` (a warning, never a
+  seconds. The first read that no longer lists it gives a neutral `KEY is no longer in the trash`;
+  for the emptying, only a read whose `total` is 0 gives `Trash emptied`, since a partial listing
+  proves nothing. When no read proves it, `Could not confirm the change` (a warning, never a
   refusal) frees the entry.
 - `404 trash-entry.not-found` never hides an entry by itself: the trash is read again and that read
   decides what shows; a restore then toasts `Already restored`, a purge
@@ -98,6 +104,6 @@ footer and Errors' `Open the trash` link to it.
 | `trash.toast.restore-failed`, `trash.toast.purge-failed`, `trash.toast.empty-failed`, `trash.toast.unconfirmed*` | The mockup draws no failed or unconfirmed write.                                              |
 | `trash.toast.gone`                                                                                               | The mockup draws no write whose entry is already gone.                                        |
 | `trash.toast.not-ready`, `trash.toast.not-ready-text`                                                            | The mockup draws no restore during a list deletion.                                           |
-| `trash.capped`                                                                                                   | The mockup's trash is never larger than one read.                                             |
+| `trash.capped`, `trash.show-more`, `trash.toast.more-failed`                                                     | The mockup's trash is never larger than one read.                                             |
 | `trash.empty-dialog.word`                                                                                        | The word to type is translated, as the mockup asks for its own word in French.                |
 | `trash.toast.already-restored`                                                                                   | Errors' `Already restored` text, as the step 6 spec asks.                                     |

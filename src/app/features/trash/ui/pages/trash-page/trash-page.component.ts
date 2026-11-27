@@ -47,9 +47,11 @@ import { TrashRow } from '../../components/trash-row/trash-row.component';
  * @description
  * The trash at `/:org/trash` (`App.dc.html` lines 1965-1997): `Trash` and its summary
  * (`n items · erased for good after 30 days`), `Empty the trash` when it holds entries, then one
- * row per entry, or `The trash is empty`. A trash larger than a read lists says how many entries
- * it does not show. The page skeleton (`Loading the trash`) shows while the first read runs; a
- * failed read renders the route's error boundary in place of the page.
+ * row per entry, or `The trash is empty`. A trash larger than the rows listed says how many it
+ * holds and offers `Show more`, which lists 1,000 more at a time. While the first read runs, the
+ * `h1` (the route focus target) stays and only the summary, the action and the rows show the
+ * mockup's skeleton (`Loading the trash`); a failed read renders the route's error boundary in
+ * place of the page.
  *
  * `Delete forever` confirms in an alert dialog naming the task; `Empty the trash` asks to type
  * `trash` (the translated word). Each dialog belongs to the organization epoch it opened in: an
@@ -279,6 +281,16 @@ export class TrashPage {
     const order: readonly string[] = this.neighbours(entry.id);
     await this.store.restore(entry);
     this.focusAway(entry.id, order);
+  }
+
+  /**
+   * Method showMore
+   *
+   * @description
+   * Lists the next entries past those shown.
+   */
+  protected showMore(): void {
+    void this.store.showMore();
   }
 
   /**

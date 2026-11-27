@@ -19,6 +19,7 @@ import {
   isTrashWriteNotSent,
   isUncertainTrashWrite,
   MAX_PAGES,
+  TRASH_READ_DEPTH,
   TrashApi,
 } from './trash-api.service';
 
@@ -87,23 +88,50 @@ describe('TrashApi', () => {
     });
   });
 
-  it('stops at its page cap and keeps the total of the trash', async () => {
+  it('reads 1,000 entries by default, then continues from its cursor', async () => {
+    const pageOf: (page: number) => readonly TrashEntryDto[] = (page: number) =>
+      Array.from({ length: 100 }, (_: unknown, index: number) => {
+        const number: string = String(page * 100 + index);
+        return dto(`e${number}`, `CAD-${number}`);
+      });
     const read: Promise<TrashListing> = api.entries();
-    for (let index: number = 0; index < MAX_PAGES; index += 1) {
-      const page: string = String(index);
+    for (let page: number = 0; page < MAX_PAGES; page += 1) {
       await Promise.resolve();
       http
         .expectOne((request) => request.url === '/v1/trash/entries')
-        .flush({
-          items: [dto(`e${page}`, `CAD-${page}`)],
-          nextCursor: `c${page}`,
-          total: 4_000,
-        });
+        .flush({ items: pageOf(page), nextCursor: `c${String(page + 1)}`, total: 1_150 });
+    }
+    const first: TrashListing = await read;
+    expect(first.entries).toHaveLength(TRASH_READ_DEPTH);
+    expect(first.total).toBe(1_150);
+    expect(first.nextCursor).toBe('c10');
+
+    const more: Promise<TrashListing> = api.entries({ cursor: first.nextCursor });
+    const next: TestRequest = http.expectOne((request) => request.url === '/v1/trash/entries');
+    expect(next.request.params.get('cursor')).toBe('c10');
+    next.flush({ items: pageOf(10).slice(0, 50), nextCursor: null, total: 1_150 });
+    const rest: TrashListing = await more;
+    expect(rest.entries).toHaveLength(50);
+    expect(rest.nextCursor).toBeNull();
+  });
+
+  it('reads as deep as asked, in whole pages', async () => {
+    const pageOf: (page: number) => readonly TrashEntryDto[] = (page: number) =>
+      Array.from({ length: 100 }, (_: unknown, index: number) => {
+        const number: string = String(page * 100 + index);
+        return dto(`e${number}`, `CAD-${number}`);
+      });
+    const read: Promise<TrashListing> = api.entries({ depth: 150 });
+    for (let page: number = 0; page < 2; page += 1) {
+      await Promise.resolve();
+      http
+        .expectOne((request) => request.url === '/v1/trash/entries')
+        .flush({ items: pageOf(page), nextCursor: `c${String(page + 1)}`, total: 900 });
     }
 
-    const { entries, total }: TrashListing = await read;
-    expect(entries).toHaveLength(MAX_PAGES);
-    expect(total).toBe(4_000);
+    const listed: TrashListing = await read;
+    expect(listed.entries).toHaveLength(200);
+    expect(listed.nextCursor).toBe('c2');
   });
 
   it('names the members of every page of the directory', async () => {

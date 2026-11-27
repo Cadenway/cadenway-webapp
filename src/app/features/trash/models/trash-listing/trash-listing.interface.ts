@@ -30,5 +30,16 @@ export interface TrashListing {
    * @readonly
    */
   readonly total: number;
+
+  /**
+   * Property nextCursor
+   *
+   * @description
+   * Cursor of the next page after the entries read, or null when the read reached the end.
+   *
+   * @type {string | null}
+   * @readonly
+   */
+  readonly nextCursor: string | null;
   // #endregion
 }

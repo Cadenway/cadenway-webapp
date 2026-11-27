@@ -31,12 +31,22 @@ const PAGE_LIMIT: number = 100;
  * Constant MAX_PAGES
  *
  * @description
- * Pages a trash read follows at most: the 1,000 most recently deleted entries. `total` still
- * counts every entry, so the page can say how many it does not list.
+ * Pages a trash read follows by default, and a `Show more` adds: 1,000 entries at a time. `total`
+ * still counts every entry, so the page can say how many it does not list yet.
  *
  * @type {number}
  */
 export const MAX_PAGES: number = 10;
+
+/**
+ * Constant TRASH_READ_DEPTH
+ *
+ * @description
+ * Entries a trash read lists by default, and that one `Show more` adds: `MAX_PAGES` pages.
+ *
+ * @type {number}
+ */
+export const TRASH_READ_DEPTH: number = MAX_PAGES * PAGE_LIMIT;
 
 /**
  * Function isUncertainTrashWrite
@@ -154,20 +164,27 @@ export class TrashApi {
    *
    * @description
    * Reads the entries of the trash the caller may restore, the most recently deleted first, page
-   * after page up to `MAX_PAGES` (1,000 entries); `total` counts them all. A passive read (on focus
-   * or reconnection) waits while the organization context is being verified.
+   * after page from `cursor` (the start by default), until `depth` entries are read (rounded up to
+   * whole pages) or the trash ends. The default depth is `MAX_PAGES` pages, 1,000 entries; `total`
+   * counts every entry and `nextCursor` continues the read. A passive read (on focus or
+   * reconnection) waits while the organization context is being verified.
    *
-   * @param {{ readonly passive?: boolean; readonly signal?: AbortSignal }} options - Whether the read is a background one, and its cancellation.
-   * @returns {Promise<TrashListing>} The entries read and the total; a failed or aborted page rejects.
+   * @param {{ readonly passive?: boolean; readonly signal?: AbortSignal; readonly cursor?: string | null; readonly depth?: number }} options - Whether the read is a background one, its cancellation, where it starts and how many entries it reads at least.
+   * @returns {Promise<TrashListing>} The entries read, the total and the continuation; a failed or aborted page rejects.
    */
   public async entries(
-    options: { readonly passive?: boolean; readonly signal?: AbortSignal } = {},
+    options: {
+      readonly passive?: boolean;
+      readonly signal?: AbortSignal;
+      readonly cursor?: string | null;
+      readonly depth?: number;
+    } = {},
   ): Promise<TrashListing> {
     const context: HttpContext = new HttpContext().set(PASSIVE_REQUEST, options.passive === true);
+    const depth: number = Math.max(1, options.depth ?? TRASH_READ_DEPTH);
     const items: TrashEntry[] = [];
-    let cursor: string | undefined;
+    let cursor: string | undefined = options.cursor ?? undefined;
     let total: number;
-    let pages: number = 0;
     do {
       const page: TrashEntryPage = await read(
         this.trash.listTrash(
@@ -178,10 +195,13 @@ export class TrashApi {
       );
       items.push(...page.items.map(toTrashEntry));
       total = page.total;
-      pages += 1;
       cursor = page.nextCursor ?? undefined;
-    } while (cursor && pages < MAX_PAGES);
-    return { entries: items, total: Math.max(total, items.length) };
+    } while (cursor && items.length < depth);
+    return {
+      entries: items,
+      total: Math.max(total, items.length),
+      nextCursor: cursor ?? null,
+    };
   }
 
   /**
