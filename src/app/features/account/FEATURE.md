@@ -37,6 +37,9 @@ parent provides the English texts of `cw-password-strength` and `cw-input-otp` t
 - `api-tokens` (package A5) replaces its stub: the page provides `ApiTokensStore` and reads the
   person's tokens of the current organization, with the section skeleton while loading, the
   route's error boundary for a failed read and `No active token` for an empty list.
+- `preferences` (package A4) replaces its stub: the page reads the account's language through
+  `LanguageApi`, with the section skeleton while loading and the route's error boundary for a
+  failed read.
 
 ## Public entry points
 
@@ -78,6 +81,9 @@ parent provides the English texts of `cw-password-strength` and `cw-input-otp` t
 - API tokens: `@cadenway/api-client` `ApiTokensService` (`listApiTokens`, `createApiToken`,
   `revokeApiToken`) through `data-access/`, and `@cadenway/ui` `alert-dialog`, `badge`,
   `checkbox`, `empty`, `field`, `input-group`, `select`, `skeleton` and `table`.
+- Preferences: `@cadenway/api-client` `AuthService.getCurrentUser` and `updateCurrentUser`
+  (`language`) under Auth's `withSessionLock`, through `data-access/`; `@core/locale`
+  (`LocaleService`); `@cadenway/ui` `card`, `radio-group`, `select` and `skeleton`.
 
 ## Invariants
 
@@ -181,6 +187,17 @@ parent provides the English texts of `cw-password-strength` and `cw-input-otp` t
     previous failure toast; when the outcome stays unknown, the next write reads first.
 - Known gap: the mockup's `Set a status message` item and the status message under the header are left out,
   since the backend has no status message yet.
+- `preferences` (`Compte.dc.html` lines 405-505): the `Theme` cards drive `ThemeService` at once,
+  the transition spreading from the chosen card, and stay per device. `Language` is the account's
+  (`updateCurrentUser` with `If-Match` on the account version, after the same account check under
+  the session lock as the notification preferences). A pick shows at once and saves; a `412` or a
+  write without a known outcome reads the account again, counts as saved when it holds the pick,
+  and is otherwise resent once. Once saved, the application reloads in the pick's locale with
+  `LocaleService.use` (`?lang=`) when that locale is not the one shown (German and Spanish show
+  English), and otherwise confirms with `Preference saved`. A refusal puts the previous language
+  back with `Could not save`; another account or none holding the session stops silently. Known
+  gaps: the date format, the week start and the `Display and accessibility` card are hidden until
+  the account stores them (B9); the application does not apply the account's language on load.
 
 ## Copy not taken word for word from the mockup
 
@@ -207,4 +224,6 @@ parent provides the English texts of `cw-password-strength` and `cw-input-otp` t
 | `account.reauthentication.*`                                                                                                                                                                                      | The mockup draws no reauthentication dialog (`auth.yaml` "Recent authentication").             |
 | `account.labels.*`                                                                                                                                                                                                | Texts of the password strength and one-time code bricks, worded as Auth's.                     |
 | `account.notifications.save-failed`, `account.notifications.save-failed-text`                                                                                                                                     | The mockup draws no refused save; the section saves at once.                                   |
+| `account.preferences.lead`, `account.preferences.saved-text`                                                                                                                                                      | The theme stays per device and the accessibility settings are hidden (B9).                     |
+| `account.preferences.language-unknown`, `account.preferences.save-failed`, `account.preferences.save-failed-text`                                                                                                 | The mockup draws no unknown language and no refused save.                                      |
 | `account.user-menu.avatar-unknown`, `account.user-menu.avatar-online`, `account.user-menu.avatar-away`, `account.user-menu.avatar-dnd`, `account.user-menu.avatar-invisible`, `account.user-menu.avatar-disabled` | Texts of the avatar brick, taken from its defaults.                                            |
