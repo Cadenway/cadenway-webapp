@@ -1,0 +1,236 @@
+@let doc = store.current();
+@if (doc) {
+  <div class="mx-auto flex w-full max-w-3xl flex-col gap-5 px-4 py-6 sm:px-6">
+    <div class="flex flex-wrap items-center gap-2">
+      <a
+        cwButton
+        variant="ghost"
+        size="sm"
+        class="-ml-2 text-muted-foreground hover:text-foreground"
+        data-testid="document-back"
+        [routerLink]="docsLink()"
+      >
+        <ng-icon name="phosphorArrowLeftBold" aria-hidden="true" />
+        <ng-container i18n="@@docs.document.back">Documents</ng-container>
+      </a>
+      <div class="ml-auto flex flex-wrap items-center gap-2">
+        @if (store.editing()) {
+          <button
+            cwButton
+            type="button"
+            variant="ghost"
+            data-testid="document-cancel"
+            [disabled]="store.saving()"
+            (click)="cancel()"
+          >
+            <ng-container i18n="@@docs.document.cancel">Cancel</ng-container>
+          </button>
+          <button
+            cwButton
+            type="button"
+            data-testid="document-done"
+            [loading]="store.saving()"
+            (click)="done()"
+          >
+            <ng-container i18n="@@docs.document.done">Done</ng-container>
+          </button>
+        } @else {
+          <button
+            cwButton
+            type="button"
+            variant="ghost"
+            size="icon"
+            class="text-muted-foreground hover:text-foreground"
+            aria-label="Copy the document link"
+            i18n-aria-label="@@docs.document.copy-link"
+            data-testid="document-copy-link"
+            (click)="copyLink(doc.id)"
+          >
+            <ng-icon name="phosphorLinkSimpleBold" aria-hidden="true" />
+          </button>
+          @if (store.canEdit()) {
+            <button
+              cwButton
+              type="button"
+              variant="ghost"
+              class="text-destructive hover:text-destructive"
+              data-testid="document-delete"
+              (click)="deleteOpen.set(true)"
+            >
+              <ng-icon name="phosphorTrashBold" aria-hidden="true" />
+              <ng-container i18n="@@docs.document.delete">Delete</ng-container>
+            </button>
+            <button
+              #editButton
+              cwButton
+              type="button"
+              variant="outline"
+              data-testid="document-edit"
+              (click)="startEditing()"
+            >
+              <ng-icon name="phosphorPencilSimpleBold" aria-hidden="true" />
+              <ng-container i18n="@@docs.document.edit">Edit</ng-container>
+            </button>
+          }
+        }
+      </div>
+    </div>
+
+    @if (store.editing()) {
+      <article class="flex flex-col">
+        <label for="document-title" class="sr-only" i18n="@@docs.document.title-label"
+          >Document title</label
+        >
+        <textarea
+          #titleField
+          id="document-title"
+          rows="1"
+          placeholder="Untitled"
+          i18n-placeholder="@@docs.untitled"
+          class="field-sizing-content w-full resize-none overflow-hidden bg-transparent text-3xl leading-tight font-semibold tracking-tight outline-none placeholder:text-muted-foreground/50"
+          data-testid="document-title-field"
+          data-route-focus
+          [formField]="draftForm.title"
+          (keydown.enter)="toBody($event)"
+        ></textarea>
+        <p
+          class="flex items-center gap-1.5 border-b border-border pt-2 pb-4 text-xs text-muted-foreground"
+        >
+          <ng-icon name="phosphorPencilSimpleBold" class="size-3.5 shrink-0" aria-hidden="true" />
+          @let editedSpace = spaceName();
+          <span class="truncate" i18n="@@docs.document.editing"
+            >{{ editedSpace }} · editing in progress</span
+          >
+        </p>
+        @if (conflictNotice(); as notice) {
+          <p
+            class="mt-3 flex items-start gap-2 rounded-lg border border-border bg-muted px-3 py-2 text-sm"
+            role="status"
+            data-testid="document-conflict"
+          >
+            <ng-icon
+              name="phosphorWarningBold"
+              class="mt-0.5 size-4 shrink-0 text-destructive"
+              aria-hidden="true"
+            />
+            <span>{{ notice }}</span>
+          </p>
+        }
+        <cw-block-editor
+          #bodyEditor
+          class="mt-3"
+          variant="document"
+          toolbar
+          data-testid="document-editor"
+          [formField]="draftForm.body"
+        />
+        <button
+          type="button"
+          class="mt-1 h-24 w-full cursor-text rounded-md text-left focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background focus-visible:outline-none"
+          (click)="focusBody()"
+        >
+          <span class="sr-only" i18n="@@docs.document.add-block-end">Add a block at the end</span>
+        </button>
+      </article>
+    } @else {
+      <article class="flex flex-col gap-3">
+        <header class="flex flex-col gap-1 border-b border-border pb-4">
+          <h1
+            class="text-3xl leading-tight font-semibold tracking-tight"
+            tabindex="-1"
+            data-route-focus
+            data-testid="document-title"
+          >
+            {{ doc.title }}
+          </h1>
+          <p class="text-xs text-muted-foreground" data-testid="document-meta">
+            {{ spaceName() }} · {{ meta(doc) }}
+          </p>
+        </header>
+        @if (doc.body.trim() === '') {
+          <cw-empty variant="outline" size="sm" data-testid="document-empty">
+            <cw-empty-header>
+              <cw-empty-description>
+                @if (store.canEdit()) {
+                  <ng-container i18n="@@docs.document.empty"
+                    >This document is empty. Choose Edit to write it.</ng-container
+                  >
+                } @else {
+                  <ng-container i18n="@@docs.document.empty-read-only"
+                    >This document is empty.</ng-container
+                  >
+                }
+              </cw-empty-description>
+            </cw-empty-header>
+          </cw-empty>
+        } @else {
+          <cw-markdown [source]="doc.body" data-testid="document-body" />
+        }
+      </article>
+    }
+  </div>
+} @else {
+  <cw-docs-skeleton width="document" />
+}
+
+<cw-document-delete-dialog
+  [(open)]="deleteOpen"
+  [title]="shown()?.title ?? ''"
+  [pending]="store.deletingId() !== null"
+  (confirmed)="confirmDelete()"
+/>
+
+<cw-alert-dialog [(open)]="replaceOpen" (confirm)="confirmReplace()">
+  <h2 cwAlertDialogTitle i18n="@@docs.replace.title">Replace the other version?</h2>
+  <p cwAlertDialogDescription i18n="@@docs.replace.description">
+    Your version replaces the one saved meanwhile, for the whole team.
+  </p>
+  <button
+    cwButton
+    cwAlertDialogCancel
+    variant="outline"
+    data-testid="document-replace-keep"
+    i18n="@@docs.replace.keep"
+  >
+    Keep editing
+  </button>
+  <button
+    cwButton
+    cwAlertDialogAction
+    variant="destructive"
+    data-testid="document-replace-confirm"
+    i18n="@@docs.replace.confirm"
+  >
+    Replace
+  </button>
+</cw-alert-dialog>
+
+<cw-alert-dialog
+  [(open)]="discardOpen"
+  data-testid="document-discard-dialog"
+  (confirm)="settleDiscard(true)"
+  (cancel)="settleDiscard(false)"
+>
+  <h2 cwAlertDialogTitle i18n="@@docs.discard.title">Leave without saving?</h2>
+  <p cwAlertDialogDescription i18n="@@docs.discard.description">
+    Your changes to this document will be lost.
+  </p>
+  <button
+    cwButton
+    cwAlertDialogCancel
+    variant="outline"
+    data-testid="document-discard-keep"
+    i18n="@@docs.discard.keep"
+  >
+    Keep editing
+  </button>
+  <button
+    cwButton
+    cwAlertDialogAction
+    variant="destructive"
+    data-testid="document-discard-confirm"
+    i18n="@@docs.discard.leave"
+  >
+    Leave
+  </button>
+</cw-alert-dialog>
