@@ -850,9 +850,10 @@ function createGettingStartedStore(): Type<GettingStartedStoreInstance> {
                 // The invitations are out, whatever becomes of the dialog: the route's
                 // `OnboardingStore` records the marker for the organization they went to (never
                 // for one shown since), and a failed write stays owed there, surviving a shell
-                // change, for this store's refresh occasions.
+                // change, for this store's refresh occasions. It is not awaited: a slow marker
+                // write never holds the next batches back.
                 recorded = true;
-                await store._onboarding.recordInvitation().catch((): undefined => undefined);
+                void store._onboarding.recordInvitation().catch((): undefined => undefined);
               }
             } catch (error: unknown) {
               if (isDroppedOnboardingWrite(error)) {

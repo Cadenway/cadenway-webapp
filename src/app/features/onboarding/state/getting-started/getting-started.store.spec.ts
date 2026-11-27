@@ -891,6 +891,7 @@ describe('GettingStartedStore', () => {
       const sending: Promise<void> = store.invite(['ines.robert@ateliernord.fr']);
       expect(store.inviting()).toBe(true);
       await sending;
+      await settle();
 
       expect(api.invite).toHaveBeenCalledWith(['ines.robert@ateliernord.fr']);
       expect(toasts.success).toHaveBeenCalledWith('1 invitation sent', { description: '' });
@@ -966,6 +967,7 @@ describe('GettingStartedStore', () => {
 
       api.invite.mockResolvedValueOnce({ invited: 0, skipped: 1, alreadyInvited: 1 });
       await store.invite(['ines.robert@ateliernord.fr']);
+      await settle();
 
       expect(api.updateChecklist).toHaveBeenCalledWith({ invitationSent: true }, 4);
       expect(store.items()[1]).toEqual({ key: 'invite', done: true });
@@ -1109,13 +1111,11 @@ describe('GettingStartedStore', () => {
         expect(toasts.toasts()).toEqual([]);
       });
 
-      it('records the invitation marker right after the first batch that reaches someone', async () => {
+      it('records the invitation marker once, after the first batch that reaches someone', async () => {
         api.invite.mockImplementation((batch: readonly string[]) =>
           Promise.resolve({ invited: batch.length, skipped: 0, alreadyInvited: 0 }),
         );
-        api.invite
-          .mockResolvedValueOnce({ invited: 0, skipped: 50, alreadyInvited: 0 })
-          .mockResolvedValueOnce({ invited: 50, skipped: 0, alreadyInvited: 0 });
+        api.invite.mockResolvedValueOnce({ invited: 0, skipped: 50, alreadyInvited: 0 });
         const order: string[] = [];
         const invite: Mock = api.invite;
         api.invite = vi.fn((batch: readonly string[]) => {
@@ -1131,8 +1131,42 @@ describe('GettingStartedStore', () => {
         store.start('invite');
 
         await store.invite(many);
+        await settle();
 
-        expect(order).toEqual(['invite', 'invite', 'marker', 'invite']);
+        expect(order.filter((call: string) => call === 'invite')).toHaveLength(3);
+        expect(order.indexOf('marker')).toBeGreaterThan(1);
+        expect(api.updateChecklist).toHaveBeenCalledTimes(1);
+      });
+
+      it('sends the next batches while the marker write is still pending', async () => {
+        api.invite.mockImplementation((batch: readonly string[]) =>
+          Promise.resolve({ invited: batch.length, skipped: 0, alreadyInvited: 0 }),
+        );
+        let saveMarker: () => void = (): void => undefined;
+        const write: Mock = api.updateChecklist;
+        api.updateChecklist = vi.fn(
+          (change: unknown, version: number) =>
+            new Promise((resolve: (progress: unknown) => void) => {
+              saveMarker = (): void => {
+                resolve(write(change, version));
+              };
+            }),
+        );
+        const store: GettingStartedStore = await setup();
+        store.start('invite');
+
+        await store.invite(many);
+        await settle();
+
+        expect(api.invite).toHaveBeenCalledTimes(3);
+        expect(api.updateChecklist).toHaveBeenCalledTimes(1);
+        expect(store.inviteOpen()).toBe(false);
+        expect(store.items()[1]).toEqual({ key: 'invite', done: false });
+
+        saveMarker();
+        await settle();
+
+        expect(store.items()[1]).toEqual({ key: 'invite', done: true });
       });
 
       it('stops at a definite refusal and keeps the addresses not sent', async () => {
@@ -1210,6 +1244,7 @@ describe('GettingStartedStore', () => {
       store.start('invite');
       api.updateChecklist.mockRejectedValueOnce(problem(403, 'auth.csrf-rejected'));
       await store.invite(['ines.robert@ateliernord.fr']);
+      await settle();
       expect(route.get(OnboardingStore).owesInvitation()).toBe(true);
 
       host.destroy();
