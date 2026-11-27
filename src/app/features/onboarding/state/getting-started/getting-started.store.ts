@@ -467,7 +467,10 @@ interface GettingStartedStoreInstance {
    * closed, emptied or toasted. When addresses are left unsent (a refused batch and the ones after
    * it, a batch whose outcome is unknown, or addresses a batch answered with another outcome), the
    * dialog stays open with only those (`inviteKept`), so `Invite` sends only them again, and one
-   * failure summary says why; a sent summary counts the invited ones.
+   * failure summary says why; a sent summary counts the invited ones. When the host was destroyed
+   * meanwhile, in the same organization, the summaries still show, outliving the store, and the
+   * failure one counts the addresses not invited and says where to invite them again. An
+   * organization change says nothing.
    *
    * @param {readonly string[]} emails - The addresses.
    * @returns {Promise<void>} Resolves once settled; never rejects.
@@ -573,11 +576,24 @@ function createGettingStartedStore(): Type<GettingStartedStoreInstance> {
     withMethods((store) => {
       let followed: string | null = null;
 
-      const show: (tone: ToastTone, title: string, options?: CwToastOptions) => void = (
+      // `tracked` toasts are dismissed with the store (an organization change, its destruction); a
+      // toast shown once the host is gone is not.
+      const show: (
         tone: ToastTone,
         title: string,
         options?: CwToastOptions,
+        tracked?: boolean,
+      ) => void = (
+        tone: ToastTone,
+        title: string,
+        options?: CwToastOptions,
+        tracked: boolean = true,
       ): void => {
+        if (!tracked) {
+          if (options) store._toasts[tone](title, options);
+          else store._toasts[tone](title);
+          return;
+        }
         const live: ReadonlySet<string> = new Set(
           store._toasts.toasts().map((item: { readonly id: string }): string => item.id),
         );
@@ -642,7 +658,11 @@ function createGettingStartedStore(): Type<GettingStartedStoreInstance> {
       // left unsent have their own toast.
       const toastOutcome: (
         outcome: Pick<OnboardingInvitationOutcome, 'invited' | 'skipped'>,
-      ) => void = (outcome: Pick<OnboardingInvitationOutcome, 'invited' | 'skipped'>): void => {
+        tracked?: boolean,
+      ) => void = (
+        outcome: Pick<OnboardingInvitationOutcome, 'invited' | 'skipped'>,
+        tracked: boolean = true,
+      ): void => {
         const skipped: string =
           outcome.skipped === 0
             ? ''
@@ -650,9 +670,12 @@ function createGettingStartedStore(): Type<GettingStartedStoreInstance> {
               ? $localize`:@@onboarding.getting-started.invite-skipped-one:${outcome.skipped}:count: address skipped: already a member or invited.`
               : $localize`:@@onboarding.getting-started.invite-skipped:${outcome.skipped}:count: addresses skipped: already members or invited.`;
         if (outcome.invited === 0) {
-          show('info', $localize`:@@onboarding.getting-started.invite-none:No invitation sent`, {
-            description: skipped,
-          });
+          show(
+            'info',
+            $localize`:@@onboarding.getting-started.invite-none:No invitation sent`,
+            { description: skipped },
+            tracked,
+          );
           return;
         }
         show(
@@ -661,6 +684,44 @@ function createGettingStartedStore(): Type<GettingStartedStoreInstance> {
             ? $localize`:@@onboarding.getting-started.invite-sent-one:${outcome.invited}:count: invitation sent`
             : $localize`:@@onboarding.getting-started.invite-sent:${outcome.invited}:count: invitations sent`,
           { description: skipped },
+          tracked,
+        );
+      };
+
+      // The summary of a send whose host was destroyed while its batches went on: the dialog is
+      // gone and cannot keep the addresses left unsent, so the failure toast counts them and says
+      // where to invite them again. These toasts outlive the store.
+      const toastDetached: (send: InviteSend, unsent: number) => void = (
+        send: InviteSend,
+        unsent: number,
+      ): void => {
+        if (send.invited > 0 || unsent === 0) {
+          toastOutcome({ invited: send.invited, skipped: send.skipped }, false);
+        }
+        if (unsent === 0) return;
+        const lines: string[] = [];
+        if (send.invited === 0 && send.skipped > 0) {
+          lines.push(
+            takesSingular(send.skipped)
+              ? $localize`:@@onboarding.getting-started.invite-skipped-one:${send.skipped}:count: address skipped: already a member or invited.`
+              : $localize`:@@onboarding.getting-started.invite-skipped:${send.skipped}:count: addresses skipped: already members or invited.`,
+          );
+        }
+        if (readProblem(send.refusal)?.code === 'invitation.daily-limit-reached') {
+          lines.push(
+            $localize`:@@onboarding.getting-started.invite-failed-limit:The daily invitation limit is reached: try again later.`,
+          );
+        }
+        lines.push(
+          $localize`:@@onboarding.getting-started.invite-not-sent-later:Invite them again from “Getting started” or the Members page.`,
+        );
+        show(
+          'error',
+          takesSingular(unsent)
+            ? $localize`:@@onboarding.getting-started.invite-not-sent-one:${unsent}:count: address could not be invited`
+            : $localize`:@@onboarding.getting-started.invite-not-sent-other:${unsent}:count: addresses could not be invited`,
+          { description: lines.join(' ') },
+          false,
         );
       };
 
@@ -870,14 +931,20 @@ function createGettingStartedStore(): Type<GettingStartedStoreInstance> {
             }
           }
           if (store._sending() === dialog) patchState(store, { _sending: null });
+          // Another organization is shown: nothing about this one is said there.
+          if (moved()) return;
+          const kept: readonly string[] = emails.filter(
+            (email: string): boolean => !settled.has(email.toLowerCase()),
+          );
+          if (store._lifecycle.destroyed) {
+            if (!dropped) toastDetached(send, kept.length);
+            return;
+          }
           if (!current()) return;
           if (dropped) {
             setInviteOpen(false);
             return;
           }
-          const kept: readonly string[] = emails.filter(
-            (email: string): boolean => !settled.has(email.toLowerCase()),
-          );
           if (kept.length === 0 && !uncertain) {
             toastOutcome({ invited: send.invited, skipped: send.skipped });
             setInviteOpen(false);

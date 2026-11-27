@@ -1108,6 +1108,42 @@ describe('GettingStartedStore', () => {
         await sending;
 
         expect(api.invite).toHaveBeenCalledTimes(3);
+        expect(toasts.success).toHaveBeenCalledWith('120 invitations sent', { description: '' });
+        expect(toasts.error).not.toHaveBeenCalled();
+      });
+
+      it('still says what a send did once the host is destroyed, and keeps those toasts', async () => {
+        const answer: () => void = holdFirstBatch();
+        api.invite.mockRejectedValue(problem(429, 'invitation.daily-limit-reached'));
+        const store: GettingStartedStore = await setup();
+        store.start('invite');
+
+        const sending: Promise<void> = store.invite(many);
+        host.destroy();
+        answer();
+        await sending;
+
+        expect(api.invite).toHaveBeenCalledTimes(2);
+        expect(toasts.success).toHaveBeenCalledWith('50 invitations sent', { description: '' });
+        expect(toasts.error).toHaveBeenCalledWith('70 addresses could not be invited', {
+          description:
+            'The daily invitation limit is reached: try again later. Invite them again from “Getting started” or the Members page.',
+        });
+        expect(toasts.dismiss).not.toHaveBeenCalled();
+        expect(toasts.toasts()).toHaveLength(2);
+      });
+
+      it('says nothing once the organization changed, even with the host destroyed', async () => {
+        const answer: () => void = holdFirstBatch();
+        const store: GettingStartedStore = await setup();
+        store.start('invite');
+
+        const sending: Promise<void> = store.invite(many);
+        host.destroy();
+        switchOrganization();
+        answer();
+        await sending;
+
         expect(toasts.toasts()).toEqual([]);
       });
 
@@ -1397,7 +1433,8 @@ describe('GettingStartedStore', () => {
       await settle();
 
       expect(again.inviteOpen()).toBe(true);
-      expect(toasts.toasts()).toEqual([]);
+      expect(again.inviteKept()).toEqual([]);
+      expect(toasts.toasts().map((toast) => toast.title)).toEqual(['1 invitation sent']);
       expect(api.updateChecklist).toHaveBeenCalledWith({ invitationSent: true }, 4);
     });
 
