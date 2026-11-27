@@ -1,5 +1,6 @@
 import { Component, signal, type WritableSignal } from '@angular/core';
 import { type ComponentFixture, TestBed } from '@angular/core/testing';
+import { By } from '@angular/platform-browser';
 import { provideRouter } from '@angular/router';
 import { provideCadenwayIcons } from '@cadenway/icons';
 import { CwMenu, CwMenuItem } from '@cadenway/ui/components/menu';
@@ -152,5 +153,28 @@ describe('HomePriorities', () => {
     expect(host.querySelector('[data-testid="home-priorities-empty"]')?.textContent.trim()).toBe(
       'Nothing is assigned to you. A good moment to move the backlog forward.',
     );
+  });
+  it('gives the focus to the first given line still shown, else to the heading', () => {
+    const section: HomePriorities = fixture.debugElement.query(By.directive(HomePriorities))
+      .componentInstance as HomePriorities;
+
+    section.focusFirst(['CAD-999', 'CAD-482']);
+    expect(document.activeElement?.closest('[data-task-key]')?.getAttribute('data-task-key')).toBe(
+      'CAD-482',
+    );
+
+    section.focusFirst(['CAD-999']);
+    expect(document.activeElement?.textContent.trim()).toBe('My priorities');
+  });
+
+  it('gives the focus to the empty paragraph once no line is left', async () => {
+    fixture.componentInstance.rows.set([]);
+    await fixture.whenStable();
+    const section: HomePriorities = fixture.debugElement.query(By.directive(HomePriorities))
+      .componentInstance as HomePriorities;
+
+    section.focusFirst(['CAD-470']);
+
+    expect(document.activeElement?.getAttribute('data-testid')).toBe('home-priorities-empty');
   });
 });

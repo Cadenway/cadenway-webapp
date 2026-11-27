@@ -351,6 +351,39 @@ describe('HomeStore', () => {
     expect(read.mock.calls[1][1].passive).toBe(true);
   });
 
+  it('ignores a focus while the first read runs and once it settled within 30 seconds', async () => {
+    const first: ReturnType<typeof deferred<HomeSnapshot>> = deferred<HomeSnapshot>();
+    read.mockReturnValueOnce(first.promise);
+    const store: HomeStoreInstance = TestBed.inject(HomeStore);
+    await settle();
+
+    window.dispatchEvent(new Event('focus'));
+    await settle();
+    first.resolve(snapshotOf(['CAD-482']));
+    await settle();
+    window.dispatchEvent(new Event('focus'));
+    await settle();
+
+    expect(read).toHaveBeenCalledTimes(1);
+    expect(keys(store)).toEqual(['CAD-482']);
+  });
+
+  it('ignores a focus while the first read of a new organization runs', async () => {
+    await loaded();
+    vi.setSystemTime(Date.now() + FOCUS_REFRESH_MS);
+    const lumen: ReturnType<typeof deferred<HomeSnapshot>> = deferred<HomeSnapshot>();
+    read.mockReturnValueOnce(lumen.promise);
+    current.set(organization('lumen'));
+    await settle();
+
+    window.dispatchEvent(new Event('focus'));
+    await settle();
+    lumen.resolve(snapshotOf(['LUM-1']));
+    await settle();
+
+    expect(read).toHaveBeenCalledTimes(2);
+  });
+
   it('counts a refresh against the new local day after midnight', async () => {
     const store: HomeStoreInstance = await loaded();
     vi.setSystemTime(new Date(2026, 10, 13, 0, 5));

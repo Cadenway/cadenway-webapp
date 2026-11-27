@@ -1,13 +1,16 @@
 import { formatDate } from '@angular/common';
 import {
+  afterNextRender,
   Component,
   computed,
   inject,
+  Injector,
   input,
   type InputSignal,
   LOCALE_ID,
   type Signal,
   signal,
+  viewChild,
   type WritableSignal,
 } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
@@ -288,7 +291,8 @@ export class HomePage {
    *
    * @description
    * The lines of `My priorities` as the writes show them (a deleted task is hidden at once, a
-   * pending status is drawn), each with its list's name.
+   * pending value is drawn), each with its list's name; the status drawn is the one the writes
+   * show over the read copy.
    *
    * @type {Signal<readonly HomePriorityRow[]>}
    * @readonly
@@ -297,9 +301,12 @@ export class HomePage {
     (): readonly HomePriorityRow[] => {
       const read: HomeRead | undefined = this.store.read();
       if (!read) return [];
+      const copies: ReadonlyMap<string, TaskSummary> = new Map<string, TaskSummary>(
+        read.priorities.map((task: TaskSummary): [string, TaskSummary] => [task.key, task]),
+      );
       return this.rowActions.rows(read.priorities).map((task: TaskSummary): HomePriorityRow => ({
         task,
-        status: this.rowActions.displayedStatus(task),
+        status: this.rowActions.displayedStatus(copies.get(task.key) ?? task),
         listName: this.listName(task),
       }));
     },
@@ -344,7 +351,9 @@ export class HomePage {
    * Property menuTask
    *
    * @description
-   * The task the menu acts on, as the writes show it; null once it left the page.
+   * The read copy of the task the menu acts on, looked up by key, so every write and its `Undo`
+   * start from the values the page read, never from a value still waiting for its write; null
+   * once the read no longer holds it.
    *
    * @type {Signal<TaskSummary | null>}
    * @readonly
@@ -352,16 +361,14 @@ export class HomePage {
   protected readonly menuTask: Signal<TaskSummary | null> = computed((): TaskSummary | null => {
     const key: string | null = this.menuKey();
     if (key === null) return null;
-    return (
-      this.priorities().find((row: HomePriorityRow): boolean => row.task.key === key)?.task ?? null
-    );
+    return this.store.tasks().find((task: TaskSummary): boolean => task.key === key) ?? null;
   });
 
   /**
    * Property menuTasks
    *
    * @description
-   * What the menu acts on: the one task of the line, or nothing.
+   * What the menu checks: the one task of the line as the writes show it, or nothing.
    *
    * @type {Signal<readonly TaskSummary[]>}
    * @readonly
@@ -369,7 +376,7 @@ export class HomePage {
   protected readonly menuTasks: Signal<readonly TaskSummary[]> = computed(
     (): readonly TaskSummary[] => {
       const task: TaskSummary | null = this.menuTask();
-      return task ? [task] : [];
+      return task ? [this.rowActions.displayedTask(task)] : [];
     },
   );
 
@@ -386,6 +393,39 @@ export class HomePage {
     const task: TaskSummary | null = this.menuTask();
     return task ? this.rowActions.displayedStatus(task) : null;
   });
+
+  /**
+   * Property prioritiesSection
+   *
+   * @description
+   * `My priorities`, which takes the focus back after a deletion.
+   *
+   * @type {Signal<HomePriorities | undefined>}
+   * @readonly
+   */
+  private readonly prioritiesSection: Signal<HomePriorities | undefined> =
+    viewChild(HomePriorities);
+
+  /**
+   * Property injector
+   *
+   * @description
+   * Schedules the focus after the render that follows a deletion.
+   *
+   * @type {Injector}
+   * @readonly
+   */
+  private readonly injector: Injector = inject(Injector);
+
+  /**
+   * Property deleteKey
+   *
+   * @description
+   * Key of the task whose deletion the confirmation asks for, or null.
+   *
+   * @type {string | null}
+   */
+  private deleteKey: string | null = null;
   // #endregion
 
   // #region Constructor
@@ -514,9 +554,41 @@ export class HomePage {
         void this.rowActions.copyKey(task);
         break;
       case 'delete':
+        this.deleteKey = task.key;
         this.rowActions.askDelete(task);
         break;
     }
+  }
+
+  /**
+   * Method confirmDelete
+   *
+   * @description
+   * The confirmation's action: moves the task to the trash, then gives the focus to the line that
+   * took its place, else the one before it, else the `My priorities` heading or the empty
+   * paragraph; a refused deletion brings the line back, which then takes the focus.
+   *
+   * @returns {Promise<void>} Resolves once the focus is scheduled.
+   */
+  protected async confirmDelete(): Promise<void> {
+    const key: string | null = this.deleteKey;
+    const keys: readonly string[] = this.priorities().map(
+      (row: HomePriorityRow): string => row.task.key,
+    );
+    const index: number = key === null ? -1 : keys.indexOf(key);
+    const candidates: readonly string[] = [
+      ...(key === null ? [] : [key]),
+      ...(index >= 0 ? keys.slice(index + 1, index + 2) : []),
+      ...(index > 0 ? keys.slice(index - 1, index) : []),
+    ];
+    await this.rowActions.trash();
+    this.deleteKey = null;
+    afterNextRender(
+      (): void => {
+        this.prioritiesSection()?.focusFirst(candidates);
+      },
+      { injector: this.injector },
+    );
   }
 
   /**

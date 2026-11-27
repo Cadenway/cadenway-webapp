@@ -441,7 +441,8 @@ function createHomeStore(): Type<HomeStoreInstance> {
         },
         _focused(): void {
           const settledAt: number | null = store._loads.settledAt;
-          if (settledAt !== null && Date.now() - settledAt < FOCUS_REFRESH_MS) return;
+          if (store._home.isLoading() || settledAt === null) return;
+          if (Date.now() - settledAt < FOCUS_REFRESH_MS) return;
           reload(true);
         },
         _followOrganization: signalMethod<string>((organizationId: string): void => {
@@ -502,8 +503,9 @@ function createHomeStore(): Type<HomeStoreInstance> {
  * page. There is no realtime event for the caller's tasks across lists (gap G-R1), so the home
  * screen is read again, in the background and keeping its values, after a realtime reconnection,
  * when a task detail closes or reports a change, after a creation, on `refresh()` (the page's own
- * writes) and on window focus unless a read settled less than 30 s before (`FOCUS_REFRESH_MS`); a
- * read asked for while another runs is sent once it settles. A refresh that fails keeps the
+ * writes) and on window focus, except while a read runs, before the organization's first read
+ * settled and less than 30 s after a read settled (`FOCUS_REFRESH_MS`); any other read asked for
+ * while one runs is sent once it settles. A refresh that fails keeps the
  * previous values with `refreshFailed`; one refused while the organization context is stale keeps
  * them silently and is sent again once the context is verified. An organization switch drops the
  * values at once and reads anew: a read of the previous organization is aborted and never shown.

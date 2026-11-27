@@ -64,8 +64,8 @@ organization.context-changed`) keeps them silently and is sent again once the co
   late and due tasks against the new day.
 - No realtime event covers the caller's tasks across lists (gap G-R1): the page is read again in
   the background, keeping its values, after each settled write of the menu
-  (`TaskRowActionsStore.changed`), on window focus when no read settled in the last 30 s
-  (`FOCUS_REFRESH_MS`), after a realtime reconnection, when a task detail closes or reports a
+  (`TaskRowActionsStore.changed`), on window focus (never while a read runs, before the
+  organization's first read settled, or within 30 s of a settled read, `FOCUS_REFRESH_MS`), after a realtime reconnection, when a task detail closes or reports a
   change (`TaskDetailOpener.closed`, `changed`) and after a creation (`TaskCreate.created`). A read
   asked for while another runs is sent once it settles; no list room is joined.
 - An organization switch drops the values at once and reads anew; a read of the previous
@@ -80,7 +80,12 @@ organization.context-changed`) keeps them silently and is sent again once the co
   opens from the list item around each line (right click, Shift F10, the Menu key, a long press),
   not from the line itself; the item has `tabindex="-1"` and hands the focus it receives itself (the
   menu closing) to the line's button. A pending status or value of the menu stays shown over a
-  reread of an older copy; a deleted line hides at once (`TaskRowActionsStore.rows`). Below 640 px
+  reread of an older copy; a deleted line hides at once (`TaskRowActionsStore.rows`). Every write
+  of the menu, and the status it checks, take the read copy of the task looked up by key
+  (`HomeStore.tasks`), never the drawn copy, so `Undo` only puts back a confirmed value; only the
+  menu's checkmarks (`tasks`) take the drawn copy (`displayedTask`). After a confirmed deletion the
+  focus goes to the line that took its place, else the one before it, else the empty paragraph or
+  the `My priorities` heading (both `tabindex="-1"`). Below 640 px
   the lines drop their priority (Task's line); below 1024 px the aside stacks under them.
 - A list that `LIST_DIRECTORY` does not hold reads `Archived list` (gap G-T1, until `TaskSummary`
   carries its list's name) only when the directory holds at least one list of the task's space;
@@ -101,6 +106,9 @@ organization.context-changed`) keeps them silently and is sent again once the co
   on task-service `getHome`, then the gateway relay.
 - G-T1: `TaskSummary` carries no list name; archived lists read `Archived list`.
 - G-R1: no realtime notice for the caller's tasks across lists; see the refresh triggers above.
+- The members of `Assign` have no loading or error state: Task's `cw-task-menu` takes only
+  `people` and disables `Assign` while it is empty, so a failed members read looks like an empty
+  menu until the next opening reads them again.
 - The route relies on the router's default error component instead of declaring
   `errorComponent: RouteErrorBoundary`, because Errors' `.` entry does not list `home` among its
   consumers; the rendered state is the same.

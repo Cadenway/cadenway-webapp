@@ -185,11 +185,13 @@ describe('HomePage', () => {
     toggleAssignee: Mock;
     moveTo: Mock;
     askDelete: Mock;
+    duplicate: Mock;
     setDeleteOpen: Mock;
     trash: Mock;
     confirmCancel: Mock;
     keepCancel: Mock;
     hidden: WritableSignal<readonly string[]>;
+    pending: WritableSignal<Readonly<Record<string, Partial<TaskSummary>>>>;
     cancelKeys: WritableSignal<readonly string[] | null>;
     deleteOpen: WritableSignal<boolean>;
   };
@@ -204,8 +206,16 @@ describe('HomePage', () => {
     );
     changed = new Subject<string>();
     const hidden: WritableSignal<readonly string[]> = signal<readonly string[]>([]);
+    const pending: WritableSignal<Readonly<Record<string, Partial<TaskSummary>>>> = signal<
+      Readonly<Record<string, Partial<TaskSummary>>>
+    >({});
+    const displayed: (task: TaskSummary) => TaskSummary = (task: TaskSummary): TaskSummary => ({
+      ...task,
+      ...pending()[task.key],
+    });
     rowActions = {
       hidden,
+      pending,
       changed,
       userId: signal('u-camille'),
       cancelKeys: signal<readonly string[] | null>(null),
@@ -217,8 +227,8 @@ describe('HomePage', () => {
       deleteItems: signal(['CAD-470 · Fix the login redirect']),
       sync: vi.fn(),
       rows: (tasks: readonly TaskSummary[]): readonly TaskSummary[] =>
-        tasks.filter((task: TaskSummary): boolean => !hidden().includes(task.key)),
-      displayedTask: (task: TaskSummary): TaskSummary => task,
+        tasks.filter((task: TaskSummary): boolean => !hidden().includes(task.key)).map(displayed),
+      displayedTask: displayed,
       displayedStatus: (task: TaskSummary): StatusKey => task.status,
       open: vi.fn(),
       setStatus: vi.fn(),
@@ -230,6 +240,7 @@ describe('HomePage', () => {
       toggleAssignee: vi.fn(),
       moveTo: vi.fn(),
       askDelete: vi.fn(),
+      duplicate: vi.fn(),
     };
     taskCreate = { created: new Subject<CreatedTask>(), open: vi.fn() };
     TestBed.overrideComponent(HomePage, {
@@ -530,6 +541,26 @@ describe('HomePage', () => {
       expect.objectContaining({ key: 'CAD-482' }),
       expect.objectContaining({ id: 'u-ines' }),
     );
+  });
+
+  it('runs the menu writes on the read copy and checks the drawn one', async () => {
+    rowActions.pending.set({ 'CAD-482': { priority: 'urgente' } });
+    const { harness, element }: { harness: RouterTestingHarness; element: HTMLElement } =
+      await open();
+    expect(lines(element)[1]).toContain('Urgent');
+
+    const menu: TaskMenu = await menuOf(harness, 1);
+    expect(menu.tasks().map((task: TaskSummary) => task.priority)).toEqual(['urgente']);
+    menu.priorityPicked.emit('basse');
+    menu.statusPicked.emit('done');
+    menu.duplicateRequested.emit();
+    menu.deleteRequested.emit();
+
+    const readCopy: unknown = expect.objectContaining({ key: 'CAD-482', priority: 'haute' });
+    expect(rowActions.setPriority).toHaveBeenCalledWith(readCopy, 'basse');
+    expect(rowActions.setStatus).toHaveBeenCalledWith(readCopy, 'done');
+    expect(rowActions.duplicate).toHaveBeenCalledWith(readCopy);
+    expect(rowActions.askDelete).toHaveBeenCalledWith(readCopy);
   });
 
   it('confirms a deletion of the menu and hides the deleted line at once', async () => {

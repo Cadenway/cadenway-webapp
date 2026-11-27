@@ -1,4 +1,12 @@
-import { Component, input, type InputSignal, output, type OutputEmitterRef } from '@angular/core';
+import {
+  Component,
+  ElementRef,
+  inject,
+  input,
+  type InputSignal,
+  output,
+  type OutputEmitterRef,
+} from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { CwButton } from '@cadenway/ui/components/button';
 import { CwContextMenuTriggerFor } from '@cadenway/ui/components/context-menu';
@@ -21,7 +29,9 @@ import type { HomePriorityRow } from '../../../models/home-rows/home-rows.interf
  * it opened it for (`menuOpened`); the trigger sits on the item rather than on the line, whose own
  * `opened` output would otherwise receive the menu's. A menu opened with the mouse or a long press
  * gives the focus back to its trigger, the item: the item takes it (`tabindex=-1`) and hands it to
- * the line's button, so the focus is never lost. Presentational: inputs and outputs only.
+ * the line's button, so the focus is never lost. `focusFirst` gives the focus back after a
+ * deletion, to a line, else to the empty paragraph or the heading. Presentational: inputs and
+ * outputs.
  */
 @Component({
   selector: 'cw-home-priorities',
@@ -30,7 +40,12 @@ import type { HomePriorityRow } from '../../../models/home-rows/home-rows.interf
   template: `
     <section class="flex min-w-0 flex-col gap-2" aria-labelledby="home-priorities">
       <div class="flex items-center justify-between gap-3">
-        <h2 id="home-priorities" class="text-base font-semibold" i18n="@@home.priorities.title">
+        <h2
+          id="home-priorities"
+          class="text-base font-semibold focus-visible:outline-none"
+          tabindex="-1"
+          i18n="@@home.priorities.title"
+        >
           My priorities
         </h2>
         <a cwButton variant="ghost" size="sm" [routerLink]="allLink()">
@@ -44,6 +59,7 @@ import type { HomePriorityRow } from '../../../models/home-rows/home-rows.interf
             <li
               class="border-b border-border last:border-b-0 focus:outline-none"
               tabindex="-1"
+              [attr.data-task-key]="row.task.key"
               [cwContextMenuTriggerFor]="menu()"
               (opened)="menuOpened.emit(row.task)"
               (focus)="forwardFocus($event)"
@@ -60,7 +76,8 @@ import type { HomePriorityRow } from '../../../models/home-rows/home-rows.interf
         </ul>
       } @else {
         <p
-          class="rounded-lg border border-dashed border-input p-6 text-center text-sm text-muted-foreground"
+          class="rounded-lg border border-dashed border-input p-6 text-center text-sm text-muted-foreground focus-visible:outline-none"
+          tabindex="-1"
           data-testid="home-priorities-empty"
           i18n="@@home.priorities.empty"
         >
@@ -127,9 +144,48 @@ export class HomePriorities {
    * @readonly
    */
   public readonly menuOpened: OutputEmitterRef<TaskSummary> = output<TaskSummary>();
+
+  /**
+   * Property host
+   *
+   * @description
+   * The section, whose lines, empty paragraph and heading take the focus back.
+   *
+   * @type {ElementRef<HTMLElement>}
+   * @readonly
+   */
+  private readonly host: ElementRef<HTMLElement> = inject<ElementRef<HTMLElement>>(ElementRef);
   // #endregion
 
   // #region Methods
+  /**
+   * Method focusFirst
+   *
+   * @description
+   * Focuses the line of the first of these tasks still shown, else the empty paragraph when no
+   * line is left, else the `My priorities` heading.
+   *
+   * @param {readonly string[]} keys - Task keys, in order of preference.
+   */
+  public focusFirst(keys: readonly string[]): void {
+    const element: HTMLElement = this.host.nativeElement;
+    const items: HTMLElement[] = [...element.querySelectorAll<HTMLElement>('[data-task-key]')];
+    for (const key of keys) {
+      const button: HTMLButtonElement | null =
+        items
+          .find((item: HTMLElement): boolean => item.dataset['taskKey'] === key)
+          ?.querySelector('button') ?? null;
+      if (button) {
+        button.focus();
+        return;
+      }
+    }
+    (
+      element.querySelector<HTMLElement>('[data-testid="home-priorities-empty"]') ??
+      element.querySelector<HTMLElement>('h2')
+    )?.focus();
+  }
+
   /**
    * Method forwardFocus
    *
