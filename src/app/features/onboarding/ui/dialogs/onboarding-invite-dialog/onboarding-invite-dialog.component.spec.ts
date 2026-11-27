@@ -151,6 +151,21 @@ describe('OnboardingInviteDialog', () => {
     expect(submitButton().disabled).toBe(true);
   });
 
+  it('forgets an address typed but not added once it closes', async () => {
+    const [fixture, submitted]: [ComponentFixture<OnboardingInviteDialog>, Mock] = await open();
+    await typeOnly(fixture, 'marc.roux@ateliernord.fr');
+
+    fixture.componentRef.setInput('open', false);
+    await fixture.whenStable();
+    fixture.componentRef.setInput('open', true);
+    await fixture.whenStable();
+
+    expect((find('onboarding-invite-email') as HTMLInputElement).value).toBe('');
+    expect(submitButton().disabled).toBe(true);
+    submitButton().click();
+    expect(submitted).not.toHaveBeenCalled();
+  });
+
   it('sends the address still typed in the field with the pills', async () => {
     const [fixture, submitted]: [ComponentFixture<OnboardingInviteDialog>, Mock] = await open();
     await add(fixture, 'ines.robert@ateliernord.fr');

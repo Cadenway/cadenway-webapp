@@ -35,7 +35,8 @@ import { OnboardingInviteField } from '../../components/onboarding-invite-field/
  * contract's `invitationSent` marker requires. Its `Invite` button is named after the share
  * dialog's (`App.dc.html` line 2987).
  *
- * Presentational: `[(open)]` opens it and the list of addresses empties each time it opens or
+ * Presentational: `[(open)]` opens it; the list of addresses empties and the field is created anew
+ * (no text typed but not added survives) each time it opens or
  * closes. `Invite`, enabled once an address is added or typed, first commits the address still
  * typed in the field (`commitPending()`, as `Add` does): an invalid one shows the field's error and
  * sends nothing. It then emits `submitted` with the addresses, and the host sends them. While `pending`, the dialog cannot be closed, the field and its pills are

@@ -3,7 +3,9 @@
     <h2 cwDialogTitle i18n="@@onboarding.getting-started.invite-title">Invite a team member</h2>
   </cw-dialog-header>
 
-  <cw-onboarding-invite-field [(emails)]="emails" [disabled]="pending()" />
+  @if (open()) {
+    <cw-onboarding-invite-field [(emails)]="emails" [disabled]="pending()" />
+  }
 
   <cw-dialog-footer>
     <button cwButton cwDialogClose type="button" variant="outline" [disabled]="pending()">
