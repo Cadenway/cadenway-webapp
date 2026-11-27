@@ -59,7 +59,7 @@ function setup(api: Partial<Record<keyof OrganizationApi, unknown>>): Organizati
 }
 
 describe('OrganizationCreateStore', () => {
-  it('creates, then enters the new organization with its logo and opens its workspace', async () => {
+  it('creates, then enters the new organization with its logo and opens its onboarding', async () => {
     const calls: string[] = [];
     const store: OrganizationCreateStore = setup({
       create: vi.fn(() => {
@@ -74,7 +74,7 @@ describe('OrganizationCreateStore', () => {
 
     await expect(store.create(draft)).resolves.toEqual({
       ok: true,
-      destination: '/studio-nord',
+      destination: '/studio-nord?onboarding=start',
       logoFailed: false,
     });
     expect(calls).toEqual(['create', 'enter org-studio logo.png']);
@@ -99,7 +99,11 @@ describe('OrganizationCreateStore', () => {
       enterCreated: () => Promise.resolve({ logoFailed: true }),
     });
 
-    await expect(store.create(draft)).resolves.toMatchObject({ ok: true, logoFailed: true });
+    await expect(store.create(draft)).resolves.toEqual({
+      ok: true,
+      destination: '/studio-nord?onboarding=start',
+      logoFailed: true,
+    });
   });
 
   it('returns the address refusals of the gateway without a created organization', async () => {

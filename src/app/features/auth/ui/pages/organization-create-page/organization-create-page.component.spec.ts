@@ -73,9 +73,9 @@ async function submit(
 }
 
 describe('OrganizationCreatePage', () => {
-  it('previews the address and opens the new workspace', async () => {
+  it('previews the address and opens the onboarding of the new workspace', async () => {
     const { host, fixture, navigate, create }: Awaited<ReturnType<typeof render>> = await render(
-      { ok: true, destination: '/studio-nord', logoFailed: false },
+      { ok: true, destination: '/studio-nord?onboarding=start', logoFailed: false },
       'Studio N\u00f6rd',
     );
 
@@ -89,7 +89,25 @@ describe('OrganizationCreatePage', () => {
       inviteEmails: [],
       logo: null,
     });
-    expect(navigate).toHaveBeenCalledWith('/studio-nord', { replaceUrl: true });
+    expect(navigate).toHaveBeenCalledWith('/studio-nord?onboarding=start', { replaceUrl: true });
+  });
+
+  it('adds the notice of a logo that could not be uploaded to the address it opens', async () => {
+    for (const [destination, opened] of [
+      ['/studio-nord?onboarding=start', '/studio-nord?onboarding=start&notice=logo-upload-failed'],
+      ['/studio-nord', '/studio-nord?notice=logo-upload-failed'],
+      ['/organizations', '/organizations'],
+    ] as const) {
+      TestBed.resetTestingModule();
+      const { host, fixture, navigate }: Awaited<ReturnType<typeof render>> = await render(
+        { ok: true, destination, logoFailed: true },
+        'Studio Nord',
+      );
+
+      await submit(host, fixture);
+
+      expect(navigate).toHaveBeenCalledWith(opened, { replaceUrl: true });
+    }
   });
 
   it('marks the empty logo with the draft initials and sizes a chosen logo', async () => {

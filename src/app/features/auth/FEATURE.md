@@ -86,8 +86,11 @@ was scheduled, whose session the gateway already ended.
   chooser card: the header slots are bound once by the auth root route, so one screen cannot add
   its own header action.
 - A sign-up replaced by a newer one (`auth.sign-up-replaced`) returns to
-  `/signup?reason=sign-up-replaced`. A creation whose logo could not be uploaded opens
-  `/<slug>?notice=logo-upload-failed`, which the home screen explains.
+  `/signup?reason=sign-up-replaced`.
+- A creation opens `/<slug>?onboarding=start`, which asks Onboarding's assistant to open; the
+  assistant belongs to Onboarding, and a reserved slug opens `/organizations` without it. A
+  creation whose logo could not be uploaded appends `&notice=logo-upload-failed`, which the home
+  screen explains.
 
 ## Copy not taken word for word from the mockup
 

@@ -148,8 +148,9 @@ interface CreateModel {
  * generated address preview `app.<domain>/<slug>`, team size, main use and invitations. The
  * gateway's address refusals (`organization.slug-invalid`, `organization.slug-reserved`,
  * `organization.slug-taken`) show on the name. Once created, the session moves to the new
- * organization, its logo is uploaded, and `/<slug>` opens; when the logo could not be uploaded it
- * opens `/<slug>?notice=logo-upload-failed`, which the home screen explains.
+ * organization, its logo is uploaded, and `/<slug>?onboarding=start` opens the onboarding
+ * assistant; when the logo could not be uploaded the address also carries
+ * `notice=logo-upload-failed`, which the home screen explains.
  */
 @Component({
   selector: 'cw-organization-create-page',
@@ -538,7 +539,7 @@ export class OrganizationCreatePage {
         if (result.ok) {
           await this.open(
             result.logoFailed && result.destination !== '/organizations'
-              ? `${result.destination}?notice=logo-upload-failed`
+              ? `${result.destination}${result.destination.includes('?') ? '&' : '?'}notice=logo-upload-failed`
               : result.destination,
           );
           return undefined;
