@@ -7,7 +7,7 @@ import type { Subscription } from 'rxjs';
  * Service RouteFocusService
  *
  * @description
- * Moves focus after navigation to a different path.
+ * Moves focus after navigation to a different path, unless a modal window holds it.
  */
 @Service()
 export class RouteFocusService {
@@ -104,9 +104,12 @@ export class RouteFocusService {
    * Method focus
    *
    * @description
-   * Focuses the innermost route target, or main, without scrolling.
+   * Focuses the innermost route target, or main, without scrolling. A modal window that holds the
+   * focus (an `aria-modal` dialog kept open across the navigation, such as the onboarding
+   * assistant) keeps it: the route target is behind it.
    */
   private focus(): void {
+    if (this.document.activeElement?.closest('[aria-modal="true"]')) return;
     const targets: NodeListOf<HTMLElement> = this.document.querySelectorAll('[data-route-focus]');
     const element: HTMLElement | null =
       Array.from(targets).at(-1) ?? this.document.querySelector('main');

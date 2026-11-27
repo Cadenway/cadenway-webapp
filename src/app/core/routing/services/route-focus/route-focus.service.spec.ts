@@ -56,6 +56,45 @@ describe('route infrastructure', () => {
     expect(TestBed.inject(Router).url).toBe('/two');
     focus.mockRestore();
   });
+  it('leaves the focus in a modal window that holds it across the navigation', async () => {
+    TestBed.configureTestingModule({
+      providers: [
+        provideRouter([
+          { path: 'one', component: RouteFixture },
+          { path: 'two', component: RouteFixture },
+        ]),
+        provideAppRouting(),
+      ],
+    });
+    TestBed.inject(RouteFocusService);
+    const modal: HTMLElement = document.createElement('div');
+    modal.setAttribute('role', 'dialog');
+    modal.setAttribute('aria-modal', 'true');
+    const title: HTMLElement = document.createElement('h2');
+    title.tabIndex = -1;
+    modal.append(title);
+    document.body.append(modal);
+    const harness: RouterTestingHarness = await RouterTestingHarness.create();
+    await harness.navigateByUrl('/one');
+    title.focus();
+    const focus: MockInstance = vi.spyOn(HTMLElement.prototype, 'focus');
+    await harness.navigateByUrl('/two');
+    harness.detectChanges();
+    TestBed.tick();
+    expect(focus).not.toHaveBeenCalled();
+    expect(document.activeElement).toBe(title);
+    title.blur();
+    await harness.navigateByUrl('/one');
+    harness.detectChanges();
+    TestBed.tick();
+    expect(focus.mock.contexts.at(-1)).toBe(document.querySelector('h1[data-route-focus]'));
+    modal.remove();
+    await harness.navigateByUrl('/two');
+    harness.detectChanges();
+    TestBed.tick();
+    expect(focus.mock.contexts.at(-1)).toBe(document.querySelector('h1[data-route-focus]'));
+    focus.mockRestore();
+  });
   it('prefers the innermost route target and falls back to main', async () => {
     TestBed.configureTestingModule({
       providers: [
