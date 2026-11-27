@@ -1,0 +1,117 @@
+import { TestBed } from '@angular/core/testing';
+import { InvitationsService, MyTasksService, type OnboardingState } from '@cadenway/api-client';
+import { of } from 'rxjs';
+import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
+
+import type { OnboardingProgress } from '../../../models/onboarding/onboarding.interface';
+import { OnboardingApi } from './onboarding-api.service';
+
+/**
+ * Function state
+ *
+ * @description
+ * An onboarding state of the gateway at a version.
+ *
+ * @param {number} version - Its version.
+ * @returns {OnboardingState} The state.
+ */
+function state(version: number): OnboardingState {
+  return {
+    version,
+    wizard: {
+      status: 'in-progress',
+      step: 'space',
+      preset: 'dev',
+      name: null,
+      prefix: null,
+      color: 'violet',
+    },
+    provisioning: null,
+    checklist: {
+      presentation: 'expanded',
+      firstTaskCreated: false,
+      invitationSent: false,
+      boardTried: false,
+    },
+  };
+}
+
+describe('OnboardingApi', () => {
+  let myTasks: Record<string, Mock>;
+  let inviteMembers: Mock;
+  let api: OnboardingApi;
+
+  beforeEach(() => {
+    myTasks = {
+      getOnboarding: vi.fn(() => of(state(1))),
+      updateOnboarding: vi.fn(() => of(state(2))),
+      updateOnboardingChecklist: vi.fn(() => of(state(3))),
+      finishOnboarding: vi.fn(() => of(state(4))),
+    };
+    inviteMembers = vi.fn(() =>
+      of({
+        invitations: [
+          { email: 'ines.robert@ateliernord.fr', outcome: 'invited', invitationId: null },
+          { email: 'hugo.martin@ateliernord.fr', outcome: 'already-invited', invitationId: null },
+        ],
+      }),
+    );
+    TestBed.configureTestingModule({
+      providers: [
+        OnboardingApi,
+        { provide: MyTasksService, useValue: myTasks },
+        { provide: InvitationsService, useValue: { inviteMembers } },
+      ],
+    });
+    api = TestBed.inject(OnboardingApi);
+  });
+
+  it('reads the progress', async () => {
+    const progress: OnboardingProgress = await api.get();
+
+    expect(progress.version).toBe(1);
+    expect(progress.wizard.status).toBe('in-progress');
+  });
+
+  it('saves a draft and dismisses from the version shown', async () => {
+    await expect(api.saveDraft({ step: 'preset', name: 'Product' }, 1)).resolves.toMatchObject({
+      version: 2,
+    });
+    await api.dismiss(2);
+
+    expect(myTasks['updateOnboarding'].mock.calls).toEqual([
+      [{ step: 'preset', name: 'Product' }, { headers: { 'If-Match': '"1"' } }],
+      [{ dismissed: true }, { headers: { 'If-Match': '"2"' } }],
+    ]);
+  });
+
+  it('updates the checklist from the version shown', async () => {
+    await api.updateChecklist({ presentation: 'collapsed' }, 5);
+
+    expect(myTasks['updateOnboardingChecklist']).toHaveBeenCalledWith(
+      { presentation: 'collapsed' },
+      { headers: { 'If-Match': '"5"' } },
+    );
+  });
+
+  it('finishes with the version and the idempotency key', async () => {
+    await expect(
+      api.finish({ name: 'Product', prefix: 'PRO', preset: 'dev', color: 'violet' }, 2, 'key-1'),
+    ).resolves.toMatchObject({ version: 4 });
+
+    expect(myTasks['finishOnboarding']).toHaveBeenCalledWith(
+      { name: 'Product', prefix: 'PRO', preset: 'dev', color: 'violet' },
+      { headers: { 'If-Match': '"2"', 'Idempotency-Key': 'key-1' } },
+    );
+  });
+
+  it('invites as members and counts the addresses invited', async () => {
+    await expect(
+      api.invite(['ines.robert@ateliernord.fr', 'hugo.martin@ateliernord.fr']),
+    ).resolves.toEqual({ invited: 1, skipped: 1 });
+    expect(inviteMembers).toHaveBeenCalledWith({
+      emails: ['ines.robert@ateliernord.fr', 'hugo.martin@ateliernord.fr'],
+      role: 'member',
+    });
+  });
+});

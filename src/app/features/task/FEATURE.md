@@ -36,11 +36,11 @@ the typed route error states belong to Errors.
 
 ## Public entry points
 
-| Entry point   | Consumers                                                                 |
-| ------------- | ------------------------------------------------------------------------- |
-| `.`           | spaces, search, inbox, home, my-tasks, dashboards, goals, trash, archives |
-| `providers`   | workspace                                                                 |
-| `task.routes` | workspace                                                                 |
+| Entry point   | Consumers                                                                             |
+| ------------- | ------------------------------------------------------------------------------------- |
+| `.`           | spaces, search, inbox, home, my-tasks, dashboards, goals, trash, archives, onboarding |
+| `providers`   | workspace                                                                             |
+| `task.routes` | workspace                                                                             |
 
 `providers` publishes, bound on the shells of `/:org` (the application shell and both settings
 shells, so the palette's `Create a task`, task results and `?task=<KEY>` work in the settings too):

@@ -22,8 +22,9 @@ belong to Auth.
 - `/:org` runs `sessionGuard`, then `organizationGuard`, then `workspaceResolver`, with
   guards rerun when the slug changes or context revalidation is requested. It is componentless:
   it provides `provideCadenwayIcons()` and the workspace-wide services (the workspace runtime and
-  context, Account's `providePresence()`, Organization's `provideOrganizationUsage()` and Spaces'
-  `provideSpacesNavigation()`), and its children mount the shells, in this order:
+  context, Account's `providePresence()`, Organization's `provideOrganizationUsage()`,
+  Onboarding's `provideOnboarding()` and Spaces' `provideSpacesNavigation()`), and its children
+  mount the shells, in this order:
   - `account` and `organization` load `SettingsShell` and mount Account's `ACCOUNT_ROUTES` and
     Organization's `ORGANIZATION_ROUTES`. Their `data` names the settings navigation (`Settings`,
     `workspace.settings.account-navigation`; `Organization settings`,
@@ -52,7 +53,7 @@ belong to Auth.
     | `sidebarHeader`        | Workspace's organization row, Search's `Search…` button                                                                                                      |
     | `sidebar`              | Spaces' favorites, spaces accordion and tips                                                                                                                 |
     | `sidebarFooter`        | Spaces' sprint progress, Organization's plan line, Spaces' `Trash` and `Archives`, `Keyboard shortcuts`                                                      |
-    | `overlays`             | Search's command palette, Workspace's shortcuts dialog, Task's create dialog and task detail                                                                 |
+    | `overlays`             | Search's command palette, Workspace's shortcuts dialog, Task's create dialog and task detail, Onboarding's `Getting started` checklist and assistant         |
     - `''` mounts `HOME_ROUTES`, then `SPACES_ROUTES` (`spaces/:spaceId`, `l/:listId`), then
       `TASK_ROUTES` (`t/:taskKey`), then `MY_TASKS_ROUTES` (`my-tasks`), `DASHBOARDS_ROUTES`
       (`dashboards`), `GOALS_ROUTES` (`goals`), `DOCS_ROUTES` (`docs`, `d/:docId`), `TRASH_ROUTES`
@@ -68,13 +69,13 @@ belong to Auth.
 
 ## Public entry points
 
-| Entry point                         | Consumers                                                                                           |
-| ----------------------------------- | --------------------------------------------------------------------------------------------------- |
-| `workspace.routes`                  | app                                                                                                 |
-| `ports/workspace-context`           | home, errors, account, search, inbox, organization, spaces, task, my-tasks, dashboards, goals, docs |
-| `http/guards/organization-role`     | organization                                                                                        |
-| `ui/dialogs/discard-changes-dialog` | account, organization                                                                               |
-| `ports/workspace-refresh`           | organization, account                                                                               |
+| Entry point                         | Consumers                                                                                                       |
+| ----------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| `workspace.routes`                  | app                                                                                                             |
+| `ports/workspace-context`           | home, errors, account, search, inbox, organization, spaces, task, my-tasks, dashboards, goals, docs, onboarding |
+| `http/guards/organization-role`     | organization                                                                                                    |
+| `ui/dialogs/discard-changes-dialog` | account, organization                                                                                           |
+| `ports/workspace-refresh`           | organization, account                                                                                           |
 
 `ports/workspace-context` publishes `WORKSPACE_CONTEXT` (`WorkspaceContextPort`: `user`,
 `organization`, `role` and `can(role)`) and the `WorkspaceUser`, `WorkspaceOrganization` and
@@ -106,7 +107,9 @@ answer, for a settings page's `confirmDiscard()` (`@shared/unsaved-changes`).
   `RealtimeService.issueRealtimeTicket` for single-use connection tickets.
 - Auth's `withSessionLock` (`@features/auth`), in exclusive mode around the organization switch.
 - The `providers` entries of Account, Dashboards, Docs, Goals, Home, Inbox, My tasks,
-  Organization, Search, Spaces (including `provideSpacesNavigation()`) and Task, and
+  Onboarding (`provideOnboarding()`, `withGettingStarted()` and `withOnboardingWizard()`, in the
+  application shell only), Organization, Search, Spaces (including `provideSpacesNavigation()`)
+  and Task, and
   Organization's `utils/plan-label`, bound on `/:org`.
 - The routes of Spaces, Task, My tasks, Dashboards, Goals, Docs, Trash and Archives, mounted under
   `/:org`.
