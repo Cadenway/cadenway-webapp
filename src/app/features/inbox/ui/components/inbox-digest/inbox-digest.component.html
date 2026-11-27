@@ -1,0 +1,64 @@
+<div #region class="rounded-lg focus-visible:outline-none" tabindex="-1">
+  @if (store.loading()) {
+    <div
+      class="flex flex-col gap-2 rounded-lg border border-border p-2"
+      role="status"
+      aria-busy="true"
+      aria-label="Loading the notifications"
+      i18n-aria-label="@@inbox.digest.loading"
+      data-testid="inbox-digest-loading"
+    >
+      <div cwSkeleton class="h-14 w-full"></div>
+      <div cwSkeleton class="h-14 w-full"></div>
+      <div cwSkeleton class="h-14 w-full"></div>
+    </div>
+  } @else if (store.failed()) {
+    <cw-empty variant="outline" size="sm" role="alert" data-testid="inbox-digest-failed">
+      <cw-empty-header>
+        <cw-empty-media tone="destructive">
+          <ng-icon name="phosphorWarningCircleBold" aria-hidden="true" />
+        </cw-empty-media>
+        <cw-empty-title i18n="@@inbox.notifications-failed"
+          >The notifications could not be loaded</cw-empty-title
+        >
+      </cw-empty-header>
+      <cw-empty-content>
+        <button
+          cwButton
+          type="button"
+          variant="outline"
+          size="sm"
+          [loading]="store.retrying()"
+          (click)="retry()"
+          i18n="@@inbox.retry"
+        >
+          Retry
+        </button>
+      </cw-empty-content>
+    </cw-empty>
+  } @else if (store.empty()) {
+    <cw-empty variant="outline" size="sm">
+      <cw-empty-header>
+        <cw-empty-media>
+          <ng-icon name="phosphorCheckCircleBold" aria-hidden="true" />
+        </cw-empty-media>
+        <cw-empty-title i18n="@@inbox.notifications-empty">No notifications</cw-empty-title>
+        <cw-empty-description i18n="@@inbox.notifications-empty-text"
+          >Mentions, assignments and comments on your tasks will show here.</cw-empty-description
+        >
+      </cw-empty-header>
+    </cw-empty>
+  } @else {
+    <ul class="flex flex-col gap-px rounded-lg border border-border p-1" data-testid="inbox-digest">
+      @for (notification of store.items(); track notification.id) {
+        <li>
+          <cw-notification-row
+            [notification]="notification"
+            [now]="now()"
+            (opened)="open(notification)"
+          />
+        </li>
+      }
+    </ul>
+  }
+</div>
