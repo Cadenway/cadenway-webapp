@@ -673,7 +673,8 @@ interface OnboardingWizardStoreInstance {
    * @description
    * `Set up later`: closes the assistant at once, then closes it for good on the gateway; a read in
    * flight is awaited first (the shared store reads before it writes). Only a failed read closes
-   * without a write. A definite refusal, or an unknown outcome after which the progress still shows
+   * without a write, with the toast saying the choice was not saved (the host then removes
+   * `?onboarding=start`). A definite refusal, or an unknown outcome after which the progress still shows
    * the assistant `in-progress`, shows a toast saying the choice was not saved and the assistant
    * may come back; a dropped write shows nothing. Once settled, when a space exists (a finish whose
    * outcome was unknown did create it), it opens the first list.
@@ -979,6 +980,15 @@ function createOnboardingWizardStore(): Type<OnboardingWizardStoreInstance> {
         }
       };
 
+      const showSkipFailed: () => void = (): void => {
+        store._toasts.error(
+          $localize`:@@onboarding.wizard.toast.skip-failed:Your choice could not be saved`,
+          {
+            description: $localize`:@@onboarding.wizard.toast.skip-failed-text:The setup assistant may come back on your next visit.`,
+          },
+        );
+      };
+
       const dismiss: (organizationId: string) => Promise<void> = async (
         organizationId: string,
       ): Promise<void> => {
@@ -992,14 +1002,7 @@ function createOnboardingWizardStore(): Type<OnboardingWizardStoreInstance> {
           const unsaved: boolean = isUncertainOnboardingWrite(error)
             ? shown.wizard.status === 'in-progress'
             : problemCode(error) !== 'onboarding.wizard-closed';
-          if (unsaved) {
-            store._toasts.error(
-              $localize`:@@onboarding.wizard.toast.skip-failed:Your choice could not be saved`,
-              {
-                description: $localize`:@@onboarding.wizard.toast.skip-failed-text:The setup assistant may come back on your next visit.`,
-              },
-            );
-          }
+          if (unsaved) showSkipFailed();
         }
         if (store._onboarding.progress()?.provisioning) openProvisioned(organizationId);
       };
@@ -1084,7 +1087,13 @@ function createOnboardingWizardStore(): Type<OnboardingWizardStoreInstance> {
           const readFailed: boolean =
             store._onboarding.progress() === null && store._onboarding.failed();
           patchState(store, { closed: true });
-          if (organizationId === null || readFailed) return;
+          if (organizationId === null) return;
+          if (readFailed) {
+            // Nothing can be written without a version: the choice is not saved, and the assistant
+            // comes back once a saved draft reopens it on the workspace root.
+            showSkipFailed();
+            return;
+          }
           await dismiss(organizationId);
         },
         finish,

@@ -508,4 +508,27 @@ describe('OnboardingWizardHost', () => {
     expect(dismiss).toHaveBeenCalledTimes(1);
     expect(wizard()).toBeNull();
   });
+
+  it('removes ?onboarding=start on Set up later after a failed read, with the failure toast', async () => {
+    const { fixture, router, dismiss }: Harness = await render(
+      '/atelier-nord?onboarding=start&notice=logo-upload-failed',
+      null,
+      'owner',
+      (): void => {
+        (TestBed.inject(OnboardingStore).failed as WritableSignal<boolean>).set(true);
+      },
+    );
+    expect(wizard()).not.toBeNull();
+
+    document.querySelector<HTMLButtonElement>('[data-testid="onboarding-skip"]')?.click();
+    await settle(fixture);
+
+    expect(wizard()).toBeNull();
+    expect(dismiss).not.toHaveBeenCalled();
+    expect(router.url).toBe('/atelier-nord?notice=logo-upload-failed');
+    const toasts: { error: Mock } = TestBed.inject(CwToastService) as unknown as { error: Mock };
+    expect(toasts.error).toHaveBeenCalledWith('Your choice could not be saved', {
+      description: 'The setup assistant may come back on your next visit.',
+    });
+  });
 });

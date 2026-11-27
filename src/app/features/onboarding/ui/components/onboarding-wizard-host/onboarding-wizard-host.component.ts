@@ -295,6 +295,23 @@ export class OnboardingWizardHost {
         this.settleStart(organizationId, progress);
       });
     });
+    effect((): void => {
+      // `Set up later` after a failed read closes with nothing written and no progress to settle
+      // the launch: the parameter goes, so a reload does not reopen the assistant. A close with a
+      // progress is settled above once the dismissal answers.
+      const organizationId: string = this.workspace.organization().id;
+      if (
+        !this.wizard.closed() ||
+        this.onboarding.progress() !== null ||
+        this.startedFor() !== organizationId ||
+        !hasStart(this.address())
+      ) {
+        return;
+      }
+      untracked((): void => {
+        this.removeStart();
+      });
+    });
     if (this.router.currentNavigation() === null) this.takeStart();
     this.router.events
       .pipe(

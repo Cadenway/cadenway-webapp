@@ -1167,7 +1167,7 @@ describe('OnboardingWizardStore', () => {
     expect(fakes.dismiss).toHaveBeenCalledTimes(1);
   });
 
-  it('only closes on Set up later when the progress read failed', async () => {
+  it('only closes on Set up later when the progress read failed, saying the choice was not saved', async () => {
     const { store, fakes }: Setup = setup(null);
     fakes.failed.set(true);
 
@@ -1175,6 +1175,9 @@ describe('OnboardingWizardStore', () => {
 
     expect(store.closed()).toBe(true);
     expect(fakes.dismiss).not.toHaveBeenCalled();
+    expect(fakes.error).toHaveBeenCalledWith('Your choice could not be saved', {
+      description: 'The setup assistant may come back on your next visit.',
+    });
   });
 
   it('says the choice was not saved when the dismissal is refused', async () => {
