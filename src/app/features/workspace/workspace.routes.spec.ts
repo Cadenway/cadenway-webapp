@@ -31,6 +31,7 @@ import {
   SpacesService,
   TaskQueriesService,
   TasksService,
+  DocumentsService,
 } from '@cadenway/api-client';
 import { filter, firstValueFrom, NEVER, Observable, of, Subject, throwError } from 'rxjs';
 import { type Socket } from 'socket.io-client';
@@ -263,6 +264,23 @@ describe('WORKSPACE_ROUTES', () => {
         { provide: RuntimeConfigStore, useValue: { config: () => ({}) } },
         { provide: InboxService, useValue: { getInboxUnreadCount: () => of({ unreadCount: 2 }) } },
         {
+          provide: DocumentsService,
+          useValue: {
+            listDocuments: () => of({ items: [], nextCursor: null, total: 0 }),
+            getDocument: () =>
+              of({
+                id: 'doc-onboarding',
+                spaceId: 's1',
+                title: 'Onboarding',
+                authorUserId: 'u1',
+                createdAt: '2026-11-02T09:00:00Z',
+                updatedAt: '2026-11-02T09:00:00Z',
+                version: 1,
+                body: '',
+              }),
+          },
+        },
+        {
           provide: BillingService,
           useValue: {
             getBillingSubscription: () =>
@@ -437,7 +455,7 @@ describe('WORKSPACE_ROUTES', () => {
       ['/atelier-nord/dashboards', 'Team dashboard', 'Dashboards', 'dashboards-rail-item'],
       ['/atelier-nord/goals', 'Goals', 'Goals', 'goals-rail-item'],
       ['/atelier-nord/docs', 'Documents', 'Documents', 'docs-rail-item'],
-      ['/atelier-nord/d/doc-onboarding', 'Document', 'Document', 'docs-rail-item'],
+      ['/atelier-nord/d/doc-onboarding', 'Onboarding', 'Onboarding — Cadenway', 'docs-rail-item'],
       ['/atelier-nord/trash', 'Trash', 'Trash', null],
       ['/atelier-nord/archives', 'Archives', 'Archives', null],
     ] as const) {
