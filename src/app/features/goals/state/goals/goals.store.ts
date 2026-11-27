@@ -23,7 +23,7 @@ import {
 } from '@ngrx/signals';
 import { auditTime, EMPTY, filter, fromEvent, merge, type Observable } from 'rxjs';
 
-import { hasProblemCode, OrganizationSwitchPendingError } from '@core/api';
+import { hasProblemCode, OrganizationPin, OrganizationSwitchPendingError } from '@core/api';
 import { RealtimeConnection } from '@core/realtime';
 import { LIST_DIRECTORY, type ListDirectoryEntry } from '@features/spaces/ports/list-directory';
 import { SPACE_DIRECTORY, type SpaceDirectoryEntry } from '@features/spaces/ports/space-directory';
@@ -223,11 +223,22 @@ interface GoalsContext {
   generation: number;
 
   /**
+   * Property organizationId
+   *
+   * @description
+   * The organization of the current generation, the one the goals were read for: a write is sent,
+   * and its answer applied, only while the workspace and `OrganizationPin` both still name it.
+   *
+   * @type {string}
+   */
+  organizationId: string;
+
+  /**
    * Property destroyed
    *
    * @description
-   * Whether the page that provided the store is gone: the writes already queued are still sent,
-   * but nothing is read again.
+   * Whether the page that provided the store is gone: the writes already queued are still sent
+   * while the workspace and the pin still name its organization, but nothing is read again.
    *
    * @type {boolean}
    */
@@ -915,7 +926,11 @@ function createGoalsStore(): Type<GoalsStoreInstance> {
       const api: GoalsApi = inject(GoalsApi);
       const workspace: WorkspaceContextPort = inject(WORKSPACE_CONTEXT);
       const loads: GoalsLoads = { background: false, queued: false, last: null, landed: 0 };
-      const context: GoalsContext = { generation: 0, destroyed: false };
+      const context: GoalsContext = {
+        generation: 0,
+        organizationId: workspace.organization().id,
+        destroyed: false,
+      };
       inject(DestroyRef).onDestroy((): void => {
         context.destroyed = true;
       });
@@ -923,6 +938,7 @@ function createGoalsStore(): Type<GoalsStoreInstance> {
       return {
         _api: api,
         _workspace: workspace,
+        _pin: inject(OrganizationPin),
         _loads: loads,
         _context: context,
         _toasts: inject(CwToastService),
@@ -1149,12 +1165,22 @@ function createGoalsStore(): Type<GoalsStoreInstance> {
     withMethods((store) => {
       const context: GoalsContext = store._context;
       const today: () => string = (): string => todayIso(new Date());
+      // `current` only says whether `_followOrganization` has yet to reset a generation, so it
+      // guards the flags that reset owns. The resolver commits another organization (workspace
+      // context and pin) synchronously, before that effect moves the generation, and a destroyed
+      // store keeps its generation while the global pin moves on: `live` also checks both against
+      // the organization the store read, so nothing is sent under another organization's pin or
+      // applied in between.
       const current: (generation: number) => boolean = (generation: number): boolean =>
         generation === context.generation;
+      const live: (generation: number) => boolean = (generation: number): boolean =>
+        current(generation) &&
+        store._workspace.organization().id === context.organizationId &&
+        store._pin.current() === context.organizationId;
       const alive: (generation: number) => boolean = (generation: number): boolean =>
-        current(generation) && !context.destroyed;
+        live(generation) && !context.destroyed;
       const guard: (generation: number) => void = (generation: number): void => {
-        if (!current(generation)) throw new WriteDroppedError();
+        if (!live(generation)) throw new WriteDroppedError();
       };
       const dropped: (error: unknown, generation: number) => boolean = (
         error: unknown,
@@ -1163,8 +1189,8 @@ function createGoalsStore(): Type<GoalsStoreInstance> {
         error instanceof WriteDroppedError ||
         error instanceof OrganizationSwitchPendingError ||
         hasProblemCode(error, 'organization.context-changed') ||
-        !current(generation);
-      const organizationId: () => string = (): string => store._workspace.organization().id;
+        !live(generation);
+      const organizationId: () => string = (): string => context.organizationId;
       const record: (write: GoalWrite) => void = (write: GoalWrite): void => {
         patchState(store, { _writes: [...store._writes(), write] });
       };
@@ -1393,7 +1419,7 @@ function createGoalsStore(): Type<GoalsStoreInstance> {
         generation: number,
       ): Promise<void> => {
         scheduled.delete(resultId);
-        if (!current(generation)) return;
+        if (!live(generation)) return;
         const edits: Readonly<Record<string, number | boolean>> = store._edits();
         if (!(resultId in edits)) return;
         const edit: EditRecord | undefined = records.get(resultId);
@@ -1448,7 +1474,7 @@ function createGoalsStore(): Type<GoalsStoreInstance> {
             }
             write = await send(generation, goalId, update);
           }
-          if (!current(generation)) return;
+          if (!live(generation)) return;
           const lane: GoalLane = laneOf(goalId);
           lane.version = write.version ?? lane.version;
           lane.dirty = true;
@@ -1541,7 +1567,7 @@ function createGoalsStore(): Type<GoalsStoreInstance> {
               store._api.create(draft, quarter, today(), idempotencyKey),
             );
             createKeys.delete(draftKey);
-            if (!current(generation)) return null;
+            if (!live(generation)) return null;
             record({
               organizationId: organizationId(),
               after: store._readsIssued(),
@@ -1596,7 +1622,7 @@ function createGoalsStore(): Type<GoalsStoreInstance> {
             try {
               guard(generation);
               await store._api.delete(goalId, version);
-              if (current(generation)) outcome = removed();
+              if (live(generation)) outcome = removed();
             } catch (error: unknown) {
               if (dropped(error, generation)) return;
               if (isGone(error)) {
@@ -1693,7 +1719,7 @@ function createGoalsStore(): Type<GoalsStoreInstance> {
                 write = await send(generation, goalId, creation);
               }
               createKeys.delete(draftKey);
-              if (!current(generation)) return;
+              if (!live(generation)) return;
               const lane: GoalLane = laneOf(goalId);
               lane.version = write.version ?? lane.version;
               lane.dirty = true;
@@ -1746,7 +1772,7 @@ function createGoalsStore(): Type<GoalsStoreInstance> {
                 await fresh(goalId, generation);
                 await send(generation, goalId, removal);
               }
-              if (!current(generation)) return;
+              if (!live(generation)) return;
               record({
                 organizationId: organizationId(),
                 after: store._readsIssued(),
@@ -1781,8 +1807,9 @@ function createGoalsStore(): Type<GoalsStoreInstance> {
           store._askOwners(ids.split(' '));
           patchState(store, { _peopleRequest: store._peopleRequest() + 1 });
         }),
-        _followOrganization: signalMethod<string>((): void => {
+        _followOrganization: signalMethod<string>((organizationId: string): void => {
           context.generation += 1;
+          context.organizationId = organizationId;
           lastAsked = null;
           records.clear();
           scheduled.clear();
@@ -1852,7 +1879,11 @@ function createGoalsStore(): Type<GoalsStoreInstance> {
  * are dropped with a warning. A deletion is sent from the version confirmed, and a `412` keeps the
  * goal, warns and reads it again, so deleting it takes a new confirmation. Every write is bound to
  * the organization generation it started in: after a switch, even back to the same organization,
- * nothing more is sent, patched or toasted. A creation keeps its idempotency key until a definitive
+ * nothing more is sent, patched or toasted. It is also sent, and its answer applied, only while the
+ * workspace and `OrganizationPin` both name the organization the goals were read for, so a write
+ * queued or answered once the resolver committed another organization, before the store reacts or
+ * after the page is gone, is dropped instead of reaching the gateway under the new organization's
+ * `If-Organization-Match`. A creation keeps its idempotency key until a definitive
  * answer and is sent again with it after an unknown outcome or
  * `409 idempotency.request-in-progress`, up to three times, then reported as unconfirmed; a resubmitted
  * identical draft reuses the key. The members are read again after a failure and for owners they

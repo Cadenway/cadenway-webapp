@@ -8,6 +8,7 @@ import { CwToastService } from '@cadenway/ui/components/toast';
 import { of, Subject } from 'rxjs';
 import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 
+import { OrganizationPin } from '@core/api';
 import { LIST_DIRECTORY } from '@features/spaces/ports/list-directory';
 import { SPACE_DIRECTORY, type SpaceDirectoryEntry } from '@features/spaces/ports/space-directory';
 import { TaskDetailOpener } from '@features/task';
@@ -265,11 +266,13 @@ describe('GoalsPage', () => {
    * Function render
    *
    * @description
-   * Opens the goals and waits until the skeleton is gone.
+   * Pins Atelier Nord, as the workspace resolver does, opens the goals and waits until the
+   * skeleton is gone.
    *
    * @returns {Promise<RouterTestingHarness>} The harness.
    */
   async function render(): Promise<RouterTestingHarness> {
+    TestBed.inject(OrganizationPin).set('o1');
     const harness: RouterTestingHarness = await RouterTestingHarness.create();
     await harness.navigateByUrl('/goals');
     await expect

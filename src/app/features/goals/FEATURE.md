@@ -41,7 +41,7 @@ it (`App.dc.html` line 6964). The settings shells do not bind it: `Compte.dc.htm
 - Workspace's `ports/workspace-context` (`WORKSPACE_CONTEXT`) for the organization, the role, the
   caller and the slug.
 - Core's `@core/api` (`PASSIVE_REQUEST`, `readProblem`, `hasProblemCode`,
-  `OrganizationSwitchPendingError`) and `@core/realtime` (`RealtimeConnection.reconnected`,
+  `OrganizationSwitchPendingError`, `OrganizationPin`) and `@core/realtime` (`RealtimeConnection.reconnected`,
   optional).
 - Errors' `.` entry (`RouteErrorBoundary`) for the route's `errorComponent`.
 - `@cadenway/ui` (`accordion`, `alert-dialog`, `app-rail`, `button`, `checkbox`, `empty`, `input`,
@@ -94,7 +94,10 @@ confirmed` asks to submit again, which reuses the key. A deletion of unknown out
   and is not kept once a newer read landed. A superseded read is aborted between its pages. Each
   write is bound to the organization generation it started in: after a switch, even back to the
   same organization, nothing more is sent, patched or toasted, and the forms and the confirmation
-  close.
+  close. A write is also sent, and its answer applied, only while the workspace and
+  `OrganizationPin` both name the organization the goals were read for (the resolver commits both
+  synchronously, before the store reacts), so a write queued or answered in between, or after the
+  page is gone and the pin moved on, is dropped without a toast.
 - Focus: after a key result is removed, the next row's control takes it, else `Add a key result`,
   else the goal's trigger; a closed goal form returns it to `New goal`, or to the new goal's trigger
   after a creation; a closed key result form returns it to `Add a key result`. The key result

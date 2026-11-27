@@ -5,6 +5,7 @@ import { CwToastService } from '@cadenway/ui/components/toast';
 import { firstValueFrom, Subject } from 'rxjs';
 import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 
+import { OrganizationPin } from '@core/api';
 import { SPACE_DIRECTORY, type SpaceDirectoryEntry } from '@features/spaces/ports/space-directory';
 import { type Person, TaskDetailOpener } from '@features/task';
 import {
@@ -359,6 +360,7 @@ describe('GoalsStore', () => {
     Mock
   >;
   let toasts: { success: Mock; error: Mock; warning: Mock };
+  let pin: OrganizationPin;
 
   beforeEach(() => {
     organization.set(ATELIER_NORD);
@@ -418,9 +420,38 @@ describe('GoalsStore', () => {
    * @returns {Promise<InstanceType<typeof GoalsStore>>} The store.
    */
   async function loaded(): Promise<InstanceType<typeof GoalsStore>> {
-    const store: InstanceType<typeof GoalsStore> = TestBed.inject(GoalsStore);
+    const store: InstanceType<typeof GoalsStore> = started();
     await settle();
     return store;
+  }
+
+  /**
+   * Function started
+   *
+   * @description
+   * Pins the workspace's organization, as the resolver does, then creates the store. It injects
+   * nothing earlier, so a spec may still override a provider before calling it.
+   *
+   * @returns {InstanceType<typeof GoalsStore>} The store.
+   */
+  function started(): InstanceType<typeof GoalsStore> {
+    pin = TestBed.inject(OrganizationPin);
+    pin.set(organization().id);
+    return TestBed.inject(GoalsStore);
+  }
+
+  /**
+   * Function commit
+   *
+   * @description
+   * Commits another organization in the workspace and the pin, synchronously, as the resolver
+   * does, without letting the store react.
+   *
+   * @param {WorkspaceOrganization} next - The organization committed.
+   */
+  function commit(next: WorkspaceOrganization): void {
+    organization.set(next);
+    pin.set(next.id);
   }
 
   it('reads the goals of the quarter with their owners and figures', async () => {
@@ -597,7 +628,7 @@ describe('GoalsStore', () => {
 
     store.step('g1', 'k6', 1);
     await settle();
-    organization.set(STUDIO_SUD);
+    commit(STUDIO_SUD);
     await settle();
     pending.error(problem(403, 'access.role-insufficient'));
     await settle();
@@ -838,9 +869,9 @@ describe('GoalsStore', () => {
     store.step('g1', 'k6', 1);
     await burst();
     store.step('g1', 'k6', 1);
-    organization.set(STUDIO_SUD);
+    commit(STUDIO_SUD);
     await settle();
-    organization.set(ATELIER_NORD);
+    commit(ATELIER_NORD);
     await settle();
     first.next({ result: signups(177), version: 4 });
     first.complete();
@@ -875,7 +906,7 @@ describe('GoalsStore', () => {
       .mockResolvedValueOnce([{ id: 'u-cm', name: 'Camille Martin', initials: 'CM', avatar: null }])
       .mockReturnValueOnce(firstValueFrom(second));
     api.list.mockResolvedValue(list([goal({ ownerUserId: 'u-lp' })]));
-    const store: InstanceType<typeof GoalsStore> = TestBed.inject(GoalsStore);
+    const store: InstanceType<typeof GoalsStore> = started();
     await expect
       .poll(async () => {
         TestBed.tick();
@@ -1108,5 +1139,74 @@ describe('GoalsStore', () => {
       description: 'It was not deleted. Check it, then delete it again.',
     });
     expect(toasts.success).not.toHaveBeenCalled();
+  });
+
+  it('does not send a queued write once another organization is committed, before the store reacts', async () => {
+    const store: InstanceType<typeof GoalsStore> = await loaded();
+    const first: Subject<KeyResultWrite> = await queued(store);
+    await burst();
+
+    commit(STUDIO_SUD);
+    first.next({ result: signups(177), version: 4 });
+    first.complete();
+    await flush();
+
+    expect(api.updateResult).toHaveBeenCalledTimes(1);
+    expect(api.get).not.toHaveBeenCalled();
+    TestBed.tick();
+    await settle();
+    expect(api.updateResult).toHaveBeenCalledTimes(1);
+    expect(toasts.error).not.toHaveBeenCalled();
+  });
+
+  it('does not apply an answer that lands once another organization is committed, before the store reacts', async () => {
+    const answer: Deferred<Goal> = deferred<Goal>();
+    api.create.mockReturnValueOnce(answer.promise);
+    const store: InstanceType<typeof GoalsStore> = await loaded();
+    const creating: Promise<string | null> = store.create(SUPPORT);
+    await flush();
+
+    commit(STUDIO_SUD);
+    answer.resolve(goal({ id: 'g9', name: SUPPORT.name, version: 1, results: [] }));
+
+    await expect(creating).resolves.toBeNull();
+    TestBed.tick();
+    await settle();
+    expect(store.list()?.map((view: GoalView) => view.goal.id)).toEqual(['g1']);
+    expect(store.creating()).toBe(false);
+    expect(toasts.success).not.toHaveBeenCalled();
+  });
+
+  it('refuses a write while the pin names another organization than the store', async () => {
+    const store: InstanceType<typeof GoalsStore> = await loaded();
+
+    pin.set(STUDIO_SUD.id);
+    store.step('g1', 'k6', 1);
+    await burst();
+
+    await expect(store.create(SUPPORT)).resolves.toBeNull();
+    expect(organization().id).toBe(ATELIER_NORD.id);
+    expect(api.updateResult).not.toHaveBeenCalled();
+    expect(api.create).not.toHaveBeenCalled();
+    expect(store.creating()).toBe(false);
+    expect(toasts.error).not.toHaveBeenCalled();
+  });
+
+  it('never sends a queued write once the page is gone and another organization is committed', async () => {
+    const first: Subject<KeyResultWrite> = new Subject<KeyResultWrite>();
+    api.updateResult.mockReturnValueOnce(firstValueFrom(first));
+    const store: InstanceType<typeof GoalsStore> = await loaded();
+
+    store.step('g1', 'k6', 1);
+    await burst();
+    store.step('g1', 'k6', 1);
+    TestBed.resetTestingModule();
+    commit(STUDIO_SUD);
+    first.next({ result: signups(177), version: 4 });
+    first.complete();
+    await flush();
+
+    expect(api.updateResult).toHaveBeenCalledTimes(1);
+    expect(api.get).not.toHaveBeenCalled();
   });
 });
