@@ -746,23 +746,25 @@ function createProfileStore(): Type<ProfileStoreInstance> {
           if (!stillWanted()) return 'cancelled';
           return latest === null ? 'unreconciled' : 'outdated';
         };
-        // Ends a publication or a removal whose answer was lost: done once the account shows
-        // another photo reference than the one before.
+        // Ends a publication or a removal whose answer was lost: done only once the account shows
+        // the reference this write sets (`expected`), so a photo change made elsewhere meanwhile
+        // never confirms it. A publication sets the reserved upload's id, which the contract
+        // reuses for the published asset (`ProfileMediaId`); a removal sets none.
         const lostAvatar: (
           outcome: 'updated' | 'removed',
-          before: string | null,
+          expected: string | null,
           userId: string,
           stillWanted: () => boolean,
         ) => Promise<AvatarOutcome> = async (
           outcome: 'updated' | 'removed',
-          before: string | null,
+          expected: string | null,
           userId: string,
           stillWanted: () => boolean,
         ): Promise<AvatarOutcome> => {
           const settled: Settlement = await settle(
             userId,
             stillWanted,
-            (latest: AccountProfile): boolean => latest.avatarId !== before,
+            (latest: AccountProfile): boolean => latest.avatarId === expected,
           );
           if (settled === 'held') return outcome;
           if (settled === 'not-held') return 'unconfirmed';
@@ -783,33 +785,6 @@ function createProfileStore(): Type<ProfileStoreInstance> {
           return latest === null ? 'unreconciled' : outcome;
         };
 
-        // Checks a deletion whose answer was lost. A scheduled deletion revokes this session in the
-        // same step, so a session that still reads the account after the last check means none was
-        // scheduled. A session that no longer reads it proves nothing: it may have been revoked by
-        // the deletion or have ended otherwise (`401 auth.session-expired` tells neither apart),
-        // so the outcome stays unconfirmed and the person is told to sign in again to check.
-        const lostDeletion: (
-          userId: string,
-          stillWanted: () => boolean,
-        ) => Promise<DeletionResult> = async (
-          userId: string,
-          stillWanted: () => boolean,
-        ): Promise<DeletionResult> => {
-          let readable: boolean = false;
-          for (const delay of RECHECK_DELAYS) {
-            if (delay > 0) await pause(delay);
-            if (!stillWanted()) return { outcome: 'cancelled' };
-            try {
-              await api.current(userId);
-              readable = true;
-            } catch (reread: unknown) {
-              if (!stillWanted()) return { outcome: 'cancelled' };
-              readable = false;
-              if (reread instanceof AccountChangedError) return { outcome: 'unconfirmed' };
-            }
-          }
-          return readable ? { outcome: 'failed' } : { outcome: 'unconfirmed' };
-        };
         // Reserves, sends and publishes a photo, then reads the account again.
         const upload: (current: AccountProfile, file: File) => Promise<AvatarOutcome> = async (
           current: AccountProfile,
@@ -836,7 +811,7 @@ function createProfileStore(): Type<ProfileStoreInstance> {
               );
             } catch (error: unknown) {
               if (!stillWanted() || !isUnknownOutcome(error)) throw error;
-              return await lostAvatar('updated', current.avatarId, current.id, stillWanted);
+              return await lostAvatar('updated', reserved.uploadId, current.id, stillWanted);
             }
             if (!stillWanted()) return 'cancelled';
             return await appliedAvatar('updated', current.id, stillWanted);
@@ -858,7 +833,7 @@ function createProfileStore(): Type<ProfileStoreInstance> {
             return await appliedAvatar('removed', current.id, stillWanted);
           } catch (error: unknown) {
             if (stillWanted() && isUnknownOutcome(error)) {
-              return await lostAvatar('removed', current.avatarId, current.id, stillWanted);
+              return await lostAvatar('removed', null, current.id, stillWanted);
             }
             return await refusedAvatar(error, current.id, stillWanted);
           } finally {
@@ -1035,7 +1010,10 @@ function createProfileStore(): Type<ProfileStoreInstance> {
                   organizationIds: api.ownedOrganizationIds(error),
                 };
               }
-              if (isUnknownOutcome(error)) return await lostDeletion(current.id, stillWanted);
+              // A deletion whose answer was lost may still commit after any reread, and a session
+              // that no longer reads the account proves nothing either (`401 auth.session-expired`
+              // covers a revoked and an ended session alike): only the gateway's answer decides.
+              if (isUnknownOutcome(error)) return { outcome: 'unconfirmed' };
               return { outcome: 'failed' };
             } finally {
               patchState(store, { deleting: false });
@@ -1083,10 +1061,11 @@ function createProfileStore(): Type<ProfileStoreInstance> {
  * reaches the error boundary.
  *
  * The e-mail change request and the deletion run through `ReauthenticationService`; a closed
- * reauthentication ends `cancelled`. Only the gateway's answer counts a deletion as `scheduled`:
- * when its answer is lost, an account the session still reads after the last reread ends
- * `failed`, and a session that no longer reads it (revoked by the deletion, or ended otherwise:
- * the contract's `401 auth.session-expired` tells neither apart) ends `unconfirmed`.
+ * reauthentication ends `cancelled`. Only the gateway's answer decides a deletion: one whose
+ * answer was lost ends `unconfirmed`, without reading the account again, since it may still commit
+ * after any reread and a session that no longer reads the account (`401 auth.session-expired`)
+ * may have ended for another reason. A photo publication or removal whose answer was lost is
+ * done only once the account shows the reference it sets: the reserved upload's id, or none.
  *
  * @type {ReturnType<typeof createProfileStore>}
  */

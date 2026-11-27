@@ -279,7 +279,7 @@ export type ProfileSaveResult =
  * `unreadable`, `too-large` and `invalid-image` for a refused file; `outdated` after a stale
  * version (the account is read again); `unreconciled` when that reread failed; `unconfirmed` when
  * the answer of the publication or the removal was lost and the account read again until 8 s
- * later shows the same photo; `failed` for any other refusal; `skipped` when nothing was sent;
+ * later never shows the reference it sets (the reserved upload's id, or none); `failed` for any other refusal; `skipped` when nothing was sent;
  * `cancelled` when the account or the page changed meanwhile.
  *
  * @type {'updated' | 'removed' | 'unsupported' | 'unreadable' | 'too-large' | 'invalid-image' | 'outdated' | 'unreconciled' | 'unconfirmed' | 'failed' | 'skipped' | 'cancelled'}
@@ -457,9 +457,8 @@ export interface MyOrganization {
  * @description
  * How scheduling the deletion ended: `scheduled` once the gateway answered so, after which the
  * session is gone; `owner` when the person still owns organizations, listed by id;
- * `unconfirmed` when the answer was lost and the account could no longer be read (the session may
- * have been revoked by the deletion, or have ended for another reason, which the contract does not
- * tell apart); `failed` for any other failure, the account still read after the rereads included;
+ * `unconfirmed` when the answer was lost: the deletion may have been scheduled or may still be,
+ * and no reread tells; `failed` for any other failure;
  * `cancelled` when the reauthentication was closed, or the account or the page changed meanwhile.
  *
  * @type {{ readonly outcome: 'scheduled' | 'unconfirmed' | 'failed' | 'cancelled' } | { readonly outcome: 'owner'; readonly organizationIds: readonly string[] }}

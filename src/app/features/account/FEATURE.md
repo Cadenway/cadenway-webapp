@@ -220,8 +220,10 @@ parent provides the English texts of `cw-password-strength` and `cw-input-otp` t
   (`WORKSPACE_REFRESH`), so the shell shows the new name.
 - A write whose answer is lost (no status, `408`, `5xx`: a save, the photo's publication or
   removal, the address confirmation) may still land after a first reread, so the account is read
-  at once, then 2, 4 and 8 s later, and the write counts as done once the account holds it (for the
-  photo, once its reference changed). When none of the rereads holds it, the outcome stays
+  at once, then 2, 4 and 8 s later, and the write counts as done once the account holds it. For
+  the photo that is the reference this write sets, never another one a concurrent change brought:
+  a publication sets the reserved upload's id, which the contract reuses for the published asset
+  (`ProfileMediaId`), and a removal sets none. When none of the rereads holds it, the outcome stays
   unconfirmed: a save keeps the draft unsaved with `Your change could not be confirmed.`, a photo
   change and an address confirmation toast that they could not be confirmed; nothing reports a
   failure. When no reread succeeds, the refresh alert shows.
@@ -262,15 +264,15 @@ parent provides the English texts of `cw-password-strength` and `cw-input-otp` t
 - `Delete the account` first reads the person's organizations (every page; a failed read toasts
   and opens nothing), then asks through `cw-alert-dialog`: `You will leave <n> organizations.` and
   `<names> must first have another owner.` for those owned, typing the saved name. The deletion
-  runs through the reauthentication. Only the gateway's answer counts it as scheduled: a deletion
-  whose answer is lost is read again (at once, then 2, 4 and 8 s later); an account the session
-  still reads after the last reread means none was scheduled (a failure toast), and a session that
-  no longer reads it proves nothing, since `401 auth.session-expired` covers a revoked and an
-  ended session alike: the confirmation closes and a warning asks the person to sign in again to
-  check (signing in cancels a scheduled deletion). Once scheduled, the page lets the navigation go
-  without asking and signs out
-  through Auth's `SignOut`, which opens the signed-out screen (`/logged-out?reason=signed-out`,
-  opened directly when the sign-out request fails). `409 account.organization-owner` closes the
+  runs through the reauthentication. Only the gateway's answer decides it: a deletion whose answer
+  is lost stays unconfirmed, without a reread, since it may still commit after any reread and a
+  session that no longer reads the account (`401 auth.session-expired`) may have ended for another
+  reason. The confirmation closes and a warning says how to know: a scheduled deletion ends this
+  session and sends an email, and signing in again cancels it. Once scheduled, the page lets the
+  navigation go without asking and signs out through Auth's `SignOut`, which opens the signed-out screen (`/logged-out?reason=signed-out`,
+  opened directly when the sign-out request fails; known gap: that fallback cannot forget the
+  person's device data, since Auth publishes its cleanup only inside `SignOut.run()`).
+  `409 account.organization-owner` closes the
   confirmation and toasts the organizations to hand over, named from `details.organizationIds`.
   The mockup's count of the API tokens revoked (line 1543) is left out: tokens are listed per
   organization, so the page cannot count them all.

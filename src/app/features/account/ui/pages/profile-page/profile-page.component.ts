@@ -991,9 +991,9 @@ export class ProfilePage implements UnsavedChanges {
    * @description
    * Schedules the deletion once confirmed. Scheduled: the person is signed out and the signed-out
    * screen opens. An organization still owned closes the confirmation and toasts the organizations
-   * to hand over; a deletion whose answer was lost and that the account rereads cannot confirm
-   * closes the confirmation and asks the person to sign in again to check; another failure toasts
-   * and keeps the confirmation; a closed reauthentication keeps it silently.
+   * to hand over; a deletion whose answer was lost closes the confirmation and tells how to know
+   * (the e-mail a scheduled deletion sends) and that signing in again cancels it; another failure
+   * toasts and keeps the confirmation; a closed reauthentication keeps it silently.
    *
    * @returns {Promise<void>} Resolves once the deletion ended.
    */
@@ -1032,7 +1032,7 @@ export class ProfilePage implements UnsavedChanges {
         this.toasts.warning(
           $localize`:@@account.profile.delete-unconfirmed:The deletion could not be confirmed`,
           {
-            description: $localize`:@@account.profile.delete-unconfirmed-text:Sign in again to check your account. If its deletion was scheduled, signing in cancels it.`,
+            description: $localize`:@@account.profile.delete-unconfirmed-text:If it was scheduled, this session ends and an email tells you so. Signing in again cancels a scheduled deletion; without that email, try again.`,
           },
         );
         return;

@@ -24,7 +24,6 @@ import { WORKSPACE_CONTEXT } from '@features/workspace/ports/workspace-context';
 import { WORKSPACE_REFRESH } from '@features/workspace/ports/workspace-refresh';
 import { unsavedChangesGuard } from '@shared/unsaved-changes';
 
-import { AccountChangedError } from '../../../data-access/services/notification-preferences-api/account-changed.error';
 import { ProfileApi } from '../../../data-access/services/profile-api/profile-api.service';
 import type { AccountProfile, ProfileChange } from '../../../models/profile/profile.interface';
 import { PRESENCE } from '../../../ports/presence/presence.token';
@@ -674,10 +673,9 @@ describe('ProfilePage', () => {
     expect(toasts.error).not.toHaveBeenCalled();
   });
 
-  it('asks to sign in again when a lost deletion cannot be confirmed', async () => {
+  it('tells how to know whether a deletion whose answer was lost was scheduled', async () => {
     api['scheduleDeletion'].mockRejectedValueOnce(new HttpErrorResponse({ status: 0 }));
     const harness: RouterTestingHarness = await open();
-    api['current'].mockRejectedValue(new AccountChangedError());
 
     byTestId(harness, 'profile-delete')?.click();
     await expect.poll(() => document.querySelector('[role="alertdialog"] input')).not.toBeNull();
@@ -691,7 +689,7 @@ describe('ProfilePage', () => {
     await expect.poll(() => toasts.warning.mock.calls.length).toBe(1);
     expect(toasts.warning).toHaveBeenCalledWith('The deletion could not be confirmed', {
       description:
-        'Sign in again to check your account. If its deletion was scheduled, signing in cancels it.',
+        'If it was scheduled, this session ends and an email tells you so. Signing in again cancels a scheduled deletion; without that email, try again.',
     });
     expect(signOut.run).not.toHaveBeenCalled();
   });

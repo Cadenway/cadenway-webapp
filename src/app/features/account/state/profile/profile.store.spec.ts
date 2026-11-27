@@ -217,26 +217,6 @@ describe('ProfileStore', () => {
     expect(store.deleted()).toBe(false);
   });
 
-  it('never counts a lost deletion as scheduled because the session no longer reads the account', async () => {
-    api['scheduleDeletion'].mockRejectedValueOnce(new HttpErrorResponse({ status: 0 }));
-    api['current'].mockRejectedValueOnce(new AccountChangedError());
-
-    expect(await store.scheduleDeletion()).toEqual({ outcome: 'unconfirmed' });
-    expect(store.deleted()).toBe(false);
-  });
-
-  it('reports a lost deletion as failed when the account still reads after the delayed rereads', async () => {
-    vi.useFakeTimers();
-    api['scheduleDeletion'].mockRejectedValueOnce(new HttpErrorResponse({ status: 503 }));
-
-    const deleting: Promise<DeletionResult> = store.scheduleDeletion();
-    await vi.advanceTimersByTimeAsync(15_000);
-
-    expect(await deleting).toEqual({ outcome: 'failed' });
-    expect(api['current']).toHaveBeenCalledTimes(1 + 4);
-    expect(store.deleted()).toBe(false);
-  });
-
   it('keeps checking a lost save until a later reread holds it', async () => {
     vi.useFakeTimers();
     api['update'].mockRejectedValueOnce(new HttpErrorResponse({ status: 504 }));
@@ -280,36 +260,6 @@ describe('ProfileStore', () => {
     await vi.advanceTimersByTimeAsync(7_000);
 
     expect(await confirming).toBe('confirmed');
-  });
-
-  it('counts a lost publication as done once the account shows the new photo', async () => {
-    api['publishAvatar'].mockRejectedValueOnce(new HttpErrorResponse({ status: 503 }));
-    api['current'].mockResolvedValueOnce({ ...CAMILLE, avatarId: 'avatar-1', version: 4 });
-
-    expect(await store.uploadAvatar(new File(['png'], 'me.png', { type: 'image/png' }))).toBe(
-      'updated',
-    );
-    expect(store.current()?.avatarId).toBe('avatar-1');
-  });
-
-  it('counts a lost removal as done once the account has no photo', async () => {
-    api['current'].mockResolvedValueOnce({ ...CAMILLE, avatarId: 'avatar-1' });
-    TestBed.resetTestingModule();
-    TestBed.configureTestingModule({
-      providers: [
-        ProfileStore,
-        { provide: ProfileApi, useValue: api },
-        { provide: ReauthenticationService, useValue: { run } },
-        { provide: WORKSPACE_CONTEXT, useValue: { user: () => ({ id: userId() }) } },
-      ],
-    });
-    const withPhoto: InstanceType<typeof ProfileStore> = TestBed.inject(ProfileStore);
-    await expect.poll(() => withPhoto.current()?.avatarId).toBe('avatar-1');
-    api['removeAvatar'].mockRejectedValueOnce(new HttpErrorResponse({ status: 0 }));
-    api['current'].mockResolvedValueOnce({ ...CAMILLE, version: 4 });
-
-    expect(await withPhoto.removeAvatar()).toBe('removed');
-    expect(withPhoto.current()?.avatarId).toBeNull();
   });
 
   it('publishes the same upload once when the transfer times out or storage fails', async () => {
@@ -358,4 +308,97 @@ describe('ProfileStore', () => {
     await expect.poll(() => store.avatar.hasValue()).toBe(true);
     expect(api['avatar']).toHaveBeenCalledTimes(2);
   });
+
+  it('leaves a lost deletion unconfirmed when the session no longer reads the account', async () => {
+    api['scheduleDeletion'].mockRejectedValueOnce(new HttpErrorResponse({ status: 0 }));
+    api['current'].mockRejectedValue(new AccountChangedError());
+
+    expect(await store.scheduleDeletion()).toEqual({ outcome: 'unconfirmed' });
+    expect(store.deleted()).toBe(false);
+  });
+
+  it('leaves a lost deletion unconfirmed even while the account still reads', async () => {
+    api['scheduleDeletion'].mockRejectedValueOnce(new HttpErrorResponse({ status: 503 }));
+    const reads: number = api['current'].mock.calls.length;
+
+    expect(await store.scheduleDeletion()).toEqual({ outcome: 'unconfirmed' });
+    expect(api['current']).toHaveBeenCalledTimes(reads);
+    expect(store.deleted()).toBe(false);
+  });
+
+  it('counts a lost publication as done once the account shows the reserved upload', async () => {
+    api['publishAvatar'].mockRejectedValueOnce(new HttpErrorResponse({ status: 503 }));
+    api['current'].mockResolvedValueOnce({ ...CAMILLE, avatarId: 'upload-1', version: 4 });
+
+    expect(await store.uploadAvatar(new File(['png'], 'me.png', { type: 'image/png' }))).toBe(
+      'updated',
+    );
+    expect(store.current()?.avatarId).toBe('upload-1');
+  });
+
+  it('does not take a photo another change published for a lost publication', async () => {
+    vi.useFakeTimers();
+    api['publishAvatar'].mockRejectedValueOnce(new HttpErrorResponse({ status: 0 }));
+    api['current'].mockResolvedValue({ ...CAMILLE, avatarId: 'avatar-elsewhere', version: 4 });
+
+    const uploading: Promise<string> = store.uploadAvatar(
+      new File(['png'], 'me.png', { type: 'image/png' }),
+    );
+    await vi.advanceTimersByTimeAsync(15_000);
+
+    expect(await uploading).toBe('unconfirmed');
+  });
+
+  it('counts a lost removal as done only once the account has no photo', async () => {
+    vi.useFakeTimers();
+    const withPhoto: InstanceType<typeof ProfileStore> = await storeWithPhoto();
+    api['removeAvatar'].mockRejectedValueOnce(new HttpErrorResponse({ status: 0 }));
+    api['current']
+      .mockResolvedValueOnce({ ...CAMILLE, avatarId: 'avatar-elsewhere', version: 4 })
+      .mockResolvedValueOnce({ ...CAMILLE, version: 5 });
+
+    const removing: Promise<string> = withPhoto.removeAvatar();
+    await vi.advanceTimersByTimeAsync(3_000);
+
+    expect(await removing).toBe('removed');
+    expect(withPhoto.current()?.avatarId).toBeNull();
+  });
+
+  it('does not take a photo another change published for a lost removal', async () => {
+    vi.useFakeTimers();
+    const withPhoto: InstanceType<typeof ProfileStore> = await storeWithPhoto();
+    api['removeAvatar'].mockRejectedValueOnce(new HttpErrorResponse({ status: 504 }));
+    api['current'].mockResolvedValue({ ...CAMILLE, avatarId: 'avatar-elsewhere', version: 4 });
+
+    const removing: Promise<string> = withPhoto.removeAvatar();
+    await vi.advanceTimersByTimeAsync(15_000);
+
+    expect(await removing).toBe('unconfirmed');
+  });
+
+  /**
+   * Function storeWithPhoto
+   *
+   * @description
+   * A fresh store whose account has the photo `avatar-1`, once read.
+   *
+   * @returns {Promise<InstanceType<typeof ProfileStore>>} The store.
+   */
+  async function storeWithPhoto(): Promise<InstanceType<typeof ProfileStore>> {
+    api['current'].mockResolvedValueOnce({ ...CAMILLE, avatarId: 'avatar-1' });
+    TestBed.resetTestingModule();
+    TestBed.configureTestingModule({
+      providers: [
+        ProfileStore,
+        { provide: ProfileApi, useValue: api },
+        { provide: ReauthenticationService, useValue: { run } },
+        { provide: WORKSPACE_CONTEXT, useValue: { user: () => ({ id: userId() }) } },
+      ],
+    });
+    const withPhoto: InstanceType<typeof ProfileStore> = TestBed.inject(ProfileStore);
+    await vi.waitFor(() => {
+      expect(withPhoto.current()?.avatarId).toBe('avatar-1');
+    });
+    return withPhoto;
+  }
 });

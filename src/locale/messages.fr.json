@@ -155,7 +155,7 @@
     "account.profile.delete-owner-other": "{$names} doivent d’abord avoir chacune un autre propriétaire.",
     "account.profile.delete-title": "Supprimer le compte de {$INTERPOLATION} ?",
     "account.profile.delete-unconfirmed": "La suppression n’a pas pu être confirmée",
-    "account.profile.delete-unconfirmed-text": "Reconnectez-vous pour vérifier votre compte. Si sa suppression était programmée, la connexion l’annule.",
+    "account.profile.delete-unconfirmed-text": "Si elle a été programmée, cette session se ferme et un e-mail vous le confirme. Se reconnecter annule une suppression programmée ; sans cet e-mail, réessayez.",
     "account.profile.display-name": "Nom affiché",
     "account.profile.display-name-help": "Utilisé pour les mentions : @{$INTERPOLATION}",
     "account.profile.display-name-too-long": "60 caractères au maximum.",
