@@ -14,6 +14,7 @@ import {
 import { DocumentsApi } from '../../data-access/services/documents-api/documents-api.service';
 import type {
   DocumentCreateOutcome,
+  DocumentDeleteOutcome,
   DocumentList,
   DocumentRow,
   DocumentSummary,
@@ -379,19 +380,49 @@ describe('DocsStore', () => {
     expect(store.rows()).toHaveLength(2);
   });
 
-  it('reads the document again after a lost deletion answer instead of failing', async () => {
+  it('keeps a timed-out deletion pending until a delayed read finds the document gone', async () => {
     const store: InstanceType<typeof DocsStore> = await loaded();
-    const [first, second]: [DocumentRow, DocumentRow] = shownRows(store);
-    api.remove.mockRejectedValue(new HttpErrorResponse({ status: 504 }));
+    const [first]: [DocumentRow, DocumentRow] = shownRows(store);
+    vi.useFakeTimers();
+    api.remove.mockRejectedValueOnce(new HttpErrorResponse({ status: 504 }));
+    // The first check still finds it: the original request completes only afterwards.
+    api.get.mockResolvedValueOnce({ ...first.document, body: '' });
     api.get.mockRejectedValueOnce(problem(404, 'document.not-found'));
-    api.get.mockResolvedValueOnce({ ...second.document, body: '' });
 
-    expect(await store.remove(first)).toBe('deleted');
-    expect(await store.remove(second)).toBe('failed');
+    const removal: Promise<DocumentDeleteOutcome> = store.remove(first);
+    await vi.advanceTimersByTimeAsync(1_999);
+    expect(api.get).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1);
+    expect(api.get).toHaveBeenCalledTimes(1);
+    expect(store.deletingId()).toBe('d1');
+    expect(toasts.error).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(4_000);
 
+    expect(await removal).toBe('deleted');
+    expect(api.get).toHaveBeenCalledTimes(2);
+    expect(store.deletingId()).toBeNull();
     expect(store.rows()?.map((row: DocumentRow) => row.document.id)).toEqual(['d2']);
-    expect(toasts.error).toHaveBeenCalledWith('The document could not be deleted', {
-      description: 'It is still there. Try again in a moment.',
+    expect(toasts.success).toHaveBeenCalledWith('Document deleted', {
+      description: 'Release notes 3.1',
+    });
+  });
+
+  it('says a deletion could not be confirmed, never failed, when every check finds it', async () => {
+    const store: InstanceType<typeof DocsStore> = await loaded();
+    const [first]: [DocumentRow, DocumentRow] = shownRows(store);
+    vi.useFakeTimers();
+    api.remove.mockRejectedValueOnce(new HttpErrorResponse({ status: 0 }));
+    api.get.mockResolvedValue({ ...first.document, body: '' });
+
+    const removal: Promise<DocumentDeleteOutcome> = store.remove(first);
+    await vi.advanceTimersByTimeAsync(14_000);
+
+    expect(await removal).toBe('unknown');
+    expect(api.get).toHaveBeenCalledTimes(3);
+    expect(toasts.error).not.toHaveBeenCalled();
+    expect(toasts.warning).toHaveBeenCalledWith('The deletion could not be confirmed', {
+      description:
+        'The answer was lost and the document may still disappear. Check the list in a moment before deleting it again.',
     });
   });
 
@@ -426,5 +457,25 @@ describe('DocsStore', () => {
     await store.refresh();
     expect(api.list).toHaveBeenCalledTimes(3);
     expect(store.rows()?.map((row: DocumentRow) => row.document.id)).toEqual(['d3']);
+  });
+
+  it('applies only the last background read issued when two overlap', async () => {
+    const store: InstanceType<typeof DocsStore> = await loaded();
+    const answers: ((list: DocumentList) => void)[] = [];
+    api.list.mockImplementation(
+      () =>
+        new Promise<DocumentList>((resolve) => {
+          answers.push(resolve);
+        }),
+    );
+
+    const older: Promise<void> = store.refresh(true);
+    const newer: Promise<void> = store.refresh(true);
+    answers[1]?.(listOf(summary('d4', 'Sprint 14 review', 's1')));
+    await newer;
+    answers[0]?.(listOf(summary('d3', 'Quota specification', 's1')));
+    await older;
+
+    expect(store.rows()?.map((row: DocumentRow) => row.document.id)).toEqual(['d4']);
   });
 });

@@ -24,7 +24,9 @@ the English texts of the bricks the pages render (block editor, alert dialog, av
 and two children, each with `errorComponent: RouteErrorBoundary`:
 
 - `docs`: `DocsPage`, the catalog, with the `Documents` route title (`docs.route.title`). `?q=`
-  searches it: the field writes it after a 300 ms pause (replacing the history entry).
+  searches it: the field writes it after a 300 ms pause (replacing the history entry), unless the
+  address's search changed meanwhile (Back, Forward, a link), which then wins. Only the last
+  background read of the catalog issued applies its answer.
 - `d/:docId`: `DocumentPage`, the shareable address of a document, with `canDeactivate:
 [unsavedChangesGuard]`. Its route title is the fallback `Document` (`docs.route.document`); the
   page then titles the browser tab `<title> — Cadenway` after each navigation. `?mode=edit` opens
@@ -88,9 +90,13 @@ is shown, whatever the query parameters.
   outcome (no answer, a timeout, a `5xx`) is never reported as a failure: a creation is sent once
   more with the same idempotency key, which replays it; a creation still running
   (`409 idempotency.request-in-progress`) is sent again after 1 s; a replay whose document was
-  deleted since (`404 document.not-found`) is sent once with a new key; a save or a deletion reads
-  the document again to learn what happened. Only `404 document.not-found` means a document is
-  gone. A `400` and a `403` have their own toast text.
+  deleted since (`404 document.not-found`) is sent once with a new key; a save reads the document
+  again to learn what happened; a deletion stays pending and reads the document after 2, 4 and 8 s
+  (`DELETION_CHECK_DELAYS_MS`), since a read that still finds it proves nothing while the original
+  request may still run: a read that finds it gone ends it `deleted`, and after the last read it
+  ends with the neutral `The deletion could not be confirmed` (`docs.toast.delete-unknown`), never
+  as kept or failed. Only `404 document.not-found` means a document is gone. A `400` and a `403`
+  have their own toast text.
 - Edit mode records the stored document the draft starts from (`DocumentStore.beginEditing`).
   Saving (`Done`) sends the title (trimmed, at most 200 code points, `Untitled` when empty) and the
   body (at most 100 000 characters) from that version (`If-Match`), never from a version read
@@ -130,4 +136,5 @@ is shown, whatever the query parameters.
 | `docs.table.truncated`                                  | The mockup's catalog is never cut.                                           |
 | `docs.delete.cancel`                                    | The mockup's confirmation draws its `Cancel` without a dedicated text.       |
 | `docs.toast.*` but `saved`, `deleted`, `link-copied`    | The mockup draws no refused, conflicting, uncertain or gone write.           |
+| `docs.toast.delete-unknown`, `delete-unknown-text`      | The mockup draws no deletion whose outcome stays unconfirmed.                |
 | `docs.editor.*` but the mockup's words, `docs.labels.*` | Texts of the bricks, their defaults.                                         |

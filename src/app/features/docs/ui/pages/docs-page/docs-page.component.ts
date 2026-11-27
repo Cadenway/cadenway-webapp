@@ -255,16 +255,19 @@ export class DocsPage {
    * Method search
    *
    * @description
-   * Shows what is typed and applies it to the address after a pause in typing.
+   * Shows what is typed and applies it to the address after a pause in typing, unless the
+   * address's search changed meanwhile (Back, Forward, a link), which then wins.
    *
    * @param {Event} event - The field's input event.
    */
   protected search(event: Event): void {
     const text: string = (event.target as HTMLInputElement).value;
+    const from: string | undefined = this.q();
     this.searchText.set(text);
     if (this.searchTimer !== null) clearTimeout(this.searchTimer);
     this.searchTimer = setTimeout((): void => {
       this.searchTimer = null;
+      if (this.q() !== from) return;
       const query: string = text.trim();
       if (query === (this.q() ?? '').trim()) return;
       this.written = query;

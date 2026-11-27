@@ -225,6 +225,17 @@ interface DocsState {
    * @type {number}
    */
   _readAt: number;
+
+  /**
+   * Property _readsIssued
+   *
+   * @description
+   * How many reads of the catalog were issued; a background read applies its answer only while it
+   * is the last one issued, so an older answer never replaces a newer one.
+   *
+   * @type {number}
+   */
+  _readsIssued: number;
   // #endregion
 }
 
@@ -243,6 +254,7 @@ const initialState: DocsState = {
   _creation: null,
   _lastRead: null,
   _readAt: 0,
+  _readsIssued: 0,
 };
 
 /**
@@ -376,7 +388,8 @@ interface DocsStoreInstance {
    *
    * @description
    * Reads the catalog again in the background, unless a read settled less than 30 s ago and
-   * `force` is not set; a failure keeps the rows shown.
+   * `force` is not set; a failure keeps the rows shown. Only the answer of the last read issued
+   * applies, so an older answer that lands later never replaces a newer one.
    *
    * @param {boolean} force - Whether to read even right after another read.
    * @returns {Promise<void>} Settles once read.
@@ -438,6 +451,8 @@ function createDocsStore(): Type<DocsStoreInstance> {
           params: { organizationId: string; query: string };
           abortSignal: AbortSignal;
         }): Promise<DocumentList> => {
+          // A read of the route supersedes the background reads already issued.
+          patchState(store, { _readsIssued: store._readsIssued() + 1 });
           try {
             const list: DocumentList = await store._api.list(params.query, {
               signal: abortSignal,
@@ -550,9 +565,12 @@ function createDocsStore(): Type<DocsStoreInstance> {
         if (!force && Date.now() - store._readAt() < REFRESH_INTERVAL_MS) return;
         const organization: string = organizationId();
         const query: string = store.query();
+        const issued: number = store._readsIssued() + 1;
+        patchState(store, { _readsIssued: issued });
         try {
           const list: DocumentList = await store._api.list(query, { passive: true });
           if (
+            store._readsIssued() === issued &&
             stillWanted(organization) &&
             store.query() === query &&
             store.documents.hasValue() &&

@@ -19,6 +19,7 @@ import { WORKSPACE_CONTEXT } from '@features/workspace/ports/workspace-context';
 import { NotFoundRouteError } from '@shared/route-errors';
 import { unsavedChangesGuard } from '@shared/unsaved-changes';
 
+import { DELETION_CHECK_DELAYS_MS } from '../../../constants/deletion-checks/deletion-checks.token';
 import { DocumentsApi } from '../../../data-access/services/documents-api/documents-api.service';
 import type { DocumentDetail } from '../../../models/document/document.interface';
 import { DocumentPage } from './document-page.component';
@@ -114,6 +115,7 @@ describe('DocumentPage', () => {
           useValue: { organization: signal({ id: 'o1', slug: 'atelier-nord' }) },
         },
         { provide: SPACE_DIRECTORY, useValue: { spaces } },
+        { provide: DELETION_CHECK_DELAYS_MS, useValue: [0, 0, 0] },
       ],
     });
   });

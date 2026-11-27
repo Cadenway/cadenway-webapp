@@ -14,6 +14,7 @@ import {
   type WorkspaceContextPort,
 } from '@features/workspace/ports/workspace-context';
 
+import { DELETION_CHECK_DELAYS_MS } from '../../constants/deletion-checks/deletion-checks.token';
 import { refusalText } from '../../constants/write-copy/write-copy.constants';
 import { DocumentsApi } from '../../data-access/services/documents-api/documents-api.service';
 import type {
@@ -95,6 +96,21 @@ type Literal<T> = { [K in keyof T]: T[K] };
 type Attempt = DocumentDeleteOutcome | { readonly refused: unknown };
 
 /**
+ * Function delay
+ *
+ * @description
+ * Waits a number of milliseconds.
+ *
+ * @param {number} ms - The wait.
+ * @returns {Promise<void>} Resolves after it.
+ */
+function delay(ms: number): Promise<void> {
+  return new Promise<void>((resolve: () => void): void => {
+    setTimeout(resolve, ms);
+  });
+}
+
+/**
  * Function withDocumentDeletion
  *
  * @description
@@ -105,9 +121,11 @@ type Attempt = DocumentDeleteOutcome | { readonly refused: unknown };
  * A deletion belongs to the organization shown when it starts and, through `isCurrent`, to the
  * document shown: once either changes or the page went away, it reads nothing more and ends
  * `cancelled` without a toast. A document already gone (`404 document.not-found`) counts as
- * deleted. A stale version (`412`) keeps it (`conflict`). A lost answer or a server error reads the
- * document again: gone is `deleted`, still there is `failed`, and a read that fails too is
- * `unknown`.
+ * deleted. A stale version (`412`) keeps it (`conflict`). A lost answer or a server error keeps the
+ * deletion pending and reads the document after 2, 4 and 8 s (`DELETION_CHECK_DELAYS_MS`): a read
+ * that finds it gone ends `deleted`; one that still finds it proves nothing, since the original
+ * request may still run, so after the last read it ends `unknown` with the neutral
+ * `The deletion could not be confirmed`, never `failed`.
  *
  * @returns {SignalStoreFeature} The feature.
  */
@@ -128,19 +146,26 @@ export function withDocumentDeletion(): SignalStoreFeature<
         workspace: WorkspaceContextPort = inject(WORKSPACE_CONTEXT),
         toasts: CwToastService = inject(CwToastService),
         destroyRef: DestroyRef = inject(DestroyRef),
+        checkDelays: readonly number[] = inject(DELETION_CHECK_DELAYS_MS),
       ) => {
+        // A read that still finds the document proves nothing while the original request may
+        // still run: only a read that finds it gone settles the deletion, and once the last
+        // delayed read is done it stays unconfirmed, never failed.
         const verify: (document: DocumentSummary, ensure: () => void) => Promise<Attempt> = async (
           document: DocumentSummary,
           ensure: () => void,
         ): Promise<Attempt> => {
-          try {
-            ensure();
-            await api.get(document.id);
-            return 'failed';
-          } catch (error: unknown) {
-            if (isContextChange(error)) return 'cancelled';
-            return isGone(error) ? 'deleted' : 'unknown';
+          for (const wait of checkDelays) {
+            await delay(wait);
+            try {
+              ensure();
+              await api.get(document.id);
+            } catch (error: unknown) {
+              if (isContextChange(error)) return 'cancelled';
+              if (isGone(error)) return 'deleted';
+            }
           }
+          return 'unknown';
         };
         const attempt: (document: DocumentSummary, ensure: () => void) => Promise<Attempt> = async (
           document: DocumentSummary,
@@ -209,9 +234,9 @@ export function withDocumentDeletion(): SignalStoreFeature<
                   break;
                 case 'unknown':
                   toasts.warning(
-                    $localize`:@@docs.toast.delete-unknown:The document may not have been deleted`,
+                    $localize`:@@docs.toast.delete-unknown:The deletion could not be confirmed`,
                     {
-                      description: $localize`:@@docs.toast.delete-unknown-text:The answer was lost. Check the list before deleting it again.`,
+                      description: $localize`:@@docs.toast.delete-unknown-text:The answer was lost and the document may still disappear. Check the list in a moment before deleting it again.`,
                     },
                   );
                   break;

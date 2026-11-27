@@ -319,6 +319,28 @@ describe('DocsPage', () => {
     expect(field.value).toBe('notes ');
   });
 
+  it('lets Back or Forward win over a search still waiting for its pause', async () => {
+    const harness: RouterTestingHarness = await open('/atelier-nord/docs?q=notes');
+    const router: Router = TestBed.inject(Router);
+    const field: HTMLInputElement | null = view(harness).querySelector<HTMLInputElement>(
+      '[data-testid="docs-search"]',
+    );
+    if (field === null) throw new Error('Expected the search field.');
+
+    field.value = 'notes 3';
+    field.dispatchEvent(new Event('input'));
+    await router.navigateByUrl('/atelier-nord/docs?q=guide');
+    harness.detectChanges();
+    await new Promise<void>((resolve: () => void): void => {
+      setTimeout(resolve, 400);
+    });
+    harness.detectChanges();
+
+    expect(router.url).toBe('/atelier-nord/docs?q=guide');
+    expect(field.value).toBe('guide');
+    expect(api.list).not.toHaveBeenCalledWith('notes 3', expect.anything());
+  });
+
   it('keeps what is typed while the address takes the previous search', async () => {
     const harness: RouterTestingHarness = await open();
     const field: HTMLInputElement | null = view(harness).querySelector<HTMLInputElement>(
