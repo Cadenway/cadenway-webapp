@@ -506,17 +506,17 @@ describe('GoalsStore', () => {
     });
   });
 
-  it('reads the goals again after an unknown outcome instead of reporting a failure', async () => {
+  it('settles a change of unknown outcome by reading the goal, without reporting a failure', async () => {
     api.updateResult.mockRejectedValueOnce(new HttpErrorResponse({ status: 0 }));
+    api.get.mockResolvedValueOnce(goal({ version: 4, results: [signups(177)] }));
     const store: InstanceType<typeof GoalsStore> = await loaded();
-    api.list.mockResolvedValue(list([goal({ results: [signups(177)] })]));
 
     store.step('g1', 'k6', 1);
     await settle();
 
     expect(toasts.error).not.toHaveBeenCalled();
-    expect(api.list).toHaveBeenCalledTimes(2);
-    expect(api.list.mock.calls[1][2]).toBe(true);
+    expect(api.get).toHaveBeenCalled();
+    expect(api.updateResult).toHaveBeenCalledTimes(1);
     expect(shownValue(store)).toBe(177);
   });
 
@@ -869,5 +869,126 @@ describe('GoalsStore', () => {
     await settle();
 
     expect(store.owners().map((person: Person) => person.id)).toEqual(['u-cm', 'u-hd']);
+  });
+
+  /**
+   * Function queued
+   *
+   * @description
+   * Clicks `+` twice on the sign-ups: the first send waits on the returned subject, so the second
+   * click is queued behind it.
+   *
+   * @param {InstanceType<typeof GoalsStore>} store - The store.
+   * @returns {Promise<Subject<KeyResultWrite>>} The first send.
+   */
+  async function queued(store: InstanceType<typeof GoalsStore>): Promise<Subject<KeyResultWrite>> {
+    const first: Subject<KeyResultWrite> = new Subject<KeyResultWrite>();
+    api.updateResult.mockReturnValueOnce(firstValueFrom(first));
+    store.step('g1', 'k6', 1);
+    await flush();
+    store.step('g1', 'k6', 1);
+    return first;
+  }
+
+  it('rebases a queued change on the confirmed one after a stale version', async () => {
+    const store: InstanceType<typeof GoalsStore> = await loaded();
+    const first: Subject<KeyResultWrite> = await queued(store);
+    api.updateResult.mockRejectedValueOnce(problem(412, 'request.version-mismatch'));
+    api.get.mockResolvedValueOnce(goal({ version: 7, results: [signups(177)] }));
+
+    first.next({ result: signups(177), version: 4 });
+    first.complete();
+    await settle();
+
+    expect(api.updateResult.mock.calls.slice(1)).toEqual([
+      ['g1', 'k6', 4, { currentValue: 186 }],
+      ['g1', 'k6', 7, { currentValue: 186 }],
+    ]);
+  });
+
+  it('moves only the unsent steps of a queued change from a value set elsewhere', async () => {
+    const store: InstanceType<typeof GoalsStore> = await loaded();
+    const first: Subject<KeyResultWrite> = await queued(store);
+    api.updateResult.mockRejectedValueOnce(problem(412, 'request.version-mismatch'));
+    api.get.mockResolvedValueOnce(goal({ version: 7, results: [signups(200)] }));
+
+    first.next({ result: signups(177), version: 4 });
+    first.complete();
+    await settle();
+
+    expect(api.updateResult.mock.calls[2]).toEqual(['g1', 'k6', 7, { currentValue: 209 }]);
+  });
+
+  it('sends a queued checkbox change again after a stale version of its own write', async () => {
+    const guide: KeyResult = {
+      id: 'k3',
+      kind: 'checkbox',
+      label: 'SSO guide published',
+      checked: false,
+      progressPercent: 0,
+    };
+    api.list.mockResolvedValue(list([goal({ results: [guide] })]));
+    const first: Subject<KeyResultWrite> = new Subject<KeyResultWrite>();
+    api.updateResult
+      .mockReturnValueOnce(firstValueFrom(first))
+      .mockRejectedValueOnce(problem(412, 'request.version-mismatch'))
+      .mockResolvedValue({ result: guide, version: 9 });
+    api.get.mockResolvedValueOnce(
+      goal({ version: 7, results: [{ ...guide, checked: true, progressPercent: 100 }] }),
+    );
+    const store: InstanceType<typeof GoalsStore> = await loaded();
+
+    store.toggle('g1', 'k3');
+    await flush();
+    store.toggle('g1', 'k3');
+    first.next({ result: { ...guide, checked: true, progressPercent: 100 }, version: 4 });
+    first.complete();
+    await settle();
+
+    expect(api.updateResult.mock.calls.map((call: unknown[]) => call[3])).toEqual([
+      { checked: true },
+      { checked: false },
+      { checked: false },
+    ]);
+    expect(toasts.warning).not.toHaveBeenCalled();
+  });
+
+  it('settles a timed-out change before a queued one when it was recorded', async () => {
+    const store: InstanceType<typeof GoalsStore> = await loaded();
+    const first: Subject<KeyResultWrite> = await queued(store);
+    api.get.mockResolvedValueOnce(goal({ version: 4, results: [signups(177)] }));
+
+    first.error(new HttpErrorResponse({ status: 504 }));
+    await settle();
+
+    expect(api.updateResult.mock.calls[1]).toEqual(['g1', 'k6', 4, { currentValue: 186 }]);
+    expect(toasts.error).not.toHaveBeenCalled();
+  });
+
+  it('rebases a queued change when a timed-out one was not recorded', async () => {
+    const store: InstanceType<typeof GoalsStore> = await loaded();
+    const first: Subject<KeyResultWrite> = await queued(store);
+    api.get.mockResolvedValueOnce(goal({ version: 3, results: [signups(168)] }));
+
+    first.error(new HttpErrorResponse({ status: 0 }));
+    await settle();
+
+    expect(api.updateResult.mock.calls[1]).toEqual(['g1', 'k6', 3, { currentValue: 177 }]);
+    expect(toasts.error).not.toHaveBeenCalled();
+  });
+
+  it('warns and reads again when a deletion of unknown outcome cannot be checked', async () => {
+    const store: InstanceType<typeof GoalsStore> = await loaded();
+    api.delete.mockRejectedValueOnce(problem(502));
+    api.get.mockRejectedValueOnce(problem(503));
+
+    expect(await store.remove('g1')).toBe(false);
+    await settle();
+
+    expect(toasts.warning).toHaveBeenCalledWith('The deletion could not be confirmed', {
+      description: 'The goal is still shown. Try again in a moment.',
+    });
+    expect(api.list).toHaveBeenCalledTimes(2);
+    expect(store.list()).toHaveLength(1);
   });
 });

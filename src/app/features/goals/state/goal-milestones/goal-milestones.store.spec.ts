@@ -86,4 +86,19 @@ describe('GoalMilestonesStore', () => {
     TestBed.tick();
     expect(milestone.mock.calls).toEqual([['CAD-582']]);
   });
+
+  it('settles a task with its newest read only', () => {
+    const store: InstanceType<typeof GoalMilestonesStore> = TestBed.inject(GoalMilestonesStore);
+    store.follow(signal(['CAD-580']));
+    TestBed.tick();
+    const older: Subject<MilestoneState> | undefined = reads.get('CAD-580');
+
+    closed.next('CAD-580');
+    const newer: Subject<MilestoneState> | undefined = reads.get('CAD-580');
+    expect(older?.observed).toBe(false);
+    newer?.next({ key: 'CAD-580', dueDate: '2026-12-20' });
+    older?.next({ key: 'CAD-580', dueDate: '2026-11-01' });
+
+    expect(store.milestones()['CAD-580']).toEqual({ key: 'CAD-580', dueDate: '2026-12-20' });
+  });
 });

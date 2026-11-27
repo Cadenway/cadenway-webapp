@@ -75,13 +75,17 @@ null`); anyone else gets a required `Space` select of the spaces they `edit`, an
   sent again only while the goal still shows the value it started from; a number otherwise moves
   by the same steps from the newer value, and a checkbox is dropped with `This key result changed
 elsewhere`. Values show at once and return to the confirmed ones after a refusal, which toasts
-  the failure; a later edit of the same key result is kept and sent. An unknown outcome (no
-  answer, a `5xx`) is settled by a read and never reported as a failure. A creation (goal or key
+  the failure; a later edit of the same key result is kept and sent. A confirmed write moves the
+  value an edit counts its steps from, so a queued edit keeps only its unsent steps. An unknown
+  outcome (no answer, a `5xx`) is never reported as a failure: a change is settled by reading its
+  goal inside its queue before a later edit of it is sent (recorded, the later edits follow it;
+  not recorded, only the steps made after it are kept, from the value read). A creation (goal or key
   result) keeps one idempotency key per draft until a definitive answer and is sent again with it
   after an unknown outcome or `409 idempotency.request-in-progress`, one second apart, three sends
   in all; still unknown, `The goal could not be confirmed` or `The key result could not be
 confirmed` asks to submit again, which reuses the key. A deletion of unknown outcome whose goal is
-  still there shows `The deletion could not be confirmed`. Confirmed writes stay over the read
+  still there, or cannot be read, shows `The deletion could not be confirmed`, and the goals are
+  read again. Confirmed writes stay over the read
   goals until a read issued after them lands; a snapshot of one goal counts from when it was sent
   and is not kept once a newer read landed. A superseded read is aborted between its pages. Each
   write is bound to the organization generation it started in: after a switch, even back to the
@@ -99,8 +103,9 @@ confirmed` asks to submit again, which reuses the key. A deletion of unknown out
   as deleted. A key result is removed without undo, as the mockup does.
 - Milestones (gap G-G1): one `getTask` per milestone key, at most four at once. Only the new keys
   of a changed set are read, and a key that leaves has its read cancelled; a task detail that
-  closes or reports a change reads only that task again, a realtime reconnection every task; the
-  reads stop with the page.
+  closes or reports a change reads only that task again, a realtime reconnection every task; a
+  newer read of a task cancels the older one, and only the newest settles it; the reads stop with
+  the page.
   A `404` shows `Milestone not found`; a task due before today shows `Late`, otherwise `Upcoming`.
 - A list-progress result names its list from `LIST_DIRECTORY`, or reads `Calculated from its list`
   for an archived list the sidebar does not show (gap G-G2).

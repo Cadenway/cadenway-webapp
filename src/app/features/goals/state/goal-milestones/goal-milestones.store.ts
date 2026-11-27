@@ -28,6 +28,38 @@ import type { MilestoneState } from '../../models/goal/goal.interface';
 export const MILESTONE_CONCURRENCY: number = 4;
 
 /**
+ * Interface MilestoneRequest
+ *
+ * @description
+ * A read of one milestone task; only the newest read of a key settles it.
+ */
+interface MilestoneRequest {
+  // #region Properties
+  /**
+   * Property key
+   *
+   * @description
+   * Key of the task.
+   *
+   * @type {string}
+   * @readonly
+   */
+  readonly key: string;
+
+  /**
+   * Property sequence
+   *
+   * @description
+   * Reads of that key asked for so far, this one included.
+   *
+   * @type {number}
+   * @readonly
+   */
+  readonly sequence: number;
+  // #endregion
+}
+
+/**
  * Interface GoalMilestonesState
  *
  * @description
@@ -96,12 +128,18 @@ function createGoalMilestonesStore(): Type<GoalMilestonesStoreInstance> {
       _api: inject(GoalsApi),
       _opener: inject(TaskDetailOpener),
       _realtime: inject(RealtimeConnection, { optional: true }),
-      _requests: new Subject<string>(),
+      _requests: new Subject<MilestoneRequest>(),
+      _sequences: new Map<string, number>(),
       _forgotten: new Subject<string>(),
     })),
     withMethods((store) => {
       const tracked: () => readonly string[] = (): readonly string[] =>
         Object.keys(store.milestones());
+      const request: (key: string) => void = (key: string): void => {
+        const sequence: number = (store._sequences.get(key) ?? 0) + 1;
+        store._sequences.set(key, sequence);
+        store._requests.next({ key, sequence });
+      };
       return {
         follow: signalMethod<readonly string[]>((keys: readonly string[]): void => {
           const known: Readonly<Record<string, MilestoneState>> = store.milestones();
@@ -113,14 +151,14 @@ function createGoalMilestonesStore(): Type<GoalMilestonesStoreInstance> {
               keys.map((key: string): [string, MilestoneState] => [key, known[key] ?? 'unknown']),
             ),
           });
-          for (const key of added) store._requests.next(key);
+          for (const key of added) request(key);
         }),
         _again(keys: readonly string[]): void {
           const current: ReadonlySet<string> = new Set<string>(tracked());
-          for (const key of keys) if (current.has(key)) store._requests.next(key);
+          for (const key of keys) if (current.has(key)) request(key);
         },
-        _settle(key: string, state: MilestoneState): void {
-          if (key in store.milestones())
+        _settle(key: string, sequence: number, state: MilestoneState): void {
+          if (store._sequences.get(key) === sequence && key in store.milestones())
             patchState(store, { milestones: { ...store.milestones(), [key]: state } });
         },
         _tracked: tracked,
@@ -131,21 +169,32 @@ function createGoalMilestonesStore(): Type<GoalMilestonesStoreInstance> {
         store._requests
           .pipe(
             mergeMap(
-              (key: string): Observable<[string, MilestoneState]> =>
-                !store._tracked().includes(key)
+              ({
+                key,
+                sequence,
+              }: MilestoneRequest): Observable<[MilestoneRequest, MilestoneState]> =>
+                !store._tracked().includes(key) || store._sequences.get(key) !== sequence
                   ? EMPTY
                   : store._api.milestone(key).pipe(
                       takeUntil(
-                        store._forgotten.pipe(filter((gone: string): boolean => gone === key)),
+                        merge(
+                          store._forgotten.pipe(filter((gone: string): boolean => gone === key)),
+                          store._requests.pipe(
+                            filter((newer: MilestoneRequest): boolean => newer.key === key),
+                          ),
+                        ),
                       ),
-                      map((state: MilestoneState): [string, MilestoneState] => [key, state]),
+                      map((state: MilestoneState): [MilestoneRequest, MilestoneState] => [
+                        { key, sequence },
+                        state,
+                      ]),
                     ),
               MILESTONE_CONCURRENCY,
             ),
             takeUntilDestroyed(),
           )
-          .subscribe(([key, state]: [string, MilestoneState]): void => {
-            store._settle(key, state);
+          .subscribe(([{ key, sequence }, state]: [MilestoneRequest, MilestoneState]): void => {
+            store._settle(key, sequence, state);
           });
         merge(store._opener.closed, store._opener.changed)
           .pipe(takeUntilDestroyed())
@@ -169,7 +218,8 @@ function createGoalMilestonesStore(): Type<GoalMilestonesStoreInstance> {
  * `getTask` per milestone). At most four tasks are read at once. Only the new keys of a changed set
  * are read; a key that left is forgotten and its read, queued or in flight, cancelled. A task
  * detail that closes or reports a change reads only that task again, a realtime reconnection every
- * task. A task the gateway answers `404` for is `missing`; any other failure leaves it `unknown`,
+ * task; a newer read of a key cancels the older one, and only the newest settles it. A task the
+ * gateway answers `404` for is `missing`; any other failure leaves it `unknown`,
  * shown as upcoming. An organization switch empties the goals, so every key leaves; the reads stop
  * with the page.
  *

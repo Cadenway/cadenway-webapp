@@ -1270,6 +1270,60 @@ function createGoalsStore(): Type<GoalsStoreInstance> {
         createKeys.set(draft, key);
         return key;
       };
+      const settleUncertain: (
+        goalId: string,
+        resultId: string,
+        generation: number,
+        edit: EditRecord,
+        sent: number | boolean,
+      ) => Promise<void> = async (
+        goalId: string,
+        resultId: string,
+        generation: number,
+        edit: EditRecord,
+        sent: number | boolean,
+      ): Promise<void> => {
+        let value: number | boolean | null;
+        try {
+          value = valueOf(
+            (await fresh(goalId, generation)).results.find(
+              (result: KeyResult): boolean => result.id === resultId,
+            ),
+          );
+        } catch (error: unknown) {
+          if (dropped(error, generation)) return;
+          dropEdit(resultId, sent);
+          refresh();
+          return;
+        }
+        if (value === null) {
+          dropEdit(resultId);
+          return;
+        }
+        if (value === sent) {
+          edit.start = sent;
+          edit.confirmed = sent;
+          dropEdit(resultId, sent);
+          return;
+        }
+        const edits: Readonly<Record<string, number | boolean>> = store._edits();
+        edit.start = value;
+        edit.confirmed = value;
+        if (!(resultId in edits) || edits[resultId] === sent) {
+          dropEdit(resultId);
+          return;
+        }
+        const latest: number | boolean = edits[resultId];
+        const rebased: number | boolean =
+          typeof latest === 'number' && typeof sent === 'number' && typeof value === 'number'
+            ? value + (latest - sent)
+            : latest;
+        if (rebased === value) {
+          dropEdit(resultId);
+          return;
+        }
+        patchState(store, { _edits: { ...store._edits(), [resultId]: rebased } });
+      };
       const flush: (goalId: string, resultId: string, generation: number) => Promise<void> = async (
         goalId: string,
         resultId: string,
@@ -1344,12 +1398,17 @@ function createGoalsStore(): Type<GoalsStoreInstance> {
               result: write.result,
               version: write.version,
             });
+          edit.start = wanted;
           edit.confirmed = wanted;
           dropEdit(resultId, wanted);
         } catch (error: unknown) {
           if (dropped(error, generation)) return;
+          if (isUncertainWrite(error)) {
+            await settleUncertain(goalId, resultId, generation, edit, wanted);
+            return;
+          }
           dropEdit(resultId, wanted);
-          if (isUncertainWrite(error) || isGone(error)) {
+          if (isGone(error)) {
             refresh();
             return;
           }
@@ -1481,7 +1540,18 @@ function createGoalsStore(): Type<GoalsStoreInstance> {
                   },
                 );
               } catch (reread: unknown) {
-                if (current(generation) && isGone(reread)) outcome = removed();
+                if (dropped(reread, generation)) return;
+                if (isGone(reread)) {
+                  outcome = removed();
+                  return;
+                }
+                store._toasts.warning(
+                  $localize`:@@goals.toast.delete-unknown:The deletion could not be confirmed`,
+                  {
+                    description: $localize`:@@goals.toast.delete-unknown-text:The goal is still shown. Try again in a moment.`,
+                  },
+                );
+                refresh();
               }
             }
           });
@@ -1666,24 +1736,28 @@ function createGoalsStore(): Type<GoalsStoreInstance> {
  *
  * @description
  * State of the goals page, provided by its page. It reads every goal of the current quarter of the
- * workspace's organization once, again after a switch, and in the background on a focus, a
- * visible tab, a realtime reconnection (no goal notice exists, gap G-R2) and when a task detail
- * closes or reports a change (milestones and lists move with task writes elsewhere). A superseded
- * read is aborted between its pages. A background read keeps the goals shown while it runs and
- * when it fails; only the first read of an organization reaches the error boundary. Its own
- * confirmed writes stay over the read goals until a read issued after them lands, a snapshot read
- * of one goal counting from when it was sent, so neither a read in progress nor an older one hides
- * them. The writes of one goal are sent one after the other from the version its queue last knew
+ * workspace's organization once, again after a switch, and in the background on a focus, a visible
+ * tab, a realtime reconnection (no goal notice exists, gap G-R2) and when a task detail closes or
+ * reports a change (milestones and lists move with task writes elsewhere). A superseded read is
+ * aborted between its pages. A background read keeps the goals shown while it runs and when it
+ * fails; only the first read of an organization reaches the error boundary. Its own confirmed
+ * writes stay over the read goals until a read issued after them lands, a snapshot read of one goal
+ * counting from when it was sent, so neither a read in progress nor an older one hides them. The
+ * writes of one goal are sent one after the other from the version its queue last knew
  * (`If-Match`), kept once the page is gone so the last value of a burst is still sent; once a
  * goal's writes settle, it is read again for its progress and health, unless the page is gone. A
  * `412` reads the goal: an edit is sent again only while the goal still shows the value it started
  * from, a number moves by the same steps from a newer value, and a checkbox changed elsewhere is
- * dropped with a warning. Every write is bound to the organization generation it started in: after
- * a switch, even back to the same organization, nothing more is sent, patched or toasted. A
- * creation keeps its idempotency key until a definitive answer and is sent again with it after an
- * unknown outcome or `409 idempotency.request-in-progress`, up to three times, then reported as
- * unconfirmed; a resubmitted identical draft reuses the key. The members are read again after a
- * failure and for owners they did not name, which read as former members only once a read says so.
+ * dropped with a warning. A confirmed write moves the value an edit counts its steps from, so a
+ * queued edit keeps only its unsent steps. A change of unknown outcome is settled by reading its
+ * goal inside its queue, before any later edit of it is sent: recorded, the later edits follow it;
+ * not recorded, only the steps made after it are kept, from the value read. Every write is bound to
+ * the organization generation it started in: after a switch, even back to the same organization,
+ * nothing more is sent, patched or toasted. A creation keeps its idempotency key until a definitive
+ * answer and is sent again with it after an unknown outcome or
+ * `409 idempotency.request-in-progress`, up to three times, then reported as unconfirmed; a resubmitted
+ * identical draft reuses the key. The members are read again after a failure and for owners they
+ * did not name, which read as former members only once a read says so.
  *
  * @type {ReturnType<typeof createGoalsStore>}
  */
