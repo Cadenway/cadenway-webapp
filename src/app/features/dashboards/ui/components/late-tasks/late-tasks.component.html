@@ -1,0 +1,41 @@
+<section class="flex flex-col gap-2" aria-labelledby="dashboards-late-title">
+  <h2
+    id="dashboards-late-title"
+    class="text-base font-semibold focus-visible:outline-none"
+    tabindex="-1"
+    i18n="@@dashboards.late.title"
+  >
+    Late
+  </h2>
+  @if (rows().length > 0) {
+    <ul class="flex flex-col overflow-hidden rounded-lg border border-border">
+      @for (row of rows(); track row.task.id) {
+        <li
+          class="border-b border-border last:border-b-0"
+          data-testid="late-task"
+          [attr.data-task-key]="row.task.key"
+          [cwContextMenuTriggerFor]="menu()"
+          (opened)="menuOpened.emit(row.task.key)"
+        >
+          <cw-task-line
+            variant="late"
+            [task]="row.task"
+            [status]="row.status"
+            [listName]="row.listName"
+            [people]="row.people"
+            (opened)="opened.emit($event)"
+          />
+        </li>
+      }
+      @if (hidden() > 0) {
+        <li class="px-3 py-2 text-sm text-muted-foreground" data-testid="late-more">
+          {{ moreLabel() }}
+        </li>
+      }
+    </ul>
+  } @else {
+    <cw-empty variant="outline" size="sm" data-testid="late-empty">
+      <cw-empty-description i18n="@@dashboards.late.empty">No late task.</cw-empty-description>
+    </cw-empty>
+  }
+</section>

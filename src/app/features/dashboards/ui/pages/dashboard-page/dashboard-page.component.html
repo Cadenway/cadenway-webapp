@@ -1,0 +1,193 @@
+<div class="mx-auto flex w-full max-w-6xl flex-col gap-5 px-4 py-6 sm:px-6">
+  <header class="flex flex-wrap items-start gap-3">
+    <div class="flex min-w-0 flex-1 flex-col gap-1">
+      <h1
+        class="text-2xl font-semibold tracking-tight"
+        data-route-focus
+        i18n="@@dashboards.header.title"
+      >
+        Team dashboard
+      </h1>
+      <p class="text-sm text-muted-foreground" data-testid="dashboard-subtitle">
+        {{ subtitle() }}
+      </p>
+    </div>
+    <cw-tabs [value]="'' + period()" (valueChange)="pickPeriod($event)">
+      <cw-tabs-list ariaLabel="Period" i18n-ariaLabel="@@dashboards.period.label">
+        <button cwTab type="button" value="8" i18n="@@dashboards.period.weeks-8">8 weeks</button>
+        <button cwTab type="button" value="12" i18n="@@dashboards.period.weeks-12">12 weeks</button>
+      </cw-tabs-list>
+    </cw-tabs>
+  </header>
+
+  @if (store.loading()) {
+    <div
+      class="flex flex-col gap-5"
+      role="status"
+      aria-busy="true"
+      aria-label="Loading the dashboard"
+      i18n-aria-label="@@dashboards.loading"
+      data-testid="dashboard-skeleton"
+    >
+      <div
+        class="grid grid-cols-2 divide-x divide-border rounded-xl border border-border bg-card lg:grid-cols-4"
+        aria-hidden="true"
+      >
+        @for (cell of [1, 2, 3, 4]; track cell) {
+          <div
+            class="flex flex-col gap-2 p-4 max-lg:[&:nth-child(2)]:border-e-0 max-lg:[&:nth-child(n+3)]:border-t max-lg:[&:nth-child(n+3)]:border-border"
+          >
+            <div cwSkeleton class="h-3 w-24"></div>
+            <div cwSkeleton class="h-7 w-16"></div>
+            <div cwSkeleton class="h-2.5 w-28"></div>
+          </div>
+        }
+      </div>
+      <div class="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_22rem]" aria-hidden="true">
+        <div class="flex flex-col gap-4 rounded-xl border border-border bg-card p-4">
+          <div cwSkeleton class="h-4 w-40"></div>
+          <div class="flex h-48 items-end gap-3 border-b border-border">
+            @for (
+              height of ['40%', '65%', '50%', '80%', '55%', '90%', '70%', '30%'];
+              track $index
+            ) {
+              <div cwSkeleton class="min-w-0 flex-1 rounded-b-none" [style.height]="height"></div>
+            }
+          </div>
+        </div>
+        <div class="flex flex-col gap-5">
+          @for (card of [1, 2]; track card) {
+            <div class="flex flex-col gap-3 rounded-xl border border-border bg-card p-4">
+              <div cwSkeleton class="h-4 w-28"></div>
+              @for (row of [1, 2, 3]; track row) {
+                <div class="flex items-center gap-2">
+                  <div cwSkeleton class="size-6 rounded-full"></div>
+                  <div cwSkeleton class="h-3 w-32"></div>
+                </div>
+              }
+            </div>
+          }
+        </div>
+      </div>
+      <div class="flex flex-col gap-2" aria-hidden="true">
+        <div cwSkeleton class="h-3.5 w-28"></div>
+        <div class="flex flex-col overflow-hidden rounded-lg border border-border">
+          @for (row of [1, 2, 3]; track row) {
+            <div class="flex h-11 items-center gap-3 border-b border-border px-3 last:border-b-0">
+              <div cwSkeleton class="size-4 rounded-full"></div>
+              <div cwSkeleton class="h-3 w-48"></div>
+              <div cwSkeleton class="ml-auto size-6 rounded-full"></div>
+            </div>
+          }
+        </div>
+      </div>
+    </div>
+  } @else {
+    @if (store.dashboard(); as dashboard) {
+      <cw-stat-group class="max-lg:grid-flow-row max-lg:grid-cols-2" data-testid="dashboard-stats">
+        <cw-stat
+          class="max-lg:[&:nth-child(2)]:border-e-0 max-lg:[&:nth-child(n+3)]:border-t max-lg:[&:nth-child(n+3)]:border-border"
+          label="Open tasks"
+          i18n-label="@@dashboards.stats.open"
+          comparison="all spaces"
+          i18n-comparison="@@dashboards.stats.open-hint"
+          [value]="dashboard.openCount"
+          [refreshing]="store.stale()"
+        />
+        <cw-stat
+          class="max-lg:[&:nth-child(2)]:border-e-0 max-lg:[&:nth-child(n+3)]:border-t max-lg:[&:nth-child(n+3)]:border-border"
+          label="Completed"
+          i18n-label="@@dashboards.stats.completed"
+          [comparison]="completedHint(dashboard.weeks)"
+          [value]="dashboard.completedCount"
+          [refreshing]="store.stale()"
+        />
+        <cw-stat
+          class="max-lg:[&:nth-child(2)]:border-e-0 max-lg:[&:nth-child(n+3)]:border-t max-lg:[&:nth-child(n+3)]:border-border"
+          label="Late"
+          i18n-label="@@dashboards.stats.late"
+          comparison="past due"
+          i18n-comparison="@@dashboards.stats.late-hint"
+          [sentiment]="dashboard.lateCount > 0 ? 'negative' : 'neutral'"
+          [value]="dashboard.lateCount"
+          [refreshing]="store.stale()"
+        />
+        <cw-stat
+          class="max-lg:[&:nth-child(2)]:border-e-0 max-lg:[&:nth-child(n+3)]:border-t max-lg:[&:nth-child(n+3)]:border-border"
+          label="Blocked"
+          i18n-label="@@dashboards.stats.blocked"
+          comparison="to unblock"
+          i18n-comparison="@@dashboards.stats.blocked-hint"
+          [value]="dashboard.blockedCount"
+          [refreshing]="store.stale()"
+        />
+      </cw-stat-group>
+
+      <div class="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_22rem]">
+        <cw-completion-chart
+          [weeks]="dashboard.completions"
+          [busy]="store.stale()"
+          [(view)]="completionView"
+        />
+        <div class="flex min-w-0 flex-col gap-5">
+          <cw-workload-card [rows]="store.workload()" [threshold]="dashboard.assigneeThreshold" />
+          <cw-status-breakdown [counts]="dashboard.byStatus" />
+        </div>
+      </div>
+
+      <cw-late-tasks
+        [rows]="lateRows()"
+        [hidden]="store.hiddenLate()"
+        [menu]="taskMenu.menu()"
+        (opened)="rowActions.open($event)"
+        (menuOpened)="menuKey.set($event)"
+      />
+    }
+  }
+</div>
+
+@let menuTarget = menuTask();
+<cw-task-menu
+  #taskMenu
+  [tasks]="menuTasks()"
+  [status]="menuTarget ? rowActions.displayedStatus(menuTarget) : null"
+  [statuses]="statuses"
+  [people]="store.people()"
+  [userId]="rowActions.userId()"
+  [lists]="moveTargets()"
+  (openRequested)="rowActions.open($event)"
+  (statusPicked)="menuTarget && rowActions.setStatus(menuTarget, $event)"
+  (priorityPicked)="menuTarget && rowActions.setPriority(menuTarget, $event)"
+  (assigneeToggled)="menuTarget && rowActions.toggleAssignee(menuTarget, store.personOf($event))"
+  (moved)="menuTarget && moveTo(menuTarget, $event)"
+  (remindRequested)="menuTarget && rowActions.remind(menuTarget)"
+  (duplicateRequested)="menuTarget && rowActions.duplicate(menuTarget)"
+  (copyLinkRequested)="menuTarget && rowActions.copyLink(menuTarget)"
+  (copyKeyRequested)="menuTarget && rowActions.copyKey(menuTarget)"
+  (deleteRequested)="menuTarget && askDelete(menuTarget)"
+/>
+
+<cw-task-cancel-dialog
+  [taskKeys]="rowActions.cancelKeys()"
+  (confirmed)="rowActions.confirmCancel($event)"
+  (kept)="rowActions.keepCancel()"
+/>
+
+<cw-alert-dialog
+  variant="destructive"
+  size="sm"
+  [open]="rowActions.deleteOpen()"
+  (openChange)="rowActions.setDeleteOpen($event)"
+  [items]="rowActions.deleteItems()"
+  [pending]="rowActions.deleting()"
+  (confirm)="confirmDelete()"
+>
+  <h2 cwAlertDialogTitle>{{ rowActions.deleteTitle() }}</h2>
+  <p cwAlertDialogDescription>{{ rowActions.deleteText() }}</p>
+  <button cwButton cwAlertDialogCancel variant="outline" i18n="@@dashboards.late.delete-cancel">
+    Cancel
+  </button>
+  <button cwButton cwAlertDialogAction variant="destructive" [loading]="rowActions.deleting()">
+    {{ rowActions.deleteAction() }}
+  </button>
+</cw-alert-dialog>
