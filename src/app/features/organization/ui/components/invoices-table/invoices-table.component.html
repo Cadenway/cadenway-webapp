@@ -1,0 +1,148 @@
+<cw-table-container class="rounded-lg border border-border">
+  <table
+    cwTable
+    aria-label="Invoices"
+    i18n-aria-label="@@organization.billing.invoices-table"
+    class="min-w-[600px] max-md:block max-md:min-w-0"
+    [attr.aria-busy]="loading() || null"
+    data-testid="invoices-table"
+  >
+    <thead cwTableHeader class="max-md:hidden">
+      <tr cwTableRow>
+        <th cwTableHead class="w-40" i18n="@@organization.billing.column-number">Number</th>
+        <th cwTableHead i18n="@@organization.billing.column-period">Period</th>
+        <th cwTableHead class="w-32 text-right" i18n="@@organization.billing.column-amount">
+          Amount
+        </th>
+        <th cwTableHead class="w-44" i18n="@@organization.billing.column-status">Status</th>
+        <th cwTableHead class="w-12">
+          <span class="sr-only" i18n="@@organization.billing.column-pdf">PDF</span>
+        </th>
+      </tr>
+    </thead>
+    <tbody cwTableBody class="max-md:block">
+      @if (loading()) {
+        @for (line of skeleton; track line) {
+          <tr cwTableRow class="max-md:flex max-md:h-auto max-md:p-3" aria-hidden="true">
+            <td cwTableCell colspan="5" class="max-md:block max-md:w-full">
+              <span class="flex items-center gap-4">
+                <div cwSkeleton class="h-3 w-28"></div>
+                <div cwSkeleton class="h-3 flex-1"></div>
+                <div cwSkeleton class="h-3 w-20"></div>
+                <div cwSkeleton class="h-3 w-16"></div>
+              </span>
+            </td>
+          </tr>
+        }
+      } @else {
+        @for (invoice of rows(); track invoice.number) {
+          @let view = status(invoice);
+          <tr
+            cwTableRow
+            class="max-md:flex max-md:h-auto max-md:flex-wrap max-md:items-center max-md:gap-x-3 max-md:gap-y-1.5 max-md:p-3"
+            data-testid="invoice-row"
+          >
+            <td
+              cwTableCell
+              class="font-mono text-xs max-md:block max-md:basis-full max-md:px-0"
+              data-testid="invoice-number"
+            >
+              {{ invoice.number }}
+            </td>
+            <td cwTableCell class="max-md:block max-md:px-0" data-testid="invoice-period">
+              {{ period(invoice) }}
+            </td>
+            <td
+              cwTableCell
+              class="text-right whitespace-nowrap tabular-nums max-md:block max-md:px-0"
+              data-testid="invoice-amount"
+            >
+              {{ amount(invoice) }}
+            </td>
+            <td cwTableCell class="max-md:block max-md:px-0" data-testid="invoice-status">
+              <span class="flex items-center gap-1.5 text-xs">
+                <ng-icon
+                  [name]="view.icon"
+                  class="size-3.5"
+                  [class]="view.tone"
+                  aria-hidden="true"
+                />
+                {{ view.label }}
+              </span>
+            </td>
+            <td cwTableCell class="max-md:ml-auto max-md:block max-md:px-0">
+              <span class="flex justify-end">
+                @if (invoice.pdfUrl; as pdfUrl) {
+                  <a
+                    cwButton
+                    variant="ghost"
+                    size="icon-sm"
+                    class="text-muted-foreground"
+                    [href]="pdfUrl"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    [attr.aria-label]="downloadLabel(invoice)"
+                    [cwTooltip]="downloadLabel(invoice)"
+                    data-testid="invoice-download"
+                  >
+                    <ng-icon name="phosphorDownloadSimpleBold" aria-hidden="true" />
+                  </a>
+                }
+              </span>
+            </td>
+          </tr>
+        } @empty {
+          <tr class="max-md:block">
+            <td colspan="5" class="max-md:block">
+              <cw-empty class="p-4" data-testid="invoices-empty">
+                <cw-empty-header>
+                  <cw-empty-media>
+                    <ng-icon name="phosphorReceiptBold" aria-hidden="true" />
+                  </cw-empty-media>
+                  <cw-empty-title i18n="@@organization.billing.empty-title"
+                    >No invoices yet</cw-empty-title
+                  >
+                  <cw-empty-description i18n="@@organization.billing.empty-text"
+                    >Invoices show here once a paid plan bills the
+                    organization.</cw-empty-description
+                  >
+                </cw-empty-header>
+              </cw-empty>
+            </td>
+          </tr>
+        }
+      }
+    </tbody>
+  </table>
+</cw-table-container>
+
+@if (hasPrevious() || hasNext()) {
+  <nav
+    class="flex items-center justify-end gap-1"
+    aria-label="Invoices pagination"
+    i18n-aria-label="@@organization.billing.pagination"
+  >
+    <button
+      cwButton
+      type="button"
+      variant="outline"
+      size="sm"
+      [disabled]="!hasPrevious() || loading()"
+      (click)="previousPage.emit()"
+      data-testid="invoices-previous"
+    >
+      <ng-container i18n="@@organization.billing.previous">Previous</ng-container>
+    </button>
+    <button
+      cwButton
+      type="button"
+      variant="outline"
+      size="sm"
+      [disabled]="!hasNext() || loading()"
+      (click)="nextPage.emit()"
+      data-testid="invoices-next"
+    >
+      <ng-container i18n="@@organization.billing.next">Next</ng-container>
+    </button>
+  </nav>
+}

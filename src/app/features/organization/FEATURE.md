@@ -74,6 +74,9 @@ section has `organizationSectionGuard(<section>)` (`http/guards/organization-sec
   (optional) for the presence dots and tabs; `@cadenway/ui` `alert-dialog`, `avatar`, `badge`,
   `dialog`, `empty`, `input-group`, `select`, `skeleton`, `table`, `tabs`, `textarea`, `toast` and
   `tooltip`.
+- Billing section: `BillingService` (`listBillingInvoices`, `startBillingCheckout`) through
+  `data-access/services/billing-api`; `@cadenway/ui` `button`, `empty`, `skeleton`, `table`,
+  `toast` and `tooltip`.
 
 ## Invariants
 
@@ -189,6 +192,45 @@ loaded.` with `Retry`; the banner stays hidden until a retry succeeds.
 - Below 768 px both tables become cards (header hidden, member cell full width, actions right)
   and the remove button stays visible; the search takes the full width and the toolbar wraps.
 
+### Billing (`billing`, package O3)
+
+- `BillingPage` provides the page-scoped `InvoicesStore` and `BillingCheckoutStore` and reads the
+  plan from the shared `SubscriptionStore`. It shows only what the contract serves: the plan card
+  (`<plan> plan`, `<used> / <limit>` seats and `<n> available`), the invoices, and on the Free plan
+  `Upgrade to the Team plan`. The billing contract has no subscription status, so none shows. The
+  plan catalog (`Change plan`), the downgrade, `Manage seats`, the interval badge, the price and
+  renewal, the next invoice, the payment method, the billing details and the Stripe customer portal
+  (gap B14) are not rendered.
+- The section skeleton shows until the organization's first invoices page and its plan answered.
+  The first invoices read is the primary read: its failure reaches the route's error boundary,
+  whose `Retry` runs the route again and recreates the page's stores. A failed plan read (the
+  shared store outlives the page) shows the section's error panel in the plan area with `Retry`,
+  which reads the subscription again; a later failed invoices page shows it in place of the table.
+  A completed read without invoices shows `No invoices yet`.
+- `listBillingInvoices` is read 10 per page by cursor, newest first; the store keeps the cursor of
+  each page reached for `Previous`. The reads are keyed by the workspace organization: a switch
+  starts at the next organization's first page, never with a cursor of the last one, and shows the
+  section skeleton again. The period names its months in UTC (`November 2026`, `March 2026 –
+February 2027`; the contract's end is the start of the next period) and the amount uses the
+  currency's own decimals, both in `LOCALE_ID`. A status a later contract adds shows its key. A
+  PDF or Checkout address that is not HTTPS is dropped at the boundary; the PDF opens in a new tab.
+- A checkout is bound to the organization shown when it starts and to the page: after a switch,
+  or once the page is gone, its answer opens nothing and toasts nothing, and the organization pin
+  refuses it at the gateway for another session organization. One checkout runs at a time. A
+  retry after an unknown outcome (no answer, `5xx`, `429`, `409 idempotency.request-in-progress`)
+  sends the same `Idempotency-Key`, so Billing replays the session it may have created; a definite
+  refusal drops the key. `409 billing.subscription-active` reads the subscription again. The
+  Checkout opens in the same tab through `CHECKOUT_REDIRECT` (`state/billing-checkout`), which
+  specs replace.
+- Stripe returns to Billing's configured `BILLING_STRIPE_CHECKOUT_SUCCESS_URL` and
+  `BILLING_STRIPE_CHECKOUT_CANCEL_URL`, which carry no organization. The page expects
+  `/org/billing?checkout=success` and `/org/billing?checkout=cancel`, which Workspace's slug
+  redirect sends to the session's organization, toasts that return once and removes the
+  parameter. Settlement is asynchronous, so the plan may still read Free just after the return.
+- The page's toasts are dismissed when it is left or the organization changes.
+- Below 768 px the invoices become cards (header hidden, number full width, link right) and the
+  upgrade button wraps under the plan title.
+
 ## Copy not taken word for word from the mockup
 
 | Unit                               | Reason                                                                       |
@@ -223,3 +265,18 @@ Members section (`organization.members.*`):
 | `organization.security.save-failed`, `organization.security.conflict`, `organization.security.conflict-text`, `organization.security.two-step-not-enabled`, `organization.security.two-step-not-enabled-text` | The mockup applies each control at once and draws no refused save.                                                |
 | `organization.security.two-step-saved`                                                                                                                                                                        | The mockup's only policy toast names the session timeout; a two-step change alone needs its own title.            |
 | `organization.security.two-step-unknown`, `organization.security.two-step-unknown-choose`                                                                                                                     | The mockup knows only `nobody`, `admins` and `everyone`; a requirement a later contract adds needs its own state. |
+
+Billing section (`organization.billing.*`):
+
+| Unit                                                                                                                                            | Reason                                                                                              |
+| ----------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| `description`                                                                                                                                   | The mockup's subtitle without the payment method, which is not shown, and with `de <organization>`. |
+| `upgrade`                                                                                                                                       | The mockup draws the Team plan as current; the upgrade from Free has no button there.               |
+| `seats-free-one`                                                                                                                                | Singular form of the mockup's `<n> disponibles`.                                                    |
+| `status-open`, `status-uncollectible`, `status-void`                                                                                            | The mockup draws paid invoices only; the contract has four statuses.                                |
+| `empty-title`, `empty-text`                                                                                                                     | The mockup draws no organization without invoices.                                                  |
+| `pagination`, `previous`, `next`                                                                                                                | The mockup's four invoices fit one page.                                                            |
+| `plan-loading`, `plan-failed`                                                                                                                   | The mockup draws no plan read apart from the section.                                               |
+| `loading`, `failed-title`, `failed-text`, `retry`                                                                                               | The mockup's section states (`Organisation.dc.html` lines 73-128), with this section's ids.         |
+| `already-subscribed`, `already-subscribed-text`, `checkout-in-progress`, `checkout-in-progress-text`, `checkout-failed`, `checkout-failed-text` | The mockup draws no refused checkout.                                                               |
+| `checkout-success`, `checkout-success-text`, `checkout-cancelled`, `checkout-cancelled-text`                                                    | The mockup draws no return from the payment provider.                                               |
