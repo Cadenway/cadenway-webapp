@@ -1,0 +1,77 @@
+@let rows = store.rows();
+@if (rows) {
+  <div class="mx-auto flex w-full max-w-5xl flex-col gap-5 px-4 py-6 sm:px-6">
+    <header class="flex flex-wrap items-start gap-3">
+      <div class="flex min-w-0 flex-1 flex-col gap-1">
+        <h1
+          class="text-2xl font-semibold tracking-tight"
+          tabindex="-1"
+          data-route-focus
+          i18n="@@docs.header.title"
+        >
+          Documents
+        </h1>
+        <p class="text-sm text-muted-foreground" i18n="@@docs.header.description">
+          Specifications, guides and meeting notes of the organization.
+        </p>
+      </div>
+      <cw-input-group class="w-full sm:w-56">
+        <cw-input-group-addon>
+          <ng-icon name="phosphorMagnifyingGlassBold" aria-hidden="true" />
+        </cw-input-group-addon>
+        <input
+          cwInputGroupInput
+          type="search"
+          aria-label="Search for a document"
+          i18n-aria-label="@@docs.search.label"
+          placeholder="Search"
+          i18n-placeholder="@@docs.search.placeholder"
+          maxlength="200"
+          data-testid="docs-search"
+          [value]="searchText()"
+          (input)="search($event)"
+        />
+      </cw-input-group>
+      @if (store.targetSpace()) {
+        <button
+          cwButton
+          type="button"
+          data-testid="docs-create"
+          [loading]="store.creating()"
+          (click)="create()"
+        >
+          <ng-icon name="phosphorPlusBold" aria-hidden="true" />
+          <ng-container i18n="@@docs.create">New document</ng-container>
+        </button>
+      }
+    </header>
+
+    <cw-document-table
+      [rows]="rows"
+      [searching]="store.searching()"
+      [deletingId]="store.deletingId()"
+      (opened)="open($event)"
+      (editRequested)="edit($event)"
+      (linkCopyRequested)="copyLink($event)"
+      (deleteRequested)="askDelete($event)"
+    />
+    @if (store.truncated()) {
+      <p
+        class="text-center text-xs text-muted-foreground"
+        data-testid="documents-truncated"
+        i18n="@@docs.table.truncated"
+      >
+        Showing the 500 most recently modified documents. Refine the search to find the others.
+      </p>
+    }
+  </div>
+} @else {
+  <cw-docs-skeleton width="catalog" />
+}
+
+<cw-document-delete-dialog
+  [(open)]="deleteOpen"
+  [title]="deleteTarget()?.document?.title ?? ''"
+  [pending]="store.deletingId() !== null"
+  (confirmed)="confirmDelete()"
+/>

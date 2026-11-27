@@ -1,0 +1,98 @@
+@let entry = row().entry;
+@let ago = deletedDays();
+@let left = leftDays();
+<cw-status-icon [status]="entry.status" size="4" />
+<div class="flex min-w-0 flex-1 flex-col gap-0.5">
+  <p class="flex min-w-0 items-center gap-2 text-sm">
+    <span class="truncate font-medium">{{ entry.taskName }}</span>
+    <span class="sr-only">{{ statusLabel() }}</span>
+    <span class="shrink-0 font-mono text-xs text-muted-foreground">{{ entry.taskKey }}</span>
+    @if (entry.parentKey) {
+      <span
+        class="inline-flex shrink-0 items-center gap-1 rounded-md border border-border px-1.5 text-xs leading-5 text-muted-foreground"
+        data-testid="trash-row-parent"
+      >
+        <ng-icon name="phosphorTreeStructureBold" class="size-3" aria-hidden="true" />
+        {{ entry.parentKey }}
+      </span>
+    }
+  </p>
+  <p class="truncate text-xs text-muted-foreground" data-testid="trash-row-meta">
+    @if (entry.listDeleted) {
+      <ng-container i18n="@@trash.row.deleted-list">Deleted list</ng-container>
+    } @else {
+      {{ entry.listName }}
+    }
+    ·
+    @let name = row().deletedBy;
+    @switch (ago) {
+      @case (0) {
+        @if (name) {
+          <ng-container i18n="@@trash.row.deleted-today-by"
+            >Deleted today by {{ name }}</ng-container
+          >
+        } @else {
+          <ng-container i18n="@@trash.row.deleted-today">Deleted today</ng-container>
+        }
+      }
+      @case (1) {
+        @if (name) {
+          <ng-container i18n="@@trash.row.deleted-yesterday-by"
+            >Deleted yesterday by {{ name }}</ng-container
+          >
+        } @else {
+          <ng-container i18n="@@trash.row.deleted-yesterday">Deleted yesterday</ng-container>
+        }
+      }
+      @default {
+        @if (name) {
+          <ng-container i18n="@@trash.row.deleted-days-ago-by"
+            >Deleted {{ ago }} days ago by {{ name }}</ng-container
+          >
+        } @else {
+          <ng-container i18n="@@trash.row.deleted-days-ago"
+            >Deleted {{ ago }} days ago</ng-container
+          >
+        }
+      }
+    }
+  </p>
+</div>
+<span
+  class="shrink-0 text-xs whitespace-nowrap tabular-nums"
+  [class.text-grenat-text]="left <= warningDays"
+  [class.text-muted-foreground]="left > warningDays"
+  [attr.title]="leftTitle()"
+  data-testid="trash-row-left"
+  i18n="@@trash.row.days-left"
+  >{{ left }} d</span
+>
+<button
+  cwButton
+  type="button"
+  variant="outline"
+  size="xs"
+  [loading]="row().pending === 'restore'"
+  [attr.aria-disabled]="blocked() ? 'true' : null"
+  [attr.aria-label]="restoreLabel()"
+  data-testid="trash-row-restore"
+  (click)="requestRestore()"
+>
+  <ng-icon name="phosphorArrowCounterClockwiseBold" class="size-3.5" aria-hidden="true" />
+  <ng-container i18n="@@trash.row.restore">Restore</ng-container>
+</button>
+<button
+  cwButton
+  type="button"
+  variant="ghost"
+  size="icon-xs"
+  class="text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+  [loading]="row().pending === 'purge'"
+  [attr.aria-disabled]="blocked() ? 'true' : null"
+  [attr.aria-label]="purgeLabel()"
+  [attr.title]="purgeLabel()"
+  data-testid="trash-row-purge"
+  (click)="requestPurge()"
+>
+  <ng-icon name="phosphorTrashBold" class="size-3.5" aria-hidden="true" />
+</button>
