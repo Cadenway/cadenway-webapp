@@ -5,6 +5,7 @@ import { Router } from '@angular/router';
 import { CwToastService } from '@cadenway/ui/components/toast';
 import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 
+import { OrganizationPin } from '@core/api';
 import { NAVIGATION_REFRESH } from '@features/spaces/ports/navigation-refresh';
 import type { LookColor } from '@features/spaces/utils/space-look';
 import {
@@ -40,6 +41,103 @@ const ATELIER_NORD: WorkspaceOrganization = {
   role: 'owner',
   plan: 'team',
 };
+
+/**
+ * Constant STUDIO_PIXEL
+ *
+ * @description
+ * Another organization the person belongs to.
+ *
+ * @type {WorkspaceOrganization}
+ */
+const STUDIO_PIXEL: WorkspaceOrganization = {
+  ...ATELIER_NORD,
+  id: 'o-studio',
+  slug: 'studio-pixel',
+  name: 'Studio Pixel',
+  initials: 'SP',
+};
+
+/**
+ * Interface Deferred
+ *
+ * @description
+ * A promise settled by the test.
+ */
+interface Deferred<T> {
+  // #region Properties
+  /**
+   * Property promise
+   *
+   * @description
+   * The promise.
+   *
+   * @type {Promise<T>}
+   * @readonly
+   */
+  readonly promise: Promise<T>;
+
+  /**
+   * Property resolve
+   *
+   * @description
+   * Resolves the promise.
+   *
+   * @type {(value: T) => void}
+   * @readonly
+   */
+  readonly resolve: (value: T) => void;
+  // #endregion
+}
+
+/**
+ * Function deferred
+ *
+ * @description
+ * A promise the test resolves.
+ *
+ * @template T
+ * @returns {Deferred<T>} The promise and its resolver.
+ */
+function deferred<T>(): Deferred<T> {
+  let resolve: (value: T) => void = (): void => undefined;
+  const promise: Promise<T> = new Promise<T>((yes: (value: T) => void) => {
+    resolve = yes;
+  });
+  return { promise, resolve };
+}
+
+/**
+ * Function rejected
+ *
+ * @description
+ * A promise rejected with a client failure, as the generated client rejects.
+ *
+ * @param {unknown} error - The failure.
+ * @returns {Promise<never>} The rejected promise.
+ */
+async function rejected(error: unknown): Promise<never> {
+  await Promise.resolve();
+  throw error;
+}
+
+/**
+ * Function order
+ *
+ * @description
+ * Whether each fake was first called after the previous one.
+ *
+ * @param {...Mock} fakes - The fakes, in the expected order.
+ * @returns {boolean} Whether they were called in that order.
+ */
+function order(...fakes: Mock[]): boolean {
+  const firsts: number[] = fakes.map(
+    (fake: Mock): number => fake.mock.invocationCallOrder[0] ?? Number.NaN,
+  );
+  return firsts.every(
+    (first: number, index: number): boolean => index === 0 || first > (firsts[index - 1] ?? 0),
+  );
+}
 
 /**
  * Constant RANKS
@@ -131,6 +229,39 @@ interface Fakes {
    * @readonly
    */
   readonly role: WritableSignal<WorkspaceRole>;
+
+  /**
+   * Property organization
+   *
+   * @description
+   * The workspace's organization.
+   *
+   * @type {WritableSignal<WorkspaceOrganization>}
+   * @readonly
+   */
+  readonly organization: WritableSignal<WorkspaceOrganization>;
+
+  /**
+   * Property pin
+   *
+   * @description
+   * The organization pin's organization.
+   *
+   * @type {WritableSignal<string | null>}
+   * @readonly
+   */
+  readonly pin: WritableSignal<string | null>;
+
+  /**
+   * Property failed
+   *
+   * @description
+   * The shared store's failed first read.
+   *
+   * @type {WritableSignal<boolean>}
+   * @readonly
+   */
+  readonly failed: WritableSignal<boolean>;
 
   /**
    * Property saveDraft
@@ -279,6 +410,9 @@ function setup(initial: OnboardingProgress | null = progress(1)): Setup {
   const fakes: Fakes = {
     progress: signal<OnboardingProgress | null>(initial),
     role,
+    organization: signal<WorkspaceOrganization>(ATELIER_NORD),
+    pin: signal<string | null>(ATELIER_NORD.id),
+    failed: signal<boolean>(false),
     saveDraft: vi.fn(() => Promise.resolve(progress(2))),
     dismiss: vi.fn(() => Promise.resolve(progress(2, { status: 'dismissed' }))),
     finish: vi.fn(() => Promise.resolve(progress(3, {}, true))),
@@ -298,6 +432,7 @@ function setup(initial: OnboardingProgress | null = progress(1)): Setup {
         provide: OnboardingStore,
         useValue: {
           progress: fakes.progress,
+          failed: fakes.failed,
           saveDraft: fakes.saveDraft,
           dismiss: fakes.dismiss,
           finish: fakes.finish,
@@ -305,10 +440,11 @@ function setup(initial: OnboardingProgress | null = progress(1)): Setup {
         },
       },
       { provide: OnboardingApi, useValue: { invite: fakes.invite } },
+      { provide: OrganizationPin, useValue: { current: fakes.pin } },
       {
         provide: WORKSPACE_CONTEXT,
         useValue: {
-          organization: signal(ATELIER_NORD),
+          organization: fakes.organization,
           role,
           can: (needed: WorkspaceRole): boolean => RANKS[role()] >= RANKS[needed],
         },
@@ -484,7 +620,7 @@ describe('OnboardingWizardStore', () => {
     expect(store.nextAction()).toBe('create');
   });
 
-  it('creates the space, invites, refreshes the navigation, opens the first list and closes', async () => {
+  it('invites first, then creates the space, records the invitation, refreshes, navigates, toasts and closes', async () => {
     const { store, fakes }: Setup = setup();
     await moveTo(store, 'team');
     store.changeEmails(['ines.robert@ateliernord.fr', 'marc.roux@ateliernord.fr']);
@@ -492,22 +628,43 @@ describe('OnboardingWizardStore', () => {
 
     await store.next();
 
-    expect(sentSpaces(fakes.finish)).toEqual([
-      { name: 'Product', prefix: 'PRO', preset: 'dev', color: 'violet' },
-    ]);
     expect(fakes.invite).toHaveBeenCalledWith([
       'ines.robert@ateliernord.fr',
       'marc.roux@ateliernord.fr',
     ]);
+    expect(sentSpaces(fakes.finish)).toEqual([
+      { name: 'Product', prefix: 'PRO', preset: 'dev', color: 'violet' },
+    ]);
     expect(fakes.recordInvitation).toHaveBeenCalledTimes(1);
-    expect(fakes.refresh).toHaveBeenCalledTimes(1);
     expect(fakes.navigate).toHaveBeenCalledWith(['/', 'atelier-nord', 'l', 'l-backlog']);
     expect(fakes.show).toHaveBeenCalledWith('Space “Product” created', {
       description: '3 lists · 2 invitations sent',
     });
+    expect(order(fakes.invite, fakes.finish, fakes.recordInvitation)).toBe(true);
+    expect(order(fakes.recordInvitation, fakes.refresh, fakes.navigate, fakes.show)).toBe(true);
     expect(fakes.error).not.toHaveBeenCalled();
     expect(store.closed()).toBe(true);
     expect(store.finishing()).toBe(false);
+  });
+
+  it('sends nothing more while a finish runs', async () => {
+    const { store, fakes }: Setup = setup();
+    const pending: Deferred<OnboardingProgress> = deferred<OnboardingProgress>();
+    fakes.finish.mockReturnValueOnce(pending.promise);
+
+    const first: Promise<void> = store.finish();
+    await vi.waitFor(() => {
+      expect(fakes.finish).toHaveBeenCalledTimes(1);
+    });
+    await store.finish();
+    await store.next();
+    store.back();
+    pending.resolve(progress(3, {}, true));
+    await first;
+
+    expect(fakes.finish).toHaveBeenCalledTimes(1);
+    expect(fakes.saveDraft).not.toHaveBeenCalled();
+    expect(store.closed()).toBe(true);
   });
 
   it('counts only the invited addresses and records nothing when none was invited', async () => {
@@ -522,22 +679,67 @@ describe('OnboardingWizardStore', () => {
     expect(fakes.show).toHaveBeenCalledWith('Space “Product” created', { description: '1 list' });
   });
 
-  it('keeps the space and says so when the invitations fail', async () => {
+  it('sends more than 50 addresses in batches of 50', async () => {
+    const { store, fakes }: Setup = setup();
+    const emails: string[] = Array.from(
+      { length: 120 },
+      (_email: unknown, index: number) => `member${String(index)}@ateliernord.fr`,
+    );
+    store.changeEmails(emails);
+
+    await store.finish();
+
+    expect(fakes.invite.mock.calls.map((call: unknown[]) => (call[0] as string[]).length)).toEqual([
+      50, 50, 20,
+    ]);
+    expect(fakes.show).toHaveBeenCalledWith('Space “Product” created', {
+      description: '3 lists · 120 invitations sent',
+    });
+  });
+
+  it('still creates the space when the invitations fail, and says so', async () => {
     const { store, fakes }: Setup = setup();
     fakes.invite.mockRejectedValue(problem(429, 'invitation.daily-limit-reached'));
     store.changeEmails(['ines.robert@ateliernord.fr']);
 
     await store.finish();
 
+    expect(fakes.error).toHaveBeenCalledWith('The invitations could not be sent', {
+      description: 'You can invite your team later.',
+    });
+    expect(fakes.finish).toHaveBeenCalledTimes(1);
     expect(fakes.navigate).toHaveBeenCalledWith(['/', 'atelier-nord', 'l', 'l-backlog']);
     expect(fakes.show).toHaveBeenCalledWith('Space “Product” created', {
       description: '3 lists',
     });
-    expect(fakes.error).toHaveBeenCalledWith('The invitations could not be sent', {
-      description: 'You can invite your team later.',
-    });
     expect(fakes.recordInvitation).not.toHaveBeenCalled();
     expect(store.closed()).toBe(true);
+  });
+
+  it('does not invite again when the finish is retried, but sends a failed batch again', async () => {
+    const { store, fakes }: Setup = setup();
+    const emails: string[] = Array.from(
+      { length: 60 },
+      (_email: unknown, index: number) => `member${String(index)}@ateliernord.fr`,
+    );
+    fakes.invite
+      .mockResolvedValueOnce({ invited: 50, skipped: 0 })
+      .mockRejectedValueOnce(new HttpErrorResponse({ status: 503 }));
+    fakes.finish.mockRejectedValueOnce(new HttpErrorResponse({ status: 0 }));
+    store.changeEmails(emails);
+
+    await store.finish();
+    expect(store.failure()).toBe('unknown');
+
+    await store.finish();
+
+    expect(fakes.invite.mock.calls.map((call: unknown[]) => (call[0] as string[]).length)).toEqual([
+      50, 10, 10,
+    ]);
+    expect(fakes.invite.mock.calls[2]?.[0]).toEqual(emails.slice(50));
+    expect(fakes.show).toHaveBeenCalledWith('Space “Product” created', {
+      description: '3 lists · 60 invitations sent',
+    });
   });
 
   it('sends no invitation for a person who may not invite', async () => {
@@ -616,14 +818,20 @@ describe('OnboardingWizardStore', () => {
     expect(store.closed()).toBe(true);
   });
 
-  it('stops after the 26 fallback prefixes and asks for another name', async () => {
+  it('tries each fallback prefix once, skips the base, then asks for another name', async () => {
     const { store, fakes }: Setup = setup();
     fakes.finish.mockRejectedValue(problem(409, 'space.prefix-taken'));
+    store.rename('Abx');
 
     await store.finish();
 
-    expect(fakes.finish).toHaveBeenCalledTimes(27);
-    expect(sentSpaces(fakes.finish).at(-1)?.prefix).toBe('PRZ');
+    const prefixes: string[] = sentSpaces(fakes.finish).map(
+      (space: OnboardingSpace) => space.prefix,
+    );
+    expect(prefixes).toHaveLength(26);
+    expect(new Set(prefixes).size).toBe(26);
+    expect(prefixes[0]).toBe('ABX');
+    expect(prefixes.at(-1)).toBe('ABZ');
     expect(store.failure()).toBe('prefix');
     expect(store.finishing()).toBe(false);
   });
@@ -653,7 +861,6 @@ describe('OnboardingWizardStore', () => {
   it('shows nothing for a dropped finish', async () => {
     const { store, fakes }: Setup = setup();
     fakes.finish.mockRejectedValueOnce(new OnboardingWriteDroppedError());
-    store.changeEmails(['ines.robert@ateliernord.fr']);
 
     await store.finish();
 
@@ -661,8 +868,72 @@ describe('OnboardingWizardStore', () => {
     expect(store.finishing()).toBe(false);
     expect(fakes.show).not.toHaveBeenCalled();
     expect(fakes.error).not.toHaveBeenCalled();
-    expect(fakes.invite).not.toHaveBeenCalled();
     expect(fakes.navigate).not.toHaveBeenCalled();
+  });
+
+  it('applies nothing of a finish once the organization changed, and starts over', async () => {
+    const { store, fakes }: Setup = setup();
+    const pending: Deferred<OnboardingProgress> = deferred<OnboardingProgress>();
+    fakes.finish.mockReturnValueOnce(pending.promise);
+    await moveTo(store, 'team');
+    store.changeEmails(['ines.robert@ateliernord.fr']);
+
+    const running: Promise<void> = store.finish();
+    await vi.waitFor(() => {
+      expect(fakes.finish).toHaveBeenCalledTimes(1);
+    });
+    fakes.organization.set(STUDIO_PIXEL);
+    fakes.pin.set(STUDIO_PIXEL.id);
+    TestBed.tick();
+    pending.resolve(progress(3, {}, true));
+    await running;
+
+    expect(fakes.recordInvitation).not.toHaveBeenCalled();
+    expect(fakes.refresh).not.toHaveBeenCalled();
+    expect(fakes.navigate).not.toHaveBeenCalled();
+    expect(fakes.show).not.toHaveBeenCalled();
+    expect(store.step()).toBe('space');
+    expect(store.emails()).toEqual([]);
+    expect(store.finishing()).toBe(false);
+    expect(store.closed()).toBe(false);
+  });
+
+  it('applies nothing once the pin moved to another organization', async () => {
+    const { store, fakes }: Setup = setup();
+    const pending: Deferred<OnboardingProgress> = deferred<OnboardingProgress>();
+    fakes.finish.mockReturnValueOnce(pending.promise);
+
+    const running: Promise<void> = store.finish();
+    await vi.waitFor(() => {
+      expect(fakes.finish).toHaveBeenCalledTimes(1);
+    });
+    fakes.pin.set(STUDIO_PIXEL.id);
+    pending.resolve(progress(3, {}, true));
+    await running;
+
+    expect(fakes.navigate).not.toHaveBeenCalled();
+    expect(fakes.show).not.toHaveBeenCalled();
+  });
+
+  it('sends, refreshes, navigates and toasts nothing once destroyed while inviting', async () => {
+    const { store, fakes }: Setup = setup();
+    const pending: Deferred<OnboardingInvitationOutcome> = deferred<OnboardingInvitationOutcome>();
+    fakes.invite.mockReturnValueOnce(pending.promise);
+    store.changeEmails(['ines.robert@ateliernord.fr']);
+
+    const running: Promise<void> = store.finish();
+    await vi.waitFor(() => {
+      expect(fakes.invite).toHaveBeenCalledTimes(1);
+    });
+    TestBed.resetTestingModule();
+    pending.resolve({ invited: 1, skipped: 0 });
+    await running;
+
+    expect(fakes.finish).not.toHaveBeenCalled();
+    expect(fakes.refresh).not.toHaveBeenCalled();
+    expect(fakes.navigate).not.toHaveBeenCalled();
+    expect(fakes.show).not.toHaveBeenCalled();
+    expect(fakes.error).not.toHaveBeenCalled();
   });
 
   it('opens the space another tab created when the assistant is already closed', async () => {
@@ -677,21 +948,94 @@ describe('OnboardingWizardStore', () => {
     expect(store.closed()).toBe(true);
   });
 
-  it('closes at once and dismisses for good on Set up later', () => {
+  it('closes at once and dismisses for good on Set up later', async () => {
     const { store, fakes }: Setup = setup();
 
-    store.skip();
+    const skipped: Promise<void> = store.skip();
+
+    expect(store.closed()).toBe(true);
+    await skipped;
+    expect(fakes.dismiss).toHaveBeenCalledTimes(1);
+    expect(fakes.error).not.toHaveBeenCalled();
+    expect(fakes.navigate).not.toHaveBeenCalled();
+  });
+
+  it('waits for the read in flight, then dismisses, on Set up later during the skeleton', async () => {
+    const { store, fakes }: Setup = setup(null);
+
+    await store.skip();
 
     expect(store.closed()).toBe(true);
     expect(fakes.dismiss).toHaveBeenCalledTimes(1);
   });
 
-  it('only closes on Set up later when the progress could not be read', () => {
+  it('only closes on Set up later when the progress read failed', async () => {
     const { store, fakes }: Setup = setup(null);
+    fakes.failed.set(true);
 
-    store.skip();
+    await store.skip();
 
     expect(store.closed()).toBe(true);
     expect(fakes.dismiss).not.toHaveBeenCalled();
+  });
+
+  it('says the choice was not saved when the dismissal is refused', async () => {
+    const { store, fakes }: Setup = setup();
+    fakes.dismiss.mockRejectedValueOnce(problem(412, 'request.version-mismatch'));
+
+    await store.skip();
+
+    expect(store.closed()).toBe(true);
+    expect(fakes.error).toHaveBeenCalledWith('Your choice could not be saved', {
+      description: 'The setup assistant may come back on your next visit.',
+    });
+  });
+
+  it('says the choice was not saved when an unknown dismissal still reads in progress', async () => {
+    const { store, fakes }: Setup = setup();
+    fakes.dismiss.mockRejectedValueOnce(new HttpErrorResponse({ status: 503 }));
+
+    await store.skip();
+
+    expect(fakes.error).toHaveBeenCalledWith('Your choice could not be saved', {
+      description: 'The setup assistant may come back on your next visit.',
+    });
+  });
+
+  it('says nothing when an unknown dismissal reads the assistant closed, or is dropped', async () => {
+    const { store, fakes }: Setup = setup();
+    fakes.dismiss.mockImplementationOnce(() => {
+      fakes.progress.set(progress(3, { status: 'dismissed' }));
+      return rejected(new HttpErrorResponse({ status: 503 }));
+    });
+
+    await store.skip();
+
+    expect(fakes.error).not.toHaveBeenCalled();
+    TestBed.resetTestingModule();
+    const again: Setup = setup();
+    again.fakes.dismiss.mockRejectedValueOnce(new OnboardingWriteDroppedError());
+
+    await again.store.skip();
+
+    expect(again.fakes.error).not.toHaveBeenCalled();
+  });
+
+  it('opens the space an unknown finish created when Set up later follows', async () => {
+    const { store, fakes }: Setup = setup();
+    fakes.finish.mockRejectedValueOnce(new HttpErrorResponse({ status: 0 }));
+    fakes.dismiss.mockImplementationOnce(() => {
+      fakes.progress.set(progress(4, {}, true));
+      return rejected(problem(409, 'onboarding.wizard-closed'));
+    });
+
+    await store.finish();
+    expect(store.failure()).toBe('unknown');
+    await store.skip();
+
+    expect(fakes.error).not.toHaveBeenCalled();
+    expect(fakes.refresh).toHaveBeenCalledTimes(1);
+    expect(fakes.navigate).toHaveBeenCalledWith(['/', 'atelier-nord', 'l', 'l-backlog']);
+    expect(store.closed()).toBe(true);
   });
 });

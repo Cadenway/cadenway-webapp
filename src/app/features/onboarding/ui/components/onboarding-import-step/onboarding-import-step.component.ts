@@ -18,8 +18,10 @@ import {
  * tool` of four cards. No public operation imports anything (gap B18: the contract defers
  * import), so `Trello`, `Jira` and `CSV file` show disabled and `Later` stays checked; the screen
  * keeps its place so the counter stays `of 4`, as in the mockup and the contract's `import` step.
- * It emits nothing. The cards are written out rather than repeated with `@for`, since the radio
- * group reads every item's value before a repeated item has its inputs (see `OnboardingPresetStep`).
+ * It emits nothing. The checked card's icon and name are `text-primary`, as in the mockup. The
+ * cards are written out rather than repeated with `@for`, since the radio group reads every item's
+ * value before a repeated item has its inputs and `Later` is the fourth card (NG0950, see
+ * `OnboardingPresetStep`).
  */
 @Component({
   selector: 'cw-onboarding-import-step',
@@ -67,7 +69,10 @@ import {
     </cw-radio-group>
 
     <ng-template #card let-choice>
-      <span class="flex flex-col items-center gap-2 text-sm font-medium">
+      <span
+        class="flex flex-col items-center gap-2 text-sm font-medium"
+        [class.text-primary]="choice.value === selected"
+      >
         <ng-icon class="size-5" [name]="choice.icon" aria-hidden="true" />
         {{ choice.label }}
       </span>

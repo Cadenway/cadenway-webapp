@@ -7,7 +7,9 @@ import {
   inject,
   Injector,
   type Signal,
+  signal,
   viewChild,
+  type WritableSignal,
 } from '@angular/core';
 import { CwButton } from '@cadenway/ui/components/button';
 import { CwDialog } from '@cadenway/ui/components/dialog';
@@ -75,8 +77,11 @@ interface WizardStepLabel {
  * open and after each screen change, announced as `Step n of 4: <name>`. The segmented step bar
  * (`cw-stepper variant="segments"`, not clickable) and the `Step n of 4` line follow the screen
  * shown. Until the progress is read the card shows a skeleton; a failed read shows an inline error
- * whose Retry reads it again. It reads `OnboardingWizardStore`, provided by
- * `OnboardingWizardHost`, and `OnboardingStore` for the read state.
+ * whose Retry reads it again. After a Retry removes its alert the focus goes to the title. The
+ * dialog brick closes itself on a history move (Back, Forward: the CDK's `closeOnNavigation`);
+ * the window shows itself again at once, since only `Set up later` dismisses it. It reads
+ * `OnboardingWizardStore`, provided by `OnboardingWizardHost`, and `OnboardingStore` for the read
+ * state.
  */
 @Component({
   selector: 'cw-onboarding-wizard',
@@ -99,6 +104,11 @@ interface WizardStepLabel {
       done: $localize`:@@onboarding.wizard.stepper.done:done`,
       current: $localize`:@@onboarding.wizard.stepper.current:current`,
       todo: $localize`:@@onboarding.wizard.stepper.todo:to come`,
+      error: $localize`:@@onboarding.wizard.stepper.error:failed`,
+      optional: $localize`:@@onboarding.wizard.stepper.optional:(optional)`,
+      position: $localize`:@@onboarding.wizard.stepper.position:Step`,
+      of: $localize`:@@onboarding.wizard.stepper.of:of`,
+      ariaLabel: $localize`:@@onboarding.wizard.steps:Steps`,
     })),
   ],
   templateUrl: './onboarding-wizard.component.html',
@@ -115,6 +125,18 @@ export class OnboardingWizard {
    * @readonly
    */
   protected readonly store: OnboardingWizardStore = inject(OnboardingWizardStore);
+
+  /**
+   * Property shown
+   *
+   * @description
+   * Whether the dialog brick shows; it turns false only when the brick closed itself (a history
+   * move), and true again right after.
+   *
+   * @type {WritableSignal<boolean>}
+   * @readonly
+   */
+  protected readonly shown: WritableSignal<boolean> = signal<boolean>(true);
 
   /**
    * Property onboarding
@@ -297,7 +319,7 @@ export class OnboardingWizard {
    */
   public constructor() {
     afterNextRender((): void => {
-      this.title()?.nativeElement.focus();
+      this.focusTitle();
     });
   }
   // #endregion
@@ -330,6 +352,87 @@ export class OnboardingWizard {
   }
 
   /**
+   * Method openChanged
+   *
+   * @description
+   * Shows the window again once the dialog brick closed itself: the assistant never closes with
+   * the history, only with `Set up later` or a finish, which remove the window.
+   *
+   * @param {boolean} open - Whether the brick is open.
+   */
+  protected openChanged(open: boolean): void {
+    this.shown.set(open);
+    if (open) return;
+    afterNextRender(
+      (): void => {
+        this.shown.set(true);
+        afterNextRender(
+          (): void => {
+            this.focusTitle();
+          },
+          { injector: this.injector },
+        );
+      },
+      { injector: this.injector },
+    );
+  }
+
+  /**
+   * Method retryFinish
+   *
+   * @description
+   * Sends `Create the space` again and moves the focus to the title, since the alert holding the
+   * Retry button goes away.
+   *
+   * @returns {Promise<void>} Resolves once the finish settled.
+   */
+  protected async retryFinish(): Promise<void> {
+    const settled: Promise<void> = this.store.finish();
+    this.focusTitleAfterRender();
+    await settled;
+  }
+
+  /**
+   * Method retryRead
+   *
+   * @description
+   * Reads the progress again and moves the focus to the title, since the alert holding the Retry
+   * button goes away.
+   *
+   * @returns {Promise<void>} Resolves once the read settled.
+   */
+  protected async retryRead(): Promise<void> {
+    const settled: Promise<void> = this.onboarding.reload();
+    this.focusTitleAfterRender();
+    await settled;
+  }
+
+  /**
+   * Method focusTitleAfterRender
+   *
+   * @description
+   * Moves the focus to the title once the view is rendered.
+   */
+  private focusTitleAfterRender(): void {
+    afterNextRender(
+      (): void => {
+        this.focusTitle();
+      },
+      { injector: this.injector },
+    );
+  }
+
+  /**
+   * Method focusTitle
+   *
+   * @description
+   * Moves the focus to the title.
+   */
+  private focusTitle(): void {
+    this.title()?.nativeElement.focus();
+  }
+
+  /**
    * Method showStep
    *
    * @description
@@ -343,12 +446,7 @@ export class OnboardingWizard {
       $localize`:@@onboarding.wizard.announcement:Step ${step}:step: of 4: ${label}:label:`,
       'polite',
     );
-    afterNextRender(
-      (): void => {
-        this.title()?.nativeElement.focus();
-      },
-      { injector: this.injector },
-    );
+    this.focusTitleAfterRender();
   }
   // #endregion
 }

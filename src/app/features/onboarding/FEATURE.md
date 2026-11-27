@@ -51,10 +51,11 @@ route), `withGettingStarted()` and `withOnboardingWizard()` (the `overlays` cont
 - `@cadenway/api-client` through `data-access/` (`OnboardingApi`): `MyTasksService`
   (`getOnboarding`, `updateOnboarding`, `updateOnboardingChecklist` and `finishOnboarding`, each
   write with `If-Match: "<version>"`, `finishOnboarding` with an `Idempotency-Key` too) and
-  `InvitationsService.inviteMembers` (role `member`; called from step 9, wizard and
-  getting-started packages). Core's `OrganizationPin` adds `If-Organization-Match` to the four
+  `InvitationsService.inviteMembers` (role `member`, 50 addresses per call; called by the assistant
+  and the getting-started invite dialog). Core's `OrganizationPin` adds `If-Organization-Match` to the four
   onboarding operations.
-- `@core/api` (`readProblem`, `OrganizationSwitchPendingError`).
+- `@core/api` (`readProblem`, `OrganizationSwitchPendingError`, and `OrganizationPin`, which
+  fences the assistant's finish and dismissal too).
 - Workspace's `ports/workspace-context` (the current organization, which fences every write; its
   name in the assistant's welcome; `can('member')` for who sees the assistant and `can('admin')`
   for who may invite).
@@ -83,13 +84,18 @@ route), `withGettingStarted()` and `withOnboardingWizard()` (the `overlays` cont
   (`can('member')`; `finishOnboarding` refuses one).
 - The window (`OnboardingWizard`) is an edge-to-edge `cw-dialog` (`size="screen"`) without a close
   button that Escape and a click outside do not close: only `Set up later` dismisses, since
-  dismissal is final. It is named by the card's `h1` (`cwDialogTitle` imposes an `h2`), which takes
-  the focus on open and after each screen change; the change is announced as `Step n of 4:
-<name>`. The step bar is `cw-stepper variant="segments"` (not clickable) and the `Step n of 4`
-  line is the assistant's own. While it shows, the host holds `onboarding.wizard` in
-  `ShellOverlay` (as soon as no other shell overlay is open), so the getting-started checklist
-  stays hidden and the palette and shortcuts cannot open over it; it releases it when the window
-  closes or the host is destroyed.
+  dismissal is final. The dialog brick also closes itself on a history move (Back, Forward: the
+  CDK's `closeOnNavigation`); the window then shows itself again at once, focused on its title.
+  It is named by the card's `h1` (`cwDialogTitle` imposes an `h2`), which takes the focus on open,
+  after each screen change and after a Retry removes its alert; a screen change is announced as
+  `Step n of 4: <name>`. The step bar is `cw-stepper variant="segments"` (not clickable), with
+  every `provideCwStepperLabels` key given in English, and the `Step n of 4` line is the
+  assistant's own.
+- While the assistant should show, the host holds `onboarding.wizard` in `ShellOverlay`, taken as
+  soon as no other shell overlay is open, and renders the window only while it holds it: it never
+  shows over the palette or the shortcuts, which cannot open over it either. It releases the hold
+  when the assistant closes or the host is destroyed. The getting-started checklist stays hidden
+  under the assistant because it honours that hold, which only the host owns.
 - `OnboardingWizardStore` is provided by `OnboardingWizardHost`, so a finish keeps running while
   the window shows its result; an organization switch starts it over. It takes the draft from the
   progress once (a null name reads as `Product`, the field's placeholder; a `gris` color, which
@@ -100,29 +106,51 @@ route), `withGettingStarted()` and `withOnboardingWizard()` (the `overlays` cont
   again. After `409 onboarding.wizard-closed` it closes, and opens the first list when a space
   exists. The `Space` screen cannot continue while the name is blank (`aria-invalid`), as in the
   mockup. The invitation addresses and the import choice stay in memory (gap G6).
-- `Set up later` closes at once and sends the dismissal; when the progress could not be read, it
-  only closes and writes nothing. A failed read shows an inline error in the card whose Retry
-  calls `reload()`.
-- `Create the space` (`App.dc.html` lines 5276-5298) sends `finishOnboarding` with the trimmed
-  name, the derived prefix, the template and the color, `Back` and `Set up later` disabled
-  meanwhile. After `409 space.prefix-taken` it tries the first two letters followed by `A` to `Z`,
-  each with a new key, silently, then asks for another name. An unknown outcome
-  (`isUncertainOnboardingWrite`) shows an inline error whose Retry sends the same body with the
-  same `Idempotency-Key`; a new key is taken only after a definite refusal or a changed body. A
-  stale version is retried once with a new key; `403 organization.role-forbidden` and other
-  refusals show an inline error. A dropped write (`OnboardingWriteDroppedError`) shows nothing.
-  Once provisioned, it invites the addresses as members when the person is an owner or an
-  administrator (`OnboardingApi.invite`), records `invitationSent` when at least one was invited,
-  refreshes the navigation, opens `/<slug>/l/<firstListId>`, shows the toast `Space “<name>”
-created` with `<n> lists` and `<n> invitations sent` (invited outcomes only; never the
-  mockup's import part, gap B18) and closes. A failed invitation (a `429` daily limit included)
-  keeps the space and adds a failure toast.
+- Every step of a finish or a dismissal is fenced like `OnboardingStore`'s writes: once the store
+  is destroyed, or the workspace or `OrganizationPin` shows another organization than the one it
+  started in, nothing more is sent, applied, refreshed, navigated or toasted.
+- `Set up later` closes at once, then sends the dismissal; a read in flight is awaited first (the
+  shared store reads before it writes), and only a failed read closes without a write. A definite
+  refusal, or an unknown outcome after which the progress still shows the assistant `in-progress`,
+  shows a failure toast (the choice was not saved, the assistant may come back); a dropped write
+  or `409 onboarding.wizard-closed` shows none. Once settled, when a space exists (a finish whose
+  outcome was unknown did create it), it refreshes the navigation and opens the first list. A
+  failed read shows an inline error in the card whose Retry calls `reload()`.
+- `Create the space` (`App.dc.html` lines 5276-5298), with `Back` and `Set up later` disabled and a
+  second click ignored while it runs:
+  1. invites the addresses not sent yet as members, in batches of 50 (the `inviteMembers` limit),
+     when the person is an owner or an administrator (`OnboardingApi.invite`). Organization
+     invitations hold even if the finish later fails, so they go first; an accepted batch is never
+     sent again by a retried finish, and a failed batch (a `429` daily limit included) shows a
+     failure toast, is sent again by the next finish, and the finish goes on;
+  2. sends `finishOnboarding` with the trimmed name, the derived prefix, the template and the
+     color. After `409 space.prefix-taken` it tries the first two letters followed by `A` to `Z`,
+     each prefix once (a fallback equal to the base is skipped) and each with a new key, silently,
+     then asks for another name. An unknown outcome (`isUncertainOnboardingWrite`) shows an inline
+     error whose Retry sends the same body with the same `Idempotency-Key`; a new key is taken
+     only after a definite refusal or a changed body. A stale version is retried once with a new
+     key; `403 organization.role-forbidden` and other refusals show an inline error. A dropped
+     write (`OnboardingWriteDroppedError`) shows nothing;
+  3. once provisioned, records `invitationSent` when at least one address was invited (the
+     checklist exists only then), refreshes the navigation, opens `/<slug>/l/<firstListId>`, then
+     shows the toast `Space “<name>” created` with `<n> lists` and `<n> invitations sent` (invited
+     outcomes only; never the mockup's import part, gap B18), and closes.
 - The `Team` screen shows no invitation form to a person who may not invite, and offers `Skip`.
   The `Import` screen shows `Trello`, `Jira` and `CSV file` disabled and `Later` checked (gap
   B18): the screen keeps its place, so the counter stays `of 4` as in the mockup and the
-  contract's `import` step. The template cards and the import cards are written out instead of
-  repeated with `@for`: `cw-radio-group` reads every item's value while it renders the first one,
-  before a repeated item has its inputs.
+  contract's `import` step.
+- The template cards and the import cards are written out instead of repeated with `@for`
+  (`@cadenway/ui` 0.11.0 bug). Under `@for`, `cw-radio-group`'s `tabStop` computed reads every
+  item's `value()` while the first item renders, before the later repeated items have their
+  inputs; when the checked item is not the first, it throws
+  `NG0950: Input "value" is required but no value is available yet`. Reproduction: the `Template`
+  screen under `@for` with the draft preset `agency` (checked item index 2) throws on render; the
+  `Import` screen would too, since `Later` is index 3. Account's presence picker uses `@for` and
+  works because its checked item comes first.
+- Deviations from the mockup's accents: the checked template and import cards' icon (and the
+  import card's name) are `text-primary`, as in the mockup; the segments of the step bar, the
+  checked cards' border and fill and the checked swatch's ring keep the design system's ink tones
+  where the mockup uses primary, since the token rule forbids primary fills.
 - `OnboardingStore` is route-scoped on `/:org` (`provideOnboarding()`) and shared by both hosts;
   leaving `/:org` destroys it. It reads nothing until a screen calls `load()`, then holds the
   latest progress the gateway answered (`progress`, null while unread or when the first read
@@ -187,6 +215,7 @@ These assistant units have no mockup wording (step 9 spec, A.6), pending product
 | ---------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
 | `onboarding.wizard.load-failed`, `onboarding.wizard.retry`                                                                                     | The progress read failed; the mockup has no read.                                                                              |
 | `onboarding.wizard.finish-unknown`, `onboarding.wizard.finish-failed`, `onboarding.wizard.finish-forbidden`, `onboarding.wizard.finish-prefix` | `finishOnboarding` failures the mockup does not draw.                                                                          |
-| `onboarding.wizard.toast.invitations-failed`, `onboarding.wizard.toast.invitations-failed-text`                                                | A failed `inviteMembers` after the space exists.                                                                               |
+| `onboarding.wizard.toast.invitations-failed`, `onboarding.wizard.toast.invitations-failed-text`                                                | A failed `inviteMembers` before the space is created.                                                                          |
+| `onboarding.wizard.toast.skip-failed`, `onboarding.wizard.toast.skip-failed-text`                                                              | A refused or unconfirmed `Set up later`.                                                                                       |
 | `onboarding.wizard.announcement`, `onboarding.wizard.stepper.*`                                                                                | Screen reader text of the step change and of the step bar.                                                                     |
 | `onboarding.wizard.preset.*.lists` (English)                                                                                                   | The gateway creates the contract's French list names for every template (gap G7); the English source previews them in English. |

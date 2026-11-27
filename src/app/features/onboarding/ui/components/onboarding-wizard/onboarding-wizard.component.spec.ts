@@ -1,3 +1,4 @@
+import { LiveAnnouncer } from '@angular/cdk/a11y';
 import { signal, type WritableSignal } from '@angular/core';
 import { type ComponentFixture, TestBed } from '@angular/core/testing';
 import { Router } from '@angular/router';
@@ -5,6 +6,7 @@ import { provideCadenwayIcons } from '@cadenway/icons';
 import { CwToastService } from '@cadenway/ui/components/toast';
 import { afterEach, describe, expect, it, type Mock, vi } from 'vitest';
 
+import { OrganizationPin } from '@core/api';
 import { NAVIGATION_REFRESH } from '@features/spaces/ports/navigation-refresh';
 import type { LookColor } from '@features/spaces/utils/space-look';
 import {
@@ -226,6 +228,7 @@ async function render(
         },
       },
       { provide: OnboardingApi, useValue: { invite } },
+      { provide: OrganizationPin, useValue: { current: signal('o-atelier') } },
       {
         provide: WORKSPACE_CONTEXT,
         useValue: {
@@ -550,6 +553,48 @@ describe('OnboardingWizard', () => {
     expect(reload).toHaveBeenCalledTimes(1);
   });
 
+  it('announces the screen shown after each move', async () => {
+    const { fixture }: Harness = await render(progress(1));
+    const announce: Mock = vi
+      .spyOn(TestBed.inject(LiveAnnouncer), 'announce')
+      .mockResolvedValue(undefined);
+
+    await click(fixture, find('onboarding-next'));
+    await click(fixture, find('onboarding-back'));
+
+    expect(announce.mock.calls).toEqual([
+      ['Step 2 of 4: Template', 'polite'],
+      ['Step 1 of 4: Space', 'polite'],
+    ]);
+  });
+
+  it('shows itself again when a history move closes the dialog brick', async () => {
+    const { fixture }: Harness = await render(progress(1));
+    expect(document.querySelector('[role="dialog"]')).not.toBeNull();
+
+    window.dispatchEvent(new PopStateEvent('popstate', { state: null }));
+    for (let round: number = 0; round < 4; round += 1) {
+      await fixture.whenStable();
+      await new Promise<void>((resolve: () => void) => setTimeout(resolve));
+    }
+
+    expect(document.querySelectorAll('[role="dialog"]')).toHaveLength(1);
+    expect(find('onboarding-wizard')).not.toBeNull();
+    expect(document.activeElement).toBe(title());
+  });
+
+  it('moves the focus to the title once Retry removed its alert', async () => {
+    const { fixture, failed }: Harness = await render(null);
+    failed.set(true);
+    await fixture.whenStable();
+    find('onboarding-load-retry')?.focus();
+
+    failed.set(false);
+    await click(fixture, find('onboarding-load-retry'));
+
+    expect(document.activeElement).toBe(title());
+  });
+
   it('shows an unknown finish outcome with a Retry', async () => {
     const { fixture, finish }: Harness = await render(progress(2, { step: 'import' }));
     finish.mockRejectedValueOnce(new Error('network'));
@@ -567,5 +612,6 @@ describe('OnboardingWizard', () => {
       expect(finish).toHaveBeenCalledTimes(2);
     });
     expect(finish.mock.calls[1]?.[1]).toBe(finish.mock.calls[0]?.[1]);
+    expect(document.activeElement).toBe(title());
   });
 });

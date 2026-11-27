@@ -5,6 +5,7 @@ import { provideCadenwayIcons } from '@cadenway/icons';
 import { CwToastService } from '@cadenway/ui/components/toast';
 import { afterEach, describe, expect, it, type Mock, vi } from 'vitest';
 
+import { OrganizationPin } from '@core/api';
 import { NAVIGATION_REFRESH } from '@features/spaces/ports/navigation-refresh';
 import {
   WORKSPACE_CONTEXT,
@@ -213,6 +214,7 @@ async function render(
         },
       },
       { provide: OnboardingApi, useValue: { invite: vi.fn() } },
+      { provide: OrganizationPin, useValue: { current: signal('o-atelier') } },
       {
         provide: WORKSPACE_CONTEXT,
         useValue: {
@@ -380,10 +382,12 @@ describe('OnboardingWizardHost', () => {
     });
     const overlay: ShellOverlay = TestBed.inject(ShellOverlay);
     expect(overlay.isOpen('onboarding.wizard')).toBe(false);
+    expect(wizard()).toBeNull();
 
     overlay.close('search.command-palette');
     await settle(fixture);
     expect(overlay.isOpen('onboarding.wizard')).toBe(true);
+    expect(wizard()).not.toBeNull();
 
     fixture.destroy();
     expect(overlay.anyOpen()).toBe(false);

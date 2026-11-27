@@ -888,16 +888,16 @@ again, after another feature's write that may bring a list or a space back (a re
 unarchived list); `refreshCounts()` reads only the trash and archive counts of the sidebar footer
 again (a purge, an emptied trash, an unarchived task). Both only schedule reads: a read in flight,
 even the first one, is followed by one more.
-Onboarding is a declared consumer ahead of its use: its assistant calls `refresh()` once the
-first space is provisioned (step 9, wizard package).
+Onboarding's assistant calls `refresh()` once the first space is provisioned, so the sidebar shows
+it before the assistant opens its first list.
 
 `utils/space-look` publishes `prefixFromName(name)`, the key prefix proposed for a space name (its
 first three unaccented letters in capitals, completed with `X`, empty for a blank name), and
 `lookColorChoices()`, the thirteen colors of `LOOK_COLORS` in the mockup's order as
 `LookColorChoice` (value, name under the `spaces.look.*` ids, literal swatch class), with the
-`LookColor` type. The space dialog and the look picker use them too. Onboarding reads the
-`LookColor` type today; its assistant will propose the same prefix and name the colors with the
-same words (step 9, wizard package).
+`LookColor` type. The space dialog and the look picker use them too. Onboarding's assistant
+proposes the same prefix for the first space, draws the same swatches without `gris` and names the
+colors with the same words.
 
 ## Dependencies
 

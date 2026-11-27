@@ -12,7 +12,7 @@ import {
   withState,
 } from '@ngrx/signals';
 
-import { type ApiProblem, readProblem } from '@core/api';
+import { type ApiProblem, OrganizationPin, readProblem } from '@core/api';
 import {
   NAVIGATION_REFRESH,
   type NavigationRefreshPort,
@@ -69,9 +69,22 @@ const DEFAULT_COLOR: LookColor = 'violet';
  * @description
  * Third letters tried, in order, after `409 space.prefix-taken` (`App.dc.html` lines 5285-5286).
  *
- * @type {string}
+ * @type {readonly string[]}
  */
-const PREFIX_LETTERS: string = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+const PREFIX_LETTERS: readonly string[] = Array.from(
+  { length: 26 },
+  (_letter: unknown, index: number) => String.fromCharCode(65 + index),
+);
+
+/**
+ * Constant INVITE_BATCH_SIZE
+ *
+ * @description
+ * Most addresses one `inviteMembers` call accepts; longer lists are sent in batches of this size.
+ *
+ * @type {number}
+ */
+const INVITE_BATCH_SIZE: number = 50;
 
 /**
  * Type OnboardingNextAction
@@ -97,19 +110,22 @@ export type OnboardingNextAction = 'continue' | 'skip' | 'create';
 export type OnboardingFinishFailure = 'unknown' | 'forbidden' | 'prefix' | 'refused';
 
 /**
- * Function prefixCandidate
+ * Function prefixCandidates
  *
  * @description
- * The key prefix tried at a rank: the name's own prefix (Spaces' `prefixFromName`) at rank 0, then
- * its first two letters followed by `A` to `Z`.
+ * The key prefixes tried in order: the name's own prefix (Spaces' `prefixFromName`), then its
+ * first two letters followed by `A` to `Z` (`App.dc.html` lines 5285-5286), each prefix once, so a
+ * fallback equal to the base is not tried twice.
  *
  * @param {string} name - The trimmed space name.
- * @param {number} rank - 0 to 26.
- * @returns {string} The prefix.
+ * @returns {readonly string[]} The prefixes, the base first.
  */
-function prefixCandidate(name: string, rank: number): string {
+function prefixCandidates(name: string): readonly string[] {
   const base: string = prefixFromName(name);
-  return rank === 0 ? base : `${base.slice(0, 2)}${PREFIX_LETTERS.charAt(rank - 1)}`;
+  const stem: string = base.slice(0, 2);
+  return [
+    ...new Set([base, ...PREFIX_LETTERS.map((letter: string): string => `${stem}${letter}`)]),
+  ];
 }
 
 /**
@@ -179,12 +195,33 @@ interface FinishAttempt {
    * Property rank
    *
    * @description
-   * Rank of its prefix candidate.
+   * Position of its prefix among `prefixCandidates`.
    *
    * @type {number}
    * @readonly
    */
   readonly rank: number;
+  // #endregion
+}
+
+/**
+ * Interface OnboardingWizardRuns
+ *
+ * @description
+ * Bookkeeping outside the state, since no view reads it.
+ */
+interface OnboardingWizardRuns {
+  // #region Properties
+  /**
+   * Property destroyed
+   *
+   * @description
+   * Whether the store was destroyed (the host left the shell): a finish in flight then refreshes,
+   * navigates and toasts nothing.
+   *
+   * @type {boolean}
+   */
+  destroyed: boolean;
   // #endregion
 }
 
@@ -244,12 +281,37 @@ interface OnboardingWizardState {
    * Property emails
    *
    * @description
-   * The addresses to invite once the space exists; kept in memory only (contract gap G6).
+   * The addresses to invite, sent just before the space is created; kept in memory only
+   * (contract gap G6).
    *
    * @type {readonly string[]}
    * @readonly
    */
   readonly emails: readonly string[];
+
+  /**
+   * Property _sent
+   *
+   * @description
+   * Addresses an invitation batch already accepted, in lower case; a retried finish does not send
+   * them again.
+   *
+   * @type {readonly string[]}
+   * @readonly
+   */
+  readonly _sent: readonly string[];
+
+  /**
+   * Property _invited
+   *
+   * @description
+   * Number of `invited` outcomes of the batches sent, counted by the toast and the checklist
+   * marker.
+   *
+   * @type {number}
+   * @readonly
+   */
+  readonly _invited: number;
 
   /**
    * Property seeded
@@ -333,6 +395,8 @@ const initialState: OnboardingWizardState = {
   color: DEFAULT_COLOR,
   preset: 'dev',
   emails: [],
+  _sent: [],
+  _invited: 0,
   seeded: false,
   finishing: false,
   failure: null,
@@ -558,21 +622,32 @@ interface OnboardingWizardStoreInstance {
    * Method skip
    *
    * @description
-   * `Set up later`: closes the assistant at once and closes it for good on the gateway. When the
-   * progress could not be read, it only closes, and writes nothing.
+   * `Set up later`: closes the assistant at once, then closes it for good on the gateway; a read in
+   * flight is awaited first (the shared store reads before it writes). Only a failed read closes
+   * without a write. A definite refusal, or an unknown outcome after which the progress still shows
+   * the assistant `in-progress`, shows a toast saying the choice was not saved and the assistant
+   * may come back; a dropped write shows nothing. Once settled, when a space exists (a finish whose
+   * outcome was unknown did create it), it opens the first list.
+   *
+   * @returns {Promise<void>} Resolves once settled; never rejects.
    */
-  skip(): void;
+  skip(): Promise<void>;
 
   /**
    * Method finish
    *
    * @description
-   * `Create the space`: provisions the space with the template (`finishOnboarding`), tries the next
-   * prefix after `409 space.prefix-taken` with a new key (26 at most), retries once with a new key
-   * after a stale version, sends the same key again after an unknown outcome, invites the
-   * addresses, refreshes the navigation, opens the first list, shows the toast and closes. After
-   * `409 onboarding.wizard-closed` (another tab finished or dismissed), it opens the first list
-   * when a space exists and closes. A dropped write (another organization) shows nothing.
+   * `Create the space`: first invites the addresses not sent yet as members, in batches of 50, when
+   * the person may invite (organization invitations hold even if the finish fails; a failed batch
+   * shows a toast and is sent again by the next finish, which still goes on). It then provisions
+   * the space with the template (`finishOnboarding`), tries each other prefix after
+   * `409 space.prefix-taken` with a new key, retries once with a new key after a stale version, and
+   * sends the same key again after an unknown outcome. Once provisioned it records the invitation
+   * marker when one was invited, refreshes the navigation, opens the first list, shows the toast
+   * and closes. After `409 onboarding.wizard-closed` (another tab finished or dismissed), it opens
+   * the first list when a space exists and closes. Nothing more is applied once the organization
+   * changed, the store was destroyed or the write was dropped. A second call while one runs does
+   * nothing.
    *
    * @returns {Promise<void>} Resolves once settled; never rejects.
    */
@@ -591,14 +666,19 @@ interface OnboardingWizardStoreInstance {
 function createOnboardingWizardStore(): Type<OnboardingWizardStoreInstance> {
   return signalStore(
     withState<OnboardingWizardState>(initialState),
-    withProps(() => ({
-      _onboarding: inject(OnboardingStore),
-      _api: inject(OnboardingApi),
-      _workspace: inject<WorkspaceContextPort>(WORKSPACE_CONTEXT),
-      _navigation: inject<NavigationRefreshPort>(NAVIGATION_REFRESH),
-      _router: inject(Router),
-      _toasts: inject(CwToastService),
-    })),
+    withProps(() => {
+      const runs: OnboardingWizardRuns = { destroyed: false };
+      return {
+        _onboarding: inject(OnboardingStore),
+        _api: inject(OnboardingApi),
+        _workspace: inject<WorkspaceContextPort>(WORKSPACE_CONTEXT),
+        _pin: inject(OrganizationPin),
+        _navigation: inject<NavigationRefreshPort>(NAVIGATION_REFRESH),
+        _router: inject(Router),
+        _toasts: inject(CwToastService),
+        _runs: runs,
+      };
+    }),
     withComputed((store) => ({
       stepIndex: (): number => ONBOARDING_STEPS.indexOf(store.step()),
       nameBlank: (): boolean => store.name().trim() === '',
@@ -613,12 +693,32 @@ function createOnboardingWizardStore(): Type<OnboardingWizardStoreInstance> {
       },
     })),
     withMethods((store) => {
+      const runs: OnboardingWizardRuns = store._runs;
+
       const defaultName: () => string = (): string =>
         $localize`:@@onboarding.wizard.space.default-name:Product`;
 
+      // As in `OnboardingStore`: the resolver commits another organization (workspace context and
+      // pin) before the `_followOrganization` effect resets the state, so check all of them.
       const live: (organizationId: string) => boolean = (organizationId: string): boolean =>
+        !runs.destroyed &&
         store._organizationId() === organizationId &&
-        store._workspace.organization().id === organizationId;
+        store._workspace.organization().id === organizationId &&
+        store._pin.current() === organizationId;
+
+      const openProvisioned: (organizationId: string) => void = (organizationId: string): void => {
+        if (!live(organizationId)) return;
+        const provisioned: OnboardingProgress | null = store._onboarding.progress();
+        patchState(store, { finishing: false, closed: true, _attempt: null });
+        if (!provisioned?.provisioning) return;
+        store._navigation.refresh();
+        void store._router.navigate([
+          '/',
+          store._workspace.organization().slug,
+          'l',
+          provisioned.provisioning.firstListId,
+        ]);
+      };
 
       const saveDraft: () => void = (): void => {
         const organizationId: string | null = store._organizationId();
@@ -633,55 +733,56 @@ function createOnboardingWizardStore(): Type<OnboardingWizardStoreInstance> {
             preset: store.preset(),
           })
           .catch((error: unknown): void => {
-            if (problemCode(error) === 'onboarding.wizard-closed' && live(organizationId)) {
-              openProvisioned(organizationId);
-            }
+            if (problemCode(error) === 'onboarding.wizard-closed') openProvisioned(organizationId);
           });
       };
 
-      const openProvisioned: (organizationId: string) => void = (organizationId: string): void => {
-        const provisioned: OnboardingProgress | null = store._onboarding.progress();
-        patchState(store, { finishing: false, closed: true });
-        if (!provisioned?.provisioning || !live(organizationId)) return;
-        store._navigation.refresh();
-        void store._router.navigate([
-          '/',
-          store._workspace.organization().slug,
-          'l',
-          provisioned.provisioning.firstListId,
-        ]);
-      };
-
-      const invite: (organizationId: string) => Promise<number | null> = async (
+      const invite: (organizationId: string) => Promise<void> = async (
         organizationId: string,
-      ): Promise<number | null> => {
-        const emails: readonly string[] = store.emails();
-        if (emails.length === 0 || !store._workspace.can('admin')) return 0;
-        try {
-          const outcome: OnboardingInvitationOutcome = await store._api.invite(emails);
-          if (outcome.invited > 0 && live(organizationId)) {
-            await store._onboarding.recordInvitation().catch((): undefined => undefined);
+      ): Promise<void> => {
+        if (!store._workspace.can('admin')) return;
+        const sent: ReadonlySet<string> = new Set(store._sent());
+        const pending: readonly string[] = store
+          .emails()
+          .filter((email: string): boolean => !sent.has(email.toLowerCase()));
+        let failed: boolean = false;
+        for (let start: number = 0; start < pending.length; start += INVITE_BATCH_SIZE) {
+          if (!live(organizationId)) return;
+          const batch: readonly string[] = pending.slice(start, start + INVITE_BATCH_SIZE);
+          try {
+            const outcome: OnboardingInvitationOutcome = await store._api.invite(batch);
+            if (!live(organizationId)) return;
+            patchState(store, (state: OnboardingWizardState) => ({
+              _sent: [...state._sent, ...batch.map((email: string): string => email.toLowerCase())],
+              _invited: state._invited + outcome.invited,
+            }));
+          } catch {
+            if (!live(organizationId)) return;
+            failed = true;
           }
-          return outcome.invited;
-        } catch {
-          return null;
+        }
+        if (failed) {
+          store._toasts.error(
+            $localize`:@@onboarding.wizard.toast.invitations-failed:The invitations could not be sent`,
+            {
+              description: $localize`:@@onboarding.wizard.toast.invitations-failed-text:You can invite your team later.`,
+            },
+          );
         }
       };
 
-      const announce: (space: OnboardingSpace, invited: number | null) => void = (
-        space: OnboardingSpace,
-        invited: number | null,
-      ): void => {
+      const announce: (space: OnboardingSpace) => void = (space: OnboardingSpace): void => {
         const choice: OnboardingPresetChoice | undefined = onboardingPresets().find(
           (preset: OnboardingPresetChoice): boolean => preset.value === space.preset,
         );
         const lists: number = choice?.listCount ?? 1;
+        const invited: number = store._invited();
         const parts: string[] = [
           lists === 1
             ? $localize`:@@onboarding.wizard.toast.lists-one:${lists}:count: list`
             : $localize`:@@onboarding.wizard.toast.lists-other:${lists}:count: lists`,
         ];
-        if (invited !== null && invited > 0) {
+        if (invited > 0) {
           parts.push(
             invited === 1
               ? $localize`:@@onboarding.wizard.toast.invitations-one:${invited}:count: invitation sent`
@@ -692,14 +793,6 @@ function createOnboardingWizardStore(): Type<OnboardingWizardStoreInstance> {
           $localize`:@@onboarding.wizard.toast.created:Space “${space.name}:name:” created`,
           { description: parts.join(' · ') },
         );
-        if (invited === null) {
-          store._toasts.error(
-            $localize`:@@onboarding.wizard.toast.invitations-failed:The invitations could not be sent`,
-            {
-              description: $localize`:@@onboarding.wizard.toast.invitations-failed-text:You can invite your team later.`,
-            },
-          );
-        }
       };
 
       const complete: (
@@ -711,7 +804,9 @@ function createOnboardingWizardStore(): Type<OnboardingWizardStoreInstance> {
         space: OnboardingSpace,
         progress: OnboardingProgress,
       ): Promise<void> => {
-        const invited: number | null = await invite(organization.id);
+        if (store._invited() > 0) {
+          await store._onboarding.recordInvitation().catch((): undefined => undefined);
+        }
         if (!live(organization.id)) return;
         store._navigation.refresh();
         if (progress.provisioning) {
@@ -720,7 +815,7 @@ function createOnboardingWizardStore(): Type<OnboardingWizardStoreInstance> {
             .catch((): boolean => false);
         }
         if (!live(organization.id)) return;
-        announce(space, invited);
+        announce(space);
         patchState(store, { finishing: false, closed: true, _attempt: null });
       };
 
@@ -731,9 +826,10 @@ function createOnboardingWizardStore(): Type<OnboardingWizardStoreInstance> {
         const name: string = store.name().trim();
         const preset: OnboardingPreset = store.preset();
         const color: LookColor = store.color();
+        const prefixes: readonly string[] = prefixCandidates(name);
         const body: (rank: number) => OnboardingSpace = (rank: number): OnboardingSpace => ({
           name,
-          prefix: prefixCandidate(name, rank),
+          prefix: prefixes.at(rank) ?? '',
           preset,
           color,
         });
@@ -745,6 +841,8 @@ function createOnboardingWizardStore(): Type<OnboardingWizardStoreInstance> {
         let key: string = resumed?.key ?? crypto.randomUUID();
         let staleRetried: boolean = false;
         patchState(store, { finishing: true, failure: null });
+        await invite(organization.id);
+        if (!live(organization.id)) return;
         for (;;) {
           try {
             const progress: OnboardingProgress = await store._onboarding.finish(space, key);
@@ -753,11 +851,11 @@ function createOnboardingWizardStore(): Type<OnboardingWizardStoreInstance> {
             await complete(organization, space, progress);
             return;
           } catch (error: unknown) {
+            if (!live(organization.id)) return;
             if (error instanceof OnboardingWriteDroppedError) {
               patchState(store, { finishing: false, _attempt: null });
               return;
             }
-            if (!live(organization.id)) return;
             if (isUncertainOnboardingWrite(error)) {
               patchState(store, {
                 finishing: false,
@@ -769,11 +867,10 @@ function createOnboardingWizardStore(): Type<OnboardingWizardStoreInstance> {
             const problem: ApiProblem | null = readProblem(error);
             const code: string | null = problem?.code ?? null;
             if (code === 'onboarding.wizard-closed') {
-              patchState(store, { _attempt: null });
               openProvisioned(organization.id);
               return;
             }
-            if (code === 'space.prefix-taken' && rank < PREFIX_LETTERS.length) {
+            if (code === 'space.prefix-taken' && rank < prefixes.length - 1) {
               rank += 1;
               space = body(rank);
               key = crypto.randomUUID();
@@ -797,6 +894,31 @@ function createOnboardingWizardStore(): Type<OnboardingWizardStoreInstance> {
             return;
           }
         }
+      };
+
+      const dismiss: (organizationId: string) => Promise<void> = async (
+        organizationId: string,
+      ): Promise<void> => {
+        try {
+          await store._onboarding.dismiss();
+        } catch (error: unknown) {
+          if (error instanceof OnboardingWriteDroppedError || !live(organizationId)) return;
+          const shown: OnboardingProgress | null = store._onboarding.progress();
+          // No progress: the read the dismissal waited for failed, and nothing was written.
+          if (shown === null) return;
+          const unsaved: boolean = isUncertainOnboardingWrite(error)
+            ? shown.wizard.status === 'in-progress'
+            : problemCode(error) !== 'onboarding.wizard-closed';
+          if (unsaved) {
+            store._toasts.error(
+              $localize`:@@onboarding.wizard.toast.skip-failed:Your choice could not be saved`,
+              {
+                description: $localize`:@@onboarding.wizard.toast.skip-failed-text:The setup assistant may come back on your next visit.`,
+              },
+            );
+          }
+        }
+        if (store._onboarding.progress()?.provisioning) openProvisioned(organizationId);
       };
 
       return {
@@ -850,11 +972,14 @@ function createOnboardingWizardStore(): Type<OnboardingWizardStoreInstance> {
           patchState(store, { step: previous, failure: null });
           saveDraft();
         },
-        skip(): void {
+        async skip(): Promise<void> {
           if (store.finishing() || store.closed()) return;
-          const read: boolean = store._onboarding.progress() !== null;
+          const organizationId: string | null = store._organizationId();
+          const readFailed: boolean =
+            store._onboarding.progress() === null && store._onboarding.failed();
           patchState(store, { closed: true });
-          if (read) void store._onboarding.dismiss().catch((): undefined => undefined);
+          if (organizationId === null || readFailed) return;
+          await dismiss(organizationId);
         },
         finish,
       };
@@ -863,6 +988,9 @@ function createOnboardingWizardStore(): Type<OnboardingWizardStoreInstance> {
       onInit(store): void {
         store._followOrganization(computed((): string => store._workspace.organization().id));
         store._seed(store._onboarding.progress);
+      },
+      onDestroy(store): void {
+        store._runs.destroyed = true;
       },
     }),
   );
@@ -876,10 +1004,13 @@ function createOnboardingWizardStore(): Type<OnboardingWizardStoreInstance> {
  * `OnboardingWizardHost` so a finish keeps running while the assistant shows its result. It takes
  * the draft from `OnboardingStore`'s progress once (a null name reads as the default name, a `gris`
  * color as `violet`), changes screens locally and saves the draft after each move without blocking
- * (a failed save is sent again in full by the next one). `Create the space` provisions the space
+ * (a failed save is sent again in full by the next one). `Create the space` sends the invitations
+ * first (they hold even if the finish fails, and are not sent twice), then provisions the space
  * through `OnboardingStore.finish`, which never retries by itself: an unknown outcome keeps the
- * body and its idempotency key for the retry, and any definite refusal takes a new key. An
- * organization switch starts over.
+ * body and its idempotency key for the retry, and any definite refusal takes a new key. Every
+ * step is fenced like `OnboardingStore`'s writes: once the workspace or `OrganizationPin` shows
+ * another organization, or the store is destroyed, nothing more is applied, refreshed, navigated
+ * or toasted. An organization switch starts over.
  *
  * @type {Type<OnboardingWizardStoreInstance>}
  */

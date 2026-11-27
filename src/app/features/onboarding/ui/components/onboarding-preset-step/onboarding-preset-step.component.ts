@@ -15,10 +15,11 @@ import type { OnboardingPreset } from '../../../models/onboarding/onboarding.typ
  * @description
  * The assistant's `Template` screen (`App.dc.html` lines 2688-2692): a radio group named `Space
  * template` of four cards without a radio dot, each with its icon, name, line and list names. It
- * edits `preset` and sends nothing. The checked card uses the design system's ink tone where the
- * mockup tints it violet (a token rule of the card radio). The four cards are written out rather
- * than repeated with `@for`: the radio group reads every item's value while rendering the first
- * one, before a repeated item has its inputs, so a draft whose template is not the first fails.
+ * edits `preset` and sends nothing. The checked card's icon is `text-primary`, as in the mockup;
+ * its border and fill use the design system's ink tone where the mockup tints them violet (a
+ * token rule of the card radio). The four cards are written out rather than repeated with `@for`:
+ * the radio group reads every item's value while rendering the first one, before a repeated item
+ * has its inputs, so a draft whose template is not the first throws NG0950.
  */
 @Component({
   selector: 'cw-onboarding-preset-step',
@@ -49,7 +50,9 @@ import type { OnboardingPreset } from '../../../models/onboarding/onboarding.typ
     <ng-template #card let-choice>
       <span class="flex items-start gap-3">
         <ng-icon
-          class="mt-0.5 size-5 shrink-0 text-muted-foreground"
+          class="mt-0.5 size-5 shrink-0"
+          [class.text-primary]="preset() === choice.value"
+          [class.text-muted-foreground]="preset() !== choice.value"
           [name]="choice.icon"
           aria-hidden="true"
         />

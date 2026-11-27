@@ -79,10 +79,11 @@ const ONBOARDING_WIZARD_OVERLAY: string = 'onboarding.wizard';
  * - never for a guest (`can('member')`), whom `finishOnboarding` would refuse.
  * It closes once the assistant is closed in this organization (`Set up later`, a finish), or the
  * progress shows it finished or dismissed elsewhere, but stays open while a finish runs. While it
- * shows it holds `onboarding.wizard` in `ShellOverlay` (taken as soon as no other shell overlay
- * is open), released when it closes or the host is destroyed. It provides
- * `OnboardingWizardStore`, so a finish outlives the window, and renders the assistant in its own
- * chunk.
+ * should show it holds `onboarding.wizard` in `ShellOverlay`, taken as soon as no other shell
+ * overlay is open, and renders only while it holds it; the hold is released when the assistant
+ * closes or the host is destroyed. The getting-started checklist relies on that hold to stay
+ * hidden under the assistant. It provides `OnboardingWizardStore`, so a finish outlives the
+ * window, and renders the assistant in its own chunk.
  */
 @Component({
   selector: 'cw-onboarding-wizard-host',
@@ -90,7 +91,7 @@ const ONBOARDING_WIZARD_OVERLAY: string = 'onboarding.wizard';
   providers: [OnboardingWizardStore],
   host: { class: 'contents', 'data-testid': 'onboarding-wizard-host' },
   template: `
-    @if (open()) {
+    @if (open() && held()) {
       @defer (on immediate) {
         <cw-onboarding-wizard />
       }
@@ -229,6 +230,20 @@ export class OnboardingWizardHost {
     const progress: OnboardingProgress | null = this.onboarding.progress();
     return progress === null ? started : progress.wizard.status === 'in-progress';
   });
+
+  /**
+   * Property held
+   *
+   * @description
+   * Whether the assistant holds `onboarding.wizard` in `ShellOverlay`: it renders only then, so it
+   * never shows over another shell overlay; it takes the hold once that overlay closes.
+   *
+   * @type {Signal<boolean>}
+   * @readonly
+   */
+  protected readonly held: Signal<boolean> = computed((): boolean =>
+    this.overlay.isOpen(ONBOARDING_WIZARD_OVERLAY),
+  );
   // #endregion
 
   // #region Constructor
