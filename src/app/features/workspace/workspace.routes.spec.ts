@@ -19,6 +19,7 @@ import {
   withRouterConfig,
 } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
+import { Title } from '@angular/platform-browser';
 import {
   AccessService,
   ArchivesService,
@@ -404,6 +405,11 @@ describe('WORKSPACE_ROUTES', () => {
     for (const id of [
       'home-rail-item',
       'inbox-rail-item',
+      'my-tasks-rail-item',
+      'spaces-rail-item',
+      'dashboards-rail-item',
+      'goals-rail-item',
+      'docs-rail-item',
       'search-rail-item',
       'theme-rail-item',
       'user-menu-trigger',
@@ -420,6 +426,53 @@ describe('WORKSPACE_ROUTES', () => {
     expect(
       element.querySelector('[data-testid="home-rail-item"]')?.getAttribute('aria-current'),
     ).toBe('page');
+  });
+
+  it('orders the rail applications as the mockup does', async () => {
+    const harness: RouterTestingHarness = await open('/atelier-nord');
+
+    const element: HTMLElement = harness.fixture.nativeElement as HTMLElement;
+    expect(
+      [...element.querySelectorAll('[data-testid$="-rail-item"]')]
+        .map((item: Element) => item.getAttribute('data-testid'))
+        .filter((id: string | null) => id !== 'search-rail-item' && id !== 'theme-rail-item'),
+    ).toEqual([
+      'home-rail-item',
+      'inbox-rail-item',
+      'my-tasks-rail-item',
+      'spaces-rail-item',
+      'dashboards-rail-item',
+      'goals-rail-item',
+      'docs-rail-item',
+    ]);
+  });
+
+  it('opens each cross-cutting page inside the shell, its rail item current', async () => {
+    const harness: RouterTestingHarness = await open('/atelier-nord');
+    for (const [url, heading, title, item] of [
+      ['/atelier-nord/my-tasks?tab=closed', 'My tasks', 'My tasks', 'my-tasks-rail-item'],
+      ['/atelier-nord/dashboards', 'Team dashboard', 'Dashboards', 'dashboards-rail-item'],
+      ['/atelier-nord/goals', 'Goals', 'Goals', 'goals-rail-item'],
+      ['/atelier-nord/docs', 'Documents', 'Documents', 'docs-rail-item'],
+      ['/atelier-nord/d/doc-onboarding', 'Document', 'Document', 'docs-rail-item'],
+      ['/atelier-nord/trash', 'Trash', 'Trash', null],
+      ['/atelier-nord/archives', 'Archives', 'Archives', null],
+    ] as const) {
+      await harness.navigateByUrl(url);
+      await harness.fixture.whenStable();
+      harness.detectChanges();
+
+      const element: HTMLElement = harness.fixture.nativeElement as HTMLElement;
+      expect(element.querySelector('h1')?.textContent.trim(), url).toBe(heading);
+      expect(TestBed.inject(Title).getTitle(), url).toBe(title);
+      expect(element.querySelector('[data-testid="organization-switcher"]'), url).not.toBeNull();
+      expect(
+        element
+          .querySelector('[aria-current="page"][data-testid$="-rail-item"]')
+          ?.getAttribute('data-testid') ?? null,
+        url,
+      ).toBe(item);
+    }
   });
 
   it('revalidates after a context mismatch but not for query-only navigation', async () => {
@@ -1482,7 +1535,10 @@ describe('WORKSPACE_ROUTES', () => {
       'settings-organization-home',
       'home-rail-item',
       'inbox-rail-item',
+      'my-tasks-rail-item',
       'spaces-rail-item',
+      'dashboards-rail-item',
+      'docs-rail-item',
       'search-rail-item',
       'theme-rail-item',
       'user-menu-trigger',
@@ -1490,6 +1546,7 @@ describe('WORKSPACE_ROUTES', () => {
     ]) {
       expect(element.querySelector(`[data-testid="${id}"]`), id).not.toBeNull();
     }
+    expect(element.querySelector('[data-testid="goals-rail-item"]')).toBeNull();
     expect(
       element.querySelector('[data-testid="settings-back-to-app"]')?.getAttribute('href'),
     ).toBe('/atelier-nord');

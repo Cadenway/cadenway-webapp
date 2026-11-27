@@ -113,8 +113,8 @@ const paletteFilter: CwCommandFilter = (
  * field (line 4377); the rail item and the sidebar button open it through `CommandPalette`. Its
  * groups: `Suggestions` (`Create a task`, which opens Task's creation dialog, with its
  * shortcut N), `Recent tasks`
- * (`RecentTasks`, empty until tasks are opened from here), `Go to` (`Home`; later steps add
- * their pages), `Lists` (the workspace's lists from Spaces' `LIST_DIRECTORY`: the first four
+ * (`RecentTasks`, empty until tasks are opened from here), `Go to` (`Home`, `My tasks`,
+ * `Dashboards` and `Documents`, lines 6921-6924), `Lists` (the workspace's lists from Spaces' `LIST_DIRECTORY`: the first four
  * before anything is typed, then those whose name contains the text, followed by the server's other
  * list matches), `Tasks` from `GET /v1/search` (debounced, the latest text winning, with the
  * loading row and an inline error with `Retry`), `Settings` (`Profile and

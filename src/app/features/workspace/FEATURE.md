@@ -33,28 +33,33 @@ belong to Auth.
     `organizationRoleGuard('member')`, so a guest never sees its frame (not even its 404), again on
     every recovery (`shouldRecheckOrganizationRole`):
 
-    | Slot                 | `account`                                                                                                                       | `organization`                                                              |
-    | -------------------- | ------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
-    | `railNavigation`     | Workspace's organization square, Home's `Home`, Inbox's `Inbox`, Spaces' `Spaces` (`variant: 'settings'`)                       | Same                                                                        |
-    | `railFooter`         | Search's `Search`, Workspace's theme button, Account's menu                                                                     | Same                                                                        |
-    | `settingsNavigation` | Workspace's back link, Account's sections, Organization's section links                                                         | Workspace's back link, Organization's identity and sections, Account's link |
-    | `overlays`           | Search's command palette, Workspace's shortcuts dialog, Task's create dialog and task detail, Account's reauthentication dialog | Same                                                                        |
+    | Slot                 | `account`                                                                                                                                                                                             | `organization`                                                              |
+    | -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
+    | `railNavigation`     | Workspace's organization square, Home's `Home`, Inbox's `Inbox`, My tasks' `My tasks`, Spaces' `Spaces`, Dashboards' `Dashboards`, Docs' `Documents`, Spaces' favorite spaces (`variant: 'settings'`) | Same                                                                        |
+    | `railFooter`         | Search's `Search`, Workspace's theme button, Account's menu                                                                                                                                           | Same                                                                        |
+    | `settingsNavigation` | Workspace's back link, Account's sections, Organization's section links                                                                                                                               | Workspace's back link, Organization's identity and sections, Account's link |
+    | `overlays`           | Search's command palette, Workspace's shortcuts dialog, Task's create dialog and task detail, Account's reauthentication dialog                                                                       | Same                                                                        |
 
   - `''` loads `AppShell` with these contributions, and holds the screens of the other features.
     A new screen adds an empty-path `loadChildren` entry before `**` in this child's `children`:
 
-    | Slot                   | Contributions, in order                                                                                 |
-    | ---------------------- | ------------------------------------------------------------------------------------------------------- |
-    | `banners`              | Organization's storage banner                                                                           |
-    | `organizationSwitcher` | Workspace's organizations menu                                                                          |
-    | `railNavigation`       | Home's `Home`, Inbox's `Inbox`, Spaces' `Spaces`                                                        |
-    | `railFooter`           | Search's `Search`, Workspace's theme button, Account's menu                                             |
-    | `sidebarHeader`        | Workspace's organization row, Search's `Search…` button                                                 |
-    | `sidebar`              | Spaces' favorites, spaces accordion and tips                                                            |
-    | `sidebarFooter`        | Spaces' sprint progress, Organization's plan line, Spaces' `Trash` and `Archives`, `Keyboard shortcuts` |
-    | `overlays`             | Search's command palette, Workspace's shortcuts dialog, Task's create dialog and task detail            |
+    | Slot                   | Contributions, in order                                                                                                                                      |
+    | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+    | `banners`              | Organization's storage banner                                                                                                                                |
+    | `organizationSwitcher` | Workspace's organizations menu                                                                                                                               |
+    | `railNavigation`       | Home's `Home`, Inbox's `Inbox`, My tasks' `My tasks`, Spaces' `Spaces`, Dashboards' `Dashboards`, Goals' `Goals`, Docs' `Documents`, Spaces' favorite spaces |
+    | `railFooter`           | Search's `Search`, Workspace's theme button, Account's menu                                                                                                  |
+    | `sidebarHeader`        | Workspace's organization row, Search's `Search…` button                                                                                                      |
+    | `sidebar`              | Spaces' favorites, spaces accordion and tips                                                                                                                 |
+    | `sidebarFooter`        | Spaces' sprint progress, Organization's plan line, Spaces' `Trash` and `Archives`, `Keyboard shortcuts`                                                      |
+    | `overlays`             | Search's command palette, Workspace's shortcuts dialog, Task's create dialog and task detail                                                                 |
     - `''` mounts `HOME_ROUTES`, then `SPACES_ROUTES` (`spaces/:spaceId`, `l/:listId`), then
-      `TASK_ROUTES` (`t/:taskKey`).
+      `TASK_ROUTES` (`t/:taskKey`), then `MY_TASKS_ROUTES` (`my-tasks`), `DASHBOARDS_ROUTES`
+      (`dashboards`), `GOALS_ROUTES` (`goals`), `DOCS_ROUTES` (`docs`, `d/:docId`), `TRASH_ROUTES`
+      (`trash`) and `ARCHIVES_ROUTES` (`archives`).
+    - The rail lists the seven applications in the mockup's order (`App.dc.html` `railDefs`, lines
+      6958-6966; orders 0 to 60), then the favorite spaces (order 90). The settings rails draw no
+      `Goals`, as `Compte.dc.html` (line 1498) and `Organisation.dc.html` (line 1672) do not.
     - `**` mounts `ERRORS_ROUTES`, so an unknown address renders the 404 inside the application
       shell; an unknown settings section renders it inside the settings shell.
 
@@ -63,12 +68,12 @@ belong to Auth.
 
 ## Public entry points
 
-| Entry point                         | Consumers                                                        |
-| ----------------------------------- | ---------------------------------------------------------------- |
-| `workspace.routes`                  | app                                                              |
-| `ports/workspace-context`           | home, errors, account, search, inbox, organization, spaces, task |
-| `http/guards/organization-role`     | organization                                                     |
-| `ui/dialogs/discard-changes-dialog` | account, organization                                            |
+| Entry point                         | Consumers                                                                                           |
+| ----------------------------------- | --------------------------------------------------------------------------------------------------- |
+| `workspace.routes`                  | app                                                                                                 |
+| `ports/workspace-context`           | home, errors, account, search, inbox, organization, spaces, task, my-tasks, dashboards, goals, docs |
+| `http/guards/organization-role`     | organization                                                                                        |
+| `ui/dialogs/discard-changes-dialog` | account, organization                                                                               |
 
 `ports/workspace-context` publishes `WORKSPACE_CONTEXT` (`WorkspaceContextPort`: `user`,
 `organization`, `role` and `can(role)`) and the `WorkspaceUser`, `WorkspaceOrganization` and
@@ -91,9 +96,11 @@ answer, for a settings page's `confirmDiscard()` (`@shared/unsaved-changes`).
   (`cache: 'no-store'`), `listMyOrganizations` (every cursor page) and `switchOrganization`, and
   `RealtimeService.issueRealtimeTicket` for single-use connection tickets.
 - Auth's `withSessionLock` (`@features/auth`), in exclusive mode around the organization switch.
-- The `providers` entries of Account, Home, Inbox, Organization, Search, Spaces (including
-  `provideSpacesNavigation()`) and Task, and Organization's `utils/plan-label`, bound on `/:org`.
-- Spaces' `spaces.routes` and Task's `task.routes`, mounted under `/:org`.
+- The `providers` entries of Account, Dashboards, Docs, Goals, Home, Inbox, My tasks,
+  Organization, Search, Spaces (including `provideSpacesNavigation()`) and Task, and
+  Organization's `utils/plan-label`, bound on `/:org`.
+- The routes of Spaces, Task, My tasks, Dashboards, Goals, Docs, Trash and Archives, mounted under
+  `/:org`.
 - `@core/shortcuts` (`?`) and `@core/theme`.
 - Account's `account.routes` and Organization's `organization.routes`, mounted in the settings
   shell, and Errors' `.` entry (`RouteErrorData`).

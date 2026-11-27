@@ -22,7 +22,7 @@ section has `organizationSectionGuard(<section>)` (`http/guards/organization-sec
 | `members`      | `members-page` (`MembersPage`)             | `Members`              | member     |                                      |
 | `billing`      | `billing-page` (`BillingPage`)             | `Billing`              | owner      |                                      |
 | `quotas`       | `quotas-page` (`QuotasPage`)               | `Quotas and usage`     | owner      |                                      |
-| `security`     | `security-page` (`SecurityPage`)           | `Security and SSO`     | admin      |                                      |
+| `security`     | `security-page` (`SecurityPage`)           | `Security and SSO`     | admin      | `canDeactivate: unsavedChangesGuard` |
 | `integrations` | `integrations-page` (`IntegrationsPage`)   | `Integrations`         | admin      |                                      |
 | `audit-log`    | `audit-log-page` (`AuditLogPage`)          | `Audit log`            | admin      |                                      |
 | `**`           | Errors' `ERRORS_ROUTES` (404 in the shell) |                        |            |                                      |
@@ -38,7 +38,7 @@ section has `organizationSectionGuard(<section>)` (`http/guards/organization-sec
 - Billing and Quotas are owner only because `billing.yaml` answers the owner only
   (`Organisation.dc.html` line 321); Quotas reads the same `getBillingSubscription`.
 - Each page is a stub (WP0 of steps 7 and 8) showing the mockup's section title in the
-  organization column (`max-w-4xl`); packages O1 to O6 replace them. Integrations and the Audit
+  organization column (`max-w-4xl`); packages O1 to O6 replace them. Security (O5) is built. Integrations and the Audit
   log stay stubs until their backends exist (B7, B11). The stubs read no data, so they have no
   loading, error or empty state yet.
 - A failed primary read of a section renders the default error boundary in the shell, titled
@@ -62,7 +62,9 @@ section has `organizationSectionGuard(<section>)` (`http/guards/organization-sec
 
 ## Dependencies
 
-- `@cadenway/api-client`: `BillingService.getBillingSubscription` through `data-access/`.
+- `@cadenway/api-client`: `BillingService.getBillingSubscription` and
+  `AuthenticationPolicyService.getAuthenticationPolicy` / `updateAuthenticationPolicy` through
+  `data-access/`.
 - Workspace's `ports/workspace-context` and `http/guards/organization-role`, Errors' `errors.routes`,
   `@shared/unsaved-changes`.
 - `@cadenway/ui` (`banner`, `button`) and `@cadenway/icons`.
@@ -103,6 +105,33 @@ loaded.` with `Retry`; the banner stays hidden until a retry succeeds.
 - A write the gateway guards with a recent authentication (`updateAuthenticationPolicy`, package
   O5) runs through Account's `ReauthenticationService` (`reauthentication` entry), which Workspace
   provides on the organization settings route with its dialog.
+- Security shows only what the contract serves: the `Authentication policy` card with the two
+  two-step switches and `Idle session timeout`. The SAML card, `Test connection`, `Enforce SSO`
+  and the allowed sign-in methods (gap B13) are not rendered. The page-scoped
+  `AuthenticationPolicyStore` reads the policy of the workspace organization (the primary read,
+  keyed by its id, so a page reused for another organization reads and resets to that one's; a
+  failure reaches the route's error boundary) and saves only the changed members from the version
+  read (`If-Match`). A save is bound to the organization shown when it starts and to the page:
+  after a switch or once the page is gone it sends nothing more, the retry after a
+  reauthentication included, drops any late answer and toasts nothing. The card is a form with the
+  `Unsaved changes` footer, `Cancel` and `Save`, where the mockup applies each control at once.
+  The administrators' switch keeps its own choice; `everyone` shows it on and disabled without
+  changing it, so turning `all members` on then off is clean, and the sent requirement is
+  `everyone`, else `admins`, else `nobody`. A two-step requirement a later contract adds is not
+  shown as `nobody`: a note says the current rule cannot be shown, both switches stay disabled
+  until `Choose a new rule`, and only then is the requirement sent (`nobody` if both stay off). A
+  timeout a later contract adds shows nothing selected and is sent only once another option is
+  picked. Leaving while a change is on its way to the gateway, which may still apply it, never
+  offers `Discard`: the page waits for it, then leaves once it is saved or asks once it is
+  refused. A save waiting only for the reauthentication dialog sent nothing, so `Discard` is
+  offered at once and cancels it. A save of the timeout toasts the mockup's
+  `Session policy updated` with the new timeout; a save of the two-step requirement alone toasts
+  `Two-step verification policy updated`. A `412 request.version-mismatch` reads the policy again
+  and toasts the conflict, a `409 auth.two-step-not-enabled` toasts why, any other refusal toasts
+  the failure and keeps the edits. A closed reauthentication dialog and a
+  `412 organization.context-changed` (or a switch in progress), which the workspace recovery
+  handles, keep them silently. A recovery reruns the route on the same URL, which
+  `unsavedChangesGuard` lets through without asking.
 
 ### Members (`members`, package O2)
 
@@ -179,3 +208,12 @@ Members section (`organization.members.*`):
 | `remove-text`                                                                                                                                                                                           | `de <organization>` rather than the mockup's `d’Atelier Nord`, for any name.                 |
 | `invite-placeholder`                                                                                                                                                                                    | English source with `example.com`; the French keeps the mockup's `exemple.fr`.               |
 | `avatar-*`, `alert-*`, `dialog-close`, `select-*`                                                                                                                                                       | Texts of the bricks (the avatar's title, hidden from screen readers); the mockup draws none. |
+
+| Unit                                                                                                                                                                                                          | Reason                                                                                                            |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `organization.plan-summary.failed`                                                                                                                                                                            | The mockup draws no failed billing read.                                                                          |
+| `organization.retry`                                                                                                                                                                                          | `Retry` is the mockup's word, used for a new state.                                                               |
+| `organization.navigation.plan`                                                                                                                                                                                | The identity row without the member count, for whoever may not read billing.                                      |
+| `organization.security.save-failed`, `organization.security.conflict`, `organization.security.conflict-text`, `organization.security.two-step-not-enabled`, `organization.security.two-step-not-enabled-text` | The mockup applies each control at once and draws no refused save.                                                |
+| `organization.security.two-step-saved`                                                                                                                                                                        | The mockup's only policy toast names the session timeout; a two-step change alone needs its own title.            |
+| `organization.security.two-step-unknown`, `organization.security.two-step-unknown-choose`                                                                                                                     | The mockup knows only `nobody`, `admins` and `everyone`; a requirement a later contract adds needs its own state. |
