@@ -55,6 +55,7 @@ import {
   type StatusOption,
   TaskCancelDialog,
   TaskCreate,
+  TaskMenu,
   type TaskSummary,
 } from '@features/task';
 
@@ -96,7 +97,6 @@ import {
   ganttTimelineOf,
 } from '../../../utils/gantt-timeline/gantt-timeline.util';
 import { NO_ASSIGNEE_GROUP } from '../../../utils/list-rows/list-rows.util';
-import { TaskMenu } from '../../components/task-menu/task-menu.component';
 
 /**
  * Constant PRIORITY_ORDER

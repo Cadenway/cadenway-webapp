@@ -60,6 +60,7 @@ import {
   TaskCreate,
   TaskDueDate,
   TaskLabelChips,
+  TaskMenu,
   type TaskSummary,
 } from '@features/task';
 
@@ -100,7 +101,6 @@ import {
   type SheetEditorValue,
 } from '../../components/sheet-cell-editor/sheet-cell-editor.component';
 import { SheetSpentCell } from '../../components/sheet-spent-cell/sheet-spent-cell.component';
-import { TaskMenu } from '../../components/task-menu/task-menu.component';
 
 /**
  * Interface ColumnOption

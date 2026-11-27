@@ -1,0 +1,68 @@
+<button
+  type="button"
+  class="flex w-full min-w-0 items-center gap-2.5 px-3 py-2 text-left text-sm transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none focus-visible:ring-inset"
+  (click)="opened.emit(task())"
+>
+  <cw-status-icon [status]="shown()" [from]="from()" [milestone]="task().milestone" size="4" />
+  <span class="sr-only">{{ statusWord() }}</span>
+  @if (variant() === 'priority') {
+    <span class="flex min-w-0 flex-1 flex-col">
+      <span
+        class="truncate font-medium"
+        data-testid="task-line-name"
+        [class.text-muted-foreground]="shown() === 'done' || shown() === 'cancelled'"
+        [class.line-through]="shown() === 'cancelled'"
+        >{{ task().name }}</span
+      >
+      <span class="truncate text-xs text-muted-foreground"
+        ><span class="font-mono">{{ task().key }}</span>
+        @if (listName()) {
+          · {{ listName() }}
+        }
+      </span>
+    </span>
+    <cw-task-due-date class="shrink-0" [due]="task().due" [status]="shown()" />
+  } @else {
+    <span
+      class="min-w-0 flex-1 truncate font-medium"
+      data-testid="task-line-name"
+      [class.text-muted-foreground]="shown() === 'done' || shown() === 'cancelled'"
+      [class.line-through]="shown() === 'cancelled'"
+      >{{ task().name }}</span
+    >
+    @if (variant() === 'mine') {
+      <span class="hidden shrink-0 font-mono text-xs text-muted-foreground md:inline">{{
+        task().key
+      }}</span>
+    }
+    <span class="hidden w-36 shrink-0 truncate text-xs text-muted-foreground sm:inline">{{
+      listName()
+    }}</span>
+    @if (variant() === 'late') {
+      <span class="flex -space-x-1" aria-hidden="true">
+        @for (person of people(); track person.id) {
+          <span
+            class="flex size-6 items-center justify-center rounded-full bg-secondary text-[10px] leading-none font-semibold text-secondary-foreground ring-2 ring-background"
+            [title]="person.name"
+            >{{ person.initials }}</span
+          >
+        }
+      </span>
+      @if (peopleNames()) {
+        <span class="sr-only">{{ peopleNames() }}</span>
+      }
+    }
+    <span class="flex w-24 shrink-0 items-center">
+      <cw-task-due-date [due]="task().due" [status]="shown()" />
+    </span>
+  }
+  @if (variant() !== 'late') {
+    <span
+      class="hidden w-20 shrink-0 items-center gap-1.5 text-xs sm:flex"
+      [class.text-destructive]="task().priority === 'urgente'"
+      data-testid="task-line-priority"
+    >
+      <cw-priority-icon [priority]="task().priority" size="3.5" />{{ priorityWord() }}
+    </span>
+  }
+</button>

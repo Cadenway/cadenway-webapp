@@ -32,7 +32,10 @@ import type {
   TaskStatusChange,
 } from '../../models/task-status-change/task-status-change.interface';
 import type { TaskSummary } from '../../models/task-summary/task-summary.interface';
-import { TaskVersionConflict } from '../../models/task-write-error/task-write-error.model';
+import {
+  TaskVersionConflict,
+  TaskWriteCancelled,
+} from '../../models/task-write-error/task-write-error.model';
 import { TASK_WRITE_LANE, type TaskWriteLane } from '../../ports/task-write-lane';
 import { statusLabel } from '../../utils/task-status/task-status.util';
 
@@ -870,6 +873,7 @@ function createTaskStatusChanges(): Type<TaskStatusChangesInstance> {
                   !batch &&
                   !destroyRef.destroyed &&
                   !(error instanceof OrganizationSwitchPendingError) &&
+                  !(error instanceof TaskWriteCancelled) &&
                   !hasProblemCode(error, 'organization.context-changed')
                 )
                   failed();

@@ -39,7 +39,13 @@ import { CwSkeleton } from '@cadenway/ui/components/skeleton';
 import { CwStatusIcon } from '@cadenway/ui/components/status-icon';
 import { NgIcon } from '@ng-icons/core';
 
-import { TaskCancelDialog, TaskCreate, TaskDetailOpener, type TaskSummary } from '@features/task';
+import {
+  TaskCancelDialog,
+  TaskCreate,
+  TaskDetailOpener,
+  TaskMenu,
+  type TaskSummary,
+} from '@features/task';
 
 import { SPACES_RETRY } from '../../../constants/data-table-texts/data-table-texts.constants';
 import type { CalendarRead } from '../../../models/calendar-view/calendar-view.interface';
@@ -59,7 +65,6 @@ import { VIEW_TASK_WRITER } from '../../../state/view-task-writes/view-task-writ
 import { todayIso, toLocalDate } from '../../../utils/calendar-date/calendar-date.util';
 import { formatLongDay, rescheduleChanges } from '../../../utils/calendar-view/calendar-view.util';
 import { TaskCard } from '../../components/task-card/task-card.component';
-import { TaskMenu } from '../../components/task-menu/task-menu.component';
 
 /**
  * Constant MAX_PER_DAY

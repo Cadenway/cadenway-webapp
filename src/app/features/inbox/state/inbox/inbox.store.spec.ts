@@ -28,10 +28,12 @@ import type {
   InboxNotification,
   InboxNotificationPage,
 } from '../../models/inbox-notification/inbox-notification.interface';
+import type { InboxRead } from '../../models/inbox-read/inbox-read.interface';
 import type {
   InboxReminder,
   InboxReminderPage,
 } from '../../models/inbox-reminder/inbox-reminder.interface';
+import { InboxReads } from '../../services/inbox-reads/inbox-reads.service';
 import { InboxStore, POLL_MS } from './inbox.store';
 
 /**
@@ -635,6 +637,41 @@ describe('InboxStore', () => {
     await expect(store.markRead(mention)).resolves.toBe(true);
 
     expect(api.markRead).toHaveBeenCalledWith('n1');
+    expect(store.unreadCount()).toBe(0);
+  });
+
+  it('publishes the reads it recorded to the other inbox views, not the refused ones', async () => {
+    const store: InstanceType<typeof InboxStore> = await opened();
+    const published: InboxRead[] = [];
+    TestBed.inject(InboxReads).changes.subscribe((read: InboxRead) => published.push(read));
+
+    await store.markRead(mention);
+    api.markAllRead.mockRejectedValueOnce(new Error('unavailable'));
+    await store.markAllRead();
+    await store.markAllRead();
+
+    expect(published).toEqual([
+      { organizationId: 'atelier-nord', source: 'popover', ids: ['n1'], all: false },
+      { organizationId: 'atelier-nord', source: 'popover', ids: [], all: true },
+    ]);
+  });
+
+  it('refreshes the badge when the digest of the same organization records a read', async () => {
+    const store: InstanceType<typeof InboxStore> = TestBed.inject(InboxStore);
+    TestBed.tick();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(store.unreadCount()).toBe(1);
+    const reads: InboxReads = TestBed.inject(InboxReads);
+    api.unreadCount.mockReturnValue(of(0));
+
+    reads.publish({ organizationId: 'lumen', source: 'digest', ids: ['n1'], all: false });
+    reads.publish({ organizationId: 'atelier-nord', source: 'popover', ids: ['n1'], all: false });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(api.unreadCount).toHaveBeenCalledTimes(1);
+
+    reads.publish({ organizationId: 'atelier-nord', source: 'digest', ids: ['n1'], all: false });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(api.unreadCount).toHaveBeenCalledTimes(2);
     expect(store.unreadCount()).toBe(0);
   });
 

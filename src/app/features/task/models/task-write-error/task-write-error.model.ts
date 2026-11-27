@@ -22,3 +22,29 @@ export class TaskVersionConflict extends Error {
   }
   // #endregion
 }
+
+/**
+ * Class TaskWriteCancelled
+ *
+ * @description
+ * Raised by a write lane for a queued write it no longer sends: the page that queued it was left,
+ * or the organization it was asked in is no longer the current one. Nothing reached the gateway,
+ * so the caller puts its shown value back without a failure toast.
+ */
+export class TaskWriteCancelled extends Error {
+  // #region Constructor
+  /**
+   * Constructor
+   *
+   * @description
+   * Names the task whose write was dropped.
+   *
+   * @param {string} taskKey - Key of the task.
+   * @constructor
+   */
+  public constructor(taskKey: string) {
+    super(`The queued write of ${taskKey} was not sent.`);
+    this.name = 'TaskWriteCancelled';
+  }
+  // #endregion
+}

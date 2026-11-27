@@ -8,8 +8,8 @@ suggestions, the sprint progress and the `Trash` and `Archives` rows of its foot
 space and list dialogs (create, edit, delete a space; create a list or a sprint, edit it), the
 space overview, the frame of a list page (header, view tabs and saved views, view tools and active
 filters, the selection bar, the hosts of the header's dialogs) with its view configuration, and
-the `List` view: its grouped, virtualized task rows, read page by page. The cells, pickers, status
-interaction and create dialog belong to Task, which the rows compose, as the task detail opened
+the `List` view: its grouped, virtualized task rows, read page by page. The cells, pickers, task menu,
+status interaction and create dialog belong to Task, which the rows compose, as the task detail opened
 from a row does; the trash and archives screens belong to their features. It also owns the eight other views
 (`Board`, `Calendar`, `Gantt`, `Workload`, `Sheet`, `Form`, `Activity`, `Timesheet`) and the
 `Share`, `Sprint report`, `Space statuses` and `Automations` dialogs.
@@ -88,9 +88,10 @@ constants belong to the lead):
 
 - The task views (board, calendar, Gantt, workload, sheet) share the task plumbing of the `List`
   view, which they compose and do not edit:
-  - `cw-task-menu` (`ui/components/task-menu`): the task menu, presentational (`tasks`, `status`,
-    `statuses`, `people`, `userId`, `lists`; one output per item). The view opens `menu()` from its
-    own `[cwContextMenuTriggerFor]` triggers.
+  - Task's `cw-task-menu` (`@features/task`, `TaskMenu`): the task menu, presentational (`tasks`,
+    `status`, `statuses`, `people`, `userId`, `lists` of `TaskMoveTarget`; one output per item),
+    which Task owns since the cross-cutting pages share it; its ids stay `spaces.rows.*` and
+    `spaces.bulk.*`. The view opens `menu()` from its own `[cwContextMenuTriggerFor]` triggers.
   - `withViewTaskWrites()` (`state/view-task-writes/view-task-writes.feature.ts`): the per-task
     serialized writes, composed by the view's reader store (`act`, `update`, `remind`,
     `restore`; the host connects its reads in `onInit` with `_connectWrites` and calls
@@ -888,7 +889,8 @@ computed from the navigation's reads, for the command palette's `Lists` and the 
 - Task (`@features/task`): `TaskSummary`, `TaskStatusChangesStore`, `TaskActionsApi` and the
   `TaskBulk*` models (the rows' writes), the status words, hints and categories,
   `TaskCreate`, `TaskDetailOpener` (`open`, `closed`, `changed`), `cw-task-title-cell`,
-  `cw-task-due-date`, `cw-task-label-chips`, `cw-task-cancel-dialog`, `personOf` and the status
+  `cw-task-due-date`, `cw-task-label-chips`, `cw-task-cancel-dialog`, `cw-task-menu` with its
+  `TaskMoveTarget` (`Move to` of the menu and of the selection bar), `personOf` and the status
   rules.
 - `@core/api` (problem readers), `@core/realtime` (`watch({ kind: 'list' })`), `@shared/layout-slot`
   (`SlotFeature`, `SHELL_SIDEBAR`) and `@shared/route-errors`.

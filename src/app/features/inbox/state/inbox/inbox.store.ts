@@ -60,10 +60,12 @@ import type {
   InboxNotification,
   InboxNotificationPage,
 } from '../../models/inbox-notification/inbox-notification.interface';
+import type { InboxRead } from '../../models/inbox-read/inbox-read.interface';
 import type {
   InboxReminder,
   InboxReminderPage,
 } from '../../models/inbox-reminder/inbox-reminder.interface';
+import { InboxReads } from '../../services/inbox-reads/inbox-reads.service';
 
 /**
  * Constant POLL_MS
@@ -433,6 +435,7 @@ function createInboxStore(): Type<InboxStoreInstance> {
       };
       return {
         _api: api,
+        _reads: inject(InboxReads),
         _workspace: workspace,
         _pin: pin,
         _refused: refused,
@@ -589,6 +592,8 @@ function createInboxStore(): Type<InboxStoreInstance> {
           claims.delete(id);
           for (const read of ids) confirmedIds.add(read);
           if (all) confirmedAll = true;
+          if (organizationId !== null)
+            store._reads.publish({ organizationId, source: 'popover', ids: [...ids], all });
           if (confirmed !== null && claims.size === 0)
             patchState(store, { unreadCount: confirmed });
           bump();
@@ -698,6 +703,10 @@ function createInboxStore(): Type<InboxStoreInstance> {
             .subscribe(() => {
               if (organizationAtStart === organizationVersion) refreshReminders();
             });
+        },
+        _readElsewhere(change: InboxRead): void {
+          if (change.source === 'popover' || !sameOrganization(change.organizationId)) return;
+          refreshNotifications();
         },
         _verified(): void {
           const refused: typeof store._refused = store._refused;
@@ -909,6 +918,9 @@ function createInboxStore(): Type<InboxStoreInstance> {
           .subscribe(() => {
             store._connected();
           });
+        store._reads.changes.pipe(takeUntilDestroyed()).subscribe((change: InboxRead) => {
+          store._readElsewhere(change);
+        });
         store._pin.organizationVerified.pipe(takeUntilDestroyed()).subscribe(() => {
           if (store._pin.current() === store._organizationId()) store._verified();
         });
@@ -949,7 +961,9 @@ function createInboxStore(): Type<InboxStoreInstance> {
  * notifications and reminders are refreshed on opening. Every write bumps a
  * version, so a poll answer or a notifications load that began before it is dropped. Writes are
  * optimistic; a refusal restores only what that write changed and no other write covers, on the
- * current state. A failed read keeps its resource error for the popover's inline `Retry`.
+ * current state. Recorded reads are published through `InboxReads`, and a read recorded by the
+ * home screen's digest refreshes the badge and the open list. A failed read keeps its resource
+ * error for the popover's inline `Retry`.
  *
  * @type {ReturnType<typeof createInboxStore>}
  */
