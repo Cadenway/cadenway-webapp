@@ -27,6 +27,7 @@ import {
   InboxService,
   ListsService,
   MembersService,
+  MyTasksService,
   RealtimeService,
   SpacesService,
   TaskQueriesService,
@@ -262,6 +263,12 @@ describe('WORKSPACE_ROUTES', () => {
         { provide: WorkspaceSession, useValue: session },
         { provide: RuntimeConfigStore, useValue: { config: () => ({}) } },
         { provide: InboxService, useValue: { getInboxUnreadCount: () => of({ unreadCount: 2 }) } },
+        {
+          provide: MyTasksService,
+          useValue: {
+            listMyTasks: () => of({ items: [], nextCursor: null, counts: { open: 0, closed: 0 } }),
+          },
+        },
         {
           provide: BillingService,
           useValue: {
