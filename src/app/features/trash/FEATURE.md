@@ -21,12 +21,12 @@ footer and Errors' `Open the trash` link to it.
 
 ## Dependencies
 
-- `@cadenway/api-client` through `data-access/` (`TrashApi`): `TrashService.listTrash` (to the last
-  cursor page, `cache: 'no-store'`, passive on focus and reconnection), `restoreTrashEntry`,
-  `purgeTrashEntry`, `emptyTrash`, and `MembersService.listMembers` (to the last page) for the
-  names of who deleted each entry.
-- `@core/api` (`OrganizationPin`, `PASSIVE_REQUEST`, `hasProblemCode`) and `@core/realtime`
-  (`RealtimeConnection.reconnected`, optional).
+- `@cadenway/api-client` through `data-access/` (`TrashApi`): `TrashService.listTrash` (up to 10
+  pages of 100, `cache: 'no-store'`, passive on focus and reconnection), `restoreTrashEntry` (with
+  `reportNotReady: true`), `purgeTrashEntry`, `emptyTrash`, and `MembersService.listMembers` (to
+  the last page) for the names of who deleted each entry.
+- `@core/api` (`OrganizationPin`, `OrganizationSwitchPendingError`, `PASSIVE_REQUEST`,
+  `hasProblemCode`) and `@core/realtime` (`RealtimeConnection.reconnected`, optional).
 - Spaces' `ports/navigation-refresh` (`NAVIGATION_REFRESH`, optional).
 - Task's `.` entry: `TaskDetailOpener` (the restore toast's `Open`, and `closed`) and
   `STATUS_LABELS` (the status word read next to the decorative icon).
@@ -38,35 +38,56 @@ footer and Errors' `Open the trash` link to it.
 
 - The page's `h1` is its route focus target (`data-route-focus`).
 - `TrashStore` is page-scoped (component providers). Its primary read follows the pinned
-  organization; while it runs the page shows the mockup's skeleton (`Loading the trash`, one group of
-  five rows). A failure renders `RouteErrorBoundary` in place of the page (`Could not load this
-page`, whose `Retry` runs the route again), so the shell stays. A successful read without entries
-  shows `The trash is empty`. A failed member read only leaves `by <name>` out.
+  organization and the organization epoch, which rises on each organization change (A, then B,
+  then A again gives three epochs). While the read runs the page shows the mockup's skeleton
+  (`Loading the trash`, one group of five rows). A failure renders `RouteErrorBoundary` in place of
+  the page (`Could not load this page`, whose `Retry` runs the route again), so the shell stays. A
+  successful read without entries shows `The trash is empty`. A failed member read only leaves
+  `by <name>` out.
+- A read lists at most the 1,000 most recently deleted entries; the summary counts the whole trash
+  (`total`) and a notice says how many entries are not listed.
 - Rows show the status icon (with the status word for screen readers), the name, the key, the parent
   key of a subtask, `<list> · Deleted <today|yesterday|N days ago> by <name>` (`Deleted list` for a
-  list in the `deleted` state, `Former member` for a person no longer in the directory, `An
-automation` for a rule, nothing for another actor), and the days left (`purgeAt - now` rounded up,
-  grenat at five or fewer). Days count from the instant of the read shown. The mockup draws no
-  filter. Below 768 px the header and the rows wrap.
+  list in the `deleted` state, `Former member` for a person no longer in the directory,
+  `An automation` for a rule, nothing for another actor), and the days left (`purgeAt - now`
+  rounded up, grenat at five or fewer). Days count from the instant of the read shown. The mockup
+  draws no filter. Below 768 px the header and the rows wrap.
 - `Restore` runs at once; `Delete forever` confirms in an alert dialog; `Empty the trash` (shown only
-  with entries) asks to type `trash`, the translated word. A dialog stays open with its action
-  pending until the write settles. One write per entry at a time; `Empty the trash` waits for no
-  write in flight, and rows wait for the emptying.
-- Each write is bound to the organization where it started: when the organization changes
-  meanwhile, its answer patches nothing and raises no toast.
-- A confirmed restore, purge or emptying is never undone by an older read: reads are ranked by start
-  and a read never replaces a newer one, entries a write took out stay hidden, and reads started
-  before a confirmed emptying show nothing.
-- A write without an answer (no status, `408`, `5xx`, a client timeout) is not taken as failed: the
-  trash is read again and the entry's presence decides (`restored` or `erased`, or the refusal
-  toast). When that read fails too, `Could not confirm the change` says so and the entry stays.
-- `404 trash-entry.not-found` on a restore toasts `Already restored`; on a purge, `KEY is no longer
-in the trash`. Both hide the entry and read the trash again.
-- After a restore (applied or already restored) the page calls `NAVIGATION_REFRESH.refresh()`, since
-  a list or a space may come back; after a purge or an emptying, `refreshCounts()`. Each write is
-  followed by a background read of the trash.
+  with entries) asks to type `trash`, the translated word. Each dialog belongs to the epoch it
+  opened in: an organization change closes it and a confirmation from another epoch does nothing.
+  A dialog stays open with its action pending until the write settles. One write per entry at a
+  time; `Empty the trash` waits for no write in flight, and rows wait for the emptying.
+- A pending button is `aria-busy` and `aria-disabled`, never natively disabled, so it keeps the
+  focus; its clicks are ignored. When a row leaves after a write, or after its dialog closes, the
+  focus goes to the next row's `Restore`, else the previous row's, else the `h1`; it stays where it
+  is when the person had moved it elsewhere.
+- Each write is bound to the organization and the epoch where it started, on a live page: when
+  either changes or the page is destroyed meanwhile, its answer patches nothing and raises no
+  toast. The restore toast's `Open` does nothing in another organization. The page's toasts are
+  dismissed on an organization change and when the page is destroyed.
+- A write blocked by an organization switch (`OrganizationSwitchPendingError`) never left: it is
+  dropped without a read or a toast.
+- A write confirmed by a success is never undone by an older read: reads are ranked by start and a
+  read never replaces a newer one, entries a successful write took out stay hidden, and reads
+  started before a successful emptying show nothing.
+- A write without an answer (no status, `408`, `5xx`, a client timeout) is not taken as failed. Its
+  entry stays pending (the emptying stays running) while the trash is read again after 2, 4 and 8
+  seconds. The first read that no longer lists it (for the emptying: lists none of the entries
+  shown, or an empty trash when none was shown) gives a neutral `KEY is no longer in the trash`
+  (`Trash emptied`). When no read proves it, `Could not confirm the change` (a warning, never a
+  refusal) frees the entry.
+- `404 trash-entry.not-found` never hides an entry by itself: the trash is read again and that read
+  decides what shows; a restore then toasts `Already restored`, a purge
+  `KEY is no longer in the trash`. A restore asks `reportNotReady`, so an entry whose list is still
+  being deleted answers `409 trash-entry.not-restorable-yet`: `KEY cannot be restored yet`, and the
+  entry stays.
+- After a restore (applied, already restored, or confirmed by a read) the page calls
+  `NAVIGATION_REFRESH.refresh()`, since a list or a space may come back; after a purge or an
+  emptying, `refreshCounts()`. Each successful write is followed by a read of the trash.
 - No organization-wide realtime notice exists: the trash is read again on window focus, on realtime
-  reconnection and when a task detail opened from the page closes.
+  reconnection and whenever a task detail shown over the page closes (`TaskDetailOpener.closed`).
+  The store's own reads run one at a time with at most one more queued, and abort on an
+  organization change and on destroy.
 
 ## Copy not taken word for word from the mockup
 
@@ -75,6 +96,8 @@ in the trash`. Both hide the entry and read the trash again.
 | `trash.row.former-member`, `trash.row.automation`                                                                | The mockup names every author from its seed; the contract may name a former member or a rule. |
 | `trash.row.days-left-title-one`, `trash.toast.emptied-one`                                                       | Singular forms the mockup does not have.                                                      |
 | `trash.toast.restore-failed`, `trash.toast.purge-failed`, `trash.toast.empty-failed`, `trash.toast.unconfirmed*` | The mockup draws no failed or unconfirmed write.                                              |
-| `trash.toast.gone`                                                                                               | The mockup draws no purge of an entry already gone.                                           |
+| `trash.toast.gone`                                                                                               | The mockup draws no write whose entry is already gone.                                        |
+| `trash.toast.not-ready`, `trash.toast.not-ready-text`                                                            | The mockup draws no restore during a list deletion.                                           |
+| `trash.capped`                                                                                                   | The mockup's trash is never larger than one read.                                             |
 | `trash.empty-dialog.word`                                                                                        | The word to type is translated, as the mockup asks for its own word in French.                |
 | `trash.toast.already-restored`                                                                                   | Errors' `Already restored` text, as the step 6 spec asks.                                     |

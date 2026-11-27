@@ -16,7 +16,7 @@ import {
   TrashService,
 } from '@cadenway/api-client';
 import { provideCadenwayIcons } from '@cadenway/icons';
-import { type Observable, of, throwError } from 'rxjs';
+import { NEVER, type Observable, of, throwError } from 'rxjs';
 import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 
 import { OrganizationPin } from '@core/api';
@@ -81,11 +81,22 @@ describe('TRASH_ROUTES', () => {
   let listTrash: Mock<() => Observable<TrashEntryPage>>;
   let purgeTrashEntry: Mock<(entryId: string) => Observable<void>>;
   let emptyTrash: Mock<() => Observable<{ entryCount: number }>>;
+  let restoreTrashEntry: Mock<(entryId: string) => Observable<unknown>>;
 
   beforeEach(() => {
     listTrash = vi.fn(() => of(page(ENTRIES)));
     purgeTrashEntry = vi.fn(() => of(undefined));
     emptyTrash = vi.fn(() => of({ entryCount: 2 }));
+    restoreTrashEntry = vi.fn(() =>
+      of({
+        task: { key: 'CAD-452', name: 'Old sign-in screen', status: 'cancelled' },
+        list: { name: 'Sprint 14' },
+        subtaskCount: 0,
+        detached: false,
+        listRestored: false,
+        spaceRestored: false,
+      }),
+    );
     TestBed.configureTestingModule({
       providers: [
         provideRouter(
@@ -96,7 +107,7 @@ describe('TRASH_ROUTES', () => {
         ),
         {
           provide: TrashService,
-          useValue: { listTrash, purgeTrashEntry, emptyTrash, restoreTrashEntry: vi.fn() },
+          useValue: { listTrash, purgeTrashEntry, emptyTrash, restoreTrashEntry },
         },
         {
           provide: MembersService,
@@ -275,6 +286,74 @@ describe('TRASH_ROUTES', () => {
         return element.querySelectorAll('[data-testid="trash-row"]').length;
       })
       .toBe(1);
+    await expect
+      .poll(() => document.activeElement?.getAttribute('aria-label'))
+      .toBe('Restore CAD-447');
+  });
+
+  it('moves the focus to the next row once a restored row leaves', async () => {
+    const { harness, element }: { harness: RouterTestingHarness; element: HTMLElement } =
+      await open();
+    listTrash.mockReturnValue(of(page([ENTRIES[1]])));
+    const restore: HTMLButtonElement | undefined = button(element, 'Restore CAD-452');
+    restore?.focus();
+
+    restore?.click();
+    await settle(harness);
+
+    expect(restoreTrashEntry).toHaveBeenCalledWith('entry-452', {}, { reportNotReady: true });
+    expect(element.querySelectorAll('[data-testid="trash-row"]')).toHaveLength(1);
+    expect(document.activeElement?.getAttribute('aria-label')).toBe('Restore CAD-447');
+  });
+
+  it('keeps a pending button focusable and ignores its clicks', async () => {
+    const { harness, element }: { harness: RouterTestingHarness; element: HTMLElement } =
+      await open();
+    restoreTrashEntry.mockReturnValue(NEVER);
+    const restore: HTMLButtonElement | undefined = button(element, 'Restore CAD-452');
+    restore?.focus();
+
+    restore?.click();
+    harness.detectChanges();
+    restore?.click();
+    harness.detectChanges();
+
+    expect(restoreTrashEntry).toHaveBeenCalledTimes(1);
+    expect(restore?.hasAttribute('disabled')).toBe(false);
+    expect(restore?.getAttribute('aria-disabled')).toBe('true');
+    expect(document.activeElement).toBe(restore);
+  });
+
+  it('closes the Empty confirmation when the organization changes, and empties nothing', async () => {
+    const { harness, element }: { harness: RouterTestingHarness; element: HTMLElement } =
+      await open();
+
+    button(element, 'Empty the trash')?.click();
+    harness.detectChanges();
+    expect(document.body.querySelector('[role="alertdialog"]')).not.toBeNull();
+    TestBed.inject(OrganizationPin).set('org-lumen');
+    await settle(harness);
+
+    await expect
+      .poll(() => {
+        harness.detectChanges();
+        return document.body.querySelector('[role="alertdialog"]');
+      })
+      .toBeNull();
+    expect(emptyTrash).not.toHaveBeenCalled();
+  });
+
+  it('says how many entries a capped read does not list', async () => {
+    listTrash.mockReturnValue(of({ items: [...ENTRIES], nextCursor: null, total: 1_200 }));
+
+    const { element }: { element: HTMLElement } = await open();
+
+    expect(text(element.querySelector('[data-testid="trash-capped"]'))).toBe(
+      'Showing the 2 most recently deleted items of 1200. Restore or delete some to see the others.',
+    );
+    expect(text(element.querySelector('[data-testid="trash-summary"]'))).toBe(
+      '1200 items · erased for good after 30 days',
+    );
   });
 
   it('empties the trash only once the word is typed', async () => {
@@ -312,5 +391,6 @@ describe('TRASH_ROUTES', () => {
         return element.querySelector('[data-testid="trash-empty-state"]') !== null;
       })
       .toBe(true);
+    await expect.poll(() => document.activeElement?.tagName).toBe('H1');
   });
 });

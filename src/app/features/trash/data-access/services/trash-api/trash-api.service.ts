@@ -10,9 +10,10 @@ import {
 } from '@cadenway/api-client';
 import { firstValueFrom, fromEvent, type Observable, takeUntil } from 'rxjs';
 
-import { hasProblemCode, PASSIVE_REQUEST } from '@core/api';
+import { hasProblemCode, OrganizationSwitchPendingError, PASSIVE_REQUEST } from '@core/api';
 
 import type { TrashEntry } from '../../../models/trash-entry/trash-entry.interface';
+import type { TrashListing } from '../../../models/trash-listing/trash-listing.interface';
 import type { TrashRestore } from '../../../models/trash-restore/trash-restore.interface';
 import { toTrashEntry, toTrashRestore } from '../../adapters/trash/trash.adapter';
 
@@ -27,6 +28,17 @@ import { toTrashEntry, toTrashRestore } from '../../adapters/trash/trash.adapter
 const PAGE_LIMIT: number = 100;
 
 /**
+ * Constant MAX_PAGES
+ *
+ * @description
+ * Pages a trash read follows at most: the 1,000 most recently deleted entries. `total` still
+ * counts every entry, so the page can say how many it does not list.
+ *
+ * @type {number}
+ */
+export const MAX_PAGES: number = 10;
+
+/**
  * Function isUncertainTrashWrite
  *
  * @description
@@ -38,6 +50,7 @@ const PAGE_LIMIT: number = 100;
  * @returns {boolean} Whether the outcome is unknown.
  */
 export function isUncertainTrashWrite(error: unknown): boolean {
+  if (isTrashWriteNotSent(error)) return false;
   if (!(error instanceof HttpErrorResponse)) return true;
   return error.status === 0 || error.status === 408 || error.status >= 500;
 }
@@ -54,6 +67,35 @@ export function isUncertainTrashWrite(error: unknown): boolean {
  */
 export function isTrashEntryGone(error: unknown): boolean {
   return hasProblemCode(error, 'trash-entry.not-found');
+}
+
+/**
+ * Function isTrashEntryNotReady
+ *
+ * @description
+ * Whether a restore found its entry still held by the deletion of its list, which is batching
+ * (`409 trash-entry.not-restorable-yet`, sent because the restore asks `reportNotReady`). Nothing
+ * was written; the same restore succeeds once the batch ends.
+ *
+ * @param {unknown} error - The failed restore.
+ * @returns {boolean} Whether the entry cannot be restored yet.
+ */
+export function isTrashEntryNotReady(error: unknown): boolean {
+  return hasProblemCode(error, 'trash-entry.not-restorable-yet');
+}
+
+/**
+ * Function isTrashWriteNotSent
+ *
+ * @description
+ * Whether a write never left the browser: the organization pin blocked it while the session was
+ * changing organization (`OrganizationSwitchPendingError`).
+ *
+ * @param {unknown} error - The failed write.
+ * @returns {boolean} Whether nothing was sent.
+ */
+export function isTrashWriteNotSent(error: unknown): boolean {
+  return error instanceof OrganizationSwitchPendingError;
 }
 
 /**
@@ -111,19 +153,21 @@ export class TrashApi {
    * Method entries
    *
    * @description
-   * Reads every entry of the trash the caller may restore, the most recently deleted first, page
-   * after page. A passive read (on focus or reconnection) waits while the organization context is
-   * being verified.
+   * Reads the entries of the trash the caller may restore, the most recently deleted first, page
+   * after page up to `MAX_PAGES` (1,000 entries); `total` counts them all. A passive read (on focus
+   * or reconnection) waits while the organization context is being verified.
    *
    * @param {{ readonly passive?: boolean; readonly signal?: AbortSignal }} options - Whether the read is a background one, and its cancellation.
-   * @returns {Promise<readonly TrashEntry[]>} The entries; a failed page rejects.
+   * @returns {Promise<TrashListing>} The entries read and the total; a failed or aborted page rejects.
    */
   public async entries(
     options: { readonly passive?: boolean; readonly signal?: AbortSignal } = {},
-  ): Promise<readonly TrashEntry[]> {
+  ): Promise<TrashListing> {
     const context: HttpContext = new HttpContext().set(PASSIVE_REQUEST, options.passive === true);
     const items: TrashEntry[] = [];
     let cursor: string | undefined;
+    let total: number;
+    let pages: number = 0;
     do {
       const page: TrashEntryPage = await read(
         this.trash.listTrash(
@@ -133,9 +177,11 @@ export class TrashApi {
         options.signal,
       );
       items.push(...page.items.map(toTrashEntry));
+      total = page.total;
+      pages += 1;
       cursor = page.nextCursor ?? undefined;
-    } while (cursor);
-    return items;
+    } while (cursor && pages < MAX_PAGES);
+    return { entries: items, total: Math.max(total, items.length) };
   }
 
   /**
@@ -165,14 +211,18 @@ export class TrashApi {
    * Method restore
    *
    * @description
-   * Brings an entry back to its list, with its subtasks. A `404 trash-entry.not-found`
-   * (`isTrashEntryGone`) means the entry is no longer in the trash.
+   * Brings an entry back to its list, with its subtasks. It asks `reportNotReady`, so an entry
+   * whose list deletion is still batching answers `409 trash-entry.not-restorable-yet`
+   * (`isTrashEntryNotReady`) instead of a `404`; a `404 trash-entry.not-found`
+   * (`isTrashEntryGone`) then means the entry is no longer in the trash for the caller.
    *
    * @param {string} entryId - The trash entry.
    * @returns {Promise<TrashRestore>} What came back; a failure rejects.
    */
   public async restore(entryId: string): Promise<TrashRestore> {
-    const restored: TrashRestored = await firstValueFrom(this.trash.restoreTrashEntry(entryId, {}));
+    const restored: TrashRestored = await firstValueFrom(
+      this.trash.restoreTrashEntry(entryId, {}, { reportNotReady: true }),
+    );
     return toTrashRestore(restored);
   }
 

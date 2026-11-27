@@ -292,3 +292,41 @@ export function trashRestoreLabel(key: string): string {
 export function trashPurgeLabel(key: string): string {
   return $localize`:@@trash.row.purge-label:Delete ${key}:key: forever`;
 }
+
+/**
+ * Constant TRASH_NOT_READY_TEXT
+ *
+ * @description
+ * The description of the toast when a restore finds its list still being deleted
+ * (`409 trash-entry.not-restorable-yet`).
+ *
+ * @type {string}
+ */
+export const TRASH_NOT_READY_TEXT: string = $localize`:@@trash.toast.not-ready-text:Its list is still being deleted. Try again in a moment.`;
+
+/**
+ * Function trashNotReadyTitle
+ *
+ * @description
+ * The title of the toast when a restore finds its list still being deleted.
+ *
+ * @param {string} key - Key of the task.
+ * @returns {string} The title.
+ */
+export function trashNotReadyTitle(key: string): string {
+  return $localize`:@@trash.toast.not-ready:${key}:key: cannot be restored yet`;
+}
+
+/**
+ * Function trashCappedText
+ *
+ * @description
+ * The notice under the rows when the trash holds more entries than a read lists.
+ *
+ * @param {number} shown - Entries listed.
+ * @param {number} total - Entries in the trash.
+ * @returns {string} The notice.
+ */
+export function trashCappedText(shown: number, total: number): string {
+  return $localize`:@@trash.capped:Showing the ${shown}:shown: most recently deleted items of ${total}:total:. Restore or delete some to see the others.`;
+}

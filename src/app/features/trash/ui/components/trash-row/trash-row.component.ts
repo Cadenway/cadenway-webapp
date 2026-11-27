@@ -33,8 +33,10 @@ import { daysLeft, daysSince, WARNING_DAYS } from '../../../utils/trash-time/tra
  * `<list> · Deleted <when> by <name>` (`Deleted list` for a deleted list), the days left before
  * the entry is erased (grenat at 5 or fewer), `Restore` and the purge button. The row wraps below
  * 640 px. Inputs: `row`, `now` (the instant the days count from) and `disabled` (while the trash
- * is being emptied); a write in flight on the entry spins its button and disables both. Outputs
- * `restoreRequested` and `purgeRequested` carry the entry; the page confirms the purge.
+ * is being emptied). A write in flight on the entry spins its button and marks both
+ * `aria-disabled` without disabling them natively, so the focused button keeps the focus; their
+ * clicks are then ignored. Outputs `restoreRequested` and `purgeRequested` carry the entry; the page
+ * confirms the purge and moves the focus when the row leaves. The host carries `data-entry-id`.
  */
 @Component({
   selector: 'cw-trash-row',
@@ -44,6 +46,7 @@ import { daysLeft, daysSince, WARNING_DAYS } from '../../../utils/trash-time/tra
     class:
       'flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-border px-4 py-3 first:border-t-0 hover:bg-muted/60',
     '[attr.aria-busy]': "row().pending ? 'true' : null",
+    '[attr.data-entry-id]': 'row().entry.id',
     'data-testid': 'trash-row',
   },
   templateUrl: './trash-row.component.html',
@@ -195,5 +198,40 @@ export class TrashRow {
   protected readonly statusLabel: Signal<string> = computed(
     (): string => STATUS_LABELS[this.row().entry.status],
   );
+
+  /**
+   * Property blocked
+   *
+   * @description
+   * Whether both buttons ignore clicks: a write runs on the entry, or the trash is being emptied.
+   *
+   * @type {Signal<boolean>}
+   * @readonly
+   */
+  protected readonly blocked: Signal<boolean> = computed(
+    (): boolean => this.disabled() || this.row().pending !== null,
+  );
+  // #endregion
+
+  // #region Methods
+  /**
+   * Method requestRestore
+   *
+   * @description
+   * Emits `restoreRequested` unless the row is blocked.
+   */
+  protected requestRestore(): void {
+    if (!this.blocked()) this.restoreRequested.emit(this.row().entry);
+  }
+
+  /**
+   * Method requestPurge
+   *
+   * @description
+   * Emits `purgeRequested` unless the row is blocked.
+   */
+  protected requestPurge(): void {
+    if (!this.blocked()) this.purgeRequested.emit(this.row().entry);
+  }
   // #endregion
 }

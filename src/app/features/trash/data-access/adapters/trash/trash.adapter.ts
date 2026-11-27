@@ -24,7 +24,7 @@ function toActorKind(type: string): TrashActorKind {
  * Keeps what the trash row shows of an entry. A list whose state is `deleted` reads as a deleted
  * list; any other state (`active`, `archived` or a later one) keeps its name.
  *
- * @param {TrashEntryDto} entry - Item of `GET /v1/trash`.
+ * @param {TrashEntryDto} entry - Item of `GET /v1/trash/entries`.
  * @returns {TrashEntry} Display model of the entry.
  */
 export function toTrashEntry(entry: TrashEntryDto): TrashEntry {
@@ -49,7 +49,7 @@ export function toTrashEntry(entry: TrashEntryDto): TrashEntry {
  * @description
  * Keeps what the restore toast says of a restored entry.
  *
- * @param {TrashRestored} restored - Answer of `POST /v1/trash/{entryId}/restore`.
+ * @param {TrashRestored} restored - Answer of `POST /v1/trash/entries/{entryId}/restore`.
  * @returns {TrashRestore} Display model of the restore.
  */
 export function toTrashRestore(restored: TrashRestored): TrashRestore {

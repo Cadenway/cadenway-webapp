@@ -83,9 +83,9 @@
           variant="outline"
           class="text-destructive hover:bg-destructive/10"
           [loading]="store.emptying()"
-          [disabled]="store.writing()"
+          [attr.aria-disabled]="store.writing() ? 'true' : null"
           data-testid="trash-empty"
-          (click)="emptyOpen.set(true)"
+          (click)="askEmpty()"
         >
           <ng-icon name="phosphorTrashBold" aria-hidden="true" />
           <ng-container i18n="@@trash.header.empty">Empty the trash</ng-container>
@@ -105,7 +105,11 @@
         </cw-empty-header>
       </cw-empty>
     } @else {
-      <div class="overflow-hidden rounded-lg border border-border" role="list">
+      <div
+        class="overflow-hidden rounded-lg border border-border"
+        role="list"
+        data-testid="trash-list"
+      >
         @for (row of store.rows(); track row.entry.id) {
           <cw-trash-row
             [row]="row"
@@ -116,6 +120,11 @@
           />
         }
       </div>
+      @if (store.hiddenCount() > 0) {
+        <p class="text-sm text-muted-foreground" role="status" data-testid="trash-capped">
+          {{ cappedText() }}
+        </p>
+      }
     }
   </div>
 }
@@ -126,7 +135,7 @@
   [open]="purgeOpen()"
   [pending]="purgePending()"
   data-testid="trash-purge-dialog"
-  (openChange)="purgeOpen.set($event)"
+  (openChange)="purgeOpenChanged($event)"
   (confirm)="confirmPurge()"
 >
   <h2 cwAlertDialogTitle i18n="@@trash.purge.title">Delete {{ target?.taskKey }} forever?</h2>
@@ -145,7 +154,7 @@
   [confirmText]="confirmWord"
   [confirmLabel]="confirmLabel"
   data-testid="trash-empty-dialog"
-  (openChange)="emptyOpen.set($event)"
+  (openChange)="emptyOpenChanged($event)"
   (confirm)="confirmEmpty()"
 >
   <cw-alert-dialog-media>

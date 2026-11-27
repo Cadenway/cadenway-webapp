@@ -8,11 +8,19 @@ import { TestBed } from '@angular/core/testing';
 import type { TrashEntry as TrashEntryDto } from '@cadenway/api-client';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { PASSIVE_REQUEST } from '@core/api';
+import { OrganizationSwitchPendingError, PASSIVE_REQUEST } from '@core/api';
 
 import type { TrashEntry } from '../../../models/trash-entry/trash-entry.interface';
+import type { TrashListing } from '../../../models/trash-listing/trash-listing.interface';
 import type { TrashRestore } from '../../../models/trash-restore/trash-restore.interface';
-import { isTrashEntryGone, isUncertainTrashWrite, TrashApi } from './trash-api.service';
+import {
+  isTrashEntryGone,
+  isTrashEntryNotReady,
+  isTrashWriteNotSent,
+  isUncertainTrashWrite,
+  MAX_PAGES,
+  TrashApi,
+} from './trash-api.service';
 
 /**
  * Function dto
@@ -54,7 +62,7 @@ describe('TrashApi', () => {
   });
 
   it('reads every page of the trash, passive when asked, past the HTTP cache', async () => {
-    const read: Promise<readonly TrashEntry[]> = api.entries({ passive: true });
+    const read: Promise<TrashListing> = api.entries({ passive: true });
     const first: TestRequest = http.expectOne(
       (request) => request.url === '/v1/trash/entries' && !request.params.has('cursor'),
     );
@@ -68,7 +76,8 @@ describe('TrashApi', () => {
     );
     second.flush({ items: [dto('e2', 'CAD-447')], nextCursor: null, total: 2 });
 
-    const entries: readonly TrashEntry[] = await read;
+    const { entries, total }: TrashListing = await read;
+    expect(total).toBe(2);
     expect(entries.map((entry: TrashEntry) => entry.taskKey)).toEqual(['CAD-452', 'CAD-447']);
     expect(entries[0]).toMatchObject({
       parentKey: 'CAD-482',
@@ -76,6 +85,25 @@ describe('TrashApi', () => {
       listDeleted: true,
       trashedBy: { kind: 'other', id: 'github' },
     });
+  });
+
+  it('stops at its page cap and keeps the total of the trash', async () => {
+    const read: Promise<TrashListing> = api.entries();
+    for (let index: number = 0; index < MAX_PAGES; index += 1) {
+      const page: string = String(index);
+      await Promise.resolve();
+      http
+        .expectOne((request) => request.url === '/v1/trash/entries')
+        .flush({
+          items: [dto(`e${page}`, `CAD-${page}`)],
+          nextCursor: `c${page}`,
+          total: 4_000,
+        });
+    }
+
+    const { entries, total }: TrashListing = await read;
+    expect(entries).toHaveLength(MAX_PAGES);
+    expect(total).toBe(4_000);
   });
 
   it('names the members of every page of the directory', async () => {
@@ -92,7 +120,10 @@ describe('TrashApi', () => {
 
   it('maps what a restore brought back', async () => {
     const restore: Promise<TrashRestore> = api.restore('e1');
-    const request: TestRequest = http.expectOne('/v1/trash/entries/e1/restore');
+    const request: TestRequest = http.expectOne(
+      (candidate) => candidate.url === '/v1/trash/entries/e1/restore',
+    );
+    expect(request.request.params.get('reportNotReady')).toBe('true');
     expect(request.request.method).toBe('POST');
     request.flush({
       task: { key: 'CAD-452', name: 'Old sign-in screen', status: 'cancelled' },
@@ -137,5 +168,14 @@ describe('TrashApi', () => {
     });
     expect(isTrashEntryGone(gone)).toBe(true);
     expect(isUncertainTrashWrite(gone)).toBe(false);
+    const notReady: HttpErrorResponse = new HttpErrorResponse({
+      status: 409,
+      error: { code: 'trash-entry.not-restorable-yet' },
+    });
+    expect(isTrashEntryNotReady(notReady)).toBe(true);
+    expect(isUncertainTrashWrite(notReady)).toBe(false);
+    const blocked: OrganizationSwitchPendingError = new OrganizationSwitchPendingError();
+    expect(isTrashWriteNotSent(blocked)).toBe(true);
+    expect(isUncertainTrashWrite(blocked)).toBe(false);
   });
 });

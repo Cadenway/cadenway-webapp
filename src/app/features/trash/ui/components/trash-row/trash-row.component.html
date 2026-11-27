@@ -73,9 +73,10 @@
   variant="outline"
   size="xs"
   [loading]="row().pending === 'restore'"
-  [disabled]="disabled() || row().pending !== null"
+  [attr.aria-disabled]="blocked() ? 'true' : null"
   [attr.aria-label]="restoreLabel()"
-  (click)="restoreRequested.emit(entry)"
+  data-testid="trash-row-restore"
+  (click)="requestRestore()"
 >
   <ng-icon name="phosphorArrowCounterClockwiseBold" class="size-3.5" aria-hidden="true" />
   <ng-container i18n="@@trash.row.restore">Restore</ng-container>
@@ -87,10 +88,11 @@
   size="icon-xs"
   class="text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
   [loading]="row().pending === 'purge'"
-  [disabled]="disabled() || row().pending !== null"
+  [attr.aria-disabled]="blocked() ? 'true' : null"
   [attr.aria-label]="purgeLabel()"
   [attr.title]="purgeLabel()"
-  (click)="purgeRequested.emit(entry)"
+  data-testid="trash-row-purge"
+  (click)="requestPurge()"
 >
   <ng-icon name="phosphorTrashBold" class="size-3.5" aria-hidden="true" />
 </button>

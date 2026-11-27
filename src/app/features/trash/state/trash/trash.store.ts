@@ -35,12 +35,14 @@ import {
   TRASH_EMPTIED,
   TRASH_EMPTY_FAILED,
   TRASH_FORMER_MEMBER,
+  TRASH_NOT_READY_TEXT,
   TRASH_PURGED_TEXT,
   TRASH_TOAST_OPEN,
   TRASH_UNCONFIRMED,
   TRASH_UNCONFIRMED_TEXT,
   trashEmptiedText,
   trashGoneTitle,
+  trashNotReadyTitle,
   trashPurgedTitle,
   trashPurgeFailed,
   trashRestoredText,
@@ -49,18 +51,22 @@ import {
 } from '../../constants/trash-copy/trash-copy.constants';
 import {
   isTrashEntryGone,
+  isTrashEntryNotReady,
+  isTrashWriteNotSent,
   isUncertainTrashWrite,
   TrashApi,
 } from '../../data-access/services/trash-api/trash-api.service';
 import type { TrashEntry } from '../../models/trash-entry/trash-entry.interface';
+import type { TrashListing } from '../../models/trash-listing/trash-listing.interface';
 import type { TrashRestore } from '../../models/trash-restore/trash-restore.interface';
 import type { TrashRow, TrashWrite } from '../../models/trash-row/trash-row.interface';
+import { TRASH_RECONCILE_DELAYS } from './trash-reconcile-delays.token';
 
 /**
  * Interface TrashSnapshot
  *
  * @description
- * One complete read of the trash, numbered in the order the reads started.
+ * One read of the trash, numbered in the order the reads started.
  */
 interface TrashSnapshot {
   // #region Properties
@@ -74,6 +80,17 @@ interface TrashSnapshot {
    * @readonly
    */
   readonly organizationId: string;
+
+  /**
+   * Property epoch
+   *
+   * @description
+   * Organization epoch the read was made in; a read from an earlier epoch is never shown.
+   *
+   * @type {number}
+   * @readonly
+   */
+  readonly epoch: number;
 
   /**
    * Property seq
@@ -102,12 +119,23 @@ interface TrashSnapshot {
    * Property entries
    *
    * @description
-   * The entries the read found.
+   * The entries the read listed, up to its cap.
    *
    * @type {readonly TrashEntry[]}
    * @readonly
    */
   readonly entries: readonly TrashEntry[];
+
+  /**
+   * Property total
+   *
+   * @description
+   * Entries the trash held, listed or not.
+   *
+   * @type {number}
+   * @readonly
+   */
+  readonly total: number;
   // #endregion
 }
 
@@ -115,28 +143,111 @@ interface TrashSnapshot {
  * Type WriteOutcome
  *
  * @description
- * How a write ended for the page: applied (`done`), the entry already out of the trash (`gone`),
- * refused or found not applied (`refused`), or still unknown once the trash could not be read
- * again (`unknown`).
+ * How a write answered: applied (`done`), no entry for the caller (`gone`, a `404`), the list
+ * still being deleted (`not-ready`), refused (`refused`), blocked before it left by an
+ * organization switch (`not-sent`), or without an answer (`unknown`).
  *
- * @type {'done' | 'gone' | 'refused' | 'unknown'}
+ * @type {'done' | 'gone' | 'not-ready' | 'refused' | 'not-sent' | 'unknown'}
  */
-type WriteOutcome = 'done' | 'gone' | 'refused' | 'unknown';
+type WriteOutcome = 'done' | 'gone' | 'not-ready' | 'refused' | 'not-sent' | 'unknown';
+
+/**
+ * Type Verdict
+ *
+ * @description
+ * What the reads after a write without an answer found: the expected change (`applied`), or no
+ * proof either way (`unconfirmed`); null once the organization or the page changed.
+ *
+ * @type {'applied' | 'unconfirmed' | null}
+ */
+type Verdict = 'applied' | 'unconfirmed' | null;
+
+/**
+ * Type ToastTone
+ *
+ * @description
+ * The `CwToastService` methods the store uses.
+ *
+ * @type {'success' | 'info' | 'warning' | 'error'}
+ */
+type ToastTone = 'success' | 'info' | 'warning' | 'error';
+
+/**
+ * Interface ReadLane
+ *
+ * @description
+ * The single-flight lane of the store's own reads: one read runs, at most one more waits for it.
+ */
+interface ReadLane {
+  // #region Properties
+  /**
+   * Property running
+   *
+   * @description
+   * The read in flight, or null.
+   *
+   * @type {Promise<TrashSnapshot | null> | null}
+   */
+  running: Promise<TrashSnapshot | null> | null;
+
+  /**
+   * Property queued
+   *
+   * @description
+   * The read that starts once the running one ends, shared by every caller meanwhile, or null.
+   *
+   * @type {Promise<TrashSnapshot | null> | null}
+   */
+  queued: Promise<TrashSnapshot | null> | null;
+
+  /**
+   * Property queuedPassive
+   *
+   * @description
+   * Whether the queued read is passive: only when every caller asked for a passive one.
+   *
+   * @type {boolean}
+   */
+  queuedPassive: boolean;
+
+  /**
+   * Property controller
+   *
+   * @description
+   * Aborts the reads of the current organization epoch, on an organization change and on destroy.
+   *
+   * @type {AbortController}
+   */
+  controller: AbortController;
+  // #endregion
+}
 
 /**
  * Interface TrashState
  *
  * @description
- * What the store adds to the reads: the background reads, the writes confirmed and in flight.
- * All of it belongs to the current organization and starts over when it changes.
+ * The organization epoch, the background reads and the writes confirmed and in flight. All but
+ * the epoch belong to the current organization and start over when it changes.
  */
 interface TrashState {
   // #region Properties
   /**
+   * Property epoch
+   *
+   * @description
+   * Rises on each organization change (A, then B, then A again gives three epochs). A dialog opened
+   * in an epoch confirms only in that epoch.
+   *
+   * @type {number}
+   * @readonly
+   */
+  readonly epoch: number;
+
+  /**
    * Property _latest
    *
    * @description
-   * The newest background read (on focus, on reconnection, after a write), or null.
+   * The newest of the store's own reads (on focus, on reconnection, after a write), or null.
    *
    * @type {TrashSnapshot | null}
    * @readonly
@@ -147,8 +258,9 @@ interface TrashState {
    * Property _gone
    *
    * @description
-   * Entries a confirmed write took out of the trash. An entry id never comes back (deleting the
-   * task again makes a new entry), so a read that started before the write cannot show them again.
+   * Entries a write confirmed with a success took out of the trash. An entry id never comes back
+   * (deleting the task again makes a new entry), so a read that started before the write cannot
+   * show them again. A `404` or a read's absence never pins an entry here: the reads decide.
    *
    * @type {Readonly<Partial<Record<string, true>>>}
    * @readonly
@@ -171,7 +283,7 @@ interface TrashState {
    * Property _pending
    *
    * @description
-   * The write in flight on each entry.
+   * The write in flight on each entry, kept until its outcome is known or given up.
    *
    * @type {Readonly<Partial<Record<string, TrashWrite>>>}
    * @readonly
@@ -182,58 +294,13 @@ interface TrashState {
    * Property _emptying
    *
    * @description
-   * Whether `Empty the trash` is in flight.
+   * Whether `Empty the trash` is in flight or being confirmed.
    *
    * @type {boolean}
    * @readonly
    */
   readonly _emptying: boolean;
   // #endregion
-}
-
-/**
- * Constant initialState
- *
- * @description
- * No background read, no write.
- *
- * @type {TrashState}
- */
-const initialState: TrashState = {
-  _latest: null,
-  _gone: {},
-  _emptiedAt: -1,
-  _pending: {},
-  _emptying: false,
-};
-
-/**
- * Function without
- *
- * @description
- * A copy of a record without one key.
- *
- * @param {Readonly<Record<string, T>>} record - The record.
- * @param {string} key - The key to drop.
- * @returns {Record<string, T>} The copy.
- */
-function without<T>(record: Readonly<Record<string, T>>, key: string): Record<string, T> {
-  return Object.fromEntries(Object.entries(record).filter(([id]: [string, T]) => id !== key));
-}
-
-/**
- * Function classify
- *
- * @description
- * Reads a failed write: `404 trash-entry.not-found` is `gone`, a lost answer (no status, a
- * timeout or a `5xx`) is `unknown`, anything else is a refusal.
- *
- * @param {unknown} error - The failure.
- * @returns {WriteOutcome} The outcome.
- */
-function classify(error: unknown): WriteOutcome {
-  if (isTrashEntryGone(error)) return 'gone';
-  return isUncertainTrashWrite(error) ? 'unknown' : 'refused';
 }
 
 /**
@@ -244,6 +311,17 @@ function classify(error: unknown): WriteOutcome {
  */
 export interface TrashStoreInstance {
   // #region Properties
+  /**
+   * Property epoch
+   *
+   * @description
+   * The organization epoch; the page binds each confirmation dialog to the epoch it opened in.
+   *
+   * @type {Signal<number>}
+   * @readonly
+   */
+  readonly epoch: Signal<number>;
+
   /**
    * Property loading
    *
@@ -260,12 +338,23 @@ export interface TrashStoreInstance {
    * Property count
    *
    * @description
-   * Entries shown.
+   * Entries in the trash: those shown and those past the read's cap.
    *
    * @type {Signal<number>}
    * @readonly
    */
   readonly count: Signal<number>;
+
+  /**
+   * Property hiddenCount
+   *
+   * @description
+   * Entries in the trash past the read's cap, which the page does not list.
+   *
+   * @type {Signal<number>}
+   * @readonly
+   */
+  readonly hiddenCount: Signal<number>;
 
   /**
    * Property readAt
@@ -294,7 +383,7 @@ export interface TrashStoreInstance {
    * Property emptying
    *
    * @description
-   * Whether `Empty the trash` is in flight.
+   * Whether `Empty the trash` is in flight or being confirmed.
    *
    * @type {Signal<boolean>}
    * @readonly
@@ -305,7 +394,7 @@ export interface TrashStoreInstance {
    * Property writing
    *
    * @description
-   * Whether any write is in flight; `Empty the trash` waits for none.
+   * Whether any write is in flight or being confirmed; `Empty the trash` waits for none.
    *
    * @type {Signal<boolean>}
    * @readonly
@@ -318,7 +407,8 @@ export interface TrashStoreInstance {
    * Method isPending
    *
    * @description
-   * Whether a restore or a purge of the entry is in flight. Reactive in a template.
+   * Whether a restore or a purge of the entry is in flight or being confirmed. Reactive in a
+   * template.
    *
    * @param {string} entryId - The trash entry.
    * @returns {boolean} Whether a write on it is in flight.
@@ -329,9 +419,8 @@ export interface TrashStoreInstance {
    * Method restore
    *
    * @description
-   * Restores an entry with its subtasks, then toasts `KEY restored` with `Open`, or
-   * `Already restored` when it was no longer in the trash. Ignored while a write on it or the
-   * emptying runs.
+   * Restores an entry with its subtasks, then toasts the outcome. Ignored while a write on it or
+   * the emptying runs.
    *
    * @param {TrashEntry} entry - The entry.
    * @returns {Promise<void>} Settles once the outcome is shown.
@@ -342,25 +431,114 @@ export interface TrashStoreInstance {
    * Method purge
    *
    * @description
-   * Erases an entry for good, then toasts `KEY erased`. Ignored while a write on it or the
-   * emptying runs.
+   * Erases an entry for good, then toasts the outcome. Ignored while a write on it or the
+   * emptying runs, and when the organization epoch is no longer the given one.
    *
    * @param {TrashEntry} entry - The entry.
+   * @param {number} epoch - The epoch the confirmation opened in.
    * @returns {Promise<void>} Settles once the outcome is shown.
    */
-  purge(entry: TrashEntry): Promise<void>;
+  purge(entry: TrashEntry, epoch: number): Promise<void>;
 
   /**
    * Method empty
    *
    * @description
-   * Takes every entry out of the trash, then toasts `Trash emptied`. Ignored while any write
-   * runs.
+   * Takes every entry out of the trash, then toasts the outcome. Ignored while any write runs, and
+   * when the organization epoch is no longer the given one.
    *
+   * @param {number} epoch - The epoch the confirmation opened in.
    * @returns {Promise<void>} Settles once the outcome is shown.
    */
-  empty(): Promise<void>;
+  empty(epoch: number): Promise<void>;
   // #endregion
+}
+
+/**
+ * Constant initialState
+ *
+ * @description
+ * The first epoch, no read of the store's own, no write.
+ *
+ * @type {TrashState}
+ */
+const initialState: TrashState = {
+  epoch: 0,
+  _latest: null,
+  _gone: {},
+  _emptiedAt: -1,
+  _pending: {},
+  _emptying: false,
+};
+
+/**
+ * Function without
+ *
+ * @description
+ * A copy of a record without one key.
+ *
+ * @param {Readonly<Partial<Record<string, T>>>} record - The record.
+ * @param {string} key - The key to drop.
+ * @returns {Partial<Record<string, T>>} The copy.
+ */
+function without<T>(
+  record: Readonly<Partial<Record<string, T>>>,
+  key: string,
+): Partial<Record<string, T>> {
+  return Object.fromEntries(
+    Object.entries(record).filter(([id]: [string, T | undefined]) => id !== key),
+  );
+}
+
+/**
+ * Function classify
+ *
+ * @description
+ * Reads a failed write. A write blocked by an organization switch never left; a lost answer (no
+ * status, a timeout, a `408` or a `5xx`) is unknown; a `404 trash-entry.not-found` and a
+ * `409 trash-entry.not-restorable-yet` are named; anything else is a refusal.
+ *
+ * @param {unknown} error - The failure.
+ * @returns {WriteOutcome} The outcome.
+ */
+function classify(error: unknown): WriteOutcome {
+  if (isTrashWriteNotSent(error)) return 'not-sent';
+  if (isTrashEntryGone(error)) return 'gone';
+  if (isTrashEntryNotReady(error)) return 'not-ready';
+  return isUncertainTrashWrite(error) ? 'unknown' : 'refused';
+}
+
+/**
+ * Function listed
+ *
+ * @description
+ * Whether a read may still hold an entry: it lists it, or it stopped at its cap before reaching
+ * entries as old as it, so its absence proves nothing.
+ *
+ * @param {TrashSnapshot} snapshot - The read.
+ * @param {TrashEntry} entry - The entry.
+ * @returns {boolean} Whether the entry may still be in the trash.
+ */
+function listed(snapshot: TrashSnapshot, entry: TrashEntry): boolean {
+  if (snapshot.entries.some((item: TrashEntry) => item.id === entry.id)) return true;
+  if (snapshot.total <= snapshot.entries.length) return false;
+  const oldest: TrashEntry | undefined = snapshot.entries.at(-1);
+  return !oldest || Date.parse(entry.trashedAt) <= Date.parse(oldest.trashedAt);
+}
+
+/**
+ * Function pause
+ *
+ * @description
+ * Waits a delay.
+ *
+ * @param {number} ms - Delay, in milliseconds.
+ * @returns {Promise<void>} Resolves after it.
+ */
+function pause(ms: number): Promise<void> {
+  return new Promise<void>((resolve: () => void) => {
+    setTimeout(resolve, ms);
+  });
 }
 
 /**
@@ -374,19 +552,27 @@ export interface TrashStoreInstance {
 function createTrashStore(): Type<TrashStoreInstance> {
   return signalStore(
     withState(initialState),
-    withProps(() => {
+    withProps((store) => {
       const api: TrashApi = inject(TrashApi);
       const pin: OrganizationPin = inject(OrganizationPin);
       const reads: { seq: number } = { seq: 0 };
-      const organization: () => { organizationId: string } | undefined = () => {
+      const organization: () => { organizationId: string; epoch: number } | undefined = () => {
         const organizationId: string | null = pin.current();
-        return organizationId ? { organizationId } : undefined;
+        return organizationId ? { organizationId, epoch: store.epoch() } : undefined;
+      };
+      const lane: ReadLane = {
+        running: null,
+        queued: null,
+        queuedPassive: true,
+        controller: new AbortController(),
       };
       return {
         _api: api,
         _pin: pin,
         _reads: reads,
-        _generation: { value: 0 },
+        _lane: lane,
+        _shownToasts: new Set<string>(),
+        _delays: inject(TRASH_RECONCILE_DELAYS),
         _toasts: inject(CwToastService),
         _navigation: inject<NavigationRefreshPort | null>(NAVIGATION_REFRESH, { optional: true }),
         _opener: inject(TaskDetailOpener),
@@ -399,13 +585,20 @@ function createTrashStore(): Type<TrashStoreInstance> {
             params,
             abortSignal,
           }: {
-            params: { organizationId: string };
+            params: { organizationId: string; epoch: number };
             abortSignal: AbortSignal;
           }): Promise<TrashSnapshot> => {
             reads.seq += 1;
             const seq: number = reads.seq;
-            const entries: readonly TrashEntry[] = await api.entries({ signal: abortSignal });
-            return { organizationId: params.organizationId, seq, readAt: Date.now(), entries };
+            const listing: TrashListing = await api.entries({ signal: abortSignal });
+            return {
+              organizationId: params.organizationId,
+              epoch: params.epoch,
+              seq,
+              readAt: Date.now(),
+              entries: listing.entries,
+              total: listing.total,
+            };
           },
         }),
         _members: resource({
@@ -417,21 +610,30 @@ function createTrashStore(): Type<TrashStoreInstance> {
     withComputed((store) => {
       const snapshot: Signal<TrashSnapshot | undefined> = computed(() => {
         const organizationId: string | null = store._pin.current();
+        const epoch: number = store.epoch();
         const primary: TrashSnapshot | undefined = store._primary.value();
         const latest: TrashSnapshot | null = store._latest();
         let newest: TrashSnapshot | undefined;
         for (const candidate of [primary, latest]) {
-          if (candidate?.organizationId !== organizationId) continue;
+          if (candidate?.organizationId !== organizationId || candidate.epoch !== epoch) continue;
           if (!newest || candidate.seq > newest.seq) newest = candidate;
         }
         return newest;
       });
+      const emptied: Signal<boolean> = computed(
+        (): boolean => (snapshot()?.seq ?? Infinity) <= store._emptiedAt(),
+      );
       const visible: Signal<readonly TrashEntry[] | undefined> = computed(() => {
         const current: TrashSnapshot | undefined = snapshot();
         if (!current) return undefined;
-        if (current.seq <= store._emptiedAt()) return [];
+        if (emptied()) return [];
         const gone: Readonly<Partial<Record<string, true>>> = store._gone();
-        return current.entries.filter((entry: TrashEntry) => !gone[entry.id]);
+        return current.entries.filter((entry: TrashEntry) => gone[entry.id] === undefined);
+      });
+      const hidden: Signal<number> = computed((): number => {
+        const current: TrashSnapshot | undefined = snapshot();
+        if (!current || emptied()) return 0;
+        return Math.max(0, current.total - current.entries.length);
       });
       const names: Signal<ReadonlyMap<string, string> | null> = computed(() =>
         store._members.hasValue() ? store._members.value() : null,
@@ -446,7 +648,8 @@ function createTrashStore(): Type<TrashStoreInstance> {
       return {
         _visible: visible,
         loading: computed((): boolean => visible() === undefined),
-        count: computed((): number => visible()?.length ?? 0),
+        count: computed((): number => (visible()?.length ?? 0) + hidden()),
+        hiddenCount: hidden,
         readAt: computed((): number => snapshot()?.readAt ?? 0),
         emptying: computed((): boolean => store._emptying()),
         writing: computed(
@@ -463,8 +666,33 @@ function createTrashStore(): Type<TrashStoreInstance> {
       };
     }),
     withMethods((store) => {
-      const current: (generation: number) => boolean = (generation: number): boolean =>
-        generation === store._generation.value;
+      // A write's answer applies only in the organization and epoch it started in, on a live page.
+      const current: (epoch: number, organizationId: string) => boolean = (
+        epoch: number,
+        organizationId: string,
+      ): boolean =>
+        !store._destroyRef.destroyed &&
+        epoch === store.epoch() &&
+        store._pin.current() === organizationId;
+
+      const show: (
+        tone: ToastTone,
+        title: string,
+        options?: Parameters<CwToastService['show']>[1],
+      ) => void = (tone, title, options): void => {
+        const live: ReadonlySet<string> = new Set(
+          store._toasts.toasts().map((item: { readonly id: string }): string => item.id),
+        );
+        for (const kept of store._shownToasts) if (!live.has(kept)) store._shownToasts.delete(kept);
+        store._shownToasts.add(
+          options ? store._toasts[tone](title, options) : store._toasts[tone](title),
+        );
+      };
+
+      const dismissToasts: () => void = (): void => {
+        for (const id of store._shownToasts) store._toasts.dismiss(id);
+        store._shownToasts.clear();
+      };
 
       const settle: (entryId: string, gone: boolean) => void = (
         entryId: string,
@@ -476,56 +704,94 @@ function createTrashStore(): Type<TrashStoreInstance> {
         });
       };
 
-      const readAgain: (passive?: boolean) => Promise<TrashSnapshot | null> = async (
-        passive: boolean = false,
+      const run: (passive: boolean) => Promise<TrashSnapshot | null> = async (
+        passive: boolean,
       ): Promise<TrashSnapshot | null> => {
         const organizationId: string | null = store._pin.current();
         if (!organizationId) return null;
-        const generation: number = store._generation.value;
+        const epoch: number = store.epoch();
         store._reads.seq += 1;
         const seq: number = store._reads.seq;
         try {
-          const entries: readonly TrashEntry[] = await store._api.entries({ passive });
-          if (!current(generation)) return null;
-          const snapshot: TrashSnapshot = { organizationId, seq, readAt: Date.now(), entries };
+          const listing: TrashListing = await store._api.entries({
+            passive,
+            signal: store._lane.controller.signal,
+          });
+          if (!current(epoch, organizationId)) return null;
+          const snapshot: TrashSnapshot = {
+            organizationId,
+            epoch,
+            seq,
+            readAt: Date.now(),
+            entries: listing.entries,
+            total: listing.total,
+          };
           const latest: TrashSnapshot | null = store._latest();
-          if (latest?.organizationId !== organizationId || latest.seq < seq) {
-            patchState(store, { _latest: snapshot });
-          }
+          if (latest?.epoch !== epoch || latest.seq < seq) patchState(store, { _latest: snapshot });
           return snapshot;
         } catch {
           return null;
         }
       };
 
-      // After a write without an answer, the trash read again decides: the entry still listed
-      // means the write was not applied. Null when the organization changed meanwhile.
-      const confirm: (
-        entryIds: readonly string[],
-        generation: number,
-      ) => Promise<WriteOutcome | null> = async (
-        entryIds: readonly string[],
-        generation: number,
-      ): Promise<WriteOutcome | null> => {
-        const snapshot: TrashSnapshot | null = await readAgain();
-        if (!current(generation)) return null;
-        if (!snapshot) return 'unknown';
-        const listed: boolean = snapshot.entries.some((entry: TrashEntry) =>
-          entryIds.includes(entry.id),
-        );
-        return listed ? 'refused' : 'done';
+      // Single flight: while a read runs, every caller shares one read queued after it, which
+      // started after their call, so its answer is fresh for each of them.
+      const read: (passive: boolean) => Promise<TrashSnapshot | null> = (
+        passive: boolean,
+      ): Promise<TrashSnapshot | null> => {
+        const lane: ReadLane = store._lane;
+        if (lane.running === null) {
+          const started: Promise<TrashSnapshot | null> = run(passive).finally(() => {
+            if (lane.running === started) lane.running = null;
+          });
+          lane.running = started;
+          return started;
+        }
+        if (lane.queued === null) {
+          lane.queuedPassive = passive;
+          const next: Promise<TrashSnapshot | null> = lane.running.then(() => {
+            if (lane.queued === next) lane.queued = null;
+            return read(lane.queuedPassive);
+          });
+          lane.queued = next;
+          return next;
+        }
+        lane.queuedPassive &&= passive;
+        return lane.queued;
+      };
+
+      // After a write without an answer, the trash is read again after each delay until a read
+      // shows the expected change; one read right after the failure would prove nothing.
+      const reconcile: (
+        applied: (snapshot: TrashSnapshot) => boolean,
+        epoch: number,
+        organizationId: string,
+      ) => Promise<Verdict> = async (applied, epoch, organizationId): Promise<Verdict> => {
+        for (const delay of store._delays) {
+          await pause(delay);
+          if (!current(epoch, organizationId)) return null;
+          const snapshot: TrashSnapshot | null = await read(false);
+          if (!current(epoch, organizationId)) return null;
+          if (snapshot && applied(snapshot)) return 'applied';
+        }
+        return 'unconfirmed';
       };
 
       const unconfirmed: () => void = (): void => {
-        store._toasts.error(TRASH_UNCONFIRMED, { description: TRASH_UNCONFIRMED_TEXT });
+        show('warning', TRASH_UNCONFIRMED, { description: TRASH_UNCONFIRMED_TEXT });
       };
 
-      const restored: (restore: TrashRestore) => void = (restore: TrashRestore): void => {
-        store._toasts.success(trashRestoredTitle(restore.taskKey), {
+      const restored: (restore: TrashRestore, epoch: number, organizationId: string) => void = (
+        restore: TrashRestore,
+        epoch: number,
+        organizationId: string,
+      ): void => {
+        show('success', trashRestoredTitle(restore.taskKey), {
           description: trashRestoredText(restore),
           action: {
             label: TRASH_TOAST_OPEN,
             run: (): void => {
+              if (!current(epoch, organizationId)) return;
               void store._opener.open(restore.taskKey, {
                 key: restore.taskKey,
                 name: restore.taskName,
@@ -535,7 +801,6 @@ function createTrashStore(): Type<TrashStoreInstance> {
             },
           },
         });
-        store._navigation?.refresh();
       };
 
       return {
@@ -544,8 +809,9 @@ function createTrashStore(): Type<TrashStoreInstance> {
         },
 
         async restore(entry: TrashEntry): Promise<void> {
-          if (store._pending()[entry.id] || store._emptying()) return;
-          const generation: number = store._generation.value;
+          const organizationId: string | null = store._pin.current();
+          if (!organizationId || store._pending()[entry.id] || store._emptying()) return;
+          const epoch: number = store.epoch();
           patchState(store, { _pending: { ...store._pending(), [entry.id]: 'restore' } });
           let outcome: WriteOutcome;
           let restore: TrashRestore | null = null;
@@ -555,89 +821,108 @@ function createTrashStore(): Type<TrashStoreInstance> {
           } catch (error: unknown) {
             outcome = classify(error);
           }
-          if (!current(generation)) return;
-          if (outcome === 'unknown') {
-            const confirmed: WriteOutcome | null = await confirm([entry.id], generation);
-            if (confirmed === null) return;
-            outcome = confirmed;
-          }
-          settle(entry.id, outcome === 'done' || outcome === 'gone');
+          if (!current(epoch, organizationId)) return;
           switch (outcome) {
             case 'done':
-              restored(
-                restore ?? {
-                  taskKey: entry.taskKey,
-                  taskName: entry.taskName,
-                  status: entry.status,
-                  listName: entry.listName,
-                  subtaskCount: entry.subtaskCount,
-                  detached: false,
-                },
-              );
-              if (restore) void readAgain();
+              settle(entry.id, true);
+              if (restore) restored(restore, epoch, organizationId);
+              store._navigation?.refresh();
+              void read(false);
               return;
             case 'gone':
-              store._toasts.info(TRASH_ALREADY_RESTORED);
+              await read(false);
+              if (!current(epoch, organizationId)) return;
+              settle(entry.id, false);
+              show('info', TRASH_ALREADY_RESTORED);
               store._navigation?.refresh();
-              void readAgain();
+              return;
+            case 'not-ready':
+              settle(entry.id, false);
+              show('warning', trashNotReadyTitle(entry.taskKey), {
+                description: TRASH_NOT_READY_TEXT,
+              });
               return;
             case 'refused':
-              store._toasts.error(trashRestoreFailed(entry.taskKey));
+              settle(entry.id, false);
+              show('error', trashRestoreFailed(entry.taskKey));
               return;
-            case 'unknown':
-              unconfirmed();
+            case 'not-sent':
+              settle(entry.id, false);
               return;
+            case 'unknown': {
+              const verdict: Verdict = await reconcile(
+                (snapshot: TrashSnapshot) => !listed(snapshot, entry),
+                epoch,
+                organizationId,
+              );
+              if (verdict === null) return;
+              settle(entry.id, false);
+              if (verdict === 'applied') {
+                show('info', trashGoneTitle(entry.taskKey));
+                store._navigation?.refresh();
+              } else unconfirmed();
+              return;
+            }
           }
         },
 
-        async purge(entry: TrashEntry): Promise<void> {
+        async purge(entry: TrashEntry, expected: number): Promise<void> {
+          const organizationId: string | null = store._pin.current();
+          if (!organizationId || expected !== store.epoch()) return;
           if (store._pending()[entry.id] || store._emptying()) return;
-          const generation: number = store._generation.value;
+          const epoch: number = store.epoch();
           patchState(store, { _pending: { ...store._pending(), [entry.id]: 'purge' } });
           let outcome: WriteOutcome;
-          let answered: boolean = true;
           try {
             await store._api.purge(entry.id);
             outcome = 'done';
           } catch (error: unknown) {
             outcome = classify(error);
           }
-          if (!current(generation)) return;
-          if (outcome === 'unknown') {
-            answered = false;
-            const confirmed: WriteOutcome | null = await confirm([entry.id], generation);
-            if (confirmed === null) return;
-            outcome = confirmed;
-          }
-          settle(entry.id, outcome === 'done' || outcome === 'gone');
+          if (!current(epoch, organizationId)) return;
           switch (outcome) {
             case 'done':
-              store._toasts.success(trashPurgedTitle(entry.taskKey), {
-                description: TRASH_PURGED_TEXT,
-              });
+              settle(entry.id, true);
+              show('success', trashPurgedTitle(entry.taskKey), { description: TRASH_PURGED_TEXT });
               store._navigation?.refreshCounts();
-              if (answered) void readAgain();
+              void read(false);
               return;
             case 'gone':
-              store._toasts.info(trashGoneTitle(entry.taskKey));
+              await read(false);
+              if (!current(epoch, organizationId)) return;
+              settle(entry.id, false);
+              show('info', trashGoneTitle(entry.taskKey));
               store._navigation?.refreshCounts();
-              void readAgain();
               return;
-            case 'refused':
-              store._toasts.error(trashPurgeFailed(entry.taskKey));
+            case 'not-sent':
+              settle(entry.id, false);
               return;
-            case 'unknown':
-              unconfirmed();
+            case 'unknown': {
+              const verdict: Verdict = await reconcile(
+                (snapshot: TrashSnapshot) => !listed(snapshot, entry),
+                epoch,
+                organizationId,
+              );
+              if (verdict === null) return;
+              settle(entry.id, false);
+              if (verdict === 'applied') {
+                show('info', trashGoneTitle(entry.taskKey));
+                store._navigation?.refreshCounts();
+              } else unconfirmed();
+              return;
+            }
+            default:
+              settle(entry.id, false);
+              show('error', trashPurgeFailed(entry.taskKey));
               return;
           }
         },
 
-        async empty(): Promise<void> {
-          if (store.writing()) return;
-          const generation: number = store._generation.value;
-          const shown: readonly string[] = (store._visible() ?? []).map(
-            (entry: TrashEntry) => entry.id,
-          );
+        async empty(expected: number): Promise<void> {
+          const organizationId: string | null = store._pin.current();
+          if (!organizationId || expected !== store.epoch() || store.writing()) return;
+          const epoch: number = store.epoch();
+          const shown: readonly TrashEntry[] = store._visible() ?? [];
           patchState(store, { _emptying: true });
           let outcome: WriteOutcome;
           let count: number = shown.length;
@@ -645,42 +930,62 @@ function createTrashStore(): Type<TrashStoreInstance> {
             count = await store._api.empty();
             outcome = 'done';
           } catch (error: unknown) {
-            outcome = isUncertainTrashWrite(error) ? 'unknown' : 'refused';
+            outcome = classify(error);
           }
-          if (!current(generation)) return;
-          const answered: boolean = outcome === 'done';
-          if (outcome === 'unknown') {
-            const confirmed: WriteOutcome | null = await confirm(shown, generation);
-            if (confirmed === null) return;
-            outcome = confirmed;
-          }
-          if (outcome !== 'done') {
-            patchState(store, { _emptying: false });
-            if (outcome === 'refused') store._toasts.error(TRASH_EMPTY_FAILED);
-            else unconfirmed();
+          if (!current(epoch, organizationId)) return;
+          if (outcome === 'done') {
+            patchState(store, {
+              _emptying: false,
+              _gone: {
+                ...store._gone(),
+                ...Object.fromEntries(shown.map((entry: TrashEntry) => [entry.id, true as const])),
+              },
+              _emptiedAt: store._reads.seq,
+            });
+            show('success', TRASH_EMPTIED, { description: trashEmptiedText(count) });
+            store._navigation?.refreshCounts();
+            void read(false);
             return;
           }
-          patchState(store, {
-            _emptying: false,
-            _gone: {
-              ...store._gone(),
-              ...Object.fromEntries(shown.map((id: string) => [id, true as const])),
-            },
-            ...(answered ? { _emptiedAt: store._reads.seq } : {}),
-          });
-          store._toasts.success(TRASH_EMPTIED, { description: trashEmptiedText(count) });
-          store._navigation?.refreshCounts();
-          if (answered) void readAgain();
+          if (outcome === 'unknown') {
+            // With nothing shown to look for, only an empty trash proves the emptying.
+            const verdict: Verdict = await reconcile(
+              (snapshot: TrashSnapshot) =>
+                shown.length === 0
+                  ? snapshot.total === 0
+                  : shown.every((entry: TrashEntry) => !listed(snapshot, entry)),
+              epoch,
+              organizationId,
+            );
+            if (verdict === null) return;
+            patchState(store, { _emptying: false });
+            if (verdict === 'applied') {
+              show('success', TRASH_EMPTIED, { description: trashEmptiedText(shown.length) });
+              store._navigation?.refreshCounts();
+            } else unconfirmed();
+            return;
+          }
+          patchState(store, { _emptying: false });
+          if (outcome !== 'not-sent') show('error', TRASH_EMPTY_FAILED);
         },
 
         _readAgain(passive: boolean): void {
           if (store._primary.isLoading() || !store._primary.hasValue()) return;
-          void readAgain(passive);
+          void read(passive);
         },
 
         _reset(): void {
-          store._generation.value += 1;
-          patchState(store, initialState);
+          store._lane.controller.abort();
+          store._lane.controller = new AbortController();
+          store._lane.running = null;
+          store._lane.queued = null;
+          dismissToasts();
+          patchState(store, { ...initialState, epoch: store.epoch() + 1 });
+        },
+
+        _dispose(): void {
+          store._lane.controller.abort();
+          dismissToasts();
         },
       };
     }),
@@ -701,6 +1006,9 @@ function createTrashStore(): Type<TrashStoreInstance> {
           store._readAgain(false);
         });
       },
+      onDestroy(store): void {
+        store._dispose();
+      },
     }),
   );
 }
@@ -710,21 +1018,26 @@ function createTrashStore(): Type<TrashStoreInstance> {
  *
  * @description
  * The trash page of the current organization (`App.dc.html` lines 1965-1997 and 8371-8419),
- * page-scoped. Its primary read (`listTrash` to the last page) follows the pinned organization;
- * its failure reaches the route's error boundary through `rows`, `count` and `loading`. The
- * member directory names who deleted each entry; its failure only leaves the names out.
+ * page-scoped. Its primary read (`listTrash`, up to 1,000 entries) follows the pinned organization
+ * and its epoch; its failure reaches the route's error boundary through `rows`, `count` and
+ * `loading`. The member directory names who deleted each entry; its failure only leaves the names
+ * out.
  *
- * The trash is read again on window focus, on realtime reconnection, when a task detail opened
- * from the page closes, and after each write. Reads are ranked by start: a read never replaces
- * one that started after it, and a confirmed restore, purge or emptying hides what a read started
- * before it still shows, so a confirmed write is never undone by an older answer.
+ * The store's own reads (on window focus, on realtime reconnection, when a task detail closes over
+ * the page, after each write) run one at a time with one more queued, and abort on an organization
+ * change and on destroy. Reads are ranked by start: a read never replaces one that started after
+ * it, and a write confirmed by a success hides what an older read still shows.
  *
- * Each write is bound to the organization it started in: when it changes meanwhile, its answer
- * patches nothing and raises no toast. A write without an answer (no status, a timeout, a `5xx`)
- * is not taken as failed: the trash is read again and the entry's presence decides; when that read
- * fails too, `Could not confirm the change` says so and the entry stays. After a restore the
- * sidebar reads its spaces and lists again (`NAVIGATION_REFRESH.refresh`); after a purge or an
- * emptying only its counts (`refreshCounts`).
+ * Each write is bound to the organization and the epoch it started in, on a live page: otherwise
+ * its answer patches nothing and raises no toast. A write blocked by an organization switch is
+ * dropped silently. A write without an answer (no status, a timeout, a `5xx`) keeps its entry
+ * pending while the trash is read again after 2, 4 and 8 seconds: the expected absence gives a
+ * neutral `KEY is no longer in the trash` (or `Trash emptied`), and no proof gives
+ * `Could not confirm the change` and frees the entry. A `404` never hides an entry by itself: the
+ * read that follows decides. A restore asks `reportNotReady`, so a list still being deleted
+ * answers `KEY cannot be restored yet`. After a restore the sidebar reads its spaces and lists
+ * again (`NAVIGATION_REFRESH.refresh`); after a purge or an emptying only its counts
+ * (`refreshCounts`). The page's toasts are dismissed on an organization change and on destroy.
  *
  * @type {ReturnType<typeof createTrashStore>}
  */
