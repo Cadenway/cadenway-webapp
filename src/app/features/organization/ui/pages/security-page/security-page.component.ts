@@ -27,48 +27,72 @@ import { type UnsavedChanges, warnBeforeUnload } from '@shared/unsaved-changes';
 import type {
   AuthenticationPolicy,
   AuthenticationPolicyChange,
+  AuthenticationPolicyForm,
   AuthenticationPolicySaveOutcome,
-  AuthenticationPolicySettings,
   SessionTimeoutOption,
+  TwoStepRequirement,
 } from '../../../models/authentication-policy/authentication-policy.interface';
 import { AuthenticationPolicyStore } from '../../../state/authentication-policy/authentication-policy.store';
 
 /**
- * Function settingsOf
+ * Function formOf
  *
  * @description
- * The editable part of a policy, or nothing selected while none is read.
+ * The form value of a saved policy, or nothing on or selected while none is read. A saved
+ * `everyone` sets both switches, a saved `admins` the administrators' one; a requirement this
+ * version does not know sets neither.
  *
  * @param {AuthenticationPolicy | null} policy - The saved policy.
- * @returns {AuthenticationPolicySettings} What the form starts from.
+ * @returns {AuthenticationPolicyForm} What the form starts from.
  */
-function settingsOf(policy: AuthenticationPolicy | null): AuthenticationPolicySettings {
+function formOf(policy: AuthenticationPolicy | null): AuthenticationPolicyForm {
+  const required: TwoStepRequirement | null = policy?.twoStepRequiredFor ?? null;
   return {
-    twoStepRequiredFor: policy?.twoStepRequiredFor ?? null,
+    requireAdmins: required === 'admins' || required === 'everyone',
+    requireEveryone: required === 'everyone',
     sessionTimeoutMinutes: policy?.sessionTimeoutMinutes ?? null,
   };
+}
+
+/**
+ * Function requirementOf
+ *
+ * @description
+ * The two-step requirement the switches select.
+ *
+ * @param {AuthenticationPolicyForm} value - The form value.
+ * @returns {TwoStepRequirement} `everyone`, else `admins`, else `nobody`.
+ */
+function requirementOf(value: AuthenticationPolicyForm): TwoStepRequirement {
+  if (value.requireEveryone) return 'everyone';
+  return value.requireAdmins ? 'admins' : 'nobody';
 }
 
 /**
  * Function changeBetween
  *
  * @description
- * What the edited settings change from the saved policy. A value still unknown (null) is never
- * sent, so a value a later contract added stays as it is until the person picks another one.
+ * What the form changes from the saved policy. The requirement is sent only once a switch differs
+ * from what the saved policy set and the requirement it selects differs from the saved one; the
+ * timeout only once another option is picked. Switching back is therefore clean, and a value a
+ * later contract added stays as it is until the person changes its control.
  *
  * @param {AuthenticationPolicy | null} saved - The saved policy.
- * @param {AuthenticationPolicySettings} edited - The form's settings.
+ * @param {AuthenticationPolicyForm} edited - The form value.
  * @returns {AuthenticationPolicyChange} The members that differ; empty when nothing does.
  */
 function changeBetween(
   saved: AuthenticationPolicy | null,
-  edited: AuthenticationPolicySettings,
+  edited: AuthenticationPolicyForm,
 ): AuthenticationPolicyChange {
   if (saved === null) return {};
+  const start: AuthenticationPolicyForm = formOf(saved);
+  const switched: boolean =
+    edited.requireAdmins !== start.requireAdmins ||
+    edited.requireEveryone !== start.requireEveryone;
+  const required: TwoStepRequirement = requirementOf(edited);
   return {
-    ...(edited.twoStepRequiredFor !== null && edited.twoStepRequiredFor !== saved.twoStepRequiredFor
-      ? { twoStepRequiredFor: edited.twoStepRequiredFor }
-      : {}),
+    ...(switched && required !== saved.twoStepRequiredFor ? { twoStepRequiredFor: required } : {}),
     ...(edited.sessionTimeoutMinutes !== null &&
     edited.sessionTimeoutMinutes !== saved.sessionTimeoutMinutes
       ? { sessionTimeoutMinutes: edited.sessionTimeoutMinutes }
@@ -90,14 +114,17 @@ function changeBetween(
  *
  * The mockup applies each control at once; here the card is a form with the `Unsaved changes`
  * footer, `Cancel` and `Save`. Requiring it for every member implies the administrators: the
- * administrators' switch then stays on and disabled, and turning `all members` off keeps the
- * administrators. `Save` sends only what changed, through the page's `AuthenticationPolicyStore`,
- * which asks for a recent authentication when the gateway wants one; it is disabled while nothing
- * changed and shows its pending state while the request runs, when the controls are disabled.
- * A save toasts `Session policy updated`; a stale version toasts the conflict and shows the latest
+ * administrators' switch then shows on and disabled, while it keeps the person's own choice, to
+ * which turning `all members` off goes back. `Save` sends only what changed, through the page's
+ * `AuthenticationPolicyStore`, which asks for a recent authentication when the gateway wants one
+ * and is bound to the organization shown; it is disabled while nothing changed and shows its
+ * pending state while the request runs, when the controls are disabled. A save of the timeout
+ * toasts `Session policy updated` with the new timeout, a save of the two-step requirement alone
+ * `Two-step verification policy updated`; a stale version toasts the conflict and shows the latest
  * policy; requiring two-step verification of one's own role without having it toasts why; any
- * other refusal toasts the failure and keeps the edits; closing the reauthentication dialog keeps
- * them silently.
+ * other refusal toasts the failure and keeps the edits. Closing the reauthentication dialog, a
+ * switch to another organization, leaving the page and a changed organization context keep them
+ * silently.
  *
  * While the policy loads, a skeleton of the card shows (`Loading the section`); a failed read
  * reaches the route's error boundary, whose `Retry` runs the route again. The route guards the
@@ -179,13 +206,14 @@ export class SecurityPage implements UnsavedChanges {
    * Property model
    *
    * @description
-   * The edited settings, reset to the saved policy whenever a read or a save replaces it.
+   * The form value, reset to the saved policy whenever a read or a save replaces it, an
+   * organization switch included.
    *
-   * @type {WritableSignal<AuthenticationPolicySettings>}
+   * @type {WritableSignal<AuthenticationPolicyForm>}
    * @readonly
    */
-  private readonly model: WritableSignal<AuthenticationPolicySettings> = linkedSignal(
-    (): AuthenticationPolicySettings => settingsOf(this.store.current()),
+  private readonly model: WritableSignal<AuthenticationPolicyForm> = linkedSignal(
+    (): AuthenticationPolicyForm => formOf(this.store.current()),
   );
 
   /**
@@ -194,15 +222,12 @@ export class SecurityPage implements UnsavedChanges {
    * @description
    * The card's form; its controls are disabled while a save runs.
    *
-   * @type {FieldTree<AuthenticationPolicySettings>}
+   * @type {FieldTree<AuthenticationPolicyForm>}
    * @readonly
    */
-  protected readonly policyForm: FieldTree<AuthenticationPolicySettings> = form(
-    this.model,
-    (path) => {
-      disabled(path.sessionTimeoutMinutes, { when: (): boolean => this.store.saving() });
-    },
-  );
+  protected readonly policyForm: FieldTree<AuthenticationPolicyForm> = form(this.model, (path) => {
+    disabled(path.sessionTimeoutMinutes, { when: (): boolean => this.store.saving() });
+  });
 
   /**
    * Property change
@@ -240,22 +265,22 @@ export class SecurityPage implements UnsavedChanges {
    * @readonly
    */
   protected readonly requiredForEveryone: Signal<boolean> = computed(
-    (): boolean => this.model().twoStepRequiredFor === 'everyone',
+    (): boolean => this.model().requireEveryone,
   );
 
   /**
    * Property requiredForAdmins
    *
    * @description
-   * Whether `Require two-step verification for administrators` is on, which `everyone` implies.
+   * Whether `Require two-step verification for administrators` shows on: the person's choice, or
+   * on while `everyone` implies it, without changing that choice.
    *
    * @type {Signal<boolean>}
    * @readonly
    */
   protected readonly requiredForAdmins: Signal<boolean> = computed((): boolean => {
-    const required: AuthenticationPolicySettings['twoStepRequiredFor'] =
-      this.model().twoStepRequiredFor;
-    return required === 'admins' || required === 'everyone';
+    const value: AuthenticationPolicyForm = this.model();
+    return value.requireAdmins || value.requireEveryone;
   });
   // #endregion
 
@@ -322,26 +347,24 @@ export class SecurityPage implements UnsavedChanges {
    * Method requireForAdmins
    *
    * @description
-   * Turns the administrators' requirement on or off; it is disabled while every member is
-   * required.
+   * Records the administrators' choice; the switch is disabled while every member is required.
    *
    * @param {boolean} required - The switch's new state.
    */
   protected requireForAdmins(required: boolean): void {
-    this.policyForm.twoStepRequiredFor().value.set(required ? 'admins' : 'nobody');
+    this.policyForm.requireAdmins().value.set(required);
   }
 
   /**
    * Method requireForEveryone
    *
    * @description
-   * Turns every member's requirement on or off; off keeps the administrators' requirement it
-   * implied.
+   * Turns every member's requirement on or off; off goes back to the administrators' choice.
    *
    * @param {boolean} required - The switch's new state.
    */
   protected requireForEveryone(required: boolean): void {
-    this.policyForm.twoStepRequiredFor().value.set(required ? 'everyone' : 'admins');
+    this.policyForm.requireEveryone().value.set(required);
   }
 
   /**
@@ -351,22 +374,25 @@ export class SecurityPage implements UnsavedChanges {
    * Drops the edits and shows the saved policy again.
    */
   protected cancel(): void {
-    this.model.set(settingsOf(this.store.current()));
+    this.model.set(formOf(this.store.current()));
   }
 
   /**
    * Method save
    *
    * @description
-   * Sends the change and toasts its outcome.
+   * Sends the change and toasts its outcome. A cancelled save (the reauthentication dialog
+   * closed, the organization switched, the page left) and a changed organization context, which
+   * the workspace recovery handles, toast nothing and keep the edits.
    *
    * @returns {Promise<void>} Resolves once the save ended.
    */
   protected async save(): Promise<void> {
-    const outcome: AuthenticationPolicySaveOutcome = await this.store.save(this.change());
+    const change: AuthenticationPolicyChange = this.change();
+    const outcome: AuthenticationPolicySaveOutcome = await this.store.save(change);
     switch (outcome) {
       case 'saved':
-        this.toastSaved();
+        this.toastSaved(change);
         break;
       case 'outdated':
         this.toasts.error(
@@ -390,6 +416,7 @@ export class SecurityPage implements UnsavedChanges {
         );
         break;
       case 'cancelled':
+      case 'context-changed':
       case 'skipped':
         break;
     }
@@ -399,11 +426,21 @@ export class SecurityPage implements UnsavedChanges {
    * Method toastSaved
    *
    * @description
-   * The mockup's success toast, naming the timeout now applied.
+   * The success toast. A change of the timeout gets the mockup's toast naming the new timeout; a
+   * change of the two-step requirement alone gets `Two-step verification policy updated`, which
+   * the mockup does not draw.
+   *
+   * @param {AuthenticationPolicyChange} change - What the save sent.
    */
-  private toastSaved(): void {
-    const minutes: AuthenticationPolicySettings['sessionTimeoutMinutes'] =
-      this.store.current()?.sessionTimeoutMinutes ?? null;
+  private toastSaved(change: AuthenticationPolicyChange): void {
+    const minutes: AuthenticationPolicyChange['sessionTimeoutMinutes'] =
+      change.sessionTimeoutMinutes;
+    if (minutes === undefined) {
+      this.toasts.success(
+        $localize`:@@organization.security.two-step-saved:Two-step verification policy updated`,
+      );
+      return;
+    }
     const timeout: string | undefined = this.timeouts.find(
       (option: SessionTimeoutOption): boolean => option.minutes === minutes,
     )?.label;

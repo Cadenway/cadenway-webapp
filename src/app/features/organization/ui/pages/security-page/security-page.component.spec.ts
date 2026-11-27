@@ -8,7 +8,10 @@ import { CwToastService } from '@cadenway/ui/components/toast';
 import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 
 import { RuntimeConfigStore } from '@core/config';
-import { ReauthenticationService } from '@features/account/reauthentication';
+import {
+  ReauthenticationCancelledError,
+  ReauthenticationService,
+} from '@features/account/reauthentication';
 import { RouteErrorBoundary } from '@features/errors/ui/components/route-error-boundary/route-error-boundary.component';
 import { WORKSPACE_CONTEXT } from '@features/workspace/ports/workspace-context';
 import { unsavedChangesGuard } from '@shared/unsaved-changes';
@@ -145,6 +148,7 @@ async function pickTimeout(harness: RouterTestingHarness, label: string): Promis
 describe('SecurityPage', () => {
   let api: { policy: Mock; update: Mock };
   let toasts: { success: Mock; error: Mock };
+  let run: Mock;
 
   beforeEach(() => {
     api = {
@@ -154,12 +158,18 @@ describe('SecurityPage', () => {
       ),
     };
     toasts = { success: vi.fn(), error: vi.fn() };
+    run = vi.fn((operation: () => Promise<unknown>) => operation());
     TestBed.configureTestingModule({
       providers: [
         provideCadenwayIcons(),
         provideRouter(
           [
-            { path: 'security', component: SecurityPage, canDeactivate: [unsavedChangesGuard] },
+            {
+              path: 'security',
+              component: SecurityPage,
+              canDeactivate: [unsavedChangesGuard],
+              runGuardsAndResolvers: 'always',
+            },
             { path: 'members', component: OtherSection },
           ],
           withErrorBoundaries({ defaultErrorComponent: RouteErrorBoundary }),
@@ -167,7 +177,7 @@ describe('SecurityPage', () => {
         { provide: AuthenticationPolicyApi, useValue: api },
         {
           provide: ReauthenticationService,
-          useValue: { run: (operation: () => Promise<unknown>) => operation() },
+          useValue: { run },
         },
         { provide: CwToastService, useValue: toasts },
         {
@@ -305,6 +315,119 @@ describe('SecurityPage', () => {
 
     expect(byTestId(harness, 'security-unsaved')).toBeNull();
     expect(button('Save')?.disabled).toBe(true);
+  });
+
+  it('turning every member on then off from nobody leaves nothing to save', async () => {
+    api.policy.mockResolvedValue({ ...ATELIER_NORD, twoStepRequiredFor: 'nobody' });
+    const harness: RouterTestingHarness = await open();
+
+    switchOf(harness, 'security-two-step-everyone')?.click();
+    harness.detectChanges();
+    expect(switchOf(harness, 'security-two-step-admins')?.getAttribute('aria-checked')).toBe(
+      'true',
+    );
+    switchOf(harness, 'security-two-step-everyone')?.click();
+    harness.detectChanges();
+
+    expect(switchOf(harness, 'security-two-step-admins')?.getAttribute('aria-checked')).toBe(
+      'false',
+    );
+    expect(byTestId(harness, 'security-unsaved')).toBeNull();
+    expect(button('Save')?.disabled).toBe(true);
+  });
+
+  it('sends a choice for an unknown requirement only once a switch changes', async () => {
+    api.policy.mockResolvedValue({ ...ATELIER_NORD, twoStepRequiredFor: null });
+    const harness: RouterTestingHarness = await open();
+
+    switchOf(harness, 'security-two-step-everyone')?.click();
+    harness.detectChanges();
+    switchOf(harness, 'security-two-step-everyone')?.click();
+    harness.detectChanges();
+    expect(byTestId(harness, 'security-unsaved')).toBeNull();
+
+    switchOf(harness, 'security-two-step-admins')?.click();
+    harness.detectChanges();
+    button('Save')?.click();
+
+    await expect.poll(() => api.update.mock.calls.length).toBe(1);
+    expect(api.update).toHaveBeenCalledWith({ twoStepRequiredFor: 'admins' }, 2);
+  });
+
+  it('toasts a two-step change without naming the timeout', async () => {
+    const harness: RouterTestingHarness = await open();
+
+    switchOf(harness, 'security-two-step-everyone')?.click();
+    harness.detectChanges();
+    button('Save')?.click();
+
+    await expect.poll(() => toasts.success.mock.calls.length).toBe(1);
+    expect(api.update).toHaveBeenCalledWith({ twoStepRequiredFor: 'everyone' }, 2);
+    expect(toasts.success).toHaveBeenCalledWith('Two-step verification policy updated');
+  });
+
+  it('keeps the edits silently when the reauthentication is closed', async () => {
+    run.mockRejectedValue(new ReauthenticationCancelledError());
+    const harness: RouterTestingHarness = await open();
+
+    switchOf(harness, 'security-two-step-everyone')?.click();
+    harness.detectChanges();
+    button('Save')?.click();
+
+    await expect.poll(() => run.mock.calls.length).toBe(1);
+    await expect
+      .poll(() => {
+        harness.detectChanges();
+        return switchOf(harness, 'security-two-step-everyone')?.disabled;
+      })
+      .toBe(false);
+    expect(toasts.success).not.toHaveBeenCalled();
+    expect(toasts.error).not.toHaveBeenCalled();
+    expect(switchOf(harness, 'security-two-step-everyone')?.getAttribute('aria-checked')).toBe(
+      'true',
+    );
+    expect(byTestId(harness, 'security-unsaved')).not.toBeNull();
+    expect(button('Save')?.disabled).toBe(false);
+  });
+
+  it('keeps the edits silently when the organization context changed', async () => {
+    api.update.mockRejectedValue(problem(412, 'organization.context-changed'));
+    const harness: RouterTestingHarness = await open();
+
+    await pickTimeout(harness, '7 days');
+    button('Save')?.click();
+
+    await expect.poll(() => api.update.mock.calls.length).toBe(1);
+    await expect
+      .poll(() => {
+        harness.detectChanges();
+        return button('Save')?.disabled;
+      })
+      .toBe(false);
+    expect(toasts.success).not.toHaveBeenCalled();
+    expect(toasts.error).not.toHaveBeenCalled();
+    expect(api.policy).toHaveBeenCalledTimes(1);
+    expect(byTestId(harness, 'security-session-timeout')?.textContent).toContain('7 days');
+    expect(byTestId(harness, 'security-unsaved')).not.toBeNull();
+  });
+
+  it('keeps the edits without asking through a workspace recovery', async () => {
+    const harness: RouterTestingHarness = await open();
+    switchOf(harness, 'security-two-step-everyone')?.click();
+    harness.detectChanges();
+
+    const recovered: boolean = await TestBed.inject(Router).navigateByUrl('/security', {
+      onSameUrlNavigation: 'reload',
+      info: Symbol('recovery'),
+    });
+    harness.detectChanges();
+
+    expect(recovered).toBe(true);
+    expect(document.querySelector('[role="alertdialog"]')).toBeNull();
+    expect(switchOf(harness, 'security-two-step-everyone')?.getAttribute('aria-checked')).toBe(
+      'true',
+    );
+    expect(byTestId(harness, 'security-unsaved')).not.toBeNull();
   });
 
   it('saves only the changed timeout and toasts it', async () => {

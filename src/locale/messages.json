@@ -546,6 +546,7 @@
     "organization.security.two-step-not-enabled": "Set up two-step verification first",
     "organization.security.two-step-not-enabled-text": "You cannot require it for your own role before using it yourself.",
     "organization.security.save-failed": "The authentication policy could not be saved",
+    "organization.security.two-step-saved": "Two-step verification policy updated",
     "organization.security.saved": "Session policy updated",
     "organization.security.saved-text": "Idle sessions now expire after {$timeout}.",
     "organization.plan.free": "Free",

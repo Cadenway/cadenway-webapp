@@ -1,12 +1,17 @@
 import { HttpErrorResponse } from '@angular/common/http';
-import { ApplicationRef } from '@angular/core';
+import { ApplicationRef, signal, type WritableSignal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 
+import { OrganizationSwitchPendingError } from '@core/api';
 import {
   ReauthenticationCancelledError,
   ReauthenticationService,
 } from '@features/account/reauthentication';
+import {
+  WORKSPACE_CONTEXT,
+  type WorkspaceOrganization,
+} from '@features/workspace/ports/workspace-context';
 
 import { AuthenticationPolicyApi } from '../../data-access/services/authentication-policy-api/authentication-policy-api.service';
 import type {
@@ -44,9 +49,40 @@ function problem(status: number, code: string): HttpErrorResponse {
   return new HttpErrorResponse({ status, error: { type: 'about:blank', title: '', status, code } });
 }
 
+/**
+ * Function organization
+ *
+ * @description
+ * A workspace organization of the fixtures.
+ *
+ * @param {string} id - Organization id.
+ * @param {string} slug - Organization slug.
+ * @returns {WorkspaceOrganization} The organization.
+ */
+function organization(id: string, slug: string): WorkspaceOrganization {
+  return { id, slug, name: slug, initials: 'AN', role: 'owner', plan: 'team' };
+}
+
+/**
+ * Function deferred
+ *
+ * @description
+ * A promise and the function that resolves it.
+ *
+ * @returns {{ promise: Promise<void>; resolve: () => void }} Both.
+ */
+function deferred(): { promise: Promise<void>; resolve: () => void } {
+  let resolve: () => void = (): void => undefined;
+  const promise: Promise<void> = new Promise<void>((done: () => void): void => {
+    resolve = done;
+  });
+  return { promise, resolve };
+}
+
 describe('AuthenticationPolicyStore', () => {
   let api: { policy: Mock; update: Mock };
   let run: Mock;
+  let shown: WritableSignal<WorkspaceOrganization>;
 
   /**
    * Function store
@@ -62,6 +98,7 @@ describe('AuthenticationPolicyStore', () => {
         AuthenticationPolicyStore,
         { provide: AuthenticationPolicyApi, useValue: api },
         { provide: ReauthenticationService, useValue: { run } },
+        { provide: WORKSPACE_CONTEXT, useValue: { organization: shown } },
       ],
     });
     const instance: InstanceType<typeof AuthenticationPolicyStore> =
@@ -78,6 +115,108 @@ describe('AuthenticationPolicyStore', () => {
       ),
     };
     run = vi.fn((operation: () => Promise<unknown>) => operation());
+    shown = signal(organization('org-nord', 'atelier-nord'));
+  });
+
+  /**
+   * Function reauthenticateAfter
+   *
+   * @description
+   * Makes `run` behave as the reauthentication does for a refused first send: it sends once, and
+   * once more after the person confirms.
+   *
+   * @param {Promise<void>} confirmed - Settles when the person confirms.
+   */
+  function reauthenticateAfter(confirmed: Promise<void>): void {
+    api.update.mockRejectedValueOnce(problem(403, 'auth.reauthentication-required'));
+    run.mockImplementation(async (operation: () => Promise<unknown>) => {
+      try {
+        return await operation();
+      } catch {
+        await confirmed;
+        return operation();
+      }
+    });
+  }
+
+  it('reads the policy of the organization shown again after a switch', async () => {
+    const instance: InstanceType<typeof AuthenticationPolicyStore> = await store();
+    api.policy.mockResolvedValue({ ...ATELIER_NORD, twoStepRequiredFor: 'nobody', version: 9 });
+
+    shown.set(organization('org-sud', 'atelier-sud'));
+    expect(instance.current()).toBeNull();
+    await TestBed.inject(ApplicationRef).whenStable();
+
+    expect(api.policy).toHaveBeenCalledTimes(2);
+    expect(instance.current()?.twoStepRequiredFor).toBe('nobody');
+    expect(instance.current()?.version).toBe(9);
+  });
+
+  it('sends nothing to the new organization when it switches during the reauthentication', async () => {
+    const confirmation: { promise: Promise<void>; resolve: () => void } = deferred();
+    reauthenticateAfter(confirmation.promise);
+    const instance: InstanceType<typeof AuthenticationPolicyStore> = await store();
+
+    const saving: Promise<AuthenticationPolicySaveOutcome> = instance.save({
+      twoStepRequiredFor: 'everyone',
+    });
+    await expect.poll(() => api.update.mock.calls.length).toBe(1);
+    shown.set(organization('org-sud', 'atelier-sud'));
+    confirmation.resolve();
+
+    expect(await saving).toBe('cancelled');
+    expect(api.update).toHaveBeenCalledTimes(1);
+    expect(instance.saving()).toBe(false);
+  });
+
+  it('drops the answer of a save that ends after an organization switch', async () => {
+    let answer: (policy: AuthenticationPolicy) => void = (): void => undefined;
+    api.update.mockReturnValue(
+      new Promise<AuthenticationPolicy>((resolve: (policy: AuthenticationPolicy) => void) => {
+        answer = resolve;
+      }),
+    );
+    const instance: InstanceType<typeof AuthenticationPolicyStore> = await store();
+    const south: AuthenticationPolicy = { ...ATELIER_NORD, twoStepRequiredFor: 'nobody' };
+    api.policy.mockResolvedValue(south);
+
+    const saving: Promise<AuthenticationPolicySaveOutcome> = instance.save({
+      twoStepRequiredFor: 'everyone',
+    });
+    shown.set(organization('org-sud', 'atelier-sud'));
+    await TestBed.inject(ApplicationRef).whenStable();
+    answer({ ...ATELIER_NORD, twoStepRequiredFor: 'everyone', version: 3 });
+
+    expect(await saving).toBe('cancelled');
+    expect(instance.current()).toEqual(south);
+  });
+
+  it('sends nothing more once the page is gone during the reauthentication', async () => {
+    const confirmation: { promise: Promise<void>; resolve: () => void } = deferred();
+    reauthenticateAfter(confirmation.promise);
+    const instance: InstanceType<typeof AuthenticationPolicyStore> = await store();
+
+    const saving: Promise<AuthenticationPolicySaveOutcome> = instance.save({
+      sessionTimeoutMinutes: 60,
+    });
+    await expect.poll(() => api.update.mock.calls.length).toBe(1);
+    TestBed.resetTestingModule();
+    confirmation.resolve();
+
+    expect(await saving).toBe('cancelled');
+    expect(api.update).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    ['a changed organization context', problem(412, 'organization.context-changed')],
+    ['a switch in progress', new OrganizationSwitchPendingError()],
+  ])('leaves %s to the workspace recovery', async (_case: string, error: Error) => {
+    api.update.mockRejectedValue(error);
+    const instance: InstanceType<typeof AuthenticationPolicyStore> = await store();
+
+    expect(await instance.save({ sessionTimeoutMinutes: 60 })).toBe('context-changed');
+    expect(api.policy).toHaveBeenCalledTimes(1);
+    expect(instance.current()).toEqual(ATELIER_NORD);
   });
 
   it('reads the policy', async () => {

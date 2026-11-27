@@ -12,7 +12,8 @@ makes leaving such a page ask first.
   routed page implements. `confirmDiscard()` opens the page's own confirmation and resolves true to
   discard and leave, false to keep editing.
 - `unsavedChangesGuard`: the `CanDeactivateFn<UnsavedChanges>` of the route. A clean page leaves at
-  once; a dirty one waits for `confirmDiscard()`.
+  once; a dirty one waits for `confirmDiscard()`. A navigation to the URL already shown (a
+  workspace recovery, a `Retry`) reruns the route on the reused page and goes without asking.
 - `warnBeforeUnload(dirty)`: asks the browser to confirm closing or reloading the tab while
   `dirty()` holds. Call it in the page's injection context; the listener goes with the page.
 

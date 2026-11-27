@@ -102,20 +102,31 @@ loaded.` with `Retry`; the banner stays hidden until a retry succeeds.
 - Security shows only what the contract serves: the `Authentication policy` card with the two
   two-step switches and `Idle session timeout`. The SAML card, `Test connection`, `Enforce SSO`
   and the allowed sign-in methods (gap B13) are not rendered. The page-scoped
-  `AuthenticationPolicyStore` reads the policy (the primary read: a failure reaches the route's
-  error boundary) and saves only the changed members from the version read (`If-Match`). The
-  card is a form with the `Unsaved changes` footer, `Cancel` and `Save`, where the mockup applies
-  each control at once. `everyone` implies the administrators: their switch stays on and
-  disabled, and turning `all members` off keeps `admins`. A value a later contract adds shows
-  nothing selected and is never sent back. A `412` reads the policy again and toasts the
-  conflict, a `409 auth.two-step-not-enabled` toasts why, any other refusal toasts the failure and
-  keeps the edits, and a closed reauthentication dialog keeps them silently.
+  `AuthenticationPolicyStore` reads the policy of the workspace organization (the primary read,
+  keyed by its id, so a page reused for another organization reads and resets to that one's; a
+  failure reaches the route's error boundary) and saves only the changed members from the version
+  read (`If-Match`). A save is bound to the organization shown when it starts and to the page:
+  after a switch or once the page is gone it sends nothing more, the retry after a
+  reauthentication included, drops any late answer and toasts nothing. The card is a form with the
+  `Unsaved changes` footer, `Cancel` and `Save`, where the mockup applies each control at once.
+  The administrators' switch keeps its own choice; `everyone` shows it on and disabled without
+  changing it, so turning `all members` on then off is clean, and the sent requirement is
+  `everyone`, else `admins`, else `nobody`. A value a later contract adds shows nothing selected
+  and is sent only once its control changes. A save of the timeout toasts the mockup's
+  `Session policy updated` with the new timeout; a save of the two-step requirement alone toasts
+  `Two-step verification policy updated`. A `412 request.version-mismatch` reads the policy again
+  and toasts the conflict, a `409 auth.two-step-not-enabled` toasts why, any other refusal toasts
+  the failure and keeps the edits. A closed reauthentication dialog and a
+  `412 organization.context-changed` (or a switch in progress), which the workspace recovery
+  handles, keep them silently. A recovery reruns the route on the same URL, which
+  `unsavedChangesGuard` lets through without asking.
 
 ## Copy not taken word for word from the mockup
 
-| Unit                                                                                                                                                                                                          | Reason                                                                       |
-| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
-| `organization.plan-summary.failed`                                                                                                                                                                            | The mockup draws no failed billing read.                                     |
-| `organization.retry`                                                                                                                                                                                          | `Retry` is the mockup's word, used for a new state.                          |
-| `organization.navigation.plan`                                                                                                                                                                                | The identity row without the member count, for whoever may not read billing. |
-| `organization.security.save-failed`, `organization.security.conflict`, `organization.security.conflict-text`, `organization.security.two-step-not-enabled`, `organization.security.two-step-not-enabled-text` | The mockup applies each control at once and draws no refused save.           |
+| Unit                                                                                                                                                                                                          | Reason                                                                                                 |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| `organization.plan-summary.failed`                                                                                                                                                                            | The mockup draws no failed billing read.                                                               |
+| `organization.retry`                                                                                                                                                                                          | `Retry` is the mockup's word, used for a new state.                                                    |
+| `organization.navigation.plan`                                                                                                                                                                                | The identity row without the member count, for whoever may not read billing.                           |
+| `organization.security.save-failed`, `organization.security.conflict`, `organization.security.conflict-text`, `organization.security.two-step-not-enabled`, `organization.security.two-step-not-enabled-text` | The mockup applies each control at once and draws no refused save.                                     |
+| `organization.security.two-step-saved`                                                                                                                                                                        | The mockup's only policy toast names the session timeout; a two-step change alone needs its own title. |

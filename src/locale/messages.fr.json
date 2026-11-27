@@ -560,6 +560,7 @@
     "organization.security.two-step-everyone-hint-one": "1 personne ne l’a pas configurée : elle devra le faire à sa prochaine connexion.",
     "organization.security.two-step-not-enabled": "Configurez d’abord la vérification en deux étapes",
     "organization.security.two-step-not-enabled-text": "Vous ne pouvez pas l’exiger pour votre propre rôle sans l’utiliser vous-même.",
+    "organization.security.two-step-saved": "Politique de vérification en deux étapes mise à jour",
     "organization.security.unsaved": "Modifications non enregistrées",
     "organization.storage-banner.close": "Fermer l'annonce",
     "organization.storage-banner.description": "· {$used} Go utilisés sur {$limit} Go. Au-delà, les nouvelles pièces jointes seront refusées.",
