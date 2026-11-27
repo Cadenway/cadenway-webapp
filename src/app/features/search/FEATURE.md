@@ -51,7 +51,8 @@ organization`) and `Actions` (one theme action that toggles, named after the the
   icon in its tone, its name and its space: the first four before anything is typed, then up to
   twenty whose name contains the text (`App.dc.html` line 6935), followed by the server's list
   matches that are not already shown (deduplicated by list id).
-- `Go to` has `Home` only: every later step adds the entry of the page it builds.
+- `Go to` has `Home`, `My tasks`, `Dashboards` and `Documents` (`App.dc.html` lines 6921-6924),
+  which open `/<slug>`, `/<slug>/my-tasks`, `/<slug>/dashboards` and `/<slug>/docs`.
 - `RecentTasks` keeps the last five tasks opened from the palette, per person and organization, in
   `localStorage` (`cadenway-recent-tasks:<userId>:<organizationId>`); Auth's `SignOut` removes them.
   The task page (step 5) will add to it.

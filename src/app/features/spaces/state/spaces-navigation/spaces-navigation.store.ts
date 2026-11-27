@@ -54,6 +54,16 @@ import { isWithin, todayIso } from '../../utils/calendar-date/calendar-date.util
 const OVERVIEW_PAGE_TIMEOUT_MS: number = 10_000;
 
 /**
+ * Type Reloadable
+ *
+ * @description
+ * What the store needs of a resource to read it again, or once more after the read in flight.
+ *
+ * @type {Pick<ResourceRef<unknown>, 'reload' | 'isLoading' | 'status'>}
+ */
+type Reloadable = Pick<ResourceRef<unknown>, 'reload' | 'isLoading' | 'status'>;
+
+/**
  * Interface OverviewReadOrder
  *
  * @description
@@ -529,9 +539,28 @@ interface SpacesNavigationStoreInstance {
    * Method refresh
    *
    * @description
-   * Reads the spaces and their counts again, after a write that changed them.
+   * Reads the spaces and their counts again, after a write that changed them: the overviews
+   * follow the new spaces, so they are read again directly only when the spaces could not be.
    */
   refresh(): void;
+
+  /**
+   * Method refreshFavorites
+   *
+   * @description
+   * Reads the favorites again, or once more after the read in flight, after another feature's
+   * write that may bring a favorite target back (a restored or unarchived list).
+   */
+  refreshFavorites(): void;
+
+  /**
+   * Method refreshCounts
+   *
+   * @description
+   * Reads the trash and archive counts again, each once more after its read in flight, so a
+   * write during their first read is never missed.
+   */
+  refreshCounts(): void;
 
   /**
    * Method favoriteOf
@@ -737,10 +766,21 @@ function createSpacesNavigationStore(): Type<SpacesNavigationStoreInstance> {
       const reloadOverviews: () => void = (): void => {
         if (!store.overviews.reload() && store.overviews.isLoading()) overviewRefreshQueued = true;
       };
-      // Reads the spaces and every overview again, or once more after the reads in flight.
+      // Reads the spaces again, or once more after the read in flight; the overviews follow the
+      // new spaces (their params change), so they are read directly only when the spaces are not.
       const refresh: () => void = (): void => {
-        if (!store.spaces.reload() && store.spaces.isLoading()) refreshQueued = true;
+        if (store.spaces.reload()) return;
+        if (store.spaces.isLoading()) {
+          refreshQueued = true;
+          return;
+        }
         reloadOverviews();
+      };
+      // Resources to read once more when their read in flight ends.
+      const queuedReloads: Set<Reloadable> = new Set<Reloadable>();
+      // Reads a resource again, or once more after the read in flight.
+      const reloadOrQueue: (target: Reloadable) => void = (target: Reloadable): void => {
+        if (!target.reload() && target.isLoading()) queuedReloads.add(target);
       };
       const currentSpaces: () => readonly SpaceDetails[] = () =>
         store.spaces.hasValue() ? store.spaces.value() : [];
@@ -852,6 +892,20 @@ function createSpacesNavigationStore(): Type<SpacesNavigationStoreInstance> {
             store.spaces.reload();
           }
         }),
+        _flushQueued: signalMethod<{ readonly target: Reloadable; readonly status: string }>(
+          ({ target, status }: { readonly target: Reloadable; readonly status: string }): void => {
+            if (status !== 'loading' && status !== 'reloading' && queuedReloads.delete(target)) {
+              target.reload();
+            }
+          },
+        ),
+        refreshFavorites(): void {
+          reloadOrQueue(store.favorites);
+        },
+        refreshCounts(): void {
+          reloadOrQueue(store.trashCount);
+          reloadOrQueue(store.archiveCount);
+        },
         _countCreations: rxMethod<CreatedTask>(
           pipe(
             concatMap((task: CreatedTask): Observable<SpaceOverview> => {
@@ -1172,6 +1226,14 @@ function createSpacesNavigationStore(): Type<SpacesNavigationStoreInstance> {
         );
         store.follow(organizationId);
         store._flushRefresh(store.spaces.status);
+        for (const target of [store.favorites, store.trashCount, store.archiveCount]) {
+          store._flushQueued(
+            computed((): { readonly target: Reloadable; readonly status: string } => ({
+              target,
+              status: target.status(),
+            })),
+          );
+        }
         store._flushOverviews(store.overviews.status);
         store._countCreations(store._taskCreate.created);
       },

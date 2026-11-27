@@ -18,6 +18,7 @@ import type { SpaceDetails } from '../../../models/space/space.interface';
 import type { SpaceOverview, TaskList } from '../../../models/task-list/task-list.interface';
 import { SpacesNavigationStore } from '../../../state/spaces-navigation/spaces-navigation.store';
 import { todayIso } from '../../../utils/calendar-date/calendar-date.util';
+import { FavoriteSpacesRail } from '../favorite-spaces-rail/favorite-spaces-rail.component';
 import { SidebarFooterLinks } from '../sidebar-footer-links/sidebar-footer-links.component';
 import { SpacesRailItem } from '../spaces-rail-item/spaces-rail-item.component';
 import { SprintProgress } from '../sprint-progress/sprint-progress.component';
@@ -31,9 +32,17 @@ import { SpacesSidebar } from './spaces-sidebar.component';
  */
 @Component({
   selector: 'cw-shell-stub',
-  imports: [CwSidebar, SidebarFooterLinks, SpacesRailItem, SpacesSidebar, SprintProgress],
+  imports: [
+    CwSidebar,
+    FavoriteSpacesRail,
+    SidebarFooterLinks,
+    SpacesRailItem,
+    SpacesSidebar,
+    SprintProgress,
+  ],
   template: `
     <cw-spaces-rail-item />
+    <cw-favorite-spaces-rail />
     <cw-sidebar ariaLabel="Navigation">
       <cw-spaces-sidebar />
       <cw-sprint-progress />
@@ -47,12 +56,12 @@ class ShellStub {}
  * Component SettingsRailStub
  *
  * @description
- * Renders the rail item as the settings shell does, without a sidebar.
+ * Renders the rail items as the settings shell does, without a sidebar.
  */
 @Component({
   selector: 'cw-settings-rail-stub',
-  imports: [SpacesRailItem],
-  template: '<cw-spaces-rail-item variant="settings" />',
+  imports: [FavoriteSpacesRail, SpacesRailItem],
+  template: '<cw-spaces-rail-item /><cw-favorite-spaces-rail variant="settings" />',
 })
 class SettingsRailStub {}
 
@@ -94,6 +103,7 @@ const product: SpaceDetails = {
   name: 'Product',
   prefix: 'CAD',
   canEdit: true,
+  callerRole: 'edit',
   canManage: true,
   version: 3,
   description: null,

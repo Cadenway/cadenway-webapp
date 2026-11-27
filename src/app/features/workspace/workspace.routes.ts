@@ -10,9 +10,13 @@ import {
   withReauthenticationDialog,
   withUserMenu,
 } from '@features/account/providers';
+import { withDashboardsRailItem } from '@features/dashboards/providers';
+import { withDocsRailItem } from '@features/docs/providers';
 import type { RouteErrorData } from '@features/errors';
+import { withGoalsRailItem } from '@features/goals/providers';
 import { withHomeRailItem } from '@features/home/providers';
 import { withInbox } from '@features/inbox/providers';
+import { withMyTasksRailItem } from '@features/my-tasks/providers';
 import {
   provideOrganizationUsage,
   withOrganizationSettingsLinks,
@@ -27,6 +31,7 @@ import {
 } from '@features/search/providers';
 import {
   provideSpacesNavigation,
+  withFavoriteSpacesRail,
   withSidebarFooterLinks,
   withSpacesRailItem,
   withSpacesSidebar,
@@ -117,7 +122,11 @@ export const WORKSPACE_ROUTES: Routes = [
               withOrganizationHomeItem(),
               withHomeRailItem(),
               withInbox(),
-              withSpacesRailItem({ variant: 'settings' }),
+              withMyTasksRailItem(),
+              withSpacesRailItem(),
+              withDashboardsRailItem(),
+              withDocsRailItem(),
+              withFavoriteSpacesRail({ variant: 'settings' }),
             ],
             railFooter: [withSearchRailItem(), withThemeRailItem(), withUserMenu()],
             settingsNavigation: [
@@ -154,7 +163,11 @@ export const WORKSPACE_ROUTES: Routes = [
               withOrganizationHomeItem(),
               withHomeRailItem(),
               withInbox(),
-              withSpacesRailItem({ variant: 'settings' }),
+              withMyTasksRailItem(),
+              withSpacesRailItem(),
+              withDashboardsRailItem(),
+              withDocsRailItem(),
+              withFavoriteSpacesRail({ variant: 'settings' }),
             ],
             railFooter: [withSearchRailItem(), withThemeRailItem(), withUserMenu()],
             settingsNavigation: [
@@ -182,7 +195,16 @@ export const WORKSPACE_ROUTES: Routes = [
           provideAppShellSlots({
             banners: [withStorageBanner()],
             organizationSwitcher: [withOrganizationSwitcher()],
-            railNavigation: [withHomeRailItem(), withInbox(), withSpacesRailItem()],
+            railNavigation: [
+              withHomeRailItem(),
+              withInbox(),
+              withMyTasksRailItem(),
+              withSpacesRailItem(),
+              withDashboardsRailItem(),
+              withGoalsRailItem(),
+              withDocsRailItem(),
+              withFavoriteSpacesRail(),
+            ],
             railFooter: [withSearchRailItem(), withThemeRailItem(), withUserMenu()],
             sidebarHeader: [withOrganizationRow(), withSearchButton()],
             sidebar: [withSpacesSidebar()],
@@ -217,6 +239,36 @@ export const WORKSPACE_ROUTES: Routes = [
             path: '',
             loadChildren: async (): Promise<Routes> =>
               (await import('@features/task/task.routes')).TASK_ROUTES,
+          },
+          {
+            path: '',
+            loadChildren: async (): Promise<Routes> =>
+              (await import('@features/my-tasks/my-tasks.routes')).MY_TASKS_ROUTES,
+          },
+          {
+            path: '',
+            loadChildren: async (): Promise<Routes> =>
+              (await import('@features/dashboards/dashboards.routes')).DASHBOARDS_ROUTES,
+          },
+          {
+            path: '',
+            loadChildren: async (): Promise<Routes> =>
+              (await import('@features/goals/goals.routes')).GOALS_ROUTES,
+          },
+          {
+            path: '',
+            loadChildren: async (): Promise<Routes> =>
+              (await import('@features/docs/docs.routes')).DOCS_ROUTES,
+          },
+          {
+            path: '',
+            loadChildren: async (): Promise<Routes> =>
+              (await import('@features/trash/trash.routes')).TRASH_ROUTES,
+          },
+          {
+            path: '',
+            loadChildren: async (): Promise<Routes> =>
+              (await import('@features/archives/archives.routes')).ARCHIVES_ROUTES,
           },
           {
             path: '**',

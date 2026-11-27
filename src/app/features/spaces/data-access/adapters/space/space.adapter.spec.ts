@@ -72,8 +72,12 @@ describe('space adapter', () => {
     expect(space.prefix).toBe('CAD');
     expect(space.canEdit).toBe(true);
     expect(space.canManage).toBe(true);
+    expect(space.callerRole).toBe('edit');
+    expect(toSpace({ ...product, callerRole: null }).callerRole).toBeNull();
+    expect(toSpace({ ...product, callerRole: 'future-role' }).callerRole).toBe('view');
     expect(toSpace({ ...product, callerRole: 'view', callerCanManage: false })).toMatchObject({
       canEdit: false,
+      callerRole: 'view',
       canManage: false,
     });
     expect(space.icon).toBe('rocket');

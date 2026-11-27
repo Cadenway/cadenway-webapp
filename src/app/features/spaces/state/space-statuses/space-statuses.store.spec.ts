@@ -56,6 +56,7 @@ function product(
     name: 'Product',
     prefix: 'CAD',
     canEdit: true,
+    callerRole: 'edit',
     canManage: true,
     version,
     description: null,
