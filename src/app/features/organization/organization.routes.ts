@@ -18,7 +18,7 @@ import { organizationSectionGuard } from './http/guards/organization-section/org
  * General, Security, Integrations and the Audit log, member for Members) and sends anyone else to
  * the first section their role may open, or to `/<slug>` for a guest. The guards run again on
  * every workspace recovery (`shouldRecheckOrganizationRole`), so a demoted person leaves a
- * section they may no longer open. `general` keeps unsaved
+ * section they may no longer open. `general` and `security` keep unsaved
  * edits with `unsavedChangesGuard`. A failed primary read renders the router's default error
  * component, `RouteErrorBoundary`, in the shell, titled by the `unavailableTitle` the mounting
  * route sets. An unknown section renders the 404 inside the shell.
@@ -65,6 +65,7 @@ export const ORGANIZATION_ROUTES: Routes = [
     title: $localize`:@@organization.route.security:Security and SSO`,
     canActivate: [organizationSectionGuard('security')],
     runGuardsAndResolvers: shouldRecheckOrganizationRole,
+    canDeactivate: [unsavedChangesGuard],
     loadComponent: async (): Promise<Type<unknown>> =>
       (await import('./ui/pages/security-page/security-page.component')).SecurityPage,
   },

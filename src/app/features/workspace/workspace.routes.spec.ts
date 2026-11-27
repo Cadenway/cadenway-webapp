@@ -25,6 +25,7 @@ import {
   ArchivesService,
   BillingService,
   InboxService,
+  InvitationsService,
   ListsService,
   MembersService,
   RealtimeService,
@@ -278,6 +279,22 @@ describe('WORKSPACE_ROUTES', () => {
                 storage: { attachmentBytesUsed: 92_400_000_000, limitBytes: 100_000_000_000 },
               }),
           },
+        },
+        {
+          provide: MembersService,
+          useValue: {
+            listMembers: () =>
+              of({
+                items: [],
+                nextCursor: null,
+                total: 0,
+                counts: { owner: 1, admin: 0, member: 0, guest: 0 },
+              }),
+          },
+        },
+        {
+          provide: InvitationsService,
+          useValue: { listInvitations: () => of({ items: [], nextCursor: null, total: 0 }) },
         },
       ],
     });
