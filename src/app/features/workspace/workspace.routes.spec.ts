@@ -32,6 +32,7 @@ import {
   SpacesService,
   TaskQueriesService,
   TasksService,
+  GoalsService,
 } from '@cadenway/api-client';
 import { filter, firstValueFrom, NEVER, Observable, of, Subject, throwError } from 'rxjs';
 import { type Socket } from 'socket.io-client';
@@ -263,6 +264,24 @@ describe('WORKSPACE_ROUTES', () => {
         { provide: WorkspaceSession, useValue: session },
         { provide: RuntimeConfigStore, useValue: { config: () => ({}) } },
         { provide: InboxService, useValue: { getInboxUnreadCount: () => of({ unreadCount: 2 }) } },
+        {
+          provide: GoalsService,
+          useValue: {
+            listGoals: () =>
+              of({
+                items: [],
+                nextCursor: null,
+                summary: {
+                  goalCount: 0,
+                  expectedProgressPercent: 0,
+                  averageProgressPercent: 0,
+                  onTrackOrAchievedCount: 0,
+                  achievedCount: 0,
+                  atRiskOrBehindCount: 0,
+                },
+              }),
+          },
+        },
         {
           provide: BillingService,
           useValue: {
