@@ -1,0 +1,166 @@
+<div class="mx-auto flex w-full max-w-4xl flex-col gap-6 px-4 py-6 sm:px-8 sm:py-8">
+  @if (!store.shown()) {
+    <div
+      class="flex flex-col gap-6"
+      role="status"
+      [attr.aria-busy]="primary() === undefined"
+      aria-label="Loading the section"
+      i18n-aria-label="@@organization.members.loading"
+      data-testid="members-skeleton"
+    >
+      <div class="flex items-start gap-4" aria-hidden="true">
+        <div class="flex min-w-0 flex-1 flex-col gap-2">
+          <div cwSkeleton class="h-7 w-56"></div>
+          <div cwSkeleton class="h-3 w-3/4"></div>
+        </div>
+        @if (canInvite()) {
+          <div cwSkeleton class="h-8 w-32 rounded-lg"></div>
+        }
+      </div>
+      <div class="flex flex-wrap items-center gap-2" aria-hidden="true">
+        <div cwSkeleton class="h-8 w-64 rounded-lg"></div>
+        <div cwSkeleton class="h-8 w-56 rounded-lg"></div>
+        <div cwSkeleton class="h-8 w-40 rounded-lg"></div>
+      </div>
+      <div class="overflow-hidden rounded-xl border border-border bg-card" aria-hidden="true">
+        @for (line of skeleton; track line) {
+          <div class="flex h-14 items-center gap-3 border-b border-border px-4 last:border-b-0">
+            <div cwSkeleton class="size-8 rounded-full"></div>
+            <div class="flex min-w-0 flex-1 flex-col gap-1.5">
+              <div cwSkeleton class="h-3 w-2/5"></div>
+              <div cwSkeleton class="h-2.5 w-40"></div>
+            </div>
+            <div cwSkeleton class="h-5 w-16 rounded-full"></div>
+          </div>
+        }
+      </div>
+    </div>
+  } @else {
+    <header class="flex flex-wrap items-start gap-4">
+      <div class="flex min-w-0 flex-1 flex-col gap-1">
+        <h1 class="text-2xl font-semibold tracking-tight" i18n="@@organization.members.title">
+          Members
+        </h1>
+        <p class="text-sm text-muted-foreground tabular-nums" data-testid="members-summary">
+          {{ summary() }}
+        </p>
+      </div>
+      @if (canInvite()) {
+        <button cwButton type="button" (click)="inviteOpen.set(true)" data-testid="members-invite">
+          <ng-icon name="phosphorUserPlusBold" aria-hidden="true" />
+          <ng-container i18n="@@organization.members.invite-open">Invite members</ng-container>
+        </button>
+      }
+    </header>
+
+    <cw-members-toolbar
+      [search]="store.search()"
+      [role]="store.role()"
+      [presence]="store.presence()"
+      [counts]="store.counts()"
+      [onlineCount]="store.onlineCount()"
+      (searchChanged)="store.setSearch($event)"
+      (roleChanged)="store.setRole($event)"
+      (presenceChanged)="store.setPresence($event)"
+    />
+
+    @if (store.failed()) {
+      <div
+        class="rounded-xl border border-dashed border-border"
+        role="alert"
+        data-testid="members-failed"
+      >
+        <cw-empty class="p-6">
+          <cw-empty-header>
+            <cw-empty-media tone="destructive">
+              <ng-icon name="phosphorWarningCircleBold" aria-hidden="true" />
+            </cw-empty-media>
+            <cw-empty-title i18n="@@organization.members.failed-title"
+              >Could not load this section</cw-empty-title
+            >
+            <cw-empty-description i18n="@@organization.members.failed-text"
+              >The server did not answer in time. Your settings are not lost: try again in a
+              moment.</cw-empty-description
+            >
+          </cw-empty-header>
+          <cw-empty-content>
+            <button
+              cwButton
+              type="button"
+              variant="outline"
+              (click)="store.retry()"
+              data-testid="members-retry"
+            >
+              <ng-icon name="phosphorArrowClockwiseBold" aria-hidden="true" />
+              <ng-container i18n="@@organization.members.retry">Retry</ng-container>
+            </button>
+          </cw-empty-content>
+        </cw-empty>
+      </div>
+    } @else {
+      <cw-members-table
+        [rows]="store.rows()"
+        [total]="store.total()"
+        [rangeFirst]="store.rangeFirst()"
+        [rangeLast]="store.rangeLast()"
+        [hasPrevious]="store.hasPrevious()"
+        [hasNext]="store.hasNext()"
+        [editable]="store.editable()"
+        [showTwoStep]="store.editable()"
+        [loading]="store.loading()"
+        [filtered]="store.filtered()"
+        (roleChanged)="changeRole($event)"
+        (removeRequested)="askRemove($event)"
+        (previousPage)="store.previous()"
+        (nextPage)="store.next()"
+        (filtersCleared)="store.clearFilters()"
+      />
+    }
+
+    @if (invitations.readable()) {
+      <cw-invitations-list
+        [invitations]="invitations.items()"
+        [total]="invitations.total()"
+        [pendingIds]="invitations.pendingIds()"
+        [loading]="invitations.invitations.isLoading()"
+        [failed]="invitations.invitations.status() === 'error'"
+        (resent)="invitations.resend($event)"
+        (cancelled)="invitations.revoke($event)"
+        (retried)="invitations.retry()"
+      />
+    }
+  }
+</div>
+
+@if (canInvite()) {
+  <cw-invite-dialog
+    [(open)]="inviteOpen"
+    [seatsFree]="seatsFree()"
+    [planName]="planLabel()"
+    [pending]="invitations.inviting()"
+    (submitted)="invite($event)"
+  />
+}
+
+@let member = removing();
+@if (member) {
+  <cw-alert-dialog
+    variant="destructive"
+    size="sm"
+    [(open)]="confirmOpen"
+    (confirm)="confirmRemove(member)"
+    data-testid="member-remove-dialog"
+  >
+    <cw-alert-dialog-media>
+      <ng-icon name="phosphorUserMinusBold" aria-hidden="true" />
+    </cw-alert-dialog-media>
+    <h2 cwAlertDialogTitle>{{ removeTitle(member) }}</h2>
+    <p cwAlertDialogDescription>{{ removeText(member) }}</p>
+    <button cwButton cwAlertDialogCancel variant="outline" data-testid="member-remove-cancel">
+      <ng-container i18n="@@organization.members.cancel">Cancel</ng-container>
+    </button>
+    <button cwButton cwAlertDialogAction variant="destructive" data-testid="member-remove-confirm">
+      <ng-container i18n="@@organization.members.remove">Remove the member</ng-container>
+    </button>
+  </cw-alert-dialog>
+}

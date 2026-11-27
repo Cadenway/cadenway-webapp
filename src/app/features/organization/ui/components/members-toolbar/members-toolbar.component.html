@@ -1,0 +1,59 @@
+<cw-input-group class="w-full sm:w-64">
+  <cw-input-group-addon>
+    <ng-icon name="phosphorMagnifyingGlassBold" aria-hidden="true" />
+  </cw-input-group-addon>
+  <input
+    cwInputGroupInput
+    type="search"
+    aria-label="Search for a member"
+    i18n-aria-label="@@organization.members.search"
+    placeholder="Search for a member"
+    i18n-placeholder="@@organization.members.search"
+    [value]="search()"
+    (input)="typed($event)"
+    data-testid="members-search"
+  />
+</cw-input-group>
+
+<cw-tabs [value]="role()" (valueChange)="pickRole($event)">
+  <cw-tabs-list ariaLabel="Filter by role" i18n-ariaLabel="@@organization.members.filter-role">
+    <button cwTab value="all" [count]="roleCounts().all">
+      <ng-container i18n="@@organization.members.filter-all">All</ng-container>
+    </button>
+    <button cwTab value="admin" [count]="roleCounts().admin">
+      <ng-container i18n="@@organization.members.filter-admins">Administrators</ng-container>
+    </button>
+    <button cwTab value="member" [count]="roleCounts().member">
+      <ng-container i18n="@@organization.members.filter-members">Members</ng-container>
+    </button>
+    <button cwTab value="guest" [count]="roleCounts().guest">
+      <ng-container i18n="@@organization.members.filter-guests">Guests</ng-container>
+    </button>
+  </cw-tabs-list>
+</cw-tabs>
+
+<cw-tabs [value]="presence()" (valueChange)="pickPresence($event)">
+  <cw-tabs-list
+    ariaLabel="Filter by presence"
+    i18n-ariaLabel="@@organization.members.filter-presence"
+  >
+    <button cwTab value="all" [count]="presenceCounts().all">
+      <ng-container i18n="@@organization.members.filter-all">All</ng-container>
+    </button>
+    <button cwTab value="online" [count]="presenceCounts().online">
+      <span class="size-2 shrink-0 rounded-full bg-jade" aria-hidden="true"></span>
+      <ng-container i18n="@@organization.members.filter-online">Online</ng-container>
+    </button>
+    <button cwTab value="offline" [count]="presenceCounts().offline">
+      <ng-container i18n="@@organization.members.filter-offline">Offline</ng-container>
+    </button>
+  </cw-tabs-list>
+</cw-tabs>
+
+<p
+  class="ml-auto flex items-center gap-1.5 text-sm whitespace-nowrap text-muted-foreground tabular-nums"
+  aria-live="polite"
+  data-testid="members-online"
+>
+  <span class="size-2 shrink-0 rounded-full bg-jade" aria-hidden="true"></span>{{ onlineSummary() }}
+</p>
