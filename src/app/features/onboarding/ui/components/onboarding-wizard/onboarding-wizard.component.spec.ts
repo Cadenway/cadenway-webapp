@@ -618,17 +618,20 @@ describe('OnboardingWizard', () => {
     ]);
   });
 
-  it('shows itself again when a history move closes the dialog brick', async () => {
+  it('stays open, on the same window, through a history move', async () => {
     const { fixture }: Harness = await render(progress(1));
-    expect(document.querySelector('[role="dialog"]')).not.toBeNull();
+    const dialog: Element | null = document.querySelector('[role="dialog"]');
+    expect(dialog).not.toBeNull();
 
     window.dispatchEvent(new PopStateEvent('popstate', { state: null }));
+    window.dispatchEvent(new HashChangeEvent('hashchange'));
     for (let round: number = 0; round < 4; round += 1) {
       await fixture.whenStable();
       await new Promise<void>((resolve: () => void) => setTimeout(resolve));
     }
 
     expect(document.querySelectorAll('[role="dialog"]')).toHaveLength(1);
+    expect(document.querySelector('[role="dialog"]')).toBe(dialog);
     expect(find('onboarding-wizard')).not.toBeNull();
     expect(document.activeElement).toBe(title());
   });

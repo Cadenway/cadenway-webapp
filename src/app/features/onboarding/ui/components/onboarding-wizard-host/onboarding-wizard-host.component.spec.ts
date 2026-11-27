@@ -516,6 +516,21 @@ describe('OnboardingWizardHost', () => {
     expect(wizard()).not.toBeNull();
   });
 
+  it('keeps the same window open through a navigation within the workspace and a history move', async () => {
+    const { fixture, router }: Harness = await render('/atelier-nord', progress(3));
+    const dialog: Element | null = document.querySelector('[role="dialog"]');
+    expect(dialog).not.toBeNull();
+
+    await router.navigateByUrl('/atelier-nord/l/l-backlog');
+    await settle(fixture);
+    window.dispatchEvent(new PopStateEvent('popstate', { state: null }));
+    await settle(fixture);
+
+    expect(document.querySelectorAll('[role="dialog"]')).toHaveLength(1);
+    expect(document.querySelector('[role="dialog"]')).toBe(dialog);
+    expect(wizard()).not.toBeNull();
+  });
+
   it('holds the onboarding.wizard shell overlay while shown, and releases it once closed', async () => {
     const { fixture }: Harness = await render('/atelier-nord', progress(3));
     const overlay: ShellOverlay = TestBed.inject(ShellOverlay);
