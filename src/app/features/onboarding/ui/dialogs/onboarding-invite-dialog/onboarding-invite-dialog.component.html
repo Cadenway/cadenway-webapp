@@ -1,0 +1,23 @@
+<cw-dialog [(open)]="open" [pending]="pending()" data-testid="onboarding-invite-dialog">
+  <cw-dialog-header>
+    <h2 cwDialogTitle i18n="@@onboarding.getting-started.invite-title">Invite a team member</h2>
+  </cw-dialog-header>
+
+  <cw-onboarding-invite-field [(emails)]="emails" [disabled]="pending()" />
+
+  <cw-dialog-footer>
+    <button cwButton cwDialogClose type="button" variant="outline" [disabled]="pending()">
+      <ng-container i18n="@@onboarding.getting-started.invite-cancel">Cancel</ng-container>
+    </button>
+    <button
+      cwButton
+      type="button"
+      [loading]="pending()"
+      [disabled]="emails().length === 0"
+      (click)="send()"
+      data-testid="onboarding-invite-submit"
+    >
+      <ng-container i18n="@@onboarding.getting-started.invite-submit">Invite</ng-container>
+    </button>
+  </cw-dialog-footer>
+</cw-dialog>

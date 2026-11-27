@@ -11,17 +11,21 @@ afterwards (step 9, wizard package); the space, lists and tasks the assistant cr
 Spaces and Task once they exist; the invitations are organization invitations, which
 Organization manages.
 
-What exists so far is the foundation: the state, the data access, two hosts that render
-nothing and the internal invitation field. The assistant comes with step 9's wizard package, the
-checklist with its getting-started package.
+What exists so far is the foundation (the state, the data access and the internal invitation
+field) and the `Getting started` checklist with its invite dialog. The assistant comes with step
+9's wizard package.
 
 `OnboardingInviteField` (`cw-onboarding-invite-field`, `ui/components/onboarding-invite-field/`) is
 internal, not a public entry: the presentational invitation field (`App.dc.html` lines 2694-2695)
 that both the assistant's `Team` step and the getting-started invite dialog render. It edits the
 list of addresses (`[(emails)]`, `disabled`) and sends nothing; the screen that renders it calls
-`inviteMembers`. No bundled file renders it yet, so its copy (`@@onboarding.invite.*`) enters
-`messages.json` and `messages.fr.json` with the first package that renders it (step 9, wizard
-package).
+`inviteMembers`. The getting-started invite dialog renders it, so its copy
+(`@@onboarding.invite.*`) is in `messages.json` and `messages.fr.json`.
+
+`GettingStartedPanel` (`cw-getting-started-panel`, `ui/components/getting-started-panel/`) and
+`OnboardingInviteDialog` (`cw-onboarding-invite-dialog`, `ui/dialogs/onboarding-invite-dialog/`)
+are internal and presentational; `GettingStartedHost` renders both from `GettingStartedStore`
+(`state/getting-started/`), which it provides.
 
 ## Routes
 
@@ -33,7 +37,8 @@ the application shell's `overlays` slot (not in the settings shells):
 | `withGettingStarted()`   | `onboarding.getting-started` | 40    | `GettingStartedHost` (`cw-getting-started-host`)     |
 | `withOnboardingWizard()` | `onboarding.wizard`          | 50    | `OnboardingWizardHost` (`cw-onboarding-wizard-host`) |
 
-Both hosts render nothing yet (step 9, wizard and getting-started packages).
+`GettingStartedHost` renders the checklist and its invite dialog, each in its own chunk;
+`OnboardingWizardHost` renders nothing yet (step 9, wizard package).
 
 ## Public entry points
 
@@ -53,15 +58,19 @@ route), `withGettingStarted()` and `withOnboardingWizard()` (the `overlays` cont
   getting-started packages). Core's `OrganizationPin` adds `If-Organization-Match` to the four
   onboarding operations.
 - `@core/api` (`readProblem`, `OrganizationSwitchPendingError`).
-- Workspace's `ports/workspace-context` (the current organization, which fences every write; the
-  role checks come with step 9, wizard and getting-started packages).
+- Workspace's `ports/workspace-context` (the current organization, which fences every write;
+  `can('admin')` shows the checklist's invitation item; the assistant's role checks come with
+  step 9, wizard package).
 - Spaces' `utils/space-look`: the `LookColor` type today; `prefixFromName` and
   `lookColorChoices` for the first space's prefix and color names (step 9, wizard package).
-- Not used yet, declared for the next packages: Spaces' `ports/navigation-refresh`
-  (`NAVIGATION_REFRESH`, to show the provisioned space in the sidebar; step 9, wizard package)
-  and Task's `.` entry (`TaskCreate`, for the checklist's `Create your first task`; step 9,
-  getting-started package).
-- `@shared/layout-slot` (`SlotContribution`, `SlotFeature`).
+- Task's `.` entry: `TaskCreate`, whose `open({ listId })` the checklist's
+  `Create your first task` calls on the first list, and whose `created` makes it read the
+  progress again.
+- Not used yet, declared for the next package: Spaces' `ports/navigation-refresh`
+  (`NAVIGATION_REFRESH`, to show the provisioned space in the sidebar; step 9, wizard package).
+- `@shared/layout-slot` (`SlotContribution`, `SlotFeature`, `ShellOverlay`: the invite dialog
+  opens as `onboarding.invite-dialog`, and the checklist hides while `onboarding.wizard` is open).
+- `@cadenway/ui` (`button`, `dialog`, `input`, `progress`, `toast`) and `@cadenway/icons`.
 
 ## Invariants
 
@@ -119,7 +128,39 @@ route), `withGettingStarted()` and `withOnboardingWizard()` (the `overlays` cont
   regard to case (the mockup compares it as typed), and the field empties. The focus returns to
   the field after an add, and after a removal goes to the remove button now at that place, else
   the last one, else the field. The mockup's guest badge (line 2695) is not drawn (gap G5).
-- The checklist will have the three items the contract records (step 9, getting-started
-  package): `firstTaskCreated`, set by the gateway; `invitationSent`; `boardTried`. The mockup's
-  reminder and mobile items have no marker (gaps G2 and G3). A failed checklist read will show
-  nothing.
+- The `Getting started` checklist (`App.dc.html` lines 2712-2727, behaviour 5299-5319) shows
+  when the assistant finished (`wizard.status` `finished`) and provisioned the first space, the
+  presentation is not `dismissed`, and the assistant is not the open `ShellOverlay`
+  (`onboarding.wizard`). Nothing shows while the progress is unread, nor when its first read
+  failed (a shell widget for almost nobody: no error card); a later failed read keeps it.
+- It has the three items the contract records, in the mockup's order: `Create your first task`
+  (`firstTaskCreated`, set by the gateway when the person creates a task in the space),
+  `Invite a team member` (`invitationSent`; shown to an owner or administrator only, since
+  `inviteMembers` refuses the others) and `Try the Board view` (`boardTried`). The counter reads
+  `{done} of {total}` over the items shown. The mockup's reminder and mobile items have no marker
+  (gaps G2 and G3) and are not shipped. A done item stays pressable, as in the mockup.
+- `Create your first task` opens `TaskCreate` on `provisioning.firstListId`; `Try the Board view`
+  opens `/<slug>/l/<firstListId>/board`; `Invite a team member` opens the invite dialog, not the
+  list's share dialog the mockup opens (sharing a list sends no organization invitation, so it
+  could not record the marker).
+- The collapse toggle and `Hide “Getting started”` change the presentation at once through
+  `setPresentation`; a refusal restores the confirmed one with a failure toast
+  (`The list could not be updated`, `“Getting started” could not be hidden`, not in the
+  mockup), and a write
+  dropped for a changed organization (`OnboardingWriteDroppedError`) shows nothing. The
+  dismissal is final.
+- The board watcher records `boardTried` when the address is a list's `Board` view
+  (`/<slug>/l/<id>/board`, any list), on each `NavigationEnd` and for the address shown when the
+  progress arrives, only while the checklist applies and the marker is not recorded. Its write
+  stays silent: a navigation into another organization's board is dropped by the store's
+  organization fence, and a refusal is retried on the next board visit.
+- With no realtime fact for onboarding (gap G8), the checklist reads the progress again after
+  each `TaskCreate.created` and when the tab becomes visible, only while `firstTaskCreated` is
+  not set. It does not poll.
+- The invite dialog (titled `Invite a team member`, with `Cancel` and `Invite`) invites the
+  addresses as members, then toasts the outcome (`{n} invitation(s) sent`, the skipped addresses
+  as the description, or `No invitation sent` when every address was skipped) and closes; it then
+  records `invitationSent` when at least one address was invited, silently. A failure keeps the
+  dialog and its addresses with `The invitations could not be sent` (and the daily-limit line for
+  `429 invitation.daily-limit-reached`); nothing shows when the organization changed meanwhile.
+  The addresses empty each time it opens.
