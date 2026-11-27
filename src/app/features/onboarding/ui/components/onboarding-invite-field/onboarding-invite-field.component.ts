@@ -69,13 +69,15 @@ interface InviteFieldModel {
  * field with its outline `Add` button, then one pill per address with its `Remove <email>` button.
  * It is its own `<form>`, so a host must not nest it inside another form.
  *
- * `Add` checks the trimmed address against the mockup's pattern. An invalid one shows
- * `Enter a full address, for example ines.robert@ateliernord.fr.` under the field, sets
- * `aria-invalid` and keeps the focus in the field; the error follows the text until the next valid
- * add. An empty field adds nothing and shows no error, as in the mockup. A valid address is added
- * once (a duplicate, compared without regard to case, is dropped), the field is emptied and the
- * focus returns to it. Removing a pill moves the focus to the next pill's remove button, else the
- * previous one's, else the field.
+ * The trimmed address must match the mockup's pattern; only a truly empty field is valid, so blank
+ * text is invalid, as in the mockup. Once the field is touched (blurred, or submitted with `Add`)
+ * an invalid address shows `Enter a full address, for example ines.robert@ateliernord.fr.` under
+ * the field, which it describes, and `CwInput` sets `aria-invalid` from the same field state; the
+ * error follows the text until the next valid add. An invalid `Add` keeps the focus in the field,
+ * and `Add` on an empty field adds nothing and shows no error. A valid address is added once (a
+ * duplicate, compared without regard to case, is dropped), the field is emptied and untouched, and
+ * the focus returns to it. Removing a pill moves the focus to the next pill's remove button, else
+ * the previous one's, else the field.
  *
  * Presentational: the list is the two-way `emails` model; sending the invitations belongs to the
  * host. `disabled` disables the field and every button, for example while the host sends them.
@@ -152,8 +154,8 @@ export class OnboardingInviteField {
    * Property inviteForm
    *
    * @description
-   * The invite form: a typed address must match the mockup's pattern once trimmed; an empty field
-   * is valid and adds nothing. The field is disabled with `disabled`.
+   * The invite form: any text, blank text included, must match the mockup's pattern once trimmed;
+   * only an empty field is valid, and it adds nothing. The field is disabled with `disabled`.
    *
    * @type {FieldTree<InviteFieldModel>}
    * @readonly
@@ -161,8 +163,8 @@ export class OnboardingInviteField {
   protected readonly inviteForm: FieldTree<InviteFieldModel> = form(this.model, (path) => {
     disabled(path.email, { when: (): boolean => this.disabled() });
     validate(path.email, (context: FieldContext<string>) => {
-      const email: string = context.value().trim();
-      if (email === '' || INVITE_EMAIL_PATTERN.test(email)) return undefined;
+      const text: string = context.value();
+      if (text === '' || INVITE_EMAIL_PATTERN.test(text.trim())) return undefined;
       return {
         kind: 'email',
         message: $localize`:@@onboarding.invite.invalid:Enter a full address, for example ines.robert@ateliernord.fr.`,
@@ -171,28 +173,19 @@ export class OnboardingInviteField {
   });
 
   /**
-   * Property attempted
-   *
-   * @description
-   * Whether `Add` was pressed with an invalid address since the last valid add: the error shows
-   * from that submit on, as in the mockup, and not on blur.
-   *
-   * @type {WritableSignal<boolean>}
-   * @readonly
-   */
-  protected readonly attempted: WritableSignal<boolean> = signal<boolean>(false);
-
-  /**
    * Property error
    *
    * @description
-   * Message of the field after an invalid `Add`, while the text stays invalid; null otherwise.
+   * Message of the field while it is touched and invalid, the state `CwInput` reads for
+   * `aria-invalid`; null otherwise.
    *
    * @type {Signal<string | null>}
    * @readonly
    */
   protected readonly error: Signal<string | null> = computed((): string | null =>
-    this.attempted() ? (this.inviteForm.email().errors()[0]?.message ?? null) : null,
+    this.inviteForm.email().touched() && this.inviteForm.email().invalid()
+      ? (this.inviteForm.email().errors()[0]?.message ?? null)
+      : null,
   );
 
   /**
@@ -226,8 +219,8 @@ export class OnboardingInviteField {
    * Method add
    *
    * @description
-   * Adds the typed address once and empties the field, or shows the error; the focus stays in, or
-   * returns to, the field.
+   * Adds the typed address once and empties the field, or shows the error (`submit()` marks the
+   * field touched); the focus stays in, or returns to, the field.
    *
    * @param {Event} event - The form submission.
    * @returns {Promise<void>} Resolves once checked.
@@ -244,14 +237,12 @@ export class OnboardingInviteField {
             this.emails.update((added: readonly string[]): readonly string[] => [...added, email]);
           }
           this.model.set({ email: '' });
-          this.inviteForm().reset();
         }
-        this.attempted.set(false);
+        this.inviteForm().reset();
         this.inviteForm.email().focusBoundControl();
         return Promise.resolve(undefined);
       },
       onInvalid: (fields: FieldTree<InviteFieldModel>): void => {
-        this.attempted.set(true);
         fields.email().focusBoundControl();
       },
     });

@@ -190,14 +190,54 @@ describe('OnboardingInviteField', () => {
     expect(field().getAttribute('aria-invalid')).toBeNull();
   });
 
+  it('shows the error with aria-invalid together once an incomplete address is blurred', async () => {
+    const fixture: ComponentFixture<OnboardingInviteField> = await render();
+
+    await type(fixture, 'ines.robert@ateliernord');
+    field().dispatchEvent(new Event('blur'));
+    await fixture.whenStable();
+
+    const error: HTMLElement | null = find('onboarding-invite-error');
+    expect(error?.textContent.trim()).toBe(
+      'Enter a full address, for example ines.robert@ateliernord.fr.',
+    );
+    expect(field().getAttribute('aria-invalid')).toBe('true');
+    expect(field().getAttribute('aria-describedby')).toBe(error?.id);
+  });
+
+  it('shows neither the error nor aria-invalid when an empty field is blurred', async () => {
+    const fixture: ComponentFixture<OnboardingInviteField> = await render();
+
+    field().dispatchEvent(new Event('blur'));
+    await fixture.whenStable();
+
+    expect(find('onboarding-invite-error')).toBeNull();
+    expect(field().getAttribute('aria-invalid')).toBeNull();
+    expect(field().getAttribute('aria-describedby')).toBeNull();
+  });
+
   it('adds nothing and shows no error when the field is empty', async () => {
+    const fixture: ComponentFixture<OnboardingInviteField> = await render();
+
+    await add(fixture);
+
+    expect(fixture.componentInstance.emails()).toEqual([]);
+    expect(find('onboarding-invite-error')).toBeNull();
+    expect(field().getAttribute('aria-invalid')).toBeNull();
+    expect(document.activeElement).toBe(field());
+  });
+
+  it('shows the error for blank text and adds nothing', async () => {
     const fixture: ComponentFixture<OnboardingInviteField> = await render();
 
     await type(fixture, '   ');
     await add(fixture);
 
     expect(fixture.componentInstance.emails()).toEqual([]);
-    expect(find('onboarding-invite-error')).toBeNull();
+    expect(find('onboarding-invite-error')?.textContent.trim()).toBe(
+      'Enter a full address, for example ines.robert@ateliernord.fr.',
+    );
+    expect(field().getAttribute('aria-invalid')).toBe('true');
     expect(document.activeElement).toBe(field());
   });
 
