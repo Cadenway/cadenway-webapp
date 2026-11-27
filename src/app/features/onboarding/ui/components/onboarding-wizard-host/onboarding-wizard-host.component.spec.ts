@@ -32,6 +32,16 @@ import { OnboardingWizardHost } from './onboarding-wizard-host.component';
 class BlankPage {}
 
 /**
+ * Constant held
+ *
+ * @description
+ * The answer of the guard on `/:org/held`, which a test holds to keep a navigation under way.
+ *
+ * @type {{ answer: Promise<boolean> }}
+ */
+const held: { answer: Promise<boolean> } = { answer: Promise.resolve(true) };
+
+/**
  * Constant ATELIER_NORD
  *
  * @description
@@ -212,6 +222,11 @@ async function render(
           children: [
             { path: '', component: BlankPage },
             { path: 'l/:listId', component: BlankPage },
+            {
+              path: 'held',
+              component: BlankPage,
+              canActivate: [(): Promise<boolean> => held.answer],
+            },
           ],
         },
       ]),
@@ -391,6 +406,39 @@ describe('OnboardingWizardHost', () => {
     expect(saveDraft).not.toHaveBeenCalled();
     expect(router.url).toBe('/atelier-nord');
     expect(wizard()).not.toBeNull();
+  });
+
+  it('removes the parameter once a navigation under way during the settlement is cancelled', async () => {
+    const {
+      fixture,
+      router,
+      progress: shown,
+    }: Harness = await render('/atelier-nord?onboarding=start', null);
+    let answer: (allowed: boolean) => void = (): void => undefined;
+    held.answer = new Promise<boolean>((resolve: (allowed: boolean) => void) => {
+      answer = resolve;
+    });
+    // `whenStable` would wait for the held navigation: let the effects run by hand meanwhile.
+    const turn: () => Promise<void> = async (): Promise<void> => {
+      for (let round: number = 0; round < 3; round += 1) {
+        await new Promise<void>((resolve: () => void) => setTimeout(resolve));
+        TestBed.tick();
+      }
+    };
+    const leaving: Promise<boolean> = router.navigateByUrl('/atelier-nord/held');
+    await turn();
+    expect(router.currentNavigation()).not.toBeNull();
+
+    shown.set(progress(3));
+    await turn();
+    expect(router.url).toBe('/atelier-nord?onboarding=start');
+
+    answer(false);
+    expect(await leaving).toBe(false);
+    await settle(fixture);
+
+    expect(router.url).toBe('/atelier-nord');
+    held.answer = Promise.resolve(true);
   });
 
   it('opens when a later navigation carries ?onboarding=start', async () => {

@@ -12,7 +12,9 @@ import {
 import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
 import {
   type Event,
+  NavigationCancel,
   NavigationEnd,
+  NavigationError,
   PRIMARY_OUTLET,
   Router,
   type UrlSegmentGroup,
@@ -224,6 +226,27 @@ export class OnboardingWizardHost {
   );
 
   /**
+   * Property unfinished
+   *
+   * @description
+   * Id of the last navigation that was cancelled or failed (0 before any): a launch whose
+   * settlement waited for a navigation is settled again once it ends without changing the address.
+   *
+   * @type {Signal<number>}
+   * @readonly
+   */
+  private readonly unfinished: Signal<number> = toSignal(
+    this.router.events.pipe(
+      filter(
+        (event: Event): event is NavigationCancel | NavigationError =>
+          event instanceof NavigationCancel || event instanceof NavigationError,
+      ),
+      map((event: NavigationCancel | NavigationError): number => event.id),
+    ),
+    { initialValue: 0 },
+  );
+
+  /**
    * Property atRoot
    *
    * @description
@@ -289,6 +312,7 @@ export class OnboardingWizardHost {
     effect((): void => {
       const organizationId: string = this.workspace.organization().id;
       const progress: OnboardingProgress | null = this.onboarding.progress();
+      this.unfinished();
       if (this.startedFor() !== organizationId || progress === null || !hasStart(this.address())) {
         return;
       }
@@ -355,7 +379,8 @@ export class OnboardingWizardHost {
    * @description
    * Once the progress of a launch from `?onboarding=start` is known: removes the parameter when the
    * launch is durable (the progress is past version 1, or the assistant is no longer
-   * `in-progress`), unless a navigation is under way, whose end settles it again; at version 1
+   * `in-progress`), unless a navigation is under way, whose end (completed, cancelled or failed)
+   * settles it again; at version 1
    * it asks the store, once per organization, to save the initial
    * draft, whose answer moves the version on and comes back here.
    *
@@ -365,7 +390,8 @@ export class OnboardingWizardHost {
   private settleStart(organizationId: string, progress: OnboardingProgress): void {
     if (progress.wizard.status !== 'in-progress' || progress.version > 1) {
       // A navigation under way (the finish opening the first list) would be cut short by the
-      // removal; its end changes the address, which settles the launch again.
+      // removal; its end settles the launch again: a completed one changes the address, a
+      // cancelled or failed one moves `unfinished` on.
       if (this.router.currentNavigation() === null) this.removeStart();
       return;
     }
