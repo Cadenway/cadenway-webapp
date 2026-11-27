@@ -1,0 +1,96 @@
+<div class="mx-auto flex w-full max-w-4xl flex-col gap-6 px-4 py-6 sm:px-8 sm:py-8">
+  @if (store.current()) {
+    <header class="flex flex-wrap items-start gap-4">
+      <div class="flex min-w-0 flex-1 flex-col gap-1">
+        <h1
+          class="text-2xl font-semibold tracking-tight"
+          tabindex="-1"
+          data-route-focus
+          i18n="@@organization.quotas.title"
+        >
+          Quotas and usage
+        </h1>
+      </div>
+      <button
+        cwButton
+        type="button"
+        variant="outline"
+        (click)="exportUsage()"
+        data-testid="quotas-export"
+      >
+        <ng-icon name="phosphorDownloadSimpleBold" aria-hidden="true" />
+        <ng-container i18n="@@organization.quotas.export">Export usage (CSV)</ng-container>
+      </button>
+    </header>
+
+    <cw-quota-meters [title]="limitsTitle()" [meters]="meters()" />
+  } @else if (store.subscription.isLoading()) {
+    <div
+      class="flex flex-col gap-6"
+      role="status"
+      aria-busy="true"
+      aria-label="Loading the section"
+      i18n-aria-label="@@organization.quotas.loading"
+      data-testid="quotas-skeleton"
+    >
+      <div class="flex items-start gap-4" aria-hidden="true">
+        <div class="flex min-w-0 flex-1 flex-col gap-2">
+          <div cwSkeleton class="h-7 w-56"></div>
+        </div>
+        <div cwSkeleton class="h-8 w-32 rounded-lg"></div>
+      </div>
+      <section
+        class="flex flex-col gap-5 rounded-xl border border-border bg-card p-4"
+        aria-hidden="true"
+      >
+        <div class="flex items-center justify-between gap-2">
+          <div cwSkeleton class="h-4 w-40"></div>
+          <div cwSkeleton class="h-3 w-28"></div>
+        </div>
+        @for (row of skeletonRows; track row) {
+          <div class="flex flex-col gap-2">
+            <div class="flex items-center justify-between gap-3">
+              <div cwSkeleton class="h-3 w-24"></div>
+              <div cwSkeleton class="h-3 w-16"></div>
+            </div>
+            <div cwSkeleton class="h-1.5 w-full rounded-full"></div>
+            <div cwSkeleton class="h-2.5 w-1/2"></div>
+          </div>
+        }
+      </section>
+    </div>
+  } @else if (store.failed()) {
+    <div
+      class="rounded-xl border border-dashed border-border"
+      role="alert"
+      data-testid="quotas-failed"
+    >
+      <cw-empty class="p-6">
+        <cw-empty-header>
+          <cw-empty-media tone="destructive">
+            <ng-icon name="phosphorWarningCircleBold" aria-hidden="true" />
+          </cw-empty-media>
+          <cw-empty-title i18n="@@organization.quotas.failed-title"
+            >Could not load this section</cw-empty-title
+          >
+          <cw-empty-description i18n="@@organization.quotas.failed-text"
+            >The server did not answer in time. Your settings are not lost: try again in a
+            moment.</cw-empty-description
+          >
+        </cw-empty-header>
+        <cw-empty-content>
+          <button
+            cwButton
+            type="button"
+            variant="outline"
+            (click)="store.retry()"
+            data-testid="quotas-retry"
+          >
+            <ng-icon name="phosphorArrowClockwiseBold" aria-hidden="true" />
+            <ng-container i18n="@@organization.quotas.retry">Retry</ng-container>
+          </button>
+        </cw-empty-content>
+      </cw-empty>
+    </div>
+  }
+</div>

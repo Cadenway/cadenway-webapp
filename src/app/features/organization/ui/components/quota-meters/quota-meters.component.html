@@ -1,0 +1,39 @@
+<cw-card role="region" aria-labelledby="quotas-limits-title">
+  <cw-card-header>
+    <cw-card-title>
+      <h2 id="quotas-limits-title">{{ title() }}</h2>
+    </cw-card-title>
+    <cw-card-action>
+      <span class="text-xs text-muted-foreground" i18n="@@organization.quotas.alert-threshold"
+        >alert threshold at 80%</span
+      >
+    </cw-card-action>
+  </cw-card-header>
+  <cw-card-content class="flex flex-col gap-5">
+    @for (meter of meters(); track meter.id) {
+      @if (meter.limit === null) {
+        <div [attr.data-testid]="'quota-' + meter.id">
+          <div class="flex items-center justify-between gap-3">
+            <span class="text-sm font-medium">{{ meter.label }}</span>
+            <span class="shrink-0 text-sm text-muted-foreground tabular-nums">{{
+              meter.text
+            }}</span>
+          </div>
+          @if (meter.note) {
+            <p class="mt-1.5 text-xs text-muted-foreground">{{ meter.note }}</p>
+          }
+        </div>
+      } @else {
+        <cw-meter
+          [attr.data-testid]="'quota-' + meter.id"
+          [label]="meter.label"
+          [value]="meter.used"
+          [max]="meter.limit"
+          [zone]="meter.zone"
+          [format]="format(meter)"
+          [note]="meter.note"
+        />
+      }
+    }
+  </cw-card-content>
+</cw-card>
