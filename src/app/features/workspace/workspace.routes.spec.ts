@@ -1452,6 +1452,100 @@ describe('WORKSPACE_ROUTES', () => {
     expect(TestBed.inject(Router).url).toBe('/atelier-nord/missing/page');
   });
 
+  it('mounts the account settings in the settings shell, outside the application shell', async () => {
+    const harness: RouterTestingHarness = await open('/atelier-nord/account');
+
+    const element: HTMLElement = harness.fixture.nativeElement as HTMLElement;
+    expect(TestBed.inject(Router).url).toBe('/atelier-nord/account/profile');
+    expect(element.querySelector('h1')?.textContent.trim()).toBe('Profile');
+    expect(element.querySelector('nav[aria-label="Settings"]')).not.toBeNull();
+    expect(element.querySelector('[data-testid="organization-switcher"]')).toBeNull();
+    for (const id of [
+      'settings-organization-home',
+      'home-rail-item',
+      'inbox-rail-item',
+      'spaces-rail-item',
+      'search-rail-item',
+      'theme-rail-item',
+      'user-menu-trigger',
+      'settings-back-to-app',
+    ]) {
+      expect(element.querySelector(`[data-testid="${id}"]`), id).not.toBeNull();
+    }
+    expect(
+      element.querySelector('[data-testid="settings-back-to-app"]')?.getAttribute('href'),
+    ).toBe('/atelier-nord');
+    expect(
+      element
+        .querySelector('[data-testid="account-navigation-profile"]')
+        ?.getAttribute('aria-current'),
+    ).toBe('page');
+    expect(
+      [...element.querySelectorAll('[data-testid^="organization-link-"]')].map((link: Element) =>
+        link.getAttribute('href'),
+      ),
+    ).toEqual([
+      '/atelier-nord/organization/general',
+      '/atelier-nord/organization/members',
+      '/atelier-nord/organization/billing',
+      '/atelier-nord/organization/quotas',
+    ]);
+  });
+
+  it('mounts the organization settings with the navigation of an owner', async () => {
+    const harness: RouterTestingHarness = await open('/atelier-nord/organization/billing');
+
+    const element: HTMLElement = harness.fixture.nativeElement as HTMLElement;
+    expect(element.querySelector('h1')?.textContent.trim()).toBe('Billing');
+    expect(element.querySelector('nav[aria-label="Organization settings"]')).not.toBeNull();
+    await vi.waitFor(() => {
+      harness.detectChanges();
+      expect(element.querySelector('[data-testid="organization-identity"]')?.textContent).toContain(
+        'Team plan · 18 members',
+      );
+    });
+    expect(element.querySelectorAll('[data-testid^="organization-navigation-"]')).toHaveLength(7);
+    expect(
+      element
+        .querySelector('[data-testid="organization-navigation-quotas"] [aria-hidden="false"]')
+        ?.getAttribute('aria-label'),
+    ).toBe('Critical quota');
+    expect(
+      element.querySelector('[data-testid="account-settings-link"]')?.getAttribute('href'),
+    ).toBe('/atelier-nord/account/security');
+  });
+
+  it('sends a member who opens an owner section to the first section their role allows', async () => {
+    const harness: RouterTestingHarness = await open('/lumen/organization/billing');
+
+    const element: HTMLElement = harness.fixture.nativeElement as HTMLElement;
+    expect(TestBed.inject(Router).url).toBe('/lumen/organization/general');
+    expect(element.querySelector('h1')?.textContent.trim()).toBe('Organization profile');
+    expect(
+      [...element.querySelectorAll('[data-testid^="organization-navigation-"]')].map(
+        (link: Element) => link.textContent.trim(),
+      ),
+    ).toEqual(['General', 'Members']);
+  });
+
+  it('sends a guest who opens the organization settings back to the workspace', async () => {
+    session.currentOrganization.mockReturnValue(ok({ ...lumen, role: 'guest' }));
+    session.myOrganizations.mockReturnValue(ok([atelierNord, { ...lumen, role: 'guest' }]));
+
+    await open('/lumen/organization');
+
+    expect(TestBed.inject(Router).url).toBe('/lumen');
+  });
+
+  it('renders the 404 inside the settings shell for an unknown settings section', async () => {
+    const harness: RouterTestingHarness = await open('/atelier-nord/account/missing');
+
+    const element: HTMLElement = harness.fixture.nativeElement as HTMLElement;
+    expect(element.querySelector('h1')?.textContent.trim()).toBe('Page not found');
+    expect(element.querySelector('nav[aria-label="Settings"]')).not.toBeNull();
+    expect(TestBed.inject(Router).url).toBe('/atelier-nord/account/missing');
+  });
+
   it('mounts the task deep link inside the shell and renders not found for a missing task', async () => {
     const getTask: Mock<() => Observable<never>> = vi.fn(() =>
       throwError(() => new HttpErrorResponse({ status: 404, url: '/tasks/CAD-482' })),

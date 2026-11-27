@@ -5,8 +5,9 @@
 The organization-scoped workspace under `/:org`: the session and slug guards, the context resolver,
 the workspace context (user, organization, role, plan), the redirects of slug-less e-mail links, and
 the mounting of the `app-shell` and `settings-shell` layouts with their slot bindings, and the shell
-chrome no other feature owns: the organizations menu, the rail's theme button and the keyboard
-shortcuts dialog. The screens inside belong to their own features; sign-in and organization choice
+chrome no other feature owns: the organizations menu, the rail's theme button, the keyboard
+shortcuts dialog, the settings shell's organization square and `Back to the application` link,
+the role guard of the organization settings and the discard confirmation of unsaved settings. The screens inside belong to their own features; sign-in and organization choice
 belong to Auth.
 
 ## Routes
@@ -19,38 +20,67 @@ belong to Auth.
   or redirected to: `organizationGuard` and `slugRedirectGuard` send it to `/organizations`, so
   `/home` cannot redirect to itself while organization-service does not refuse such slugs yet.
 - `/:org` runs `sessionGuard`, then `organizationGuard`, then `workspaceResolver`, with
-  guards rerun when the slug changes or context revalidation is requested. It provides the workspace
-  runtime, the workspace context, Account's `providePresence()` and every shell contribution, and
-  loads `AppShell` with `provideCadenwayIcons()`:
+  guards rerun when the slug changes or context revalidation is requested. It is componentless:
+  it provides `provideCadenwayIcons()` and the workspace-wide services (the workspace runtime and
+  context, Account's `providePresence()`, Organization's `provideOrganizationUsage()` and Spaces'
+  `provideSpacesNavigation()`), and its children mount the shells, in this order:
+  - `account` and `organization` load `SettingsShell` and mount Account's `ACCOUNT_ROUTES` and
+    Organization's `ORGANIZATION_ROUTES`. Their `data` names the settings navigation (`Settings`,
+    `workspace.settings.account-navigation`; `Organization settings`,
+    `workspace.settings.organization-navigation`) and titles the error boundary's unavailable state
+    (`Could not load this section`, `workspace.settings.load-failed`). Each provides Account's
+    `provideReauthentication()` and these settings shell contributions:
 
-  | Slot                   | Contributions, in order                                                                                 |
-  | ---------------------- | ------------------------------------------------------------------------------------------------------- |
-  | `banners`              | Organization's storage banner                                                                           |
-  | `organizationSwitcher` | Workspace's organizations menu                                                                          |
-  | `railNavigation`       | Home's `Home`, Inbox's `Inbox`, Spaces' `Spaces`                                                        |
-  | `railFooter`           | Search's `Search`, Workspace's theme button, Account's menu                                             |
-  | `sidebarHeader`        | Workspace's organization row, Search's `Search…` button                                                 |
-  | `sidebar`              | Spaces' favorites, spaces accordion and tips                                                            |
-  | `sidebarFooter`        | Spaces' sprint progress, Organization's plan line, Spaces' `Trash` and `Archives`, `Keyboard shortcuts` |
-  | `overlays`             | Search's command palette, Workspace's shortcuts dialog, Task's create dialog and task detail            |
-  - `''` mounts `HOME_ROUTES`, then `SPACES_ROUTES` (`spaces/:spaceId`, `l/:listId`), then
-    `TASK_ROUTES` (`t/:taskKey`).
-  - `**` mounts `ERRORS_ROUTES`, so an unknown address renders the 404 inside the shell.
+    | Slot                 | `account`                                                                                 | `organization`                                                              |
+    | -------------------- | ----------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
+    | `railNavigation`     | Workspace's organization square, Home's `Home`, Inbox's `Inbox`, Spaces' `Spaces`         | Same                                                                        |
+    | `railFooter`         | Search's `Search`, Workspace's theme button, Account's menu                               | Same                                                                        |
+    | `settingsNavigation` | Workspace's back link, Account's sections, Organization's section links                   | Workspace's back link, Organization's identity and sections, Account's link |
+    | `overlays`           | Search's command palette, Workspace's shortcuts dialog, Account's reauthentication dialog | Same                                                                        |
+
+  - `''` loads `AppShell` with these contributions, and holds the screens of the other features.
+    A new screen adds an empty-path `loadChildren` entry before `**` in this child's `children`:
+
+    | Slot                   | Contributions, in order                                                                                 |
+    | ---------------------- | ------------------------------------------------------------------------------------------------------- |
+    | `banners`              | Organization's storage banner                                                                           |
+    | `organizationSwitcher` | Workspace's organizations menu                                                                          |
+    | `railNavigation`       | Home's `Home`, Inbox's `Inbox`, Spaces' `Spaces`                                                        |
+    | `railFooter`           | Search's `Search`, Workspace's theme button, Account's menu                                             |
+    | `sidebarHeader`        | Workspace's organization row, Search's `Search…` button                                                 |
+    | `sidebar`              | Spaces' favorites, spaces accordion and tips                                                            |
+    | `sidebarFooter`        | Spaces' sprint progress, Organization's plan line, Spaces' `Trash` and `Archives`, `Keyboard shortcuts` |
+    | `overlays`             | Search's command palette, Workspace's shortcuts dialog, Task's create dialog and task detail            |
+    - `''` mounts `HOME_ROUTES`, then `SPACES_ROUTES` (`spaces/:spaceId`, `l/:listId`), then
+      `TASK_ROUTES` (`t/:taskKey`).
+    - `**` mounts `ERRORS_ROUTES`, so an unknown address renders the 404 inside the application
+      shell; an unknown settings section renders it inside the settings shell.
 
 - Redirect targets owned by Auth: `/login?next=<url>` for a `401`, `/organizations` for an
   unknown slug, a refused switch (`organization.mfa-required`...) or an unavailable gateway.
 
 ## Public entry points
 
-| Entry point               | Consumers                                                        |
-| ------------------------- | ---------------------------------------------------------------- |
-| `workspace.routes`        | app                                                              |
-| `ports/workspace-context` | home, errors, account, search, inbox, organization, spaces, task |
+| Entry point                         | Consumers                                                        |
+| ----------------------------------- | ---------------------------------------------------------------- |
+| `workspace.routes`                  | app                                                              |
+| `ports/workspace-context`           | home, errors, account, search, inbox, organization, spaces, task |
+| `http/guards/organization-role`     | organization                                                     |
+| `ui/dialogs/discard-changes-dialog` | account, organization                                            |
 
 `ports/workspace-context` publishes `WORKSPACE_CONTEXT` (`WorkspaceContextPort`: `user`,
 `organization`, `role` and `can(role)`) and the `WorkspaceUser`, `WorkspaceOrganization` and
 `WorkspaceRole` models. It is provided only inside `/:org`; code that may run outside a workspace
 injects it as optional.
+
+`http/guards/organization-role` publishes `organizationRoleGuard(least, fallbacks?)` and the
+`OrganizationRoleFallback` model. It lets a route below `/:org` open for a role at least `least`
+(the order of `can()`), and otherwise redirects with a `UrlTree` to the first fallback the role
+meets, below `/<slug>`, or else to `/<slug>`.
+
+`ui/dialogs/discard-changes-dialog` publishes `DiscardChangesDialog` (`cw-discard-changes-dialog`):
+`ask()` opens `Discard unsaved changes?` with `Keep editing` and `Discard` and resolves the
+answer, for a settings page's `confirmDiscard()` (`@shared/unsaved-changes`).
 
 ## Dependencies
 
@@ -62,8 +92,12 @@ injects it as optional.
   `provideSpacesNavigation()`) and Task, and Organization's `utils/plan-label`, bound on `/:org`.
 - Spaces' `spaces.routes` and Task's `task.routes`, mounted under `/:org`.
 - `@core/shortcuts` (`?`) and `@core/theme`.
-- `@layouts/app-shell` and `@layouts/app-shell/providers` for the shell and its slots.
-- `@cadenway/ui` (`app-rail`, `button`, `dialog`, `kbd`, `menu`, `skeleton`) and `@cadenway/icons`.
+- Account's `account.routes` and Organization's `organization.routes`, mounted in the settings
+  shell, and Errors' `.` entry (`RouteErrorData`).
+- `@layouts/app-shell`, `@layouts/app-shell/providers`, `@layouts/settings-shell` and
+  `@layouts/settings-shell/providers` for the shells and their slots.
+- `@cadenway/ui` (`alert-dialog`, `app-rail`, `button`, `dialog`, `kbd`, `menu`, `skeleton`) and
+  `@cadenway/icons`.
 
 ## Invariants
 
@@ -82,8 +116,7 @@ injects it as optional.
   `listMyOrganizations` the first time the menu opens, with skeletons and an inline `Retry`.
   Choosing another organization navigates to `/<slug>`, whose guard switches the session; once the
   navigation succeeds with that organization committed, the toast `Organization: <name>` confirms
-  it (a cancelled or redirected switch confirms nothing). The settings entries open `/<slug>/organization/general|members|billing` (the 404 until the
-  organization settings step) and `Create or join an organization` opens `/organizations`.
+  it (a cancelled or redirected switch confirms nothing). The settings entries open `/<slug>/organization/general|members|billing` and `Create or join an organization` opens `/organizations`.
 - `ShortcutsHelp` (root) only holds whether the shortcuts dialog is open; `?` opens it outside fields
   through `ShortcutsService`, for as long as the shell lives.
 - The same menu opens from the rail square (desktop only) and from the sidebar header's
@@ -112,7 +145,16 @@ injects it as optional.
   switch reconnects its realtime client.
 - Guards and the resolver never reach the error boundary: they redirect with a `UrlTree` or a
   `RedirectCommand`.
-- The `settings-shell` binding comes with the account and organization settings steps.
+- The organization guard records the router navigation that verified the organization.
+  `organizationRoleGuard` runs before `workspaceResolver` commits the context, so it checks the
+  role verified during its own navigation, or else the committed role (a navigation between
+  sections, where the `/:org` guards do not run again). A role verified by a cancelled navigation
+  is never used.
+- The settings shell's organization square (`withOrganizationHomeItem()`, rail order -10) and
+  `Back to the application` (`withBackToApp()`, navigation order 0) open `/<slug>`: the mockup
+  opens the spaces screen, which has no index route yet.
+- `DiscardChangesDialog` answers false on `Keep editing`, Escape, a new question and its own
+  destruction, so an unsaved-changes guard never waits forever.
 
 ## Copy not taken word for word from the mockup
 
@@ -120,3 +162,4 @@ injects it as optional.
 | ---------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
 | `workspace.organization-menu.failed`, `workspace.retry`                            | The mockup draws no failed organizations read.                              |
 | `workspace.organization-menu.role-admin`, `workspace.organization-menu.role-guest` | Roles the mockup's menu does not list, worded as in `Organisation.dc.html`. |
+| `workspace.settings.discard-*`                                                     | The mockup draws no discard confirmation.                                   |
