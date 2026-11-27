@@ -232,7 +232,11 @@ be loaded.` with `Retry`, until a read or a save confirms the organization (anot
   writes and the section skeleton (the next organization's first read failing reaches the error
   boundary), and a write that settles after it changes nothing and shows no toast. The page binds
   the invite dialog and the removal confirmation to the organization they were opened for: a
-  switch closes and empties them, and a submission for another organization sends nothing.
+  switch closes and empties them, and a submission for another organization sends nothing. Each
+  opening (and each closing by the page) starts a new dialog generation: an invite's answer
+  applies only to the dialog that submitted it while it is still open, so a dialog or removal
+  confirmation opened while an older invite was pending keeps its state, whatever that invite
+  ends with.
   `InvitationsStore` also hears `OrganizationPin.organizationChanges`: a commit resets its writes
   at once, and each invite, resend and cancellation listens to it while pending and stays moved
   once it fired, so a switch away and back (A, then B, then A) before the answer still drops it

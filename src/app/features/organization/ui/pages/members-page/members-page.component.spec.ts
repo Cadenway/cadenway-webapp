@@ -504,6 +504,127 @@ describe('MembersPage', () => {
     expect(fakes.toasts.error).toHaveBeenCalledTimes(1);
   });
 
+  describe('an invite still pending when the organization changes', () => {
+    /**
+     * Function pendingInvite
+     *
+     * @description
+     * Renders the page, submits an invite whose answer waits, then switches to another
+     * organization.
+     *
+     * @returns {Promise<[ComponentFixture<MembersPage>, Fakes, (outcome: unknown) => void]>} The
+     * page, its fakes and the answer of the pending invite.
+     */
+    async function pendingInvite(): Promise<
+      [ComponentFixture<MembersPage>, Fakes, (outcome: unknown) => void]
+    > {
+      const [fixture, fakes]: [ComponentFixture<MembersPage>, Fakes] = await render('admin');
+      let answer: (outcome: unknown) => void = () => undefined;
+      fakes.invitations.invite.mockReturnValueOnce(
+        new Promise<unknown>((resolve: (outcome: unknown) => void) => {
+          answer = resolve;
+        }),
+      );
+      find('members-invite')?.click();
+      await fixture.whenStable();
+      await typeAddresses(fixture, 'marc.roux@ateliernord.fr');
+      find('invite-submit')?.click();
+      await vi.waitFor(() => {
+        expect(fakes.invitations.invite).toHaveBeenCalledTimes(1);
+      });
+      fakes.organization.set({ ...fakes.organization(), id: 'o2', slug: 'lumen', name: 'Lumen' });
+      await fixture.whenStable();
+      expect(find('invite-emails')).toBeNull();
+      return [fixture, fakes, answer];
+    }
+
+    /**
+     * Function typeAddresses
+     *
+     * @description
+     * Types addresses in the invite dialog's field.
+     *
+     * @param {ComponentFixture<MembersPage>} fixture - The page.
+     * @param {string} value - What is typed.
+     * @returns {Promise<void>} Resolves once rendered.
+     */
+    async function typeAddresses(
+      fixture: ComponentFixture<MembersPage>,
+      value: string,
+    ): Promise<void> {
+      const field: HTMLTextAreaElement = find('invite-emails') as HTMLTextAreaElement;
+      field.value = value;
+      field.dispatchEvent(new Event('input'));
+      await fixture.whenStable();
+    }
+
+    /**
+     * Function settle
+     *
+     * @description
+     * Answers the pending invite and waits for the page.
+     *
+     * @param {ComponentFixture<MembersPage>} fixture - The page.
+     * @param {(outcome: unknown) => void} answer - The answer of the pending invite.
+     * @returns {Promise<void>} Resolves once rendered.
+     */
+    async function settle(
+      fixture: ComponentFixture<MembersPage>,
+      answer: (outcome: unknown) => void,
+    ): Promise<void> {
+      answer({ invited: 1, skipped: 0, notSent: [] });
+      await new Promise<void>((done: () => void) => {
+        setTimeout(done, 0);
+      });
+      await fixture.whenStable();
+    }
+
+    it('leaves an invite dialog opened since alone when it ends dropped', async () => {
+      const [fixture, , answer]: [ComponentFixture<MembersPage>, Fakes, (o: unknown) => void] =
+        await pendingInvite();
+      find('members-invite')?.click();
+      await fixture.whenStable();
+      await typeAddresses(fixture, 'lucie@example.com');
+
+      await settle(fixture, answer);
+
+      expect((find('invite-emails') as HTMLTextAreaElement | null)?.value).toBe(
+        'lucie@example.com',
+      );
+    });
+
+    it('leaves an invite dialog opened since alone when it ends sent', async () => {
+      const [fixture, fakes, answer]: [ComponentFixture<MembersPage>, Fakes, (o: unknown) => void] =
+        await pendingInvite();
+      fakes.organization.set({ ...fakes.organization(), id: 'o1', slug: 'atelier-nord' });
+      await fixture.whenStable();
+      find('members-invite')?.click();
+      await fixture.whenStable();
+      await typeAddresses(fixture, 'lucie@example.com');
+
+      await settle(fixture, answer);
+
+      expect((find('invite-emails') as HTMLTextAreaElement | null)?.value).toBe(
+        'lucie@example.com',
+      );
+    });
+
+    it('leaves a removal confirmation opened since alone', async () => {
+      const [fixture, fakes, answer]: [ComponentFixture<MembersPage>, Fakes, (o: unknown) => void] =
+        await pendingInvite();
+      all('member-remove')[1]?.click();
+      await fixture.whenStable();
+      expect(document.querySelector('[role="alertdialog"]')).not.toBeNull();
+
+      await settle(fixture, answer);
+
+      expect(document.querySelector('[role="alertdialog"]')).not.toBeNull();
+      find('member-remove-confirm')?.click();
+      await fixture.whenStable();
+      expect(fakes.members.remove).toHaveBeenCalledTimes(1);
+    });
+  });
+
   it('closes the dialog silently when the gateway drops the batch', async () => {
     const [fixture, fakes]: [ComponentFixture<MembersPage>, Fakes] = await render('admin');
     fakes.invitations.invite.mockRejectedValueOnce(

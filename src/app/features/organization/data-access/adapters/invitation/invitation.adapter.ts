@@ -1,9 +1,4 @@
-import type {
-  Invitation,
-  InvitationBatchResult,
-  InvitationPage,
-  InvitationResult,
-} from '@cadenway/api-client';
+import type { Invitation, InvitationBatchResult, InvitationPage } from '@cadenway/api-client';
 
 import type {
   InvitationList,
@@ -88,7 +83,7 @@ export function toInvitationOutcome(result: InvitationBatchResult): InvitationOu
   let invited: number = 0;
   let skipped: number = 0;
   const notSent: string[] = [];
-  for (const entry of result.invitations as readonly InvitationResult[]) {
+  for (const entry of result.invitations) {
     if (entry.outcome === 'invited') invited += 1;
     else if (SKIPPED_OUTCOMES.has(entry.outcome)) skipped += 1;
     else notSent.push(entry.email);

@@ -198,6 +198,18 @@ export class MembersPage {
   private readonly dialogOrganization: WritableSignal<string | null> = signal<string | null>(null);
 
   /**
+   * Property dialog
+   *
+   * @description
+   * Generation of the dialogs: every opening and every closing by the page raises it, so the late
+   * answer of an invite applies only to the dialog that submitted it, while it is still open.
+   *
+   * @type {WritableSignal<number>}
+   * @readonly
+   */
+  private readonly dialog: WritableSignal<number> = signal<number>(0);
+
+  /**
    * Property skeleton
    *
    * @description
@@ -417,6 +429,7 @@ export class MembersPage {
   protected openInvite(): void {
     this.refused.set([]);
     this.kept.set([]);
+    this.dialog.update((generation: number): number => generation + 1);
     this.dialogOrganization.set(this.workspace.organization().id);
     this.inviteOpen.set(true);
   }
@@ -444,6 +457,7 @@ export class MembersPage {
    * @param {MemberRow} member - The member.
    */
   protected askRemove(member: MemberRow): void {
+    this.dialog.update((generation: number): number => generation + 1);
     this.dialogOrganization.set(this.workspace.organization().id);
     this.removing.set(member);
     this.confirmOpen.set(true);
@@ -515,7 +529,8 @@ export class MembersPage {
    * send again (an unknown outcome, or an outcome that sent nothing) replace its addresses. A
    * dropped batch (the organization changed, or the gateway refused it for another session
    * organization) closes it silently, and a dialog opened for another organization sends nothing
-   * and closes.
+   * and closes. The answer applies only to the dialog that submitted it, while it is still open:
+   * a dialog or confirmation opened since, after a switch for instance, keeps its state.
    *
    * @param {InviteRequest} request - Addresses and role.
    * @returns {Promise<void>} Resolves once the batch is settled.
@@ -525,9 +540,11 @@ export class MembersPage {
       this.closeDialogs();
       return;
     }
+    const dialog: number = this.dialog();
     this.refused.set([]);
     this.kept.set([]);
     const result: InviteResult = await this.invitations.invite(request.emails, request.role);
+    if (this.dialog() !== dialog || !this.inviteOpen()) return;
     if (result === 'sent') {
       this.inviteOpen.set(false);
     } else if (result === 'dropped') {
@@ -570,6 +587,7 @@ export class MembersPage {
    * Closes the invite dialog and the removal confirmation and forgets what they held.
    */
   private closeDialogs(): void {
+    this.dialog.update((generation: number): number => generation + 1);
     this.inviteOpen.set(false);
     this.confirmOpen.set(false);
     this.removing.set(null);
