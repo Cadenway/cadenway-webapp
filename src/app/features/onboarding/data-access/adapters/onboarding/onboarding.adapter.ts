@@ -162,12 +162,29 @@ export function toFinish(space: OnboardingSpace): OnboardingFinish {
 }
 
 /**
+ * Constant SETTLED_INVITATION_OUTCOMES
+ *
+ * @description
+ * Per-address outcomes after which nothing is left to send: `invited`, `already-invited` (an
+ * invitation is out) and `already-member`. Any other outcome, one a later contract adds included,
+ * counts as not sent.
+ *
+ * @type {ReadonlySet<string>}
+ */
+const SETTLED_INVITATION_OUTCOMES: ReadonlySet<string> = new Set([
+  'invited',
+  'already-invited',
+  'already-member',
+]);
+
+/**
  * Function toInvitationOutcome
  *
  * @description
  * Counts the addresses an invitation batch invited; any other outcome, an unknown one included,
  * counts as not sent, as the contract asks. The `already-invited` ones are also counted apart: an
- * invitation is already out for them.
+ * invitation is already out for them. The addresses with an outcome outside
+ * `SETTLED_INVITATION_OUTCOMES` are listed in `notSent`, so a caller can send them again.
  *
  * @param {InvitationBatchResult} dto - Gateway result.
  * @returns {OnboardingInvitationOutcome} The counts.
@@ -180,7 +197,13 @@ export function toInvitationOutcome(dto: InvitationBatchResult): OnboardingInvit
     (entry: InvitationBatchResult['invitations'][number]): boolean =>
       entry.outcome === 'already-invited',
   ).length;
-  return { invited, skipped: dto.invitations.length - invited, alreadyInvited };
+  const notSent: readonly string[] = dto.invitations
+    .filter(
+      (entry: InvitationBatchResult['invitations'][number]): boolean =>
+        !SETTLED_INVITATION_OUTCOMES.has(entry.outcome),
+    )
+    .map((entry: InvitationBatchResult['invitations'][number]): string => entry.email);
+  return { invited, skipped: dto.invitations.length - invited, alreadyInvited, notSent };
 }
 
 /**

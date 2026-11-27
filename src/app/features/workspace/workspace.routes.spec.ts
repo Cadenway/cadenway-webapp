@@ -346,13 +346,6 @@ describe('WORKSPACE_ROUTES', () => {
           provide: MyTasksService,
           useValue: {
             listMyTasks: () => of({ items: [], nextCursor: null, counts: { open: 0, closed: 0 } }),
-            getHome: () =>
-              of({
-                stats: { assigned: 0, late: 0, dueToday: 0, done: 0 },
-                priorities: [],
-                sprints: [],
-                lists: [],
-              }),
             getOnboarding: () =>
               of({
                 version: 1,
@@ -371,6 +364,13 @@ describe('WORKSPACE_ROUTES', () => {
                   invitationSent: false,
                   boardTried: false,
                 },
+              }),
+            getHome: () =>
+              of({
+                stats: { assigned: 0, late: 0, dueToday: 0, done: 0 },
+                priorities: [],
+                sprints: [],
+                lists: [],
               }),
           },
         },

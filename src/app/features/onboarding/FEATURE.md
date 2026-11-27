@@ -6,21 +6,21 @@ The person's first launch in an organization (`App.dc.html`, artboard prop `onbo
 four-step assistant (`Space`, `Template`, `Team`, `Import`) that provisions the first space, then
 the `Getting started` checklist that ticks itself off as the person creates a task, invites a
 member and tries the `Board` view. Both are overlays of the application shell, over the page
-shown. Creating the organization belongs to Auth, which will open `/<slug>?onboarding=start`
-afterwards (step 9, wizard package); the space, lists and tasks the assistant creates belong to
-Spaces and Task once they exist; the invitations are organization invitations, which
-Organization manages.
+shown. Creating the organization belongs to Auth, which opens `/<slug>?onboarding=start`
+afterwards; the space, lists and tasks the assistant creates belong to Spaces and Task once they
+exist; the invitations are organization invitations, which Organization manages. Importing from
+another tool is not built (gap B18): the `Import` screen only offers `Later`.
 
-What exists so far is the foundation (the state, the data access and the internal invitation
-field) and the `Getting started` checklist with its invite dialog. The assistant comes with step
-9's wizard package.
+The assistant: `OnboardingWizardHost` (`ui/components/onboarding-wizard-host/`), the window
+`OnboardingWizard` (`ui/components/onboarding-wizard/`), its four screens
+(`ui/components/onboarding-{space,preset,team,import}-step/`), `OnboardingWizardStore`
+(`state/onboarding-wizard/`) and the templates and import sources (`constants/`).
 
 `OnboardingInviteField` (`cw-onboarding-invite-field`, `ui/components/onboarding-invite-field/`) is
 internal, not a public entry: the presentational invitation field (`App.dc.html` lines 2694-2695)
 that both the assistant's `Team` step and the getting-started invite dialog render. It edits the
 list of addresses (`[(emails)]`, `disabled`) and sends nothing; the screen that renders it calls
-`inviteMembers`. The getting-started invite dialog renders it, so its copy
-(`@@onboarding.invite.*`) is in `messages.json` and `messages.fr.json`.
+`inviteMembers`. Its copy (`@@onboarding.invite.*`) is in `messages.json` and `messages.fr.json`.
 
 `GettingStartedPanel` (`cw-getting-started-panel`, `ui/components/getting-started-panel/`) and
 `OnboardingInviteDialog` (`cw-onboarding-invite-dialog`, `ui/dialogs/onboarding-invite-dialog/`)
@@ -38,8 +38,9 @@ the application shell's `overlays` slot (not in the settings shells):
 | `withOnboardingWizard()` | `onboarding.wizard`          | 50    | `OnboardingWizardHost` (`cw-onboarding-wizard-host`) |
 
 `GettingStartedHost` renders the checklist, in its own chunk, and its invite dialog, in the
-host's chunk so that a chunk failing to load never leaves its `ShellOverlay` held;
-`OnboardingWizardHost` renders nothing yet (step 9, wizard package).
+host's chunk so that a chunk failing to load never leaves its `ShellOverlay` held.
+`OnboardingWizardHost` renders the assistant in its own chunk, only while it holds the
+`onboarding.wizard` `ShellOverlay`.
 
 ## Public entry points
 
@@ -55,31 +56,138 @@ route), `withGettingStarted()` and `withOnboardingWizard()` (the `overlays` cont
 - `@cadenway/api-client` through `data-access/` (`OnboardingApi`): `MyTasksService`
   (`getOnboarding`, `updateOnboarding`, `updateOnboardingChecklist` and `finishOnboarding`, each
   write with `If-Match: "<version>"`, `finishOnboarding` with an `Idempotency-Key` too) and
-  `InvitationsService.inviteMembers` (role `member`; called from step 9, wizard and
-  getting-started packages). Core's `OrganizationPin` adds `If-Organization-Match` to the four
-  onboarding operations and to `POST /v1/invitations`.
-- `@core/api` (`readProblem`, `OrganizationSwitchPendingError`, `OrganizationPin`).
-- Workspace's `ports/workspace-context` (the current organization, which fences every write;
-  `can('admin')` shows the checklist's invitation item; the assistant's role checks come with
-  step 9, wizard package).
-- Spaces' `utils/space-look`: the `LookColor` type today; `prefixFromName` and
-  `lookColorChoices` for the first space's prefix and color names (step 9, wizard package).
+  `InvitationsService.inviteMembers` (role `member`, 50 addresses per call; called by the
+  assistant and the getting-started invite dialog). Core's `OrganizationPin` adds
+  `If-Organization-Match` to the four onboarding operations and to `POST /v1/invitations`.
+- `@core/api` (`readProblem`, `OrganizationSwitchPendingError`, `OrganizationPin`, which also
+  fences the assistant's finish and dismissal).
+- Workspace's `ports/workspace-context` (the current organization, which fences every write; its
+  name in the assistant's welcome; `can('member')` for who sees the assistant; `can('admin')` for
+  who may invite from the assistant and shows the checklist's invitation item).
+- Spaces' `utils/space-look`: the `LookColor` type, `prefixFromName` for the first space's key
+  prefix and `lookColorChoices` for the assistant's swatches and color names (`@@spaces.look.*`).
+- Spaces' `ports/navigation-refresh` (`NAVIGATION_REFRESH.refresh()`, so the sidebar shows the
+  space the assistant provisioned).
 - Task's `.` entry: `TaskCreate`, whose `open({ listId })` the checklist's
   `Create your first task` calls on the first list, and whose `created` makes it read the
   progress again.
-- Not used yet, declared for the next package: Spaces' `ports/navigation-refresh`
-  (`NAVIGATION_REFRESH`, to show the provisioned space in the sidebar; step 9, wizard package).
-- `@shared/layout-slot` (`SlotContribution`, `SlotFeature`, `ShellOverlay`: the invite dialog
-  opens as `onboarding.invite-dialog`, and the checklist hides while `onboarding.wizard` is open).
-- `@cadenway/ui` (`button`, `dialog`, `input`, `progress`, `toast`) and `@cadenway/icons`.
+- `@shared/layout-slot` (`SlotContribution`, `SlotFeature`, `ShellOverlay`: the assistant holds
+  `onboarding.wizard` while it shows, the invite dialog opens as `onboarding.invite-dialog`, and
+  the checklist hides while `onboarding.wizard` is open).
+- `@cadenway/ui` (`button`, `dialog` with `size="screen"`, `input`, `logo`, `progress`,
+  `radio-group` cards without indicator, `skeleton`, `stepper` with `variant="segments"`,
+  `toast`, `toggle-group`) and `@cadenway/icons`.
 
 ## Invariants
 
-- Who sees the assistant (step 9, wizard package): `getOnboarding` answers an `in-progress` state
-  at version 1 for every member, so it does not tell (contract gap G1). The assistant will open
-  when Auth's creation opened `/<slug>?onboarding=start`, and by itself on Home only when the
-  draft was saved past version 1; never for a guest (`finishOnboarding` refuses one). It will
-  close with `Set up later` only, never with Escape or a click outside, since dismissal is final.
+- Who sees the assistant: `getOnboarding` answers an `in-progress` state at version 1 for every
+  member, so it does not tell (contract gap G1). `OnboardingWizardHost` opens it when the address
+  carries `?onboarding=start` (Auth's creation): it reads the progress and shows the window at
+  once, with a skeleton card until the progress is known, then keeps it while the assistant is
+  `in-progress`. The parameter stays in the address until the launch is durable: at version 1
+  `OnboardingWizardStore.saveStart()` saves the initial draft (the screen, the default name, its
+  prefix, the color and the template), and once the progress is past version 1, or the assistant
+  is closed, the host removes the parameter with `replaceUrl`, keeping the path and the other
+  parameters (`notice=` included). A reload before that save reopens the assistant from the
+  parameter; a failed first save keeps it, the assistant stays usable, and the next draft save
+  makes the launch durable; a dropped one does nothing. Otherwise the assistant opens by itself
+  only on the workspace root (`/<slug>`, without `?task=`) once the progress shows `in-progress`
+  past version 1, so it never covers a deep link; it reads the progress only there. Never for a
+  guest (`can('member')`; `finishOnboarding` refuses one), whose parameter is removed at once.
+- The window (`OnboardingWizard`) is an edge-to-edge `cw-dialog` (`size="screen"`) without a close
+  button that Escape and a click outside do not close: only `Set up later` dismisses, since
+  dismissal is final. The dialog brick also closes itself on a history move (Back, Forward: the
+  CDK's `closeOnNavigation`); the window then shows itself again at once, focused on its title.
+  It is named by the card's `h1` (`cwDialogTitle` imposes an `h2`), which takes the focus on open,
+  after each screen change and after a Retry removes its alert; a screen change is announced as
+  `Step n of 4: <name>`. The step bar is `cw-stepper variant="segments"` (not clickable), with
+  every `provideCwStepperLabels` key given in English, and the `Step n of 4` line is the
+  assistant's own.
+- While the assistant should show, the host holds `onboarding.wizard` in `ShellOverlay`, taken as
+  soon as no other shell overlay is open, and renders the window only while it holds it: it never
+  shows over the palette or the shortcuts, which cannot open over it either. It releases the hold
+  when the assistant closes or the host is destroyed. The getting-started checklist stays hidden
+  under the assistant because it honours that hold, which only the host owns.
+- `OnboardingWizardStore` is provided by `OnboardingWizardHost`, so a finish keeps running while
+  the window shows its result; an organization switch starts it over. It takes the draft from the
+  progress once (a null name reads as `Product`, the field's placeholder; a `gris` color, which
+  has no swatch, shows and is sent as `violet`, the first swatch and the contract's default), and
+  later reads never overwrite the edits. `Continue` and `Back` change the screen locally, then
+  save the whole draft (`step`, `name`, `prefix` derived with `prefixFromName`, `color`,
+  `preset`) without waiting; a failed save keeps the screen, and the next save sends everything
+  again. After `409 onboarding.wizard-closed` it closes, and opens the first list when a space
+  exists. The `Space` screen cannot continue while the name is blank (`aria-invalid`), as in the
+  mockup. The invitation addresses and the import choice stay in memory (gap G6).
+- Every step of a finish or a dismissal is fenced like `OnboardingStore`'s writes: once the store
+  is destroyed, or the workspace or `OrganizationPin` shows another organization than the one it
+  started in, nothing more is sent, applied, refreshed, navigated or toasted.
+- `Set up later` closes at once, then sends the dismissal; a read in flight is awaited first (the
+  shared store reads before it writes), and only a failed read closes without a write. A definite
+  refusal, or an unknown outcome after which the progress still shows the assistant `in-progress`,
+  shows a failure toast (the choice was not saved, the assistant may come back); a dropped write
+  or `409 onboarding.wizard-closed` shows none. Once settled, when a space exists (a finish whose
+  outcome was unknown did create it), it refreshes the navigation and opens the first list. A
+  failed read shows an inline error in the card whose Retry calls `reload()`.
+- The `Team` screen shows no invitation form to a person who may not invite, and offers `Skip`.
+  Its primary button reads `Continue` once an address is added or typed; moving on first commits
+  the typed address (`commitPending()`), and an invalid one keeps the screen with the field's
+  error, so a typed address is never lost. The `Import` screen shows `Trello`, `Jira` and
+  `CSV file` disabled and `Later` checked (gap B18): the screen keeps its place, so the counter
+  stays `of 4` as in the mockup and the contract's `import` step.
+- Invitations go out on the `Team` screen, then the finish provisions the space. `Continue` on
+  `Team` commits the typed address, then invites the addresses not sent yet as members, in
+  batches of 50 (the `inviteMembers` limit), when the person is an owner or an administrator
+  (`OnboardingApi.invite`), and only then saves the step and moves on; it shows its loading state
+  meanwhile, with `Back`, `Set up later` and the field disabled. Organization invitations hold on
+  their own and the draft does not keep the addresses (gap G6), so sending them there means a
+  reload resuming at `Import` loses none, and the finish invites no one (nor invents any).
+- Within a batch, an address answered `invited`, `already-invited` or `already-member` is done
+  and never sent again: going back to `Team` keeps it as a pill, and `Continue` sends only the
+  others. Any other outcome (one a later contract adds counts as not sent; the adapter lists
+  them in `notSent`) leaves the address unsent for a later `Continue`, and shows
+  `{n} address(es) could not be invited`; the screen still changes. A batch whose outcome is
+  unknown keeps its addresses unsent, keeps the screen and shows
+  `The invitations may not have been sent` / `Press Continue to send them again: it is safe.`
+  (an address the lost batch reached then answers `already-invited`); a refused batch (a `429`
+  daily limit included) shows `The invitations could not be sent` and the screen still changes.
+- The invitation marker: once a batch invited an address or found one `already-invited`, the
+  assistant records `invitationSent` at once (`recordInvitation`), which the contract allows
+  during the assistant (`updateOnboardingChecklist`: "the caller can record an invitation outcome
+  during the wizard or afterwards"). A failed marker write stays owed in the route's
+  `OnboardingStore` (`owesInvitation`); the finish sends it again (`retryOwedInvitation`), and so
+  does the getting-started checklist on its occasions, so leaving after `Set up later` throws
+  nothing and keeps the debt. A full page reload before the marker is recorded forgets the debt,
+  as for the checklist; the next batch that reaches an address records it again.
+- `Create the space` (`App.dc.html` lines 5276-5298), with `Back` and `Set up later` disabled and a
+  second click ignored while it runs:
+  1. sends `finishOnboarding` with the trimmed name, the derived prefix, the template and the
+     color. After `409 space.prefix-taken` it tries the first two letters followed by `A` to `Z`,
+     each prefix once (a fallback equal to the base is skipped) and each with a new key, silently,
+     then asks for another name. An unknown outcome (`isUncertainOnboardingWrite`) shows an inline
+     error whose Retry sends the same body with the same `Idempotency-Key`; a new key is taken
+     only after a definite refusal or a changed body. A stale version is retried once with a new
+     key; `403 organization.role-forbidden` and other refusals show an inline error. A dropped
+     write (`OnboardingWriteDroppedError`) shows nothing;
+  2. once provisioned, sends an owed invitation marker again (`retryOwedInvitation`), refreshes
+     the navigation, opens `/<slug>/l/<firstListId>`, then shows the toast
+     `Space “<name>” created` with `<n> lists` and `<n> invitations sent` (this session's invited
+     outcomes only; never the mockup's import part, gap B18), and closes.
+- The contract reports no seat outcome for an invitation (`InvitationResult.outcome` is
+  `invited`, `already-member` or `already-invited`; "sending an invitation does not consume a
+  seat", `members.yaml`), so the assistant has no seat-limit message; any other outcome counts
+  as not sent.
+- The template cards and the import cards are written out instead of repeated with `@for`
+  (`@cadenway/ui` 0.11.0 bug). Under `@for`, `cw-radio-group`'s `tabStop` computed reads every
+  item's `value()` while the first item renders, before the later repeated items have their
+  inputs; when the checked item is not the first, it throws
+  `NG0950: Input "value" is required but no value is available yet`. Reproduction: the `Template`
+  screen under `@for` with the draft preset `agency` (checked item index 2) throws on render; the
+  `Import` screen would too, since `Later` is index 3. Account's presence picker uses `@for` and
+  works because its checked item comes first.
+- Deviations from the mockup's accents: the checked template and import cards' icon (and the
+  import card's name) are `text-primary`, as in the mockup; the segments of the step bar, the
+  checked cards' border and fill and the checked swatch's ring keep the design system's ink tones
+  where the mockup uses primary, since the token rule forbids primary fills.
 - `OnboardingStore` is route-scoped on `/:org` (`provideOnboarding()`) and shared by both hosts;
   leaving `/:org` destroys it. It reads nothing until a screen calls `load()`, then holds the
   latest progress the gateway answered (`progress`, null while unread or when the first read
@@ -123,7 +231,7 @@ route), `withGettingStarted()` and `withOnboardingWizard()` (the `overlays` cont
   answered `invited` or `already-invited` for at least one address; any other outcome, an unknown
   one included, counts as not sent.
 - A draft color a later contract adds reads as `gris`, as `LookColorValue` says; the assistant
-  draws no `gris` swatch (step 9, wizard package, decides how to show it).
+  draws no `gris` swatch and shows such a draft with the first swatch (`violet`) checked.
 - `OnboardingInviteField` is its own `<form>`, so a host never nests it in another form. Any text,
   blank text included, must match the mockup's pattern once trimmed
   (`^[^\s@]+@[^\s@]+\.[^\s@]{2,}$`, line 5258); only an empty field is valid, and `Add` then adds
@@ -142,8 +250,8 @@ route), `withGettingStarted()` and `withOnboardingWizard()` (the `overlays` cont
   the application shell (a settings shell destroys it) and reads the route's `OnboardingStore`.
   Its invite dialog, toasts and listeners end with it: destroying it closes the dialog's
   `ShellOverlay` and dismisses the toasts it showed.
-- While the assistant covers the shell, it holds the `ShellOverlay` id `onboarding.wizard` (step
-  9, wizard package); the checklist reads that id to stay hidden under it.
+- While the assistant covers the shell, its host holds the `ShellOverlay` id `onboarding.wizard`;
+  the checklist reads that id to stay hidden under it.
 - The `Getting started` checklist (`App.dc.html` lines 2712-2727, behaviour 5299-5319) shows
   when the assistant finished (`wizard.status` `finished`) and provisioned the first space, the
   presentation is not `dismissed`, and the assistant is not the open `ShellOverlay`
@@ -213,3 +321,18 @@ route), `withGettingStarted()` and `withOnboardingWizard()` (the `overlays` cont
   the progress shows `invitationSent`. An organization change or leaving `/:org` clears the debt.
   A full page reload forgets it, which is accepted: the next batch that invites an address, or
   finds it `already-invited`, records the marker again.
+
+## Copy not taken word for word from the mockup
+
+These assistant units have no mockup wording (step 9 spec, A.6), pending product approval.
+
+| Unit                                                                                                                                           | Reason                                                                                                                         |
+| ---------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| `onboarding.wizard.load-failed`, `onboarding.wizard.retry`                                                                                     | The progress read failed; the mockup has no read.                                                                              |
+| `onboarding.wizard.finish-unknown`, `onboarding.wizard.finish-failed`, `onboarding.wizard.finish-forbidden`, `onboarding.wizard.finish-prefix` | `finishOnboarding` failures the mockup does not draw.                                                                          |
+| `onboarding.wizard.toast.invitations-failed`, `onboarding.wizard.toast.invitations-failed-text`                                                | A refused `inviteMembers` on leaving the `Team` screen.                                                                        |
+| `onboarding.wizard.toast.invitations-unknown`, `onboarding.wizard.toast.invitations-unknown-text`                                              | An `inviteMembers` whose outcome is unknown on leaving the `Team` screen.                                                      |
+| `onboarding.wizard.toast.not-invited-one`, `onboarding.wizard.toast.not-invited-other`                                                         | Addresses a batch answered with an outcome other than invited, already invited or already a member.                            |
+| `onboarding.wizard.toast.skip-failed`, `onboarding.wizard.toast.skip-failed-text`                                                              | A refused or unconfirmed `Set up later`.                                                                                       |
+| `onboarding.wizard.announcement`, `onboarding.wizard.stepper.*`                                                                                | Screen reader text of the step change and of the step bar.                                                                     |
+| `onboarding.wizard.preset.*.lists` (English)                                                                                                   | The gateway creates the contract's French list names for every template (gap G7); the English source previews them in English. |
