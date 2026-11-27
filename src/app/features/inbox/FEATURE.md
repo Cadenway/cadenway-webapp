@@ -3,8 +3,9 @@
 ## Purpose
 
 The inbox popover opened from the rail: notifications and reminders, unread counts, mark as read,
-snooze and complete. It owns the rail entry and its badge. Notification preferences belong to
-Account; the full inbox of the home screen belongs to Home.
+snooze and complete. It owns the rail entry and its badge, and the notification digest that Home
+shows under its `Mentions and activity` heading. Notification preferences belong to Account; the
+home screen, that heading and its layout belong to Home.
 
 ## Routes
 
@@ -14,9 +15,15 @@ None.
 
 | Entry point | Consumers |
 | ----------- | --------- |
+| `.`         | home      |
 | `providers` | workspace |
 
 `providers` publishes `withInbox()` (`railNavigation`, order 10).
+
+`.` publishes `InboxDigest` (`cw-inbox-digest`, no inputs or outputs): the first page of
+notifications in `NotificationRow`, for Home's `Mentions and activity`. It provides its own
+`InboxDigestStore`; its host needs `WORKSPACE_CONTEXT`, `TaskDetailOpener`, the shell's toaster
+and, when realtime is on, `RealtimeConnection`.
 
 ## Dependencies
 
@@ -31,6 +38,16 @@ None.
 
 ## Invariants
 
+- `InboxDigestStore` is provided by `InboxDigest` (component scope, so it dies with the page) and
+  keyed on the workspace's organization; a switch drops the previous rows at once. It reads the
+  first page (30 notifications, read and unread) actively on opening and on `Retry`, and passively
+  on a `notification.created.v1` notice (once per 300 ms burst), after a realtime reconnection and
+  after a switch; a refused passive read is sent again once the workspace is verified. A
+  background refresh keeps the rows; a failed read shows the inline error with `Retry`, never the
+  empty state. Opening a row is optimistic, and a page read before the write settled still shows
+  it read; a refusal shows it unread again with the inbox's error toast. The digest and the rail
+  popover do not share state: the badge catches up on its next poll, focus or notice, and the
+  popover reads its list on opening.
 - `InboxStore` is provided by the rail item and keyed on the workspace's organization. A committed
   organization switch clears the count and the lists at once and restarts the poll; any answer or
   write result that belongs to the previous organization is ignored.
@@ -72,16 +89,11 @@ None.
 | `inbox.rail.badge-overdue`                                                                                                                     | The mockup gives its badge no spoken text; built from `unread` and `late`.                                                        |
 | `inbox.verb.status-changed`, `inbox.verb.other`                                                                                                | Contract cases the mockup does not draw: a status change without a status, and the `due-date`, `access` and `billing` categories. |
 | `inbox.notifications-empty`, `inbox.notifications-empty-text`                                                                                  | The mockup draws no empty notification list.                                                                                      |
-| `inbox.notifications-failed`, `inbox.reminders-failed`                                                                                         | The mockup draws no failed read.                                                                                                  |
+| `inbox.notifications-failed`, `inbox.reminders-failed`, `inbox.retry`                                                                          | The mockup draws no failed read.                                                                                                  |
 | `inbox.mark-all-failed`, `inbox.mark-read-failed`, `inbox.reminder.snooze-failed`, `inbox.reminder.complete-failed`, `inbox.write-failed-text` | The mockup draws no refused write.                                                                                                |
+| `inbox.digest.loading`                                                                                                                         | The mockup gives the home screen's mentions no loading label; built on its `Loading …` skeleton labels.                           |
 | `inbox.time.tomorrow`, `inbox.time.at-time`                                                                                                    | Built on the mockup's `Today, 9:00` for tomorrow and for minutes.                                                                 |
 
-## Copy not taken word for word from the mockup
-
-| Unit                                                                          | Reason                                                         |
-| ----------------------------------------------------------------------------- | -------------------------------------------------------------- |
-| `inbox.notifications-empty`, `inbox.notifications-empty-text`                 | The mockup draws no empty notification list.                   |
-| `inbox.notifications-failed`, `inbox.reminders-failed`, `inbox.retry`         | The mockup draws no failed read.                               |
-| `inbox.verb.other`, `inbox.verb.status-changed`                               | Contract categories the mockup does not draw.                  |
-| `inbox.mark-all-failed`, `inbox.reminder.*-failed`, `inbox.write-failed-text` | The mockup draws no refused write.                             |
-| `inbox.time.*`                                                                | Built from the mockup's samples (`12 min`, `Mon 9 Nov, 9:00`). |
+The extracted catalog only holds messages the application reaches, so `inbox.digest.loading` enters
+`messages.json`, and its French text `messages.fr.json`, in the change where Home mounts
+`cw-inbox-digest`.
