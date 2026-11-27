@@ -1,0 +1,162 @@
+<form
+  class="flex flex-col gap-4 rounded-xl border border-primary/30 bg-card p-4"
+  aria-label="New goal"
+  i18n-aria-label="@@goals.form.label"
+  novalidate
+  data-testid="goal-form"
+  (submit)="send($event)"
+  (keydown.escape)="cancelled.emit()"
+>
+  <div class="flex flex-col gap-2">
+    <label for="goal-form-name" class="text-sm font-medium" i18n="@@goals.form.name-field"
+      >Goal</label
+    >
+    <input
+      #nameField
+      cwInput
+      id="goal-form-name"
+      type="text"
+      autocomplete="off"
+      placeholder="Cut the support response time"
+      i18n-placeholder="@@goals.form.name-placeholder"
+      [formField]="goalForm.name"
+      [attr.aria-describedby]="
+        goalForm.name().touched() && goalForm.name().invalid() ? 'goal-form-name-error' : null
+      "
+    />
+    @if (goalForm.name().touched() && goalForm.name().invalid()) {
+      <p
+        id="goal-form-name-error"
+        role="alert"
+        class="flex items-center gap-1 text-xs font-medium text-destructive"
+      >
+        <ng-icon name="phosphorWarningCircleFill" class="size-3.5 shrink-0" aria-hidden="true" />
+        {{ goalForm.name().errors()[0]?.message }}
+      </p>
+    }
+  </div>
+
+  <div class="flex flex-col gap-2">
+    <span id="goal-form-owner" class="text-sm font-medium" i18n="@@goals.form.owner-field"
+      >Owner</span
+    >
+    <cw-toggle-group
+      type="single"
+      variant="outline"
+      class="flex-wrap"
+      [spacing]="1"
+      [formField]="goalForm.owner"
+      aria-labelledby="goal-form-owner"
+      data-testid="goal-form-owner"
+    >
+      @for (person of owners(); track person.id) {
+        <button cwToggleGroupItem type="button" [value]="person.id">
+          <span
+            class="flex size-5 items-center justify-center rounded-full bg-secondary text-[9px] leading-none font-semibold text-secondary-foreground"
+            aria-hidden="true"
+            >{{ person.initials }}</span
+          >
+          {{ person.name }}
+        </button>
+      }
+    </cw-toggle-group>
+    @if (goalForm.owner().touched() && goalForm.owner().invalid()) {
+      <p role="alert" class="flex items-center gap-1 text-xs font-medium text-destructive">
+        <ng-icon name="phosphorWarningCircleFill" class="size-3.5 shrink-0" aria-hidden="true" />
+        {{ goalForm.owner().errors()[0]?.message }}
+      </p>
+    }
+  </div>
+
+  @if (spaces(); as options) {
+    <div class="flex flex-col gap-2">
+      <label for="goal-form-space" class="text-sm font-medium" i18n="@@goals.form.space-field"
+        >Space</label
+      >
+      <cw-select
+        [id]="'goal-form-space'"
+        [formField]="goalForm.space"
+        data-testid="goal-form-space"
+      >
+        @for (option of options; track option.id) {
+          <cw-select-option [value]="option.id">{{ option.name }}</cw-select-option>
+        }
+      </cw-select>
+      @if (goalForm.space().touched() && goalForm.space().invalid()) {
+        <p role="alert" class="flex items-center gap-1 text-xs font-medium text-destructive">
+          <ng-icon name="phosphorWarningCircleFill" class="size-3.5 shrink-0" aria-hidden="true" />
+          {{ goalForm.space().errors()[0]?.message }}
+        </p>
+      }
+    </div>
+  }
+
+  <div class="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_8rem]">
+    <div class="flex flex-col gap-2">
+      <label for="goal-form-result" class="text-sm font-medium"
+        ><ng-container i18n="@@goals.form.result-field">First key result</ng-container>
+        <span class="font-normal text-muted-foreground" i18n="@@goals.form.optional"
+          >(optional)</span
+        ></label
+      >
+      <input
+        cwInput
+        id="goal-form-result"
+        type="text"
+        autocomplete="off"
+        placeholder="Answer within 4 h"
+        i18n-placeholder="@@goals.form.result-placeholder"
+        [formField]="goalForm.result"
+      />
+      @if (goalForm.result().touched() && goalForm.result().invalid()) {
+        <p role="alert" class="flex items-center gap-1 text-xs font-medium text-destructive">
+          <ng-icon name="phosphorWarningCircleFill" class="size-3.5 shrink-0" aria-hidden="true" />
+          {{ goalForm.result().errors()[0]?.message }}
+        </p>
+      }
+    </div>
+    <div class="flex flex-col gap-2">
+      <label for="goal-form-target" class="text-sm font-medium" i18n="@@goals.form.target-field"
+        >Target</label
+      >
+      <input
+        cwInput
+        id="goal-form-target"
+        type="text"
+        inputmode="numeric"
+        autocomplete="off"
+        placeholder="90"
+        class="tabular-nums"
+        [formField]="goalForm.target"
+      />
+      @if (goalForm.target().touched() && goalForm.target().invalid()) {
+        <p role="alert" class="flex items-center gap-1 text-xs font-medium text-destructive">
+          <ng-icon name="phosphorWarningCircleFill" class="size-3.5 shrink-0" aria-hidden="true" />
+          {{ goalForm.target().errors()[0]?.message }}
+        </p>
+      }
+    </div>
+  </div>
+
+  <div class="flex flex-wrap justify-end gap-2">
+    <button
+      cwButton
+      type="button"
+      variant="ghost"
+      data-testid="goal-form-cancel"
+      (click)="cancelled.emit()"
+      i18n="@@goals.form.cancel"
+    >
+      Cancel
+    </button>
+    <button
+      cwButton
+      type="submit"
+      [loading]="pending()"
+      data-testid="goal-form-submit"
+      i18n="@@goals.form.submit"
+    >
+      Create the goal
+    </button>
+  </div>
+</form>
