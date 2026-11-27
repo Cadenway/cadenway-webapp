@@ -35,7 +35,7 @@ dashboard is shown, whatever its query parameters.
   (every role, read to its last page, 100 per page).
 - Task's `.` entry: `TaskSummary`, `Person`, `personOf`, `TaskLine` (`late` variant), `TaskMenu`,
   `TaskCancelDialog`, `TASK_ROW_ACTIONS_PROVIDERS`, `TaskRowActionsStore`, `TaskDetailOpener`
-  (`closed`, `changed`), `defaultStatusOptions`, `statusLabel`.
+  (`closed`, `changed`), `TaskMenuPeopleState`, `defaultStatusOptions`, `statusLabel`.
 - Spaces' `ports/list-directory` (`LIST_DIRECTORY`, optional) for the list names and `Move to`.
 - Workspace's `ports/workspace-context` (`WORKSPACE_CONTEXT`) for the organization and the slug of
   the link.
@@ -64,7 +64,9 @@ dashboard is shown, whatever its query parameters.
   organization or a period no longer current is never kept.
 - The page never waits for the members: their people read `Unknown member` (`?`) until the
   members answer, then their names. A members read that fails, or runs again, never brings the
-  skeleton back nor makes the page unavailable; a failed one is read again on the next refresh.
+  skeleton back nor makes the page unavailable; a failed one is read again on the next refresh,
+  and the task menu's `Assign` shows it loading or failed (`peopleState`), its `Retry` reading
+  them again (`retryPeople`).
   A dashboard naming user ids the members do not hold (a new assignee) reads the members again,
   once per new set of ids in the organization, so a former member never causes a loop.
 - The late rows keep the dashboard's read copy of each task (`LateTaskRow.source`) beside the

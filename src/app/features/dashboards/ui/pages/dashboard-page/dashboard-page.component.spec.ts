@@ -480,6 +480,22 @@ describe('DashboardPage', () => {
     expect(page(harness).querySelector('[data-testid="dashboard-skeleton"]')).toBeNull();
   });
 
+  it("says in the menu's Assign that the members failed, and Retry reads them again", async () => {
+    people.mockRejectedValueOnce(new Error('unavailable'));
+    const harness: RouterTestingHarness = await RouterTestingHarness.create(
+      '/atelier-nord/dashboards',
+    );
+    await expect.poll(() => text(harness, 'late-task')).toContain('Export the sprint report');
+
+    const menu: TaskMenu = openMenu(harness);
+    await expect.poll(() => menu.peopleState()).toBe('failed');
+    menu.peopleRetried.emit();
+
+    await expect.poll(() => people.mock.calls.length).toBeGreaterThanOrEqual(2);
+    await expect.poll(() => menu.peopleState()).toBe('ready');
+    expect(menu.people().map((person) => person.name)).toEqual(['Camille Martin', 'Hugo Dubois']);
+  });
+
   it('reads the dashboard again once a menu write settles', async () => {
     const harness: RouterTestingHarness = await RouterTestingHarness.create(
       '/atelier-nord/dashboards',

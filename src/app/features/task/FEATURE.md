@@ -101,7 +101,10 @@ shells, so the palette's `Create a task`, task results and `?task=<KEY>` work in
   `cw-task-priority-picker`, `cw-task-people-picker`, `cw-task-label-picker`, `cw-task-due-date`,
   `cw-task-label-chips`, `cw-task-title-cell`, `cw-task-cancel-dialog`, `cw-task-menu` (`TaskMenu`:
   `tasks`, `status`, `statuses`, `people`, `userId`, `lists`; one output per item; the page opens
-  `menu()` from its own `[cwContextMenuTriggerFor]`) and `cw-task-line` (`TaskLine`: `task`,
+  `menu()` from its own `[cwContextMenuTriggerFor]`; the optional `peopleState`, a
+  `TaskMenuPeopleState` `ready` (the default, `Assign` disabled without people), `loading` or
+  `failed`, opens `Assign` on `Loading the members` or on `Could not load the members.` with
+  `Retry`, which emits `peopleRetried`) and `cw-task-line` (`TaskLine`: `task`,
   `status`, `from`, `listName`, `people`, `variant` `mine`, `priority` or `late`; `opened`).
 
 ## Dependencies
@@ -543,3 +546,4 @@ people`), and the due trigger shows the short date without `Tomorrow ·` or the
 | `task.row-actions.conflict`, `task.row-actions.conflict-text`                               | The mockup draws no conflicting write.                             |
 | `task.row-actions.unconfirmed`, `task.row-actions.unconfirmed-text`                         | The mockup draws no unanswered write.                              |
 | `task.row-actions.unknown`, `task.row-actions.copy-failed`                                  | The mockup draws no uncertain write nor refused copy.              |
+| `task.menu.people-loading`, `task.menu.people-failed`                                       | The mockup's `Assign` draws no loading nor failed read of members. |

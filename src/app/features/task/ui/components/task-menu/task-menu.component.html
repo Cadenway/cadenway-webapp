@@ -16,12 +16,7 @@
     <ng-icon name="phosphorCellSignalHighBold" aria-hidden="true" />
     <ng-container i18n="@@spaces.rows.priority">Priority</ng-container>
   </button>
-  <button
-    cwMenuItem
-    type="button"
-    [disabled]="people().length === 0"
-    [cwMenuTriggerFor]="peopleMenu"
-  >
+  <button cwMenuItem type="button" [disabled]="assignDisabled()" [cwMenuTriggerFor]="peopleMenu">
     <ng-icon name="phosphorUserPlusBold" aria-hidden="true" />
     <ng-container i18n="@@spaces.bulk.assign">Assign</ng-container>
   </button>
@@ -97,7 +92,17 @@
 </cw-menu>
 
 <cw-menu #peopleMenu ariaLabel="Assign" i18n-ariaLabel="@@spaces.bulk.assign">
-  @for (person of people(); track person.id) {
+  @if (peopleState() === 'failed') {
+    <span role="alert" class="block px-2 py-1.5 text-sm" i18n="@@task.menu.people-failed"
+      >Could not load the members.</span
+    >
+    <button cwMenuItem type="button" (triggered)="peopleRetried.emit()">
+      <ng-container i18n="@@task.retry">Retry</ng-container>
+    </button>
+  } @else if (peopleState() === 'loading') {
+    <cw-menu-label i18n="@@task.menu.people-loading">Loading the members</cw-menu-label>
+  }
+  @for (person of shownPeople(); track person.id) {
     <button
       cwMenuItemCheckbox
       type="button"

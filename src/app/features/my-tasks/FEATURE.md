@@ -36,7 +36,8 @@ Spaces): a link to `/<slug>/my-tasks` with the check square, filled and marked
   page) for the menu's `Assign`.
 - Task's `.` entry: `TaskSummary`, `TaskLine`, `TaskMenu`, `TaskCancelDialog`,
   `TASK_ROW_ACTIONS_PROVIDERS`, `TaskRowActionsStore`, `TaskDetailOpener` (`closed`, `changed`),
-  `TaskCreate` (`open`, `created`), `TaskMoveTarget`, `Person`, `personOf`, `isClosedStatus`.
+  `TaskCreate` (`open`, `created`), `TaskMoveTarget`, `TaskMenuPeopleState`, `Person`, `personOf`,
+  `isClosedStatus`.
 - Spaces' `ports/list-directory` (`LIST_DIRECTORY`, optional) for the list names, their spaces
   and `Move to`.
 - Workspace's `ports/workspace-context` (`WORKSPACE_CONTEXT`) for the organization and the slug.
@@ -68,8 +69,8 @@ organization.context-changed`) keeps the rows silently and is sent again once th
   (`The next tasks could not be loaded.` when it fails, the button trying again), and a refresh of
   `Done` reads again only the pages shown. A window focus reads the tab again only when no read
   settled in the last 30 s (`FOCUS_REFRESH_MS`). The members are read on the first opening of the
-  task menu, not when the page opens; a failure leaves `Assign` empty and the next opening reads
-  them again.
+  task menu, not when the page opens; `Assign` shows them loading (`peopleState`), then a failure
+  with `Retry`, which reads them again, as the next opening does.
 - No realtime event covers the caller's tasks across lists (gap G-R1): the tab is read again in
   the background, keeping its rows, after each settled write of the menu
   (`TaskRowActionsStore.changed`), on window focus (see above), after a realtime reconnection,

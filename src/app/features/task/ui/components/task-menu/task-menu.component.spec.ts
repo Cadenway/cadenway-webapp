@@ -10,7 +10,7 @@ import type { TaskMoveTarget } from '../../../models/task-move-target/task-move-
 import type { TaskSummary } from '../../../models/task-summary/task-summary.interface';
 import { personOf } from '../../../utils/person/person.util';
 import { defaultStatusOptions } from '../../../utils/task-status/task-status.util';
-import { TaskMenu } from './task-menu.component';
+import { TaskMenu, type TaskMenuPeopleState } from './task-menu.component';
 
 /**
  * Function task
@@ -179,8 +179,97 @@ class TaskMenuHost {
   // #endregion
 }
 
+/**
+ * Component TaskMenuPeopleHost
+ *
+ * @description
+ * Opens the task menu of a view whose people are read, without any yet, and records the
+ * retries of their read.
+ */
+@Component({
+  imports: [CwContextMenuTriggerFor, TaskMenu],
+  template: `
+    <button type="button" [cwContextMenuTriggerFor]="menu.menu()">Task</button>
+    <cw-task-menu
+      #menu
+      [tasks]="tasks()"
+      [peopleState]="peopleState()"
+      userId="u-camille"
+      (peopleRetried)="retries = retries + 1"
+    />
+  `,
+})
+class TaskMenuPeopleHost {
+  // #region Properties
+  /**
+   * Property tasks
+   *
+   * @description
+   * The tasks of the menu.
+   *
+   * @type {WritableSignal<readonly TaskSummary[]>}
+   * @readonly
+   */
+  public readonly tasks: WritableSignal<readonly TaskSummary[]> = signal<readonly TaskSummary[]>(
+    [],
+  );
+
+  /**
+   * Property peopleState
+   *
+   * @description
+   * Where the read of the people stands.
+   *
+   * @type {WritableSignal<TaskMenuPeopleState>}
+   * @readonly
+   */
+  public readonly peopleState: WritableSignal<TaskMenuPeopleState> =
+    signal<TaskMenuPeopleState>('loading');
+
+  /**
+   * Property retries
+   *
+   * @description
+   * How many times `Retry` was picked.
+   *
+   * @type {number}
+   */
+  public retries: number = 0;
+  // #endregion
+}
+
+/**
+ * Component TaskMenuBareHost
+ *
+ * @description
+ * Opens the task menu of a view that binds neither people nor their read state.
+ */
+@Component({
+  imports: [CwContextMenuTriggerFor, TaskMenu],
+  template: `
+    <button type="button" [cwContextMenuTriggerFor]="menu.menu()">Task</button>
+    <cw-task-menu #menu [tasks]="tasks()" />
+  `,
+})
+class TaskMenuBareHost {
+  // #region Properties
+  /**
+   * Property tasks
+   *
+   * @description
+   * The tasks of the menu.
+   *
+   * @type {WritableSignal<readonly TaskSummary[]>}
+   * @readonly
+   */
+  public readonly tasks: WritableSignal<readonly TaskSummary[]> = signal<readonly TaskSummary[]>(
+    [],
+  );
+  // #endregion
+}
+
 describe('TaskMenu', () => {
-  let fixture: ComponentFixture<TaskMenuHost>;
+  let fixture: ComponentFixture<TaskMenuHost | TaskMenuPeopleHost | TaskMenuBareHost>;
 
   /**
    * Function settle
@@ -297,7 +386,7 @@ describe('TaskMenu', () => {
     item('Delete the task').click();
     await settle();
 
-    expect(fixture.componentInstance.events).toEqual(['open CAD-482', 'delete']);
+    expect((fixture.componentInstance as TaskMenuHost).events).toEqual(['open CAD-482', 'delete']);
   });
 
   it('acts on a selection of several tasks without Open', async () => {
@@ -320,7 +409,7 @@ describe('TaskMenu', () => {
     item('In progress').click();
     await settle();
 
-    expect(fixture.componentInstance.events).toEqual(['status progress']);
+    expect((fixture.componentInstance as TaskMenuHost).events).toEqual(['status progress']);
   });
 
   it("offers a milestone's four statuses only", async () => {
@@ -343,7 +432,7 @@ describe('TaskMenu', () => {
     item('Camille Martin (me)').click();
     await settle();
 
-    expect(fixture.componentInstance.events).toEqual(['assignee u-camille']);
+    expect((fixture.componentInstance as TaskMenuHost).events).toEqual(['assignee u-camille']);
   });
 
   it('leaves out of Move to the list every task already sits in', async () => {
@@ -354,7 +443,7 @@ describe('TaskMenu', () => {
     item('Backlog').click();
     await settle();
 
-    expect(fixture.componentInstance.events).toEqual(['move backlog']);
+    expect((fixture.componentInstance as TaskMenuHost).events).toEqual(['move backlog']);
   });
 
   it('ticks the shared priority and emits the one picked', async () => {
@@ -364,6 +453,64 @@ describe('TaskMenu', () => {
     item('Low').click();
     await settle();
 
-    expect(fixture.componentInstance.events).toEqual(['priority basse']);
+    expect((fixture.componentInstance as TaskMenuHost).events).toEqual(['priority basse']);
+  });
+
+  describe('with the read of the people', () => {
+    beforeEach(() => {
+      fixture.destroy();
+      fixture = TestBed.createComponent(TaskMenuPeopleHost);
+    });
+
+    /**
+     * Function host
+     *
+     * @description
+     * The host whose people are read.
+     *
+     * @returns {TaskMenuPeopleHost} The host.
+     */
+    function host(): TaskMenuPeopleHost {
+      return fixture.componentInstance as TaskMenuPeopleHost;
+    }
+
+    it('opens Assign on a loading row while the people are read', async () => {
+      await open([task('CAD-482', 'Sign-in')]);
+
+      expect(item('Assign').getAttribute('aria-disabled')).toBeNull();
+      await openSubmenu('Assign');
+
+      expect(document.body.textContent).toContain('Loading the members');
+      expect(document.querySelectorAll('[role="menuitemcheckbox"]')).toHaveLength(0);
+    });
+
+    it('tells a failed read from an empty one and emits Retry', async () => {
+      host().peopleState.set('failed');
+      await open([task('CAD-482', 'Sign-in')]);
+      await openSubmenu('Assign');
+
+      expect(document.querySelector('[role="alert"]')?.textContent).toContain(
+        'Could not load the members.',
+      );
+      item('Retry').click();
+      await settle();
+
+      expect(host().retries).toBe(1);
+    });
+
+    it('disables Assign once the read found nobody', async () => {
+      host().peopleState.set('ready');
+      await open([task('CAD-482', 'Sign-in')]);
+
+      expect(item('Assign').getAttribute('aria-disabled')).toBe('true');
+    });
+  });
+
+  it('disables Assign without people when no read state is bound', async () => {
+    fixture.destroy();
+    fixture = TestBed.createComponent(TaskMenuBareHost);
+    await open([task('CAD-482', 'Sign-in')]);
+
+    expect(item('Assign').getAttribute('aria-disabled')).toBe('true');
   });
 });
