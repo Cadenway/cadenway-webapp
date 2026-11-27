@@ -1396,4 +1396,71 @@ describe('GoalsStore', () => {
     expect(api.create).toHaveBeenCalledTimes(2);
     expect(api.create.mock.calls[1][3]).toBe(api.create.mock.calls[0][3]);
   });
+
+  it('forgets the key of a goal created once the workspace switched away and back', async () => {
+    const answer: Deferred<Goal> = deferred<Goal>();
+    api.create.mockReturnValueOnce(answer.promise);
+    const store: InstanceType<typeof GoalsStore> = await loaded();
+    const creating: Promise<string | null> = store.create(SUPPORT);
+    await flush();
+
+    commit(STUDIO_SUD);
+    commit(ATELIER_NORD);
+    TestBed.tick();
+    await settle();
+    answer.resolve(goal({ id: 'g9', name: SUPPORT.name, version: 1, results: [] }));
+
+    await expect(creating).resolves.toBeNull();
+    expect(toasts.success).not.toHaveBeenCalled();
+    await store.create(SUPPORT);
+    expect(api.create).toHaveBeenCalledTimes(2);
+    expect(api.create.mock.calls[1][3]).not.toBe(api.create.mock.calls[0][3]);
+  });
+
+  it('forgets the key of a key result added once the workspace switched away and back', async () => {
+    const answer: Deferred<KeyResultWrite> = deferred<KeyResultWrite>();
+    api.createResult.mockReturnValueOnce(answer.promise);
+    const store: InstanceType<typeof GoalsStore> = await loaded();
+    const adding: Promise<boolean> = store.addResult('g1', {
+      label: 'Customer demos held',
+      target: 12,
+    });
+    await flush();
+
+    commit(STUDIO_SUD);
+    commit(ATELIER_NORD);
+    TestBed.tick();
+    await settle();
+    answer.resolve({
+      result: { ...signups(0), id: 'k10', label: 'Customer demos held' },
+      version: 4,
+    });
+
+    await expect(adding).resolves.toBe(false);
+    await store.addResult('g1', { label: 'Customer demos held', target: 12 });
+    expect(api.createResult).toHaveBeenCalledTimes(2);
+    expect(api.createResult.mock.calls[1][3]).not.toBe(api.createResult.mock.calls[0][3]);
+  });
+
+  it('reads the goals once the store resets when a write settled while the pin was away and back', async () => {
+    const pending: Subject<KeyResultWrite> = new Subject<KeyResultWrite>();
+    api.updateResult.mockReturnValueOnce(firstValueFrom(pending));
+    const store: InstanceType<typeof GoalsStore> = await loaded();
+    store.step('g1', 'k6', 1);
+    await burst();
+    const reads: number = api.list.mock.calls.length;
+    api.list.mockResolvedValue(list([goal({ version: 4, results: [signups(177)] })]));
+
+    pin.set(STUDIO_SUD.id);
+    pending.next({ result: signups(177), version: 4 });
+    pending.complete();
+    await flush();
+    pin.set(ATELIER_NORD.id);
+    TestBed.tick();
+    await settle();
+
+    expect(api.list).toHaveBeenCalledTimes(reads + 1);
+    expect(shownValue(store)).toBe(177);
+    expect(api.get).not.toHaveBeenCalled();
+  });
 });

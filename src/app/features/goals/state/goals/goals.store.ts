@@ -1284,16 +1284,33 @@ function createGoalsStore(): Type<GoalsStoreInstance> {
         store.goals.reload();
       };
 
-      // A write of an older generation of the organization the store is back on (a switch away and
-      // back) may have been recorded after the read the switch sent: its answer is not applied, and
-      // the goals are read once more instead, coalesced with a read in flight.
+      // A write that settles once the workspace left its organization may have been recorded, but
+      // its answer is not applied. Back on that organization the goals are read once more instead,
+      // coalesced with a read in flight: at once for a write of an older generation, at the reset
+      // for one that settled before it (`unseen`), since the goals read may end on the same
+      // organization and not be sent again.
+      let unseen: boolean = false;
       const settledBefore: (generation: number, origin: string) => void = (
         generation: number,
         origin: string,
       ): void => {
-        if (!current(generation) && alive(context.generation) && origin === context.organizationId)
+        if (current(generation) && context.left) unseen = true;
+        else if (
+          !current(generation) &&
+          alive(context.generation) &&
+          origin === context.organizationId
+        )
           refresh();
       };
+
+      // A definitive answer to a creation (created, or refused by the gateway) ends its idempotency
+      // key, even once its generation is no longer live; an unknown outcome, or a send the store or
+      // the pin stopped, keeps it so the same draft is never created twice.
+      const definitive: (error: unknown) => boolean = (error: unknown): boolean =>
+        !isUncertainCreation(error) &&
+        !(error instanceof WriteDroppedError) &&
+        !(error instanceof OrganizationSwitchPendingError) &&
+        !hasProblemCode(error, 'organization.context-changed');
 
       const lanes: Map<string, GoalLane> = new Map<string, GoalLane>();
       const scheduled: Set<string> = new Set<string>();
@@ -1627,8 +1644,8 @@ function createGoalsStore(): Type<GoalsStoreInstance> {
             const goal: Goal = await created(generation, () =>
               store._api.create(draft, quarter, today(), idempotencyKey),
             );
-            if (!live(generation)) return null;
             createKeys.delete(draftKey);
+            if (!live(generation)) return null;
             record({
               organizationId: organizationId(),
               after: store._readsIssued(),
@@ -1640,6 +1657,7 @@ function createGoalsStore(): Type<GoalsStoreInstance> {
             });
             return goal.id;
           } catch (error: unknown) {
+            if (definitive(error)) createKeys.delete(draftKey);
             if (dropped(error, generation)) return null;
             if (isUncertainCreation(error)) {
               store._toasts.warning(
@@ -1650,7 +1668,6 @@ function createGoalsStore(): Type<GoalsStoreInstance> {
               );
               return null;
             }
-            createKeys.delete(draftKey);
             failed(
               hasProblemCode(error, 'goal.owner-ineligible')
                 ? $localize`:@@goals.toast.owner-ineligible:This person cannot read the goal`
@@ -1782,8 +1799,8 @@ function createGoalsStore(): Type<GoalsStoreInstance> {
                 await fresh(goalId, generation);
                 write = await send(generation, goalId, creation);
               }
-              if (!live(generation)) return;
               createKeys.delete(draftKey);
+              if (!live(generation)) return;
               const lane: GoalLane = laneOf(goalId);
               lane.version = write.version ?? lane.version;
               lane.dirty = true;
@@ -1798,6 +1815,7 @@ function createGoalsStore(): Type<GoalsStoreInstance> {
                 });
               outcome = true;
             } catch (error: unknown) {
+              if (definitive(error)) createKeys.delete(draftKey);
               if (dropped(error, generation)) return;
               if (isUncertainCreation(error)) {
                 store._toasts.warning(
@@ -1808,7 +1826,6 @@ function createGoalsStore(): Type<GoalsStoreInstance> {
                 );
                 return;
               }
-              createKeys.delete(draftKey);
               if (isGone(error)) refresh();
               failed(
                 hasProblemCode(error, 'goal.result-limit-reached')
@@ -1874,6 +1891,8 @@ function createGoalsStore(): Type<GoalsStoreInstance> {
         _followOrganization: signalMethod<{ organizationId: string; revision: number }>(
           ({ organizationId }: { organizationId: string; revision: number }): void => {
             if (organizationId === context.organizationId && !context.left) return;
+            const catchUp: boolean = unseen && organizationId === context.organizationId;
+            unseen = false;
             context.generation += 1;
             context.organizationId = organizationId;
             context.left = false;
@@ -1890,6 +1909,7 @@ function createGoalsStore(): Type<GoalsStoreInstance> {
               addingTo: null,
               creating: false,
             });
+            if (catchUp) refresh();
           },
         ),
       };
@@ -1964,7 +1984,8 @@ function createGoalsStore(): Type<GoalsStoreInstance> {
  * `If-Organization-Match`. After a switch away and back the goals are read again, and once more
  * when a write started before it settles, so what it completed shows. A creation keeps its
  * idempotency key, per organization and across a switch and back, until a definitive
- * answer and is sent again with it after an unknown outcome or
+ * answer (created or refused, even once a switch dropped it) and is sent again with it after an
+ * unknown outcome or
  * `409 idempotency.request-in-progress`, up to three times, then reported as unconfirmed; a resubmitted
  * identical draft reuses the key. The members are read again after a failure and for owners they
  * did not name, which read as former members only once a read says so.

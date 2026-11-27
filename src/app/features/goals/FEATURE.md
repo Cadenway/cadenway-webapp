@@ -86,8 +86,9 @@ elsewhere`. Values show at once and return to the confirmed ones after a refusal
   the later edits of that key result are dropped, never rebased on an unknown value, `The key
 result change could not be confirmed` shows and the goals are read again. A creation (goal or key
   result) keeps one idempotency key per draft and organization, across a switch and back, until a
-  definitive answer and is sent again with it after an unknown outcome or
-  `409 idempotency.request-in-progress`, one second apart, three sends in all; still unknown, `The goal could not be confirmed` or `The key result could not be
+  definitive answer (created or refused, even once a switch dropped it) and is sent again with it
+  after an unknown outcome or `409 idempotency.request-in-progress`, one second apart, three sends
+  in all; still unknown, `The goal could not be confirmed` or `The key result could not be
 confirmed` asks to submit again, which reuses the key. A deletion of unknown outcome whose goal is
   still there, or cannot be read, shows `The deletion could not be confirmed`, and the goals are
   read again. Confirmed writes stay over the read
