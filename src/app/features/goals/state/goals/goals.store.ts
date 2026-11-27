@@ -21,9 +21,17 @@ import {
   withProps,
   withState,
 } from '@ngrx/signals';
-import { auditTime, EMPTY, filter, fromEvent, merge, type Observable } from 'rxjs';
+import {
+  auditTime,
+  EMPTY,
+  filter,
+  fromEvent,
+  merge,
+  type Observable,
+  type Subscription,
+} from 'rxjs';
 
-import { hasProblemCode, OrganizationSwitchPendingError } from '@core/api';
+import { hasProblemCode, OrganizationPin, OrganizationSwitchPendingError } from '@core/api';
 import { RealtimeConnection } from '@core/realtime';
 import { LIST_DIRECTORY, type ListDirectoryEntry } from '@features/spaces/ports/list-directory';
 import { SPACE_DIRECTORY, type SpaceDirectoryEntry } from '@features/spaces/ports/space-directory';
@@ -207,7 +215,8 @@ export const CREATE_ATTEMPTS: number = 3;
  * Interface GoalsContext
  *
  * @description
- * Which organization generation the writes belong to and whether the page is gone.
+ * Which organization and generation the writes belong to, whether the workspace left that
+ * organization, and whether the page is gone.
  */
 interface GoalsContext {
   // #region Properties
@@ -223,11 +232,38 @@ interface GoalsContext {
   generation: number;
 
   /**
+   * Property organizationId
+   *
+   * @description
+   * The organization of the current generation, the one the goals were read for: a write is sent,
+   * and its answer applied, only while the workspace and `OrganizationPin` both still name it.
+   *
+   * @type {string}
+   */
+  organizationId: string;
+
+  /**
+   * Property left
+   *
+   * @description
+   * Whether the pin was committed to another organization, or cleared, since the store adopted
+   * its organization. `OrganizationPin.organizationChanges` sets it synchronously, and only a
+   * reset of a live store clears it, so a write is never sent again once the workspace left the
+   * organization, even back to it, within one tick or after the page is gone. A re-verification of
+   * the same organization does not set it, so it drops nothing.
+   *
+   * @type {boolean}
+   */
+  left: boolean;
+
+  /**
    * Property destroyed
    *
    * @description
    * Whether the page that provided the store is gone: the writes already queued are still sent,
-   * but nothing is read again.
+   * with the reads of one goal they need (after a `412` or an unknown outcome), while the
+   * workspace and the pin still name its organization and it was never left; the goals and a goal
+   * whose queue went idle are not read again, and no background read is sent.
    *
    * @type {boolean}
    */
@@ -914,8 +950,14 @@ function createGoalsStore(): Type<GoalsStoreInstance> {
     withProps((store) => {
       const api: GoalsApi = inject(GoalsApi);
       const workspace: WorkspaceContextPort = inject(WORKSPACE_CONTEXT);
+      const pin: OrganizationPin = inject(OrganizationPin);
       const loads: GoalsLoads = { background: false, queued: false, last: null, landed: 0 };
-      const context: GoalsContext = { generation: 0, destroyed: false };
+      const context: GoalsContext = {
+        generation: 0,
+        organizationId: workspace.organization().id,
+        left: false,
+        destroyed: false,
+      };
       inject(DestroyRef).onDestroy((): void => {
         context.destroyed = true;
       });
@@ -923,6 +965,7 @@ function createGoalsStore(): Type<GoalsStoreInstance> {
       return {
         _api: api,
         _workspace: workspace,
+        _pin: pin,
         _loads: loads,
         _context: context,
         _toasts: inject(CwToastService),
@@ -1149,12 +1192,37 @@ function createGoalsStore(): Type<GoalsStoreInstance> {
     withMethods((store) => {
       const context: GoalsContext = store._context;
       const today: () => string = (): string => todayIso(new Date());
+      // `current` only says whether `_followOrganization` has yet to reset a generation, so it
+      // guards the flags that reset owns. The resolver commits another organization (workspace
+      // context and pin) synchronously, before that effect moves the generation, and a destroyed
+      // store keeps its generation while the global pin moves on: `live` also checks both against
+      // the organization the store adopted, and that the pin never left it since, so nothing is
+      // sent under another organization's pin or applied in between, nor after a switch and back.
       const current: (generation: number) => boolean = (generation: number): boolean =>
         generation === context.generation;
+      const live: (generation: number) => boolean = (generation: number): boolean =>
+        current(generation) &&
+        !context.left &&
+        store._workspace.organization().id === context.organizationId &&
+        store._pin.current() === context.organizationId;
+      // The writes still running, queued in a goal's lane or creating a goal. The store hears the
+      // organization changes until the page is gone and they all settled, so `left` keeps fencing
+      // the writes a gone page still sends.
+      let running: number = 0;
+      const changes: Subscription = store._pin.organizationChanges.subscribe((): void => {
+        context.left = true;
+      });
+      const hold: () => void = (): void => {
+        running += 1;
+      };
+      const free: () => void = (): void => {
+        running -= 1;
+        if (context.destroyed && running === 0) changes.unsubscribe();
+      };
       const alive: (generation: number) => boolean = (generation: number): boolean =>
-        current(generation) && !context.destroyed;
+        live(generation) && !context.destroyed;
       const guard: (generation: number) => void = (generation: number): void => {
-        if (!current(generation)) throw new WriteDroppedError();
+        if (!live(generation)) throw new WriteDroppedError();
       };
       const dropped: (error: unknown, generation: number) => boolean = (
         error: unknown,
@@ -1163,8 +1231,8 @@ function createGoalsStore(): Type<GoalsStoreInstance> {
         error instanceof WriteDroppedError ||
         error instanceof OrganizationSwitchPendingError ||
         hasProblemCode(error, 'organization.context-changed') ||
-        !current(generation);
-      const organizationId: () => string = (): string => store._workspace.organization().id;
+        !live(generation);
+      const organizationId: () => string = (): string => context.organizationId;
       const record: (write: GoalWrite) => void = (write: GoalWrite): void => {
         patchState(store, { _writes: [...store._writes(), write] });
       };
@@ -1215,6 +1283,34 @@ function createGoalsStore(): Type<GoalsStoreInstance> {
         store._loads.background = true;
         store.goals.reload();
       };
+
+      // A write that settles once the workspace left its organization may have been recorded, but
+      // its answer is not applied. Back on that organization the goals are read once more instead,
+      // coalesced with a read in flight: at once for a write of an older generation, at the reset
+      // for one that settled before it (`unseen`), since the goals read may end on the same
+      // organization and not be sent again.
+      let unseen: boolean = false;
+      const settledBefore: (generation: number, origin: string) => void = (
+        generation: number,
+        origin: string,
+      ): void => {
+        if (current(generation) && context.left) unseen = true;
+        else if (
+          !current(generation) &&
+          alive(context.generation) &&
+          origin === context.organizationId
+        )
+          refresh();
+      };
+
+      // A definitive answer to a creation (created, or refused by the gateway) ends its idempotency
+      // key, even once its generation is no longer live; an unknown outcome, or a send the store or
+      // the pin stopped, keeps it so the same draft is never created twice.
+      const definitive: (error: unknown) => boolean = (error: unknown): boolean =>
+        !isUncertainCreation(error) &&
+        !(error instanceof WriteDroppedError) &&
+        !(error instanceof OrganizationSwitchPendingError) &&
+        !hasProblemCode(error, 'organization.context-changed');
 
       const lanes: Map<string, GoalLane> = new Map<string, GoalLane>();
       const scheduled: Set<string> = new Set<string>();
@@ -1273,10 +1369,13 @@ function createGoalsStore(): Type<GoalsStoreInstance> {
         task: () => Promise<void>,
       ): Promise<void> => {
         const lane: GoalLane = laneOf(goalId);
+        const origin: string = context.organizationId;
+        hold();
         const run: Promise<void> = lane.tail.then(task);
-        const tail: Promise<void> = run.catch((): void => undefined);
+        const tail: Promise<void> = run.then(free, free);
         lane.tail = tail;
         void tail.then((): void => {
+          settledBefore(generation, origin);
           if (lane.tail !== tail || !lane.dirty || !alive(generation)) return;
           for (const pending of bursts.values()) if (pending.goalId === goalId) return;
           lane.dirty = false;
@@ -1320,6 +1419,44 @@ function createGoalsStore(): Type<GoalsStoreInstance> {
         createKeys.set(draft, key);
         return key;
       };
+      // One attempt per draft at a time. A resubmission made while an earlier attempt of the same
+      // draft runs (a switch away and back ends the `creating` and `addingTo` flags, not the
+      // attempt) sends nothing until that attempt settles: created, its answer is taken; otherwise
+      // the draft is sent again with the key it kept (an unknown outcome) or a new one (it released
+      // its key). Only the attempt running on a key releases it, so no other attempt is left
+      // sending with a key that is gone.
+      const attempts: Map<string, Promise<unknown>> = new Map<string, Promise<unknown>>();
+      const once: <T>(
+        draftKey: string,
+        prior: Promise<unknown> | undefined,
+        attempt: (key: string) => Promise<T>,
+      ) => Promise<T> = async <T>(
+        draftKey: string,
+        prior: Promise<unknown> | undefined,
+        attempt: (key: string) => Promise<T>,
+      ): Promise<T> => {
+        for (let waiting: Promise<unknown> | undefined = prior; waiting !== undefined;) {
+          try {
+            return (await waiting) as T;
+          } catch {
+            // Not created: sent again below, with the key the attempt kept or a new one.
+          }
+          const next: Promise<unknown> | undefined = attempts.get(draftKey);
+          waiting = next === waiting ? undefined : next;
+        }
+        const running: Promise<T> = attempt(keyOf(draftKey));
+        attempts.set(draftKey, running);
+        try {
+          const value: T = await running;
+          createKeys.delete(draftKey);
+          return value;
+        } catch (error: unknown) {
+          if (definitive(error)) createKeys.delete(draftKey);
+          throw error;
+        } finally {
+          if (attempts.get(draftKey) === running) attempts.delete(draftKey);
+        }
+      };
       const settleUncertain: (
         goalId: string,
         resultId: string,
@@ -1359,6 +1496,7 @@ function createGoalsStore(): Type<GoalsStoreInstance> {
             await wait(backoff[attempt]);
           }
         }
+        if (!live(generation)) return;
         if (value === null) {
           dropEdit(resultId);
           return;
@@ -1393,7 +1531,7 @@ function createGoalsStore(): Type<GoalsStoreInstance> {
         generation: number,
       ): Promise<void> => {
         scheduled.delete(resultId);
-        if (!current(generation)) return;
+        if (!live(generation)) return;
         const edits: Readonly<Record<string, number | boolean>> = store._edits();
         if (!(resultId in edits)) return;
         const edit: EditRecord | undefined = records.get(resultId);
@@ -1416,6 +1554,7 @@ function createGoalsStore(): Type<GoalsStoreInstance> {
           } catch (error: unknown) {
             if (!isVersionMismatch(error)) throw error;
             const goal: Goal = await fresh(goalId, generation);
+            if (!live(generation)) return;
             const value: number | boolean | null = valueOf(
               goal.results.find((result: KeyResult): boolean => result.id === resultId),
             );
@@ -1448,7 +1587,7 @@ function createGoalsStore(): Type<GoalsStoreInstance> {
             }
             write = await send(generation, goalId, update);
           }
-          if (!current(generation)) return;
+          if (!live(generation)) return;
           const lane: GoalLane = laneOf(goalId);
           lane.version = write.version ?? lane.version;
           lane.dirty = true;
@@ -1508,6 +1647,7 @@ function createGoalsStore(): Type<GoalsStoreInstance> {
       };
       inject(DestroyRef).onDestroy((): void => {
         for (const resultId of [...bursts.keys()]) enter(resultId);
+        if (running === 0) changes.unsubscribe();
       });
       const edit: (
         goalId: string,
@@ -1533,15 +1673,16 @@ function createGoalsStore(): Type<GoalsStoreInstance> {
           const quarter: Quarter | null = store.quarter();
           if (store.creating() || quarter === null) return null;
           const generation: number = context.generation;
-          const draftKey: string = JSON.stringify([quarter.key, draft]);
-          const idempotencyKey: string = keyOf(draftKey);
+          const origin: string = context.organizationId;
+          const draftKey: string = JSON.stringify(['goal', origin, quarter.key, draft]);
+          const prior: Promise<unknown> | undefined = attempts.get(draftKey);
           patchState(store, { creating: true });
+          hold();
           try {
-            const goal: Goal = await created(generation, () =>
-              store._api.create(draft, quarter, today(), idempotencyKey),
+            const goal: Goal = await once(draftKey, prior, (key: string) =>
+              created(generation, () => store._api.create(draft, quarter, today(), key)),
             );
-            createKeys.delete(draftKey);
-            if (!current(generation)) return null;
+            if (!live(generation)) return null;
             record({
               organizationId: organizationId(),
               after: store._readsIssued(),
@@ -1563,7 +1704,6 @@ function createGoalsStore(): Type<GoalsStoreInstance> {
               );
               return null;
             }
-            createKeys.delete(draftKey);
             failed(
               hasProblemCode(error, 'goal.owner-ineligible')
                 ? $localize`:@@goals.toast.owner-ineligible:This person cannot read the goal`
@@ -1572,6 +1712,8 @@ function createGoalsStore(): Type<GoalsStoreInstance> {
             return null;
           } finally {
             if (current(generation)) patchState(store, { creating: false });
+            free();
+            settledBefore(generation, origin);
           }
         },
         async remove(goalId: string, version: number): Promise<boolean> {
@@ -1596,7 +1738,7 @@ function createGoalsStore(): Type<GoalsStoreInstance> {
             try {
               guard(generation);
               await store._api.delete(goalId, version);
-              if (current(generation)) outcome = removed();
+              if (live(generation)) outcome = removed();
             } catch (error: unknown) {
               if (dropped(error, generation)) return;
               if (isGone(error)) {
@@ -1625,6 +1767,7 @@ function createGoalsStore(): Type<GoalsStoreInstance> {
               }
               try {
                 await fresh(goalId, generation);
+                if (!live(generation)) return;
                 store._toasts.warning(
                   $localize`:@@goals.toast.delete-unknown:The deletion could not be confirmed`,
                   {
@@ -1672,28 +1815,37 @@ function createGoalsStore(): Type<GoalsStoreInstance> {
         async addResult(goalId: string, draft: KeyResultDraft): Promise<boolean> {
           if (store.addingTo() !== null || shown(goalId) === undefined) return false;
           const generation: number = context.generation;
-          const draftKey: string = JSON.stringify([goalId, draft]);
-          let idempotencyKey: string = keyOf(draftKey);
+          const draftKey: string = JSON.stringify([
+            'result',
+            context.organizationId,
+            goalId,
+            draft,
+          ]);
+          const prior: Promise<unknown> | undefined = attempts.get(draftKey);
           let outcome: boolean = false;
-          const creation: (version: number) => Promise<KeyResultWrite> = (version: number) =>
-            created(generation, () =>
-              store._api.createResult(goalId, version, draft, idempotencyKey),
-            );
+          const attempt: (key: string) => Promise<KeyResultWrite> = async (
+            key: string,
+          ): Promise<KeyResultWrite> => {
+            let idempotencyKey: string = key;
+            const creation: (version: number) => Promise<KeyResultWrite> = (version: number) =>
+              created(generation, () =>
+                store._api.createResult(goalId, version, draft, idempotencyKey),
+              );
+            try {
+              return await send(generation, goalId, creation);
+            } catch (error: unknown) {
+              if (!isVersionMismatch(error)) throw error;
+              createKeys.delete(draftKey);
+              idempotencyKey = keyOf(draftKey);
+              await fresh(goalId, generation);
+              return send(generation, goalId, creation);
+            }
+          };
           patchState(store, { addingTo: goalId });
           await inLane(goalId, generation, async (): Promise<void> => {
             try {
-              let write: KeyResultWrite;
-              try {
-                write = await send(generation, goalId, creation);
-              } catch (error: unknown) {
-                if (!isVersionMismatch(error)) throw error;
-                createKeys.delete(draftKey);
-                idempotencyKey = keyOf(draftKey);
-                await fresh(goalId, generation);
-                write = await send(generation, goalId, creation);
-              }
-              createKeys.delete(draftKey);
-              if (!current(generation)) return;
+              const write: KeyResultWrite = await once(draftKey, prior, attempt);
+              if (!live(generation)) return;
               const lane: GoalLane = laneOf(goalId);
               lane.version = write.version ?? lane.version;
               lane.dirty = true;
@@ -1718,7 +1870,6 @@ function createGoalsStore(): Type<GoalsStoreInstance> {
                 );
                 return;
               }
-              createKeys.delete(draftKey);
               if (isGone(error)) refresh();
               failed(
                 hasProblemCode(error, 'goal.result-limit-reached')
@@ -1746,7 +1897,7 @@ function createGoalsStore(): Type<GoalsStoreInstance> {
                 await fresh(goalId, generation);
                 await send(generation, goalId, removal);
               }
-              if (!current(generation)) return;
+              if (!live(generation)) return;
               record({
                 organizationId: organizationId(),
                 after: store._readsIssued(),
@@ -1781,28 +1932,42 @@ function createGoalsStore(): Type<GoalsStoreInstance> {
           store._askOwners(ids.split(' '));
           patchState(store, { _peopleRequest: store._peopleRequest() + 1 });
         }),
-        _followOrganization: signalMethod<string>((): void => {
-          context.generation += 1;
-          lastAsked = null;
-          records.clear();
-          scheduled.clear();
-          for (const pending of bursts.values()) clearTimeout(pending.handle);
-          bursts.clear();
-          createKeys.clear();
-          store._loads.queued = false;
-          patchState(store, {
-            _edits: {},
-            _hidden: [],
-            deletingId: null,
-            addingTo: null,
-            creating: false,
-          });
-        }),
+        _followOrganization: signalMethod<{ organizationId: string; revision: number }>(
+          ({ organizationId }: { organizationId: string; revision: number }): void => {
+            if (organizationId === context.organizationId && !context.left) return;
+            const catchUp: boolean = unseen && organizationId === context.organizationId;
+            unseen = false;
+            context.generation += 1;
+            context.organizationId = organizationId;
+            context.left = false;
+            lastAsked = null;
+            records.clear();
+            scheduled.clear();
+            for (const pending of bursts.values()) clearTimeout(pending.handle);
+            bursts.clear();
+            store._loads.queued = false;
+            patchState(store, {
+              _edits: {},
+              _hidden: [],
+              deletingId: null,
+              addingTo: null,
+              creating: false,
+            });
+            if (catchUp) refresh();
+          },
+        ),
       };
     }),
     withHooks({
       onInit(store): void {
-        store._followOrganization(computed((): string => store._workspace.organization().id));
+        // The pin's revision moves on every commit: a switch and back within one tick leaves the
+        // organization unchanged, and only the revision makes the store react and reset.
+        store._followOrganization(
+          computed((): { organizationId: string; revision: number } => ({
+            organizationId: store._workspace.organization().id,
+            revision: store._pin.revision(),
+          })),
+        );
         store._settled(computed((): boolean => store.goals.isLoading()));
         store._checkOwners(store._unknownOwners);
         const view: Window | null = store._document.defaultView;
@@ -1841,7 +2006,8 @@ function createGoalsStore(): Type<GoalsStoreInstance> {
  * (`If-Match`), kept once the page is gone so the last value of a burst is still sent; a key
  * result's value enters that queue once its burst of clicks ends (`GOAL_EDIT_BURST_MS`), at once
  * when the page is left; once a
- * goal's writes settle, it is read again for its progress and health, unless the page is gone. A
+ * goal's writes settle, it is read again for its progress and health, unless the page is gone
+ * (the reads of one goal a queued write needs, after a `412` or an unknown outcome, still run). A
  * `412` reads the goal: an edit is sent again only while the goal still shows the value it started
  * from, a number moves by the same steps from a newer value, and a checkbox changed elsewhere is
  * dropped with a warning. A confirmed write moves the value an edit counts its steps from, so a
@@ -1852,10 +2018,22 @@ function createGoalsStore(): Type<GoalsStoreInstance> {
  * are dropped with a warning. A deletion is sent from the version confirmed, and a `412` keeps the
  * goal, warns and reads it again, so deleting it takes a new confirmation. Every write is bound to
  * the organization generation it started in: after a switch, even back to the same organization,
- * nothing more is sent, patched or toasted. A creation keeps its idempotency key until a definitive
- * answer and is sent again with it after an unknown outcome or
+ * nothing more is sent, patched or toasted. It is also sent, and its answer applied, only while the
+ * workspace and `OrganizationPin` both name the organization the goals were read for and the pin
+ * was not committed to another organization, or cleared, since (`organizationChanges`, heard until
+ * the page is gone and its writes settled; a re-verification of the same organization drops
+ * nothing). So a write queued or answered once the resolver committed another organization,
+ * before the store reacts, after the page is gone, after a switch and back, or once the workspace
+ * is left (the pin cleared), is dropped instead of reaching the gateway under another
+ * `If-Organization-Match`. After a switch away and back the goals are read again, and once more
+ * when a write started before it settles, so what it completed shows. A creation keeps its
+ * idempotency key, per organization and across a switch and back, until a definitive
+ * answer (created or refused, even once a switch dropped it) and is sent again with it after an
+ * unknown outcome or
  * `409 idempotency.request-in-progress`, up to three times, then reported as unconfirmed; a resubmitted
- * identical draft reuses the key. The members are read again after a failure and for owners they
+ * identical draft reuses the key, and one submitted while an earlier attempt of it runs waits for it
+ * and takes what it created instead of sending a second request. The members are read again after
+ * a failure and for owners they
  * did not name, which read as former members only once a read says so.
  *
  * @type {ReturnType<typeof createGoalsStore>}
