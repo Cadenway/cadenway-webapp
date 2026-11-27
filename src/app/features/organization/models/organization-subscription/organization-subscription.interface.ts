@@ -2,8 +2,8 @@
  * Interface OrganizationSubscription
  *
  * @description
- * The current organization's plan and usage, as the shell's plan line and storage banner show
- * them.
+ * The current organization's plan and usage, as the shell's plan line, the storage banner and the
+ * quotas section show them.
  */
 export interface OrganizationSubscription {
   // #region Properties
@@ -61,5 +61,16 @@ export interface OrganizationSubscription {
    * @readonly
    */
   readonly storageLimitBytes: number;
+
+  /**
+   * Property guestCount
+   *
+   * @description
+   * Active guests, who take no seat; the contract states no guest limit.
+   *
+   * @type {number}
+   * @readonly
+   */
+  readonly guestCount: number;
   // #endregion
 }

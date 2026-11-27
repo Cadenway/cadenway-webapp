@@ -6,7 +6,7 @@ import type { OrganizationSubscription } from '../../../models/organization-subs
  * Function toOrganizationSubscription
  *
  * @description
- * Keeps the plan, the seats and the attachment storage of a subscription.
+ * Keeps the plan, the seats, the attachment storage and the guest count of a subscription.
  *
  * @param {BillingSubscription} subscription - `GET /v1/billing/subscription` answer.
  * @returns {OrganizationSubscription} Display model of the subscription.
@@ -20,5 +20,6 @@ export function toOrganizationSubscription(
     seatsLimit: subscription.seats.limit,
     storageUsedBytes: subscription.storage.attachmentBytesUsed,
     storageLimitBytes: subscription.storage.limitBytes,
+    guestCount: subscription.guestCount,
   };
 }

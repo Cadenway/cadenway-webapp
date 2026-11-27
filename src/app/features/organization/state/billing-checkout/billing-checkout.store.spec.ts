@@ -37,6 +37,7 @@ const FREE: OrganizationSubscription = {
   seatsLimit: 5,
   storageUsedBytes: 120_000_000,
   storageLimitBytes: 2_000_000_000,
+  guestCount: 1,
 };
 
 /**
