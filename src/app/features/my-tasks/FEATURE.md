@@ -88,6 +88,10 @@ organization.context-changed`) keeps the rows silently and is sent again once th
   date). A line stays in the group of its read status and date until the next read, which a
   settled status write triggers; a pending status or value of the menu stays shown over a reread
   of an older copy; a deleted line hides at once (`TaskRowActionsStore.rows`).
+- The menu remembers the key of the line it opened on and looks the tab's read copy of that task
+  up when an item runs: every write, `displayedTask` and `displayedStatus` take that read copy, so
+  a write picked over a pending one, then its `Undo`, only put back a confirmed value. The
+  displayed copy (`rows`) only draws the lines and the menu's checkmarks.
 - The context menu opens from the list item around each `cw-task-line` (right click, Shift F10,
   the Menu key, a long press), not from the line itself, whose `opened` output would otherwise also
   receive the trigger's. The item has `tabindex="-1"` and hands the focus it receives itself (the
