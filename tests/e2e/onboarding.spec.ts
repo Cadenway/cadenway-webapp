@@ -212,6 +212,19 @@ async function stubGateway(page: Page, options: GatewayOptions = {}): Promise<Ga
         });
       case 'GET /v1/me/favorites':
         return route.fulfill({ json: { items: [], nextCursor: null } });
+      case 'GET /v1/me/home':
+        return route.fulfill({
+          json: {
+            stats: { assigned: 0, late: 0, dueToday: 0, done: 0 },
+            priorities: [],
+            sprints: [],
+            lists: [],
+          },
+        });
+      case 'GET /v1/me/tasks':
+        return route.fulfill({
+          json: { items: [], nextCursor: null, counts: { open: 0, closed: 0 } },
+        });
       case 'GET /v1/members':
         return route.fulfill({
           json: {
@@ -237,6 +250,10 @@ async function stubGateway(page: Page, options: GatewayOptions = {}): Promise<Ga
         return route.fulfill({ json: onboarding });
       case 'PATCH /v1/me/onboarding': {
         const change = body as Partial<Onboarding['wizard']> & { dismissed?: true };
+        // A repeated dismissal keeps the version; any other write to a closed wizard is refused.
+        if (change.dismissed === true && onboarding.wizard.status === 'dismissed') {
+          return route.fulfill({ json: onboarding });
+        }
         if (onboarding.wizard.status !== 'in-progress') {
           return route.fulfill(problem(409, 'onboarding.wizard-closed'));
         }
@@ -256,6 +273,22 @@ async function stubGateway(page: Page, options: GatewayOptions = {}): Promise<Ga
       }
       case 'PATCH /v1/me/onboarding/checklist': {
         const change = body as Partial<Onboarding['checklist']>;
+        // The presentation and the Board marker need a provisioned space; an invitation does not.
+        if (
+          !provisioned() &&
+          (change.presentation !== undefined || change.boardTried !== undefined)
+        ) {
+          return route.fulfill(problem(409, 'onboarding.checklist-unavailable'));
+        }
+        // A repeated, identical change keeps the version.
+        if (
+          Object.entries(change).every(
+            ([name, value]: [string, unknown]) =>
+              onboarding.checklist[name as keyof Onboarding['checklist']] === value,
+          )
+        ) {
+          return route.fulfill({ json: onboarding });
+        }
         return route.fulfill(
           write((state: Onboarding) => ({
             ...state,
@@ -280,10 +313,10 @@ async function stubGateway(page: Page, options: GatewayOptions = {}): Promise<Ga
         const { emails } = body as { emails: string[] };
         return route.fulfill({
           json: {
-            invitations: emails.map((email: string) => ({
+            invitations: emails.map((email: string, index: number) => ({
               email,
               outcome: 'invited',
-              invitation: null,
+              invitationId: `019a7002-0000-7000-8000-${String(index).padStart(12, '0')}`,
             })),
           },
         });
@@ -360,6 +393,17 @@ async function stubGateway(page: Page, options: GatewayOptions = {}): Promise<Ga
   };
 }
 
+/**
+ * Waits for the next `GET /v1/me/onboarding` answer; register it before the navigation.
+ */
+function onboardingRead(page: Page): Promise<unknown> {
+  return page.waitForResponse(
+    (response) =>
+      response.request().method() === 'GET' &&
+      new URL(response.url()).pathname === '/v1/me/onboarding',
+  );
+}
+
 test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => {
     window.sessionStorage.clear();
@@ -379,6 +423,7 @@ test('a new organization opens the assistant, which provisions the space and sho
   const wizard = page.getByTestId('onboarding-wizard');
   await expect(wizard.getByRole('heading', { name: 'Welcome to Atelier Nord' })).toBeVisible();
   // The launch is durable only once the first draft is saved: the parameter stays until then.
+  await expect.poll(() => gateway.calls.includes('PATCH /v1/me/onboarding')).toBe(true);
   await expect(page).toHaveURL(/\?onboarding=start$/);
   gateway.releaseFirstDraft();
   await expect(page).toHaveURL(/\/atelier-nord$/);
@@ -446,6 +491,8 @@ test('the checklist ticks the first task and the Board view as the person tries 
     checklist.getByRole('button', { name: 'Create your first task (done)' }),
   ).toBeVisible();
   await expect(checklist.getByTestId('getting-started-counter')).toHaveText('1 of 3');
+  // The creation toast covers the corner of the checklist until it goes.
+  await expect(page.getByText('Task PRO-4 created')).toBeHidden({ timeout: 15_000 });
 
   await checklist.getByRole('button', { name: 'Try the Board view' }).click();
   await expect(page).toHaveURL(new RegExp(`/atelier-nord/l/${backlog.id}/board$`));
@@ -455,7 +502,14 @@ test('the checklist ticks the first task and the Board view as the person tries 
 });
 
 test('Set up later closes the assistant for good, with no checklist', async ({ page }) => {
-  const gateway = await stubGateway(page);
+  // A first space already exists (an earlier finish whose answer was lost): only the dismissal
+  // keeps its checklist away, and Set up later opens its first list.
+  const gateway = await stubGateway(page, {
+    onboarding: {
+      ...initialOnboarding(),
+      provisioning: { spaceId: product.id, firstListId: backlog.id },
+    },
+  });
 
   await page.goto('/atelier-nord?onboarding=start');
   const wizard = page.getByTestId('onboarding-wizard');
@@ -463,16 +517,17 @@ test('Set up later closes the assistant for good, with no checklist', async ({ p
   await wizard.getByRole('button', { name: 'Set up later' }).click();
 
   await expect(wizard).toBeHidden();
-  await expect(page).toHaveURL(/\/atelier-nord$/);
   await expect.poll(() => gateway.onboarding().wizard.status).toBe('dismissed');
+  await expect(page).toHaveURL(new RegExp(`/atelier-nord/l/${backlog.id}/list$`));
+  await expect(page.getByRole('heading', { name: 'Backlog' })).toBeVisible();
+  await page.waitForLoadState('networkidle');
   await expect(page.getByRole('region', { name: 'Getting started' })).toHaveCount(0);
 
-  const reads = (): number =>
-    gateway.calls.filter((call: string) => call === 'GET /v1/me/onboarding').length;
-  const before: number = reads();
+  const read: Promise<unknown> = onboardingRead(page);
   await page.reload();
-  await expect.poll(reads).toBeGreaterThan(before);
-  await expect(page.getByRole('main')).toBeVisible();
+  await read;
+  await expect(page.getByRole('heading', { name: 'Backlog' })).toBeVisible();
+  await page.waitForLoadState('networkidle');
   await expect(page.getByTestId('onboarding-wizard')).toHaveCount(0);
   await expect(page.getByRole('region', { name: 'Getting started' })).toHaveCount(0);
 });
@@ -481,7 +536,7 @@ test('a saved draft reopens the assistant on the workspace root, never over a de
   page,
 }) => {
   const saved: Onboarding = initialOnboarding();
-  const gateway = await stubGateway(page, {
+  await stubGateway(page, {
     onboarding: {
       ...saved,
       version: 3,
@@ -489,10 +544,12 @@ test('a saved draft reopens the assistant on the workspace root, never over a de
     },
   });
 
-  await page.goto('/atelier-nord/my-tasks');
   // The checklist's host reads the progress on every page; the assistant opens only on the root.
-  await expect.poll(() => gateway.calls.includes('GET /v1/me/onboarding')).toBe(true);
-  await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+  const read: Promise<unknown> = onboardingRead(page);
+  await page.goto('/atelier-nord/my-tasks');
+  await read;
+  await expect(page.getByRole('heading', { level: 1, name: 'My tasks' })).toBeVisible();
+  await page.waitForLoadState('networkidle');
   await expect(page.getByTestId('onboarding-wizard')).toHaveCount(0);
 
   await page.goto('/atelier-nord');
