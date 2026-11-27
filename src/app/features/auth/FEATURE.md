@@ -98,8 +98,8 @@ was scheduled, whose session the gateway already ended.
 - When the creation succeeds but moving the session to the new organization fails, the page opens
   `/organizations`: the person reaches the workspace from the chooser, without
   `?onboarding=start`, so the assistant never opens for that
-  organization. Contract gap G1 of step 9 (`getOnboarding` cannot tell who was offered the
-  assistant) keeps the client from offering it there.
+  organization. Contract gap G1 (Onboarding's `FEATURE.md`: `getOnboarding` cannot tell who was
+  offered the assistant) keeps the client from offering it there.
 
 ## Copy not taken word for word from the mockup
 
