@@ -1,0 +1,39 @@
+import { describe, expect, it } from 'vitest';
+
+import { toInvitationOutcome, toPendingInvitation } from './invitation.adapter';
+
+describe('invitation adapter', () => {
+  it('reads an expired invitation and the name of its sender', () => {
+    expect(
+      toPendingInvitation({
+        id: 'i3',
+        email: 'atelier@nordstudio.fr',
+        role: 'member',
+        invitedBy: { userId: 'u-hd', name: 'Hugo Dubois' },
+        status: 'expired',
+        sentAt: '2026-10-26T10:00:00Z',
+        expiresAt: '2026-11-02T10:00:00Z',
+        version: 1,
+      }),
+    ).toEqual({
+      id: 'i3',
+      email: 'atelier@nordstudio.fr',
+      role: 'member',
+      invitedBy: 'Hugo Dubois',
+      expired: true,
+      expiresAt: '2026-11-02T10:00:00Z',
+    });
+  });
+
+  it('counts an unknown outcome as skipped', () => {
+    expect(
+      toInvitationOutcome({
+        invitations: [
+          { email: 'marc.roux@ateliernord.fr', outcome: 'invited', invitationId: 'i1' },
+          { email: 'ines.robert@ateliernord.fr', outcome: 'already-member', invitationId: null },
+          { email: 'lucie@example.com', outcome: 'seat-limit', invitationId: null },
+        ],
+      }),
+    ).toEqual({ invited: 1, skipped: 2 });
+  });
+});

@@ -1,0 +1,210 @@
+<cw-table-container class="rounded-lg border border-border">
+  <table
+    cwTable
+    aria-label="Organization members"
+    i18n-aria-label="@@organization.members.table"
+    class="min-w-[720px] max-md:block max-md:min-w-0"
+    [attr.aria-busy]="loading() || null"
+    data-testid="members-table"
+  >
+    <thead cwTableHeader class="max-md:hidden">
+      <tr cwTableRow>
+        <th cwTableHead i18n="@@organization.members.column-member">Member</th>
+        <th cwTableHead class="w-44" i18n="@@organization.members.column-role">Role</th>
+        @if (showTwoStep()) {
+          <th cwTableHead class="w-36" i18n="@@organization.members.column-two-step">Two-step</th>
+        }
+        <th cwTableHead class="w-12">
+          <span class="sr-only" i18n="@@organization.members.column-actions">Actions</span>
+        </th>
+      </tr>
+    </thead>
+    <tbody cwTableBody class="max-md:block">
+      @for (member of rows(); track member.id) {
+        <tr
+          cwTableRow
+          class="group/row max-md:flex max-md:h-auto max-md:flex-wrap max-md:items-center max-md:gap-x-3 max-md:gap-y-1.5 max-md:p-3"
+          data-testid="member-row"
+        >
+          <td cwTableCell class="max-md:block max-md:min-w-0 max-md:basis-full max-md:px-0">
+            <span class="flex min-w-0 items-center gap-2.5">
+              <span class="inline-flex shrink-0" aria-hidden="true">
+                <cw-avatar [name]="member.name" [presence]="avatarPresence(member)" />
+              </span>
+              <span class="sr-only" data-testid="member-status">{{ statusLabel(member) }}</span>
+              <span class="flex min-w-0 flex-col">
+                <span class="flex items-center gap-1.5 truncate leading-5 font-medium"
+                  >{{ member.name }}
+                  @if (member.me) {
+                    <span
+                      class="text-xs font-normal text-muted-foreground"
+                      i18n="@@organization.members.you"
+                      >(you)</span
+                    >
+                  }
+                </span>
+                <span class="truncate text-xs text-muted-foreground">{{ member.email }}</span>
+              </span>
+            </span>
+          </td>
+          <td cwTableCell class="max-md:block max-md:px-0">
+            @if (member.role === 'owner') {
+              <span cwBadge variant="outline" data-testid="member-owner">
+                <ng-icon name="phosphorCrownSimpleBold" class="size-3" aria-hidden="true" />
+                <ng-container i18n="@@organization.members.role-owner">Owner</ng-container>
+              </span>
+            } @else if (canEdit(member)) {
+              <cw-select
+                size="sm"
+                class="w-36"
+                [ariaLabel]="roleLabel(member)"
+                [value]="member.role"
+                [attr.aria-busy]="member.pending || null"
+                [class.opacity-60]="member.pending"
+                (valueChange)="pickRole(member, $event)"
+                data-testid="member-role"
+              >
+                @for (option of roles; track option) {
+                  <cw-select-option [value]="option">{{ roleName(option) }}</cw-select-option>
+                }
+              </cw-select>
+            } @else {
+              <span class="text-sm" data-testid="member-role-text">{{
+                roleName(member.role)
+              }}</span>
+            }
+          </td>
+          @if (showTwoStep()) {
+            <td cwTableCell class="max-md:block max-md:px-0">
+              @if (member.twoStepVerification) {
+                <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                  <ng-icon
+                    name="phosphorCheckCircleFill"
+                    class="size-3.5 text-jade"
+                    aria-hidden="true"
+                  />
+                  <ng-container i18n="@@organization.members.two-step-on">Set up</ng-container>
+                </span>
+              } @else {
+                <span class="flex items-center gap-1.5 text-xs font-medium text-grenat-text">
+                  <ng-icon
+                    name="phosphorWarningCircleFill"
+                    class="size-3.5 text-destructive"
+                    aria-hidden="true"
+                  />
+                  <ng-container i18n="@@organization.members.two-step-off">Not set up</ng-container>
+                </span>
+              }
+            </td>
+          }
+          <td cwTableCell class="max-md:ml-auto max-md:block max-md:px-0">
+            <span class="flex justify-end">
+              @if (canEdit(member)) {
+                <button
+                  cwButton
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  class="text-muted-foreground md:opacity-0 md:group-hover/row:opacity-100 md:focus-visible:opacity-100"
+                  [attr.aria-label]="removeLabel(member)"
+                  [cwTooltip]="removeLabel(member)"
+                  [attr.aria-disabled]="member.pending || null"
+                  (click)="member.pending || removeRequested.emit(member)"
+                  data-testid="member-remove"
+                >
+                  <ng-icon name="phosphorUserMinusBold" aria-hidden="true" />
+                </button>
+              }
+            </span>
+          </td>
+        </tr>
+      } @empty {
+        @if (loading()) {
+          @for (line of skeleton; track line) {
+            <tr cwTableRow class="max-md:flex max-md:h-auto max-md:p-3" aria-hidden="true">
+              <td cwTableCell [attr.colspan]="columns()" class="max-md:block max-md:w-full">
+                <span class="flex items-center gap-3">
+                  <div cwSkeleton class="size-8 rounded-full"></div>
+                  <span class="flex flex-1 flex-col gap-1.5">
+                    <div cwSkeleton class="h-3 w-2/5"></div>
+                    <div cwSkeleton class="h-2.5 w-40"></div>
+                  </span>
+                </span>
+              </td>
+            </tr>
+          }
+        } @else {
+          <tr class="max-md:block">
+            <td [attr.colspan]="columns()" class="max-md:block">
+              <cw-empty class="p-4" data-testid="members-empty">
+                <cw-empty-header>
+                  <cw-empty-media>
+                    <ng-icon name="phosphorUsersBold" aria-hidden="true" />
+                  </cw-empty-media>
+                  <cw-empty-title i18n="@@organization.members.empty-title"
+                    >No member matches</cw-empty-title
+                  >
+                  <cw-empty-description i18n="@@organization.members.empty-text"
+                    >Change the search or choose another role.</cw-empty-description
+                  >
+                </cw-empty-header>
+                @if (filtered()) {
+                  <cw-empty-content>
+                    <button
+                      cwButton
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      (click)="filtersCleared.emit()"
+                      data-testid="members-clear-filters"
+                    >
+                      <ng-container i18n="@@organization.members.clear-filters"
+                        >Clear filters</ng-container
+                      >
+                    </button>
+                  </cw-empty-content>
+                }
+              </cw-empty>
+            </td>
+          </tr>
+        }
+      }
+    </tbody>
+  </table>
+</cw-table-container>
+
+<nav
+  class="flex items-center justify-between text-sm text-muted-foreground"
+  aria-label="Members pagination"
+  i18n-aria-label="@@organization.members.pagination"
+>
+  <span class="whitespace-nowrap tabular-nums" aria-live="polite" data-testid="members-range">{{
+    range()
+  }}</span>
+  <span class="flex items-center gap-1">
+    <button
+      cwButton
+      type="button"
+      variant="outline"
+      size="sm"
+      class="text-foreground"
+      [disabled]="!hasPrevious()"
+      (click)="previousPage.emit()"
+      data-testid="members-previous"
+    >
+      <ng-container i18n="@@organization.members.previous">Previous</ng-container>
+    </button>
+    <button
+      cwButton
+      type="button"
+      variant="outline"
+      size="sm"
+      class="text-foreground"
+      [disabled]="!hasNext()"
+      (click)="nextPage.emit()"
+      data-testid="members-next"
+    >
+      <ng-container i18n="@@organization.members.next">Next</ng-container>
+    </button>
+  </span>
+</nav>

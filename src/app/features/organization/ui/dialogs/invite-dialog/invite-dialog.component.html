@@ -1,0 +1,84 @@
+<cw-dialog [(open)]="open" [pending]="pending()" data-testid="invite-dialog">
+  <cw-dialog-header>
+    <h2 cwDialogTitle i18n="@@organization.members.invite-title">Invite members</h2>
+    @if (seatsLine(); as line) {
+      <p cwDialogDescription class="tabular-nums" data-testid="invite-seats">{{ line }}</p>
+    }
+  </cw-dialog-header>
+
+  <form id="invite-form" class="flex flex-col gap-4" novalidate (submit)="send($event)">
+    <div class="flex flex-col gap-2">
+      <label
+        for="invite-emails"
+        class="text-sm leading-none font-medium"
+        i18n="@@organization.members.invite-emails"
+        >Email addresses</label
+      >
+      <textarea
+        cwTextarea
+        id="invite-emails"
+        rows="3"
+        class="max-h-60 min-h-16 resize-none"
+        placeholder="marc.roux@ateliernord.fr, lucie@example.com"
+        i18n-placeholder="@@organization.members.invite-placeholder"
+        [formField]="inviteForm.emails"
+        [attr.aria-describedby]="
+          error() ? 'invite-emails-error invite-emails-hint' : 'invite-emails-hint'
+        "
+        data-testid="invite-emails"
+      ></textarea>
+      <p
+        id="invite-emails-hint"
+        class="text-xs text-muted-foreground tabular-nums"
+        data-testid="invite-hint"
+      >
+        {{ hint() }}
+      </p>
+      @if (error(); as message) {
+        <p
+          id="invite-emails-error"
+          role="alert"
+          class="flex items-center gap-1 text-xs font-medium text-destructive"
+          data-testid="invite-error"
+        >
+          <ng-icon name="phosphorWarningCircleFill" class="size-3.5 shrink-0" aria-hidden="true" />
+          {{ message }}
+        </p>
+      }
+    </div>
+
+    <div class="flex flex-col gap-2">
+      <span
+        id="invite-role-label"
+        class="text-sm leading-none font-medium"
+        i18n="@@organization.members.invite-role"
+        >Role</span
+      >
+      <cw-select
+        ariaLabel="Role"
+        i18n-ariaLabel="@@organization.members.invite-role"
+        [formField]="inviteForm.role"
+        data-testid="invite-role"
+      >
+        @for (option of roles; track option.value) {
+          <cw-select-option [value]="option.value">{{ option.label }}</cw-select-option>
+        }
+      </cw-select>
+    </div>
+  </form>
+
+  <cw-dialog-footer>
+    <button cwButton cwDialogClose type="button" variant="outline">
+      <ng-container i18n="@@organization.members.cancel">Cancel</ng-container>
+    </button>
+    <button
+      cwButton
+      type="submit"
+      form="invite-form"
+      [loading]="pending()"
+      data-testid="invite-submit"
+    >
+      <ng-container i18n="@@organization.members.invite">Invite</ng-container>
+    </button>
+  </cw-dialog-footer>
+</cw-dialog>
