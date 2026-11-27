@@ -24,6 +24,27 @@
         </cw-card-title>
       </cw-card-header>
       <cw-card-content class="flex flex-col gap-4">
+        @if (!requirementChosen()) {
+          <cw-alert data-testid="security-two-step-unknown">
+            <cw-alert-description i18n="@@organization.security.two-step-unknown"
+              >The current two-step verification rule cannot be shown here. Choose a new rule to
+              replace it.</cw-alert-description
+            >
+            <cw-alert-actions>
+              <button
+                cwButton
+                variant="outline"
+                size="sm"
+                type="button"
+                [disabled]="store.saving()"
+                (click)="chooseRequirement()"
+                i18n="@@organization.security.two-step-unknown-choose"
+              >
+                Choose a new rule
+              </button>
+            </cw-alert-actions>
+          </cw-alert>
+        }
         <div class="flex items-start justify-between gap-4">
           <div class="grid gap-0.5">
             <label
@@ -42,7 +63,7 @@
             id="security-two-step-admins"
             data-testid="security-two-step-admins"
             [checked]="requiredForAdmins()"
-            [disabled]="requiredForEveryone() || store.saving()"
+            [disabled]="!requirementChosen() || requiredForEveryone() || store.saving()"
             (checkedChange)="requireForAdmins($event)"
           />
         </div>
@@ -64,7 +85,7 @@
             id="security-two-step-everyone"
             data-testid="security-two-step-everyone"
             [checked]="requiredForEveryone()"
-            [disabled]="store.saving()"
+            [disabled]="!requirementChosen() || store.saving()"
             (checkedChange)="requireForEveryone($event)"
           />
         </div>

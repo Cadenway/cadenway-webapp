@@ -8,6 +8,7 @@ import {
   type WritableSignal,
 } from '@angular/core';
 import { disabled, type FieldTree, form, FormField } from '@angular/forms/signals';
+import { CwAlert, CwAlertActions, CwAlertDescription } from '@cadenway/ui/components/alert';
 import { CwButton } from '@cadenway/ui/components/button';
 import {
   CwCard,
@@ -40,7 +41,7 @@ import { AuthenticationPolicyStore } from '../../../state/authentication-policy/
  * @description
  * The form value of a saved policy, or nothing on or selected while none is read. A saved
  * `everyone` sets both switches, a saved `admins` the administrators' one; a requirement this
- * version does not know sets neither.
+ * version does not know sets neither and leaves the requirement unchosen.
  *
  * @param {AuthenticationPolicy | null} policy - The saved policy.
  * @returns {AuthenticationPolicyForm} What the form starts from.
@@ -50,6 +51,7 @@ function formOf(policy: AuthenticationPolicy | null): AuthenticationPolicyForm {
   return {
     requireAdmins: required === 'admins' || required === 'everyone',
     requireEveryone: required === 'everyone',
+    requirementChosen: required !== null,
     sessionTimeoutMinutes: policy?.sessionTimeoutMinutes ?? null,
   };
 }
@@ -72,10 +74,11 @@ function requirementOf(value: AuthenticationPolicyForm): TwoStepRequirement {
  * Function changeBetween
  *
  * @description
- * What the form changes from the saved policy. The requirement is sent only once a switch differs
- * from what the saved policy set and the requirement it selects differs from the saved one; the
- * timeout only once another option is picked. Switching back is therefore clean, and a value a
- * later contract added stays as it is until the person changes its control.
+ * What the form changes from the saved policy. A known requirement is sent only once a switch
+ * differs from what the saved policy set and the requirement it selects differs from the saved
+ * one, so switching back is clean. A requirement this version does not know is sent only once the
+ * person chose to replace it, and then whatever the switches select, `nobody` included. The
+ * timeout is sent once another option is picked.
  *
  * @param {AuthenticationPolicy | null} saved - The saved policy.
  * @param {AuthenticationPolicyForm} edited - The form value.
@@ -87,12 +90,15 @@ function changeBetween(
 ): AuthenticationPolicyChange {
   if (saved === null) return {};
   const start: AuthenticationPolicyForm = formOf(saved);
+  const required: TwoStepRequirement = requirementOf(edited);
   const switched: boolean =
     edited.requireAdmins !== start.requireAdmins ||
     edited.requireEveryone !== start.requireEveryone;
-  const required: TwoStepRequirement = requirementOf(edited);
+  const replaced: boolean = start.requirementChosen
+    ? switched && required !== saved.twoStepRequiredFor
+    : edited.requirementChosen;
   return {
-    ...(switched && required !== saved.twoStepRequiredFor ? { twoStepRequiredFor: required } : {}),
+    ...(replaced ? { twoStepRequiredFor: required } : {}),
     ...(edited.sessionTimeoutMinutes !== null &&
     edited.sessionTimeoutMinutes !== saved.sessionTimeoutMinutes
       ? { sessionTimeoutMinutes: edited.sessionTimeoutMinutes }
@@ -128,12 +134,18 @@ function changeBetween(
  *
  * While the policy loads, a skeleton of the card shows (`Loading the section`); a failed read
  * reaches the route's error boundary, whose `Retry` runs the route again. The route guards the
- * unsaved edits with `unsavedChangesGuard`, which asks through `cw-discard-changes-dialog`, and the
- * page asks the browser to confirm closing or reloading the tab while they last.
+ * unsaved edits with `unsavedChangesGuard`, which asks through `cw-discard-changes-dialog` once a
+ * change on its way to the gateway has settled (it may still be applied, so it is never offered
+ * for discarding), and the page asks the browser to confirm closing or reloading the tab while
+ * they last. A saved two-step requirement this version does not know shows a note and keeps both
+ * switches disabled until the person chooses a new rule.
  */
 @Component({
   selector: 'cw-organization-security-page',
   imports: [
+    CwAlert,
+    CwAlertActions,
+    CwAlertDescription,
     CwButton,
     CwCard,
     CwCardContent,
@@ -256,6 +268,21 @@ export class SecurityPage implements UnsavedChanges {
   );
 
   /**
+   * Property requirementChosen
+   *
+   * @description
+   * Whether the two-step switches stand for a requirement. False while the saved requirement is
+   * one this version does not know and the person has not chosen to replace it: the switches are
+   * then disabled and a note says the current rule cannot be shown.
+   *
+   * @type {Signal<boolean>}
+   * @readonly
+   */
+  protected readonly requirementChosen: Signal<boolean> = computed(
+    (): boolean => this.model().requirementChosen,
+  );
+
+  /**
    * Property requiredForEveryone
    *
    * @description
@@ -315,11 +342,17 @@ export class SecurityPage implements UnsavedChanges {
    * Method confirmDiscard
    *
    * @description
-   * Asks whether to discard the unsaved edits.
+   * Asks whether to discard the unsaved edits. A change already on its way to the gateway cannot
+   * be discarded, so the page first waits for it to settle: once accepted, nothing is unsaved and
+   * the navigation goes; once refused, the person is asked. A save waiting only for the
+   * reauthentication dialog sent nothing yet, so it is asked at once, and `Discard` cancels it.
    *
-   * @returns {Promise<boolean>} Resolves true on `Discard`, false on `Keep editing`.
+   * @returns {Promise<boolean>} Resolves true on `Discard` or once the edits are saved, false on
+   * `Keep editing`.
    */
-  public confirmDiscard(): Promise<boolean> {
+  public async confirmDiscard(): Promise<boolean> {
+    await this.store.sent();
+    if (!this.dirty()) return true;
     return this.discard().ask();
   }
 
@@ -341,6 +374,17 @@ export class SecurityPage implements UnsavedChanges {
       return $localize`:@@organization.security.two-step-everyone-hint-one:1 person has not set it up: they will have to at their next sign-in.`;
     }
     return $localize`:@@organization.security.two-step-everyone-hint-many:${count}:count: people have not set it up: they will have to at their next sign-in.`;
+  }
+
+  /**
+   * Method chooseRequirement
+   *
+   * @description
+   * Replaces a requirement this version does not know: the switches become editable, and a save
+   * sends what they select, `nobody` while both stay off.
+   */
+  protected chooseRequirement(): void {
+    this.policyForm.requirementChosen().value.set(true);
   }
 
   /**

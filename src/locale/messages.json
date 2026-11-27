@@ -525,6 +525,8 @@
     "organization.security.title": " Security and SSO ",
     "organization.security.description": " Identity provider, allowed sign-in methods and session policy. ",
     "organization.security.policy-title": " Authentication policy ",
+    "organization.security.two-step-unknown": "The current two-step verification rule cannot be shown here. Choose a new rule to replace it.",
+    "organization.security.two-step-unknown-choose": " Choose a new rule ",
     "organization.security.two-step-admins": "Require two-step verification for administrators",
     "organization.security.two-step-admins-hint": "The owner and administrators can no longer sign in without it.",
     "organization.security.two-step-everyone": "Require it for all members",

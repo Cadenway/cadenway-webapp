@@ -336,16 +336,50 @@ describe('SecurityPage', () => {
     expect(button('Save')?.disabled).toBe(true);
   });
 
-  it('sends a choice for an unknown requirement only once a switch changes', async () => {
+  it('does not show an unknown requirement as nobody', async () => {
     api.policy.mockResolvedValue({ ...ATELIER_NORD, twoStepRequiredFor: null });
     const harness: RouterTestingHarness = await open();
 
-    switchOf(harness, 'security-two-step-everyone')?.click();
+    expect(byTestId(harness, 'security-two-step-unknown')?.textContent).toContain(
+      'The current two-step verification rule cannot be shown here.',
+    );
+    expect(switchOf(harness, 'security-two-step-admins')?.disabled).toBe(true);
+    expect(switchOf(harness, 'security-two-step-everyone')?.disabled).toBe(true);
+    expect(byTestId(harness, 'security-unsaved')).toBeNull();
+    expect(button('Save')?.disabled).toBe(true);
+  });
+
+  it('replaces an unknown requirement once the person chooses a new rule', async () => {
+    api.policy.mockResolvedValue({ ...ATELIER_NORD, twoStepRequiredFor: null });
+    const harness: RouterTestingHarness = await open();
+
+    button('Choose a new rule')?.click();
     harness.detectChanges();
-    switchOf(harness, 'security-two-step-everyone')?.click();
+
+    expect(byTestId(harness, 'security-two-step-unknown')).toBeNull();
+    expect(switchOf(harness, 'security-two-step-admins')?.disabled).toBe(false);
+    expect(switchOf(harness, 'security-two-step-everyone')?.disabled).toBe(false);
+    expect(byTestId(harness, 'security-unsaved')).not.toBeNull();
+
+    button('Cancel')?.click();
     harness.detectChanges();
+    expect(byTestId(harness, 'security-two-step-unknown')).not.toBeNull();
     expect(byTestId(harness, 'security-unsaved')).toBeNull();
 
+    button('Choose a new rule')?.click();
+    harness.detectChanges();
+    button('Save')?.click();
+
+    await expect.poll(() => api.update.mock.calls.length).toBe(1);
+    expect(api.update).toHaveBeenCalledWith({ twoStepRequiredFor: 'nobody' }, 2);
+  });
+
+  it('sends the switches once an unknown requirement is replaced', async () => {
+    api.policy.mockResolvedValue({ ...ATELIER_NORD, twoStepRequiredFor: null });
+    const harness: RouterTestingHarness = await open();
+
+    button('Choose a new rule')?.click();
+    harness.detectChanges();
     switchOf(harness, 'security-two-step-admins')?.click();
     harness.detectChanges();
     button('Save')?.click();
@@ -510,6 +544,87 @@ describe('SecurityPage', () => {
 
     expect(await leaving).toBe(false);
     expect(byTestId(harness, 'security-unsaved')).not.toBeNull();
+  });
+
+  it('waits for a change on its way instead of offering to discard it, then leaves once saved', async () => {
+    let answer: (policy: AuthenticationPolicy) => void = (): void => undefined;
+    api.update.mockReturnValue(
+      new Promise<AuthenticationPolicy>((resolve: (policy: AuthenticationPolicy) => void) => {
+        answer = resolve;
+      }),
+    );
+    const harness: RouterTestingHarness = await open();
+    switchOf(harness, 'security-two-step-everyone')?.click();
+    harness.detectChanges();
+    button('Save')?.click();
+    await expect.poll(() => api.update.mock.calls.length).toBe(1);
+
+    let left: boolean | undefined;
+    void TestBed.inject(Router)
+      .navigateByUrl('/members')
+      .then((result: boolean) => {
+        left = result;
+      });
+    await new Promise<void>((resolve: () => void) => setTimeout(resolve, 50));
+    harness.detectChanges();
+    expect(document.querySelector('[role="alertdialog"]')).toBeNull();
+    expect(left).toBeUndefined();
+
+    answer({ ...ATELIER_NORD, twoStepRequiredFor: 'everyone', version: 3 });
+
+    await expect.poll(() => left).toBe(true);
+    expect(document.querySelector('[role="alertdialog"]')).toBeNull();
+    expect(TestBed.inject(Router).url).toBe('/members');
+  });
+
+  it('asks once a change on its way is refused', async () => {
+    let refuse: (error: unknown) => void = (): void => undefined;
+    api.update.mockReturnValue(
+      new Promise<AuthenticationPolicy>(
+        (_resolve: (policy: AuthenticationPolicy) => void, reject: (error: unknown) => void) => {
+          refuse = reject;
+        },
+      ),
+    );
+    const harness: RouterTestingHarness = await open();
+    switchOf(harness, 'security-two-step-everyone')?.click();
+    harness.detectChanges();
+    button('Save')?.click();
+    await expect.poll(() => api.update.mock.calls.length).toBe(1);
+
+    const leaving: Promise<boolean> = TestBed.inject(Router).navigateByUrl('/members');
+    refuse(problem(503, 'service.unavailable'));
+    await expect
+      .poll(() => {
+        harness.detectChanges();
+        return document.querySelector('[role="alertdialog"]')?.textContent ?? '';
+      })
+      .toContain('Discard unsaved changes?');
+    button('Keep editing')?.click();
+
+    expect(await leaving).toBe(false);
+    expect(byTestId(harness, 'security-unsaved')).not.toBeNull();
+  });
+
+  it('offers to discard a save that only waits for the reauthentication', async () => {
+    run.mockReturnValue(new Promise<never>(() => undefined));
+    const harness: RouterTestingHarness = await open();
+    switchOf(harness, 'security-two-step-everyone')?.click();
+    harness.detectChanges();
+    button('Save')?.click();
+    await expect.poll(() => run.mock.calls.length).toBe(1);
+
+    const leaving: Promise<boolean> = TestBed.inject(Router).navigateByUrl('/members');
+    await expect
+      .poll(() => {
+        harness.detectChanges();
+        return document.querySelector('[role="alertdialog"]')?.textContent ?? '';
+      })
+      .toContain('Discard unsaved changes?');
+    button('Discard')?.click();
+
+    expect(await leaving).toBe(true);
+    expect(api.update).not.toHaveBeenCalled();
   });
 
   it('leaves at once without unsaved changes', async () => {

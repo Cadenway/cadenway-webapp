@@ -120,6 +120,19 @@ export interface AuthenticationPolicyForm {
   readonly requireEveryone: boolean;
 
   /**
+   * Property requirementChosen
+   *
+   * @description
+   * Whether the switches stand for a requirement: true for a requirement this version knows;
+   * false for one it does not know, until the person chooses to replace it, which enables the
+   * switches and sends what they select.
+   *
+   * @type {boolean}
+   * @readonly
+   */
+  readonly requirementChosen: boolean;
+
+  /**
    * Property sessionTimeoutMinutes
    *
    * @description

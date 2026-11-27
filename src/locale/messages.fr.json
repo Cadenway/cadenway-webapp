@@ -561,6 +561,8 @@
     "organization.security.two-step-not-enabled": "Configurez d’abord la vérification en deux étapes",
     "organization.security.two-step-not-enabled-text": "Vous ne pouvez pas l’exiger pour votre propre rôle sans l’utiliser vous-même.",
     "organization.security.two-step-saved": "Politique de vérification en deux étapes mise à jour",
+    "organization.security.two-step-unknown": "La règle actuelle de vérification en deux étapes ne peut pas être affichée ici. Choisissez une nouvelle règle pour la remplacer.",
+    "organization.security.two-step-unknown-choose": "Choisir une nouvelle règle",
     "organization.security.unsaved": "Modifications non enregistrées",
     "organization.storage-banner.close": "Fermer l'annonce",
     "organization.storage-banner.description": "· {$used} Go utilisés sur {$limit} Go. Au-delà, les nouvelles pièces jointes seront refusées.",

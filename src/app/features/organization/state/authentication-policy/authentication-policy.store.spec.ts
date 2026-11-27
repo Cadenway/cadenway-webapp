@@ -262,6 +262,51 @@ describe('AuthenticationPolicyStore', () => {
     expect(api.update).toHaveBeenCalledTimes(1);
   });
 
+  it('tells a change on its way from a save waiting for the reauthentication', async () => {
+    const confirmation: { promise: Promise<void>; resolve: () => void } = deferred();
+    let answer: (policy: AuthenticationPolicy) => void = (): void => undefined;
+    api.update
+      .mockRejectedValueOnce(problem(403, 'auth.reauthentication-required'))
+      .mockReturnValueOnce(
+        new Promise<AuthenticationPolicy>((resolve: (policy: AuthenticationPolicy) => void) => {
+          answer = resolve;
+        }),
+      );
+    run.mockImplementation(async (operation: () => Promise<unknown>) => {
+      try {
+        return await operation();
+      } catch {
+        await confirmation.promise;
+        return operation();
+      }
+    });
+    const instance: InstanceType<typeof AuthenticationPolicyStore> = await store();
+
+    const saving: Promise<AuthenticationPolicySaveOutcome> = instance.save({
+      sessionTimeoutMinutes: 60,
+    });
+    await expect.poll(() => api.update.mock.calls.length).toBe(1);
+    await expect.poll(() => instance.sending()).toBe(false);
+    expect(instance.saving()).toBe(true);
+    await instance.sent();
+
+    confirmation.resolve();
+    await expect.poll(() => api.update.mock.calls.length).toBe(2);
+    expect(instance.sending()).toBe(true);
+    let settled: boolean = false;
+    const waiting: Promise<void> = instance.sent().then(() => {
+      settled = true;
+    });
+    await Promise.resolve();
+    expect(settled).toBe(false);
+
+    answer({ ...ATELIER_NORD, sessionTimeoutMinutes: 60, version: 3 });
+    await waiting;
+    expect(instance.current()?.sessionTimeoutMinutes).toBe(60);
+    expect(instance.sending()).toBe(false);
+    expect(await saving).toBe('saved');
+  });
+
   it('sends nothing for an empty change', async () => {
     const instance: InstanceType<typeof AuthenticationPolicyStore> = await store();
 
