@@ -32,6 +32,7 @@ import {
   SpacesService,
   TaskQueriesService,
   TasksService,
+  TeamReportsService,
 } from '@cadenway/api-client';
 import { filter, firstValueFrom, NEVER, Observable, of, Subject, throwError } from 'rxjs';
 import { type Socket } from 'socket.io-client';
@@ -263,6 +264,27 @@ describe('WORKSPACE_ROUTES', () => {
         { provide: WorkspaceSession, useValue: session },
         { provide: RuntimeConfigStore, useValue: { config: () => ({}) } },
         { provide: InboxService, useValue: { getInboxUnreadCount: () => of({ unreadCount: 2 }) } },
+        {
+          provide: TeamReportsService,
+          useValue: {
+            getTeamDashboard: () =>
+              of({
+                today: '2026-11-08',
+                timeZone: 'Europe/Paris',
+                weeks: 8,
+                observedAt: '2026-11-08T09:00:00Z',
+                openCount: 0,
+                lateCount: 0,
+                blockedCount: 0,
+                completedCount: 0,
+                byStatus: [],
+                overdueTasks: [],
+                assigneeThreshold: 6,
+                assignees: [],
+                completions: [],
+              }),
+          },
+        },
         {
           provide: BillingService,
           useValue: {
