@@ -1,0 +1,228 @@
+@let read = store.archives.value();
+<div class="mx-auto flex w-full max-w-5xl flex-col gap-5 px-4 py-6 sm:px-6">
+  <header class="flex flex-col gap-1">
+    <h1
+      class="text-2xl font-semibold tracking-tight"
+      data-route-focus
+      i18n="@@archives.header.title"
+    >
+      Archives
+    </h1>
+    @if (read) {
+      <p class="text-sm text-muted-foreground" data-testid="archives-summary">{{ summary() }}</p>
+    }
+  </header>
+
+  @if (read) {
+    <cw-tabs variant="bar" [value]="selected()" (valueChange)="pick($event)">
+      <cw-tabs-list
+        class="border-b border-border"
+        ariaLabel="Archived item type"
+        i18n-ariaLabel="@@archives.tabs.label"
+      >
+        <button cwTab type="button" value="lists" [count]="store.listCount()">
+          <ng-container i18n="@@archives.tabs.lists">Lists</ng-container>
+        </button>
+        <button cwTab type="button" value="tasks" [count]="store.taskCount()">
+          <ng-container i18n="@@archives.tabs.tasks">Tasks</ng-container>
+        </button>
+      </cw-tabs-list>
+
+      <cw-tab-panel value="lists">
+        <div
+          class="mt-5 flex flex-col gap-3 outline-none"
+          tabindex="-1"
+          data-archives-panel="lists"
+          data-testid="archives-lists-panel"
+        >
+          @if (listRows().length > 0) {
+            <div
+              class="overflow-hidden rounded-lg border border-border"
+              role="list"
+              data-testid="archives-lists"
+            >
+              @for (row of listRows(); track row.item.id) {
+                <cw-archive-row
+                  [attr.data-archive-key]="row.key"
+                  [icon]="row.icon"
+                  [name]="row.item.name"
+                  [meta]="row.meta"
+                  [restoreLabel]="row.restoreLabel"
+                  [restorable]="row.restorable"
+                  [pending]="store.listPending(row.item.id)"
+                  (restored)="restoreList(row.item, row.key)"
+                />
+              }
+            </div>
+            @if (store.listCount() > listRows().length || store.hasMore('lists')) {
+              <div class="flex flex-wrap items-center gap-x-3 gap-y-2">
+                @if (store.listCount() > listRows().length) {
+                  <p class="text-xs text-muted-foreground" data-testid="archives-lists-truncated">
+                    {{ truncated(listRows().length, store.listCount()) }}
+                  </p>
+                }
+                @if (store.hasMore('lists')) {
+                  <button
+                    cwButton
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    class="aria-disabled:cursor-default aria-disabled:opacity-50"
+                    [attr.aria-disabled]="store.moreLoading('lists') || null"
+                    [attr.aria-busy]="store.moreLoading('lists') || null"
+                    data-testid="archives-lists-more"
+                    (click)="showMore('lists')"
+                    i18n="@@archives.tabs.show-more"
+                  >
+                    Show more
+                  </button>
+                }
+              </div>
+            }
+          } @else {
+            <cw-empty variant="outline" data-testid="archives-empty">
+              <cw-empty-header>
+                <cw-empty-media>
+                  <ng-icon name="phosphorArchiveBold" aria-hidden="true" />
+                </cw-empty-media>
+                <cw-empty-title i18n="@@archives.empty.lists">No archived list</cw-empty-title>
+                <cw-empty-description i18n="@@archives.empty.text"
+                  >Archive a list or a completed task to lighten the sidebar without losing
+                  anything.</cw-empty-description
+                >
+              </cw-empty-header>
+            </cw-empty>
+          }
+        </div>
+      </cw-tab-panel>
+
+      <cw-tab-panel value="tasks">
+        <div
+          class="mt-5 flex flex-col gap-3 outline-none"
+          tabindex="-1"
+          data-archives-panel="tasks"
+          data-testid="archives-tasks-panel"
+        >
+          @if (taskRows().length > 0) {
+            <div
+              class="overflow-hidden rounded-lg border border-border"
+              role="list"
+              data-testid="archives-tasks"
+            >
+              @for (row of taskRows(); track row.item.key) {
+                <cw-archive-row
+                  [attr.data-archive-key]="row.key"
+                  [icon]="row.icon"
+                  [name]="row.item.name"
+                  [taskKey]="row.item.key"
+                  [meta]="row.meta"
+                  [restoreLabel]="row.restoreLabel"
+                  [restorable]="row.restorable"
+                  [pending]="store.taskPending(row.item.key)"
+                  (restored)="restoreTask(row.item, row.key)"
+                />
+              }
+            </div>
+            @if (store.taskCount() > taskRows().length || store.hasMore('tasks')) {
+              <div class="flex flex-wrap items-center gap-x-3 gap-y-2">
+                @if (store.taskCount() > taskRows().length) {
+                  <p class="text-xs text-muted-foreground" data-testid="archives-tasks-truncated">
+                    {{ truncated(taskRows().length, store.taskCount()) }}
+                  </p>
+                }
+                @if (store.hasMore('tasks')) {
+                  <button
+                    cwButton
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    class="aria-disabled:cursor-default aria-disabled:opacity-50"
+                    [attr.aria-disabled]="store.moreLoading('tasks') || null"
+                    [attr.aria-busy]="store.moreLoading('tasks') || null"
+                    data-testid="archives-tasks-more"
+                    (click)="showMore('tasks')"
+                    i18n="@@archives.tabs.show-more"
+                  >
+                    Show more
+                  </button>
+                }
+              </div>
+            }
+          } @else {
+            <cw-empty variant="outline" data-testid="archives-empty">
+              <cw-empty-header>
+                <cw-empty-media>
+                  <ng-icon name="phosphorArchiveBold" aria-hidden="true" />
+                </cw-empty-media>
+                <cw-empty-title i18n="@@archives.empty.tasks">No archived task</cw-empty-title>
+                <cw-empty-description i18n="@@archives.empty.text"
+                  >Archive a list or a completed task to lighten the sidebar without losing
+                  anything.</cw-empty-description
+                >
+              </cw-empty-header>
+            </cw-empty>
+          }
+        </div>
+      </cw-tab-panel>
+    </cw-tabs>
+  } @else {
+    <div
+      class="flex flex-col gap-5"
+      role="status"
+      aria-busy="true"
+      aria-label="Loading the archives"
+      i18n-aria-label="@@archives.loading"
+      data-testid="archives-loading"
+    >
+      <div class="flex flex-col gap-5" aria-hidden="true">
+        <div cwSkeleton class="h-4 w-80 max-w-full"></div>
+        <div class="flex gap-4 border-b border-border pb-2">
+          <div cwSkeleton class="h-6 w-20"></div>
+          <div cwSkeleton class="h-6 w-20"></div>
+        </div>
+        <div class="flex flex-col overflow-hidden rounded-lg border border-border">
+          <div class="flex items-center gap-3 border-b border-border px-4 py-3 last:border-b-0">
+            <div cwSkeleton class="size-8 rounded-lg"></div>
+            <div class="flex min-w-0 flex-1 flex-col gap-1.5">
+              <div cwSkeleton class="h-3.5 w-56 max-w-full"></div>
+              <div cwSkeleton class="h-2.5 w-48 max-w-full"></div>
+            </div>
+            <div cwSkeleton class="h-7 w-24"></div>
+          </div>
+          <div class="flex items-center gap-3 border-b border-border px-4 py-3 last:border-b-0">
+            <div cwSkeleton class="size-8 rounded-lg"></div>
+            <div class="flex min-w-0 flex-1 flex-col gap-1.5">
+              <div cwSkeleton class="h-3.5 w-40 max-w-full"></div>
+              <div cwSkeleton class="h-2.5 w-48 max-w-full"></div>
+            </div>
+            <div cwSkeleton class="h-7 w-24"></div>
+          </div>
+          <div class="flex items-center gap-3 border-b border-border px-4 py-3 last:border-b-0">
+            <div cwSkeleton class="size-8 rounded-lg"></div>
+            <div class="flex min-w-0 flex-1 flex-col gap-1.5">
+              <div cwSkeleton class="h-3.5 w-64 max-w-full"></div>
+              <div cwSkeleton class="h-2.5 w-48 max-w-full"></div>
+            </div>
+            <div cwSkeleton class="h-7 w-24"></div>
+          </div>
+          <div class="flex items-center gap-3 border-b border-border px-4 py-3 last:border-b-0">
+            <div cwSkeleton class="size-8 rounded-lg"></div>
+            <div class="flex min-w-0 flex-1 flex-col gap-1.5">
+              <div cwSkeleton class="h-3.5 w-48 max-w-full"></div>
+              <div cwSkeleton class="h-2.5 w-48 max-w-full"></div>
+            </div>
+            <div cwSkeleton class="h-7 w-24"></div>
+          </div>
+          <div class="flex items-center gap-3 border-b border-border px-4 py-3 last:border-b-0">
+            <div cwSkeleton class="size-8 rounded-lg"></div>
+            <div class="flex min-w-0 flex-1 flex-col gap-1.5">
+              <div cwSkeleton class="h-3.5 w-36 max-w-full"></div>
+              <div cwSkeleton class="h-2.5 w-48 max-w-full"></div>
+            </div>
+            <div cwSkeleton class="h-7 w-24"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  }
+</div>
