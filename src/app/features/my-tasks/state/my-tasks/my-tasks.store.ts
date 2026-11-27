@@ -240,6 +240,28 @@ interface ReadLoads {
 }
 
 /**
+ * Interface MoreRequest
+ *
+ * @description
+ * The running `Show more`, the only one whose answer and settlement change the state.
+ */
+interface MoreRequest {
+  // #region Properties
+  /**
+   * Property controller
+   *
+   * @description
+   * Aborts the running `Show more`; null when none runs. A tab change, an organization change and
+   * the store's destruction abort it and release `Show more` at once, so a request of a previous
+   * context never holds the reads of the new one.
+   *
+   * @type {AbortController | null}
+   */
+  controller: AbortController | null;
+  // #endregion
+}
+
+/**
  * Interface MyTasksStoreInstance
  *
  * @description
@@ -409,7 +431,9 @@ export interface MyTasksStoreInstance {
    *
    * @description
    * `Show more` of the `Done` tab: reads its next page and adds it under the rows; nothing while a
-   * read runs or once the last page is shown.
+   * read runs or once the last page is shown. The request has its own abort signal: a tab change,
+   * an organization change or the store's destruction aborts it and releases `loadingMore` at
+   * once, and only the request that owns `loadingMore` settles it.
    *
    * @returns {Promise<void>} Resolves once the page is shown or its failure is.
    */
@@ -556,9 +580,11 @@ function createMyTasksStore(): Type<MyTasksStoreInstance> {
         loader: ({ abortSignal }: { abortSignal: AbortSignal }): Promise<readonly Person[]> =>
           api.people(abortSignal),
       });
+      const more: MoreRequest = { controller: null };
       return {
         _api: api,
         _loads: loads,
+        _more: more,
         _tasks: tasks,
         _people: people,
         _directory: inject<ListDirectoryPort | null>(LIST_DIRECTORY, { optional: true }),
@@ -623,6 +649,13 @@ function createMyTasksStore(): Type<MyTasksStoreInstance> {
         store._loads.passive = passive;
         store._tasks.reload();
       };
+      const cancelMore: () => void = (): void => {
+        const controller: AbortController | null = store._more.controller;
+        if (controller === null) return;
+        store._more.controller = null;
+        controller.abort();
+        patchState(store, { _loadingMore: false });
+      };
       return {
         _settled: signalMethod<boolean>((running: boolean): void => {
           if (running || store._loads.queued === null) return;
@@ -642,6 +675,7 @@ function createMyTasksStore(): Type<MyTasksStoreInstance> {
         },
         _followOrganization: signalMethod<string>((organizationId: string): void => {
           if (organizationId === store._organizationId()) return;
+          cancelMore();
           store._loads.queued = null;
           store._loads.refused = false;
           store._loads.last = null;
@@ -655,6 +689,7 @@ function createMyTasksStore(): Type<MyTasksStoreInstance> {
         }),
         show: signalMethod<MyTasksTab>((tab: MyTasksTab): void => {
           if (tab === store._tab()) return;
+          cancelMore();
           store._loads.queued = null;
           store._loads.settledAt = null;
           patchState(store, { _tab: tab, _moreFailed: false });
@@ -671,18 +706,22 @@ function createMyTasksStore(): Type<MyTasksStoreInstance> {
           const organizationId: string | null = store._organizationId();
           if (current.tab !== 'closed' || current.nextCursor === null || organizationId === null)
             return;
-          const still: () => boolean = (): boolean =>
+          const controller: AbortController = new AbortController();
+          const owns: () => boolean = (): boolean =>
+            store._more.controller === controller &&
             store._organizationId() === organizationId &&
             store._tasks.hasValue() &&
             store._tasks.value() === current;
+          store._more.controller = controller;
           patchState(store, { _loadingMore: true, _moreFailed: false });
           try {
             const page: MyTasksPage = await store._api.read('closed', {
               passive: false,
               cursor: current.nextCursor,
               pages: 1,
+              signal: controller.signal,
             });
-            if (!still()) return;
+            if (!owns()) return;
             const seen: ReadonlySet<string> = new Set(
               current.tasks.map((task: TaskSummary): string => task.key),
             );
@@ -700,9 +739,12 @@ function createMyTasksStore(): Type<MyTasksStoreInstance> {
             store._tasks.set(read);
             patchState(store, { _counts: page.counts });
           } catch {
-            if (still()) patchState(store, { _moreFailed: true });
+            if (owns()) patchState(store, { _moreFailed: true });
           } finally {
-            patchState(store, { _loadingMore: false });
+            if (store._more.controller === controller) {
+              store._more.controller = null;
+              patchState(store, { _loadingMore: false });
+            }
           }
         },
         loadPeople(): void {
@@ -735,6 +777,10 @@ function createMyTasksStore(): Type<MyTasksStoreInstance> {
           store._verified();
         });
       },
+      onDestroy(store): void {
+        store._more.controller?.abort();
+        store._more.controller = null;
+      },
     }),
   );
 }
@@ -757,7 +803,9 @@ function createMyTasksStore(): Type<MyTasksStoreInstance> {
  * page, while the organization context is stale keeps them silently and is sent again once the
  * context is verified. An organization switch or a tab change drops the rows at once and reads
  * anew: a read of another organization is aborted and never shown, and a `Show more` answered
- * after it is dropped. The tab counts stay while another tab of the same organization is read.
+ * after it is dropped: such a change aborts a running `Show more` and frees the reads it held, so a
+ * request of the previous context, even one that never answers, never queues the new context's
+ * refreshes. The tab counts stay while another tab of the same organization is read.
  * The members (`people`) are a secondary read made when the task menu first opens: a failure
  * leaves the menu's `Assign` empty until the next opening reads them again. The list names come
  * from Spaces' `LIST_DIRECTORY`, which holds no archived list.

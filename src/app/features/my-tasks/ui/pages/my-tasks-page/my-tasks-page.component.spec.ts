@@ -619,7 +619,10 @@ describe('MyTasksPage', () => {
     button(element, 'Show more')?.click();
     await settle(harness);
 
-    expect(read).toHaveBeenLastCalledWith('closed', { passive: false, cursor: 'c2', pages: 1 });
+    expect(read).toHaveBeenLastCalledWith(
+      'closed',
+      expect.objectContaining({ passive: false, cursor: 'c2', pages: 1 }),
+    );
     expect(groups(element)).toEqual([
       'Done and cancelled: Ship the SSO screen, Drop the beta flag',
     ]);

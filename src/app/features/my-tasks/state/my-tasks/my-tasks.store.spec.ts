@@ -508,7 +508,8 @@ describe('MyTasksStore', () => {
     await store.showMore();
     await settle();
 
-    expect(read.mock.calls[2]).toEqual(['closed', { passive: false, cursor: 'c2', pages: 1 }]);
+    expect(read.mock.calls[2][0]).toBe('closed');
+    expect(read.mock.calls[2][1]).toMatchObject({ passive: false, cursor: 'c2', pages: 1 });
     expect(store.tasks().map((task: TaskSummary) => task.key)).toEqual(['CAD-460', 'CAD-455']);
     expect(store.canShowMore()).toBe(false);
 
@@ -569,5 +570,92 @@ describe('MyTasksStore', () => {
     expect(store.read()?.tab).toBe('closed');
     expect(store.tasks().map((task: TaskSummary) => task.key)).toEqual(['CAD-460']);
     expect(read).toHaveBeenCalledTimes(3);
+  });
+  /**
+   * Function hangShowMore
+   *
+   * @description
+   * Shows the `Done` tab with a next page, then starts a `Show more` whose request never answers,
+   * whatever its abort signal says.
+   *
+   * @param {MyTasksStoreInstance} store - The store.
+   * @returns {Promise<AbortSignal | undefined>} The signal the hung request was given.
+   */
+  async function hangShowMore(store: MyTasksStoreInstance): Promise<AbortSignal | undefined> {
+    read.mockResolvedValueOnce(pageOf([myTask({ key: 'CAD-460', status: 'done' })], 2, 'c2'));
+    store.show('closed');
+    await settle();
+    read.mockReturnValueOnce(new Promise<MyTasksPage>(() => undefined));
+    void store.showMore();
+    await settle();
+    expect(store.loadingMore()).toBe(true);
+    const options: MyTasksReadOptions | undefined = read.mock.lastCall?.[1];
+    expect(options?.cursor).toBe('c2');
+    return options?.signal;
+  }
+
+  it('never lets a hung Show more of the previous tab hold the new tab', async () => {
+    const store: MyTasksStoreInstance = await loaded();
+    const signal: AbortSignal | undefined = await hangShowMore(store);
+
+    store.show('open');
+    await settle();
+
+    expect(signal?.aborted).toBe(true);
+    expect(store.loadingMore()).toBe(false);
+    expect(read.mock.lastCall?.[0]).toBe('open');
+    expect(store.read()?.tab).toBe('open');
+
+    const calls: number = read.mock.calls.length;
+    store.refresh();
+    await settle();
+    expect(read).toHaveBeenCalledTimes(calls + 1);
+    expect(read.mock.lastCall?.[1].passive).toBe(true);
+
+    read.mockResolvedValueOnce(pageOf([myTask({ key: 'CAD-460', status: 'done' })], 2, 'c2'));
+    store.show('closed');
+    await settle();
+    read.mockResolvedValueOnce(pageOf([myTask({ key: 'CAD-455', status: 'cancelled' })], 2));
+    await store.showMore();
+    await settle();
+
+    expect(read.mock.lastCall?.[1]).toMatchObject({ cursor: 'c2', pages: 1 });
+    expect(store.tasks().map((task: TaskSummary) => task.key)).toEqual(['CAD-460', 'CAD-455']);
+    expect(store.loadingMore()).toBe(false);
+  });
+
+  it('never lets a hung Show more of the previous organization hold the new one', async () => {
+    const store: MyTasksStoreInstance = await loaded();
+    const signal: AbortSignal | undefined = await hangShowMore(store);
+
+    read.mockResolvedValueOnce(pageOf([myTask({ key: 'SUD-40', status: 'done' })], 1, 's2'));
+    current.set(organization('studio-sud'));
+    await settle();
+
+    expect(signal?.aborted).toBe(true);
+    expect(store.loadingMore()).toBe(false);
+    expect(store.tasks().map((task: TaskSummary) => task.key)).toEqual(['SUD-40']);
+
+    const calls: number = read.mock.calls.length;
+    read.mockResolvedValueOnce(pageOf([myTask({ key: 'SUD-40', status: 'done' })], 1, 's2'));
+    store.refresh();
+    await settle();
+    expect(read).toHaveBeenCalledTimes(calls + 1);
+
+    read.mockResolvedValueOnce(pageOf([myTask({ key: 'SUD-38', status: 'done' })], 1));
+    await store.showMore();
+    await settle();
+
+    expect(read.mock.lastCall?.[1]).toMatchObject({ cursor: 's2', pages: 1 });
+    expect(store.tasks().map((task: TaskSummary) => task.key)).toEqual(['SUD-40', 'SUD-38']);
+  });
+
+  it('aborts a running Show more when the store is destroyed', async () => {
+    const store: MyTasksStoreInstance = await loaded();
+    const signal: AbortSignal | undefined = await hangShowMore(store);
+
+    TestBed.resetTestingModule();
+
+    expect(signal?.aborted).toBe(true);
   });
 });
