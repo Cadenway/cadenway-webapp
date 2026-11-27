@@ -74,6 +74,7 @@ belong to Auth.
 | `ports/workspace-context`           | home, errors, account, search, inbox, organization, spaces, task, my-tasks, dashboards, goals, docs |
 | `http/guards/organization-role`     | organization                                                                                        |
 | `ui/dialogs/discard-changes-dialog` | account, organization                                                                               |
+| `ports/workspace-refresh`           | organization                                                                                        |
 
 `ports/workspace-context` publishes `WORKSPACE_CONTEXT` (`WorkspaceContextPort`: `user`,
 `organization`, `role` and `can(role)`) and the `WorkspaceUser`, `WorkspaceOrganization` and
@@ -85,6 +86,14 @@ injects it as optional.
 a workspace recovery navigation reverifies the role) and the `OrganizationRoleFallback` model. It lets a route below `/:org` open for a role at least `least`
 (the order of `can()`), and otherwise redirects with a `UrlTree` to the first fallback the role
 meets, below `/<slug>`, or else to `/<slug>`.
+
+`ports/workspace-refresh` publishes `WORKSPACE_REFRESH` (`WorkspaceRefreshPort`: `refresh()`),
+provided only inside `/:org` by `provideWorkspaceRuntime()`. It asks the workspace to verify the
+person and the organization again after a feature changed the organization (Organization's
+General section after a save): a same-address navigation marked as a workspace recovery, so the
+`/:org` guards and resolver rerun, a transient failure keeps the workspace, and
+`unsavedChangesGuard` lets it through without asking. While another navigation is under way it
+starts none and leaves the request to the next navigation, so it never cancels the person's.
 
 `ui/dialogs/discard-changes-dialog` publishes `DiscardChangesDialog` (`cw-discard-changes-dialog`):
 `ask()` opens `Discard unsaved changes?` with `Keep editing` and `Discard` and resolves the

@@ -33,6 +33,8 @@ import {
   signInRedirect,
 } from '../../navigation/access-redirect/access-redirect.util';
 import { WORKSPACE_CONTEXT } from '../../ports/workspace-context/workspace-context.token';
+import { WORKSPACE_REFRESH } from '../../ports/workspace-refresh/workspace-refresh.token';
+import { WorkspaceRefresh } from './workspace-refresh.service';
 import {
   WORKSPACE_RECOVERY_NAVIGATION,
   WorkspaceRevalidation,
@@ -61,7 +63,8 @@ export function shouldRevalidateWorkspace(
  * Function provideWorkspaceRuntime
  *
  * @description
- * Provides realtime credentials and context-change recovery for the workspace route. The resolver
+ * Provides realtime credentials, context-change recovery and `WORKSPACE_REFRESH` (a recovery the
+ * features ask for) for the workspace route. The resolver
  * commits the pin after verification; this initializer clears it with the route injector.
  *
  * @returns {(Provider | EnvironmentProviders)[]} Workspace-scoped runtime providers.
@@ -70,6 +73,8 @@ export function provideWorkspaceRuntime(): (Provider | EnvironmentProviders)[] {
   return [
     ...provideRealtime(),
     WorkspaceRevalidation,
+    WorkspaceRefresh,
+    { provide: WORKSPACE_REFRESH, useExisting: WorkspaceRefresh },
     {
       provide: REALTIME_TICKET_SOURCE,
       useFactory: (): (() => Promise<string>) => {

@@ -1,0 +1,182 @@
+@let loading = store.loading();
+@let count = store.count();
+<div class="mx-auto flex w-full max-w-5xl flex-col gap-5 px-4 py-6 sm:px-6">
+  <header class="flex flex-wrap items-start gap-3">
+    <div class="flex min-w-0 flex-1 flex-col gap-1">
+      <h1
+        class="text-2xl font-semibold tracking-tight"
+        tabindex="-1"
+        data-route-focus
+        i18n="@@trash.header.title"
+      >
+        Trash
+      </h1>
+      @if (loading) {
+        <div cwSkeleton class="h-5 w-64 max-w-full" aria-hidden="true"></div>
+      } @else {
+        <p class="text-sm text-muted-foreground" data-testid="trash-summary">
+          <ng-container i18n="@@trash.header.summary">{count, plural,
+            =1 {1 item · erased for good after 30 days}
+            other {{{ count }} items · erased for good after 30 days}
+          }</ng-container>
+        </p>
+      }
+    </div>
+    @if (loading) {
+      <div cwSkeleton class="h-8 w-32 rounded-lg" aria-hidden="true"></div>
+    } @else if (count > 0) {
+      <button
+        cwButton
+        type="button"
+        variant="outline"
+        class="text-destructive hover:bg-destructive/10"
+        [loading]="store.emptying()"
+        [attr.aria-disabled]="store.writing() ? 'true' : null"
+        data-testid="trash-empty"
+        (click)="askEmpty()"
+      >
+        <ng-icon name="phosphorTrashBold" aria-hidden="true" />
+        <ng-container i18n="@@trash.header.empty">Empty the trash</ng-container>
+      </button>
+    }
+  </header>
+  @if (loading) {
+    <div
+      role="status"
+      aria-busy="true"
+      aria-label="Loading the trash"
+      i18n-aria-label="@@trash.loading"
+      data-testid="trash-loading"
+    >
+      <ul class="flex flex-col overflow-hidden rounded-lg border border-border" aria-hidden="true">
+        <li class="flex h-11 items-center gap-3 border-b border-border px-3">
+          <div cwSkeleton class="size-4 rounded-full"></div>
+          <div cwSkeleton class="h-2.5 w-14"></div>
+          <div cwSkeleton class="h-3 w-2/5"></div>
+          <div cwSkeleton class="ml-auto h-5 w-16 rounded-full"></div>
+          <div cwSkeleton class="size-6 rounded-full"></div>
+        </li>
+        <li class="flex h-11 items-center gap-3 border-b border-border px-3">
+          <div cwSkeleton class="size-4 rounded-full"></div>
+          <div cwSkeleton class="h-2.5 w-14"></div>
+          <div cwSkeleton class="h-3 w-2/3"></div>
+          <div cwSkeleton class="ml-auto h-5 w-16 rounded-full"></div>
+          <div cwSkeleton class="size-6 rounded-full"></div>
+        </li>
+        <li class="flex h-11 items-center gap-3 border-b border-border px-3">
+          <div cwSkeleton class="size-4 rounded-full"></div>
+          <div cwSkeleton class="h-2.5 w-14"></div>
+          <div cwSkeleton class="h-3 w-3/5"></div>
+          <div cwSkeleton class="ml-auto h-5 w-16 rounded-full"></div>
+          <div cwSkeleton class="size-6 rounded-full"></div>
+        </li>
+        <li class="flex h-11 items-center gap-3 border-b border-border px-3">
+          <div cwSkeleton class="size-4 rounded-full"></div>
+          <div cwSkeleton class="h-2.5 w-14"></div>
+          <div cwSkeleton class="h-3 w-1/3"></div>
+          <div cwSkeleton class="ml-auto h-5 w-16 rounded-full"></div>
+          <div cwSkeleton class="size-6 rounded-full"></div>
+        </li>
+        <li class="flex h-11 items-center gap-3 px-3">
+          <div cwSkeleton class="size-4 rounded-full"></div>
+          <div cwSkeleton class="h-2.5 w-14"></div>
+          <div cwSkeleton class="h-3 w-4/5"></div>
+          <div cwSkeleton class="ml-auto h-5 w-16 rounded-full"></div>
+          <div cwSkeleton class="size-6 rounded-full"></div>
+        </li>
+      </ul>
+    </div>
+  } @else if (count === 0) {
+    <cw-empty variant="outline" data-testid="trash-empty-state">
+      <cw-empty-header>
+        <cw-empty-media>
+          <ng-icon name="phosphorTrashBold" aria-hidden="true" />
+        </cw-empty-media>
+        <cw-empty-title i18n="@@trash.empty.title">The trash is empty</cw-empty-title>
+        <cw-empty-description i18n="@@trash.empty.text"
+          >Deleted tasks arrive here. You can restore them for 30 days.</cw-empty-description
+        >
+      </cw-empty-header>
+    </cw-empty>
+  } @else {
+    <div
+      class="overflow-hidden rounded-lg border border-border"
+      role="list"
+      data-testid="trash-list"
+    >
+      @for (row of store.rows(); track row.entry.id) {
+        <cw-trash-row
+          [row]="row"
+          [now]="store.readAt()"
+          [disabled]="store.emptying()"
+          (restoreRequested)="restore($event)"
+          (purgeRequested)="askPurge($event)"
+        />
+      }
+    </div>
+    @if (store.hiddenCount() > 0) {
+      <div class="flex flex-wrap items-center gap-3">
+        <p
+          class="min-w-0 flex-1 text-sm text-muted-foreground"
+          role="status"
+          data-testid="trash-capped"
+        >
+          {{ cappedText() }}
+        </p>
+        @if (store.hasMore()) {
+          <button
+            cwButton
+            type="button"
+            variant="outline"
+            size="sm"
+            [loading]="store.loadingMore()"
+            data-testid="trash-show-more"
+            (click)="showMore()"
+          >
+            <ng-container i18n="@@trash.show-more">Show more</ng-container>
+          </button>
+        }
+      </div>
+    }
+  }
+</div>
+
+@let target = purgeTarget();
+<cw-alert-dialog
+  variant="destructive"
+  [open]="purgeOpen()"
+  [pending]="purgePending()"
+  data-testid="trash-purge-dialog"
+  (openChange)="purgeOpenChanged($event)"
+  (confirm)="confirmPurge()"
+>
+  <h2 cwAlertDialogTitle i18n="@@trash.purge.title">Delete {{ target?.taskKey }} forever?</h2>
+  <p cwAlertDialogDescription>{{ purgeText() }}</p>
+  <button cwButton cwAlertDialogCancel variant="outline" i18n="@@trash.cancel">Cancel</button>
+  <button cwButton cwAlertDialogAction variant="destructive" [loading]="purgePending()">
+    <ng-icon name="phosphorTrashBold" aria-hidden="true" />
+    <ng-container i18n="@@trash.purge.confirm">Delete forever</ng-container>
+  </button>
+</cw-alert-dialog>
+
+<cw-alert-dialog
+  variant="destructive"
+  [open]="emptyOpen()"
+  [pending]="store.emptying()"
+  [confirmText]="confirmWord"
+  [confirmLabel]="confirmLabel"
+  data-testid="trash-empty-dialog"
+  (openChange)="emptyOpenChanged($event)"
+  (confirm)="confirmEmpty()"
+>
+  <cw-alert-dialog-media>
+    <ng-icon name="phosphorWarningBold" aria-hidden="true" />
+  </cw-alert-dialog-media>
+  <h2 cwAlertDialogTitle i18n="@@trash.empty-dialog.title">Empty the trash?</h2>
+  <p cwAlertDialogDescription>{{ emptyText() }}</p>
+  <button cwButton cwAlertDialogCancel variant="outline" i18n="@@trash.cancel">Cancel</button>
+  <button cwButton cwAlertDialogAction variant="destructive" [loading]="store.emptying()">
+    <ng-icon name="phosphorTrashBold" aria-hidden="true" />
+    <ng-container i18n="@@trash.empty-dialog.confirm">Empty the trash</ng-container>
+  </button>
+</cw-alert-dialog>
