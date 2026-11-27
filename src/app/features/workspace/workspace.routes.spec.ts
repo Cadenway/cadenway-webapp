@@ -33,6 +33,7 @@ import {
   SpacesService,
   TaskQueriesService,
   TasksService,
+  TrashService,
 } from '@cadenway/api-client';
 import { filter, firstValueFrom, NEVER, Observable, of, Subject, throwError } from 'rxjs';
 import { type Socket } from 'socket.io-client';
@@ -271,6 +272,10 @@ describe('WORKSPACE_ROUTES', () => {
           },
         },
         {
+          provide: TrashService,
+          useValue: { listTrash: () => of({ items: [], nextCursor: null, total: 0 }) },
+        },
+        {
           provide: BillingService,
           useValue: {
             getBillingSubscription: () =>
@@ -455,6 +460,12 @@ describe('WORKSPACE_ROUTES', () => {
   });
 
   it('opens each cross-cutting page inside the shell, its rail item current', async () => {
+    TestBed.overrideProvider(ArchivesService, {
+      useValue: {
+        listArchivedLists: () => of({ items: [], nextCursor: null, total: 0 }),
+        listArchivedTasks: () => of({ items: [], nextCursor: null, total: 0 }),
+      },
+    });
     const harness: RouterTestingHarness = await open('/atelier-nord');
     for (const [url, heading, title, item] of [
       ['/atelier-nord/my-tasks?tab=closed', 'My tasks', 'My tasks', 'my-tasks-rail-item'],
