@@ -842,21 +842,26 @@ through `SpaceStatusesApi` (`data-access/services/space-statuses-api/`, `updateS
 
 ## Public entry points
 
-| Entry point            | Consumers    |
-| ---------------------- | ------------ |
-| `spaces.routes`        | workspace    |
-| `providers`            | workspace    |
-| `ports/list-directory` | search, task |
+| Entry point                | Consumers                                                        |
+| -------------------------- | ---------------------------------------------------------------- |
+| `spaces.routes`            | workspace                                                        |
+| `providers`                | workspace                                                        |
+| `ports/list-directory`     | search, task, home, my-tasks, dashboards, goals, trash, archives |
+| `ports/space-directory`    | docs, goals, archives                                            |
+| `ports/navigation-refresh` | trash, archives                                                  |
 
 `providers` publishes, for the `/:org` route that loads the shell:
 
-- `provideSpacesNavigation()`: the workspace's `SpacesNavigationStore` and `LIST_DIRECTORY`;
-- `withSpacesRailItem(options?)` (`railNavigation`, order 30; `{ variant: 'settings' }` in the
-  settings shell, whose favorite spaces' menu keeps only `Open the overview` and `Remove from
-favorite spaces`, as `Compte.dc.html` lines 759-767 draw it, since no sidebar hosts the space
-  dialogs there): `Spaces`, which opens the last list or
-  space overview shown in the tab (else the first space) and is current on a spaces screen, then,
-  on desktop, a separator and one button per favorite space;
+- `provideSpacesNavigation()`: the workspace's `SpacesNavigationStore`, `LIST_DIRECTORY`,
+  `SPACE_DIRECTORY` and `NAVIGATION_REFRESH`;
+- `withSpacesRailItem()` (`railNavigation`, order 30, in both shells): `Spaces`, which opens the
+  last list or space overview shown in the tab (else the first space) and is current on a spaces
+  screen;
+- `withFavoriteSpacesRail(options?)` (`railNavigation`, order 90, after every application item, as
+  `App.dc.html` lines 37-53 draw it): on desktop, a separator and one button per favorite space,
+  current on its overview, whose context menu is the space menu. `{ variant: 'settings' }` in the
+  settings shell keeps only `Open the overview` and `Remove from favorite spaces` in that menu, as
+  `Compte.dc.html` lines 759-767 draw it, since no sidebar hosts the space dialogs there;
 - `withSpacesSidebar()` (`sidebar`, order 0): `Favorites`, `Spaces`, the suggestions and the
   host of the navigation's dialogs;
 - `withSprintProgress()` (`sidebarFooter`, order 0): the current sprint's progress;
@@ -865,8 +870,22 @@ favorite spaces`, as `Compte.dc.html` lines 759-767 draw it, since no sidebar ho
 
 `ports/list-directory` publishes `LIST_DIRECTORY` (`ListDirectoryPort`: `lists`, a signal of
 `ListDirectoryEntry` — id, name, space id and name, Bold icon and tone class — in sidebar order),
-computed from the navigation's reads, for the command palette's `Lists` and the task detail's
-`Move to…`.
+computed from the navigation's reads, for the command palette's `Lists`, the task detail's
+`Move to…` and the list names of the step 6 pages (Home, My tasks, Dashboards, Goals, Trash,
+Archives). It holds no archived list.
+
+`ports/space-directory` publishes `SPACE_DIRECTORY` (`SpaceDirectoryPort`: `spaces`, a signal of
+`SpaceDirectoryEntry` — id, name, Bold icon or null for the initial, tone class and `callerRole`,
+the caller's role on the space itself (`edit`, `comment`, `view`, or null when only some of its
+lists are shared with the caller) — in sidebar order), computed from the navigation's spaces read,
+for the documents' space names and `New document`, the space of an archived list and the goals a
+member may create. An absent gateway role reads as `edit`, an unknown one as `view`.
+
+`ports/navigation-refresh` publishes `NAVIGATION_REFRESH` (`NavigationRefreshPort`): `refresh()`
+reads the spaces, their lists and counts, and the trash and archive counts again, after another
+feature's write that may bring a list or a space back (a restore, an unarchived list);
+`refreshCounts()` reads only the trash and archive counts of the sidebar footer again (a purge, an
+emptied trash, an unarchived task). Both only schedule reads.
 
 ## Dependencies
 

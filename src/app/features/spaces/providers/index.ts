@@ -1,5 +1,6 @@
 export {
   provideSpacesNavigation,
+  withFavoriteSpacesRail,
   withSidebarFooterLinks,
   withSpacesRailItem,
   withSpacesSidebar,

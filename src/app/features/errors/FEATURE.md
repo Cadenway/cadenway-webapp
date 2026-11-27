@@ -16,10 +16,10 @@ browser.
 
 ## Public entry points
 
-| Entry point     | Consumers                             |
-| --------------- | ------------------------------------- |
-| `errors.routes` | account, app, organization, workspace |
-| `.`             | app, spaces, task, workspace          |
+| Entry point     | Consumers                                                                        |
+| --------------- | -------------------------------------------------------------------------------- |
+| `errors.routes` | account, app, organization, workspace                                            |
+| `.`             | app, spaces, task, workspace, my-tasks, dashboards, goals, docs, trash, archives |
 
 `.` publishes `RouteErrorBoundary`, the `defaultErrorComponent` of `withErrorBoundaries` in
 `app.config.ts`, a component under `ui/components/route-error-boundary`. A route that needs its

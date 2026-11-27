@@ -38,6 +38,7 @@ function space(id: string, name: string): SpaceDetails {
     name,
     prefix: name.slice(0, 3).toUpperCase(),
     canEdit: true,
+    callerRole: 'edit',
     canManage: true,
     version: 3,
     description: null,

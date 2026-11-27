@@ -179,6 +179,22 @@ describe('CommandPaletteDialog', () => {
     expect(TestBed.inject(CommandPalette).isOpen()).toBe(false);
   });
 
+  it('goes to my tasks, the dashboards and the documents from `Go to`', async () => {
+    for (const [name, segment] of [
+      ['My tasks', 'my-tasks'],
+      ['Dashboards', 'dashboards'],
+      ['Documents', 'docs'],
+    ] as const) {
+      TestBed.inject(CommandPalette).setOpen(true);
+      await fixture.whenStable();
+      optionNamed(name)?.click();
+      await fixture.whenStable();
+
+      expect(navigate).toHaveBeenLastCalledWith(['/', 'atelier-nord', segment]);
+      expect(TestBed.inject(CommandPalette).isOpen()).toBe(false);
+    }
+  });
+
   it('keeps the palette open on Ctrl K and ignores Ctrl K typed in a field', async () => {
     const field: HTMLInputElement = document.createElement('input');
     document.body.append(field);
