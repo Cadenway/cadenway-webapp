@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { toOrganizationSubscription } from './subscription.adapter';
 
 describe('toOrganizationSubscription', () => {
-  it('keeps the plan, the seats and the attachment storage', () => {
+  it('keeps the plan, the seats, the attachment storage and the guest count', () => {
     expect(
       toOrganizationSubscription({
         plan: 'team',
@@ -17,6 +17,7 @@ describe('toOrganizationSubscription', () => {
       seatsLimit: 25,
       storageUsedBytes: 92_400_000_000,
       storageLimitBytes: 100_000_000_000,
+      guestCount: 2,
     });
   });
 });

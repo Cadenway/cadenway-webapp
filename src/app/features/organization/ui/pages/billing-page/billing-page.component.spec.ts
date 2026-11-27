@@ -38,6 +38,7 @@ const TEAM: OrganizationSubscription = {
   seatsLimit: 25,
   storageUsedBytes: 92_400_000_000,
   storageLimitBytes: 100_000_000_000,
+  guestCount: 4,
 };
 
 /**
@@ -54,6 +55,7 @@ const FREE: OrganizationSubscription = {
   seatsLimit: 5,
   storageUsedBytes: 120_000_000,
   storageLimitBytes: 2_000_000_000,
+  guestCount: 1,
 };
 
 /**
