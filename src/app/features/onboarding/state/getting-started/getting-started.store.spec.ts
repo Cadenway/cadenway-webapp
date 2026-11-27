@@ -695,10 +695,41 @@ describe('GettingStartedStore', () => {
 
     describe('changes made in another tab', () => {
       let now: number;
+      let timers: { run: () => void; delay: number; cleared: boolean }[];
+
+      /**
+       * Function runTrailingRead
+       *
+       * @description
+       * Runs the throttle's trailing read the store scheduled, unless it was cleared.
+       */
+      function runTrailingRead(): void {
+        for (const timer of timers) if (!timer.cleared) timer.run();
+      }
 
       beforeEach(() => {
-        now = Date.parse('2026-11-08T09:00:00Z');
-        vi.spyOn(Date, 'now').mockImplementation((): number => now);
+        now = 1_000;
+        timers = [];
+        vi.spyOn(performance, 'now').mockImplementation((): number => now);
+        // Timers of 1 to 29 seconds are the throttle's trailing read: held for the test to run.
+        const realSetTimeout: typeof setTimeout = globalThis.setTimeout;
+        const realClearTimeout: typeof clearTimeout = globalThis.clearTimeout;
+        vi.spyOn(globalThis, 'setTimeout').mockImplementation(((
+          handler: () => void,
+          delay?: number,
+        ): unknown => {
+          if ((delay ?? 0) < 1_000 || (delay ?? 0) >= 30_000) return realSetTimeout(handler, delay);
+          timers.push({ run: handler, delay: delay ?? 0, cleared: false });
+          return 900_000 + timers.length;
+        }) as never);
+        vi.spyOn(globalThis, 'clearTimeout').mockImplementation(((handle?: number): void => {
+          if ((handle ?? 0) <= 900_000) {
+            realClearTimeout(handle);
+            return;
+          }
+          const timer: { cleared: boolean } | undefined = timers.at((handle ?? 0) - 900_001);
+          if (timer !== undefined) timer.cleared = true;
+        }) as never);
       });
 
       afterEach(() => {
@@ -739,15 +770,75 @@ describe('GettingStartedStore', () => {
 
         showTab();
         await settle();
-        now = Date.parse('2026-11-08T09:00:29Z');
+        now = 30_000;
         showTab();
         await settle();
         expect(api.get).toHaveBeenCalledTimes(2);
 
-        now = Date.parse('2026-11-08T09:00:30Z');
+        now = 31_000;
         showTab();
         await settle();
         expect(api.get).toHaveBeenCalledTimes(3);
+      });
+
+      it('reads once at the end of the interval when the tab showed again inside it', async () => {
+        shown = progress(5, { firstTaskCreated: true });
+        const store: GettingStartedStore = await setup();
+        showTab();
+        await settle();
+
+        now = 30_000;
+        showTab();
+        now = 30_500;
+        showTab();
+        await settle();
+        expect(api.get).toHaveBeenCalledTimes(2);
+        expect(timers.map((timer) => timer.delay)).toEqual([1_000]);
+
+        shown = progress(6, { firstTaskCreated: true, presentation: 'dismissed' });
+        now = 31_000;
+        runTrailingRead();
+        await settle();
+
+        expect(api.get).toHaveBeenCalledTimes(3);
+        expect(store.visible()).toBe(false);
+      });
+
+      it('drops the trailing read once the tab is hidden again', async () => {
+        shown = progress(5, { firstTaskCreated: true });
+        await setup();
+        showTab();
+        await settle();
+        now = 30_000;
+        showTab();
+        await settle();
+
+        vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('hidden');
+        runTrailingRead();
+        await settle();
+
+        expect(api.get).toHaveBeenCalledTimes(2);
+      });
+
+      it('clears the trailing read on destruction and on an organization change', async () => {
+        shown = progress(5, { firstTaskCreated: true });
+        await setup();
+        showTab();
+        await settle();
+        now = 30_000;
+        showTab();
+        await settle();
+
+        switchOrganization();
+        TestBed.tick();
+        await settle();
+        expect(timers[0].cleared).toBe(true);
+        const reads: number = api.get.mock.calls.length;
+
+        host.destroy();
+        runTrailingRead();
+        await settle();
+        expect(api.get).toHaveBeenCalledTimes(reads);
       });
 
       it('reads nothing when the tab shows again once the checklist was dismissed', async () => {
@@ -956,6 +1047,134 @@ describe('GettingStartedStore', () => {
       });
       expect(store.inviteOpen()).toBe(true);
       expect(store.inviteKept()).toEqual(emails.slice(50));
+    });
+
+    describe('several batches', () => {
+      const many: readonly string[] = Array.from(
+        { length: 120 },
+        (_unused: unknown, index: number): string => `member${String(index)}@ateliernord.fr`,
+      );
+
+      /**
+       * Function holdFirstBatch
+       *
+       * @description
+       * Makes the first batch wait until the test answers it; the next ones invite every address.
+       *
+       * @returns {() => void} Answers the first batch with all its addresses invited.
+       */
+      function holdFirstBatch(): () => void {
+        let answer: () => void = (): void => undefined;
+        api.invite.mockImplementation((batch: readonly string[]) =>
+          Promise.resolve({ invited: batch.length, skipped: 0, alreadyInvited: 0 }),
+        );
+        api.invite.mockImplementationOnce(
+          (batch: readonly string[]) =>
+            new Promise((resolve: (outcome: unknown) => void) => {
+              answer = (): void => {
+                resolve({ invited: batch.length, skipped: 0, alreadyInvited: 0 });
+              };
+            }),
+        );
+        return (): void => {
+          answer();
+        };
+      }
+
+      it('stops the batches once the organization changes', async () => {
+        const answer: () => void = holdFirstBatch();
+        const store: GettingStartedStore = await setup();
+        store.start('invite');
+
+        const sending: Promise<void> = store.invite(many);
+        switchOrganization();
+        answer();
+        await sending;
+
+        expect(api.invite).toHaveBeenCalledTimes(1);
+        expect(api.updateChecklist).not.toHaveBeenCalled();
+      });
+
+      it('sends every batch even once the host is destroyed', async () => {
+        const answer: () => void = holdFirstBatch();
+        const store: GettingStartedStore = await setup();
+        store.start('invite');
+
+        const sending: Promise<void> = store.invite(many);
+        host.destroy();
+        answer();
+        await sending;
+
+        expect(api.invite).toHaveBeenCalledTimes(3);
+        expect(toasts.toasts()).toEqual([]);
+      });
+
+      it('records the invitation marker right after the first batch that reaches someone', async () => {
+        api.invite.mockImplementation((batch: readonly string[]) =>
+          Promise.resolve({ invited: batch.length, skipped: 0, alreadyInvited: 0 }),
+        );
+        api.invite
+          .mockResolvedValueOnce({ invited: 0, skipped: 50, alreadyInvited: 0 })
+          .mockResolvedValueOnce({ invited: 50, skipped: 0, alreadyInvited: 0 });
+        const order: string[] = [];
+        const invite: Mock = api.invite;
+        api.invite = vi.fn((batch: readonly string[]) => {
+          order.push('invite');
+          return invite(batch) as Promise<unknown>;
+        });
+        const write: Mock = api.updateChecklist;
+        api.updateChecklist = vi.fn((change: unknown, version: number) => {
+          order.push('marker');
+          return write(change, version) as Promise<unknown>;
+        });
+        const store: GettingStartedStore = await setup();
+        store.start('invite');
+
+        await store.invite(many);
+
+        expect(order).toEqual(['invite', 'invite', 'marker', 'invite']);
+      });
+
+      it('stops at a definite refusal and keeps the addresses not sent', async () => {
+        api.invite.mockRejectedValueOnce(problem(429, 'invitation.daily-limit-reached'));
+        const store: GettingStartedStore = await setup();
+        store.start('invite');
+
+        await store.invite(many);
+
+        expect(api.invite).toHaveBeenCalledTimes(1);
+        expect(store.inviteKept()).toEqual(many);
+        expect(toasts.error).toHaveBeenCalledTimes(1);
+        expect(toasts.error).toHaveBeenCalledWith('The invitations could not be sent', {
+          description: 'The daily invitation limit is reached: try again later.',
+        });
+      });
+    });
+
+    it('counts the addresses that leave the list in the failure summary when none was invited', async () => {
+      api.invite.mockResolvedValueOnce({
+        invited: 0,
+        skipped: 3,
+        alreadyInvited: 0,
+        notSent: ['lea.petit@ateliernord.fr'],
+      });
+      const store: GettingStartedStore = await setup();
+      store.start('invite');
+
+      await store.invite([
+        'ines.robert@ateliernord.fr',
+        'marc.roux@ateliernord.fr',
+        'lea.petit@ateliernord.fr',
+      ]);
+
+      expect(toasts.info).not.toHaveBeenCalled();
+      expect(toasts.success).not.toHaveBeenCalled();
+      expect(toasts.error).toHaveBeenCalledTimes(1);
+      expect(toasts.error).toHaveBeenCalledWith('1 address could not be invited', {
+        description:
+          '2 addresses skipped: already members or invited. The addresses stay in the list: press Invite to try again.',
+      });
+      expect(store.inviteKept()).toEqual(['lea.petit@ateliernord.fr']);
     });
 
     it('empties the kept addresses when the dialog closes', async () => {
