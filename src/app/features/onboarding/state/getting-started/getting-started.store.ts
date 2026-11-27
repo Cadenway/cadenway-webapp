@@ -62,6 +62,17 @@ import { OnboardingStore } from '../onboarding/onboarding.store';
 const BOARD_SEGMENT: string = 'board';
 
 /**
+ * Constant INVITE_BATCH_SIZE
+ *
+ * @description
+ * Most addresses one `inviteMembers` call accepts; longer lists are sent in batches of this size,
+ * as the assistant's `Team` screen does.
+ *
+ * @type {number}
+ */
+const INVITE_BATCH_SIZE: number = 50;
+
+/**
  * Type ToastTone
  *
  * @description
@@ -198,6 +209,20 @@ interface GettingStartedState {
    * @readonly
    */
   readonly _inviteOrganization: string | null;
+
+  /**
+   * Property inviteKept
+   *
+   * @description
+   * The addresses the open invite dialog keeps after a send left some unsent (a refused or
+   * unknown batch, or addresses the gateway answered with another outcome), in the order typed;
+   * a new array after each such send, empty whenever the dialog opens or closes. The dialog shows
+   * them in place of its list, so `Invite` sends only them again.
+   *
+   * @type {readonly string[]}
+   * @readonly
+   */
+  readonly inviteKept: readonly string[];
   // #endregion
 }
 
@@ -286,6 +311,18 @@ interface GettingStartedStoreInstance {
    * @readonly
    */
   readonly inviting: Signal<boolean>;
+
+  /**
+   * Property inviteKept
+   *
+   * @description
+   * The addresses the open invite dialog keeps after a send left some unsent, so `Invite` sends
+   * only them again; empty whenever the dialog opens or closes.
+   *
+   * @type {Signal<readonly string[]>}
+   * @readonly
+   */
+  readonly inviteKept: Signal<readonly string[]>;
   // #endregion
 
   // #region Methods
@@ -338,12 +375,14 @@ interface GettingStartedStoreInstance {
    * Method invite
    *
    * @description
-   * Invites the addresses as members of the organization the dialog was opened in, toasts the
-   * outcome and closes the dialog, then records the checklist's invitation marker when an
-   * invitation is out for at least one address (invited now, or already invited). Nothing is sent
-   * once the organization changed; a write the organization pin dropped closes the dialog
-   * silently. A refusal keeps the dialog open with a failure toast, an unknown outcome with a toast
-   * saying that sending again is safe.
+   * Invites the addresses as members of the organization the dialog was opened in, in batches of
+   * 50 (the `inviteMembers` limit), toasts the outcome and closes the dialog, then records the
+   * checklist's invitation marker when an invitation is out for at least one address (invited now,
+   * or already invited). Nothing is sent once the organization changed; a batch the organization
+   * pin dropped closes the dialog silently. When addresses are left unsent (a refused batch, with a
+   * failure toast; an unknown outcome, with a toast saying that sending again is safe; addresses a
+   * batch answered with another outcome, with a toast counting them), the dialog stays open with
+   * only those (`inviteKept`), so `Invite` sends only them again.
    *
    * @param {readonly string[]} emails - The addresses.
    * @returns {Promise<void>} Resolves once settled; never rejects.
@@ -366,6 +405,7 @@ function createGettingStartedStore(): Type<GettingStartedStoreInstance> {
       _dialog: 0,
       _sending: null,
       _inviteOrganization: null,
+      inviteKept: [],
     }),
     withProps(() => {
       const router: Router = inject(Router);
@@ -470,12 +510,17 @@ function createGettingStartedStore(): Type<GettingStartedStoreInstance> {
             patchState(store, {
               _dialog: store._dialog() + 1,
               _inviteOrganization: store._workspace.organization().id,
+              inviteKept: [],
             });
           }
           return;
         }
         store._overlay.close(ONBOARDING_INVITE_DIALOG_OVERLAY);
-        patchState(store, { _dialog: store._dialog() + 1, _inviteOrganization: null });
+        patchState(store, {
+          _dialog: store._dialog() + 1,
+          _inviteOrganization: null,
+          inviteKept: [],
+        });
       };
 
       const leaveOrganization: () => void = (): void => {
@@ -498,9 +543,11 @@ function createGettingStartedStore(): Type<GettingStartedStoreInstance> {
         show('error', title);
       };
 
-      const toastOutcome: (outcome: OnboardingInvitationOutcome) => void = (
-        outcome: OnboardingInvitationOutcome,
-      ): void => {
+      // `skipped` counts the addresses already members or already invited only: the ones a batch
+      // left unsent have their own toast.
+      const toastOutcome: (
+        outcome: Pick<OnboardingInvitationOutcome, 'invited' | 'skipped'>,
+      ) => void = (outcome: Pick<OnboardingInvitationOutcome, 'invited' | 'skipped'>): void => {
         const skipped: string =
           outcome.skipped === 0
             ? ''
@@ -611,43 +658,87 @@ function createGettingStartedStore(): Type<GettingStartedStoreInstance> {
             return;
           }
           patchState(store, { _sending: dialog });
-          let outcome: OnboardingInvitationOutcome;
-          try {
-            outcome = await store._api.invite(emails);
-          } catch (error: unknown) {
-            if (!current()) return;
-            if (isDroppedOnboardingWrite(error)) {
-              setInviteOpen(false);
-              return;
-            }
-            if (isUncertainOnboardingWrite(error)) {
-              show(
-                'warning',
-                $localize`:@@onboarding.getting-started.invite-uncertain:The invitations may not have been sent`,
-                {
-                  description: $localize`:@@onboarding.getting-started.invite-uncertain-text:Sending again is safe.`,
-                },
+          // Addresses a batch settled (invited, already invited or already a member), in lower
+          // case: never sent again. Every other address of the list stays in the dialog.
+          const settled: Set<string> = new Set<string>();
+          let invited: number = 0;
+          let skipped: number = 0;
+          let notSent: number = 0;
+          let reached: boolean = false;
+          let uncertain: boolean = false;
+          let refusal: unknown = null;
+          let dropped: boolean = false;
+          for (let start: number = 0; start < emails.length; start += INVITE_BATCH_SIZE) {
+            if (start > 0 && !current()) break;
+            const batch: readonly string[] = emails.slice(start, start + INVITE_BATCH_SIZE);
+            try {
+              const outcome: OnboardingInvitationOutcome = await store._api.invite(batch);
+              const unsent: ReadonlySet<string> = new Set(
+                (outcome.notSent ?? []).map((email: string): string => email.toLowerCase()),
               );
-              return;
+              for (const email of batch) {
+                const address: string = email.toLowerCase();
+                if (!unsent.has(address)) settled.add(address);
+              }
+              invited += outcome.invited;
+              notSent += unsent.size;
+              skipped += Math.max(0, outcome.skipped - unsent.size);
+              reached ||= outcome.invited + outcome.alreadyInvited > 0;
+            } catch (error: unknown) {
+              if (isDroppedOnboardingWrite(error)) {
+                dropped = true;
+                break;
+              }
+              if (isUncertainOnboardingWrite(error)) uncertain = true;
+              else refusal ??= error;
             }
-            show(
-              'error',
-              $localize`:@@onboarding.getting-started.invite-failed:The invitations could not be sent`,
-              readProblem(error)?.code === 'invitation.daily-limit-reached'
-                ? {
-                    description: $localize`:@@onboarding.getting-started.invite-failed-limit:The daily invitation limit is reached: try again later.`,
-                  }
-                : undefined,
-            );
-            return;
-          } finally {
-            if (store._sending() === dialog) patchState(store, { _sending: null });
           }
+          if (store._sending() === dialog) patchState(store, { _sending: null });
           if (current()) {
-            toastOutcome(outcome);
-            setInviteOpen(false);
+            const kept: readonly string[] = emails.filter(
+              (email: string): boolean => !settled.has(email.toLowerCase()),
+            );
+            if (dropped) setInviteOpen(false);
+            else if (kept.length === 0) {
+              toastOutcome({ invited, skipped });
+              setInviteOpen(false);
+            } else {
+              if (invited > 0) toastOutcome({ invited, skipped });
+              if (notSent > 0) {
+                show(
+                  'error',
+                  takesSingular(notSent)
+                    ? $localize`:@@onboarding.wizard.toast.not-invited-one:${notSent}:count: address could not be invited`
+                    : $localize`:@@onboarding.wizard.toast.not-invited-other:${notSent}:count: addresses could not be invited`,
+                  {
+                    description: $localize`:@@onboarding.getting-started.invite-not-sent-text:The addresses stay in the list: press Invite to try again.`,
+                  },
+                );
+              }
+              if (uncertain) {
+                show(
+                  'warning',
+                  $localize`:@@onboarding.getting-started.invite-uncertain:The invitations may not have been sent`,
+                  {
+                    description: $localize`:@@onboarding.getting-started.invite-uncertain-text:Sending again is safe.`,
+                  },
+                );
+              }
+              if (refusal !== null) {
+                show(
+                  'error',
+                  $localize`:@@onboarding.getting-started.invite-failed:The invitations could not be sent`,
+                  readProblem(refusal)?.code === 'invitation.daily-limit-reached'
+                    ? {
+                        description: $localize`:@@onboarding.getting-started.invite-failed-limit:The daily invitation limit is reached: try again later.`,
+                      }
+                    : undefined,
+                );
+              }
+              patchState(store, { inviteKept: kept });
+            }
           }
-          if (!moved() && (outcome.invited > 0 || outcome.alreadyInvited > 0)) {
+          if (!moved() && reached) {
             // The invitations are out, whatever became of the dialog: the route's `OnboardingStore`
             // records the marker for the organization they went to (never for one shown since),
             // and a failed write stays owed there, surviving a shell change, for this store's

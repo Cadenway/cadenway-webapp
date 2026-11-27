@@ -39,6 +39,7 @@ import { GettingStartedPanel } from '../getting-started-panel/getting-started-pa
       [open]="store.inviteOpen()"
       (openChange)="store.setInviteOpen($event)"
       [pending]="store.inviting()"
+      [kept]="store.inviteKept()"
       (submitted)="store.invite($event)"
     />
   `,

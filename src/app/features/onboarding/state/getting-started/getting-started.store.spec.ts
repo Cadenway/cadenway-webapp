@@ -803,6 +803,96 @@ describe('GettingStartedStore', () => {
       expect(store.items()[1]).toEqual({ key: 'invite', done: true });
     });
 
+    it('sends the addresses in batches of 50', async () => {
+      api.invite.mockImplementation((batch: readonly string[]) =>
+        Promise.resolve({ invited: batch.length, skipped: 0, alreadyInvited: 0 }),
+      );
+      const emails: readonly string[] = Array.from(
+        { length: 120 },
+        (_unused: unknown, index: number): string => `member${String(index)}@ateliernord.fr`,
+      );
+      const store: GettingStartedStore = await setup();
+      store.start('invite');
+
+      await store.invite(emails);
+
+      expect(
+        api.invite.mock.calls.map((call: unknown[]): number => (call[0] as string[]).length),
+      ).toEqual([50, 50, 20]);
+      expect(api.invite).toHaveBeenNthCalledWith(2, emails.slice(50, 100));
+      expect(toasts.success).toHaveBeenCalledWith('120 invitations sent', { description: '' });
+      expect(store.inviteOpen()).toBe(false);
+      expect(api.updateChecklist).toHaveBeenCalledTimes(1);
+    });
+
+    it('keeps only the addresses the gateway did not invite, with a toast counting them', async () => {
+      api.invite.mockResolvedValueOnce({
+        invited: 1,
+        skipped: 2,
+        alreadyInvited: 0,
+        notSent: ['Marc.Roux@ateliernord.fr', 'lea.petit@ateliernord.fr'],
+      });
+      const store: GettingStartedStore = await setup();
+      store.start('invite');
+
+      await store.invite([
+        'ines.robert@ateliernord.fr',
+        'marc.roux@ateliernord.fr',
+        'lea.petit@ateliernord.fr',
+      ]);
+
+      expect(toasts.success).toHaveBeenCalledWith('1 invitation sent', { description: '' });
+      expect(toasts.error).toHaveBeenCalledWith('2 addresses could not be invited', {
+        description: 'The addresses stay in the list: press Invite to try again.',
+      });
+      expect(store.inviteOpen()).toBe(true);
+      expect(store.inviteKept()).toEqual(['marc.roux@ateliernord.fr', 'lea.petit@ateliernord.fr']);
+      expect(api.updateChecklist).toHaveBeenCalledWith({ invitationSent: true }, 4);
+
+      api.invite.mockResolvedValueOnce({ invited: 2, skipped: 0, alreadyInvited: 0 });
+      await store.invite(store.inviteKept());
+
+      expect(api.invite).toHaveBeenLastCalledWith([
+        'marc.roux@ateliernord.fr',
+        'lea.petit@ateliernord.fr',
+      ]);
+      expect(store.inviteOpen()).toBe(false);
+      expect(store.inviteKept()).toEqual([]);
+    });
+
+    it('keeps the addresses of a refused batch only, after the others were invited', async () => {
+      api.invite
+        .mockResolvedValueOnce({ invited: 50, skipped: 0, alreadyInvited: 0 })
+        .mockRejectedValueOnce(problem(429, 'invitation.daily-limit-reached'));
+      const emails: readonly string[] = Array.from(
+        { length: 52 },
+        (_unused: unknown, index: number): string => `member${String(index)}@ateliernord.fr`,
+      );
+      const store: GettingStartedStore = await setup();
+      store.start('invite');
+
+      await store.invite(emails);
+
+      expect(toasts.success).toHaveBeenCalledWith('50 invitations sent', { description: '' });
+      expect(toasts.error).toHaveBeenCalledWith('The invitations could not be sent', {
+        description: 'The daily invitation limit is reached: try again later.',
+      });
+      expect(store.inviteOpen()).toBe(true);
+      expect(store.inviteKept()).toEqual(emails.slice(50));
+    });
+
+    it('empties the kept addresses when the dialog closes', async () => {
+      api.invite.mockRejectedValueOnce(problem(503, 'service.unavailable'));
+      const store: GettingStartedStore = await setup();
+      store.start('invite');
+      await store.invite(['ines.robert@ateliernord.fr']);
+      expect(store.inviteKept()).toEqual(['ines.robert@ateliernord.fr']);
+
+      store.setInviteOpen(false);
+
+      expect(store.inviteKept()).toEqual([]);
+    });
+
     it('records the invitation marker again after its write failed', async () => {
       const store: GettingStartedStore = await setup();
       store.start('invite');
