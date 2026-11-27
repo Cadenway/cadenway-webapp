@@ -297,4 +297,49 @@ describe('OnboardingInviteField', () => {
 
     expect(fixture.componentInstance.emails()).toEqual(['ines.robert@ateliernord.fr']);
   });
+
+  describe('commitPending', () => {
+    it('accepts an empty field and adds nothing', async () => {
+      const fixture: ComponentFixture<OnboardingInviteField> = await render([
+        'marc.roux@ateliernord.fr',
+      ]);
+
+      expect(fixture.componentInstance.hasText()).toBe(false);
+      expect(fixture.componentInstance.commitPending()).toBe(true);
+      expect(fixture.componentInstance.emails()).toEqual(['marc.roux@ateliernord.fr']);
+    });
+
+    it('adds a valid typed address and empties the field', async () => {
+      const fixture: ComponentFixture<OnboardingInviteField> = await render([
+        'marc.roux@ateliernord.fr',
+      ]);
+      await type(fixture, ' ines.robert@ateliernord.fr ');
+      expect(fixture.componentInstance.hasText()).toBe(true);
+
+      expect(fixture.componentInstance.commitPending()).toBe(true);
+      await fixture.whenStable();
+
+      expect(fixture.componentInstance.emails()).toEqual([
+        'marc.roux@ateliernord.fr',
+        'ines.robert@ateliernord.fr',
+      ]);
+      expect(field().value).toBe('');
+      expect(find('onboarding-invite-error')).toBeNull();
+    });
+
+    it('refuses an invalid typed address, shows the error and focuses the field', async () => {
+      const fixture: ComponentFixture<OnboardingInviteField> = await render();
+      await type(fixture, 'ines.robert@');
+
+      expect(fixture.componentInstance.commitPending()).toBe(false);
+      await fixture.whenStable();
+
+      expect(fixture.componentInstance.emails()).toEqual([]);
+      expect(find('onboarding-invite-error')?.textContent.trim()).toBe(
+        'Enter a full address, for example ines.robert@ateliernord.fr.',
+      );
+      expect(field().getAttribute('aria-invalid')).toBe('true');
+      expect(document.activeElement).toBe(field());
+    });
+  });
 });

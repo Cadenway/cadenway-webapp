@@ -166,7 +166,8 @@ export function toFinish(space: OnboardingSpace): OnboardingFinish {
  *
  * @description
  * Counts the addresses an invitation batch invited; any other outcome, an unknown one included,
- * counts as not sent, as the contract asks.
+ * counts as not sent, as the contract asks. The `already-invited` ones are also counted apart: an
+ * invitation is already out for them.
  *
  * @param {InvitationBatchResult} dto - Gateway result.
  * @returns {OnboardingInvitationOutcome} The counts.
@@ -175,7 +176,11 @@ export function toInvitationOutcome(dto: InvitationBatchResult): OnboardingInvit
   const invited: number = dto.invitations.filter(
     (entry: InvitationBatchResult['invitations'][number]): boolean => entry.outcome === 'invited',
   ).length;
-  return { invited, skipped: dto.invitations.length - invited };
+  const alreadyInvited: number = dto.invitations.filter(
+    (entry: InvitationBatchResult['invitations'][number]): boolean =>
+      entry.outcome === 'already-invited',
+  ).length;
+  return { invited, skipped: dto.invitations.length - invited, alreadyInvited };
 }
 
 /**

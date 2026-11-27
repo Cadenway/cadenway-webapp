@@ -41,7 +41,7 @@ it (`App.dc.html` line 6964). The settings shells do not bind it: `Compte.dc.htm
 - Workspace's `ports/workspace-context` (`WORKSPACE_CONTEXT`) for the organization, the role, the
   caller and the slug.
 - Core's `@core/api` (`PASSIVE_REQUEST`, `readProblem`, `hasProblemCode`,
-  `OrganizationSwitchPendingError`) and `@core/realtime` (`RealtimeConnection.reconnected`,
+  `OrganizationSwitchPendingError`, `OrganizationPin`) and `@core/realtime` (`RealtimeConnection.reconnected`,
   optional).
 - Errors' `.` entry (`RouteErrorBoundary`) for the route's `errorComponent`.
 - `@cadenway/ui` (`accordion`, `alert-dialog`, `app-rail`, `button`, `checkbox`, `empty`, `input`,
@@ -72,7 +72,8 @@ null`); anyone else gets a required `Space` select of the spaces they `edit`, an
   serialized; a key result's value enters its goal's queue 300 ms after its last click
   (`GOAL_EDIT_BURST_MS`), so a burst of `−`/`+` clicks sends one value, and a burst still waiting
   when the page is left is sent at once; once a goal's writes settle, the goal is read again for its progress, health and
-  version, unless the page is gone. A `412 request.version-mismatch` reads the goal: an edit is
+  version, unless the page is gone (the reads of one goal a queued write needs, after a `412` or
+  an unknown outcome, still run). A `412 request.version-mismatch` reads the goal: an edit is
   sent again only while the goal still shows the value it started from; a number otherwise moves
   by the same steps from the newer value, and a checkbox is dropped with `This key result changed
 elsewhere`. Values show at once and return to the confirmed ones after a refusal, which toasts
@@ -84,17 +85,28 @@ elsewhere`. Values show at once and return to the confirmed ones after a refusal
   while that read is retried after 2, 4 and 8 s (`GOAL_SETTLE_BACKOFF_MS`); when it still fails,
   the later edits of that key result are dropped, never rebased on an unknown value, `The key
 result change could not be confirmed` shows and the goals are read again. A creation (goal or key
-  result) keeps one idempotency key per draft until a definitive answer and is sent again with it
+  result) keeps one idempotency key per draft and organization, across a switch and back, until a
+  definitive answer (created or refused, even once a switch dropped it) and is sent again with it
   after an unknown outcome or `409 idempotency.request-in-progress`, one second apart, three sends
   in all; still unknown, `The goal could not be confirmed` or `The key result could not be
-confirmed` asks to submit again, which reuses the key. A deletion of unknown outcome whose goal is
+confirmed` asks to submit again, which reuses the key; a draft submitted again while an earlier
+  attempt of it still runs (after a switch and back) waits for it and takes what it created, or
+  sends again with the key it kept. A deletion of unknown outcome whose goal is
   still there, or cannot be read, shows `The deletion could not be confirmed`, and the goals are
   read again. Confirmed writes stay over the read
   goals until a read issued after them lands; a snapshot of one goal counts from when it was sent
   and is not kept once a newer read landed. A superseded read is aborted between its pages. Each
   write is bound to the organization generation it started in: after a switch, even back to the
   same organization, nothing more is sent, patched or toasted, and the forms and the confirmation
-  close.
+  close; after a switch away and back the goals are read again, and once more when a write started
+  before it settles, so what that write completed shows. A write is also sent, and its answer applied, only while the workspace and
+  `OrganizationPin` both name the organization the goals were read for and the pin was not
+  committed to another organization, or cleared, since (the resolver commits both synchronously,
+  before the store reacts; `organizationChanges` is heard until the page is gone and its writes
+  settled; a re-verification of the same organization drops nothing). So a write queued or
+  answered in between, after the page is gone and the pin moved on, even back to the same
+  organization, or once the workspace is left (the pin cleared), is dropped without a toast;
+  leaving the workspace therefore drops the last value of a burst still queued.
 - Focus: after a key result is removed, the next row's control takes it, else `Add a key result`,
   else the goal's trigger; a closed goal form returns it to `New goal`, or to the new goal's trigger
   after a creation; a closed key result form returns it to `Add a key result`. The key result
