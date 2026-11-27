@@ -10,7 +10,7 @@ import {
   withState,
 } from '@ngrx/signals';
 
-import { type ApiProblem, readProblem } from '@core/api';
+import { type ApiProblem, OrganizationPin, readProblem } from '@core/api';
 import {
   WORKSPACE_CONTEXT,
   type WorkspaceContextPort,
@@ -292,6 +292,17 @@ interface OnboardingRuns {
    * @type {AbortController}
    */
   reading: AbortController;
+
+  /**
+   * Property destroyed
+   *
+   * @description
+   * Whether the store's route was destroyed (the person left the workspace): nothing more is sent
+   * or applied.
+   *
+   * @type {boolean}
+   */
+  destroyed: boolean;
   // #endregion
 }
 
@@ -481,14 +492,16 @@ function createOnboardingStore(): Type<OnboardingStoreInstance> {
     withProps(() => {
       const api: OnboardingApi = inject(OnboardingApi);
       const workspace: WorkspaceContextPort = inject(WORKSPACE_CONTEXT);
+      const pin: OrganizationPin = inject(OrganizationPin);
       const runs: OnboardingRuns = {
         generation: 0,
         reads: 0,
         presentations: 0,
         tail: Promise.resolve(),
         reading: new AbortController(),
+        destroyed: false,
       };
-      return { _api: api, _workspace: workspace, _runs: runs };
+      return { _api: api, _workspace: workspace, _pin: pin, _runs: runs };
     }),
     withComputed((store) => ({
       progress: (): OnboardingProgress | null => {
@@ -505,12 +518,19 @@ function createOnboardingStore(): Type<OnboardingStoreInstance> {
     withMethods((store) => {
       const runs: OnboardingRuns = store._runs;
 
-      // The workspace commits another organization synchronously (the resolver), before the
-      // `_followOrganization` effect moves the generation: compare both, so nothing is sent or
-      // applied in between.
-      const live: (generation: number) => boolean = (generation: number): boolean =>
-        generation === runs.generation &&
-        store._workspace.organization().id === store._organizationId();
+      // The resolver commits another organization (workspace context and pin) synchronously,
+      // before the `_followOrganization` effect moves the generation, and a destroyed store keeps
+      // its last context while the global pin moves on: check all of them, so nothing is sent
+      // under another organization's pin or applied in between.
+      const live: (generation: number) => boolean = (generation: number): boolean => {
+        const organizationId: string | null = store._organizationId();
+        return (
+          !runs.destroyed &&
+          generation === runs.generation &&
+          store._workspace.organization().id === organizationId &&
+          store._pin.current() === organizationId
+        );
+      };
 
       const accept: (incoming: OnboardingProgress, generation: number) => void = (
         incoming: OnboardingProgress,
@@ -707,6 +727,13 @@ function createOnboardingStore(): Type<OnboardingStoreInstance> {
         patchState(store, { _organizationId: store._workspace.organization().id });
         store._followOrganization(computed((): string => store._workspace.organization().id));
       },
+      onDestroy(store): void {
+        const runs: OnboardingRuns = store._runs;
+        runs.destroyed = true;
+        runs.generation += 1;
+        runs.tail = Promise.resolve();
+        runs.reading.abort();
+      },
     }),
   );
 }
@@ -720,12 +747,13 @@ function createOnboardingStore(): Type<OnboardingStoreInstance> {
  * 9 packages), so both show the same version and their writes are sent one after the other, each
  * with the `If-Match` of the version the previous one answered. Nothing is read until a screen
  * calls `load()`. Every write and answer is fenced on the organization it started in: once the
- * workspace shows another organization, nothing more of it is sent or applied, and its caller gets
- * `OnboardingWriteDroppedError`. A switch then drops the progress, aborts the reads, starts a new
- * write queue and reads the new organization's progress when a screen had asked for it. Leaving
- * `/:org` destroys it. The reads are hand-rolled rather than a `resource()`: the writes share
- * their version and queue, a failed refresh must keep the progress shown, and nothing reads until
- * a screen asks.
+ * workspace or `OrganizationPin` (whose organization stamps the requests) shows another
+ * organization, or the store is destroyed, nothing more of it is sent or applied, and its caller
+ * gets `OnboardingWriteDroppedError`. A switch then drops the progress, aborts the reads, starts a
+ * new write queue and reads the new organization's progress when a screen had asked for it.
+ * Leaving `/:org` destroys it: its reads are aborted and its queued and unanswered writes are
+ * dropped. The reads are hand-rolled rather than a `resource()`: the writes share their version
+ * and queue, a failed refresh must keep the progress shown, and nothing reads until a screen asks.
  *
  * @type {Type<OnboardingStoreInstance>}
  */

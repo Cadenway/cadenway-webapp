@@ -70,9 +70,13 @@ route), `withGettingStarted()` and `withOnboardingWizard()` (the `overlays` cont
   `resource()`: they share the writes' version and queue, and a failed refresh keeps the
   progress shown.
 - Every write and every answer is fenced on the organization it started in: the store compares
-  the workspace's organization, which the resolver commits synchronously, and its own generation,
-  which an organization switch moves. Once they differ, nothing more is sent or applied for the
-  previous organization, and the caller gets `OnboardingWriteDroppedError`, never a stale result.
+  its organization with the workspace's and with `OrganizationPin`'s (both committed
+  synchronously by the resolver; the pin's organization stamps the requests), checks its own
+  generation, which an organization switch moves, and that it is not destroyed. Once any of them
+  differs, nothing more is sent or applied for the previous organization, and the caller gets
+  `OnboardingWriteDroppedError`, never a stale result. Leaving `/:org` destroys the store: its
+  reads are aborted, its queue is reset, and its queued or unanswered writes, a reread or a resend
+  after a `412` included, are dropped, so none goes out under the next organization's pin.
   The same error answers a write the organization pin blocked (`OrganizationSwitchPendingError`)
   or the gateway refused for another session organization (`412 organization.context-changed`);
   such a write is neither retried nor rolled back in the next organization. A switch drops the

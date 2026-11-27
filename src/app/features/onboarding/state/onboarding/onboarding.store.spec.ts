@@ -1,9 +1,14 @@
 import { HttpErrorResponse } from '@angular/common/http';
-import { signal, type WritableSignal } from '@angular/core';
+import {
+  createEnvironmentInjector,
+  EnvironmentInjector,
+  signal,
+  type WritableSignal,
+} from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 
-import { OrganizationSwitchPendingError } from '@core/api';
+import { OrganizationPin, OrganizationSwitchPendingError } from '@core/api';
 import type {
   WorkspaceContextPort,
   WorkspaceOrganization,
@@ -240,12 +245,15 @@ interface FakeOnboardingApi {
 describe('OnboardingStore', () => {
   let api: FakeOnboardingApi;
   let organization: WritableSignal<WorkspaceOrganization>;
+  let pin: OrganizationPin;
+  let route: EnvironmentInjector;
 
   /**
    * Function setup
    *
    * @description
-   * Creates the store over the fake data access, in Atelier Nord.
+   * Creates the store over the fake data access, in Atelier Nord, in a route injector the test
+   * may destroy as leaving `/:org` does.
    *
    * @returns {OnboardingStore} The store.
    */
@@ -254,12 +262,14 @@ describe('OnboardingStore', () => {
     const workspace: Pick<WorkspaceContextPort, 'organization'> = { organization };
     TestBed.configureTestingModule({
       providers: [
-        OnboardingStore,
         { provide: OnboardingApi, useValue: api },
         { provide: WORKSPACE_CONTEXT, useValue: workspace },
       ],
     });
-    const store: OnboardingStore = TestBed.inject(OnboardingStore);
+    pin = TestBed.inject(OrganizationPin);
+    pin.set(ATELIER_NORD.id);
+    route = createEnvironmentInjector([OnboardingStore], TestBed.inject(EnvironmentInjector));
+    const store: OnboardingStore = route.get(OnboardingStore);
     TestBed.tick();
     return store;
   }
@@ -283,10 +293,12 @@ describe('OnboardingStore', () => {
    * Function switchOrganization
    *
    * @description
-   * Commits Studio Pixel in the workspace, then flushes the store's reaction.
+   * Commits Studio Pixel in the workspace and the pin, as the resolver does, then flushes the
+   * store's reaction.
    */
   function switchOrganization(): void {
     organization.set(STUDIO_PIXEL);
+    pin.set(STUDIO_PIXEL.id);
     TestBed.tick();
   }
 
@@ -674,6 +686,7 @@ describe('OnboardingStore', () => {
       });
 
       organization.set(STUDIO_PIXEL);
+      pin.set(STUDIO_PIXEL.id);
       answer.resolve(progress(2));
 
       await expect(first).rejects.toBeInstanceOf(OnboardingWriteDroppedError);
@@ -748,6 +761,60 @@ describe('OnboardingStore', () => {
       expect(signals).toHaveLength(2);
       expect(signals[0]?.aborted).toBe(true);
       expect(signals[1]?.aborted).toBe(false);
+    });
+  });
+
+  describe('leaving the workspace', () => {
+    it('never sends a queued write once the store is destroyed and the pin moved on', async () => {
+      const store: OnboardingStore = setup();
+      await store.reload();
+      const answer: Deferred<OnboardingProgress> = deferred();
+      api.saveDraft.mockReturnValueOnce(answer.promise);
+      const first: Promise<OnboardingProgress> = store.saveDraft({ step: 'preset' });
+      const second: Promise<OnboardingProgress> = store.saveDraft({ step: 'team' });
+      await vi.waitFor(() => {
+        expect(api.saveDraft).toHaveBeenCalledTimes(1);
+      });
+
+      route.destroy();
+      pin.set(STUDIO_PIXEL.id);
+      answer.resolve(progress(2));
+
+      await expect(first).rejects.toBeInstanceOf(OnboardingWriteDroppedError);
+      await expect(second).rejects.toBeInstanceOf(OnboardingWriteDroppedError);
+      expect(api.saveDraft).toHaveBeenCalledTimes(1);
+    });
+
+    it('neither reads nor sends again after a stale version once the store is destroyed', async () => {
+      const store: OnboardingStore = setup();
+      await store.reload();
+      const answer: Deferred<OnboardingProgress> = deferred();
+      api.saveDraft.mockReturnValueOnce(answer.promise);
+      const saving: Promise<OnboardingProgress> = store.saveDraft({ step: 'preset' });
+      await vi.waitFor(() => {
+        expect(api.saveDraft).toHaveBeenCalledTimes(1);
+      });
+
+      route.destroy();
+      pin.set(STUDIO_PIXEL.id);
+      answer.reject(problem(412, 'request.version-mismatch'));
+
+      await expect(saving).rejects.toBeInstanceOf(OnboardingWriteDroppedError);
+      expect(api.saveDraft).toHaveBeenCalledTimes(1);
+      expect(api.get).toHaveBeenCalledTimes(1);
+    });
+
+    it('refuses a write while the pin names another organization than the store', async () => {
+      const store: OnboardingStore = setup();
+      await store.reload();
+
+      pin.set(STUDIO_PIXEL.id);
+
+      await expect(store.saveDraft({ step: 'preset' })).rejects.toBeInstanceOf(
+        OnboardingWriteDroppedError,
+      );
+      expect(organization().id).toBe(ATELIER_NORD.id);
+      expect(api.saveDraft).not.toHaveBeenCalled();
     });
   });
 });
