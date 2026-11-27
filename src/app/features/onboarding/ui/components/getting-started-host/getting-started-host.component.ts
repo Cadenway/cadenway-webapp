@@ -5,9 +5,9 @@ import { Component } from '@angular/core';
  *
  * @description
  * Host of the `Getting started` checklist in the application shell's `overlays` slot (order 40).
- * The checklist floats over the shell once the assistant provisioned the first space, while its
- * presentation is not dismissed and the assistant is closed; a failed read shows nothing. It
- * renders nothing yet: the checklist comes with the getting-started package of step 9.
+ * It renders nothing yet. With step 9's getting-started package, the checklist will float over
+ * the shell once the assistant provisioned the first space, while its presentation is not
+ * dismissed and the assistant is closed; a failed read will show nothing.
  */
 @Component({
   selector: 'cw-getting-started-host',
