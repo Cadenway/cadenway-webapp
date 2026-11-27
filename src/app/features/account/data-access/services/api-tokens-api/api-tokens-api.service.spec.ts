@@ -4,11 +4,11 @@ import {
   type ApiTokenPage as ApiTokenPageDto,
   ApiTokensService,
 } from '@cadenway/api-client';
-import { of } from 'rxjs';
+import { NEVER, of } from 'rxjs';
 import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 
 import type { ApiToken } from '../../../models/api-token/api-token.interface';
-import { ApiTokensApi } from './api-tokens-api.service';
+import { ApiTokensApi, IncompleteTokenListError } from './api-tokens-api.service';
 
 /**
  * Function dto
@@ -87,5 +87,43 @@ describe('ApiTokensApi', () => {
     await TestBed.inject(ApiTokensApi).revoke('t2');
 
     expect(client.revokeApiToken).toHaveBeenCalledWith('t2');
+  });
+
+  it('refuses a list whose cursor does not end within 20 pages', async () => {
+    let page: number = 0;
+    client.listApiTokens.mockImplementation(() => {
+      page += 1;
+      return of({
+        items: [dto(`t${String(page)}`, 'Grafana dashboard')],
+        nextCursor: `c${String(page)}`,
+      });
+    });
+
+    await expect(TestBed.inject(ApiTokensApi).list()).rejects.toBeInstanceOf(
+      IncompleteTokenListError,
+    );
+    expect(client.listApiTokens).toHaveBeenCalledTimes(20);
+  });
+
+  it('refuses a list whose cursor comes back to a page already read', async () => {
+    client.listApiTokens.mockImplementation(() =>
+      of({ items: [dto('t1', 'GitLab continuous integration')], nextCursor: 'c2' }),
+    );
+
+    await expect(TestBed.inject(ApiTokensApi).list()).rejects.toBeInstanceOf(
+      IncompleteTokenListError,
+    );
+    expect(client.listApiTokens).toHaveBeenCalledTimes(2);
+  });
+
+  it('stops reading when its signal aborts', async () => {
+    client.listApiTokens.mockReturnValue(NEVER);
+    const controller: AbortController = new AbortController();
+
+    const read: Promise<readonly ApiToken[]> = TestBed.inject(ApiTokensApi).list(controller.signal);
+    controller.abort();
+
+    await expect(read).rejects.toBeDefined();
+    expect(client.listApiTokens).toHaveBeenCalledOnce();
   });
 });

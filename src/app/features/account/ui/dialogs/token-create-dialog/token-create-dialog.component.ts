@@ -1,12 +1,16 @@
 import {
+  afterRenderEffect,
   Component,
   effect,
+  type ElementRef,
   input,
   type InputSignal,
   output,
   type OutputEmitterRef,
   signal,
+  type Signal,
   untracked,
+  viewChild,
   type WritableSignal,
 } from '@angular/core';
 import {
@@ -190,10 +194,12 @@ function emptyModel(): TokenCreateModel {
  * name over 100 characters, no scope) and focuses the first faulty field; a valid one emits
  * `submitted` with the trimmed name. While `pending` the button shows its spinner and the dialog
  * cannot be closed. Once the page passes the `secret`, the dialog shows it once, read-only, with
- * `Copy the token` (`copyRequested`) and `I have copied the token`; a backdrop click no longer
- * closes it there, so the secret is not lost by accident. Every close (`Cancel`, Escape, the
- * backdrop, the last button) emits `dismissed`; the form starts over at each opening. It holds
- * no state of its own beyond the form and never stores the secret.
+ * `Copy the token` (`copyRequested`) and `I have copied the token`, and focus moves to the secret
+ * field, since the form that held it is gone; a backdrop click no longer closes it there, so the
+ * secret is not lost by accident. Every close request (`Cancel`, Escape, the backdrop, the last
+ * button) emits `dismissed`; `detached` follows once the exit animation ended, so the page keeps
+ * the secret step on screen while it leaves and clears the secret then. The form starts over at
+ * each opening. It holds no state of its own beyond the form and never stores the secret.
  */
 @Component({
   selector: 'cw-token-create-dialog',
@@ -289,6 +295,29 @@ export class TokenCreateDialog {
   public readonly dismissed: OutputEmitterRef<void> = output();
 
   /**
+   * Property detached
+   *
+   * @description
+   * Emits once the closed dialog left the screen, after its exit animation.
+   *
+   * @type {OutputEmitterRef<void>}
+   * @readonly
+   */
+  public readonly detached: OutputEmitterRef<void> = output();
+
+  /**
+   * Property secretField
+   *
+   * @description
+   * The read-only field of the secret, present in the `Token created` step only.
+   *
+   * @type {Signal<ElementRef<HTMLInputElement> | undefined>}
+   * @readonly
+   */
+  private readonly secretField: Signal<ElementRef<HTMLInputElement> | undefined> =
+    viewChild<ElementRef<HTMLInputElement>>('secretField');
+
+  /**
    * Property scopeOptions
    *
    * @description
@@ -380,7 +409,8 @@ export class TokenCreateDialog {
    * Constructor
    *
    * @description
-   * Starts the form over each time the dialog opens.
+   * Starts the form over each time the dialog opens, and moves focus to the secret field once
+   * the `Token created` step replaced the form.
    *
    * @constructor
    */
@@ -390,6 +420,13 @@ export class TokenCreateDialog {
       untracked((): void => {
         this.createForm().reset(emptyModel());
       });
+    });
+    let shown: boolean = false;
+    afterRenderEffect((): void => {
+      const field: ElementRef<HTMLInputElement> | undefined = this.secretField();
+      const showing: boolean = this.secret() !== null && field !== undefined;
+      if (showing && !shown) field?.nativeElement.focus();
+      shown = showing;
     });
   }
   // #endregion

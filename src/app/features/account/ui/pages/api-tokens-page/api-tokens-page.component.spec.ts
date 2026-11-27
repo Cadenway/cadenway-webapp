@@ -226,6 +226,23 @@ describe('ApiTokensPage', () => {
     expect(expiries[1]?.classList).toContain('text-grenat-text');
     expect(expiries[0]?.classList).not.toContain('text-grenat-text');
     expect(view(harness).querySelector('[data-testid="tokens-empty"]')).toBeNull();
+    expect(view(harness).querySelector('table')?.getAttribute('role')).toBe('table');
+    expect(view(harness).querySelectorAll('[role="columnheader"]')).toHaveLength(5);
+    expect(view(harness).querySelectorAll('tbody [role="row"]')).toHaveLength(3);
+    expect(view(harness).querySelectorAll('tbody [role="cell"]')).toHaveLength(15);
+  });
+
+  it('words an expiry up to 90 days in days and a whole year ahead in years', async () => {
+    api.list.mockResolvedValue([
+      { ...rows[0], id: 't5', expiry: { kind: 'days', count: 90, soon: false } },
+      { ...rows[0], id: 't6', expiry: { kind: 'years', count: 1, soon: false } },
+    ]);
+    const harness: RouterTestingHarness = await open();
+
+    const expiries: string[] = [
+      ...view(harness).querySelectorAll('[data-testid="token-expiry"]'),
+    ].map((cell: Element): string => cell.textContent.trim());
+    expect(expiries).toEqual(['In 90 days', 'In 1 year']);
   });
 
   it('shows the empty state for a completed read without token', async () => {
@@ -274,6 +291,9 @@ describe('ApiTokensPage', () => {
         SECRET,
       );
     });
+    await vi.waitFor(() => {
+      expect(document.activeElement).toBe(document.querySelector('[data-testid="token-secret"]'));
+    });
     expect(api.create).toHaveBeenCalledWith({
       name: 'GitLab sync',
       scopes: ['tasks:read'],
@@ -295,6 +315,13 @@ describe('ApiTokensPage', () => {
       expect(overlay('token-secret')).toBeNull();
     });
     expect(document.body.innerHTML).not.toContain(SECRET);
+
+    view(harness).querySelector<HTMLButtonElement>('[data-testid="token-create"]')?.click();
+    await vi.waitFor(async () => {
+      await harness.fixture.whenStable();
+      expect(overlay('token-submit')).not.toBeNull();
+    });
+    expect(overlay('token-secret')).toBeNull();
   });
 
   it('says the copy failed when the clipboard refuses', async () => {
@@ -348,5 +375,39 @@ describe('ApiTokensPage', () => {
     expect(toasts.success).toHaveBeenCalledWith('Token revoked', {
       description: 'Trello import script can no longer call the API.',
     });
+    await vi.waitFor(async () => {
+      await harness.fixture.whenStable();
+      expect(document.querySelector('[role="alertdialog"]')).toBeNull();
+      expect(document.activeElement?.getAttribute('aria-label')).toBe(
+        'Revoke the token “Grafana dashboard”',
+      );
+    });
+  });
+
+  it('gives focus to Create a token once the last token is revoked', async () => {
+    api.list.mockResolvedValue([rows[1]]);
+    const harness: RouterTestingHarness = await open();
+
+    view(harness)
+      .querySelector<HTMLButtonElement>('[aria-label="Revoke the token “Trello import script”"]')
+      ?.click();
+    await harness.fixture.whenStable();
+    const typed: HTMLInputElement | null = document.querySelector<HTMLInputElement>(
+      '[role="alertdialog"] input',
+    );
+    if (typed === null) throw new Error('Expected the confirmation field.');
+    typed.value = 'Trello import script';
+    typed.dispatchEvent(new Event('input'));
+    await harness.fixture.whenStable();
+    overlay('token-revoke-confirm')?.click();
+
+    await vi.waitFor(async () => {
+      await harness.fixture.whenStable();
+      expect(document.querySelector('[role="alertdialog"]')).toBeNull();
+      expect(document.activeElement).toBe(
+        view(harness).querySelector('[data-testid="token-create"]'),
+      );
+    });
+    expect(view(harness).querySelector('[data-testid="tokens-empty"]')).not.toBeNull();
   });
 });

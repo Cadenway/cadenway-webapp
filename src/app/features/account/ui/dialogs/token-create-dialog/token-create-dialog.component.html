@@ -5,6 +5,7 @@
   [closeOnOverlayClick]="secret() === null"
   data-testid="token-create-dialog"
   (openChange)="openChanged($event)"
+  (closed)="detached.emit()"
 >
   <cw-dialog-header>
     @if (secret() !== null) {
@@ -23,6 +24,7 @@
   @if (secret(); as value) {
     <cw-input-group class="bg-muted">
       <input
+        #secretField
         cwInputGroupInput
         type="text"
         readonly

@@ -104,15 +104,32 @@ parent provides the English texts of `cw-password-strength` and `cw-input-otp` t
 - `profile` keeps unsaved edits through `unsavedChangesGuard`; its page asks with Workspace's
   `cw-discard-changes-dialog`. The stub has no form, so it never asks yet; package A1 reports its
   form's dirty state.
-- API tokens: the list follows the cursor and is read again after an organization switch; the
-  store then keeps it in step with its own writes, so a write never sends the page to the error
-  boundary. `Create the token` stays enabled while the form is invalid (blank name, more than 100
-  characters, no scope) and runs through `ReauthenticationService.run`; a closed reauthentication
-  dialog creates nothing and shows nothing. The secret is held only in the store's memory, shown
-  once read-only with `Copy the token`, never logged, persisted or put in a toast, and cleared
-  when the dialog closes; in that step a backdrop click does not close the dialog. `Revoke` asks
-  through `cw-alert-dialog`, typing the token's name; a `404` counts as revoked. Expiries within
-  7 days show in grenat. Below 768 px the table becomes cards. Known gap: the API usage strip
+- API tokens, list: it follows the cursor and is read again after an organization switch; a
+  cursor that does not end within 20 pages, or repeats, fails the read (error boundary and
+  `Retry`) rather than show part of the list. The store then keeps it in step with its own
+  writes, so a write never sends the page to the error boundary.
+- API tokens, organization: a creation or a revocation acts in the organization the workspace
+  showed when it started. Before each send, the retry after a reauthentication included, the
+  store checks that the workspace still shows it and otherwise stops silently; the requests
+  carry `If-Organization-Match` (`ORGANIZATION_PIN_OPERATIONS` lists the 3 operations), and a
+  refusal of the pin (`412 organization.context-changed`, a switch in progress) stops silently
+  too. A `404` counts as revoked only for `api-token.not-found` while the organization is
+  unchanged.
+- API tokens, creation: `Create the token` stays enabled while the form is invalid (blank name,
+  more than 100 characters, no scope) and runs through `ReauthenticationService.run`; a closed
+  reauthentication dialog creates nothing and shows nothing. The secret is held only in the
+  store's memory, shown once read-only with `Copy the token`, never logged, persisted or put in
+  a toast. Focus moves to it when the step appears; a backdrop click no longer closes the dialog
+  then. The step stays on screen during the exit animation and the secret is cleared once the
+  dialog has left.
+- API tokens, revocation: `Revoke` asks through `cw-alert-dialog`, typing the token's name. Once
+  the row left and the confirmation closed, focus moves to the `Revoke` now at its place (or the
+  one before it), or to the header's `Create a token` when no token is left.
+- API tokens, wording: the last use reads in minutes, hours, then days up to 60, then a date. The
+  expiry reads `In n days` up to 90 days (the longest day option), `In n years` when it falls on
+  today's calendar date a whole number of years ahead (the `1 year` option), and a date
+  otherwise; within 7 days it shows in grenat. Below 768 px the table becomes cards and keeps its
+  explicit table, row, column header and cell roles. Known gap: the API usage strip
   (`Compte.dc.html` lines 535-540) is hidden until billing counts API calls (B15).
 - Known gap: the mockup's `Set a status message` item and the status message under the header are left out,
   since the backend has no status message yet.
@@ -130,5 +147,5 @@ parent provides the English texts of `cw-password-strength` and `cw-input-otp` t
 | `account.api-tokens.name-required`, `account.api-tokens.name-too-long`, `account.api-tokens.scopes-required`                                                                                                      | The mockup disables `Create the token` instead of showing field errors.                        |
 | `account.api-tokens.create-failed`, `account.api-tokens.create-failed-text`, `account.api-tokens.revoke-failed`, `account.api-tokens.revoke-failed-text`                                                          | The mockup draws no refused creation or revocation.                                            |
 | `account.api-tokens.revoke-label`                                                                                                                                                                                 | Accessible name of each row's `Revoke`, naming its token.                                      |
-| `account.api-tokens.used-days`, `account.api-tokens.expires-days`, `account.api-tokens.used-minutes`, `account.api-tokens.used-hours`                                                                             | The mockup shows fixed samples; the singular and generic forms follow its wording.             |
+| `account.api-tokens.used-days`, `account.api-tokens.expires-days`, `account.api-tokens.expires-years`, `account.api-tokens.used-minutes`, `account.api-tokens.used-hours`                                         | The mockup shows fixed samples; the singular and generic forms follow its wording.             |
 | `account.user-menu.avatar-unknown`, `account.user-menu.avatar-online`, `account.user-menu.avatar-away`, `account.user-menu.avatar-dnd`, `account.user-menu.avatar-invisible`, `account.user-menu.avatar-disabled` | Texts of the avatar brick, taken from its defaults.                                            |

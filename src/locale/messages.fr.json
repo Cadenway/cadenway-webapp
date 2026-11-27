@@ -31,6 +31,7 @@
     "account.api-tokens.expiration-never": "Sans expiration",
     "account.api-tokens.expires-days": "{VAR_PLURAL, plural, =1 {Dans 1 jour} other {Dans {INTERPOLATION} jours}}",
     "account.api-tokens.expires-never": "Sans expiration",
+    "account.api-tokens.expires-years": "{VAR_PLURAL, plural, =1 {Dans 1 an} other {Dans {INTERPOLATION} ans}}",
     "account.api-tokens.loading": "Chargement de la section",
     "account.api-tokens.name-label": "Nom",
     "account.api-tokens.name-placeholder": "Synchronisation GitLab",

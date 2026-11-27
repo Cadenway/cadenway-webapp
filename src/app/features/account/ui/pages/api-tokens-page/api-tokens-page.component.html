@@ -15,7 +15,13 @@
           Personal tokens for the REST API and webhooks. They act with your rights.
         </p>
       </div>
-      <button cwButton type="button" data-testid="token-create" (click)="openCreate()">
+      <button
+        #createButton
+        cwButton
+        type="button"
+        data-testid="token-create"
+        (click)="openCreate()"
+      >
         <ng-icon name="phosphorPlusBold" aria-hidden="true" />
         <ng-container i18n="@@account.api-tokens.create">Create a token</ng-container>
       </button>
@@ -24,42 +30,69 @@
     <cw-table-container class="rounded-lg border border-border">
       <table
         cwTable
+        role="table"
         class="max-md:block md:min-w-[640px]"
         aria-label="Personal access tokens"
         i18n-aria-label="@@account.api-tokens.table"
       >
-        <thead cwTableHeader class="max-md:hidden">
-          <tr cwTableRow>
-            <th cwTableHead i18n="@@account.api-tokens.column-name">Name</th>
-            <th cwTableHead class="w-48" i18n="@@account.api-tokens.column-scopes">Scopes</th>
-            <th cwTableHead class="w-28" i18n="@@account.api-tokens.column-last-used">Last used</th>
-            <th cwTableHead class="w-28" i18n="@@account.api-tokens.column-expires">Expires</th>
-            <th cwTableHead class="w-24">
+        <thead cwTableHeader role="rowgroup" class="max-md:hidden">
+          <tr cwTableRow role="row">
+            <th cwTableHead role="columnheader" i18n="@@account.api-tokens.column-name">Name</th>
+            <th
+              cwTableHead
+              role="columnheader"
+              class="w-48"
+              i18n="@@account.api-tokens.column-scopes"
+            >
+              Scopes
+            </th>
+            <th
+              cwTableHead
+              role="columnheader"
+              class="w-28"
+              i18n="@@account.api-tokens.column-last-used"
+            >
+              Last used
+            </th>
+            <th
+              cwTableHead
+              role="columnheader"
+              class="w-28"
+              i18n="@@account.api-tokens.column-expires"
+            >
+              Expires
+            </th>
+            <th cwTableHead role="columnheader" class="w-24">
               <span class="sr-only" i18n="@@account.api-tokens.column-actions">Actions</span>
             </th>
           </tr>
         </thead>
-        <tbody cwTableBody class="max-md:block">
+        <tbody cwTableBody role="rowgroup" class="max-md:block">
           @for (token of tokens; track token.id) {
             <tr
               cwTableRow
+              role="row"
               class="max-md:flex max-md:h-auto max-md:flex-wrap max-md:items-center max-md:gap-x-3 max-md:gap-y-1.5 max-md:p-3"
               data-testid="token-row"
             >
-              <td cwTableCell class="py-2 max-md:block max-md:basis-full max-md:p-0">
+              <td cwTableCell role="cell" class="py-2 max-md:block max-md:basis-full max-md:p-0">
                 <span class="flex min-w-0 flex-col">
                   <span class="truncate leading-5 font-medium">{{ token.name }}</span>
                   <span class="font-mono text-xs text-muted-foreground">{{ token.prefix }}</span>
                 </span>
               </td>
-              <td cwTableCell class="py-2 max-md:block max-md:p-0">
+              <td cwTableCell role="cell" class="py-2 max-md:block max-md:p-0">
                 <span class="flex flex-wrap gap-1">
                   @for (scope of token.scopes; track scope) {
                     <span cwBadge variant="outline" size="sm" class="font-mono">{{ scope }}</span>
                   }
                 </span>
               </td>
-              <td cwTableCell class="text-xs text-muted-foreground max-md:block max-md:p-0">
+              <td
+                cwTableCell
+                role="cell"
+                class="text-xs text-muted-foreground max-md:block max-md:p-0"
+              >
                 @switch (token.lastUse.kind) {
                   @case ('never') {
                     <ng-container i18n="@@account.api-tokens.used-never">Never</ng-container>
@@ -90,6 +123,7 @@
               </td>
               <td
                 cwTableCell
+                role="cell"
                 class="text-xs max-md:block max-md:p-0"
                 [class.text-grenat-text]="token.expiry.soon"
                 [class.text-muted-foreground]="!token.expiry.soon"
@@ -108,13 +142,21 @@
                       other {In {{ left }} days}
                     }</ng-container>
                   }
+                  @case ('years') {
+                    @let years = countOf(token.expiry);
+                    <ng-container i18n="@@account.api-tokens.expires-years">{years, plural,
+                      =1 {In 1 year}
+                      other {In {{ years }} years}
+                    }</ng-container>
+                  }
                   @case ('date') {
                     {{ dateLabel(token.expiry) }}
                   }
                 }
               </td>
-              <td cwTableCell class="text-right max-md:ml-auto max-md:block max-md:p-0">
+              <td cwTableCell role="cell" class="text-right max-md:ml-auto max-md:block max-md:p-0">
                 <button
+                  #revokeButton
                   cwButton
                   type="button"
                   variant="ghost"
@@ -130,8 +172,8 @@
               </td>
             </tr>
           } @empty {
-            <tr cwTableRow class="hover:bg-transparent max-md:block max-md:h-auto">
-              <td cwTableCell colspan="5" class="max-md:block max-md:p-0">
+            <tr cwTableRow role="row" class="hover:bg-transparent max-md:block max-md:h-auto">
+              <td cwTableCell role="cell" colspan="5" class="max-md:block max-md:p-0">
                 <cw-empty size="sm" data-testid="tokens-empty">
                   <cw-empty-header>
                     <cw-empty-media>
@@ -213,6 +255,7 @@
   (submitted)="create($event)"
   (copyRequested)="copySecret()"
   (dismissed)="closeCreate()"
+  (detached)="forgetSecret()"
 />
 
 @let target = revokeTarget();

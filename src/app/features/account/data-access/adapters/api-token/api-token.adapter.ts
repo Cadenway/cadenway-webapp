@@ -54,11 +54,12 @@ const RECENT_USE_DAYS: number = 60;
  * Constant NEAR_EXPIRY_DAYS
  *
  * @description
- * Within how many days an expiry is counted in days; a later one shows its date.
+ * Up to how many days an expiry is counted in days: the longest day option of the create dialog
+ * (`90 days`, `Compte.dc.html` line 815).
  *
  * @type {number}
  */
-const NEAR_EXPIRY_DAYS: number = 30;
+const NEAR_EXPIRY_DAYS: number = 90;
 
 /**
  * Constant SOON_DAYS
@@ -113,11 +114,32 @@ export function toLastUse(lastUsedAt: string | null, now: number): ApiTokenLastU
 }
 
 /**
+ * Function wholeYearsAhead
+ *
+ * @description
+ * How many whole years separate two instants when the later one falls on the same calendar day
+ * and month as the earlier one, in the person's time zone.
+ *
+ * @param {number} from - The earlier instant, in milliseconds.
+ * @param {number} to - The later instant, in milliseconds.
+ * @returns {number} The years, or 0 when the dates do not line up.
+ */
+function wholeYearsAhead(from: number, to: number): number {
+  const start: Date = new Date(from);
+  const end: Date = new Date(to);
+  const years: number = end.getFullYear() - start.getFullYear();
+  return years > 0 && end.getMonth() === start.getMonth() && end.getDate() === start.getDate()
+    ? years
+    : 0;
+}
+
+/**
  * Function toExpiry
  *
  * @description
- * Words when a token stops working relative to now: never, in days (at least 1, rounded up)
- * within 30 days, then its date; within 7 days it is `soon`.
+ * Words when a token stops working relative to now: never; in days (at least 1, rounded up) up
+ * to 90 days; in years when it falls on today's date a whole number of years ahead; otherwise its
+ * date. Within 7 days it is `soon`.
  *
  * @param {string | null} expiresAt - The expiry, ISO 8601, or null for a token without one.
  * @param {number} now - The current instant, in milliseconds.
@@ -128,8 +150,10 @@ export function toExpiry(expiresAt: string | null, now: number): ApiTokenExpiry 
   const time: number = Date.parse(expiresAt);
   if (Number.isNaN(time)) return { kind: 'never', soon: false };
   const days: number = Math.max(1, Math.ceil((time - now) / DAY_MS));
-  return days <= NEAR_EXPIRY_DAYS
-    ? { kind: 'days', count: days, soon: days <= SOON_DAYS }
+  if (days <= NEAR_EXPIRY_DAYS) return { kind: 'days', count: days, soon: days <= SOON_DAYS };
+  const years: number = wholeYearsAhead(now, time);
+  return years > 0
+    ? { kind: 'years', count: years, soon: false }
     : { kind: 'date', date: calendarDate(time), soon: false };
 }
 

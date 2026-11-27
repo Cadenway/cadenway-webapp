@@ -28,7 +28,7 @@ const gitlab: ApiTokenDto = {
   scopes: ['tasks:read', 'tasks:write'],
   organizationId: 'o1',
   createdAt: '2026-10-14T09:00:00Z',
-  expiresAt: '2027-01-12T09:00:00Z',
+  expiresAt: '2027-03-12T09:00:00Z',
   lastUsedAt: '2026-11-27T09:55:00Z',
 };
 
@@ -40,7 +40,7 @@ describe('api-token adapter', () => {
       prefix: 'cw_pat_4c1e…',
       scopes: ['tasks:read', 'tasks:write'],
       lastUse: { kind: 'minutes', count: 5 },
-      expiry: { kind: 'date', date: '2027-01-12', soon: false },
+      expiry: { kind: 'date', date: '2027-03-12', soon: false },
     });
   });
 
@@ -57,8 +57,11 @@ describe('api-token adapter', () => {
   it.each([
     [null, { kind: 'never', soon: false }],
     ['2026-12-03T10:00:00Z', { kind: 'days', count: 6, soon: true }],
-    ['2026-12-27T10:00:00Z', { kind: 'days', count: 30, soon: false }],
-    ['2027-01-12T09:00:00Z', { kind: 'date', date: '2027-01-12', soon: false }],
+    ['2027-02-25T10:00:00Z', { kind: 'days', count: 90, soon: false }],
+    ['2027-11-27T10:00:00Z', { kind: 'years', count: 1, soon: false }],
+    ['2028-11-27T10:00:00Z', { kind: 'years', count: 2, soon: false }],
+    ['2027-03-12T09:00:00Z', { kind: 'date', date: '2027-03-12', soon: false }],
+    ['2027-11-28T10:00:00Z', { kind: 'date', date: '2027-11-28', soon: false }],
   ] as const)('words an expiry at %s', (expiresAt: string | null, expected: object) => {
     expect(toExpiry(expiresAt, NOW)).toEqual(expected);
   });

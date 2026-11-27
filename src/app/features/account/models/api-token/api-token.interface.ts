@@ -39,15 +39,18 @@ export type ApiTokenLastUse =
  * Type ApiTokenExpiry
  *
  * @description
- * When a token stops working, as the `Expires` column words it: never, in a number of days (at
- * least 1) within 30 days, or on a date (`date`, `YYYY-MM-DD`) beyond. `soon` marks a token that
- * expires within 7 days, which the column shows in grenat (`Compte.dc.html` line 1487).
+ * When a token stops working, as the `Expires` column words it: never; in a number of days (at
+ * least 1) up to 90, the longest day option of the create dialog; in a number of years when it
+ * falls on today's calendar date a whole number of years ahead (the `1 year` option); otherwise
+ * on a date (`date`, `YYYY-MM-DD`). `soon` marks a token that expires within 7 days, which the
+ * column shows in grenat (`Compte.dc.html` lines 815 and 1487).
  *
- * @type {{ readonly kind: 'never'; readonly soon: false } | { readonly kind: 'days'; readonly count: number; readonly soon: boolean } | { readonly kind: 'date'; readonly date: string; readonly soon: false }}
+ * @type {{ readonly kind: 'never'; readonly soon: false } | { readonly kind: 'days'; readonly count: number; readonly soon: boolean } | { readonly kind: 'years'; readonly count: number; readonly soon: false } | { readonly kind: 'date'; readonly date: string; readonly soon: false }}
  */
 export type ApiTokenExpiry =
   | { readonly kind: 'never'; readonly soon: false }
   | { readonly kind: 'days'; readonly count: number; readonly soon: boolean }
+  | { readonly kind: 'years'; readonly count: number; readonly soon: false }
   | { readonly kind: 'date'; readonly date: string; readonly soon: false };
 
 /**

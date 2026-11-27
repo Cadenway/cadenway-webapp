@@ -9,7 +9,7 @@ import {
   withState,
 } from '@ngrx/signals';
 
-import { readProblem } from '@core/api';
+import { hasProblemCode, OrganizationSwitchPendingError, readProblem } from '@core/api';
 import {
   WORKSPACE_CONTEXT,
   type WorkspaceContextPort,
@@ -74,6 +74,30 @@ interface ApiTokensState {
  * @type {ApiTokensState}
  */
 const initialState: ApiTokensState = { secret: null, creating: false, revokingId: null };
+
+/**
+ * Class OrganizationChangedError
+ *
+ * @description
+ * The workspace now shows another organization than the one a write started in: the write is
+ * not sent, and nothing is shown.
+ */
+class OrganizationChangedError extends Error {
+  // #region Constructor
+  /**
+   * Constructor
+   *
+   * @description
+   * Names the error.
+   *
+   * @constructor
+   */
+  public constructor() {
+    super('The organization changed before the request was sent.');
+    this.name = 'OrganizationChangedError';
+  }
+  // #endregion
+}
 
 /**
  * Interface ApiTokensStoreInstance
@@ -146,9 +170,13 @@ interface ApiTokensStoreInstance {
    * Method create
    *
    * @description
-   * Creates a token through the reauthentication service. On success the token heads the list
-   * and `secret` holds its secret. A closed reauthentication dialog creates nothing and shows
-   * nothing; any other refusal shows the failure toast. Ignored while a creation runs.
+   * Creates a token through the reauthentication service, in the organization the workspace shows
+   * when it starts. Before each send, the retry after a reauthentication included, it checks that
+   * the workspace still shows that organization and otherwise stops silently; the organization pin
+   * makes the gateway refuse a session switched by another tab (`412`), which stops silently too.
+   * On success `secret` holds the secret, and the token heads the list when the organization is
+   * unchanged. A closed reauthentication dialog creates nothing and shows nothing; any other
+   * refusal shows the failure toast. Ignored while a creation runs.
    *
    * @param {ApiTokenDraft} draft - What the dialog submitted.
    * @returns {Promise<void>} Resolves once settled.
@@ -167,14 +195,18 @@ interface ApiTokensStoreInstance {
    * Method revoke
    *
    * @description
-   * Revokes a token. On success, or when the gateway no longer knows it (`404`), it leaves the
-   * list and the `Token revoked` toast names it; any other refusal keeps it and shows the failure
-   * toast. Ignored while a revocation runs.
+   * Revokes a token in the organization the workspace shows when it starts. It is not sent, and
+   * nothing is shown, when the token is no longer in the list shown (the list was read again for
+   * another organization) or the workspace shows another organization by then; a refusal of the
+   * organization pin (`412`) stops silently too. On success, or on `404 api-token.not-found` while
+   * the organization is unchanged, the `Token revoked` toast names it and it leaves the list when
+   * the organization is unchanged; any other refusal keeps it and shows the failure toast. Ignored
+   * while a revocation runs.
    *
    * @param {ApiToken} token - The token.
-   * @returns {Promise<void>} Resolves once settled.
+   * @returns {Promise<boolean>} Whether the token left the list.
    */
-  revoke(token: ApiToken): Promise<void>;
+  revoke(token: ApiToken): Promise<boolean>;
   // #endregion
 }
 
@@ -201,7 +233,8 @@ function createApiTokensStore(): Type<ApiTokensStoreInstance> {
           params: (): { organizationId: string } => ({
             organizationId: workspace.organization().id,
           }),
-          loader: (): Promise<readonly ApiToken[]> => api.list(),
+          loader: ({ abortSignal }: { abortSignal: AbortSignal }): Promise<readonly ApiToken[]> =>
+            api.list(abortSignal),
         }),
       };
     }),
@@ -210,15 +243,27 @@ function createApiTokensStore(): Type<ApiTokensStoreInstance> {
     })),
     withMethods((store) => {
       const organizationId: () => string = (): string => store._workspace.organization().id;
+      const ensureOrganization: (organization: string) => void = (organization: string): void => {
+        if (organization !== organizationId()) throw new OrganizationChangedError();
+      };
+      const mismatched: (error: unknown, organization: string) => boolean = (
+        error: unknown,
+        organization: string,
+      ): boolean =>
+        error instanceof OrganizationChangedError ||
+        error instanceof OrganizationSwitchPendingError ||
+        hasProblemCode(error, 'organization.context-changed') ||
+        organization !== organizationId();
       const update: (
         organization: string,
         change: (tokens: readonly ApiToken[]) => readonly ApiToken[],
-      ) => void = (
+      ) => boolean = (
         organization: string,
         change: (tokens: readonly ApiToken[]) => readonly ApiToken[],
-      ): void => {
-        if (organization !== organizationId() || !store.tokens.hasValue()) return;
+      ): boolean => {
+        if (organization !== organizationId() || !store.tokens.hasValue()) return false;
         store.tokens.set(change(store.tokens.value()));
+        return true;
       };
       return {
         async create(draft: ApiTokenDraft): Promise<void> {
@@ -226,14 +271,16 @@ function createApiTokensStore(): Type<ApiTokensStoreInstance> {
           const organization: string = organizationId();
           patchState(store, { creating: true });
           try {
-            const created: CreatedApiToken = await store._reauthentication.run(() =>
-              store._api.create(draft),
-            );
+            const created: CreatedApiToken = await store._reauthentication.run(() => {
+              ensureOrganization(organization);
+              return store._api.create(draft);
+            });
             update(organization, (tokens: readonly ApiToken[]) => [created.token, ...tokens]);
             patchState(store, { creating: false, secret: created.secret });
           } catch (error: unknown) {
             patchState(store, { creating: false });
-            if (error instanceof ReauthenticationCancelledError) return;
+            if (error instanceof ReauthenticationCancelledError || mismatched(error, organization))
+              return;
             store._toasts.error(
               $localize`:@@account.api-tokens.create-failed:The token could not be created`,
               {
@@ -245,31 +292,41 @@ function createApiTokensStore(): Type<ApiTokensStoreInstance> {
         dismissSecret(): void {
           patchState(store, { secret: null });
         },
-        async revoke(token: ApiToken): Promise<void> {
-          if (store.revokingId() !== null) return;
+        async revoke(token: ApiToken): Promise<boolean> {
+          const listed: boolean =
+            store.tokens.hasValue() &&
+            store.tokens.value().some((item: ApiToken): boolean => item.id === token.id);
+          if (store.revokingId() !== null || !listed) return false;
           const organization: string = organizationId();
           patchState(store, { revokingId: token.id });
           try {
+            ensureOrganization(organization);
             await store._api.revoke(token.id);
           } catch (error: unknown) {
-            if (readProblem(error)?.status !== 404) {
+            const gone: boolean =
+              readProblem(error)?.status === 404 &&
+              hasProblemCode(error, 'api-token.not-found') &&
+              organization === organizationId();
+            if (!gone) {
               patchState(store, { revokingId: null });
-              store._toasts.error(
-                $localize`:@@account.api-tokens.revoke-failed:The token could not be revoked`,
-                {
-                  description: $localize`:@@account.api-tokens.revoke-failed-text:It still works. Try again in a moment.`,
-                },
-              );
-              return;
+              if (!mismatched(error, organization))
+                store._toasts.error(
+                  $localize`:@@account.api-tokens.revoke-failed:The token could not be revoked`,
+                  {
+                    description: $localize`:@@account.api-tokens.revoke-failed-text:It still works. Try again in a moment.`,
+                  },
+                );
+              return false;
             }
           }
-          update(organization, (tokens: readonly ApiToken[]) =>
+          const removed: boolean = update(organization, (tokens: readonly ApiToken[]) =>
             tokens.filter((item: ApiToken): boolean => item.id !== token.id),
           );
           patchState(store, { revokingId: null });
           store._toasts.success($localize`:@@account.api-tokens.revoked:Token revoked`, {
             description: $localize`:@@account.api-tokens.revoked-text:${token.name}:name: can no longer call the API.`,
           });
+          return removed;
         },
       };
     }),

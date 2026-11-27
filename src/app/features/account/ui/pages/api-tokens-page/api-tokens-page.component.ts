@@ -1,11 +1,15 @@
+import { Dialog, type DialogRef } from '@angular/cdk/dialog';
 import { DOCUMENT, formatDate } from '@angular/common';
 import {
   Component,
   computed,
+  ElementRef,
   inject,
   LOCALE_ID,
   type Signal,
   signal,
+  viewChild,
+  viewChildren,
   type WritableSignal,
 } from '@angular/core';
 import {
@@ -39,6 +43,7 @@ import {
 } from '@cadenway/ui/components/table';
 import { CwToastService } from '@cadenway/ui/components/toast';
 import { NgIcon } from '@ng-icons/core';
+import { take } from 'rxjs';
 
 import type {
   ApiToken,
@@ -62,10 +67,13 @@ import { TokenCreateDialog } from '../../dialogs/token-create-dialog/token-creat
  * rule): no header row, the name on its own line, `Revoke` pushed to the end. The mockup's API
  * usage strip waits for the call counters of billing (gap B15) and is left out. `Create a token`
  * opens `TokenCreateDialog`; the store creates through the reauthentication service and the
- * dialog then shows the secret once; closing the dialog forgets the secret. `Copy the token`
- * confirms with `Token copied`, or `Copy failed` when the clipboard refuses. `Revoke` asks
- * through `cw-alert-dialog`, typing the token's name, and its button spins while the gateway
- * answers.
+ * dialog then shows the secret once; the secret step stays on screen while the dialog leaves and
+ * the secret is forgotten once it left. `Copy the token` confirms with `Token copied`, or `Copy
+ * failed` when the clipboard refuses. `Revoke` asks through `cw-alert-dialog`, typing the token's
+ * name, and its button spins while the gateway answers; once a revoked row left and the
+ * confirmation closed, focus moves to the `Revoke` of the row that took its place (or the one
+ * before it), or to the header's `Create a token` when no token is left. The table carries
+ * explicit table, row, column header and cell roles, which its card layout would otherwise lose.
  */
 @Component({
   selector: 'cw-api-tokens-page',
@@ -195,6 +203,56 @@ export class ApiTokensPage {
   protected readonly revoking: Signal<boolean> = computed(
     (): boolean => this.store.revokingId() !== null,
   );
+
+  /**
+   * Property dialogs
+   *
+   * @description
+   * The CDK dialogs under `cw-alert-dialog`, watched to learn when the revoke confirmation has
+   * closed and given focus back, since the brick reports no such moment.
+   *
+   * @type {Dialog}
+   * @readonly
+   */
+  private readonly dialogs: Dialog = inject(Dialog);
+
+  /**
+   * Property revokeRef
+   *
+   * @description
+   * The open revoke confirmation, or null.
+   *
+   * @type {DialogRef | null}
+   */
+  private revokeRef: DialogRef | null = null;
+
+  /**
+   * Property createButton
+   *
+   * @description
+   * The header's `Create a token`, which takes focus when the last token is revoked.
+   *
+   * @type {Signal<ElementRef<HTMLButtonElement> | undefined>}
+   * @readonly
+   */
+  private readonly createButton: Signal<ElementRef<HTMLButtonElement> | undefined> = viewChild(
+    'createButton',
+    { read: ElementRef },
+  );
+
+  /**
+   * Property revokeButtons
+   *
+   * @description
+   * The rows' `Revoke` buttons, in the list's order.
+   *
+   * @type {Signal<readonly ElementRef<HTMLButtonElement>[]>}
+   * @readonly
+   */
+  private readonly revokeButtons: Signal<readonly ElementRef<HTMLButtonElement>[]> = viewChildren(
+    'revokeButton',
+    { read: ElementRef },
+  );
   // #endregion
 
   // #region Methods
@@ -226,10 +284,19 @@ export class ApiTokensPage {
    * Method closeCreate
    *
    * @description
-   * Closes the create dialog and forgets the secret it showed.
+   * Closes the create dialog; the secret stays until it has left the screen.
    */
   protected closeCreate(): void {
     this.createOpen.set(false);
+  }
+
+  /**
+   * Method forgetSecret
+   *
+   * @description
+   * Forgets the secret once the closed create dialog left the screen.
+   */
+  protected forgetSecret(): void {
     this.store.dismissSecret();
   }
 
@@ -269,6 +336,10 @@ export class ApiTokensPage {
    */
   protected askRevoke(token: ApiToken): void {
     this.revokeTarget.set(token);
+    this.revokeRef = null;
+    this.dialogs.afterOpened.pipe(take(1)).subscribe((ref: DialogRef): void => {
+      this.revokeRef = ref;
+    });
     this.revokeOpen.set(true);
   }
 
@@ -277,15 +348,41 @@ export class ApiTokensPage {
    *
    * @description
    * Revokes the confirmed token, then closes the confirmation, whatever the gateway answered (the
-   * store's toast says which).
+   * store's toast says which). When the row left, focus moves on once the confirmation closed.
    *
    * @returns {Promise<void>} Resolves once settled.
    */
   protected async confirmRevoke(): Promise<void> {
     const token: ApiToken | null = this.revokeTarget();
     if (token === null) return;
-    await this.store.revoke(token);
+    const index: number = (this.store.tokens.value() ?? []).findIndex(
+      (item: ApiToken): boolean => item.id === token.id,
+    );
+    const removed: boolean = await this.store.revoke(token);
+    const ref: DialogRef | null = this.revokeRef;
+    if (removed && ref !== null)
+      ref.closed.pipe(take(1)).subscribe((): void => {
+        this.focusAfterRevoke(index);
+      });
     this.revokeOpen.set(false);
+  }
+
+  /**
+   * Method focusAfterRevoke
+   *
+   * @description
+   * Gives focus to the `Revoke` now at the revoked row's place, or the one before it, or the
+   * header's `Create a token` when no row is left.
+   *
+   * @param {number} index - Where the revoked row was.
+   */
+  private focusAfterRevoke(index: number): void {
+    const buttons: readonly ElementRef<HTMLButtonElement>[] = this.revokeButtons();
+    const target: ElementRef<HTMLButtonElement> | undefined =
+      buttons.length > 0
+        ? buttons[Math.min(Math.max(index, 0), buttons.length - 1)]
+        : this.createButton();
+    target?.nativeElement.focus();
   }
 
   /**

@@ -4,7 +4,7 @@ import {
   type ApiTokenPage as ApiTokenPageDto,
   ApiTokensService,
 } from '@cadenway/api-client';
-import { firstValueFrom } from 'rxjs';
+import { firstValueFrom, fromEvent, type Observable, takeUntil } from 'rxjs';
 
 import type {
   ApiToken,
@@ -34,6 +34,47 @@ const PAGE_SIZE: number = 100;
 const MAX_PAGES: number = 20;
 
 /**
+ * Class IncompleteTokenListError
+ *
+ * @description
+ * The gateway's cursor did not end within `MAX_PAGES` pages, or came back to a page already read.
+ * The list is then refused rather than shown partly as if it were complete, so the page shows its
+ * error with `Retry`.
+ */
+export class IncompleteTokenListError extends Error {
+  // #region Constructor
+  /**
+   * Constructor
+   *
+   * @description
+   * Names the error.
+   *
+   * @constructor
+   */
+  public constructor() {
+    super('The token list did not end.');
+    this.name = 'IncompleteTokenListError';
+  }
+  // #endregion
+}
+
+/**
+ * Function abortable
+ *
+ * @description
+ * Waits for the first answer of a request, which the signal cancels.
+ *
+ * @template T
+ * @param {Observable<T>} source - The request.
+ * @param {AbortSignal | undefined} signal - Cancels a superseded read.
+ * @returns {Promise<T>} The answer.
+ */
+function abortable<T>(source: Observable<T>, signal?: AbortSignal): Promise<T> {
+  signal?.throwIfAborted();
+  return firstValueFrom(signal ? source.pipe(takeUntil(fromEvent(signal, 'abort'))) : source);
+}
+
+/**
  * Service ApiTokensApi
  *
  * @description
@@ -61,25 +102,33 @@ export class ApiTokensApi {
    * Method list
    *
    * @description
-   * Reads every active token, the most recently created first, following the cursor.
+   * Reads every active token, the most recently created first, following the cursor. It rejects
+   * with `IncompleteTokenListError` rather than return part of the list when the cursor does not
+   * end within 20 pages or repeats, and stops when the signal aborts.
    *
+   * @param {AbortSignal | undefined} signal - Cancels a superseded read.
    * @returns {Promise<readonly ApiToken[]>} The tokens.
+   * @throws {IncompleteTokenListError} When the cursor does not end.
    */
-  public async list(): Promise<readonly ApiToken[]> {
+  public async list(signal?: AbortSignal): Promise<readonly ApiToken[]> {
     const tokens: ApiToken[] = [];
+    const seen: Set<string> = new Set<string>();
     let cursor: string | undefined;
     for (let page: number = 0; page < MAX_PAGES; page += 1) {
-      const answer: ApiTokenPageDto = await firstValueFrom(
+      const answer: ApiTokenPageDto = await abortable(
         this.tokens.listApiTokens(
           cursor === undefined ? { limit: PAGE_SIZE } : { cursor, limit: PAGE_SIZE },
         ),
+        signal,
       );
       const now: number = Date.now();
       tokens.push(...answer.items.map((token) => toApiToken(token, now)));
-      if (answer.nextCursor === null) break;
+      if (answer.nextCursor === null) return tokens;
+      if (seen.has(answer.nextCursor)) throw new IncompleteTokenListError();
+      seen.add(answer.nextCursor);
       cursor = answer.nextCursor;
     }
-    return tokens;
+    throw new IncompleteTokenListError();
   }
 
   /**

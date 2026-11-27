@@ -149,11 +149,32 @@ describe('TokenCreateDialog', () => {
       dialog()?.querySelector<HTMLInputElement>('[data-testid="token-secret"]') ?? null;
     expect(field?.value).toBe(secret);
     expect(field?.readOnly).toBe(true);
+    await vi.waitFor(() => {
+      expect(document.activeElement).toBe(field);
+    });
 
     byTestId('token-copy')?.click();
     byTestId('token-done')?.click();
 
     expect(copies).toBe(1);
     expect(dismissed).toBe(1);
+  });
+
+  it('reports that it detached only once the closed dialog left the screen', async () => {
+    let detached: number = 0;
+    fixture.componentInstance.detached.subscribe(() => {
+      detached += 1;
+      expect(dialog()).toBeNull();
+    });
+    fixture.componentRef.setInput('secret', `cw_pat_${'F'.repeat(36)}`);
+    await fixture.whenStable();
+    expect(detached).toBe(0);
+
+    fixture.componentRef.setInput('open', false);
+
+    await vi.waitFor(async () => {
+      await fixture.whenStable();
+      expect(detached).toBe(1);
+    });
   });
 });
