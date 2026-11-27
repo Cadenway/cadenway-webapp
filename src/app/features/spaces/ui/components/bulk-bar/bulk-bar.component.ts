@@ -10,9 +10,7 @@ import {
 } from '@cadenway/ui/components/menu';
 import { NgIcon } from '@ng-icons/core';
 
-import type { MoveTarget } from '../../../models/view-task-write/view-task-write.interface';
-
-export type { MoveTarget } from '../../../models/view-task-write/view-task-write.interface';
+import type { TaskMoveTarget } from '@features/task';
 
 /**
  * Interface BulkPerson
@@ -237,10 +235,12 @@ export class BulkBar {
    * @description
    * Lists the selection may move to.
    *
-   * @type {InputSignal<readonly MoveTarget[]>}
+   * @type {InputSignal<readonly TaskMoveTarget[]>}
    * @readonly
    */
-  public readonly targets: InputSignal<readonly MoveTarget[]> = input<readonly MoveTarget[]>([]);
+  public readonly targets: InputSignal<readonly TaskMoveTarget[]> = input<
+    readonly TaskMoveTarget[]
+  >([]);
 
   /**
    * Property pending

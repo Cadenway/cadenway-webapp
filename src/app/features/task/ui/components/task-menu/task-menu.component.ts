@@ -29,18 +29,16 @@ import { CwStatusIcon } from '@cadenway/ui/components/status-icon';
 import { NgIcon } from '@ng-icons/core';
 
 import {
-  isMilestoneStatus,
   MILESTONE_STATUS_HINTS,
-  type Person,
-  pickableStatuses,
   PRIORITY_LABELS,
   STATUS_CATEGORY_LABELS,
   STATUS_HINTS,
-  type StatusOption,
-  type TaskSummary,
-} from '@features/task';
-
-import type { MoveTarget } from '../../../models/view-task-write/view-task-write.interface';
+} from '../../../constants/task-copy/task-copy.constants';
+import type { Person } from '../../../models/person/person.interface';
+import type { StatusOption } from '../../../models/status-option/status-option.interface';
+import type { TaskMoveTarget } from '../../../models/task-move-target/task-move-target.interface';
+import type { TaskSummary } from '../../../models/task-summary/task-summary.interface';
+import { isMilestoneStatus, pickableStatuses } from '../../../utils/task-status/task-status.util';
 
 /**
  * Constant PRIORITY_ORDER
@@ -106,7 +104,8 @@ interface StatusMenuGroup {
  * `Assign` (ticked when every task has the person; `(me)` after the signed-in member),
  * `Move to` (the lists not every task already sits in), `Remind me tomorrow morning`,
  * `Duplicate`, `Copy the link`, `Copy the identifier` and `Delete`. Presentational: it emits
- * what was picked, and the view writes it (`ViewTaskWritesStore`). It renders nothing in place:
+ * what was picked, and the view writes it (Spaces' `ViewTaskWritesStore` in a list view,
+ * `TaskRowActionsStore` on a page whose rows belong to no list). It renders nothing in place:
  * the view opens `menu()` from its own triggers (`[cwContextMenuTriggerFor]="taskMenu.menu()"`,
  * right click, Menu key, Shift F10 or long press) and sets `tasks` when one opens.
  */
@@ -194,10 +193,12 @@ export class TaskMenu {
    * The lists the tasks may move to; those every task already sits in are left out, and
    * `Move to` is disabled when none is left.
    *
-   * @type {InputSignal<readonly MoveTarget[]>}
+   * @type {InputSignal<readonly TaskMoveTarget[]>}
    * @readonly
    */
-  public readonly lists: InputSignal<readonly MoveTarget[]> = input<readonly MoveTarget[]>([]);
+  public readonly lists: InputSignal<readonly TaskMoveTarget[]> = input<readonly TaskMoveTarget[]>(
+    [],
+  );
 
   /**
    * Property openRequested
@@ -416,14 +417,14 @@ export class TaskMenu {
    * @description
    * `Move to`: the lists not every task already sits in.
    *
-   * @type {Signal<readonly MoveTarget[]>}
+   * @type {Signal<readonly TaskMoveTarget[]>}
    * @readonly
    */
-  protected readonly targets: Signal<readonly MoveTarget[]> = computed(
-    (): readonly MoveTarget[] => {
+  protected readonly targets: Signal<readonly TaskMoveTarget[]> = computed(
+    (): readonly TaskMoveTarget[] => {
       const tasks: readonly TaskSummary[] = this.tasks();
       return this.lists().filter(
-        (target: MoveTarget): boolean =>
+        (target: TaskMoveTarget): boolean =>
           !tasks.every((task: TaskSummary): boolean => task.listId === target.listId),
       );
     },

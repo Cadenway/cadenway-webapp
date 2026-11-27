@@ -26,6 +26,7 @@ import {
   type TaskBulkSelection,
   type TaskCancellation,
   TaskDetailOpener,
+  type TaskMoveTarget,
   type TaskSummary,
 } from '@features/task';
 import {
@@ -47,7 +48,6 @@ import type { Space, SpaceStatusOption } from '../../models/space/space.interfac
 import type { ListSummary, SpaceOverview } from '../../models/task-list/task-list.interface';
 import type {
   ConfirmedTask,
-  MoveTarget,
   TaskFieldChanges,
   ViewTaskOutcome,
   ViewTaskWriter,
@@ -486,10 +486,10 @@ export interface ViewTaskWritesStoreInstance {
    * @description
    * The other lists of the sidebar, with their icon, their tone and their space (`Move to`).
    *
-   * @type {Signal<readonly MoveTarget[]>}
+   * @type {Signal<readonly TaskMoveTarget[]>}
    * @readonly
    */
-  readonly targets: Signal<readonly MoveTarget[]>;
+  readonly targets: Signal<readonly TaskMoveTarget[]>;
   // #endregion
 
   // #region Methods
@@ -761,18 +761,18 @@ function createViewTaskWritesStore(): Type<ViewTaskWritesStoreInstance> {
           .sort((a: Person, b: Person): number => Number(b.id === me) - Number(a.id === me));
       },
       userId: (): string => store._workspace.user().id,
-      targets: (): readonly MoveTarget[] => {
+      targets: (): readonly TaskMoveTarget[] => {
         if (!store._navigation.spaces.hasValue() || !store._navigation.overviews.hasValue()) {
           return [];
         }
         const overviews: Readonly<Record<string, SpaceOverview>> =
           store._navigation.overviews.value();
         const current: string | null = store._page.listId();
-        return store._navigation.spaces.value().flatMap((space: Space): MoveTarget[] =>
+        return store._navigation.spaces.value().flatMap((space: Space): TaskMoveTarget[] =>
           space.id in overviews
             ? overviews[space.id].lists
                 .filter((summary: ListSummary): boolean => summary.list.id !== current)
-                .map((summary: ListSummary): MoveTarget => ({
+                .map((summary: ListSummary): TaskMoveTarget => ({
                   listId: summary.list.id,
                   name: summary.list.name,
                   spaceName: space.name,
@@ -1140,8 +1140,8 @@ function createViewTaskWritesStore(): Type<ViewTaskWritesStoreInstance> {
           );
           if (moved.length === 0) return;
           const name: string =
-            store.targets().find((target: MoveTarget): boolean => target.listId === listId)?.name ??
-            '';
+            store.targets().find((target: TaskMoveTarget): boolean => target.listId === listId)
+              ?.name ?? '';
           const key: string = moved[0].key;
           void perform(
             moved,

@@ -21,6 +21,7 @@ export type {
   TaskDetailPreview,
   TaskDetailTab,
 } from './models/task-detail/task-detail.interface';
+export type { TaskMoveTarget } from './models/task-move-target/task-move-target.interface';
 export type {
   TaskCancellation,
   TaskStatusChange,
@@ -28,6 +29,10 @@ export type {
 export type { TaskProgress, TaskSummary } from './models/task-summary/task-summary.interface';
 export { TaskCreate } from './services/task-create/task-create.service';
 export { TaskDetailOpener } from './services/task-detail-opener/task-detail-opener.service';
+export {
+  TaskRowActionsStore,
+  type TaskRowActionsStoreInstance,
+} from './state/task-row-actions/task-row-actions.store';
 export {
   STATUS_SETTLE_MS,
   type TaskCancelRequest,
@@ -37,6 +42,8 @@ export {
 } from './state/task-status-changes/task-status-changes.store';
 export { TaskDueDate } from './ui/components/task-due-date/task-due-date.component';
 export { TaskLabelChips } from './ui/components/task-label-chips/task-label-chips.component';
+export { TaskLine, type TaskLineVariant } from './ui/components/task-line/task-line.component';
+export { TaskMenu } from './ui/components/task-menu/task-menu.component';
 export { TaskLabelPicker } from './ui/components/task-label-picker/task-label-picker.component';
 export { TaskPeoplePicker } from './ui/components/task-people-picker/task-people-picker.component';
 export { TaskPriorityPicker } from './ui/components/task-priority-picker/task-priority-picker.component';
