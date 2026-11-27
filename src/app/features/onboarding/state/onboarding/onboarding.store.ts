@@ -104,8 +104,9 @@ interface OnboardingWrite {
    * Property settled
    *
    * @description
-   * Whether a progress read shows the write applied, or makes it moot (a closed assistant, a
-   * dismissed checklist): it is then not sent again.
+   * Whether a progress shows the write applied, or makes it moot (a closed assistant, a
+   * dismissed checklist): it is then not sent, neither when its turn in the queue comes nor again
+   * after a read.
    *
    * @type {(progress: OnboardingProgress) => boolean}
    * @readonly
@@ -634,6 +635,9 @@ function createOnboardingStore(): Type<OnboardingStoreInstance> {
             }
           }
           if (base === null || !live(generation)) throw new OnboardingWriteDroppedError();
+          // A write queued behind another may find its change already shown (the same marker
+          // recorded twice in a row, a presentation already saved): it is not sent again.
+          if (write.settled(base)) return base;
           return attempt(write, base.version, generation, true);
         };
         const run: Promise<OnboardingProgress> = runs.tail.then(task, task);

@@ -641,6 +641,19 @@ describe('OnboardingStore', () => {
       ]);
       expect(store.progress()?.checklist).toMatchObject({ invitationSent: true, boardTried: true });
     });
+
+    it('does not send a marker queued behind the same marker once it is shown', async () => {
+      const store: OnboardingStore = await provisioned();
+      api.updateChecklist.mockResolvedValueOnce({
+        ...progress(5, true),
+        checklist: { ...progress(5, true).checklist, boardTried: true },
+      });
+
+      await Promise.all([store.recordBoardTried(), store.recordBoardTried()]);
+
+      expect(api.updateChecklist).toHaveBeenCalledTimes(1);
+      expect(store.progress()?.checklist.boardTried).toBe(true);
+    });
   });
 
   describe('organization switch', () => {
