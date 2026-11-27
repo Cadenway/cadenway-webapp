@@ -1,0 +1,191 @@
+<cw-dialog
+  #dialog
+  size="screen"
+  [open]="true"
+  [closeOnEscape]="false"
+  [closeOnOverlayClick]="false"
+  [showClose]="false"
+  [pending]="store.finishing()"
+>
+  <div
+    class="flex min-h-full items-start justify-center px-4 py-8 sm:items-center sm:py-10"
+    data-testid="onboarding-wizard"
+  >
+    <div class="flex w-full max-w-xl flex-col gap-6">
+      <div class="flex items-center gap-2">
+        <cw-logo variant="lockup" [size]="24" decorative />
+        <button
+          cwButton
+          type="button"
+          variant="ghost"
+          size="sm"
+          class="ml-auto text-muted-foreground"
+          [disabled]="store.finishing()"
+          (click)="store.skip()"
+          data-testid="onboarding-skip"
+        >
+          <ng-container i18n="@@onboarding.wizard.skip">Set up later</ng-container>
+        </button>
+      </div>
+
+      <cw-stepper
+        variant="segments"
+        ariaLabel="Steps"
+        i18n-ariaLabel="@@onboarding.wizard.steps"
+        [selected]="store.stepIndex()"
+      >
+        @for (step of steps; track step.value) {
+          <cw-step [label]="step.label" />
+        }
+      </cw-stepper>
+
+      <section
+        class="flex flex-col gap-6 rounded-xl border border-border bg-card p-5 sm:p-8"
+        data-testid="onboarding-card"
+      >
+        <div class="flex flex-col gap-1">
+          @if (store.seeded()) {
+            <p class="text-xs font-medium text-muted-foreground" data-testid="onboarding-position">
+              {{ position() }}
+            </p>
+          }
+          <h1
+            #title
+            cdkFocusInitial
+            tabindex="-1"
+            class="text-2xl font-semibold tracking-tight outline-none"
+            [id]="dialog.titleId"
+          >
+            {{ heading() }}
+          </h1>
+          @if (store.seeded()) {
+            <p class="text-sm text-muted-foreground">{{ text() }}</p>
+          }
+        </div>
+
+        @if (store.seeded()) {
+          @switch (store.step()) {
+            @case ('space') {
+              <cw-onboarding-space-step
+                [name]="store.name()"
+                [color]="store.color()"
+                [placeholder]="defaultName"
+                (nameChange)="store.rename($event)"
+                (colorChange)="store.pickColor($event)"
+              />
+            }
+            @case ('preset') {
+              <cw-onboarding-preset-step
+                [preset]="store.preset()"
+                (presetChange)="store.pickPreset($event)"
+              />
+            }
+            @case ('team') {
+              <cw-onboarding-team-step
+                [emails]="store.emails()"
+                [canInvite]="store.canInvite()"
+                [disabled]="store.finishing()"
+                (emailsChange)="store.changeEmails($event)"
+              />
+            }
+            @case ('import') {
+              <cw-onboarding-import-step />
+            }
+          }
+
+          @if (failure(); as message) {
+            <div
+              role="alert"
+              class="flex flex-wrap items-center gap-2 text-sm text-destructive"
+              data-testid="onboarding-finish-error"
+            >
+              <ng-icon
+                name="phosphorWarningCircleFill"
+                class="size-4 shrink-0"
+                aria-hidden="true"
+              />
+              <span class="min-w-0 flex-1">{{ message }}</span>
+              @if (store.failure() === 'unknown') {
+                <button
+                  cwButton
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  (click)="store.finish()"
+                  data-testid="onboarding-finish-retry"
+                >
+                  <ng-container i18n="@@onboarding.wizard.retry">Retry</ng-container>
+                </button>
+              }
+            </div>
+          }
+
+          <div class="flex items-center justify-between gap-2">
+            @if (store.stepIndex() > 0) {
+              <button
+                cwButton
+                type="button"
+                variant="ghost"
+                [disabled]="store.finishing()"
+                (click)="back()"
+                data-testid="onboarding-back"
+              >
+                <ng-icon name="phosphorArrowLeftBold" aria-hidden="true" />
+                <ng-container i18n="@@onboarding.wizard.back">Back</ng-container>
+              </button>
+            }
+            <span class="flex-1"></span>
+            <button
+              cwButton
+              type="button"
+              [loading]="store.finishing()"
+              [disabled]="store.step() === 'space' && store.nameBlank()"
+              (click)="next()"
+              data-testid="onboarding-next"
+            >
+              @switch (store.nextAction()) {
+                @case ('create') {
+                  <ng-container i18n="@@onboarding.wizard.create">Create the space</ng-container>
+                }
+                @case ('skip') {
+                  <ng-container i18n="@@onboarding.wizard.pass">Skip</ng-container>
+                }
+                @default {
+                  <ng-container i18n="@@onboarding.wizard.continue">Continue</ng-container>
+                }
+              }
+              <ng-icon name="phosphorArrowRightBold" aria-hidden="true" />
+            </button>
+          </div>
+        } @else if (onboarding.failed()) {
+          <div
+            role="alert"
+            class="flex flex-wrap items-center gap-2 text-sm text-destructive"
+            data-testid="onboarding-load-error"
+          >
+            <ng-icon name="phosphorWarningCircleFill" class="size-4 shrink-0" aria-hidden="true" />
+            <span class="min-w-0 flex-1" i18n="@@onboarding.wizard.load-failed"
+              >Your setup could not be loaded.</span
+            >
+            <button
+              cwButton
+              type="button"
+              variant="outline"
+              size="sm"
+              (click)="onboarding.reload()"
+              data-testid="onboarding-load-retry"
+            >
+              <ng-container i18n="@@onboarding.wizard.retry">Retry</ng-container>
+            </button>
+          </div>
+        } @else {
+          <div class="flex flex-col gap-3" aria-hidden="true" data-testid="onboarding-loading">
+            <div cwSkeleton class="h-4 w-32"></div>
+            <div cwSkeleton class="h-9 w-full"></div>
+            <div cwSkeleton class="h-7 w-2/3"></div>
+          </div>
+        }
+      </section>
+    </div>
+  </div>
+</cw-dialog>

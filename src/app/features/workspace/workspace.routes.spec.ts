@@ -346,6 +346,25 @@ describe('WORKSPACE_ROUTES', () => {
           provide: MyTasksService,
           useValue: {
             listMyTasks: () => of({ items: [], nextCursor: null, counts: { open: 0, closed: 0 } }),
+            getOnboarding: () =>
+              of({
+                version: 1,
+                wizard: {
+                  status: 'in-progress',
+                  step: 'space',
+                  preset: 'dev',
+                  name: null,
+                  prefix: null,
+                  color: 'violet',
+                },
+                provisioning: null,
+                checklist: {
+                  presentation: 'expanded',
+                  firstTaskCreated: false,
+                  invitationSent: false,
+                  boardTried: false,
+                },
+              }),
             getHome: () =>
               of({
                 stats: { assigned: 0, late: 0, dueToday: 0, done: 0 },
