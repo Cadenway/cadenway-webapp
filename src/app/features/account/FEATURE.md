@@ -34,6 +34,9 @@ parent provides the English texts of `cw-password-strength` and `cw-input-otp` t
   reaches the error boundary below.
 - A failed primary read of a section renders the default error boundary in the shell, titled
   `Could not load this section` by the mounting route's `data`.
+- `profile` (package A1) replaces its stub: the page provides `ProfileStore` and reads the
+  account of the session, with the section skeleton while loading and the route's error boundary
+  for a failed read.
 - `api-tokens` (package A5) replaces its stub: the page provides `ApiTokensStore` and reads the
   person's tokens of the current organization, with the section skeleton while loading, the
   route's error boundary for a failed read and `No active token` for an empty list.
@@ -79,6 +82,13 @@ parent provides the English texts of `cw-password-strength` and `cw-input-otp` t
   `revokeApiToken`) through `data-access/`, and `@cadenway/ui` `alert-dialog`, `badge`,
   `checkbox`, `empty`, `field`, `input-group`, `select`, `skeleton` and `table`.
 
+- Profile: `AuthService` (`getCurrentUser`, `updateCurrentUser`), `AccountService`
+  (`requestEmailChange`, `confirmEmailChange`, `scheduleAccountDeletion`), the avatar operations
+  of `ProfileMediaService` (`getAvatar`, `startAvatarUpload`, `setAvatar`, `deleteAvatar`) and
+  `OrganizationsService.listMyOrganizations`, through `data-access/`; Workspace's
+  `ports/workspace-refresh`; Auth's `SignOut`; `@cadenway/ui` `alert`, `alert-dialog`, `card`,
+  `combobox`, `dialog`, `input-group`, `input-otp`, `radio-group`, `skeleton` and `spinner`.
+
 ## Invariants
 
 - `providePresence()` binds `PRESENCE` to the workspace's `RealtimeConnection` (provided by
@@ -110,8 +120,7 @@ parent provides the English texts of `cw-password-strength` and `cw-input-otp` t
   `409 auth.two-step-not-enabled` switches what it asks for. Operations refused while it is open
   wait for the same confirmation.
 - `profile` keeps unsaved edits through `unsavedChangesGuard`; its page asks with Workspace's
-  `cw-discard-changes-dialog`. The stub has no form, so it never asks yet; package A1 reports its
-  form's dirty state.
+  `cw-discard-changes-dialog` while its form differs from the saved account (see Profile).
 - API tokens, list: it follows the cursor and is read again after an organization switch; a
   cursor that does not end within 20 pages, or repeats, fails the read (error boundary and
   `Retry`) rather than show part of the list. The store keeps its own confirmed writes over the
@@ -182,6 +191,74 @@ parent provides the English texts of `cw-password-strength` and `cw-input-otp` t
 - Known gap: the mockup's `Set a status message` item and the status message under the header are left out,
   since the backend has no status message yet.
 
+### Profile (`profile`, package A1)
+
+- `ProfilePage` provides the page-scoped `ProfileStore` and shows the parts the contract serves
+  (`Compte.dc.html` lines 139-265): `Photo`, `Personal information`, `Status and availability`
+  and `Delete my account`. The status message, its icon, its suggestions and `Clear after`
+  (lines 226-258, gap B3) are not rendered.
+- The read of the account is the primary read, keyed by `WORKSPACE_CONTEXT`'s user; its failure
+  reaches the route's error boundary. It checks, under Auth's shared session lock, that the
+  session still holds that account. The photo is a secondary read keyed by
+  `<account id>:<avatar id>`; its object URL is revoked once replaced, as soon as the account has
+  no photo, and with the page; without a photo, or when its image cannot be read, the round tile
+  shows the initials of the saved name.
+- The draft is kept apart from the saved account it started from. When a read brings a newer
+  account (after a photo change, a stale version, a confirmed address), each field the person
+  changed keeps their edit and every other field takes the new value; a field someone else
+  changed to another value toasts the conflict (instead of the photo's success). The draft starts
+  over only after a successful save, `Cancel`, or for another account. A reread after a write that
+  fails never reaches the error boundary: the last confirmed account and the draft stay, and an
+  alert says the profile could not be refreshed, with `Retry`.
+- `Save` sends only what changed (the name trimmed, an empty display name or job title as `null`)
+  from the version read (`If-Match`). The form checks the contract's rules first (a name of 1 to
+  120 characters, a display name of 60 at most, a job title of 120 at most, a time zone); an
+  invalid submit shows the errors and focuses the first. A `400 request.invalid` issue on a field
+  shows on it; `412 request.version-mismatch` reads the account again, merges and toasts the
+  conflict; a save whose answer is lost (no status, `408`, `5xx`) reads the account again and
+  counts as saved when it holds the change. A successful save, like a confirmed address, asks
+  Workspace to verify the person again (`WORKSPACE_REFRESH`), so the shell shows the new name.
+- `Time zone` is a searchable `cw-combobox` of every IANA zone the browser knows (plus the saved
+  one), each labelled with its current offset as the mockup writes it (`Europe/Paris (UTC+1)`).
+  The address shows read-only with a static `Verified` badge: the contract has no verification
+  flag, and an unverified address cannot sign in.
+- The photo applies at once: a PNG, JPEG or WebP of 1 byte to 5 MiB is reserved
+  (`Idempotency-Key`), sent to its signed destination with its fields first, then published with
+  `If-Match`; a transfer that ends without an answer publishes the same upload once before
+  failing. `Remove` deletes it with `If-Match`. Each change then reads the account again. Other
+  types, an empty or too large file and an image storage refuses toast why; once a change ended,
+  the file input takes the focus.
+- One write runs at a time (a save, a photo change, the deletion). Every write is bound to the
+  account shown when it starts and to the page: once either changes it sends nothing more and
+  drops any late answer. The data access also checks, under the exclusive session lock, that the
+  session still holds the account before each write (`AccountChangedError` otherwise). Leaving
+  while a save is on its way waits for it, then leaves once saved or asks once refused.
+- `Status and availability`: four radio cards (`Active`, `Do not disturb`, `Away`, `Invisible`)
+  follow `PRESENCE.ownStatus` (nothing checked while unknown). A pick applies at once and toasts
+  `Status: <presence>`; when `ownStatus` leaves the picked presence without a new pick, an error
+  toast says the gateway refused it. While realtime is off the cards are disabled with a hint.
+- `Change the address` opens `EmailChangeDialog` (lines 593-635), two steps with their bars. The
+  address is checked as the mockup does (format, not the current address), then the code request
+  runs through `ReauthenticationService` (a closed reauthentication keeps the step). The gateway's
+  refusals show on the field: the current address, an address another account uses (kept until
+  it changes) and a throttled address. The second step takes the 3 + 3 code, counts down to the
+  gateway's `resendAvailableAt` before `Resend the code` (which asks again for the same address),
+  and goes back with `Use another address`. A wrong or expired code shows on the field; an address
+  taken meanwhile goes back to the first step with that error; a confirmation whose answer is lost
+  reads the account again and counts as done when it holds the new address.
+- `Delete the account` first reads the person's organizations (every page; a failed read toasts
+  and opens nothing), then asks through `cw-alert-dialog`: `You will leave <n> organizations.` and
+  `<names> must first have another owner.` for those owned, typing the saved name. The deletion
+  runs through the reauthentication; once scheduled (or once a deletion whose answer was lost
+  leaves the account unreadable) the page lets the navigation go without asking and signs out
+  through Auth's `SignOut`, which opens the signed-out screen (`/logged-out?reason=signed-out`,
+  opened directly when the sign-out request fails). `409 account.organization-owner` closes the
+  confirmation and toasts the organizations to hand over, named from `details.organizationIds`.
+  The mockup's count of the API tokens revoked (line 1543) is left out: tokens are listed per
+  organization, so the page cannot count them all.
+- Below 768 px the fields and the status cards take one column; the photo row, the address row
+  and the footer wrap.
+
 ## Copy not taken word for word from the mockup
 
 | Unit                                                                                                                                                                                                                                                                                                                                   | Reason                                                                                         |
@@ -208,3 +285,20 @@ parent provides the English texts of `cw-password-strength` and `cw-input-otp` t
 | `account.labels.*`                                                                                                                                                                                                | Texts of the password strength and one-time code bricks, worded as Auth's.                     |
 | `account.notifications.save-failed`, `account.notifications.save-failed-text`                                                                                                                                     | The mockup draws no refused save; the section saves at once.                                   |
 | `account.user-menu.avatar-unknown`, `account.user-menu.avatar-online`, `account.user-menu.avatar-away`, `account.user-menu.avatar-dnd`, `account.user-menu.avatar-invisible`, `account.user-menu.avatar-disabled` | Texts of the avatar brick, taken from its defaults.                                            |
+
+Profile section (`account.profile.*`):
+
+| Unit                                                                                                                                                                   | Reason                                                                                                                        |
+| ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `name-required`, `name-too-long`, `display-name-too-long`, `job-title-too-long`, `time-zone-invalid`                                                                   | The mockup checks no field.                                                                                                   |
+| `time-zone-placeholder`, `time-zone-search`, `time-zone-empty`, `time-zone-results`                                                                                    | Texts of the combobox brick; the mockup's select has 4 options and no search.                                                 |
+| `save-failed`, `save-failed-text`, `conflict`, `conflict-text`, `photo-conflict-text`                                                                                  | The mockup draws no refused or overtaken save.                                                                                |
+| `photo-too-large`, `photo-too-large-text`, `photo-invalid`, `photo-invalid-text`, `photo-failed`, `photo-failed-text`                                                  | Limits of the contract (`profile-media.yaml`); the mockup draws no refused upload.                                            |
+| `refresh-failed`, `refresh-retry`                                                                                                                                      | The mockup draws no failed reread after a write.                                                                              |
+| `status-failed`, `status-failed-text`, `status-unavailable`                                                                                                            | The mockup draws no refused presence and no state without realtime.                                                           |
+| `email-taken`, `email-throttled`, `code-required`, `code-wrong`, `code-send-failed`, `code-send-failed-text`, `email-change-failed`, `email-change-failed-text`        | Refusals of the contract (`auth.yaml`); `code-wrong` is Auth's wording of the same refusal, `email-throttled` the contract's. |
+| `email-back`                                                                                                                                                           | The mockup's line 626 wording, with an English source distinct from `email-change`.                                           |
+| `delete-leave-one`, `delete-owner-other`                                                                                                                               | The mockup's sentences for one organization left and several owned.                                                           |
+| `delete-check-failed`, `delete-check-failed-text`, `delete-owner-failed`, `delete-owner-failed-text`, `delete-owner-failed-any`, `delete-failed`, `delete-failed-text` | The mockup draws no refused deletion.                                                                                         |
+| `delete-confirm-label`                                                                                                                                                 | The brick shows the name after its label, so the end of the mockup's label (line 750) is left out.                            |
+| `loading`                                                                                                                                                              | The mockup's skeleton label (`Compte.dc.html` line 83), with this id.                                                         |
