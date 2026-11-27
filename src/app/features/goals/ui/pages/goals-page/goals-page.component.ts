@@ -647,7 +647,7 @@ export class GoalsPage {
     const target: GoalView | null = this.deleteTarget();
     if (target === null) return;
     const organization: string = this.organizationId();
-    const removed: boolean = await this.store.remove(target.goal.id);
+    const removed: boolean = await this.store.remove(target.goal.id, target.goal.version);
     if (organization !== this.organizationId()) return;
     this.deleteOpen.set(false);
     if (removed) setTimeout((): void => this.title()?.nativeElement.focus());

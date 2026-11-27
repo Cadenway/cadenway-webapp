@@ -26,6 +26,7 @@ import type {
   KeyResult,
   NumberKeyResult,
 } from '../../models/goal/goal.interface';
+import { GOAL_EDIT_BURST_MS, GOAL_SETTLE_BACKOFF_MS } from './goals-timing.token';
 import { CREATE_ATTEMPTS, GoalsStore, RETRY_DELAY_MS } from './goals.store';
 
 /**
@@ -274,6 +275,34 @@ function deferred<T>(): Deferred<T> {
 }
 
 /**
+ * Function pause
+ *
+ * @description
+ * Waits in real time, so the short bursts and back-offs the spec configures elapse.
+ *
+ * @param {number} ms - The wait, in milliseconds.
+ * @returns {Promise<void>} Resolves once elapsed.
+ */
+function pause(ms: number): Promise<void> {
+  return new Promise<void>((done: () => void): void => {
+    setTimeout(done, ms);
+  });
+}
+
+/**
+ * Function burst
+ *
+ * @description
+ * Lets a burst of clicks end and its value enter the write queue.
+ *
+ * @returns {Promise<void>} Resolves once sent.
+ */
+async function burst(): Promise<void> {
+  await pause(10);
+  await flush();
+}
+
+/**
  * Function flush
  *
  * @description
@@ -294,6 +323,7 @@ async function flush(): Promise<void> {
  * @returns {Promise<void>} Resolves once stable.
  */
 async function settle(): Promise<void> {
+  await pause(10);
   for (let turn: number = 0; turn < 20; turn += 1) await Promise.resolve();
   await TestBed.inject(ApplicationRef).whenStable();
   for (let turn: number = 0; turn < 20; turn += 1) await Promise.resolve();
@@ -366,6 +396,8 @@ describe('GoalsStore', () => {
       providers: [
         GoalsStore,
         { provide: GoalsApi, useValue: api },
+        { provide: GOAL_EDIT_BURST_MS, useValue: 1 },
+        { provide: GOAL_SETTLE_BACKOFF_MS, useValue: [1, 1, 1] },
         { provide: CwToastService, useValue: toasts },
         { provide: WORKSPACE_CONTEXT, useValue: workspace },
         { provide: SPACE_DIRECTORY, useValue: { spaces } },
@@ -541,7 +573,7 @@ describe('GoalsStore', () => {
     store.refresh();
     TestBed.tick();
     store.step('g1', 'k6', 1);
-    await flush();
+    await burst();
     older.resolve(list([goal()]));
     await settle();
 
@@ -667,7 +699,7 @@ describe('GoalsStore', () => {
     api.delete.mockRejectedValueOnce(problem(502));
     api.get.mockResolvedValueOnce(goal());
 
-    expect(await store.remove('g1')).toBe(false);
+    expect(await store.remove('g1', 3)).toBe(false);
 
     expect(store.list()).toHaveLength(1);
     expect(toasts.warning).toHaveBeenCalledWith('The deletion could not be confirmed', {
@@ -680,10 +712,10 @@ describe('GoalsStore', () => {
     api.list.mockResolvedValue(list([goal(), goal({ id: 'g2', name: 'Halve the open bugs' })]));
     const store: InstanceType<typeof GoalsStore> = await loaded();
 
-    expect(await store.remove('g1')).toBe(true);
+    expect(await store.remove('g1', 3)).toBe(true);
     expect(api.delete).toHaveBeenCalledWith('g1', 3);
     api.delete.mockRejectedValueOnce(problem(404, 'goal.not-found'));
-    expect(await store.remove('g2')).toBe(true);
+    expect(await store.remove('g2', 3)).toBe(true);
 
     expect(store.isEmpty()).toBe(true);
     expect(toasts.success).toHaveBeenLastCalledWith('Goal deleted', {
@@ -695,7 +727,7 @@ describe('GoalsStore', () => {
     api.delete.mockRejectedValueOnce(problem(403, 'access.role-insufficient'));
     const store: InstanceType<typeof GoalsStore> = await loaded();
 
-    expect(await store.remove('g1')).toBe(false);
+    expect(await store.remove('g1', 3)).toBe(false);
     expect(store.list()).toHaveLength(1);
     expect(toasts.error).toHaveBeenCalledWith('The goal could not be deleted', {
       description: 'Try again in a moment.',
@@ -728,7 +760,7 @@ describe('GoalsStore', () => {
     const store: InstanceType<typeof GoalsStore> = await loaded();
 
     store.step('g1', 'k6', 1);
-    await flush();
+    await burst();
     store.step('g1', 'k6', 1);
     first.error(problem(403, 'access.role-insufficient'));
     await settle();
@@ -746,7 +778,7 @@ describe('GoalsStore', () => {
     const store: InstanceType<typeof GoalsStore> = await loaded();
 
     store.step('g1', 'k6', 1);
-    await flush();
+    await burst();
     store.step('g1', 'k6', 1);
     store.step('g1', 'k6', 1);
     TestBed.resetTestingModule();
@@ -804,7 +836,7 @@ describe('GoalsStore', () => {
     const store: InstanceType<typeof GoalsStore> = await loaded();
 
     store.step('g1', 'k6', 1);
-    await flush();
+    await burst();
     store.step('g1', 'k6', 1);
     organization.set(STUDIO_SUD);
     await settle();
@@ -825,7 +857,7 @@ describe('GoalsStore', () => {
     const store: InstanceType<typeof GoalsStore> = await loaded();
 
     store.step('g1', 'k6', 1);
-    await flush();
+    await burst();
     expect(api.get).toHaveBeenCalledTimes(1);
     api.list.mockResolvedValueOnce(list([goal({ version: 6, results: [signups(300)] })]));
     store.refresh();
@@ -885,7 +917,7 @@ describe('GoalsStore', () => {
     const first: Subject<KeyResultWrite> = new Subject<KeyResultWrite>();
     api.updateResult.mockReturnValueOnce(firstValueFrom(first));
     store.step('g1', 'k6', 1);
-    await flush();
+    await burst();
     store.step('g1', 'k6', 1);
     return first;
   }
@@ -939,7 +971,7 @@ describe('GoalsStore', () => {
     const store: InstanceType<typeof GoalsStore> = await loaded();
 
     store.toggle('g1', 'k3');
-    await flush();
+    await burst();
     store.toggle('g1', 'k3');
     first.next({ result: { ...guide, checked: true, progressPercent: 100 }, version: 4 });
     first.complete();
@@ -982,7 +1014,7 @@ describe('GoalsStore', () => {
     api.delete.mockRejectedValueOnce(problem(502));
     api.get.mockRejectedValueOnce(problem(503));
 
-    expect(await store.remove('g1')).toBe(false);
+    expect(await store.remove('g1', 3)).toBe(false);
     await settle();
 
     expect(toasts.warning).toHaveBeenCalledWith('The deletion could not be confirmed', {
@@ -990,5 +1022,91 @@ describe('GoalsStore', () => {
     });
     expect(api.list).toHaveBeenCalledTimes(2);
     expect(store.list()).toHaveLength(1);
+  });
+
+  it('sends one value for clicks within a burst', async () => {
+    TestBed.overrideProvider(GOAL_EDIT_BURST_MS, { useValue: 60 });
+    const store: InstanceType<typeof GoalsStore> = await loaded();
+
+    store.step('g1', 'k6', 1);
+    await pause(20);
+    store.step('g1', 'k6', 1);
+    await pause(20);
+    expect(api.updateResult).not.toHaveBeenCalled();
+    await pause(80);
+    await settle();
+
+    expect(api.updateResult.mock.calls).toEqual([['g1', 'k6', 3, { currentValue: 186 }]]);
+  });
+
+  it('sends the value of a burst still waiting when the page is left', async () => {
+    TestBed.overrideProvider(GOAL_EDIT_BURST_MS, { useValue: 10_000 });
+    const store: InstanceType<typeof GoalsStore> = await loaded();
+
+    store.step('g1', 'k6', 1);
+    TestBed.resetTestingModule();
+    await flush();
+
+    expect(api.updateResult.mock.calls).toEqual([['g1', 'k6', 3, { currentValue: 177 }]]);
+  });
+
+  it('holds the queue until a change of unknown outcome is settled, then sends the next one', async () => {
+    const store: InstanceType<typeof GoalsStore> = await loaded();
+    const first: Subject<KeyResultWrite> = await queued(store);
+    api.get
+      .mockRejectedValueOnce(problem(503))
+      .mockResolvedValueOnce(goal({ version: 4, results: [signups(177)] }));
+
+    first.error(new HttpErrorResponse({ status: 0 }));
+    await expect
+      .poll(async () => {
+        await flush();
+        return api.updateResult.mock.calls.length;
+      })
+      .toBe(2);
+
+    expect(api.updateResult.mock.calls[1]).toEqual(['g1', 'k6', 4, { currentValue: 186 }]);
+    expect(toasts.warning).not.toHaveBeenCalled();
+  });
+
+  it('drops the queued edits when a change of unknown outcome cannot be settled', async () => {
+    const store: InstanceType<typeof GoalsStore> = await loaded();
+    const first: Subject<KeyResultWrite> = await queued(store);
+    api.get.mockRejectedValue(problem(503));
+
+    first.error(new HttpErrorResponse({ status: 0 }));
+    await expect
+      .poll(async () => {
+        await flush();
+        return toasts.warning.mock.calls.length;
+      })
+      .toBe(1);
+    await settle();
+
+    expect(api.get).toHaveBeenCalledTimes(4);
+    expect(api.updateResult).toHaveBeenCalledTimes(1);
+    expect(toasts.warning).toHaveBeenCalledWith('The key result change could not be confirmed', {
+      description: 'Its current value shows once the goals are read again.',
+    });
+    expect(api.list).toHaveBeenCalledTimes(2);
+    expect(shownValue(store)).toBe(168);
+  });
+
+  it('keeps a goal changed since its deletion was confirmed and asks to confirm again', async () => {
+    const store: InstanceType<typeof GoalsStore> = await loaded();
+    api.delete.mockRejectedValueOnce(problem(412, 'request.version-mismatch'));
+    api.get.mockResolvedValueOnce(goal({ version: 5, name: 'Launch SSO for all customers' }));
+
+    expect(await store.remove('g1', 3)).toBe(false);
+
+    expect(api.delete).toHaveBeenCalledTimes(1);
+    expect(store.list()?.[0].goal).toMatchObject({
+      version: 5,
+      name: 'Launch SSO for all customers',
+    });
+    expect(toasts.warning).toHaveBeenCalledWith('This goal changed since you confirmed', {
+      description: 'It was not deleted. Check it, then delete it again.',
+    });
+    expect(toasts.success).not.toHaveBeenCalled();
   });
 });

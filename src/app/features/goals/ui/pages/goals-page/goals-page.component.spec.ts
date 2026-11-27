@@ -19,6 +19,7 @@ import {
 
 import { GoalsApi } from '../../../data-access/services/goals-api/goals-api.service';
 import type { Goal, GoalList } from '../../../models/goal/goal.interface';
+import { GOAL_EDIT_BURST_MS } from '../../../state/goals/goals-timing.token';
 import { GoalsPage } from './goals-page.component';
 
 /**
@@ -228,6 +229,7 @@ describe('GoalsPage', () => {
           withRouterConfig({ onSameUrlNavigation: 'reload' }),
         ),
         { provide: GoalsApi, useValue: api },
+        { provide: GOAL_EDIT_BURST_MS, useValue: 1 },
         { provide: CwToastService, useValue: toasts },
         { provide: WORKSPACE_CONTEXT, useValue: workspace },
         { provide: SPACE_DIRECTORY, useValue: { spaces } },
@@ -396,8 +398,9 @@ describe('GoalsPage', () => {
     harness.detectChanges();
 
     expect(texts(harness, 'result-value')[1]).toBe('5 / 10');
-    await harness.fixture.whenStable();
-    expect(api.updateResult).toHaveBeenCalledWith('g1', 'k2', 3, { currentValue: 5 });
+    await expect
+      .poll(() => api.updateResult.mock.calls)
+      .toEqual([['g1', 'k2', 3, { currentValue: 5 }]]);
   });
 
   it('shows an empty quarter with its call to create a goal', async () => {

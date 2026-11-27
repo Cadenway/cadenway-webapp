@@ -52,6 +52,7 @@ import type {
   Quarter,
 } from '../../models/goal/goal.interface';
 import { quarterOf, todayIso } from '../../utils/quarter/quarter.util';
+import { GOAL_EDIT_BURST_MS, GOAL_SETTLE_BACKOFF_MS } from './goals-timing.token';
 
 /**
  * Constant REFRESH_AUDIT_MS
@@ -304,6 +305,49 @@ interface EditRecord {
    * @type {number | boolean}
    */
   confirmed: number | boolean;
+  // #endregion
+}
+
+/**
+ * Interface PendingEdit
+ *
+ * @description
+ * A key result edit waiting for the end of its burst of clicks.
+ */
+interface PendingEdit {
+  // #region Properties
+  /**
+   * Property goalId
+   *
+   * @description
+   * Goal of the key result.
+   *
+   * @type {string}
+   * @readonly
+   */
+  readonly goalId: string;
+
+  /**
+   * Property generation
+   *
+   * @description
+   * Organization generation of the clicks.
+   *
+   * @type {number}
+   * @readonly
+   */
+  readonly generation: number;
+
+  /**
+   * Property handle
+   *
+   * @description
+   * Timer that ends the burst.
+   *
+   * @type {ReturnType<typeof setTimeout>}
+   * @readonly
+   */
+  readonly handle: ReturnType<typeof setTimeout>;
   // #endregion
 }
 
@@ -743,16 +787,18 @@ export interface GoalsStoreInstance {
    * Method remove
    *
    * @description
-   * Deletes a goal after its confirmation, from the version its queue knows (once more from the
-   * current version after a `412`), and toasts `Goal deleted` with its name; a goal already gone
-   * counts as deleted. An unknown outcome reads the goal again: gone, it counts as deleted;
+   * Deletes a goal after its confirmation, from the version shown when it was confirmed, and toasts
+   * `Goal deleted` with its name; a goal already gone counts as deleted. A `412` is a conflict: the
+   * goal is not deleted, `This goal changed since you confirmed` asks to check it and delete it
+   * again, and it is read again, so a new confirmation is made against its current version. An unknown outcome reads the goal again: gone, it counts as deleted;
    * still there, the warning `The deletion could not be confirmed` shows. A refusal toasts the
    * failure. Ignored while a deletion runs.
    *
    * @param {string} goalId - Id of the goal.
+   * @param {number} version - The version shown when the deletion was confirmed.
    * @returns {Promise<boolean>} Whether the goal left the list shown.
    */
-  remove(goalId: string): Promise<boolean>;
+  remove(goalId: string, version: number): Promise<boolean>;
 
   /**
    * Method step
@@ -1172,6 +1218,9 @@ function createGoalsStore(): Type<GoalsStoreInstance> {
 
       const lanes: Map<string, GoalLane> = new Map<string, GoalLane>();
       const scheduled: Set<string> = new Set<string>();
+      const bursts: Map<string, PendingEdit> = new Map<string, PendingEdit>();
+      const burst: number = inject(GOAL_EDIT_BURST_MS);
+      const backoff: readonly number[] = inject(GOAL_SETTLE_BACKOFF_MS);
       const laneOf: (goalId: string) => GoalLane = (goalId: string): GoalLane => {
         let lane: GoalLane | undefined = lanes.get(goalId);
         if (lane === undefined) {
@@ -1229,6 +1278,7 @@ function createGoalsStore(): Type<GoalsStoreInstance> {
         lane.tail = tail;
         void tail.then((): void => {
           if (lane.tail !== tail || !lane.dirty || !alive(generation)) return;
+          for (const pending of bursts.values()) if (pending.goalId === goalId) return;
           lane.dirty = false;
           void inLane(goalId, generation, () => reread(goalId, generation));
         });
@@ -1283,18 +1333,31 @@ function createGoalsStore(): Type<GoalsStoreInstance> {
         edit: EditRecord,
         sent: number | boolean,
       ): Promise<void> => {
-        let value: number | boolean | null;
-        try {
-          value = valueOf(
-            (await fresh(goalId, generation)).results.find(
-              (result: KeyResult): boolean => result.id === resultId,
-            ),
-          );
-        } catch (error: unknown) {
-          if (dropped(error, generation)) return;
-          dropEdit(resultId, sent);
-          refresh();
-          return;
+        let value: number | boolean | null = null;
+        let settled: boolean = false;
+        for (let attempt: number = 0; !settled; attempt += 1) {
+          try {
+            value = valueOf(
+              (await fresh(goalId, generation)).results.find(
+                (result: KeyResult): boolean => result.id === resultId,
+              ),
+            );
+            settled = true;
+          } catch (error: unknown) {
+            if (dropped(error, generation)) return;
+            if (attempt >= backoff.length) {
+              dropEdit(resultId);
+              store._toasts.warning(
+                $localize`:@@goals.toast.result-update-unknown:The key result change could not be confirmed`,
+                {
+                  description: $localize`:@@goals.toast.result-update-unknown-text:Its current value shows once the goals are read again.`,
+                },
+              );
+              refresh();
+              return;
+            }
+            await wait(backoff[attempt]);
+          }
         }
         if (value === null) {
           dropEdit(resultId);
@@ -1417,15 +1480,35 @@ function createGoalsStore(): Type<GoalsStoreInstance> {
           );
         }
       };
+      const enter: (resultId: string) => void = (resultId: string): void => {
+        const pending: PendingEdit | undefined = bursts.get(resultId);
+        if (pending === undefined) return;
+        clearTimeout(pending.handle);
+        bursts.delete(resultId);
+        if (scheduled.has(resultId)) return;
+        scheduled.add(resultId);
+        void inLane(pending.goalId, pending.generation, () =>
+          flush(pending.goalId, resultId, pending.generation),
+        );
+      };
       const schedule: (goalId: string, resultId: string) => void = (
         goalId: string,
         resultId: string,
       ): void => {
-        if (scheduled.has(resultId)) return;
-        scheduled.add(resultId);
-        const generation: number = context.generation;
-        void inLane(goalId, generation, () => flush(goalId, resultId, generation));
+        laneOf(goalId);
+        const known: PendingEdit | undefined = bursts.get(resultId);
+        if (known !== undefined) clearTimeout(known.handle);
+        bursts.set(resultId, {
+          goalId,
+          generation: context.generation,
+          handle: setTimeout((): void => {
+            enter(resultId);
+          }, burst),
+        });
       };
+      inject(DestroyRef).onDestroy((): void => {
+        for (const resultId of [...bursts.keys()]) enter(resultId);
+      });
       const edit: (
         goalId: string,
         resultId: string,
@@ -1491,7 +1574,7 @@ function createGoalsStore(): Type<GoalsStoreInstance> {
             if (current(generation)) patchState(store, { creating: false });
           }
         },
-        async remove(goalId: string): Promise<boolean> {
+        async remove(goalId: string, version: number): Promise<boolean> {
           const goal: Goal | undefined = shown(goalId);
           if (store.deletingId() !== null || goal === undefined) return false;
           const generation: number = context.generation;
@@ -1507,24 +1590,33 @@ function createGoalsStore(): Type<GoalsStoreInstance> {
             });
             return true;
           };
-          const deletion: (version: number) => Promise<void> = (version: number) =>
-            store._api.delete(goalId, version);
           patchState(store, { deletingId: goalId });
           let outcome: boolean = false;
           await inLane(goalId, generation, async (): Promise<void> => {
             try {
-              try {
-                await send(generation, goalId, deletion);
-              } catch (error: unknown) {
-                if (!isVersionMismatch(error)) throw error;
-                await fresh(goalId, generation);
-                await send(generation, goalId, deletion);
-              }
+              guard(generation);
+              await store._api.delete(goalId, version);
               if (current(generation)) outcome = removed();
             } catch (error: unknown) {
               if (dropped(error, generation)) return;
               if (isGone(error)) {
                 outcome = removed();
+                return;
+              }
+              if (isVersionMismatch(error)) {
+                store._toasts.warning(
+                  $localize`:@@goals.toast.delete-conflict:This goal changed since you confirmed`,
+                  {
+                    description: $localize`:@@goals.toast.delete-conflict-text:It was not deleted. Check it, then delete it again.`,
+                  },
+                );
+                try {
+                  await fresh(goalId, generation);
+                } catch (reread: unknown) {
+                  if (dropped(reread, generation)) return;
+                  if (isGone(reread)) outcome = removed();
+                  else refresh();
+                }
                 return;
               }
               if (!isUncertainWrite(error)) {
@@ -1694,6 +1786,8 @@ function createGoalsStore(): Type<GoalsStoreInstance> {
           lastAsked = null;
           records.clear();
           scheduled.clear();
+          for (const pending of bursts.values()) clearTimeout(pending.handle);
+          bursts.clear();
           createKeys.clear();
           store._loads.queued = false;
           patchState(store, {
@@ -1744,14 +1838,19 @@ function createGoalsStore(): Type<GoalsStoreInstance> {
  * writes stay over the read goals until a read issued after them lands, a snapshot read of one goal
  * counting from when it was sent, so neither a read in progress nor an older one hides them. The
  * writes of one goal are sent one after the other from the version its queue last knew
- * (`If-Match`), kept once the page is gone so the last value of a burst is still sent; once a
+ * (`If-Match`), kept once the page is gone so the last value of a burst is still sent; a key
+ * result's value enters that queue once its burst of clicks ends (`GOAL_EDIT_BURST_MS`), at once
+ * when the page is left; once a
  * goal's writes settle, it is read again for its progress and health, unless the page is gone. A
  * `412` reads the goal: an edit is sent again only while the goal still shows the value it started
  * from, a number moves by the same steps from a newer value, and a checkbox changed elsewhere is
  * dropped with a warning. A confirmed write moves the value an edit counts its steps from, so a
  * queued edit keeps only its unsent steps. A change of unknown outcome is settled by reading its
  * goal inside its queue, before any later edit of it is sent: recorded, the later edits follow it;
- * not recorded, only the steps made after it are kept, from the value read. Every write is bound to
+ * not recorded, only the steps made after it are kept, from the value read; the queue stays held
+ * while that read is retried (`GOAL_SETTLE_BACKOFF_MS`), and if it never answers the later edits
+ * are dropped with a warning. A deletion is sent from the version confirmed, and a `412` keeps the
+ * goal, warns and reads it again, so deleting it takes a new confirmation. Every write is bound to
  * the organization generation it started in: after a switch, even back to the same organization,
  * nothing more is sent, patched or toasted. A creation keeps its idempotency key until a definitive
  * answer and is sent again with it after an unknown outcome or

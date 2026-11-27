@@ -69,8 +69,9 @@ null`); anyone else gets a required `Space` select of the spaces they `edit`, an
   `Remove` or `Add a key result`). The gateway still refuses what a role does not allow.
 - Writes: every goal write sends the version its goal's write queue last knew as `If-Match` (the
   newer of the goal shown and the last write or read of the queue). The writes of one goal are
-  serialized, and only the last value of a burst of `−`/`+` clicks is sent, still after the page
-  is left; once a goal's writes settle, the goal is read again for its progress, health and
+  serialized; a key result's value enters its goal's queue 300 ms after its last click
+  (`GOAL_EDIT_BURST_MS`), so a burst of `−`/`+` clicks sends one value, and a burst still waiting
+  when the page is left is sent at once; once a goal's writes settle, the goal is read again for its progress, health and
   version, unless the page is gone. A `412 request.version-mismatch` reads the goal: an edit is
   sent again only while the goal still shows the value it started from; a number otherwise moves
   by the same steps from the newer value, and a checkbox is dropped with `This key result changed
@@ -79,7 +80,10 @@ elsewhere`. Values show at once and return to the confirmed ones after a refusal
   value an edit counts its steps from, so a queued edit keeps only its unsent steps. An unknown
   outcome (no answer, a `5xx`) is never reported as a failure: a change is settled by reading its
   goal inside its queue before a later edit of it is sent (recorded, the later edits follow it;
-  not recorded, only the steps made after it are kept, from the value read). A creation (goal or key
+  not recorded, only the steps made after it are kept, from the value read). The queue stays held
+  while that read is retried after 2, 4 and 8 s (`GOAL_SETTLE_BACKOFF_MS`); when it still fails,
+  the later edits of that key result are dropped, never rebased on an unknown value, `The key
+result change could not be confirmed` shows and the goals are read again. A creation (goal or key
   result) keeps one idempotency key per draft until a definitive answer and is sent again with it
   after an unknown outcome or `409 idempotency.request-in-progress`, one second apart, three sends
   in all; still unknown, `The goal could not be confirmed` or `The key result could not be
@@ -100,7 +104,10 @@ confirmed` asks to submit again, which reuses the key. A deletion of unknown out
   owners and, after a failure, on the next background read.
 - Deletion asks for a confirmation (`Delete the goal “<name>”?`), since `deleteGoal` is final and
   no restore exists (gap G-G4); the toast `Goal deleted` has no `Undo`. A goal already gone counts
-  as deleted. A key result is removed without undo, as the mockup does.
+  as deleted. The deletion is sent from the version shown when it was confirmed; a `412` deletes
+  nothing: `This goal changed since you confirmed` shows, the goal is read again and stays shown,
+  and deleting it takes a new confirmation. A key result is removed without undo, as the mockup
+  does.
 - Milestones (gap G-G1): one `getTask` per milestone key, at most four at once. Only the new keys
   of a changed set are read, and a key that leaves has its read cancelled; a task detail that
   closes or reports a change reads only that task again, a realtime reconnection every task; a
