@@ -37,6 +37,19 @@ describe('write outcomes', () => {
     ]) {
       expect(isUnknownWriteOutcome(error)).toBe(true);
     }
+  });
+
+  it('calls an applied write whose answer could not be read uncertain', () => {
+    for (const status of [200, 201, 204]) {
+      expect(
+        isUnknownWriteOutcome(
+          new HttpErrorResponse({ status, statusText: 'OK', error: new SyntaxError('JSON') }),
+        ),
+      ).toBe(true);
+    }
+  });
+
+  it('calls a definite refusal certain', () => {
     for (const error of [
       refusal(409, 'space.prefix-taken'),
       refusal(409, 'onboarding.wizard-closed'),

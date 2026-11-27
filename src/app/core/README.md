@@ -69,7 +69,7 @@ The root transport provides Angular HTTP to the generated `@cadenway/api-client`
   active locale. `LocaleService` reads it and switches by reloading the page with `?lang=`; no
   screen offers the switch yet.
 - `isUnknownWriteOutcome` calls a failed write uncertain when it may still have been applied (no
-  answer, `408`, `5xx`, `409 idempotency.request-in-progress`); `isDroppedOrganizationWrite` calls
+  answer, an unreadable `2xx`, `408`, `5xx`, `409 idempotency.request-in-progress`); `isDroppedOrganizationWrite` calls
   it dropped when the pin blocked it during a switch or the gateway answered
   `412 organization.context-changed`. Features never report either as a definite failure.
 - The resolved theme is reflected in `data-theme` on the document element.

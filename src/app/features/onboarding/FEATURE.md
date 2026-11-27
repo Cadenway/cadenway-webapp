@@ -223,7 +223,7 @@ route), `withGettingStarted()` and `withOnboardingWizard()` (the `overlays` cont
   - after `412 request.version-mismatch` a draft or checklist write reads the progress and sends
     once more, unless the read shows the change, a closed assistant or a dismissed checklist; a
     failed read keeps the `412`;
-  - an uncertain outcome (`isUnknownWriteOutcome` from `@core/api`: no answer, `408`, `5xx`,
+  - an uncertain outcome (`isUnknownWriteOutcome` from `@core/api`: no answer, an unreadable `2xx`, `408`, `5xx`,
     `409 idempotency.request-in-progress`) reads the progress and resolves when it shows the
     change, else rejects with the original failure;
   - a definite refusal rejects, after a read for `409 onboarding.wizard-closed`,

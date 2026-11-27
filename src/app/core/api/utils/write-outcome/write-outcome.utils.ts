@@ -28,7 +28,8 @@ export function isDroppedOrganizationWrite(error: unknown): boolean {
  *
  * @description
  * Whether a failed write may still have been applied: no answer (a network failure, an abort, a
- * client timeout or any failure that is not a gateway answer), a `408`, a `5xx`, or
+ * client timeout or any failure that is not a gateway answer), a `2xx` the client could not read
+ * (the write was applied but its body failed to parse), a `408`, a `5xx`, or
  * `409 idempotency.request-in-progress` (the same `Idempotency-Key` is still being processed). Such
  * a write is never reported as a definite failure; any other `4xx` is a definite refusal. A dropped
  * write (`isDroppedOrganizationWrite`) is not uncertain.
@@ -40,5 +41,6 @@ export function isUnknownWriteOutcome(error: unknown): boolean {
   if (isDroppedOrganizationWrite(error)) return false;
   if (!(error instanceof HttpErrorResponse)) return true;
   if (error.status === 0 || error.status === 408 || error.status >= 500) return true;
+  if (error.status >= 200 && error.status < 300) return true;
   return error.status === 409 && readProblem(error)?.code === 'idempotency.request-in-progress';
 }
