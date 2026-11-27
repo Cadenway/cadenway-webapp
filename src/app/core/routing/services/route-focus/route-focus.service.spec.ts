@@ -26,6 +26,42 @@ class RouteFixture {}
 @Component({ template: '' })
 class EmptyFixture {}
 
+/**
+ * Function openModal
+ *
+ * @description
+ * Appends a modal window with a focusable title to the document.
+ *
+ * @returns {HTMLElement} The modal window.
+ */
+function openModal(): HTMLElement {
+  const modal: HTMLElement = document.createElement('div');
+  modal.setAttribute('role', 'dialog');
+  modal.setAttribute('aria-modal', 'true');
+  const title: HTMLElement = document.createElement('h2');
+  title.tabIndex = -1;
+  modal.append(title);
+  document.body.append(modal);
+  return modal;
+}
+
+/**
+ * Function settle
+ *
+ * @description
+ * Lets the mutation observers and the next task run.
+ *
+ * @returns {Promise<void>} Resolves after the next task.
+ */
+async function settle(): Promise<void> {
+  await new Promise<void>((resolve: () => void): void => {
+    setTimeout(resolve);
+  });
+  await new Promise<void>((resolve: () => void): void => {
+    setTimeout(resolve);
+  });
+}
+
 describe('route infrastructure', () => {
   it('sets titles and focuses only after a path change', async () => {
     TestBed.configureTestingModule({
@@ -56,7 +92,7 @@ describe('route infrastructure', () => {
     expect(TestBed.inject(Router).url).toBe('/two');
     focus.mockRestore();
   });
-  it('leaves the focus in a modal window that holds it across the navigation', async () => {
+  it('moves the focus behind a modal window that holds it only once the window closed', async () => {
     TestBed.configureTestingModule({
       providers: [
         provideRouter([
@@ -67,31 +103,54 @@ describe('route infrastructure', () => {
       ],
     });
     TestBed.inject(RouteFocusService);
-    const modal: HTMLElement = document.createElement('div');
-    modal.setAttribute('role', 'dialog');
-    modal.setAttribute('aria-modal', 'true');
-    const title: HTMLElement = document.createElement('h2');
-    title.tabIndex = -1;
-    modal.append(title);
-    document.body.append(modal);
+    const modal: HTMLElement = openModal();
     const harness: RouterTestingHarness = await RouterTestingHarness.create();
     await harness.navigateByUrl('/one');
-    title.focus();
+    modal.querySelector('h2')?.focus();
     const focus: MockInstance = vi.spyOn(HTMLElement.prototype, 'focus');
     await harness.navigateByUrl('/two');
     harness.detectChanges();
     TestBed.tick();
+    await settle();
     expect(focus).not.toHaveBeenCalled();
-    expect(document.activeElement).toBe(title);
-    title.blur();
-    await harness.navigateByUrl('/one');
-    harness.detectChanges();
-    TestBed.tick();
-    expect(focus.mock.contexts.at(-1)).toBe(document.querySelector('h1[data-route-focus]'));
+    expect(document.activeElement).toBe(modal.querySelector('h2'));
     modal.remove();
+    await settle();
+    expect(focus.mock.contexts.at(-1)).toBe(document.querySelector('h1[data-route-focus]'));
+    expect(document.activeElement).toBe(document.querySelector('h1[data-route-focus]'));
+    focus.mockRestore();
+  });
+  it('waits for every modal window and stops waiting on the next navigation', async () => {
+    TestBed.configureTestingModule({
+      providers: [
+        provideRouter([
+          { path: 'one', component: RouteFixture },
+          { path: 'two', component: RouteFixture },
+        ]),
+        provideAppRouting(),
+      ],
+    });
+    TestBed.inject(RouteFocusService);
+    const modal: HTMLElement = openModal();
+    const other: HTMLElement = openModal();
+    const harness: RouterTestingHarness = await RouterTestingHarness.create();
+    await harness.navigateByUrl('/one');
+    modal.querySelector('h2')?.focus();
+    const focus: MockInstance = vi.spyOn(HTMLElement.prototype, 'focus');
     await harness.navigateByUrl('/two');
     harness.detectChanges();
     TestBed.tick();
+    modal.remove();
+    await settle();
+    expect(focus).not.toHaveBeenCalled();
+    other.querySelector('h2')?.focus();
+    focus.mockClear();
+    await harness.navigateByUrl('/one');
+    harness.detectChanges();
+    TestBed.tick();
+    other.remove();
+    await settle();
+    expect(focus).toHaveBeenCalledTimes(1);
     expect(focus.mock.contexts.at(-1)).toBe(document.querySelector('h1[data-route-focus]'));
     focus.mockRestore();
   });
