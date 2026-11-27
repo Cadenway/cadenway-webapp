@@ -1,0 +1,210 @@
+@let overview = store.overview();
+<div class="mx-auto flex w-full max-w-3xl flex-col gap-6 px-4 py-6 sm:px-8 sm:py-8">
+  @if (overview) {
+    <header class="flex flex-col gap-1">
+      <h1
+        class="text-2xl font-semibold tracking-tight"
+        tabindex="-1"
+        data-route-focus
+        i18n="@@account.security.title"
+      >
+        Security and sign-in
+      </h1>
+      <p class="text-sm text-muted-foreground" i18n="@@account.security.lead">
+        Password, two-step verification, sign-in providers and devices.
+      </p>
+    </header>
+
+    <cw-card role="region" aria-labelledby="security-password-title" data-testid="password-card">
+      <cw-card-content class="flex flex-wrap items-center gap-4">
+        <div class="flex size-8 shrink-0 items-center justify-center rounded-lg bg-secondary">
+          <ng-icon name="phosphorPasswordBold" aria-hidden="true" />
+        </div>
+        <div class="flex min-w-0 flex-1 flex-col gap-0.5">
+          <h2
+            id="security-password-title"
+            class="text-base leading-5 font-semibold"
+            i18n="@@account.security.password-title"
+          >
+            Password
+          </h2>
+          @if (overview.passwordChangedAt; as changedAt) {
+            @let changed = changedAt | date: 'longDate';
+            <p class="text-sm text-muted-foreground" data-testid="password-changed">
+              @if (changedToday(changedAt)) {
+                <ng-container i18n="@@account.security.password-changed-today"
+                  >Changed today, {{ changed }}.</ng-container
+                >
+              } @else {
+                <ng-container i18n="@@account.security.password-changed-on"
+                  >Changed on {{ changed }}.</ng-container
+                >
+              }
+            </p>
+          }
+        </div>
+        <button
+          cwButton
+          type="button"
+          variant="outline"
+          [disabled]="busy()"
+          data-testid="password-open"
+          (click)="openPassword()"
+          i18n="@@account.security.password-submit"
+        >
+          Change password
+        </button>
+      </cw-card-content>
+    </cw-card>
+
+    <cw-two-step-card
+      [twoStep]="overview.twoStep"
+      [organization]="organization()"
+      [keysSupported]="store.keysSupported"
+      [busy]="store.busy()"
+      [busyId]="store.busyId()"
+      (enableRequested)="startSetup()"
+      (reconfigureRequested)="startSetup()"
+      (disableRequested)="ask({ kind: 'disable' })"
+      (addKeyRequested)="keyNameOpen.set(true)"
+      (removeKeyRequested)="ask({ kind: 'remove-key', key: $event })"
+      (backupCodesRequested)="generateCodes()"
+    />
+
+    <cw-sessions-list
+      [sessions]="overview.sessions"
+      [busyId]="store.busy() === 'revoke' ? store.busyId() : null"
+      [revokingOthers]="store.busy() === 'revoke-others'"
+      [disabled]="busy()"
+      (revokeRequested)="ask({ kind: 'revoke', session: $event })"
+      (revokeOthersRequested)="ask({ kind: 'revoke-others' })"
+    />
+  } @else {
+    <div
+      class="flex flex-col gap-6"
+      role="status"
+      aria-busy="true"
+      aria-label="Loading the section"
+      i18n-aria-label="@@account.security.loading"
+      data-testid="security-loading"
+    >
+      <div class="flex flex-col gap-2" aria-hidden="true">
+        <div cwSkeleton class="h-7 w-56"></div>
+        <div cwSkeleton class="h-3 w-3/4"></div>
+      </div>
+      @for (card of [1, 2]; track card) {
+        <section
+          class="flex flex-col gap-4 rounded-xl border border-border bg-card p-4"
+          aria-hidden="true"
+        >
+          <div class="flex flex-col gap-2">
+            <div cwSkeleton class="h-4 w-32"></div>
+            <div cwSkeleton class="h-3 w-2/3"></div>
+          </div>
+          @for (row of [1, 2]; track row) {
+            <div class="flex items-center gap-4">
+              <div class="flex min-w-0 flex-1 flex-col gap-1.5">
+                <div cwSkeleton class="h-3 w-40"></div>
+                <div cwSkeleton class="h-2.5 w-1/2"></div>
+              </div>
+              <div cwSkeleton class="h-7 w-28 rounded-md"></div>
+            </div>
+          }
+        </section>
+      }
+      <div class="overflow-hidden rounded-xl border border-border bg-card" aria-hidden="true">
+        @for (row of [1, 2, 3]; track row) {
+          <div class="flex h-14 items-center gap-3 border-b border-border px-4 last:border-b-0">
+            <div cwSkeleton class="size-8 rounded-full"></div>
+            <div class="flex min-w-0 flex-1 flex-col gap-1.5">
+              <div cwSkeleton class="h-3 w-40"></div>
+              <div cwSkeleton class="h-2.5 w-24"></div>
+            </div>
+            <div cwSkeleton class="h-3 w-20"></div>
+          </div>
+        }
+      </div>
+    </div>
+  }
+</div>
+
+<cw-password-change-dialog
+  [open]="passwordOpen()"
+  [pending]="store.busy() === 'password'"
+  [failure]="passwordFailure()"
+  (submitted)="changePassword($event)"
+  (dismissed)="passwordOpen.set(false)"
+/>
+
+<cw-authenticator-setup-dialog
+  [open]="setupOpen()"
+  [secret]="setupSecret()"
+  [backupCodes]="setupCodes()"
+  [pending]="store.busy() === 'confirm'"
+  [codeFailure]="setupCodeFailure()"
+  (copyKeyRequested)="copyKey()"
+  (codeSubmitted)="confirmCode($event)"
+  (copyCodesRequested)="copyCodes(setupCodes())"
+  (downloadRequested)="downloadCodes(setupCodes())"
+  (dismissed)="closeSetup()"
+  (detached)="forgetSetup()"
+/>
+
+<cw-backup-codes-dialog
+  [open]="backupOpen()"
+  [codes]="backupCodes()"
+  [replaced]="backupReplaced()"
+  (copyRequested)="copyCodes(backupCodes())"
+  (downloadRequested)="downloadAndClose()"
+  (dismissed)="closeBackup()"
+  (detached)="forgetBackup()"
+/>
+
+<cw-security-key-name-dialog
+  [open]="keyNameOpen()"
+  [pending]="store.busy() === 'add-key'"
+  (submitted)="registerKey($event)"
+  (dismissed)="keyNameOpen.set(false)"
+/>
+
+@let asked = confirmation();
+<cw-alert-dialog
+  variant="destructive"
+  [(open)]="confirmOpen"
+  [pending]="confirming()"
+  data-testid="security-confirm"
+  (confirm)="confirm()"
+>
+  <cw-alert-dialog-media>
+    <ng-icon [name]="confirmIcon(asked)" aria-hidden="true" />
+  </cw-alert-dialog-media>
+  <h2 cwAlertDialogTitle>{{ confirmTitle(asked) }}</h2>
+  <p cwAlertDialogDescription>{{ confirmDescription(asked) }}</p>
+  <button cwButton cwAlertDialogCancel variant="outline">
+    <ng-container i18n="@@account.security.cancel">Cancel</ng-container>
+  </button>
+  <button
+    cwButton
+    cwAlertDialogAction
+    variant="destructive"
+    [loading]="confirming()"
+    data-testid="security-confirm-action"
+  >
+    @switch (asked?.kind) {
+      @case ('disable') {
+        <ng-container i18n="@@account.security.disable-confirm">Turn off</ng-container>
+      }
+      @case ('remove-key') {
+        <ng-container i18n="@@account.security.key-remove">Remove</ng-container>
+      }
+      @case ('revoke') {
+        <ng-container i18n="@@account.security.revoke-confirm">Sign out</ng-container>
+      }
+      @default {
+        <ng-container i18n="@@account.security.revoke-others-confirm"
+          >Close the sessions</ng-container
+        >
+      }
+    }
+  </button>
+</cw-alert-dialog>

@@ -1,0 +1,227 @@
+@let state = twoStep();
+@let own = ownRequirement();
+@let others = otherRequirements();
+@let required = own !== null || others > 0;
+@let anyBusy = busy() !== null;
+<cw-card role="region" aria-labelledby="security-two-step-title" data-testid="two-step-card">
+  <cw-card-header>
+    <h2
+      id="security-two-step-title"
+      class="flex items-center gap-2 text-base leading-5 font-semibold"
+    >
+      <ng-container i18n="@@account.security.two-step-title">Two-step verification</ng-container>
+      <span cwBadge variant="outline" data-testid="two-step-status">
+        @if (state.enabled) {
+          <ng-icon name="phosphorCheckCircleFill" class="size-3 text-jade" aria-hidden="true" />
+          <ng-container i18n="@@account.security.two-step-on">Enabled</ng-container>
+        } @else {
+          <ng-icon name="phosphorProhibitFill" class="size-3 text-grenat" aria-hidden="true" />
+          <ng-container i18n="@@account.security.two-step-off">Disabled</ng-container>
+        }
+      </span>
+    </h2>
+    <cw-card-action>
+      @if (state.enabled) {
+        <button
+          cwButton
+          type="button"
+          variant="outline"
+          size="sm"
+          [disabled]="required || (anyBusy && busy() !== 'disable')"
+          [loading]="busy() === 'disable'"
+          [attr.aria-describedby]="required ? 'security-two-step-required' : null"
+          data-testid="two-step-disable"
+          (click)="disableRequested.emit()"
+          i18n="@@account.security.two-step-disable"
+        >
+          Turn off
+        </button>
+      } @else {
+        <button
+          cwButton
+          type="button"
+          variant="outline"
+          size="sm"
+          [disabled]="anyBusy && busy() !== 'setup'"
+          [loading]="busy() === 'setup'"
+          data-testid="two-step-enable"
+          (click)="enableRequested.emit()"
+          i18n="@@account.security.two-step-enable"
+        >
+          Turn on
+        </button>
+      }
+    </cw-card-action>
+    @if (required) {
+      <div
+        id="security-two-step-required"
+        class="flex flex-col gap-0.5 text-sm text-muted-foreground"
+      >
+        @if (own) {
+          @let name = organization().name;
+          <p data-testid="two-step-required">
+            @switch (own.requiredFor) {
+              @case ('admins') {
+                <ng-container i18n="@@account.security.two-step-required-admins"
+                  >Required by {{ name }} for owners and administrators.</ng-container
+                >
+              }
+              @case ('everyone') {
+                <ng-container i18n="@@account.security.two-step-required-everyone"
+                  >Required by {{ name }} for all members.</ng-container
+                >
+              }
+              @default {
+                <ng-container i18n="@@account.security.two-step-required-unknown"
+                  >Required by {{ name }}.</ng-container
+                >
+              }
+            }
+          </p>
+        }
+        @if (others > 0) {
+          <p>
+            <ng-container i18n="@@account.security.two-step-required-others">{others, plural,
+              =1 {Required by another of your organizations.}
+              other {Required by {{ others }} of your other organizations.}
+            }</ng-container>
+          </p>
+        }
+      </div>
+    }
+  </cw-card-header>
+
+  @if (state.enabled) {
+    <ul class="flex flex-col px-4">
+      <li class="flex flex-wrap items-center gap-3 border-b border-border py-3 first:pt-0">
+        <div class="flex size-8 shrink-0 items-center justify-center rounded-lg bg-secondary">
+          <ng-icon name="phosphorDeviceMobileBold" aria-hidden="true" />
+        </div>
+        <div class="flex min-w-0 flex-1 flex-col gap-0.5">
+          <span class="leading-5 font-medium" i18n="@@account.security.app-title"
+            >Authenticator app</span
+          >
+          @if (state.appConfiguredAt; as configuredAt) {
+            @let configured = configuredAt | date: 'longDate';
+            <span class="text-sm text-muted-foreground" data-testid="two-step-app">
+              @if (state.appIsPrimary) {
+                <ng-container i18n="@@account.security.app-configured-primary"
+                  >Configured on {{ configured }} · primary method</ng-container
+                >
+              } @else {
+                <ng-container i18n="@@account.security.app-configured"
+                  >Configured on {{ configured }}</ng-container
+                >
+              }
+            </span>
+          }
+        </div>
+        <button
+          cwButton
+          type="button"
+          variant="outline"
+          size="sm"
+          [disabled]="anyBusy && busy() !== 'setup'"
+          [loading]="busy() === 'setup'"
+          data-testid="two-step-reconfigure"
+          (click)="reconfigureRequested.emit()"
+          i18n="@@account.security.app-reconfigure"
+        >
+          Reconfigure
+        </button>
+      </li>
+      @if (keysSupported()) {
+        <li
+          class="flex flex-wrap items-center gap-3 border-b border-border py-3"
+          data-testid="two-step-keys"
+        >
+          <div class="flex size-8 shrink-0 items-center justify-center rounded-lg bg-secondary">
+            <ng-icon name="phosphorFingerprintBold" aria-hidden="true" />
+          </div>
+          <div class="flex min-w-0 flex-1 flex-col gap-0.5">
+            <span class="leading-5 font-medium" i18n="@@account.security.keys-title"
+              >Security keys and biometrics</span
+            >
+            @let count = state.securityKeys.length;
+            @let names = keyNames();
+            <span
+              class="text-sm text-muted-foreground"
+              i18n="@@account.security.keys-summary"
+              >{count, plural,
+                =0 {No key yet}
+                =1 {1 key: {{ names }}}
+                other {{{ count }} keys: {{ names }}}
+              }</span
+            >
+          </div>
+          <button
+            cwButton
+            type="button"
+            variant="outline"
+            size="sm"
+            [disabled]="anyBusy && busy() !== 'add-key'"
+            [loading]="busy() === 'add-key'"
+            data-testid="two-step-add-key"
+            (click)="addKeyRequested.emit()"
+          >
+            <ng-icon name="phosphorPlusBold" aria-hidden="true" />
+            <ng-container i18n="@@account.security.keys-add">Add a key</ng-container>
+          </button>
+          <cw-security-key-list
+            class="w-full empty:hidden"
+            [keys]="state.securityKeys"
+            [busyId]="busy() === 'remove-key' ? busyId() : null"
+            [disabled]="anyBusy"
+            (removeRequested)="removeKeyRequested.emit($event)"
+          />
+        </li>
+      }
+      <li class="flex flex-wrap items-center gap-3 py-3 pb-0">
+        <div class="flex size-8 shrink-0 items-center justify-center rounded-lg bg-secondary">
+          <ng-icon name="phosphorLifebuoyBold" aria-hidden="true" />
+        </div>
+        <div class="flex min-w-0 flex-1 flex-col gap-0.5">
+          <span class="leading-5 font-medium" i18n="@@account.security.backup-title"
+            >Backup codes</span
+          >
+          @if (state.backupCodes; as codes) {
+            @let remaining = codes.remaining;
+            @let total = codes.total;
+            <span
+              class="text-sm text-muted-foreground"
+              data-testid="two-step-backup"
+              i18n="@@account.security.backup-summary"
+              >{{ remaining }} unused codes out of {{ total }}</span
+            >
+          }
+        </div>
+        <button
+          cwButton
+          type="button"
+          variant="outline"
+          size="sm"
+          [disabled]="anyBusy && busy() !== 'backup-codes'"
+          [loading]="busy() === 'backup-codes'"
+          data-testid="two-step-backup-generate"
+          (click)="backupCodesRequested.emit()"
+          i18n="@@account.security.backup-generate"
+        >
+          Generate new codes
+        </button>
+      </li>
+    </ul>
+  } @else {
+    <cw-alert variant="destructive" class="mx-4 w-auto" data-testid="two-step-off-alert">
+      <cw-alert-title i18n="@@account.security.two-step-off-title"
+        >Your account is protected only by a password.</cw-alert-title
+      >
+      @if (own) {
+        @let name = organization().name;
+        <cw-alert-description i18n="@@account.security.two-step-off-required"
+          >{{ name }} will ask you for verification at your next sign-in: set it up
+          now.</cw-alert-description
+        >
+      }
+    </cw-alert>
+  }
+</cw-card>
