@@ -414,6 +414,7 @@ function createOnboardingStore(): Type<OnboardingStoreInstance> {
             accept(saved, generation);
             return saved;
           } catch (error: unknown) {
+            if (generation !== runs.generation) throw error;
             const problem: ApiProblem | null = readProblem(error);
             if (retryOnStale && isVersionMismatch(problem)) {
               const fresh: OnboardingProgress | null = await read();

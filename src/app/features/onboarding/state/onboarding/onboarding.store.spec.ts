@@ -388,6 +388,28 @@ describe('OnboardingStore', () => {
     expect(store.progress()?.provisioning?.spaceId).toBe('sp-product');
   });
 
+  it('never sends a stale write again to the next organization', async () => {
+    const store: OnboardingStore = setup();
+    await store.reload();
+    let refuse: (error: unknown) => void = (): void => undefined;
+    api.saveDraft.mockReturnValueOnce(
+      new Promise((_resolve: unknown, reject: (error: unknown) => void) => {
+        refuse = reject;
+      }),
+    );
+    const saving: Promise<OnboardingProgress> = store.saveDraft({ step: 'preset' });
+    await vi.waitFor(() => {
+      expect(api.saveDraft).toHaveBeenCalledTimes(1);
+    });
+
+    organization.set({ ...ATELIER_NORD, id: 'o-studio', slug: 'studio-pixel' });
+    TestBed.tick();
+    refuse(problem(412, 'request.version-mismatch'));
+
+    await expect(saving).rejects.toBeInstanceOf(HttpErrorResponse);
+    expect(api.saveDraft).toHaveBeenCalledTimes(1);
+  });
+
   it('never sends a write queued for the previous organization', async () => {
     const store: OnboardingStore = setup();
     await store.reload();
