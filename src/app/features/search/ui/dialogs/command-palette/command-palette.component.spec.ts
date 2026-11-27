@@ -1,4 +1,4 @@
-import { signal } from '@angular/core';
+import { signal, type WritableSignal } from '@angular/core';
 import { type ComponentFixture, TestBed } from '@angular/core/testing';
 import { Router } from '@angular/router';
 import { CwToastService } from '@cadenway/ui/components/toast';
@@ -12,6 +12,7 @@ import { TaskCreate, TaskDetailOpener } from '@features/task';
 import {
   WORKSPACE_CONTEXT,
   type WorkspaceContextPort,
+  type WorkspaceRole,
 } from '@features/workspace/ports/workspace-context';
 import { ShellOverlay } from '@shared/layout-slot';
 
@@ -19,6 +20,26 @@ import { SearchApi } from '../../../data-access/services/search-api/search-api.s
 import type { SearchResult } from '../../../models/search-result/search-result.interface';
 import { CommandPalette } from '../../../services/command-palette/command-palette.service';
 import { CommandPaletteDialog } from './command-palette.component';
+
+/**
+ * Constant ROLES
+ *
+ * @description
+ * The roles, the most privileged first, for the fake `can()`.
+ *
+ * @type {readonly WorkspaceRole[]}
+ */
+const ROLES: readonly WorkspaceRole[] = ['owner', 'admin', 'member', 'guest'];
+
+/**
+ * Constant role
+ *
+ * @description
+ * Role of Camille in Atelier Nord, set per test.
+ *
+ * @type {WritableSignal<WorkspaceRole>}
+ */
+const role: WritableSignal<WorkspaceRole> = signal<WorkspaceRole>('owner');
 
 /**
  * Constant workspace
@@ -45,8 +66,8 @@ const workspace: WorkspaceContextPort = {
     role: 'owner',
     plan: 'team',
   }),
-  role: signal('owner'),
-  can: () => true,
+  role,
+  can: (least: WorkspaceRole): boolean => ROLES.indexOf(role()) <= ROLES.indexOf(least),
 };
 
 /**
@@ -111,6 +132,7 @@ describe('CommandPaletteDialog', () => {
   let fixture: ComponentFixture<CommandPaletteDialog>;
 
   beforeEach(async () => {
+    role.set('owner');
     search = vi.fn(() =>
       of([{ kind: 'task', key: 'CAD-482', name: 'Review of the SSO flow', status: 'review' }]),
     );
@@ -285,6 +307,22 @@ describe('CommandPaletteDialog', () => {
     optionNamed('Switch to the dark theme')?.click();
     expect(toggle).toHaveBeenCalledOnce();
   });
+
+  it.each([
+    ['admin', true, false],
+    ['member', false, false],
+  ] as const)(
+    'shows a %s only the organization entries their role may open',
+    async (current: WorkspaceRole, settings: boolean, billing: boolean) => {
+      role.set(current);
+      TestBed.inject(CommandPalette).setOpen(true);
+      await fixture.whenStable();
+
+      expect(optionNamed('Organization settings') !== undefined).toBe(settings);
+      expect(optionNamed('Billing and quotas') !== undefined).toBe(billing);
+      expect(optionNamed('Switch organization')).toBeDefined();
+    },
+  );
 
   it('never opens over another shell overlay', async () => {
     TestBed.inject(ShellOverlay).open('workspace.shortcuts-dialog');

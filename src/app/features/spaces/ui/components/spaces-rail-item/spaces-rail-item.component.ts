@@ -1,4 +1,4 @@
-import { Component, computed, inject, type Signal } from '@angular/core';
+import { Component, computed, inject, input, type InputSignal, type Signal } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { type Event as RouterEvent, NavigationEnd, Router } from '@angular/router';
 import {
@@ -13,6 +13,7 @@ import { NgIcon } from '@ng-icons/core';
 import { filter, map, startWith, tap } from 'rxjs';
 
 import type { Favorite } from '../../../models/favorite/favorite.interface';
+import type { SpacesRailItemVariant } from '../../../models/spaces-rail-item/spaces-rail-item-variant.type';
 import type { SpaceDetails } from '../../../models/space/space.interface';
 import { SpacesNavigationStore } from '../../../state/spaces-navigation/spaces-navigation.store';
 import { lookIconName, lookTone } from '../../../utils/look/look.util';
@@ -91,8 +92,10 @@ interface RailSpaceView {
  * while a space overview or a list is shown. After a separator, each favorite space has a
  * desktop-only button with its icon in its color (or its initial), named and labelled by the
  * space, current while its overview is shown, which opens the overview; its context menu is the
- * space menu, whose dialogs the sidebar hosts. Its host is `display: contents`, so its groups
- * join the rail's layout.
+ * space menu, whose dialogs the sidebar hosts. In the settings shell (`variant="settings"`) there
+ * is no sidebar to host them, so the menu offers only `Open the overview` and `Remove from
+ * favorite spaces`, as `Compte.dc.html` draws it (lines 759-767). Its host is
+ * `display: contents`, so its groups join the rail's layout.
  */
 @Component({
   selector: 'cw-spaces-rail-item',
@@ -150,73 +153,98 @@ interface RailSpaceView {
 
     <cw-menu #spaceMenu side="right" [ariaLabel]="menuSpace(spaceMenu.data())?.name ?? ''">
       @if (menuSpace(spaceMenu.data()); as space) {
-        <button cwMenuItem (triggered)="openOverview(space)">
-          <ng-icon name="phosphorSquaresFourBold" aria-hidden="true" />
-          <ng-container i18n="@@spaces.menu.overview">Overview</ng-container>
-        </button>
-        <button
-          cwMenuItem
-          [disabled]="!space.canEdit"
-          (triggered)="navigation.openDialog({ kind: 'space', space })"
-        >
-          <ng-icon name="phosphorPencilSimpleBold" aria-hidden="true" />
-          <ng-container i18n="@@spaces.menu.edit-space">Edit the space</ng-container>
-        </button>
-        <button cwMenuItem (triggered)="removeFavorite(space)">
-          <ng-icon name="phosphorStarFill" aria-hidden="true" />
-          <ng-container i18n="@@spaces.overview.favorite-remove"
-            >Remove from favorite spaces</ng-container
-          >
-        </button>
-        <cw-menu-separator />
-        <button
-          cwMenuItem
-          [disabled]="!space.canEdit"
-          (triggered)="
-            navigation.openDialog({ kind: 'list', spaceId: space.id, list: null, sprint: false })
-          "
-        >
-          <ng-icon name="phosphorPlusBold" aria-hidden="true" />
-          <ng-container i18n="@@spaces.menu.new-list">New list</ng-container>
-        </button>
-        <button
-          cwMenuItem
-          [disabled]="!space.canEdit"
-          (triggered)="
-            navigation.openDialog({ kind: 'list', spaceId: space.id, list: null, sprint: true })
-          "
-        >
-          <ng-icon name="phosphorLightningBold" aria-hidden="true" />
-          <ng-container i18n="@@spaces.menu.new-sprint">New sprint</ng-container>
-        </button>
-        <cw-menu-separator />
-        @if (navigation.expanded()[space.id]) {
-          <button cwMenuItem (triggered)="navigation.setExpanded(space.id, false)">
-            <ng-icon name="phosphorCaretUpBold" aria-hidden="true" />
-            <ng-container i18n="@@spaces.menu.collapse-space">Collapse the space</ng-container>
+        @if (variant() === 'settings') {
+          <button cwMenuItem (triggered)="openOverview(space)">
+            <ng-icon name="phosphorSquaresFourBold" aria-hidden="true" />
+            <ng-container i18n="@@spaces.menu.open-overview">Open the overview</ng-container>
+          </button>
+          <button cwMenuItem (triggered)="removeFavorite(space)">
+            <ng-icon name="phosphorStarFill" aria-hidden="true" />
+            <ng-container i18n="@@spaces.overview.favorite-remove"
+              >Remove from favorite spaces</ng-container
+            >
           </button>
         } @else {
-          <button cwMenuItem (triggered)="navigation.setExpanded(space.id, true)">
-            <ng-icon name="phosphorCaretDownBold" aria-hidden="true" />
-            <ng-container i18n="@@spaces.menu.expand-space">Expand the space</ng-container>
+          <button cwMenuItem (triggered)="openOverview(space)">
+            <ng-icon name="phosphorSquaresFourBold" aria-hidden="true" />
+            <ng-container i18n="@@spaces.menu.overview">Overview</ng-container>
+          </button>
+          <button
+            cwMenuItem
+            [disabled]="!space.canEdit"
+            (triggered)="navigation.openDialog({ kind: 'space', space })"
+          >
+            <ng-icon name="phosphorPencilSimpleBold" aria-hidden="true" />
+            <ng-container i18n="@@spaces.menu.edit-space">Edit the space</ng-container>
+          </button>
+          <button cwMenuItem (triggered)="removeFavorite(space)">
+            <ng-icon name="phosphorStarFill" aria-hidden="true" />
+            <ng-container i18n="@@spaces.overview.favorite-remove"
+              >Remove from favorite spaces</ng-container
+            >
+          </button>
+          <cw-menu-separator />
+          <button
+            cwMenuItem
+            [disabled]="!space.canEdit"
+            (triggered)="
+              navigation.openDialog({ kind: 'list', spaceId: space.id, list: null, sprint: false })
+            "
+          >
+            <ng-icon name="phosphorPlusBold" aria-hidden="true" />
+            <ng-container i18n="@@spaces.menu.new-list">New list</ng-container>
+          </button>
+          <button
+            cwMenuItem
+            [disabled]="!space.canEdit"
+            (triggered)="
+              navigation.openDialog({ kind: 'list', spaceId: space.id, list: null, sprint: true })
+            "
+          >
+            <ng-icon name="phosphorLightningBold" aria-hidden="true" />
+            <ng-container i18n="@@spaces.menu.new-sprint">New sprint</ng-container>
+          </button>
+          <cw-menu-separator />
+          @if (navigation.expanded()[space.id]) {
+            <button cwMenuItem (triggered)="navigation.setExpanded(space.id, false)">
+              <ng-icon name="phosphorCaretUpBold" aria-hidden="true" />
+              <ng-container i18n="@@spaces.menu.collapse-space">Collapse the space</ng-container>
+            </button>
+          } @else {
+            <button cwMenuItem (triggered)="navigation.setExpanded(space.id, true)">
+              <ng-icon name="phosphorCaretDownBold" aria-hidden="true" />
+              <ng-container i18n="@@spaces.menu.expand-space">Expand the space</ng-container>
+            </button>
+          }
+          <cw-menu-separator />
+          <button
+            cwMenuItem
+            variant="destructive"
+            [disabled]="!space.canManage"
+            (triggered)="navigation.openDialog({ kind: 'delete-space', space })"
+          >
+            <ng-icon name="phosphorTrashBold" aria-hidden="true" />
+            <ng-container i18n="@@spaces.menu.delete-space">Delete the space</ng-container>
           </button>
         }
-        <cw-menu-separator />
-        <button
-          cwMenuItem
-          variant="destructive"
-          [disabled]="!space.canManage"
-          (triggered)="navigation.openDialog({ kind: 'delete-space', space })"
-        >
-          <ng-icon name="phosphorTrashBold" aria-hidden="true" />
-          <ng-container i18n="@@spaces.menu.delete-space">Delete the space</ng-container>
-        </button>
       }
     </cw-menu>
   `,
 })
 export class SpacesRailItem {
   // #region Properties
+  /**
+   * Property variant
+   *
+   * @description
+   * Which shell hosts the item: the application shell (`app`, the full space menu) or the
+   * settings shell (`settings`, its overview and favorite actions only).
+   *
+   * @type {InputSignal<SpacesRailItemVariant>}
+   * @readonly
+   */
+  public readonly variant: InputSignal<SpacesRailItemVariant> = input<SpacesRailItemVariant>('app');
+
   /**
    * Property navigation
    *

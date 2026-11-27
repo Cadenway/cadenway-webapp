@@ -86,24 +86,34 @@
       }
     </cw-menu-radio-group>
   }
-  <cw-menu-separator />
-  <button cwMenuItem (triggered)="open('general')">
-    <ng-icon name="phosphorGearSixBold" aria-hidden="true" />
-    <ng-container i18n="@@workspace.organization-menu.settings">Organization settings</ng-container>
-  </button>
-  <button cwMenuItem (triggered)="open('members')">
-    <ng-icon name="phosphorUsersBold" aria-hidden="true" />
-    <ng-container i18n="@@workspace.organization-menu.members"
-      >Members and invitations</ng-container
-    >
-    @if (memberCount(); as count) {
-      <span class="ml-auto pl-4 text-xs text-muted-foreground tabular-nums">{{ count }}</span>
-    }
-  </button>
-  <button cwMenuItem (triggered)="open('billing')">
-    <ng-icon name="phosphorCreditCardBold" aria-hidden="true" />
-    <ng-container i18n="@@workspace.organization-menu.billing">Billing and quotas</ng-container>
-  </button>
+  @if (workspace.can('member')) {
+    <cw-menu-separator />
+  }
+  @if (workspace.can('admin')) {
+    <button cwMenuItem (triggered)="open('general')">
+      <ng-icon name="phosphorGearSixBold" aria-hidden="true" />
+      <ng-container i18n="@@workspace.organization-menu.settings"
+        >Organization settings</ng-container
+      >
+    </button>
+  }
+  @if (workspace.can('member')) {
+    <button cwMenuItem (triggered)="open('members')">
+      <ng-icon name="phosphorUsersBold" aria-hidden="true" />
+      <ng-container i18n="@@workspace.organization-menu.members"
+        >Members and invitations</ng-container
+      >
+      @if (memberCount(); as count) {
+        <span class="ml-auto pl-4 text-xs text-muted-foreground tabular-nums">{{ count }}</span>
+      }
+    </button>
+  }
+  @if (workspace.can('owner')) {
+    <button cwMenuItem (triggered)="open('billing')">
+      <ng-icon name="phosphorCreditCardBold" aria-hidden="true" />
+      <ng-container i18n="@@workspace.organization-menu.billing">Billing and quotas</ng-container>
+    </button>
+  }
   <cw-menu-separator />
   <button cwMenuItem (triggered)="organizations()">
     <ng-icon name="phosphorPlusBold" aria-hidden="true" />

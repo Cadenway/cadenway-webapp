@@ -2,6 +2,7 @@ import { type EnvironmentProviders, makeEnvironmentProviders } from '@angular/co
 import { type SlotContribution, type SlotFeature, slotProviders } from '@shared/layout-slot';
 
 import {
+  SETTINGS_SHELL_OVERLAYS_SLOT,
   SETTINGS_SHELL_RAIL_FOOTER_SLOT,
   SETTINGS_SHELL_RAIL_NAVIGATION_SLOT,
   SETTINGS_SHELL_SETTINGS_NAVIGATION_SLOT,
@@ -47,6 +48,17 @@ export interface SettingsShellSlots {
    * @readonly
    */
   readonly settingsNavigation?: readonly SlotFeature<SlotContribution>[];
+
+  /**
+   * Property overlays
+   *
+   * @description
+   * Overlays rendered after the shell, before its toaster.
+   *
+   * @type {readonly SlotFeature<SlotContribution>[] | undefined}
+   * @readonly
+   */
+  readonly overlays?: readonly SlotFeature<SlotContribution>[];
   // #endregion
 }
 
@@ -68,5 +80,6 @@ export function provideSettingsShellSlots(config: SettingsShellSlots): Environme
     ...slotProviders(SETTINGS_SHELL_RAIL_NAVIGATION_SLOT, config.railNavigation),
     ...slotProviders(SETTINGS_SHELL_RAIL_FOOTER_SLOT, config.railFooter),
     ...slotProviders(SETTINGS_SHELL_SETTINGS_NAVIGATION_SLOT, config.settingsNavigation),
+    ...slotProviders(SETTINGS_SHELL_OVERLAYS_SLOT, config.overlays),
   ]);
 }

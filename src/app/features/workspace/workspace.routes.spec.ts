@@ -31,7 +31,7 @@ import {
   TaskQueriesService,
   TasksService,
 } from '@cadenway/api-client';
-import { filter, firstValueFrom, Observable, of, Subject, throwError } from 'rxjs';
+import { filter, firstValueFrom, NEVER, Observable, of, Subject, throwError } from 'rxjs';
 import { type Socket } from 'socket.io-client';
 import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 
@@ -48,6 +48,7 @@ import {
   RealtimeConnection,
 } from '@core/realtime';
 import { RouteErrorBoundary } from '@features/errors';
+import { TaskCreate, TaskDetailOpener } from '@features/task';
 
 import { WorkspaceSession } from './data-access/services/workspace-session/workspace-session.service';
 import type {
@@ -1450,6 +1451,160 @@ describe('WORKSPACE_ROUTES', () => {
     expect(element.querySelector('h1')?.textContent.trim()).toBe('Page not found');
     expect(element.querySelector('[data-testid="organization-switcher"]')).not.toBeNull();
     expect(TestBed.inject(Router).url).toBe('/atelier-nord/missing/page');
+  });
+
+  it('mounts the account settings in the settings shell, outside the application shell', async () => {
+    const harness: RouterTestingHarness = await open('/atelier-nord/account');
+
+    const element: HTMLElement = harness.fixture.nativeElement as HTMLElement;
+    expect(TestBed.inject(Router).url).toBe('/atelier-nord/account/profile');
+    expect(element.querySelector('h1')?.textContent.trim()).toBe('Profile');
+    expect(element.querySelector('nav[aria-label="Settings"]')).not.toBeNull();
+    expect(element.querySelector('[data-testid="organization-switcher"]')).toBeNull();
+    for (const id of [
+      'settings-organization-home',
+      'home-rail-item',
+      'inbox-rail-item',
+      'spaces-rail-item',
+      'search-rail-item',
+      'theme-rail-item',
+      'user-menu-trigger',
+      'settings-back-to-app',
+    ]) {
+      expect(element.querySelector(`[data-testid="${id}"]`), id).not.toBeNull();
+    }
+    expect(
+      element.querySelector('[data-testid="settings-back-to-app"]')?.getAttribute('href'),
+    ).toBe('/atelier-nord');
+    expect(
+      element
+        .querySelector('[data-testid="account-navigation-profile"]')
+        ?.getAttribute('aria-current'),
+    ).toBe('page');
+    expect(
+      [...element.querySelectorAll('[data-testid^="organization-link-"]')].map((link: Element) =>
+        link.getAttribute('href'),
+      ),
+    ).toEqual([
+      '/atelier-nord/organization/general',
+      '/atelier-nord/organization/members',
+      '/atelier-nord/organization/billing',
+      '/atelier-nord/organization/quotas',
+    ]);
+  });
+
+  it('mounts the organization settings with the navigation of an owner', async () => {
+    const harness: RouterTestingHarness = await open('/atelier-nord/organization/billing');
+
+    const element: HTMLElement = harness.fixture.nativeElement as HTMLElement;
+    expect(element.querySelector('h1')?.textContent.trim()).toBe('Billing');
+    expect(element.querySelector('nav[aria-label="Organization settings"]')).not.toBeNull();
+    await vi.waitFor(() => {
+      harness.detectChanges();
+      expect(element.querySelector('[data-testid="organization-identity"]')?.textContent).toContain(
+        'Team plan · 18 members',
+      );
+    });
+    expect(element.querySelectorAll('[data-testid^="organization-navigation-"]')).toHaveLength(7);
+    expect(
+      element
+        .querySelector('[data-testid="organization-navigation-quotas"] [aria-hidden="false"]')
+        ?.getAttribute('aria-label'),
+    ).toBe('Critical quota');
+    expect(
+      element.querySelector('[data-testid="account-settings-link"]')?.getAttribute('href'),
+    ).toBe('/atelier-nord/account/security');
+  });
+
+  it('sends a member who opens an owner section to the first section their role allows', async () => {
+    const harness: RouterTestingHarness = await open('/lumen/organization/billing');
+
+    const element: HTMLElement = harness.fixture.nativeElement as HTMLElement;
+    expect(TestBed.inject(Router).url).toBe('/lumen/organization/members');
+    expect(element.querySelector('h1')?.textContent.trim()).toBe('Members');
+    expect(
+      [...element.querySelectorAll('[data-testid^="organization-navigation-"]')].map(
+        (link: Element) => link.textContent.trim(),
+      ),
+    ).toEqual(['Members']);
+  });
+
+  it('sends a member who opens General, which only administrators may edit, to Members', async () => {
+    await open('/lumen/organization/general');
+
+    expect(TestBed.inject(Router).url).toBe('/lumen/organization/members');
+  });
+
+  it('redirects an owner demoted during a workspace recovery off a restricted section', async () => {
+    const harness: RouterTestingHarness = await open('/atelier-nord/organization/billing');
+    expect(TestBed.inject(Router).url).toBe('/atelier-nord/organization/billing');
+    session.currentOrganization.mockReturnValue(ok({ ...atelierNord, role: 'member' }));
+    const router: Router = TestBed.inject(Router);
+
+    TestBed.inject(OrganizationPin).notifyContextChanged();
+
+    await vi.waitFor(() => {
+      expect(router.url).toBe('/atelier-nord/organization/members');
+    });
+    await harness.fixture.whenStable();
+    harness.detectChanges();
+    expect(
+      (harness.fixture.nativeElement as HTMLElement).querySelector('h1')?.textContent.trim(),
+    ).toBe('Members');
+  });
+
+  it('never shows the organization settings frame to a guest, not even its 404', async () => {
+    session.currentOrganization.mockReturnValue(ok({ ...lumen, role: 'guest' }));
+    session.myOrganizations.mockReturnValue(ok([atelierNord, { ...lumen, role: 'guest' }]));
+
+    await open('/lumen/organization/missing');
+
+    expect(TestBed.inject(Router).url).toBe('/lumen');
+  });
+
+  it('opens the task creation and the task detail over the settings', async () => {
+    TestBed.configureTestingModule({
+      providers: [
+        { provide: TasksService, useValue: { getTaskDetail: () => NEVER, getTask: () => NEVER } },
+      ],
+    });
+    const harness: RouterTestingHarness = await open('/atelier-nord/account/profile');
+
+    expect(TestBed.inject(TaskCreate).open()).toBe(true);
+    await vi.waitFor(async () => {
+      await harness.fixture.whenStable();
+      expect(document.querySelector('[role="dialog"]')?.textContent).toContain('Create a task');
+    });
+    TestBed.inject(TaskCreate).close();
+    await vi.waitFor(async () => {
+      await harness.fixture.whenStable();
+      expect(document.querySelector('[role="dialog"]')).toBeNull();
+    });
+
+    await harness.navigateByUrl('/atelier-nord/account/profile?task=CAD-482');
+    await vi.waitFor(async () => {
+      await harness.fixture.whenStable();
+      expect(document.querySelector('cw-task-detail-dialog')).not.toBeNull();
+    });
+    expect(TestBed.inject(TaskDetailOpener).taskKey()).toBe('CAD-482');
+  });
+
+  it('sends a guest who opens the organization settings back to the workspace', async () => {
+    session.currentOrganization.mockReturnValue(ok({ ...lumen, role: 'guest' }));
+    session.myOrganizations.mockReturnValue(ok([atelierNord, { ...lumen, role: 'guest' }]));
+
+    await open('/lumen/organization');
+
+    expect(TestBed.inject(Router).url).toBe('/lumen');
+  });
+
+  it('renders the 404 inside the settings shell for an unknown settings section', async () => {
+    const harness: RouterTestingHarness = await open('/atelier-nord/account/missing');
+
+    const element: HTMLElement = harness.fixture.nativeElement as HTMLElement;
+    expect(element.querySelector('h1')?.textContent.trim()).toBe('Page not found');
+    expect(element.querySelector('nav[aria-label="Settings"]')).not.toBeNull();
+    expect(TestBed.inject(Router).url).toBe('/atelier-nord/account/missing');
   });
 
   it('mounts the task deep link inside the shell and renders not found for a missing task', async () => {

@@ -176,7 +176,7 @@ export const organizationGuard: CanActivateFn = (
         if (recoveryId !== undefined && isTransientWorkspaceProblem(result.problem)) return false;
         return accessRedirect(router, result.problem, state.url);
       }
-      store.verifyOrganization(result.value);
+      store.verifyOrganization(result.value, navigation?.id ?? null);
       return true;
     }),
   );

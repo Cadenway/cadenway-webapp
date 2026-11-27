@@ -21,6 +21,17 @@ import type { OrganizationSubscription } from '../../models/organization-subscri
 const NEARLY_FULL: number = 0.9;
 
 /**
+ * Constant CRITICAL
+ *
+ * @description
+ * Share of a quota from which its meter is critical (grenat) and the `Quotas and usage`
+ * navigation item carries the `Critical quota` alert (`Organisation.dc.html` lines 1636-1647).
+ *
+ * @type {number}
+ */
+const CRITICAL: number = 0.9;
+
+/**
  * Constant SILENT_STATUSES
  *
  * @description
@@ -82,6 +93,17 @@ interface SubscriptionStoreInstance {
    * @readonly
    */
   readonly storageNearlyFull: Signal<boolean>;
+
+  /**
+   * Property quotaCritical
+   *
+   * @description
+   * Whether the seats or the storage the quotas section shows use at least 90 % of their limit.
+   *
+   * @type {Signal<boolean>}
+   * @readonly
+   */
+  readonly quotaCritical: Signal<boolean>;
   // #endregion
 
   // #region Methods
@@ -124,6 +146,18 @@ function createSubscriptionStore(): Type<SubscriptionStoreInstance> {
         if (error === undefined) return false;
         const problem: ApiProblem | null = readProblem(error.cause ?? error);
         return problem === null || !SILENT_STATUSES.has(problem.status);
+      },
+      quotaCritical: (): boolean => {
+        const subscription: OrganizationSubscription | undefined = store.subscription.hasValue()
+          ? store.subscription.value()
+          : undefined;
+        if (subscription === undefined) return false;
+        const reached: (used: number, limit: number) => boolean = (used: number, limit: number) =>
+          limit > 0 && used >= CRITICAL * limit;
+        return (
+          reached(subscription.seatsUsed, subscription.seatsLimit) ||
+          reached(subscription.storageUsedBytes, subscription.storageLimitBytes)
+        );
       },
       storageNearlyFull: (): boolean => {
         const subscription: OrganizationSubscription | undefined = store.subscription.hasValue()

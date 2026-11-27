@@ -851,7 +851,10 @@ through `SpaceStatusesApi` (`data-access/services/space-statuses-api/`, `updateS
 `providers` publishes, for the `/:org` route that loads the shell:
 
 - `provideSpacesNavigation()`: the workspace's `SpacesNavigationStore` and `LIST_DIRECTORY`;
-- `withSpacesRailItem()` (`railNavigation`, order 30): `Spaces`, which opens the last list or
+- `withSpacesRailItem(options?)` (`railNavigation`, order 30; `{ variant: 'settings' }` in the
+  settings shell, whose favorite spaces' menu keeps only `Open the overview` and `Remove from
+favorite spaces`, as `Compte.dc.html` lines 759-767 draw it, since no sidebar hosts the space
+  dialogs there): `Spaces`, which opens the last list or
   space overview shown in the tab (else the first space) and is current on a spaces screen, then,
   on desktop, a separator and one button per favorite space;
 - `withSpacesSidebar()` (`sidebar`, order 0): `Favorites`, `Spaces`, the suggestions and the

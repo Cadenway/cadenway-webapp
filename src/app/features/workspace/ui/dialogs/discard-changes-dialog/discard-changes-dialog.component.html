@@ -1,0 +1,29 @@
+<cw-alert-dialog
+  variant="destructive"
+  size="sm"
+  [open]="open()"
+  data-testid="discard-changes-dialog"
+  (confirm)="answered(true)"
+  (cancel)="answered(false)"
+>
+  <h2 cwAlertDialogTitle i18n="@@workspace.settings.discard-title">Discard unsaved changes?</h2>
+  <p cwAlertDialogDescription i18n="@@workspace.settings.discard-description">
+    The changes you made in this section will be lost.
+  </p>
+  <button
+    cwButton
+    cwAlertDialogCancel
+    variant="outline"
+    i18n="@@workspace.settings.discard-keep-editing"
+  >
+    Keep editing
+  </button>
+  <button
+    cwButton
+    cwAlertDialogAction
+    variant="destructive"
+    i18n="@@workspace.settings.discard-action"
+  >
+    Discard
+  </button>
+</cw-alert-dialog>

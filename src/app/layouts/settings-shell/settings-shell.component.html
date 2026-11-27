@@ -35,4 +35,9 @@
       <router-outlet />
     </main>
   </div>
+
+  @for (overlay of overlays; track overlay.id) {
+    <ng-container *ngComponentOutlet="overlay.component; inputs: overlay.inputs" />
+  }
+  <cw-toaster />
 </div>

@@ -4,6 +4,7 @@ import type { SlotContribution } from '@shared/layout-slot';
 import { describe, expect, it } from 'vitest';
 
 import {
+  SETTINGS_SHELL_OVERLAYS_SLOT,
   SETTINGS_SHELL_RAIL_FOOTER_SLOT,
   SETTINGS_SHELL_RAIL_NAVIGATION_SLOT,
   SETTINGS_SHELL_SETTINGS_NAVIGATION_SLOT,
@@ -53,6 +54,7 @@ describe('provideSettingsShellSlots', () => {
           railNavigation: [feature('applications')],
           railFooter: [feature('search')],
           settingsNavigation: [feature('account')],
+          overlays: [feature('palette')],
         }),
         provideSettingsShellSlots({ settingsNavigation: [feature('organization')] }),
       ],
@@ -61,6 +63,7 @@ describe('provideSettingsShellSlots', () => {
     expect(ids(SETTINGS_SHELL_RAIL_NAVIGATION_SLOT)).toEqual(['applications']);
     expect(ids(SETTINGS_SHELL_RAIL_FOOTER_SLOT)).toEqual(['search']);
     expect(ids(SETTINGS_SHELL_SETTINGS_NAVIGATION_SLOT)).toEqual(['account', 'organization']);
+    expect(ids(SETTINGS_SHELL_OVERLAYS_SLOT)).toEqual(['palette']);
   });
 
   it('leaves omitted slots unprovided', () => {
@@ -68,5 +71,6 @@ describe('provideSettingsShellSlots', () => {
 
     expect(TestBed.inject(SETTINGS_SHELL_RAIL_NAVIGATION_SLOT, null)).toBeNull();
     expect(TestBed.inject(SETTINGS_SHELL_SETTINGS_NAVIGATION_SLOT, null)).toBeNull();
+    expect(TestBed.inject(SETTINGS_SHELL_OVERLAYS_SLOT, null)).toBeNull();
   });
 });

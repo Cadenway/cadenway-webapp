@@ -3,8 +3,9 @@ import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { provideCadenwayIcons } from '@cadenway/icons';
+import { CwToastService } from '@cadenway/ui/components/toast';
 import type { SlotContribution } from '@shared/layout-slot';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { provideSettingsShellSlots, type SettingsShellSlots } from './providers';
 import type { SettingsShellRouteData } from './models/settings-shell-route-data.interface';
@@ -190,6 +191,21 @@ describe('SettingsShell', () => {
     expect(labels(host)).toEqual([]);
     expect(host.querySelector('cw-app-rail-footer')).toBeNull();
     expect(landmark(host, 'nav', NAVIGATION_NAME)).toBeNull();
+  });
+
+  it('renders the overlays after the panel, then the toaster that shows the toasts', async () => {
+    const host: HTMLElement = await render({ overlays: [probe('palette', 0)] });
+
+    const overlay: Element | undefined =
+      host.querySelector('[data-testid="slot-probe"]') ?? undefined;
+    expect(overlay?.textContent.trim()).toBe('palette');
+    expect(host.querySelector('main')?.contains(overlay ?? null)).toBe(false);
+    TestBed.inject(CwToastService).success('Profile saved');
+    await vi.waitFor(() => {
+      expect(landmark(host, 'section', 'Notifications (F8)')?.textContent).toContain(
+        'Profile saved',
+      );
+    });
   });
 
   it('exposes an unnamed main landmark around the outlet', async () => {

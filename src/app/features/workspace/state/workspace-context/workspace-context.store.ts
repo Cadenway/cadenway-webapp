@@ -8,6 +8,7 @@ import type {
   WorkspaceUser,
 } from '../../models/workspace-context/workspace-context.interface';
 import type { WorkspaceContextPort } from '../../ports/workspace-context/workspace-context-port.interface';
+import { meetsRole } from '../../utils/role-rank/role-rank.util';
 
 /**
  * Interface WorkspaceContextState
@@ -61,6 +62,18 @@ interface WorkspaceContextState {
    * @readonly
    */
   readonly _pendingOrganization: WorkspaceOrganization | null;
+
+  /**
+   * Property _pendingNavigationId
+   *
+   * @description
+   * Router navigation whose organization guard verified `_pendingOrganization`, so a role check of
+   * that same navigation can trust it before the resolver commits it.
+   *
+   * @type {number | null}
+   * @readonly
+   */
+  readonly _pendingNavigationId: number | null;
   // #endregion
 }
 
@@ -92,8 +105,22 @@ interface WorkspaceContextStoreInstance extends WorkspaceContextPort {
    * progress, without changing the published context.
    *
    * @param {WorkspaceOrganization} organization - The session's current organization.
+   * @param {number | null} [navigationId] - Router navigation that verified it, when known.
    */
-  verifyOrganization(organization: WorkspaceOrganization): void;
+  verifyOrganization(organization: WorkspaceOrganization, navigationId?: number | null): void;
+
+  /**
+   * Method roleDuring
+   *
+   * @description
+   * Role a guard below `/:org` checks. Such a guard runs before the workspace resolver commits the
+   * context, so it gets the role the organization guard verified during that same navigation,
+   * otherwise the committed role (the guards of `/:org` did not run again), otherwise null.
+   *
+   * @param {number | null} navigationId - Router navigation the guard runs for.
+   * @returns {WorkspaceRole | null} The role, or null before any verified organization.
+   */
+  roleDuring(navigationId: number | null): WorkspaceRole | null;
 
   /**
    * Method commit
@@ -109,21 +136,6 @@ interface WorkspaceContextStoreInstance extends WorkspaceContextPort {
 }
 
 /**
- * Constant ROLE_RANK
- *
- * @description
- * Position of each role, the most privileged first, for `can()`.
- *
- * @type {Readonly<Record<WorkspaceRole, number>>}
- */
-const ROLE_RANK: Readonly<Record<WorkspaceRole, number>> = {
-  owner: 0,
-  admin: 1,
-  member: 2,
-  guest: 3,
-};
-
-/**
  * Constant initialState
  *
  * @description
@@ -136,6 +148,7 @@ const initialState: WorkspaceContextState = {
   _organization: null,
   _pendingUser: null,
   _pendingOrganization: null,
+  _pendingNavigationId: null,
 };
 
 /**
@@ -185,8 +198,24 @@ function createWorkspaceContextStore(): Type<WorkspaceContextStoreInstance> {
       verifyUser(user: WorkspaceUser): void {
         patchState(store, { _pendingUser: user });
       },
-      verifyOrganization(organization: WorkspaceOrganization): void {
-        patchState(store, { _pendingOrganization: organization });
+      verifyOrganization(
+        organization: WorkspaceOrganization,
+        navigationId: number | null = null,
+      ): void {
+        patchState(store, {
+          _pendingOrganization: organization,
+          _pendingNavigationId: navigationId,
+        });
+      },
+      roleDuring(navigationId: number | null): WorkspaceRole | null {
+        const pending: WorkspaceOrganization | null = store._pendingOrganization();
+        if (
+          pending !== null &&
+          navigationId !== null &&
+          store._pendingNavigationId() === navigationId
+        )
+          return pending.role;
+        return store._organization()?.role ?? null;
       },
       commit(): WorkspaceContext | null {
         const user: WorkspaceUser | null = store._pendingUser();
@@ -197,11 +226,12 @@ function createWorkspaceContextStore(): Type<WorkspaceContextStoreInstance> {
           _organization: organization,
           _pendingUser: null,
           _pendingOrganization: null,
+          _pendingNavigationId: null,
         });
         return { user, organization };
       },
       can(role: WorkspaceRole): boolean {
-        return ROLE_RANK[store.role()] <= ROLE_RANK[role];
+        return meetsRole(store.role(), role);
       },
     })),
   );

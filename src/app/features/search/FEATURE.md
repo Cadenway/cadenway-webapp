@@ -43,7 +43,7 @@ None.
 - The groups are `Suggestions` (`Create a task`, which closes the palette and opens Task's
   creation dialog; its key hint is N, the shortcut that opens that dialog, where the mockup draws C),
   `Recent tasks`, `Go to`, `Lists`, `Tasks`, `Settings` (`Profile and
-security`, `Organization settings`, `Billing and quotas`, `Switch
+security`, `Organization settings` (administrators), `Billing and quotas` (the owner), `Switch
 organization`) and `Actions` (one theme action that toggles, named after the theme it
   switches to, then `Sign out`). Local items are filtered by their label; server matches
   always show.

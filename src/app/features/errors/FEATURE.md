@@ -9,15 +9,17 @@ error from its page's primary read; guards and resolvers redirect instead.
 ## Routes
 
 `ERRORS_ROUTES` mounts `**` with the not-found state and the `Page not found` title (`errors.not-found.route-title`). The
-application mounts it after its known routes, and Workspace mounts it again below `/:org`, where it
-renders inside the shell. The page keeps the unknown address in the browser.
+application mounts it after its known routes, Workspace mounts it again below `/:org`, where it
+renders inside the application shell, and Account and Organization mount it after their settings
+sections, where it renders inside the settings shell. The page keeps the unknown address in the
+browser.
 
 ## Public entry points
 
-| Entry point     | Consumers                    |
-| --------------- | ---------------------------- |
-| `errors.routes` | app, workspace               |
-| `.`             | app, spaces, task, workspace |
+| Entry point     | Consumers                             |
+| --------------- | ------------------------------------- |
+| `errors.routes` | account, app, organization, workspace |
+| `.`             | app, spaces, task, workspace          |
 
 `.` publishes `RouteErrorBoundary`, the `defaultErrorComponent` of `withErrorBoundaries` in
 `app.config.ts`, a component under `ui/components/route-error-boundary`. A route that needs its
