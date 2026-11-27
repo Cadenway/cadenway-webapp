@@ -91,10 +91,9 @@ route), `withGettingStarted()` and `withOnboardingWizard()` (the `overlays` cont
   `in-progress`. The parameter stays in the address until the launch is durable: at version 1
   `OnboardingWizardStore.saveStart()` saves the initial draft (the screen, the default name, its
   prefix, the color and the template), and once the progress is past version 1 or shows the
-  assistant closed, or its read failed after `Set up later`, the host removes the parameter with
-  `replaceUrl` (never while a navigation is under way, whose end settles it again), keeping the
-  path and the other
-  parameters (`notice=` included). A reload before that save reopens the assistant from the
+  assistant closed, the host removes the parameter with `replaceUrl` (never while a navigation is
+  under way, whose end settles it again), keeping the path and the other parameters (`notice=`
+  included). A reload before that save reopens the assistant from the
   parameter; a failed first save keeps it, the assistant stays usable, and the next draft save
   makes the launch durable; a dropped one does nothing. Otherwise the assistant opens by itself
   only on the workspace root (`/<slug>`, without `?task=`) once the progress shows `in-progress`
@@ -130,9 +129,10 @@ route), `withGettingStarted()` and `withOnboardingWizard()` (the `overlays` cont
 - `Set up later` closes at once, then sends the dismissal; a read in flight is awaited first (the
   shared store reads before it writes). When the read fails, already failed at the click or
   failing while awaited, nothing is written: it shows `Your choice could not be saved` /
-  `The setup assistant may come back on your next visit.`, and once the read has failed the host
-  removes `?onboarding=start` with `replaceUrl`, so a reload does not reopen it; while the read is
-  in flight the parameter stays. A definite refusal, or an unknown outcome after which the
+  `The setup assistant may come back on your next visit.`, and `?onboarding=start` stays, since
+  at version 1 the resume rule never reopens the assistant: a reload reopens it, as the toast
+  says. When the read in flight succeeds, the dismissal is sent and the parameter goes once the
+  progress shows it. A definite refusal, or an unknown outcome after which the
   progress still shows the assistant `in-progress`, shows the same failure toast; a dropped write
   or `409 onboarding.wizard-closed` shows none. Once settled, when a space exists (a finish whose
   outcome was unknown did create it), it refreshes the navigation and opens the first list. A
@@ -338,8 +338,9 @@ route), `withGettingStarted()` and `withOnboardingWizard()` (the `overlays` cont
   Recording the marker does not depend on the dialog: it follows the batch, for the organization
   the batch went to only.
 - The checklist records `invitationSent` once per send, right after the first batch that invited
-  an address or found one
-  `already-invited` (an invitation is out for it, perhaps from a batch whose answer was lost).
+  an address or found one `already-invited` (an invitation is out for it, perhaps from a batch
+  whose answer was lost), without waiting for that write: a slow marker never holds the next
+  batches back.
   When that marker write fails other than by a drop, `OnboardingStore` keeps it owed
   (`owesInvitation`): being route-scoped on `/:org`, it survives a change to a settings shell and
   back. `GettingStartedStore` calls `retryOwedInvitation()` on its refresh occasions (the tab
