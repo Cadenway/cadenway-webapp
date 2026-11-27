@@ -144,7 +144,7 @@
               (click)="next()"
               data-testid="onboarding-next"
             >
-              @switch (store.nextAction()) {
+              @switch (nextAction()) {
                 @case ('create') {
                   <ng-container i18n="@@onboarding.wizard.create">Create the space</ng-container>
                 }

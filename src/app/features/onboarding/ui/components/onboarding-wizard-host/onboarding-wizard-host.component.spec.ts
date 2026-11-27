@@ -1,3 +1,4 @@
+import { HttpErrorResponse } from '@angular/common/http';
 import { Component, signal, type WritableSignal } from '@angular/core';
 import { type ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideRouter, Router } from '@angular/router';
@@ -154,6 +155,17 @@ interface Harness {
   readonly dismiss: Mock;
 
   /**
+   * Property saveDraft
+   *
+   * @description
+   * The shared store's draft save; by default it answers version 2 and shows it.
+   *
+   * @type {Mock}
+   * @readonly
+   */
+  readonly saveDraft: Mock;
+
+  /**
    * Property navigate
    *
    * @description
@@ -187,6 +199,10 @@ async function render(
   const progressSignal: WritableSignal<OnboardingProgress | null> = signal(initial);
   const load: Mock = vi.fn();
   const dismiss: Mock = vi.fn(() => Promise.resolve(progress(2, 'dismissed')));
+  const saveDraft: Mock = vi.fn(() => {
+    progressSignal.set(progress(2));
+    return Promise.resolve(progress(2));
+  });
   TestBed.configureTestingModule({
     providers: [
       provideRouter([
@@ -207,7 +223,7 @@ async function render(
           failed: signal(false),
           load,
           reload: vi.fn(() => Promise.resolve()),
-          saveDraft: vi.fn(() => Promise.resolve(progress(2))),
+          saveDraft,
           dismiss,
           finish: vi.fn(),
           recordInvitation: vi.fn(() => Promise.resolve()),
@@ -234,7 +250,7 @@ async function render(
   const fixture: ComponentFixture<OnboardingWizardHost> =
     TestBed.createComponent(OnboardingWizardHost);
   await settle(fixture);
-  return { fixture, router, progress: progressSignal, load, dismiss, navigate };
+  return { fixture, router, progress: progressSignal, load, dismiss, saveDraft, navigate };
 }
 
 /**
@@ -270,7 +286,7 @@ describe('OnboardingWizardHost', () => {
     TestBed.resetTestingModule();
   });
 
-  it('opens on ?onboarding=start, reads the progress, and removes the parameter only', async () => {
+  it('opens on ?onboarding=start and keeps the parameter while the progress is read', async () => {
     const { router, load, navigate }: Harness = await render(
       '/atelier-nord?onboarding=start&notice=logo-upload-failed',
       null,
@@ -279,12 +295,100 @@ describe('OnboardingWizardHost', () => {
     expect(load).toHaveBeenCalled();
     expect(wizard()).not.toBeNull();
     expect(document.querySelector('[data-testid="onboarding-loading"]')).not.toBeNull();
+    expect(navigate).not.toHaveBeenCalled();
+    expect(router.url).toBe('/atelier-nord?onboarding=start&notice=logo-upload-failed');
+  });
+
+  it('saves the initial draft, then removes only the parameter once the save is confirmed', async () => {
+    const pending: { resolve: () => void } = { resolve: (): void => undefined };
+    const {
+      fixture,
+      router,
+      progress: shown,
+      saveDraft,
+      navigate,
+    }: Harness = await render('/atelier-nord?onboarding=start&notice=logo-upload-failed', null);
+    saveDraft.mockImplementationOnce(
+      () =>
+        new Promise<OnboardingProgress>((resolve: (value: OnboardingProgress) => void) => {
+          pending.resolve = (): void => {
+            shown.set(progress(2));
+            resolve(progress(2));
+          };
+        }),
+    );
+
+    shown.set(progress(1));
+    await settle(fixture);
+
+    expect(saveDraft).toHaveBeenCalledTimes(1);
+    expect(saveDraft).toHaveBeenCalledWith({
+      step: 'space',
+      name: 'Product',
+      prefix: 'PRO',
+      color: 'violet',
+      preset: 'dev',
+    });
+    expect(router.url).toBe('/atelier-nord?onboarding=start&notice=logo-upload-failed');
+
+    pending.resolve();
+    await settle(fixture);
+
     expect(navigate).toHaveBeenCalledWith([], {
       queryParams: { onboarding: null },
       queryParamsHandling: 'merge',
       replaceUrl: true,
     });
     expect(router.url).toBe('/atelier-nord?notice=logo-upload-failed');
+    expect(wizard()).not.toBeNull();
+  });
+
+  it('reopens the assistant after a reload before the first save, the parameter still there', async () => {
+    const first: Harness = await render('/atelier-nord?onboarding=start', null);
+    first.saveDraft.mockReturnValueOnce(new Promise<OnboardingProgress>(() => undefined));
+    first.progress.set(progress(1));
+    await settle(first.fixture);
+    expect(first.router.url).toBe('/atelier-nord?onboarding=start');
+
+    TestBed.resetTestingModule();
+    const reloaded: Harness = await render(first.router.url, progress(1));
+
+    expect(wizard()).not.toBeNull();
+    expect(reloaded.load).toHaveBeenCalled();
+  });
+
+  it('keeps the parameter after a failed first save, and the assistant usable', async () => {
+    const {
+      fixture,
+      router,
+      saveDraft,
+      progress: shown,
+    }: Harness = await render('/atelier-nord?onboarding=start', null);
+    saveDraft.mockRejectedValueOnce(new HttpErrorResponse({ status: 503 }));
+
+    shown.set(progress(1));
+    await settle(fixture);
+
+    expect(saveDraft).toHaveBeenCalledTimes(1);
+    expect(router.url).toBe('/atelier-nord?onboarding=start');
+    expect(wizard()).not.toBeNull();
+
+    document.querySelector<HTMLButtonElement>('[data-testid="onboarding-next"]')?.click();
+    await settle(fixture);
+
+    expect(saveDraft).toHaveBeenCalledTimes(2);
+    expect(router.url).toBe('/atelier-nord');
+  });
+
+  it('removes the parameter at once for a launch already saved', async () => {
+    const { router, saveDraft }: Harness = await render(
+      '/atelier-nord?onboarding=start',
+      progress(3),
+    );
+
+    expect(saveDraft).not.toHaveBeenCalled();
+    expect(router.url).toBe('/atelier-nord');
+    expect(wizard()).not.toBeNull();
   });
 
   it('opens when a later navigation carries ?onboarding=start', async () => {

@@ -207,7 +207,7 @@ async function render(
   const reload: Mock = vi.fn(() => Promise.resolve());
   const recordInvitation: Mock = vi.fn(() => Promise.resolve());
   const invite: Mock = vi.fn((emails: readonly string[]) =>
-    Promise.resolve({ invited: emails.length, skipped: 0 }),
+    Promise.resolve({ invited: emails.length, skipped: 0, alreadyInvited: 0 }),
   );
   TestBed.configureTestingModule({
     imports: [OnboardingWizard],
@@ -523,6 +523,42 @@ describe('OnboardingWizard', () => {
     });
     expect(finish).toHaveBeenCalledTimes(1);
     expect(invite).toHaveBeenCalledWith(['ines.robert@ateliernord.fr']);
+  });
+
+  it('keeps an address typed without Add when continuing from the team screen', async () => {
+    const { fixture, invite }: Harness = await render(progress(2, { step: 'team' }));
+    const field: HTMLInputElement = find('onboarding-invite-email') as HTMLInputElement;
+
+    field.value = 'ines.robert@ateliernord.fr';
+    field.dispatchEvent(new Event('input'));
+    await fixture.whenStable();
+
+    expect(find('onboarding-next')?.textContent.trim()).toBe('Continue');
+    await click(fixture, find('onboarding-next'));
+
+    expect(title()?.textContent.trim()).toBe('Import your existing projects');
+    await click(fixture, find('onboarding-next'));
+    await vi.waitFor(() => {
+      expect(invite).toHaveBeenCalledWith(['ines.robert@ateliernord.fr']);
+    });
+  });
+
+  it('stays on the team screen and shows the error for an invalid typed address', async () => {
+    const { fixture, saveDraft }: Harness = await render(progress(2, { step: 'team' }));
+    const field: HTMLInputElement = find('onboarding-invite-email') as HTMLInputElement;
+
+    field.value = 'ines.robert@ateliernord';
+    field.dispatchEvent(new Event('input'));
+    await fixture.whenStable();
+    const next: HTMLButtonElement = find('onboarding-next') as HTMLButtonElement;
+    expect(next.disabled).toBe(false);
+    await click(fixture, next);
+
+    expect(title()?.textContent.trim()).toBe('Invite your team');
+    expect(find('onboarding-invite-error')?.textContent.trim()).toBe(
+      'Enter a full address, for example ines.robert@ateliernord.fr.',
+    );
+    expect(saveDraft).not.toHaveBeenCalled();
   });
 
   it('shows no invitation form to a person who may not invite', async () => {

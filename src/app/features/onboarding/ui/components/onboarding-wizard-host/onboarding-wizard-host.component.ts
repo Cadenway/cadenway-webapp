@@ -63,16 +63,33 @@ const ONBOARDING_START: string = 'start';
 const ONBOARDING_WIZARD_OVERLAY: string = 'onboarding.wizard';
 
 /**
+ * Function hasStart
+ *
+ * @description
+ * Whether an address carries `?onboarding=start`.
+ *
+ * @param {UrlTree} tree - The address.
+ * @returns {boolean} Whether the assistant was asked to start.
+ */
+function hasStart(tree: UrlTree): boolean {
+  return tree.queryParamMap.get(ONBOARDING_PARAM) === ONBOARDING_START;
+}
+
+/**
  * Component OnboardingWizardHost
  *
  * @description
  * The shell's host of the first-launch assistant (`withOnboardingWizard()`, `overlays` slot, order
  * 50), on every page of the application shell. It decides who sees the assistant, since
  * `getOnboarding` answers an `in-progress` state at version 1 for every member (contract gap G1):
- * - when the address carries `?onboarding=start` (Auth's creation), it reads that parameter once,
- *   removes it with `replaceUrl` while keeping the path and the other parameters, reads the
- *   progress and opens at once, with a skeleton until the progress is known; it then stays open
- *   while the assistant is `in-progress`;
+ * - when the address carries `?onboarding=start` (Auth's creation), it reads the progress and
+ *   opens at once, with a skeleton until the progress is known; it then stays open while the
+ *   assistant is `in-progress`. The parameter stays in the address until the launch is durable:
+ *   at version 1 the store saves the initial draft, and once the progress is past version 1 (or
+ *   the assistant closed) the host removes the parameter with `replaceUrl`, keeping the path and
+ *   the other parameters. A reload before that reopens the assistant; a failed first save keeps
+ *   the parameter, and the next draft save makes the launch durable; a guest's parameter is
+ *   removed at once;
  * - otherwise it opens by itself only on the workspace root (`/<slug>`, Home, without `?task=`),
  *   once the progress shows `in-progress` past version 1 (a step was saved), so it never covers a
  *   deep link;
@@ -178,6 +195,27 @@ export class OnboardingWizardHost {
   private readonly resumedFor: WritableSignal<string | null> = signal<string | null>(null);
 
   /**
+   * Property startSavedFor
+   *
+   * @description
+   * Organization whose initial draft was already asked for, so a failed save is not sent again in
+   * a loop; the next draft save makes the launch durable instead.
+   *
+   * @type {string | null}
+   */
+  private startSavedFor: string | null = null;
+
+  /**
+   * Property removingStart
+   *
+   * @description
+   * Whether the navigation removing `?onboarding=start` is under way.
+   *
+   * @type {boolean}
+   */
+  private removingStart: boolean = false;
+
+  /**
    * Property address
    *
    * @description
@@ -251,12 +289,22 @@ export class OnboardingWizardHost {
    * Constructor
    *
    * @description
-   * Takes `?onboarding=start` from the address shown and from each later navigation, and follows
-   * the workspace root for the resume rule.
+   * Takes `?onboarding=start` from the address shown and from each later navigation, keeps it
+   * until the launch is durable, and follows the workspace root for the resume rule.
    *
    * @constructor
    */
   public constructor() {
+    effect((): void => {
+      const organizationId: string = this.workspace.organization().id;
+      const progress: OnboardingProgress | null = this.onboarding.progress();
+      if (this.startedFor() !== organizationId || progress === null || !hasStart(this.address())) {
+        return;
+      }
+      untracked((): void => {
+        this.settleStart(organizationId, progress);
+      });
+    });
     if (this.router.currentNavigation() === null) this.takeStart();
     this.router.events
       .pipe(
@@ -301,17 +349,56 @@ export class OnboardingWizardHost {
    * the path and the other parameters.
    */
   private takeStart(): void {
-    const tree: UrlTree = this.router.parseUrl(this.router.url);
-    if (tree.queryParamMap.get(ONBOARDING_PARAM) !== ONBOARDING_START) return;
-    if (this.workspace.can('member')) {
-      this.startedFor.set(this.workspace.organization().id);
-      this.onboarding.load();
+    if (!hasStart(this.router.parseUrl(this.router.url))) return;
+    if (!this.workspace.can('member')) {
+      this.removeStart();
+      return;
     }
-    void this.router.navigate([], {
-      queryParams: { [ONBOARDING_PARAM]: null },
-      queryParamsHandling: 'merge',
-      replaceUrl: true,
-    });
+    this.startedFor.set(this.workspace.organization().id);
+    this.onboarding.load();
+  }
+
+  /**
+   * Method settleStart
+   *
+   * @description
+   * Once the progress of a launch from `?onboarding=start` is known: removes the parameter when the
+   * launch is durable (the progress is past version 1, or the assistant is no longer
+   * `in-progress`); at version 1 it asks the store, once per organization, to save the initial
+   * draft, whose answer moves the version on and comes back here.
+   *
+   * @param {string} organizationId - The current organization.
+   * @param {OnboardingProgress} progress - Its progress.
+   */
+  private settleStart(organizationId: string, progress: OnboardingProgress): void {
+    if (progress.wizard.status !== 'in-progress' || progress.version > 1) {
+      this.removeStart();
+      return;
+    }
+    if (this.startSavedFor === organizationId) return;
+    this.startSavedFor = organizationId;
+    void this.wizard.saveStart();
+  }
+
+  /**
+   * Method removeStart
+   *
+   * @description
+   * Removes `?onboarding=start` from the address, replacing the history entry and keeping the path
+   * and the other parameters; a removal under way is not sent twice.
+   */
+  private removeStart(): void {
+    if (this.removingStart) return;
+    this.removingStart = true;
+    void this.router
+      .navigate([], {
+        queryParams: { [ONBOARDING_PARAM]: null },
+        queryParamsHandling: 'merge',
+        replaceUrl: true,
+      })
+      .finally((): void => {
+        this.removingStart = false;
+      });
   }
   // #endregion
 }

@@ -314,6 +314,19 @@ interface OnboardingWizardState {
   readonly _invited: number;
 
   /**
+   * Property _alreadyInvited
+   *
+   * @description
+   * Number of `already-invited` outcomes of the batches sent: an invitation is out for them, so
+   * they count for the checklist marker (as the getting-started checklist counts them), not for
+   * the toast.
+   *
+   * @type {number}
+   * @readonly
+   */
+  readonly _alreadyInvited: number;
+
+  /**
    * Property seeded
    *
    * @description
@@ -397,6 +410,7 @@ const initialState: OnboardingWizardState = {
   emails: [],
   _sent: [],
   _invited: 0,
+  _alreadyInvited: 0,
   seeded: false,
   finishing: false,
   failure: null,
@@ -600,6 +614,21 @@ interface OnboardingWizardStoreInstance {
   changeEmails(emails: readonly string[]): void;
 
   /**
+   * Method saveStart
+   *
+   * @description
+   * Makes a launch from `?onboarding=start` durable: while the progress reads `in-progress` at
+   * version 1 (nothing saved yet, which the resume rule cannot tell from a member never offered
+   * the assistant), it saves the initial draft (the screen, the name or the default name, its
+   * prefix, the color and the template) so the progress moves past version 1. Sends nothing
+   * otherwise. A failed or dropped save is swallowed: the host keeps the parameter, and the next
+   * draft save makes the launch durable instead.
+   *
+   * @returns {Promise<void>} Resolves once settled; never rejects.
+   */
+  saveStart(): Promise<void>;
+
+  /**
    * Method next
    *
    * @description
@@ -643,8 +672,8 @@ interface OnboardingWizardStoreInstance {
    * the space with the template (`finishOnboarding`), tries each other prefix after
    * `409 space.prefix-taken` with a new key, retries once with a new key after a stale version, and
    * sends the same key again after an unknown outcome. Once provisioned it records the invitation
-   * marker when one was invited, refreshes the navigation, opens the first list, shows the toast
-   * and closes. After `409 onboarding.wizard-closed` (another tab finished or dismissed), it opens
+   * marker when an address was invited or already had a pending invitation, refreshes the
+   * navigation, opens the first list, shows the toast and closes. After `409 onboarding.wizard-closed` (another tab finished or dismissed), it opens
    * the first list when a space exists and closes. Nothing more is applied once the organization
    * changed, the store was destroyed or the write was dropped. A second call while one runs does
    * nothing.
@@ -755,6 +784,7 @@ function createOnboardingWizardStore(): Type<OnboardingWizardStoreInstance> {
             patchState(store, (state: OnboardingWizardState) => ({
               _sent: [...state._sent, ...batch.map((email: string): string => email.toLowerCase())],
               _invited: state._invited + outcome.invited,
+              _alreadyInvited: state._alreadyInvited + outcome.alreadyInvited,
             }));
           } catch {
             if (!live(organizationId)) return;
@@ -804,7 +834,7 @@ function createOnboardingWizardStore(): Type<OnboardingWizardStoreInstance> {
         space: OnboardingSpace,
         progress: OnboardingProgress,
       ): Promise<void> => {
-        if (store._invited() > 0) {
+        if (store._invited() > 0 || store._alreadyInvited() > 0) {
           await store._onboarding.recordInvitation().catch((): undefined => undefined);
         }
         if (!live(organization.id)) return;
@@ -950,6 +980,21 @@ function createOnboardingWizardStore(): Type<OnboardingWizardStoreInstance> {
         },
         changeEmails(emails: readonly string[]): void {
           patchState(store, { emails });
+        },
+        async saveStart(): Promise<void> {
+          const progress: OnboardingProgress | null = store._onboarding.progress();
+          if (progress?.wizard.status !== 'in-progress' || progress.version > 1) return;
+          const wizard: OnboardingProgress['wizard'] = progress.wizard;
+          const name: string = (wizard.name ?? defaultName()).trim();
+          await store._onboarding
+            .saveDraft({
+              step: wizard.step,
+              name: name === '' ? null : name,
+              prefix: name === '' ? null : prefixFromName(name),
+              color: wizard.color === 'gris' ? DEFAULT_COLOR : wizard.color,
+              preset: wizard.preset,
+            })
+            .catch((): undefined => undefined);
         },
         async next(): Promise<void> {
           if (store.finishing()) return;

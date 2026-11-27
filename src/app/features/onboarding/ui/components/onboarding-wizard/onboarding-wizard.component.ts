@@ -27,6 +27,7 @@ import type { OnboardingStep } from '../../../models/onboarding/onboarding.type'
 import { OnboardingStore } from '../../../state/onboarding/onboarding.store';
 import {
   type OnboardingFinishFailure,
+  type OnboardingNextAction,
   OnboardingWizardStore,
 } from '../../../state/onboarding-wizard/onboarding-wizard.store';
 import { OnboardingImportStep } from '../onboarding-import-step/onboarding-import-step.component';
@@ -274,6 +275,34 @@ export class OnboardingWizard {
     viewChild<ElementRef<HTMLHeadingElement>>('title');
 
   /**
+   * Property teamStep
+   *
+   * @description
+   * The `Team` screen, while it shows.
+   *
+   * @type {Signal<OnboardingTeamStep | undefined>}
+   * @readonly
+   */
+  private readonly teamStep: Signal<OnboardingTeamStep | undefined> = viewChild(OnboardingTeamStep);
+
+  /**
+   * Property nextAction
+   *
+   * @description
+   * What the primary button does: the store's choice, except that an address typed on the `Team`
+   * screen without `Add` makes it `Continue`, since moving on adds it.
+   *
+   * @type {Signal<OnboardingNextAction>}
+   * @readonly
+   */
+  protected readonly nextAction: Signal<OnboardingNextAction> = computed(
+    (): OnboardingNextAction => {
+      const action: OnboardingNextAction = this.store.nextAction();
+      return action === 'skip' && this.teamStep()?.hasText() === true ? 'continue' : action;
+    },
+  );
+
+  /**
    * Property workspace
    *
    * @description
@@ -329,12 +358,15 @@ export class OnboardingWizard {
    * Method next
    *
    * @description
-   * Moves to the next screen, or creates the space on the last one.
+   * Moves to the next screen, or creates the space on the last one. On the `Team` screen it first
+   * adds the address still typed in the field; an invalid one keeps the screen and shows the
+   * field's error.
    *
    * @returns {Promise<void>} Resolves once the store settled.
    */
   protected async next(): Promise<void> {
     const before: OnboardingStep = this.store.step();
+    if (before === 'team' && this.teamStep()?.commitPending() === false) return;
     await this.store.next();
     if (this.store.step() !== before) this.showStep();
   }

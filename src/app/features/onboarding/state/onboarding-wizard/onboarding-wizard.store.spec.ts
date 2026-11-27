@@ -418,7 +418,7 @@ function setup(initial: OnboardingProgress | null = progress(1)): Setup {
     finish: vi.fn(() => Promise.resolve(progress(3, {}, true))),
     recordInvitation: vi.fn(() => Promise.resolve()),
     invite: vi.fn((emails: readonly string[]): Promise<OnboardingInvitationOutcome> =>
-      Promise.resolve({ invited: emails.length, skipped: 0 }),
+      Promise.resolve({ invited: emails.length, skipped: 0, alreadyInvited: 0 }),
     ),
     navigate: vi.fn(() => Promise.resolve(true)),
     refresh: vi.fn(),
@@ -669,7 +669,7 @@ describe('OnboardingWizardStore', () => {
 
   it('counts only the invited addresses and records nothing when none was invited', async () => {
     const { store, fakes }: Setup = setup();
-    fakes.invite.mockResolvedValue({ invited: 0, skipped: 1 });
+    fakes.invite.mockResolvedValue({ invited: 0, skipped: 1, alreadyInvited: 0 });
     store.pickPreset('blank');
     store.changeEmails(['ines.robert@ateliernord.fr']);
 
@@ -677,6 +677,42 @@ describe('OnboardingWizardStore', () => {
 
     expect(fakes.recordInvitation).not.toHaveBeenCalled();
     expect(fakes.show).toHaveBeenCalledWith('Space “Product” created', { description: '1 list' });
+  });
+
+  it('records the invitation marker for an address already invited, without counting it as sent', async () => {
+    const { store, fakes }: Setup = setup();
+    fakes.invite.mockResolvedValue({ invited: 0, skipped: 1, alreadyInvited: 1 });
+    store.changeEmails(['ines.robert@ateliernord.fr']);
+
+    await store.finish();
+
+    expect(fakes.recordInvitation).toHaveBeenCalledTimes(1);
+    expect(fakes.show).toHaveBeenCalledWith('Space “Product” created', {
+      description: '3 lists',
+    });
+  });
+
+  it('saves the initial draft of a launch at version 1 only', async () => {
+    const { store, fakes }: Setup = setup(progress(1, { color: 'gris' as LookColor }));
+
+    await store.saveStart();
+
+    expect(fakes.saveDraft).toHaveBeenCalledWith({
+      step: 'space',
+      name: 'Product',
+      prefix: 'PRO',
+      color: 'violet',
+      preset: 'dev',
+    });
+
+    fakes.progress.set(progress(2));
+    fakes.saveDraft.mockClear();
+    await store.saveStart();
+    fakes.saveDraft.mockRejectedValueOnce(new OnboardingWriteDroppedError());
+    fakes.progress.set(progress(1));
+    await expect(store.saveStart()).resolves.toBeUndefined();
+
+    expect(fakes.saveDraft).toHaveBeenCalledTimes(1);
   });
 
   it('sends more than 50 addresses in batches of 50', async () => {
@@ -723,7 +759,7 @@ describe('OnboardingWizardStore', () => {
       (_email: unknown, index: number) => `member${String(index)}@ateliernord.fr`,
     );
     fakes.invite
-      .mockResolvedValueOnce({ invited: 50, skipped: 0 })
+      .mockResolvedValueOnce({ invited: 50, skipped: 0, alreadyInvited: 0 })
       .mockRejectedValueOnce(new HttpErrorResponse({ status: 503 }));
     fakes.finish.mockRejectedValueOnce(new HttpErrorResponse({ status: 0 }));
     store.changeEmails(emails);
@@ -926,7 +962,7 @@ describe('OnboardingWizardStore', () => {
       expect(fakes.invite).toHaveBeenCalledTimes(1);
     });
     TestBed.resetTestingModule();
-    pending.resolve({ invited: 1, skipped: 0 });
+    pending.resolve({ invited: 1, skipped: 0, alreadyInvited: 0 });
     await running;
 
     expect(fakes.finish).not.toHaveBeenCalled();
