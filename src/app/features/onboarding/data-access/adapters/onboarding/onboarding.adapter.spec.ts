@@ -99,7 +99,7 @@ describe('onboarding adapter', () => {
     });
   });
 
-  it('counts only invited addresses as sent', () => {
+  it('counts only invited addresses as sent and lists the unknown outcomes as not sent', () => {
     expect(
       toInvitationOutcome({
         invitations: [
@@ -108,7 +108,12 @@ describe('onboarding adapter', () => {
           { email: 'lea.bernard@ateliernord.fr', outcome: 'seat-limit', invitationId: null },
         ],
       }),
-    ).toEqual({ invited: 1, skipped: 2, alreadyInvited: 0 });
+    ).toEqual({
+      invited: 1,
+      skipped: 2,
+      alreadyInvited: 0,
+      notSent: ['lea.bernard@ateliernord.fr'],
+    });
   });
 
   it('counts the addresses already invited apart', () => {
@@ -119,7 +124,7 @@ describe('onboarding adapter', () => {
           { email: 'hugo.martin@ateliernord.fr', outcome: 'already-member', invitationId: null },
         ],
       }),
-    ).toEqual({ invited: 0, skipped: 2, alreadyInvited: 1 });
+    ).toEqual({ invited: 0, skipped: 2, alreadyInvited: 1, notSent: [] });
   });
 
   it('quotes the version as the precondition', () => {

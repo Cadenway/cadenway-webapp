@@ -293,8 +293,9 @@ interface OnboardingWizardState {
    * Property _sent
    *
    * @description
-   * Addresses an invitation batch already accepted, in lower case; a retried finish does not send
-   * them again.
+   * Addresses a batch settled (`invited`, `already-invited` or `already-member`), in lower case;
+   * `Continue` on the `Team` screen does not send them again. An address with another outcome, or
+   * in a batch that failed, stays out of it and is sent again.
    *
    * @type {readonly string[]}
    * @readonly
@@ -305,26 +306,12 @@ interface OnboardingWizardState {
    * Property _invited
    *
    * @description
-   * Number of `invited` outcomes of the batches sent, counted by the toast and the checklist
-   * marker.
+   * Number of `invited` outcomes of this session's batches, counted by the creation toast.
    *
    * @type {number}
    * @readonly
    */
   readonly _invited: number;
-
-  /**
-   * Property _alreadyInvited
-   *
-   * @description
-   * Number of `already-invited` outcomes of the batches sent: an invitation is out for them, so
-   * they count for the checklist marker (as the getting-started checklist counts them), not for
-   * the toast.
-   *
-   * @type {number}
-   * @readonly
-   */
-  readonly _alreadyInvited: number;
 
   /**
    * Property seeded
@@ -421,7 +408,6 @@ const initialState: OnboardingWizardState = {
   emails: [],
   _sent: [],
   _invited: 0,
-  _alreadyInvited: 0,
   seeded: false,
   finishing: false,
   failure: null,
@@ -662,7 +648,12 @@ interface OnboardingWizardStoreInstance {
    * reload afterwards loses none (the addresses are not part of the draft, gap G6). An address
    * sent is never sent again. A batch whose outcome is unknown keeps its addresses unsent, shows a
    * toast and keeps the screen, so `Continue` sends them again safely; a refused batch (a `429`
-   * daily limit included) shows the failure toast and the screen still changes.
+   * daily limit included) shows the failure toast and the screen still changes. Within a batch,
+   * an address answered `invited`, `already-invited` or `already-member` is done; any other
+   * outcome leaves it unsent (sent again by a later `Continue`) and shows a toast with their
+   * count, and the screen still changes. Once a batch invited an address or found one
+   * `already-invited`, the checklist's invitation marker is recorded at once, which the contract
+   * allows during the assistant; a failed marker write stays owed in `OnboardingStore`.
    *
    * @returns {Promise<void>} Resolves once the screen changed, or the finish settled.
    */
@@ -698,10 +689,10 @@ interface OnboardingWizardStoreInstance {
    * `Create the space`: provisions the space with the template (`finishOnboarding`); it invites
    * no one, since the `Team` screen did. It tries each other prefix after
    * `409 space.prefix-taken` with a new key, retries once with a new key after a stale version, and
-   * sends the same key again after an unknown outcome. Once provisioned it records the invitation
-   * marker when an address of this session was invited or already had a pending invitation,
-   * refreshes the navigation, opens the first list, shows the toast (with this session's
-   * invitation count) and closes. After `409 onboarding.wizard-closed` (another tab finished or
+   * sends the same key again after an unknown outcome. Once provisioned it sends the invitation
+   * marker again when `OnboardingStore` still owes it (`retryOwedInvitation`), refreshes the
+   * navigation, opens the first list, shows the toast (with this session's invitation count) and
+   * closes. After `409 onboarding.wizard-closed` (another tab finished or
    * dismissed), it opens the first list when a space exists and closes. Nothing more is applied once the organization
    * changed, the store was destroyed or the write was dropped. A second call while one runs does
    * nothing.
@@ -807,22 +798,45 @@ function createOnboardingWizardStore(): Type<OnboardingWizardStoreInstance> {
           .filter((email: string): boolean => !sent.has(email.toLowerCase()));
         let failed: boolean = false;
         let uncertain: boolean = false;
+        let unsent: number = 0;
+        let reached: boolean = false;
         for (let start: number = 0; start < pending.length; start += INVITE_BATCH_SIZE) {
           if (!live(organizationId)) return false;
           const batch: readonly string[] = pending.slice(start, start + INVITE_BATCH_SIZE);
           try {
             const outcome: OnboardingInvitationOutcome = await store._api.invite(batch);
             if (!live(organizationId)) return false;
+            const notSent: ReadonlySet<string> = new Set(
+              (outcome.notSent ?? []).map((email: string): string => email.toLowerCase()),
+            );
+            const done: readonly string[] = batch
+              .map((email: string): string => email.toLowerCase())
+              .filter((email: string): boolean => !notSent.has(email));
+            unsent += batch.length - done.length;
+            reached ||= outcome.invited + outcome.alreadyInvited > 0;
             patchState(store, (state: OnboardingWizardState) => ({
-              _sent: [...state._sent, ...batch.map((email: string): string => email.toLowerCase())],
+              _sent: [...state._sent, ...done],
               _invited: state._invited + outcome.invited,
-              _alreadyInvited: state._alreadyInvited + outcome.alreadyInvited,
             }));
           } catch (error: unknown) {
             if (!live(organizationId)) return false;
             if (isUncertainOnboardingWrite(error)) uncertain = true;
             else failed = true;
           }
+        }
+        // The contract lets the marker be recorded during the assistant (`updateOnboardingChecklist`
+        // in tasks.yaml); a failed write stays owed in `OnboardingStore`, which the finish and the
+        // checklist send again.
+        if (reached) void store._onboarding.recordInvitation().catch((): undefined => undefined);
+        if (unsent > 0) {
+          store._toasts.error(
+            unsent === 1
+              ? $localize`:@@onboarding.wizard.toast.not-invited-one:${unsent}:count: address could not be invited`
+              : $localize`:@@onboarding.wizard.toast.not-invited-other:${unsent}:count: addresses could not be invited`,
+            {
+              description: $localize`:@@onboarding.wizard.toast.invitations-failed-text:You can invite your team later.`,
+            },
+          );
         }
         if (uncertain) {
           store._toasts.error(
@@ -877,9 +891,7 @@ function createOnboardingWizardStore(): Type<OnboardingWizardStoreInstance> {
         space: OnboardingSpace,
         progress: OnboardingProgress,
       ): Promise<void> => {
-        if (store._invited() > 0 || store._alreadyInvited() > 0) {
-          await store._onboarding.recordInvitation().catch((): undefined => undefined);
-        }
+        await store._onboarding.retryOwedInvitation();
         if (!live(organization.id)) return;
         store._navigation.refresh();
         if (progress.provisioning) {

@@ -169,6 +169,17 @@ interface Harness {
   readonly recordInvitation: Mock;
 
   /**
+   * Property retryOwedInvitation
+   *
+   * @description
+   * The shared store's owed marker retry.
+   *
+   * @type {Mock}
+   * @readonly
+   */
+  readonly retryOwedInvitation: Mock;
+
+  /**
    * Property invite
    *
    * @description
@@ -206,6 +217,7 @@ async function render(
   );
   const reload: Mock = vi.fn(() => Promise.resolve());
   const recordInvitation: Mock = vi.fn(() => Promise.resolve());
+  const retryOwedInvitation: Mock = vi.fn(() => Promise.resolve());
   const invite: Mock = vi.fn((emails: readonly string[]) =>
     Promise.resolve({ invited: emails.length, skipped: 0, alreadyInvited: 0 }),
   );
@@ -225,6 +237,7 @@ async function render(
           dismiss: vi.fn(() => Promise.resolve(progress(2, { status: 'dismissed' }))),
           finish,
           recordInvitation,
+          retryOwedInvitation,
         },
       },
       { provide: OnboardingApi, useValue: { invite } },
@@ -253,6 +266,7 @@ async function render(
     finish,
     reload,
     recordInvitation,
+    retryOwedInvitation,
     invite,
   };
 }
@@ -482,9 +496,8 @@ describe('OnboardingWizard', () => {
   });
 
   it('invites the team when leaving the team screen, then creates the space', async () => {
-    const { fixture, finish, invite, recordInvitation }: Harness = await render(
-      progress(2, { step: 'team' }),
-    );
+    const { fixture, finish, invite, recordInvitation, retryOwedInvitation }: Harness =
+      await render(progress(2, { step: 'team' }));
 
     expect(title()?.textContent.trim()).toBe('Invite your team');
     expect(find('onboarding-next')?.textContent.trim()).toBe('Skip');
@@ -519,8 +532,9 @@ describe('OnboardingWizard', () => {
     await click(fixture, find('onboarding-next'));
 
     await vi.waitFor(() => {
-      expect(recordInvitation).toHaveBeenCalledTimes(1);
+      expect(retryOwedInvitation).toHaveBeenCalledTimes(1);
     });
+    expect(recordInvitation).toHaveBeenCalledTimes(1);
     expect(finish).toHaveBeenCalledTimes(1);
     expect(invite).toHaveBeenCalledWith(['ines.robert@ateliernord.fr']);
   });

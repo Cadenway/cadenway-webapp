@@ -308,6 +308,17 @@ interface Fakes {
   readonly recordInvitation: Mock;
 
   /**
+   * Property retryOwedInvitation
+   *
+   * @description
+   * The shared store's owed marker retry.
+   *
+   * @type {Mock}
+   * @readonly
+   */
+  readonly retryOwedInvitation: Mock;
+
+  /**
    * Property invite
    *
    * @description
@@ -417,6 +428,7 @@ function setup(initial: OnboardingProgress | null = progress(1)): Setup {
     dismiss: vi.fn(() => Promise.resolve(progress(2, { status: 'dismissed' }))),
     finish: vi.fn(() => Promise.resolve(progress(3, {}, true))),
     recordInvitation: vi.fn(() => Promise.resolve()),
+    retryOwedInvitation: vi.fn(() => Promise.resolve()),
     invite: vi.fn((emails: readonly string[]): Promise<OnboardingInvitationOutcome> =>
       Promise.resolve({ invited: emails.length, skipped: 0, alreadyInvited: 0 }),
     ),
@@ -437,6 +449,7 @@ function setup(initial: OnboardingProgress | null = progress(1)): Setup {
           dismiss: fakes.dismiss,
           finish: fakes.finish,
           recordInvitation: fakes.recordInvitation,
+          retryOwedInvitation: fakes.retryOwedInvitation,
         },
       },
       { provide: OnboardingApi, useValue: { invite: fakes.invite } },
@@ -648,8 +661,10 @@ describe('OnboardingWizardStore', () => {
     expect(fakes.show).toHaveBeenCalledWith('Space “Product” created', {
       description: '3 lists · 2 invitations sent',
     });
-    expect(order(fakes.invite, fakes.finish, fakes.recordInvitation)).toBe(true);
-    expect(order(fakes.recordInvitation, fakes.refresh, fakes.navigate, fakes.show)).toBe(true);
+    expect(order(fakes.invite, fakes.recordInvitation, fakes.finish)).toBe(true);
+    expect(
+      order(fakes.finish, fakes.retryOwedInvitation, fakes.refresh, fakes.navigate, fakes.show),
+    ).toBe(true);
     expect(fakes.error).not.toHaveBeenCalled();
     expect(store.closed()).toBe(true);
     expect(store.finishing()).toBe(false);
@@ -842,10 +857,84 @@ describe('OnboardingWizardStore', () => {
 
     await store.finish();
 
-    expect(fakes.recordInvitation).toHaveBeenCalledTimes(1);
+    expect(fakes.recordInvitation).toHaveBeenCalledTimes(2);
+    expect(fakes.retryOwedInvitation).toHaveBeenCalledTimes(1);
     expect(fakes.show).toHaveBeenCalledWith('Space “Product” created', {
       description: '3 lists · 50 invitations sent',
     });
+  });
+
+  it('keeps an address with an unknown outcome unsent, says so, moves on, and sends only it again', async () => {
+    const { store, fakes }: Setup = setup(progress(2, { step: 'team' }));
+    fakes.invite
+      .mockResolvedValueOnce({
+        invited: 1,
+        skipped: 1,
+        alreadyInvited: 0,
+        notSent: ['Marc.Roux@ateliernord.fr'],
+      })
+      .mockResolvedValueOnce({ invited: 1, skipped: 0, alreadyInvited: 0, notSent: [] });
+    store.changeEmails(['ines.robert@ateliernord.fr', 'marc.roux@ateliernord.fr']);
+
+    await store.next();
+
+    expect(fakes.error).toHaveBeenCalledWith('1 address could not be invited', {
+      description: 'You can invite your team later.',
+    });
+    expect(store.step()).toBe('import');
+
+    store.back();
+    await store.next();
+
+    expect(fakes.invite.mock.calls.map((call: unknown[]) => call[0])).toEqual([
+      ['ines.robert@ateliernord.fr', 'marc.roux@ateliernord.fr'],
+      ['marc.roux@ateliernord.fr'],
+    ]);
+    expect(fakes.error).toHaveBeenCalledTimes(1);
+  });
+
+  it('counts the addresses left unsent in the toast', async () => {
+    const { store, fakes }: Setup = setup(progress(2, { step: 'team' }));
+    fakes.invite.mockResolvedValueOnce({
+      invited: 0,
+      skipped: 2,
+      alreadyInvited: 0,
+      notSent: ['ines.robert@ateliernord.fr', 'marc.roux@ateliernord.fr'],
+    });
+    store.changeEmails(['ines.robert@ateliernord.fr', 'marc.roux@ateliernord.fr']);
+
+    await store.next();
+
+    expect(fakes.error).toHaveBeenCalledWith('2 addresses could not be invited', {
+      description: 'You can invite your team later.',
+    });
+    expect(fakes.recordInvitation).not.toHaveBeenCalled();
+  });
+
+  it('records the invitation marker as soon as a batch reaches an address, and keeps going if it fails', async () => {
+    const { store, fakes }: Setup = setup(progress(2, { step: 'team' }));
+    fakes.recordInvitation.mockRejectedValueOnce(problem(409, 'onboarding.checklist-unavailable'));
+    store.changeEmails(['ines.robert@ateliernord.fr']);
+
+    await store.next();
+
+    expect(fakes.recordInvitation).toHaveBeenCalledTimes(1);
+    expect(store.step()).toBe('import');
+
+    await store.finish();
+
+    expect(fakes.retryOwedInvitation).toHaveBeenCalledTimes(1);
+    expect(store.closed()).toBe(true);
+  });
+
+  it('only retries an owed marker when finishing after a reload', async () => {
+    const { store, fakes }: Setup = setup(progress(4, { step: 'import', name: 'Product' }));
+
+    await expect(store.finish()).resolves.toBeUndefined();
+
+    expect(fakes.recordInvitation).not.toHaveBeenCalled();
+    expect(fakes.retryOwedInvitation).toHaveBeenCalledTimes(1);
+    expect(store.closed()).toBe(true);
   });
 
   it('sends no invitation for a person who may not invite', async () => {

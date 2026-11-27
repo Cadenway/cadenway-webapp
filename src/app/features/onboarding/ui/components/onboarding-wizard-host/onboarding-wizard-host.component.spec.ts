@@ -227,6 +227,7 @@ async function render(
           dismiss,
           finish: vi.fn(),
           recordInvitation: vi.fn(() => Promise.resolve()),
+          retryOwedInvitation: vi.fn(() => Promise.resolve()),
         },
       },
       { provide: OnboardingApi, useValue: { invite: vi.fn() } },

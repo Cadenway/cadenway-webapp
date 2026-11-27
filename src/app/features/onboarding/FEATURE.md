@@ -140,13 +140,24 @@ route), `withGettingStarted()` and `withOnboardingWizard()` (the `overlays` cont
   (`OnboardingApi.invite`), and only then saves the step and moves on; it shows its loading state
   meanwhile, with `Back`, `Set up later` and the field disabled. Organization invitations hold on
   their own and the draft does not keep the addresses (gap G6), so sending them there means a
-  reload resuming at `Import` loses none, and the finish invites no one (nor invents any). An
-  address sent is never sent again: going back to `Team` keeps it as a pill, and `Continue`
-  sends only the new ones. A batch whose outcome is unknown keeps its addresses unsent, keeps
-  the screen and shows `The invitations may not have been sent` / `Press Continue to send them
-again: it is safe.` (an address the lost batch reached then answers `already-invited`); a
-  refused batch (a `429` daily limit included) shows `The invitations could not be sent` and
-  the screen still changes.
+  reload resuming at `Import` loses none, and the finish invites no one (nor invents any).
+- Within a batch, an address answered `invited`, `already-invited` or `already-member` is done
+  and never sent again: going back to `Team` keeps it as a pill, and `Continue` sends only the
+  others. Any other outcome (one a later contract adds counts as not sent; the adapter lists
+  them in `notSent`) leaves the address unsent for a later `Continue`, and shows
+  `{n} address(es) could not be invited`; the screen still changes. A batch whose outcome is
+  unknown keeps its addresses unsent, keeps the screen and shows
+  `The invitations may not have been sent` / `Press Continue to send them again: it is safe.`
+  (an address the lost batch reached then answers `already-invited`); a refused batch (a `429`
+  daily limit included) shows `The invitations could not be sent` and the screen still changes.
+- The invitation marker: once a batch invited an address or found one `already-invited`, the
+  assistant records `invitationSent` at once (`recordInvitation`), which the contract allows
+  during the assistant (`updateOnboardingChecklist`: "the caller can record an invitation outcome
+  during the wizard or afterwards"). A failed marker write stays owed in the route's
+  `OnboardingStore` (`owesInvitation`); the finish sends it again (`retryOwedInvitation`), and so
+  does the getting-started checklist on its occasions, so leaving after `Set up later` throws
+  nothing and keeps the debt. A full page reload before the marker is recorded forgets the debt,
+  as for the checklist; the next batch that reaches an address records it again.
 - `Create the space` (`App.dc.html` lines 5276-5298), with `Back` and `Set up later` disabled and a
   second click ignored while it runs:
   1. sends `finishOnboarding` with the trimmed name, the derived prefix, the template and the
@@ -157,12 +168,10 @@ again: it is safe.` (an address the lost batch reached then answers `already-inv
      only after a definite refusal or a changed body. A stale version is retried once with a new
      key; `403 organization.role-forbidden` and other refusals show an inline error. A dropped
      write (`OnboardingWriteDroppedError`) shows nothing;
-  2. once provisioned, records `invitationSent` when an address sent in this session was invited
-     or found `already-invited`, the checklist's rule (the checklist exists only then; a failed
-     marker write stays owed in `OnboardingStore`), refreshes the navigation, opens
-     `/<slug>/l/<firstListId>`, then shows the toast `Space “<name>” created` with `<n> lists`
-     and `<n> invitations sent` (this session's invited outcomes only; never the mockup's import
-     part, gap B18), and closes.
+  2. once provisioned, sends an owed invitation marker again (`retryOwedInvitation`), refreshes
+     the navigation, opens `/<slug>/l/<firstListId>`, then shows the toast
+     `Space “<name>” created` with `<n> lists` and `<n> invitations sent` (this session's invited
+     outcomes only; never the mockup's import part, gap B18), and closes.
 - The contract reports no seat outcome for an invitation (`InvitationResult.outcome` is
   `invited`, `already-member` or `already-invited`; "sending an invitation does not consume a
   seat", `members.yaml`), so the assistant has no seat-limit message; any other outcome counts
@@ -323,6 +332,7 @@ These assistant units have no mockup wording (step 9 spec, A.6), pending product
 | `onboarding.wizard.finish-unknown`, `onboarding.wizard.finish-failed`, `onboarding.wizard.finish-forbidden`, `onboarding.wizard.finish-prefix` | `finishOnboarding` failures the mockup does not draw.                                                                          |
 | `onboarding.wizard.toast.invitations-failed`, `onboarding.wizard.toast.invitations-failed-text`                                                | A refused `inviteMembers` on leaving the `Team` screen.                                                                        |
 | `onboarding.wizard.toast.invitations-unknown`, `onboarding.wizard.toast.invitations-unknown-text`                                              | An `inviteMembers` whose outcome is unknown on leaving the `Team` screen.                                                      |
+| `onboarding.wizard.toast.not-invited-one`, `onboarding.wizard.toast.not-invited-other`                                                         | Addresses a batch answered with an outcome other than invited, already invited or already a member.                            |
 | `onboarding.wizard.toast.skip-failed`, `onboarding.wizard.toast.skip-failed-text`                                                              | A refused or unconfirmed `Set up later`.                                                                                       |
 | `onboarding.wizard.announcement`, `onboarding.wizard.stepper.*`                                                                                | Screen reader text of the step change and of the step bar.                                                                     |
 | `onboarding.wizard.preset.*.lists` (English)                                                                                                   | The gateway creates the contract's French list names for every template (gap G7); the English source previews them in English. |

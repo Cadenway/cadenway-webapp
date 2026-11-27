@@ -432,5 +432,18 @@ export interface OnboardingInvitationOutcome {
    * @readonly
    */
   readonly alreadyInvited: number;
+
+  /**
+   * Property notSent
+   *
+   * @description
+   * The addresses of the batch the gateway answered with an outcome other than `invited`,
+   * `already-invited` or `already-member` (an outcome a later contract adds, which counts as not
+   * sent), as the gateway spelled them; a caller may send them again. Absent counts as none.
+   *
+   * @type {readonly string[] | undefined}
+   * @readonly
+   */
+  readonly notSent?: readonly string[];
   // #endregion
 }
