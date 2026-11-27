@@ -354,6 +354,24 @@ describe('QuotasPage', () => {
     expect(host.querySelector('[data-testid="quotas-refresh-failed"]')).toBeNull();
   });
 
+  it('clears the figures when the refresh finds the owner revoked', async () => {
+    const subscription: Mock<() => Promise<OrganizationSubscription>> = vi
+      .fn<() => Promise<OrganizationSubscription>>()
+      .mockResolvedValueOnce(usage(18, 92_400_000_000))
+      .mockRejectedValueOnce(httpError(403));
+    const { fixture }: Rendered = await renderAfterRead(subscription);
+    const host: HTMLElement = fixture.nativeElement as HTMLElement;
+    expect(row(host, 'seats')).not.toBeNull();
+
+    await vi.waitFor(async () => {
+      await settle(fixture);
+      expect(row(host, 'seats')).toBeNull();
+    });
+    expect(host.querySelector('[data-testid="quotas-export"]')).toBeNull();
+    expect(host.querySelector('[data-testid="quotas-refresh-failed"]')).toBeNull();
+    expect(host.querySelector('[data-testid="quotas-failed"]')).toBeNull();
+  });
+
   it('exports the usage read again just before, and toasts the file name', async () => {
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(new Date(2026, 10, 27, 10, 0));

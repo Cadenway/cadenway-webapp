@@ -1,4 +1,12 @@
-import { inject, resource, type ResourceRef, type Signal, type Type } from '@angular/core';
+import {
+  inject,
+  linkedSignal,
+  resource,
+  type ResourceRef,
+  type ResourceStatus,
+  type Signal,
+  type Type,
+} from '@angular/core';
 import {
   patchState,
   signalStore,
@@ -50,6 +58,71 @@ const CRITICAL: number = 0.9;
 const SILENT_STATUSES: ReadonlySet<number> = new Set([403, 404]);
 
 /**
+ * Interface RevokedSubscription
+ *
+ * @description
+ * A subscription a refresh found refused (`403`, `404`): the one shown is cleared for that
+ * organization until a newer subscription replaces it.
+ */
+interface RevokedSubscription {
+  // #region Properties
+  /**
+   * Property organizationId
+   *
+   * @description
+   * Organization whose subscription Billing refused.
+   *
+   * @type {string}
+   * @readonly
+   */
+  readonly organizationId: string;
+
+  /**
+   * Property generation
+   *
+   * @description
+   * Generation of the subscription the refusal cleared.
+   *
+   * @type {number}
+   * @readonly
+   */
+  readonly generation: number;
+  // #endregion
+}
+
+/**
+ * Interface PendingRefresh
+ *
+ * @description
+ * The refresh under way, shared with a second call for the same organization only.
+ */
+interface PendingRefresh {
+  // #region Properties
+  /**
+   * Property organizationId
+   *
+   * @description
+   * Organization the refresh reads.
+   *
+   * @type {string}
+   * @readonly
+   */
+  readonly organizationId: string;
+
+  /**
+   * Property run
+   *
+   * @description
+   * The refresh's outcome.
+   *
+   * @type {Promise<boolean>}
+   * @readonly
+   */
+  readonly run: Promise<boolean>;
+  // #endregion
+}
+
+/**
  * Interface SubscriptionRefreshState
  *
  * @description
@@ -78,6 +151,29 @@ interface SubscriptionRefreshState {
    * @readonly
    */
   readonly _refreshing: boolean;
+
+  /**
+   * Property _revoked
+   *
+   * @description
+   * The subscription a refresh found refused, or null.
+   *
+   * @type {RevokedSubscription | null}
+   * @readonly
+   */
+  readonly _revoked: RevokedSubscription | null;
+
+  /**
+   * Property _reads
+   *
+   * @description
+   * Reads asked through `retry()`, so the generation moves even when a read brings back the
+   * same subscription object.
+   *
+   * @type {number}
+   * @readonly
+   */
+  readonly _reads: number;
   // #endregion
 }
 
@@ -104,7 +200,8 @@ interface SubscriptionStoreInstance {
    * Property current
    *
    * @description
-   * The subscription read, or null while unread, failed or not readable.
+   * The subscription read, or null while unread, failed or not readable (a refresh refused
+   * with a `403` or a `404` clears it, as a first read refused so shows nothing).
    *
    * @type {Signal<OrganizationSubscription | null>}
    * @readonly
@@ -184,8 +281,11 @@ interface SubscriptionStoreInstance {
    * @description
    * Reads the subscription again while `current` keeps the one shown, then shows the answer. It
    * sends nothing for anyone but an owner, nor while nothing is shown (the first read under way
-   * is fresh; after a failure use `retry()`); a refresh under way is shared. A failure other than
-   * a `403` or a `404` sets `refreshFailed`. The answer is dropped once the organization changed.
+   * is fresh; after a failure use `retry()`); a refresh under way for the same organization is
+   * shared, one for another organization is not. Its outcome is dropped when the subscription
+   * changed after it was sent (another read, a `set()`, a switch, a lost owner role). A `403` or
+   * a `404` clears the subscription shown for that organization (`current` null, `failed` false,
+   * as for a first read refused so); any other failure keeps it and sets `refreshFailed`.
    *
    * @returns {Promise<boolean>} Resolves once settled: whether `current` holds the answer.
    */
@@ -203,14 +303,19 @@ interface SubscriptionStoreInstance {
  */
 function createSubscriptionStore(): Type<SubscriptionStoreInstance> {
   return signalStore(
-    withState<SubscriptionRefreshState>({ _staleAfter: null, _refreshing: false }),
+    withState<SubscriptionRefreshState>({
+      _staleAfter: null,
+      _refreshing: false,
+      _revoked: null,
+      _reads: 0,
+    }),
     withProps(() => {
       const api: BillingApi = inject(BillingApi);
       const workspace: WorkspaceContextPort = inject(WORKSPACE_CONTEXT);
       return {
         _api: api,
         _workspace: workspace,
-        _pendingRefresh: { run: null as Promise<boolean> | null },
+        _pendingRefresh: { current: null as PendingRefresh | null },
         subscription: resource({
           params: (): string | undefined =>
             workspace.role() === 'owner' ? workspace.organization().id : undefined,
@@ -218,27 +323,45 @@ function createSubscriptionStore(): Type<SubscriptionStoreInstance> {
         }),
       };
     }),
+    withProps((store) => ({
+      _generation: linkedSignal<
+        { reads: number; status: ResourceStatus; value: OrganizationSubscription | undefined },
+        number
+      >({
+        source: () => ({
+          reads: store._reads(),
+          status: store.subscription.status(),
+          value: store.subscription.hasValue() ? store.subscription.value() : undefined,
+        }),
+        computation: (_source, previous): number => (previous?.value ?? 0) + 1,
+      }),
+    })),
     withComputed((store) => ({
-      current: (): OrganizationSubscription | null =>
-        store.subscription.hasValue() ? store.subscription.value() : null,
+      current: (): OrganizationSubscription | null => {
+        if (!store.subscription.hasValue()) return null;
+        const revoked: RevokedSubscription | null = store._revoked();
+        const cleared: boolean =
+          revoked !== null &&
+          revoked.organizationId === store._workspace.organization().id &&
+          revoked.generation === store._generation();
+        return cleared ? null : store.subscription.value();
+      },
       failed: (): boolean => {
         const error: Error | undefined = store.subscription.error();
         if (error === undefined) return false;
         const problem: ApiProblem | null = readProblem(error.cause ?? error);
         return problem === null || !SILENT_STATUSES.has(problem.status);
       },
+      refreshing: (): boolean => store._refreshing(),
+    })),
+    withComputed((store) => ({
       refreshFailed: (): boolean => {
         const stale: OrganizationSubscription | null = store._staleAfter();
-        return (
-          stale !== null && store.subscription.hasValue() && store.subscription.value() === stale
-        );
+        return stale !== null && store.current() === stale;
       },
-      refreshing: (): boolean => store._refreshing(),
       quotaCritical: (): boolean => {
-        const subscription: OrganizationSubscription | undefined = store.subscription.hasValue()
-          ? store.subscription.value()
-          : undefined;
-        if (subscription === undefined) return false;
+        const subscription: OrganizationSubscription | null = store.current();
+        if (subscription === null) return false;
         const reached: (used: number, limit: number) => boolean = (used: number, limit: number) =>
           limit > 0 && used >= CRITICAL * limit;
         return (
@@ -247,55 +370,62 @@ function createSubscriptionStore(): Type<SubscriptionStoreInstance> {
         );
       },
       storageNearlyFull: (): boolean => {
-        const subscription: OrganizationSubscription | undefined = store.subscription.hasValue()
-          ? store.subscription.value()
-          : undefined;
+        const subscription: OrganizationSubscription | null = store.current();
         return (
-          subscription !== undefined &&
+          subscription !== null &&
           subscription.storageUsedBytes >= NEARLY_FULL * subscription.storageLimitBytes
         );
       },
     })),
     withMethods((store) => ({
       retry(): void {
+        patchState(store, {
+          _reads: store._reads() + 1,
+          _revoked: null,
+          _staleAfter: null,
+        });
         store.subscription.reload();
       },
       refresh(): Promise<boolean> {
-        const pending: Promise<boolean> | null = store._pendingRefresh.run;
-        if (pending !== null) return pending;
-        if (store._workspace.role() !== 'owner' || !store.subscription.hasValue()) {
-          return Promise.resolve(false);
-        }
+        if (store._workspace.role() !== 'owner') return Promise.resolve(false);
         const organizationId: string = store._workspace.organization().id;
-        const shown: OrganizationSubscription = store.subscription.value();
+        const pending: PendingRefresh | null = store._pendingRefresh.current;
+        if (pending?.organizationId === organizationId) return pending.run;
+        const shown: OrganizationSubscription | null = store.current();
+        if (shown === null) return Promise.resolve(false);
+        const generation: number = store._generation();
+        const stillCurrent: () => boolean = (): boolean =>
+          store._workspace.organization().id === organizationId &&
+          store._workspace.role() === 'owner' &&
+          store._generation() === generation;
         const run: Promise<boolean> = store._api
           .subscription()
           .then(
             (read: OrganizationSubscription): boolean => {
-              const moved: boolean =
-                store._workspace.organization().id !== organizationId ||
-                store._workspace.role() !== 'owner';
-              if (moved) return false;
+              if (!stillCurrent()) return false;
               store.subscription.set(read);
-              patchState(store, { _staleAfter: null });
+              patchState(store, { _staleAfter: null, _revoked: null });
               return true;
             },
             (error: unknown): boolean => {
-              const problem: ApiProblem | null = readProblem(error);
-              const current: OrganizationSubscription | undefined = store.subscription.hasValue()
-                ? store.subscription.value()
-                : undefined;
-              if ((problem === null || !SILENT_STATUSES.has(problem.status)) && current === shown) {
+              if (!stillCurrent()) return false;
+              const problem: ApiProblem | null = readProblem(
+                error instanceof Error ? (error.cause ?? error) : error,
+              );
+              if (problem !== null && SILENT_STATUSES.has(problem.status)) {
+                patchState(store, { _staleAfter: null, _revoked: { organizationId, generation } });
+              } else {
                 patchState(store, { _staleAfter: shown });
               }
               return false;
             },
           )
           .finally((): void => {
-            store._pendingRefresh.run = null;
+            if (store._pendingRefresh.current?.run !== run) return;
+            store._pendingRefresh.current = null;
             patchState(store, { _refreshing: false });
           });
-        store._pendingRefresh.run = run;
+        store._pendingRefresh.current = { organizationId, run };
         patchState(store, { _refreshing: true });
         return run;
       },

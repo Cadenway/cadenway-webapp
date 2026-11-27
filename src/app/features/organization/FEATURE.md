@@ -97,9 +97,14 @@ section has `organizationSectionGuard(<section>)` (`http/guards/organization-sec
 loaded.` with `Retry`; the banner stays hidden until a retry succeeds.
 - `SubscriptionStore.refresh()` reads the subscription again while the one shown stays (the
   quotas section, when it opens and before its export). It sends nothing for anyone but an owner
-  or while the first read is under way, shares a refresh under way, drops an answer for another
-  organization, and on a failure other than a `403` or `404` keeps the subscription shown and sets
-  `refreshFailed` until a newer subscription replaces it.
+  or while the first read is under way, and shares a refresh under way only with the same
+  organization. A generation of the subscription, moved by every read, `retry()`, `set()` (Billing's
+  payment confirmation) and refresh, binds each refresh: its outcome is dropped once the
+  subscription changed after it was sent, or the organization or the owner role did. A `403` or
+  `404` clears the subscription shown for that organization (`current` null and `failed` false, as
+  for a first read refused so, which hides the plan line, the banner and the quota alert) until a
+  newer subscription; any other failure keeps it and sets `refreshFailed` until a newer one
+  replaces it.
 - The banner shows from 90 % of the storage quota, in gigabytes of 10^9 bytes. `Later` and the
   close button hide it for the tab's session and the organization (`sessionStorage`,
   `cadenway-storage-banner-dismissed:<organizationId>`). `Manage quotas` opens
@@ -290,8 +295,8 @@ be loaded.` with `Retry`, until a read or a save confirms the organization (anot
   `403` or `404`) shows the section's error panel in place, whose `Retry` calls
   `SubscriptionStore.retry()`; a reread keeps the meters shown; a failed refresh keeps them with the
   note `The latest usage could not be loaded. The figures shown may be out of date.` and its own
-  `Retry`, which refreshes again. A `403` or `404` shows nothing, and the workspace recovery leaves
-  the section.
+  `Retry`, which refreshes again. A `403` or `404`, on the first read or on a refresh, shows
+  nothing (the figures go), and the workspace recovery leaves the section.
 - The export is built in the browser from the rows shown (`utils/usage-csv`): `Section`, `Metric`,
   `Value`, `Limit`, `Usage or change`, one row per meter (storage in gigabytes, guests without a
   limit or share, a share above 100 % written as it is while the gauge stops at its end), with a

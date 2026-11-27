@@ -1,11 +1,13 @@
 import { HttpErrorResponse } from '@angular/common/http';
-import { ApplicationRef, signal } from '@angular/core';
+import { ApplicationRef, signal, type WritableSignal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { describe, expect, it, type Mock, vi } from 'vitest';
 
 import {
   WORKSPACE_CONTEXT,
   type WorkspaceContextPort,
+  type WorkspaceOrganization,
+  type WorkspaceRole,
 } from '@features/workspace/ports/workspace-context';
 
 import { BillingApi } from '../../data-access/services/billing-api/billing-api.service';
@@ -112,16 +114,18 @@ const TEAM: OrganizationSubscription = {
  *
  * @param {Mock<() => Promise<OrganizationSubscription>>} read - Fake of the Billing read.
  * @param {boolean} settled - Whether to wait for the first read to settle.
+ * @param {WorkspaceContextPort} port - Workspace the store follows.
  * @returns {Promise<InstanceType<typeof SubscriptionStore>>} The store.
  */
 async function storeOver(
   read: Mock<() => Promise<OrganizationSubscription>>,
   settled: boolean = true,
+  port: WorkspaceContextPort = workspace,
 ): Promise<InstanceType<typeof SubscriptionStore>> {
   TestBed.configureTestingModule({
     providers: [
       SubscriptionStore,
-      { provide: WORKSPACE_CONTEXT, useValue: workspace },
+      { provide: WORKSPACE_CONTEXT, useValue: port },
       { provide: BillingApi, useValue: { subscription: read } },
     ],
   });
@@ -131,7 +135,182 @@ async function storeOver(
   return instance;
 }
 
+/**
+ * Constant FREE
+ *
+ * @description
+ * The Free plan of an organization that has not paid yet: 3 of 5 seats.
+ *
+ * @type {OrganizationSubscription}
+ */
+const FREE: OrganizationSubscription = {
+  plan: 'free',
+  seatsUsed: 3,
+  seatsLimit: 5,
+  storageUsedBytes: 120_000_000,
+  storageLimitBytes: 2_000_000_000,
+  guestCount: 1,
+};
+
+/**
+ * Interface MovableWorkspace
+ *
+ * @description
+ * A workspace port whose organization and role a spec changes.
+ */
+interface MovableWorkspace {
+  // #region Properties
+  /**
+   * Property port
+   *
+   * @description
+   * The port given to the store.
+   *
+   * @type {WorkspaceContextPort}
+   * @readonly
+   */
+  readonly port: WorkspaceContextPort;
+
+  /**
+   * Property organization
+   *
+   * @description
+   * The workspace organization.
+   *
+   * @type {WritableSignal<WorkspaceOrganization>}
+   * @readonly
+   */
+  readonly organization: WritableSignal<WorkspaceOrganization>;
+  // #endregion
+}
+
+/**
+ * Function movableWorkspace
+ *
+ * @description
+ * Atelier Nord's owner, in a workspace that can switch to Lumen.
+ *
+ * @returns {MovableWorkspace} The port and its organization.
+ */
+function movableWorkspace(): MovableWorkspace {
+  const organization: WritableSignal<WorkspaceOrganization> = signal(workspace.organization());
+  const role: WritableSignal<WorkspaceRole> = signal<WorkspaceRole>('owner');
+  return {
+    port: { ...workspace, organization, role, can: () => role() === 'owner' },
+    organization,
+  };
+}
+
+/**
+ * Function deferred
+ *
+ * @description
+ * A Billing answer the spec settles when it chooses.
+ *
+ * @returns {{ promise: Promise<OrganizationSubscription>; resolve: (value: OrganizationSubscription) => void }} The answer and its resolver.
+ */
+function deferred(): {
+  promise: Promise<OrganizationSubscription>;
+  resolve: (value: OrganizationSubscription) => void;
+} {
+  let resolve: (value: OrganizationSubscription) => void = () => undefined;
+  const promise: Promise<OrganizationSubscription> = new Promise<OrganizationSubscription>(
+    (done: (value: OrganizationSubscription) => void) => {
+      resolve = done;
+    },
+  );
+  return { promise, resolve };
+}
+
 describe('SubscriptionStore.refresh', () => {
+  it('drops a refresh answer once a newer subscription was set meanwhile', async () => {
+    const late: ReturnType<typeof deferred> = deferred();
+    const read: Mock<() => Promise<OrganizationSubscription>> = vi
+      .fn<() => Promise<OrganizationSubscription>>()
+      .mockResolvedValueOnce(FREE)
+      .mockReturnValueOnce(late.promise);
+    const instance: InstanceType<typeof SubscriptionStore> = await storeOver(read);
+
+    const refreshed: Promise<boolean> = instance.refresh();
+    instance.subscription.set({ ...FREE, plan: 'team', seatsLimit: 25 });
+    late.resolve(FREE);
+
+    expect(await refreshed).toBe(false);
+    expect(instance.current()?.plan).toBe('team');
+    expect(instance.refreshFailed()).toBe(false);
+  });
+
+  it('drops a refresh answer once a retry read the subscription again meanwhile', async () => {
+    const late: ReturnType<typeof deferred> = deferred();
+    const read: Mock<() => Promise<OrganizationSubscription>> = vi
+      .fn<() => Promise<OrganizationSubscription>>()
+      .mockResolvedValueOnce(TEAM)
+      .mockReturnValueOnce(late.promise)
+      .mockResolvedValueOnce({ ...TEAM, seatsUsed: 21 });
+    const instance: InstanceType<typeof SubscriptionStore> = await storeOver(read);
+
+    const refreshed: Promise<boolean> = instance.refresh();
+    instance.retry();
+    await TestBed.inject(ApplicationRef).whenStable();
+    late.resolve({ ...TEAM, seatsUsed: 19 });
+
+    expect(await refreshed).toBe(false);
+    expect(instance.current()?.seatsUsed).toBe(21);
+  });
+
+  it('shares a refresh under way only with the same organization', async () => {
+    const lumen: OrganizationSubscription = { ...TEAM, seatsUsed: 9 };
+    const late: ReturnType<typeof deferred> = deferred();
+    const read: Mock<() => Promise<OrganizationSubscription>> = vi
+      .fn<() => Promise<OrganizationSubscription>>()
+      .mockResolvedValueOnce(TEAM)
+      .mockReturnValueOnce(late.promise)
+      .mockResolvedValueOnce(lumen)
+      .mockResolvedValueOnce({ ...lumen, seatsUsed: 10 });
+    const moving: MovableWorkspace = movableWorkspace();
+    const instance: InstanceType<typeof SubscriptionStore> = await storeOver(
+      read,
+      true,
+      moving.port,
+    );
+
+    const first: Promise<boolean> = instance.refresh();
+    moving.organization.set({ ...moving.organization(), id: 'o2', slug: 'lumen', name: 'Lumen' });
+    await TestBed.inject(ApplicationRef).whenStable();
+    expect(instance.current()?.seatsUsed).toBe(9);
+
+    const second: Promise<boolean> = instance.refresh();
+    expect(second).not.toBe(first);
+    expect(await second).toBe(true);
+    late.resolve(TEAM);
+
+    expect(await first).toBe(false);
+    expect(read).toHaveBeenCalledTimes(4);
+    expect(instance.current()?.seatsUsed).toBe(10);
+  });
+
+  it('clears the figures of an owner whose refresh is refused with a 403', async () => {
+    const read: Mock<() => Promise<OrganizationSubscription>> = vi
+      .fn<() => Promise<OrganizationSubscription>>()
+      .mockResolvedValueOnce(TEAM)
+      .mockRejectedValueOnce(new HttpErrorResponse({ status: 403 }))
+      .mockResolvedValue(TEAM);
+    const instance: InstanceType<typeof SubscriptionStore> = await storeOver(read);
+    expect(instance.quotaCritical()).toBe(true);
+
+    expect(await instance.refresh()).toBe(false);
+
+    expect(instance.current()).toBeNull();
+    expect(instance.failed()).toBe(false);
+    expect(instance.refreshFailed()).toBe(false);
+    expect(instance.quotaCritical()).toBe(false);
+    expect(instance.storageNearlyFull()).toBe(false);
+
+    instance.retry();
+    await TestBed.inject(ApplicationRef).whenStable();
+    expect(instance.current()).toEqual(TEAM);
+  });
+
   it('reads again and shows the answer, keeping the figures shown meanwhile', async () => {
     let answer: (value: OrganizationSubscription) => void = () => undefined;
     const read: Mock<() => Promise<OrganizationSubscription>> = vi
