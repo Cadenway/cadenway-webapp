@@ -1,0 +1,204 @@
+<div class="mx-auto flex w-full max-w-4xl flex-col gap-6 px-4 py-6 sm:px-8 sm:py-8">
+  @if (loadingSection()) {
+    <div
+      class="flex flex-col gap-6"
+      role="status"
+      [attr.aria-busy]="!primary()"
+      aria-label="Loading the section"
+      i18n-aria-label="@@organization.billing.loading"
+      data-testid="billing-skeleton"
+    >
+      <div class="flex flex-col gap-2" aria-hidden="true">
+        <div cwSkeleton class="h-7 w-56"></div>
+        <div cwSkeleton class="h-3 w-3/4"></div>
+      </div>
+      <section
+        class="flex flex-col gap-4 rounded-xl border border-border bg-card p-4"
+        aria-hidden="true"
+      >
+        <div class="flex items-center justify-between gap-4">
+          <div cwSkeleton class="h-4 w-32"></div>
+          <div cwSkeleton class="h-8 w-40 rounded-lg"></div>
+        </div>
+        <div class="flex flex-col gap-2.5">
+          <div cwSkeleton class="h-3 w-24"></div>
+          <div cwSkeleton class="h-6 w-20"></div>
+          <div cwSkeleton class="h-2.5 w-28"></div>
+        </div>
+      </section>
+      <div class="overflow-hidden rounded-xl border border-border bg-card" aria-hidden="true">
+        <div class="flex h-10 items-center gap-4 border-b border-border bg-surface-muted px-4">
+          <div cwSkeleton class="h-2.5 w-24"></div>
+          <div cwSkeleton class="ml-auto h-2.5 w-16"></div>
+          <div cwSkeleton class="h-2.5 w-20"></div>
+        </div>
+        @for (line of [0, 1, 2, 3]; track line) {
+          <div class="flex h-10 items-center gap-4 border-b border-border px-4 last:border-b-0">
+            <div cwSkeleton class="h-3 w-28"></div>
+            <div cwSkeleton class="h-3 flex-1"></div>
+            <div cwSkeleton class="h-3 w-20"></div>
+          </div>
+        }
+      </div>
+    </div>
+  } @else {
+    <header class="flex flex-col gap-1">
+      <h1
+        class="text-2xl font-semibold tracking-tight"
+        tabindex="-1"
+        data-route-focus
+        i18n="@@organization.billing.title"
+      >
+        Billing
+      </h1>
+      <p class="text-sm text-muted-foreground" data-testid="billing-description">
+        {{ description() }}
+      </p>
+    </header>
+
+    @switch (planState()) {
+      @case ('ready') {
+        @if (plan(); as subscription) {
+          <cw-plan-card
+            [subscription]="subscription"
+            [upgrading]="checkout.starting()"
+            [upgradeHidden]="checkout.awaitingPayment()"
+            (upgradeRequested)="upgrade()"
+          />
+        }
+        @if (checkout.unconfirmed()) {
+          <cw-alert variant="warning" data-testid="payment-unconfirmed">
+            <cw-alert-title i18n="@@organization.billing.unconfirmed"
+              >The payment is not confirmed yet</cw-alert-title
+            >
+            <cw-alert-description>{{ unconfirmedText }}</cw-alert-description>
+            <cw-alert-actions>
+              <button
+                cwButton
+                type="button"
+                variant="outline"
+                size="sm"
+                (click)="checkout.retryConfirmation()"
+                data-testid="payment-unconfirmed-retry"
+              >
+                <ng-container i18n="@@organization.billing.retry">Retry</ng-container>
+              </button>
+            </cw-alert-actions>
+          </cw-alert>
+        } @else if (checkout.confirming()) {
+          <p
+            class="flex items-center gap-1.5 text-xs text-muted-foreground"
+            role="status"
+            data-testid="payment-confirming"
+          >
+            <ng-icon name="phosphorClockBold" class="size-3.5 shrink-0" aria-hidden="true" />
+            <ng-container i18n="@@organization.billing.confirming"
+              >Confirming the payment…</ng-container
+            >
+          </p>
+        }
+      }
+      @case ('reloading') {
+        <section
+          class="flex flex-col gap-4 rounded-xl border border-border bg-card p-4"
+          role="status"
+          aria-busy="true"
+          aria-label="Loading the plan"
+          i18n-aria-label="@@organization.billing.plan-loading"
+          data-testid="plan-loading"
+        >
+          <div cwSkeleton class="h-4 w-32" aria-hidden="true"></div>
+          <div cwSkeleton class="h-6 w-20" aria-hidden="true"></div>
+        </section>
+      }
+      @case ('failed') {
+        <div
+          class="rounded-xl border border-dashed border-border"
+          role="alert"
+          data-testid="plan-failed"
+        >
+          <cw-empty class="p-6">
+            <cw-empty-header>
+              <cw-empty-media tone="destructive">
+                <ng-icon name="phosphorWarningCircleBold" aria-hidden="true" />
+              </cw-empty-media>
+              <cw-empty-title i18n="@@organization.billing.plan-failed"
+                >The plan could not be loaded.</cw-empty-title
+              >
+              <cw-empty-description i18n="@@organization.billing.failed-text"
+                >The server did not answer in time. Your settings are not lost: try again in a
+                moment.</cw-empty-description
+              >
+            </cw-empty-header>
+            <cw-empty-content>
+              <button
+                cwButton
+                type="button"
+                variant="outline"
+                (click)="subscriptions.retry()"
+                data-testid="plan-retry"
+              >
+                <ng-icon name="phosphorArrowClockwiseBold" aria-hidden="true" />
+                <ng-container i18n="@@organization.billing.retry">Retry</ng-container>
+              </button>
+            </cw-empty-content>
+          </cw-empty>
+        </div>
+      }
+    }
+
+    <section class="flex flex-col gap-3" aria-labelledby="billing-invoices-title">
+      <h2
+        id="billing-invoices-title"
+        class="text-base font-semibold"
+        i18n="@@organization.billing.invoices-title"
+      >
+        Invoices
+      </h2>
+      @if (invoices.failed()) {
+        <div
+          class="rounded-xl border border-dashed border-border"
+          role="alert"
+          data-testid="invoices-failed"
+        >
+          <cw-empty class="p-6">
+            <cw-empty-header>
+              <cw-empty-media tone="destructive">
+                <ng-icon name="phosphorWarningCircleBold" aria-hidden="true" />
+              </cw-empty-media>
+              <cw-empty-title i18n="@@organization.billing.failed-title"
+                >Could not load this section</cw-empty-title
+              >
+              <cw-empty-description i18n="@@organization.billing.failed-text"
+                >The server did not answer in time. Your settings are not lost: try again in a
+                moment.</cw-empty-description
+              >
+            </cw-empty-header>
+            <cw-empty-content>
+              <button
+                cwButton
+                type="button"
+                variant="outline"
+                (click)="invoices.retry()"
+                data-testid="invoices-retry"
+              >
+                <ng-icon name="phosphorArrowClockwiseBold" aria-hidden="true" />
+                <ng-container i18n="@@organization.billing.retry">Retry</ng-container>
+              </button>
+            </cw-empty-content>
+          </cw-empty>
+        </div>
+      } @else {
+        <cw-invoices-table
+          [rows]="invoices.rows()"
+          [loading]="invoices.loading()"
+          [hasPrevious]="invoices.hasPrevious()"
+          [hasNext]="invoices.hasNext()"
+          [paged]="invoices.paged()"
+          (previousPage)="invoices.previous()"
+          (nextPage)="invoices.next()"
+        />
+      }
+    </section>
+  }
+</div>

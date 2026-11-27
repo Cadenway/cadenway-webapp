@@ -84,6 +84,10 @@ section has `organizationSectionGuard(<section>)` (`http/guards/organization-sec
 - Quotas section: the shared `SubscriptionStore` (no request of its own); `@cadenway/ui` `button`,
   `card`, `empty`, `meter`, `skeleton` and `toast`.
 
+- Billing section: `BillingService` (`listBillingInvoices`, `startBillingCheckout`) through
+  `data-access/services/billing-api`; `@cadenway/ui` `button`, `empty`, `skeleton`, `table`,
+  `toast` and `tooltip`.
+
 ## Invariants
 
 - `SubscriptionStore` is provided once on `/:org` by `provideOrganizationUsage()` and shared by the
@@ -289,6 +293,74 @@ be loaded.` with `Retry`, until a read or a save confirms the organization (anot
   the outcome.
 - Below 768 px the header wraps the export button under the title.
 
+### Billing (`billing`, package O3)
+
+- `BillingPage` provides the page-scoped `InvoicesStore` and `BillingCheckoutStore` and reads the
+  plan from the shared `SubscriptionStore`. It shows only what the contract serves: the plan card
+  (`<plan> plan`, `<used> / <limit>` seats and `<n> available`), the invoices, and on the Free plan
+  `Upgrade to the Team plan`. The billing contract has no subscription status, so none shows. The
+  plan catalog (`Change plan`), the downgrade, `Manage seats`, the interval badge, the price and
+  renewal, the next invoice, the payment method, the billing details and the Stripe customer portal
+  (gap B14) are not rendered.
+- The section skeleton shows until the organization's first invoices page and its plan answered.
+  The first invoices read is the primary read: its failure reaches the route's error boundary,
+  whose `Retry` runs the route again and recreates the page's stores. A failed plan read (the
+  shared store outlives the page) shows the section's error panel in the plan area with `Retry`,
+  which reads the subscription again; a later failed invoices page shows it in place of the table.
+  A completed read without invoices shows `No invoices yet`.
+- `listBillingInvoices` is read 10 per page by cursor, newest first; the store keeps the cursor of
+  each page reached for `Previous`. The reads are keyed by the workspace organization: a switch
+  starts at the next organization's first page, never with a cursor of the last one, and shows the
+  section skeleton again, even back to an organization answered before, whose first read is then
+  again the primary read. Once the person moved between pages, the pagination stays while the
+  page opened is read, and the focus moves to the table's caption (`Invoices`), since the pressed
+  button is disabled meanwhile. The period names its months in UTC (`November 2026`, `March 2026 –
+February 2027`; the contract's end is the start of the next period) and the amount uses the
+  currency's own decimals, both in `LOCALE_ID`. A status a later contract adds shows its key. A
+  PDF or Checkout address that is not HTTPS is dropped at the boundary; the PDF opens in a new tab.
+- A checkout is bound to the organization shown when it starts and to the page: after a switch,
+  or once the page is gone, its answer opens nothing and toasts nothing, and the organization pin
+  refuses it at the gateway for another session organization. One checkout runs at a time. A
+  retry after an unknown outcome (no answer, `5xx`, `429`, `409 idempotency.request-in-progress`)
+  sends the same `Idempotency-Key`, so Billing replays the session it may have created; a definite
+  refusal drops the key. `409 billing.subscription-active` reads the subscription again. The
+  Checkout opens in the same tab through `CHECKOUT_REDIRECT` (`state/billing-checkout`), which
+  specs replace.
+- Billing keeps a Checkout open for two hours and answers `409 billing.checkout-in-progress` to
+  another key meanwhile, so the key outlives the page: `sessionStorage`
+  (`cadenway-billing-checkout-key`) holds `{ organizationId, slug, userId, key, createdAt }`, which
+  survives the same-tab round trip to Stripe. A checkout of the same person and organization
+  within two hours sends that key again, so coming back from a cancelled Checkout replays the open
+  session. A definite refusal, `?checkout=success` and two hours drop it; a key of another person
+  or organization is never sent. A browser that refuses the storage keeps the key for the page
+  only. Follow-up (contract first, `cadenway-api-contracts` then Billing): the two-hour lifetime
+  is Billing's behaviour, not yet stated in `startBillingCheckout`; once the contract states it
+  (or answers the session's expiry), `CHECKOUT_KEY_LIFETIME_MS` follows it.
+- Stripe returns to Billing's configured `BILLING_STRIPE_CHECKOUT_SUCCESS_URL` and
+  `BILLING_STRIPE_CHECKOUT_CANCEL_URL`, which carry no organization. The page expects
+  `/org/billing?checkout=success` and `/org/billing?checkout=cancel`, which Workspace's slug
+  redirect sends to the session's organization, which another tab may have switched. So a
+  successful return is matched against the key record: for the organization shown it toasts once,
+  removes the parameter and starts the confirmation; for another organization of the same
+  person, the page opens `/<recorded slug>/organization/billing?checkout=success` once, where
+  the organization guard checks the membership and switches the session; with no record, another
+  person's or an expired one, it toasts `This payment was for another organization` and removes
+  the parameter. The key is never cleared nor a payment confirmed for an organization other than
+  the one shown. A cancelled return toasts and removes the parameter.
+- Settlement is asynchronous: after the successful return the page reads the subscription again
+  2, 4 and 8 s later (`CHECKOUT_CONFIRM_DELAYS_MS`) until the plan is no longer Free, writing each
+  answer into the shared `SubscriptionStore`. Meanwhile `Upgrade` is withheld and
+  `Confirming the payment…` shows; a plan still Free after the last read shows
+  `The payment is not confirmed yet` with `Retry`, which reads it once more. The wait is
+  recorded per organization in `sessionStorage` (`cadenway-billing-payment-pending:<id>`,
+  `{ since, unconfirmed }`) until a paid plan is observed or one hour passes, so a reload, a
+  visit to another section or a switch back resumes it: the reads, or the note with `Retry`, and
+  `Upgrade` stays withheld. A paid plan observed, by these reads or in the shared store, ends the
+  wait and reloads the invoices once. The confirmation is bound to its organization and page.
+- The page's toasts are dismissed when it is left or the organization changes.
+- Below 768 px the invoices become cards (header hidden, number full width, link right) and the
+  upgrade button wraps under the plan title.
+
 ## Copy not taken word for word from the mockup
 
 | Unit                               | Reason                                                                       |
@@ -346,3 +418,20 @@ Quotas section (`organization.quotas.*`):
 | `organization.security.save-failed`, `organization.security.conflict`, `organization.security.conflict-text`, `organization.security.two-step-not-enabled`, `organization.security.two-step-not-enabled-text` | The mockup applies each control at once and draws no refused save.                                                |
 | `organization.security.two-step-saved`                                                                                                                                                                        | The mockup's only policy toast names the session timeout; a two-step change alone needs its own title.            |
 | `organization.security.two-step-unknown`, `organization.security.two-step-unknown-choose`                                                                                                                     | The mockup knows only `nobody`, `admins` and `everyone`; a requirement a later contract adds needs its own state. |
+
+Billing section (`organization.billing.*`):
+
+| Unit                                                                                                                                            | Reason                                                                                                                                                  |
+| ----------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `description`                                                                                                                                   | The mockup's subtitle without the payment method, which is not shown, and `de l’organisation <name>` for any name (the mockup elides `d'Atelier Nord`). |
+| `upgrade`                                                                                                                                       | The mockup draws the Team plan as current; the upgrade from Free has no button there.                                                                   |
+| `seats-free-one`                                                                                                                                | Singular form of the mockup's `<n> disponibles`.                                                                                                        |
+| `status-open`, `status-uncollectible`, `status-void`                                                                                            | The mockup draws paid invoices only; the contract has four statuses.                                                                                    |
+| `empty-title`, `empty-text`                                                                                                                     | The mockup draws no organization without invoices.                                                                                                      |
+| `pagination`, `previous`, `next`                                                                                                                | The mockup's four invoices fit one page.                                                                                                                |
+| `plan-loading`, `plan-failed`                                                                                                                   | The mockup draws no plan read apart from the section.                                                                                                   |
+| `loading`, `failed-title`, `failed-text`, `retry`                                                                                               | The mockup's section states (`Organisation.dc.html` lines 73-128), with this section's ids.                                                             |
+| `already-subscribed`, `already-subscribed-text`, `checkout-in-progress`, `checkout-in-progress-text`, `checkout-failed`, `checkout-failed-text` | The mockup draws no refused checkout.                                                                                                                   |
+| `checkout-success`, `checkout-success-text`, `checkout-cancelled`, `checkout-cancelled-text`                                                    | The mockup draws no return from the payment provider.                                                                                                   |
+| `confirming`, `unconfirmed`, `unconfirmed-text`                                                                                                 | The mockup draws no payment awaiting Billing's confirmation.                                                                                            |
+| `checkout-elsewhere`, `checkout-elsewhere-text`                                                                                                 | The mockup draws no return from the payment provider for another organization.                                                                          |
