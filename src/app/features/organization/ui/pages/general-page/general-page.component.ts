@@ -18,11 +18,19 @@ import {
   validate,
   type ValidationError,
 } from '@angular/forms/signals';
-import { Router } from '@angular/router';
+import { type Navigation, Router } from '@angular/router';
 import { CwCard, CwCardContent, CwCardHeader, CwCardTitle } from '@cadenway/ui/components/card';
 import { CwSkeleton } from '@cadenway/ui/components/skeleton';
 import { CwToastService } from '@cadenway/ui/components/toast';
 
+import {
+  WORKSPACE_CONTEXT,
+  type WorkspaceContextPort,
+} from '@features/workspace/ports/workspace-context';
+import {
+  WORKSPACE_REFRESH,
+  type WorkspaceRefreshPort,
+} from '@features/workspace/ports/workspace-refresh';
 import { DiscardChangesDialog } from '@features/workspace/ui/dialogs/discard-changes-dialog';
 import { type UnsavedChanges, warnBeforeUnload } from '@shared/unsaved-changes';
 
@@ -81,6 +89,54 @@ const WEBSITE_LIMIT: number = 2048;
 const SLUG_PATTERN: RegExp = /^(?=.{2,63}$)[a-z0-9]+(-[a-z0-9]+)*$/u;
 
 /**
+ * Constant FORM_FIELDS
+ *
+ * @description
+ * The fields of the `Identity` form, merged one by one.
+ *
+ * @type {readonly OrganizationField[]}
+ */
+const FORM_FIELDS: readonly OrganizationField[] = [
+  'name',
+  'slug',
+  'description',
+  'website',
+  'defaultLanguage',
+];
+
+/**
+ * Interface Snapshot
+ *
+ * @description
+ * The saved organization as the form shows it: the draft's base.
+ */
+interface Snapshot {
+  // #region Properties
+  /**
+   * Property id
+   *
+   * @description
+   * The organization, or null while none is read.
+   *
+   * @type {string | null}
+   * @readonly
+   */
+  readonly id: string | null;
+
+  /**
+   * Property value
+   *
+   * @description
+   * Its form value.
+   *
+   * @type {OrganizationProfileForm}
+   * @readonly
+   */
+  readonly value: OrganizationProfileForm;
+  // #endregion
+}
+
+/**
  * Function formOf
  *
  * @description
@@ -100,23 +156,95 @@ function formOf(profile: OrganizationProfile | null): OrganizationProfileForm {
 }
 
 /**
+ * Function sameValue
+ *
+ * @description
+ * Whether two values of a field mean the same: texts are compared trimmed, as they are sent.
+ *
+ * @param {OrganizationProfileForm} a - A form value.
+ * @param {OrganizationProfileForm} b - Another form value.
+ * @param {OrganizationField} field - The field.
+ * @returns {boolean} True when the field means the same in both.
+ */
+function sameValue(
+  a: OrganizationProfileForm,
+  b: OrganizationProfileForm,
+  field: OrganizationField,
+): boolean {
+  const left: string | null = a[field];
+  const right: string | null = b[field];
+  return typeof left === 'string' && typeof right === 'string'
+    ? left.trim() === right.trim()
+    : left === right;
+}
+
+/**
  * Function sameForm
  *
  * @description
- * Whether two form values are equal, so a read that changes only the logo or the version keeps the
- * edits.
+ * Whether two form values are exactly equal, so a read that changes only the logo or the version
+ * is no change of the base.
  *
  * @param {OrganizationProfileForm} a - A value.
  * @param {OrganizationProfileForm} b - Another value.
  * @returns {boolean} True when every field is equal.
  */
 function sameForm(a: OrganizationProfileForm, b: OrganizationProfileForm): boolean {
-  return (
-    a.name === b.name &&
-    a.slug === b.slug &&
-    a.description === b.description &&
-    a.website === b.website &&
-    a.defaultLanguage === b.defaultLanguage
+  return FORM_FIELDS.every((field: OrganizationField): boolean => a[field] === b[field]);
+}
+
+/**
+ * Function mergeDraft
+ *
+ * @description
+ * The draft once the saved organization moved from `base` to `fresh`: a field the person changed
+ * from the base keeps their edit, any other takes the fresh value.
+ *
+ * @param {OrganizationProfileForm} base - The saved value the draft started from.
+ * @param {OrganizationProfileForm} draft - The draft.
+ * @param {OrganizationProfileForm} fresh - The saved value now.
+ * @returns {OrganizationProfileForm} The merged draft.
+ */
+function mergeDraft(
+  base: OrganizationProfileForm,
+  draft: OrganizationProfileForm,
+  fresh: OrganizationProfileForm,
+): OrganizationProfileForm {
+  const pick: <K extends OrganizationField>(field: K) => OrganizationProfileForm[K] = <
+    K extends OrganizationField,
+  >(
+    field: K,
+  ): OrganizationProfileForm[K] => (sameValue(draft, base, field) ? fresh[field] : draft[field]);
+  return {
+    name: pick('name'),
+    slug: pick('slug'),
+    description: pick('description'),
+    website: pick('website'),
+    defaultLanguage: pick('defaultLanguage'),
+  };
+}
+
+/**
+ * Function collisions
+ *
+ * @description
+ * The fields both the person and someone else changed from the base, to different values.
+ *
+ * @param {OrganizationProfileForm} base - The saved value the draft started from.
+ * @param {OrganizationProfileForm} draft - The draft.
+ * @param {OrganizationProfileForm} fresh - The saved value now.
+ * @returns {readonly OrganizationField[]} The colliding fields.
+ */
+function collisions(
+  base: OrganizationProfileForm,
+  draft: OrganizationProfileForm,
+  fresh: OrganizationProfileForm,
+): readonly OrganizationField[] {
+  return FORM_FIELDS.filter(
+    (field: OrganizationField): boolean =>
+      !sameValue(draft, base, field) &&
+      !sameValue(fresh, base, field) &&
+      !sameValue(fresh, draft, field),
   );
 }
 
@@ -181,6 +309,26 @@ function isWebAddress(value: string): boolean {
 }
 
 /**
+ * Function withSlug
+ *
+ * @description
+ * An application address with its first segment, the organization, replaced; null when it does not
+ * start with `from`.
+ *
+ * @param {string} url - The address (`/atelier-nord/organization/members?lang=fr`).
+ * @param {string} from - The old slug.
+ * @param {string} to - The new slug.
+ * @returns {string | null} The address below the new slug.
+ */
+function withSlug(url: string, from: string, to: string): string | null {
+  const prefix: string = `/${from}`;
+  if (!url.startsWith(prefix)) return null;
+  const rest: string = url.slice(prefix.length);
+  if (rest !== '' && !['/', '?', '#', '('].includes(rest.charAt(0))) return null;
+  return `/${to}${rest}`;
+}
+
+/**
  * Component GeneralPage
  *
  * @description
@@ -191,21 +339,32 @@ function isWebAddress(value: string): boolean {
  * `Default language`, and the `Unsaved changes` footer with `Cancel` and `Save`. The verified
  * domains card (gap B10) and the danger zone (transfer and deletion, gap B12) are not rendered.
  *
- * The logo applies at once, as in the mockup: a PNG or SVG of at most 5 MiB is uploaded and
- * toasts `Logo updated` with its file name, `Remove` toasts `Logo removed` with the initials, and
- * a refused file toasts why. `Save` sends only what changed through the page's
- * `OrganizationProfileStore` and toasts `Organization updated`; a new address then opens
- * `/<new slug>/organization/general`, keeping the query. An invalid submit shows the errors and
- * focuses the first invalid field; an address used by another organization or kept by the
- * application, and a field the gateway refuses, show on that field; a stale version toasts the
- * conflict and shows the latest organization; any other refusal toasts the failure and keeps the
- * edits; a changed organization context and a switch to another organization keep them silently.
+ * The draft is kept apart from the saved organization it started from. When a read brings a newer
+ * organization (after a logo change or a stale version), each field the person changed keeps their
+ * edit and every other takes the new value; a field someone else changed to another value
+ * meanwhile toasts the conflict instead of the logo's success. The draft starts over only after a
+ * successful save, `Cancel`, or for another organization.
+ *
+ * The logo applies at once, as in the mockup: a PNG or SVG of at most 5 MiB is uploaded and toasts
+ * `Logo updated` with its file name, `Remove` toasts `Logo removed` with the initials, a refused
+ * file toasts why, and the file input takes the focus afterwards. `Save` sends only what changed
+ * through the page's `OrganizationProfileStore` and toasts `Organization updated`, then asks the
+ * workspace to verify the organization again (`WORKSPACE_REFRESH`) so the shells show the new
+ * name. Once a save or a read shows an address other than the workspace's, the page opens it: a
+ * navigation the person started meanwhile is let go to another organization, or redirected below
+ * the new address; otherwise `/<new slug>/organization/general` replaces the old address, keeping
+ * the query. An invalid submit shows the errors and focuses the first invalid field; an address
+ * used by another organization or kept by the application, and a field the gateway refuses, show
+ * on that field; a stale version toasts the conflict; any other refusal toasts the failure and
+ * keeps the edits; a changed organization context and a switch to another organization keep them
+ * silently.
  *
  * While the organization loads, a skeleton of the card shows (`Loading the section`); a failed
  * read reaches the route's error boundary, whose `Retry` runs the route again. The route guards
  * the unsaved edits with `unsavedChangesGuard`, which asks through `cw-discard-changes-dialog`
- * once a save on its way has settled, and the page asks the browser to confirm closing or
- * reloading the tab while they last.
+ * once a save on its way has settled (never for the page's own move to its new address, which
+ * keeps the draft), and the page asks the browser to confirm closing or reloading the tab while
+ * they last.
  */
 @Component({
   selector: 'cw-organization-general-page',
@@ -235,6 +394,28 @@ export class GeneralPage implements UnsavedChanges {
    */
   protected readonly store: InstanceType<typeof OrganizationProfileStore> =
     inject(OrganizationProfileStore);
+
+  /**
+   * Property workspace
+   *
+   * @description
+   * The workspace's organization, whose address the page follows.
+   *
+   * @type {WorkspaceContextPort}
+   * @readonly
+   */
+  private readonly workspace: WorkspaceContextPort = inject(WORKSPACE_CONTEXT);
+
+  /**
+   * Property workspaceRefresh
+   *
+   * @description
+   * Asks the workspace to verify the organization again after a save.
+   *
+   * @type {WorkspaceRefreshPort}
+   * @readonly
+   */
+  private readonly workspaceRefresh: WorkspaceRefreshPort = inject(WORKSPACE_REFRESH);
 
   /**
    * Property toasts
@@ -279,6 +460,28 @@ export class GeneralPage implements UnsavedChanges {
    * @readonly
    */
   private readonly discard: Signal<DiscardChangesDialog> = viewChild.required(DiscardChangesDialog);
+
+  /**
+   * Property logoControl
+   *
+   * @description
+   * The logo row, focused once a logo change ends.
+   *
+   * @type {Signal<OrganizationLogo | undefined>}
+   * @readonly
+   */
+  private readonly logoControl: Signal<OrganizationLogo | undefined> = viewChild(OrganizationLogo);
+
+  /**
+   * Property followingInPlace
+   *
+   * @description
+   * Whether the page is moving itself to the organization's new address: the page stays, and so
+   * does the draft, so leaving is not asked.
+   *
+   * @type {boolean}
+   */
+  private followingInPlace: boolean = false;
 
   /**
    * Property host
@@ -348,33 +551,46 @@ export class GeneralPage implements UnsavedChanges {
   };
 
   /**
-   * Property saved
+   * Property snapshot
    *
    * @description
-   * The form value of the saved organization; a read that changes only the logo or the version
-   * leaves it equal, so it does not reset the edits.
+   * The saved organization as the form shows it, the draft's base; a read that changes only the
+   * logo or the version leaves it equal.
    *
-   * @type {Signal<OrganizationProfileForm>}
+   * @type {Signal<Snapshot>}
    * @readonly
    */
-  private readonly saved: Signal<OrganizationProfileForm> = computed(
-    (): OrganizationProfileForm => formOf(this.store.current()),
-    { equal: sameForm },
+  private readonly snapshot: Signal<Snapshot> = computed(
+    (): Snapshot => {
+      const profile: OrganizationProfile | null = this.store.current();
+      return { id: profile?.id ?? null, value: formOf(profile) };
+    },
+    { equal: (a: Snapshot, b: Snapshot): boolean => a.id === b.id && sameForm(a.value, b.value) },
   );
 
   /**
    * Property model
    *
    * @description
-   * The form value, reset to the saved organization whenever a read or a save changes its fields,
-   * an organization switch included.
+   * The draft. It starts from the saved organization, starts over for another organization, and
+   * otherwise merges a newer saved organization field by field (`mergeDraft`).
    *
    * @type {WritableSignal<OrganizationProfileForm>}
    * @readonly
    */
-  private readonly model: WritableSignal<OrganizationProfileForm> = linkedSignal(
-    (): OrganizationProfileForm => this.saved(),
-  );
+  private readonly model: WritableSignal<OrganizationProfileForm> = linkedSignal<
+    Snapshot,
+    OrganizationProfileForm
+  >({
+    source: this.snapshot,
+    computation: (
+      next: Snapshot,
+      previous?: { source: Snapshot; value: OrganizationProfileForm },
+    ): OrganizationProfileForm =>
+      previous === undefined || next.id === null || previous.source.id !== next.id
+        ? next.value
+        : mergeDraft(previous.source.value, previous.value, next.value),
+  });
 
   /**
    * Property profileForm
@@ -470,14 +686,16 @@ export class GeneralPage implements UnsavedChanges {
    * Method confirmDiscard
    *
    * @description
-   * Asks whether to discard the unsaved edits. A save already on its way may still be applied, so
-   * the page first waits for it to settle: once accepted, nothing is unsaved and the navigation
-   * goes; once refused, the person is asked.
+   * Asks whether to discard the unsaved edits. The page's own move to the organization's new
+   * address keeps the page and the draft, so it goes without asking. A save already on its way may
+   * still be applied, so the page first waits for it to settle: once accepted, nothing is unsaved
+   * and the navigation goes; once refused, the person is asked.
    *
-   * @returns {Promise<boolean>} Resolves true on `Discard` or once the edits are saved, false on
-   * `Keep editing`.
+   * @returns {Promise<boolean>} Resolves true on `Discard`, once the edits are saved, or for the
+   * page's own move; false on `Keep editing`.
    */
   public async confirmDiscard(): Promise<boolean> {
+    if (this.followingInPlace) return true;
     await this.store.sent();
     if (!this.dirty()) return true;
     return this.discard().ask();
@@ -490,8 +708,7 @@ export class GeneralPage implements UnsavedChanges {
    * Drops the edits and shows the saved organization again.
    */
   protected cancel(): void {
-    this.model.set(this.saved());
-    this.profileForm().reset();
+    this.restart();
   }
 
   /**
@@ -508,13 +725,16 @@ export class GeneralPage implements UnsavedChanges {
       action: async (
         fields: FieldTree<OrganizationProfileForm>,
       ): Promise<ValidationError.WithOptionalFieldTree[] | undefined> => {
-        const result: OrganizationSaveResult = await this.store.save(this.change());
+        const change: OrganizationProfileChange = this.change();
+        const result: OrganizationSaveResult = await this.store.save(change);
         switch (result.outcome) {
           case 'saved':
+            this.restart();
             this.toasts.success($localize`:@@organization.general.saved:Organization updated`, {
               description: $localize`:@@organization.general.saved-text:Members see the new name and address.`,
             });
-            if (result.slugChanged) await this.openAt(result.slug);
+            if (this.store.movedTo() !== null) this.followAddress();
+            else void this.workspaceRefresh.refresh();
             return undefined;
           case 'refused':
             return result.refusals.map(
@@ -525,12 +745,8 @@ export class GeneralPage implements UnsavedChanges {
               }),
             );
           case 'outdated':
-            this.toasts.error(
-              $localize`:@@organization.general.conflict:The organization changed in the meantime`,
-              {
-                description: $localize`:@@organization.general.conflict-text:Its latest version is shown.`,
-              },
-            );
+            this.toastConflict();
+            this.followAddress();
             return undefined;
           case 'failed':
             this.toasts.error(
@@ -554,40 +770,107 @@ export class GeneralPage implements UnsavedChanges {
    * Method pickLogo
    *
    * @description
-   * Uploads a picked logo and toasts the outcome.
+   * Uploads a picked logo and toasts the outcome, or the conflict when the organization read
+   * afterwards changed a field the person also edited.
    *
    * @param {File} file - The picked file.
    * @returns {Promise<void>} Resolves once the change ended.
    */
   protected async pickLogo(file: File): Promise<void> {
+    const base: OrganizationProfileForm = this.snapshot().value;
+    const draft: OrganizationProfileForm = this.model();
     const outcome: OrganizationLogoOutcome = await this.store.uploadLogo(file);
-    if (outcome === 'updated') {
+    if (outcome === 'updated' && !this.collided(base, draft)) {
       this.toasts.success($localize`:@@organization.general.logo-updated:Logo updated`, {
         description: $localize`:@@organization.general.logo-updated-text:${file.name}:file: shows in the sidebar and emails.`,
       });
-      return;
+    } else if (outcome !== 'updated') {
+      this.toastLogoFailure(outcome);
     }
-    this.toastLogoFailure(outcome);
+    this.afterLogoChange(outcome);
   }
 
   /**
    * Method removeLogo
    *
    * @description
-   * Removes the logo and toasts the outcome with the initials shown instead.
+   * Removes the logo and toasts the outcome with the initials shown instead, or the conflict when
+   * the organization read afterwards changed a field the person also edited.
    *
    * @returns {Promise<void>} Resolves once the change ended.
    */
   protected async removeLogo(): Promise<void> {
+    const base: OrganizationProfileForm = this.snapshot().value;
+    const draft: OrganizationProfileForm = this.model();
     const outcome: OrganizationLogoOutcome = await this.store.removeLogo();
-    if (outcome === 'removed') {
+    if (outcome === 'removed' && !this.collided(base, draft)) {
       const initials: string = this.store.current()?.initials ?? '';
       this.toasts.success($localize`:@@organization.general.logo-removed:Logo removed`, {
         description: $localize`:@@organization.general.logo-removed-text:The initials ${initials}:initials: show instead.`,
       });
-      return;
+    } else if (outcome !== 'removed') {
+      this.toastLogoFailure(outcome);
     }
-    this.toastLogoFailure(outcome);
+    this.afterLogoChange(outcome);
+  }
+
+  /**
+   * Method restart
+   *
+   * @description
+   * Starts the draft over from the saved organization, untouched.
+   */
+  private restart(): void {
+    this.model.set(this.snapshot().value);
+    this.profileForm().reset();
+  }
+
+  /**
+   * Method collided
+   *
+   * @description
+   * Toasts the conflict when the saved organization, read again since `base`, changed a field the
+   * draft also changed, to another value.
+   *
+   * @param {OrganizationProfileForm} base - The saved value before the read.
+   * @param {OrganizationProfileForm} draft - The draft before the read.
+   * @returns {boolean} True when a conflict was toasted.
+   */
+  private collided(base: OrganizationProfileForm, draft: OrganizationProfileForm): boolean {
+    if (collisions(base, draft, this.snapshot().value).length === 0) return false;
+    this.toastConflict();
+    return true;
+  }
+
+  /**
+   * Method afterLogoChange
+   *
+   * @description
+   * Once a logo change ended on the page shown: the file input takes the focus back, and a new
+   * address the read brought is opened.
+   *
+   * @param {OrganizationLogoOutcome} outcome - How the change ended.
+   */
+  private afterLogoChange(outcome: OrganizationLogoOutcome): void {
+    if (this.destroyRef.destroyed || outcome === 'skipped' || outcome === 'cancelled') return;
+    this.logoControl()?.focus();
+    this.followAddress();
+  }
+
+  /**
+   * Method toastConflict
+   *
+   * @description
+   * Toasts that someone else changed the organization; the fields the person did not change show
+   * the latest version.
+   */
+  private toastConflict(): void {
+    this.toasts.error(
+      $localize`:@@organization.general.conflict:The organization changed in the meantime`,
+      {
+        description: $localize`:@@organization.general.conflict-text:Its latest version shows where you changed nothing: check your edits, then save.`,
+      },
+    );
   }
 
   /**
@@ -681,21 +964,36 @@ export class GeneralPage implements UnsavedChanges {
   }
 
   /**
-   * Method openAt
+   * Method followAddress
    *
    * @description
-   * Opens the section at the organization's new address, replacing the old one in the history
-   * (it no longer opens the organization), keeping the query (`?lang=fr`).
-   *
-   * @param {string} slug - The new address.
-   * @returns {Promise<void>} Resolves once the navigation ended.
+   * Opens the organization's address once the saved organization shows one other than the
+   * workspace's. A navigation the person started meanwhile is let go when it leaves for another
+   * organization, and otherwise redirected below the new address; without one, the page moves
+   * itself, replacing the old address in the history (it no longer opens the organization) and
+   * keeping the query and the fragment. The `/:org` guards then verify the organization again.
+   * The navigation starts before this method returns.
    */
-  private async openAt(slug: string): Promise<void> {
-    if (this.destroyRef.destroyed) return;
-    await this.router.navigate(['/', slug, 'organization', 'general'], {
-      queryParamsHandling: 'preserve',
-      replaceUrl: true,
-    });
+  private followAddress(): void {
+    const moved: string | null = this.store.movedTo();
+    if (moved === null || this.destroyRef.destroyed) return;
+    const old: string = this.workspace.organization().slug;
+    const pending: Navigation | null = this.router.currentNavigation();
+    if (pending !== null) {
+      const target: string = this.router.serializeUrl(pending.finalUrl ?? pending.extractedUrl);
+      const redirected: string | null = withSlug(target, old, moved);
+      if (redirected !== null) void this.router.navigateByUrl(redirected, { replaceUrl: true });
+      return;
+    }
+    const here: string | null = withSlug(this.router.url, old, moved);
+    if (here === null) return;
+    this.followingInPlace = true;
+    void this.router
+      .navigateByUrl(here, { replaceUrl: true })
+      .catch((): boolean => false)
+      .finally((): void => {
+        this.followingInPlace = false;
+      });
   }
   // #endregion
 }

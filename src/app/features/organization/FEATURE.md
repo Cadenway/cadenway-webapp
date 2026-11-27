@@ -71,7 +71,8 @@ section has `organizationSectionGuard(<section>)` (`http/guards/organization-sec
   `data-access/services/organization-api`, plus Angular's `HttpClient` for the signed storage
   transfer only (never the API); `@cadenway/ui` `card`, `input`, `input-group`, `select`,
   `skeleton`, `spinner`, `textarea` and `toast`.
-- Workspace's `ports/workspace-context` and `http/guards/organization-role`, Errors' `errors.routes`,
+- Workspace's `ports/workspace-context`, `ports/workspace-refresh` (General) and
+  `http/guards/organization-role`, Errors' `errors.routes`,
   `@shared/unsaved-changes`.
 - `@cadenway/ui` (`banner`, `button`) and `@cadenway/icons`.
 - Members section: `MembersService` (`listMembers`, `changeMemberRole`, `removeMember`) and
@@ -99,7 +100,8 @@ loaded.` with `Retry`; the banner stays hidden until a retry succeeds.
   subscription, so only an owner, who alone sees that item, gets the alert.
 - The identity row reads `<plan> plan · <n> members` with the subscription's used seats, as the
   mockup's `orgSubtitle` does (line 1738), and `<plan> plan` for whoever may not read billing.
-  It shows the initials; the logo comes with O1.
+  It shows the initials. The logo shows in the General section only: the identity row needs a
+  logo read shared with it, which no package of steps 7 and 8 brings; it is a follow-up.
 - The navigation items and the account settings' links are filtered with `WORKSPACE_CONTEXT.can()`
   and the least role of `ORGANIZATION_SECTIONS`; a group without any section is not rendered, its
   heading included (a guest gets no `Organization · <name>` group).
@@ -142,40 +144,53 @@ loaded.` with `Retry`; the banner stays hidden until a retry succeeds.
 
 - `GeneralPage` provides the page-scoped `OrganizationProfileStore`. It shows only the `Identity`
   card the contract serves: the logo, `Name`, `Address` (the page host, then the slug),
-  `Description (optional)` with its `N / 280` count, `Website` and `Default language` (Français,
-  English, Deutsch with their flags), and the `Unsaved changes` footer with `Cancel` and `Save`.
-  The verified domains card (gap B10) and the danger zone, transfer and deletion (gap B12), are
-  not rendered.
+  `Description (optional)` with its `N / 280` count of the trimmed text, `Website` and
+  `Default language` (Français, English, Deutsch with their flags), and the `Unsaved changes`
+  footer with `Cancel` and `Save`. The verified domains card (gap B10) and the danger zone,
+  transfer and deletion (gap B12), are not rendered.
 - The read of the current organization is the primary read, keyed by the workspace
-  organization: a switch reads the next one and resets the form; its failure reaches the route's
-  error boundary. The logo image is a secondary read keyed by the logo reference, shown through an
-  object URL revoked once replaced and with the page; without a logo, or when its image cannot be
-  read, the tile shows the initials of the saved name.
+  organization: a switch reads the next one; its failure reaches the route's error boundary. The
+  logo image is a secondary read keyed by `<organization id>:<logo id>`, so a save that keeps the
+  logo reads no image; a replaced read is aborted and shows nothing. Its object URL is revoked once
+  another is shown, as soon as the organization has no logo, and with the page; without a logo,
+  or when its image cannot be read, the tile shows the initials of the saved name.
+- The draft is kept apart from the saved organization it started from. When a read brings a newer
+  organization (the reread after a logo change or after a stale version), each field the person
+  changed keeps their edit and every other field takes the new value; when someone else changed a
+  field the person also changed, to another value, the conflict is toasted (instead of the logo's
+  success). The draft starts over only after a successful save, `Cancel`, or for another
+  organization.
 - `Save` sends only what changed (names and addresses trimmed, an empty description or website
   as `null`) from the version read (`If-Match`). The form checks the contract's rules before
   sending (a name of 1 to 120 characters, a slug of 2 to 63 lowercase letters, digits and single
   dashes, a description of 280 characters at most, an absolute `https` or `http` website); an
   invalid submit shows the errors and focuses the first. `409 organization.slug-taken`,
   `422 organization.slug-reserved` and a `400 request.invalid` issue on a form field show on that
-  field. `412 request.version-mismatch` reads the organization again, shows it and toasts the
-  conflict; any other refusal toasts the failure and keeps the edits; a
+  field. `412 request.version-mismatch` reads the organization again, merges it into the draft and
+  toasts the conflict; any other refusal toasts the failure and keeps the edits; a
   `412 organization.context-changed` (or a switch in progress) keeps them silently for the
-  workspace recovery. A saved new slug opens `/<new slug>/organization/general`, replacing the old
-  address in the history and keeping the query; the `/:org` guards then verify and commit the
-  organization again. A save of the name alone does not refresh the workspace context, so the
-  settings identity row and the application shell show the new name after the next verification.
+  workspace recovery, and a reread that meets one reads nothing more.
+- A successful save asks Workspace to verify the organization again (`WORKSPACE_REFRESH`), so the
+  settings identity row and the shells show a new name. Once a save or a reread shows an address
+  other than the workspace's, the page opens it: a navigation the person started meanwhile goes on
+  when it leaves for another organization, or is redirected below the new address; otherwise the
+  page moves itself to `/<new slug>/organization/general`, replacing the old address in the history
+  and keeping the query, without asking to discard (the page and its draft stay). The `/:org`
+  guards then verify and commit the organization again.
 - The logo applies at once, as the mockup does: a PNG or SVG of 1 byte to 5 MiB is reserved
   (`Idempotency-Key`), sent to its signed destination with its fields first and no credentials,
-  then published with `If-Match`; `Remove` deletes it with `If-Match`. Each then reads the
-  organization again for its reference and version, which keeps the form's edits when only those
-  change. Another file type, an empty or too large file and an image storage refuses
-  (`media.unsupported-type`, `media.file-too-large`, `media.invalid-image`) toast why; a stale
-  version reads the organization again.
-- One write runs at a time: `Save` is disabled while a logo change runs, and the logo actions
-  while a save runs. Every write is bound to the organization shown when it starts and to the
-  page: after a switch or once the page is gone it sends nothing more, drops any late answer and
-  toasts nothing. Leaving while a save is on its way never offers `Discard`: the page waits for
-  it, then leaves once it is saved or asks once it is refused.
+  then published with `If-Match`; `Remove` deletes it with `If-Match`. A transfer that ends
+  without an answer (status 0) publishes the same upload once before failing; a
+  `409 media.upload-not-ready` fails. Each change then reads the organization again for its
+  reference and version. Another file type, an empty or too large file and an image storage
+  refuses (`media.unsupported-type`, `media.file-too-large`, `media.invalid-image`) toast why; a
+  stale version reads the organization again. Once a change ended, the file input takes the focus.
+- One write runs at a time: `Save` is disabled while a logo change runs; the logo actions stay
+  focusable with `aria-disabled="true"` and do nothing while a save or a logo change runs. Every
+  write is bound to the organization shown when it starts and to the page: after a switch or once
+  the page is gone it sends nothing more, drops any late answer and toasts nothing. Leaving while a
+  save is on its way never offers `Discard`: the page waits for it, then leaves once it is saved or
+  asks once it is refused.
 - A default language a later contract adds shows `Choose a language` and is sent only once another
   option is picked.
 - Below 768 px the fields take one column, the logo row and the footer wrap.
@@ -251,6 +266,7 @@ General section (`organization.general.*`):
 | `name-required`, `name-too-long`, `slug-invalid`, `description-too-long`, `website-invalid`, `language-invalid` | The mockup checks no field.                                                             |
 | `slug-taken`, `slug-reserved`                                                                                   | Copy of the contract's problems (`organizations.yaml`); the mockup refuses no address.  |
 | `conflict`, `conflict-text`, `logo-conflict-text`, `save-failed`                                                | The mockup draws no refused or overtaken save.                                          |
+| `language-fr`, `language-de`                                                                                    | Autonyms, the same in every catalog: the English source keeps `Français` and `Deutsch`. |
 | `logo-too-large`, `logo-too-large-text`, `logo-invalid`, `logo-invalid-text`, `logo-failed`, `logo-failed-text` | Limits of the contract (`profile-media.yaml`); the mockup draws no refused upload.      |
 | `logo-removed-text`                                                                                             | The organization's own initials rather than the mockup's fixed `AN`.                    |
 | `language-unknown`                                                                                              | A language a later contract adds needs its own state.                                   |

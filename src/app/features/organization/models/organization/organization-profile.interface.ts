@@ -384,20 +384,22 @@ export interface OrganizationFieldRefusal {
  * Type OrganizationSaveResult
  *
  * @description
- * How a save ended: `saved` with the address after the save; `refused` with the refused fields;
+ * How a save ended: `saved`; `refused` with the refused fields;
  * `skipped` when nothing was sent (no change, nothing loaded, a save or a logo change already
  * running); `cancelled` when the organization changed or the page went away before the save could
  * end; `context-changed` when the gateway refused it for a changed organization context (`412
  * organization.context-changed`, or a switch in progress), which the workspace recovery takes over;
  * `outdated` when the organization changed in the meantime (`412 request.version-mismatch`, the
- * latest version is read again); `failed` for any other refusal.
+ * latest version has been read again); `failed` for any other refusal.
  *
- * @type {{ readonly outcome: 'saved'; readonly slug: string; readonly slugChanged: boolean } | { readonly outcome: 'refused'; readonly refusals: readonly OrganizationFieldRefusal[] } | { readonly outcome: 'skipped' | 'cancelled' | 'context-changed' | 'outdated' | 'failed' }}
+ * @type {{ readonly outcome: 'refused'; readonly refusals: readonly OrganizationFieldRefusal[] } | { readonly outcome: 'saved' | 'skipped' | 'cancelled' | 'context-changed' | 'outdated' | 'failed' }}
  */
 export type OrganizationSaveResult =
-  | { readonly outcome: 'saved'; readonly slug: string; readonly slugChanged: boolean }
   | { readonly outcome: 'refused'; readonly refusals: readonly OrganizationFieldRefusal[] }
-  | { readonly outcome: 'skipped' | 'cancelled' | 'context-changed' | 'outdated' | 'failed' };
+  | {
+      readonly outcome:
+        'saved' | 'skipped' | 'cancelled' | 'context-changed' | 'outdated' | 'failed';
+    };
 
 /**
  * Type OrganizationLogoOutcome

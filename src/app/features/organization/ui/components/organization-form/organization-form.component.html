@@ -83,8 +83,8 @@
         [formField]="form().description"
         [attr.aria-describedby]="
           shown(form().description)
-            ? 'organization-description-error organization-description-hint'
-            : 'organization-description-hint'
+            ? 'organization-description-error organization-description-hint organization-description-count'
+            : 'organization-description-hint organization-description-count'
         "
       ></textarea>
       @if (shown(form().description)) {
@@ -102,7 +102,10 @@
         <span id="organization-description-hint" i18n="@@organization.general.description-hint"
           >Shown on the invitation page.</span
         >
-        <span class="tabular-nums whitespace-nowrap" data-testid="organization-description-count"
+        <span
+          class="tabular-nums whitespace-nowrap"
+          id="organization-description-count"
+          data-testid="organization-description-count"
           >{{ descriptionLength() }} / {{ descriptionLimit() }}</span
         >
       </div>

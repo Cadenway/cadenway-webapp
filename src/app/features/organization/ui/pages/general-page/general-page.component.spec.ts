@@ -10,6 +10,7 @@ import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vite
 import { RuntimeConfigStore } from '@core/config';
 import { RouteErrorBoundary } from '@features/errors/ui/components/route-error-boundary/route-error-boundary.component';
 import { WORKSPACE_CONTEXT } from '@features/workspace/ports/workspace-context';
+import { WORKSPACE_REFRESH } from '@features/workspace/ports/workspace-refresh';
 import { unsavedChangesGuard } from '@shared/unsaved-changes';
 
 import { OrganizationApi } from '../../../data-access/services/organization-api/organization-api.service';
@@ -170,8 +171,10 @@ const revokeObjectURL: typeof URL.revokeObjectURL = URL.revokeObjectURL.bind(URL
 describe('GeneralPage', () => {
   let api: Record<string, Mock>;
   let toasts: { success: Mock; error: Mock };
+  let refresh: Mock;
 
   beforeEach(() => {
+    refresh = vi.fn(() => Promise.resolve());
     URL.createObjectURL = vi.fn(() => 'blob:logo');
     URL.revokeObjectURL = vi.fn();
     api = {
@@ -200,6 +203,7 @@ describe('GeneralPage', () => {
               canDeactivate: [unsavedChangesGuard],
             },
             { path: ':org/organization/members', component: OtherSection },
+            { path: ':org/organization/billing', component: OtherSection },
           ],
           withErrorBoundaries({ defaultErrorComponent: RouteErrorBoundary }),
         ),
@@ -213,6 +217,7 @@ describe('GeneralPage', () => {
           provide: WORKSPACE_CONTEXT,
           useValue: { organization: () => ({ id: 'org-nord', slug: 'atelier-nord' }) },
         },
+        { provide: WORKSPACE_REFRESH, useValue: { refresh } },
       ],
     });
   });
@@ -341,6 +346,18 @@ describe('GeneralPage', () => {
     harness.detectChanges();
     expect(byTestId(harness, 'organization-unsaved')).toBeNull();
     expect(TestBed.inject(Router).url).toBe('/atelier-nord/organization/general');
+    expect(refresh).toHaveBeenCalledTimes(1);
+  });
+
+  it('counts the description as it is sent and links the count to the field', async () => {
+    const harness: RouterTestingHarness = await open();
+
+    type(harness, 'organization-description', '  Studio  ');
+
+    expect(byTestId(harness, 'organization-description-count')?.textContent.trim()).toBe('6 / 280');
+    expect(
+      byTestId(harness, 'organization-description')?.getAttribute('aria-describedby'),
+    ).toContain('organization-description-count');
   });
 
   it('shows the errors of an invalid submit and focuses the first', async () => {
@@ -379,6 +396,65 @@ describe('GeneralPage', () => {
 
     await expect.poll(() => TestBed.inject(Router).url).toBe('/nord/organization/general?lang=fr');
     expect(api['update']).toHaveBeenCalledWith({ slug: 'nord' }, 3);
+    expect(refresh).not.toHaveBeenCalled();
+  });
+
+  it('redirects a navigation started during a slug change below the new address', async () => {
+    let answer: (profile: OrganizationProfile) => void = (): void => undefined;
+    api['update'].mockReturnValue(
+      new Promise<OrganizationProfile>((resolve: (profile: OrganizationProfile) => void) => {
+        answer = resolve;
+      }),
+    );
+    const harness: RouterTestingHarness = await open();
+    type(harness, 'organization-slug', 'nord');
+    button('Save')?.click();
+    await expect.poll(() => api['update'].mock.calls.length).toBe(1);
+
+    void TestBed.inject(Router).navigateByUrl('/atelier-nord/organization/members?tab=all');
+    await Promise.resolve();
+    answer({ ...ATELIER_NORD, slug: 'nord', version: 4 });
+
+    await expect.poll(() => TestBed.inject(Router).url).toBe('/nord/organization/members?tab=all');
+  });
+
+  it('lets a navigation to another organization started during a slug change go', async () => {
+    let answer: (profile: OrganizationProfile) => void = (): void => undefined;
+    api['update'].mockReturnValue(
+      new Promise<OrganizationProfile>((resolve: (profile: OrganizationProfile) => void) => {
+        answer = resolve;
+      }),
+    );
+    const harness: RouterTestingHarness = await open();
+    type(harness, 'organization-slug', 'nord');
+    button('Save')?.click();
+    await expect.poll(() => api['update'].mock.calls.length).toBe(1);
+
+    const leaving: Promise<boolean> = TestBed.inject(Router).navigateByUrl(
+      '/lumen/organization/billing',
+    );
+    await Promise.resolve();
+    answer({ ...ATELIER_NORD, slug: 'nord', version: 4 });
+
+    expect(await leaving).toBe(true);
+    expect(TestBed.inject(Router).url).toBe('/lumen/organization/billing');
+  });
+
+  it('opens the new address a reread brings, keeping the draft without asking', async () => {
+    const harness: RouterTestingHarness = await open();
+    api['current'].mockResolvedValue({
+      ...ATELIER_NORD,
+      slug: 'nord-lyon',
+      logoId: 'upload-1',
+      version: 4,
+    });
+    type(harness, 'organization-name', 'Nord');
+
+    pick(harness, new File(['png'], 'logo.png', { type: 'image/png' }));
+
+    await expect.poll(() => TestBed.inject(Router).url).toBe('/nord-lyon/organization/general');
+    expect(button('Discard')).toBeUndefined();
+    expect((byTestId(harness, 'organization-name') as HTMLInputElement).value).toBe('Nord');
   });
 
   it.each([
@@ -398,21 +474,32 @@ describe('GeneralPage', () => {
     expect(TestBed.inject(Router).url).toBe('/atelier-nord/organization/general');
   });
 
-  it('shows the latest organization after a stale version', async () => {
-    api['update'].mockRejectedValue(problem(412, 'request.version-mismatch'));
+  it('keeps the edits and takes the other fields of the latest version after a stale version', async () => {
+    api['update'].mockRejectedValueOnce(problem(412, 'request.version-mismatch'));
     const harness: RouterTestingHarness = await open();
-    api['current'].mockResolvedValue({ ...ATELIER_NORD, name: 'Atelier Nord Lyon', version: 5 });
+    api['current'].mockResolvedValue({
+      ...ATELIER_NORD,
+      name: 'Atelier Nord Lyon',
+      website: 'https://nord.example',
+      version: 5,
+    });
 
     type(harness, 'organization-name', 'Nord');
     button('Save')?.click();
 
     await expect.poll(() => toasts.error.mock.calls.length).toBe(1);
     expect(toasts.error).toHaveBeenCalledWith('The organization changed in the meantime', {
-      description: 'Its latest version is shown.',
+      description:
+        'Its latest version shows where you changed nothing: check your edits, then save.',
     });
     await expect
-      .poll(() => (byTestId(harness, 'organization-name') as HTMLInputElement).value)
-      .toBe('Atelier Nord Lyon');
+      .poll(() => (byTestId(harness, 'organization-website') as HTMLInputElement).value)
+      .toBe('https://nord.example');
+    expect((byTestId(harness, 'organization-name') as HTMLInputElement).value).toBe('Nord');
+
+    button('Save')?.click();
+    await expect.poll(() => api['update'].mock.calls.length).toBe(2);
+    expect(api['update']).toHaveBeenLastCalledWith({ name: 'Nord' }, 5);
   });
 
   it('keeps the edits and toasts a refused save', async () => {
@@ -511,6 +598,82 @@ describe('GeneralPage', () => {
       .toBe('AN');
   });
 
+  it('takes a field someone else changed during a logo change and keeps the edits', async () => {
+    const harness: RouterTestingHarness = await open();
+    api['current'].mockResolvedValue({
+      ...ATELIER_NORD,
+      website: 'https://nord.example',
+      logoId: 'upload-1',
+      version: 4,
+    });
+    type(harness, 'organization-name', 'Nord');
+
+    pick(harness, new File(['png'], 'logo.png', { type: 'image/png' }));
+    await expect.poll(() => toasts.success.mock.calls.length).toBe(1);
+
+    expect(toasts.success).toHaveBeenCalledWith('Logo updated', expect.anything());
+    expect((byTestId(harness, 'organization-website') as HTMLInputElement).value).toBe(
+      'https://nord.example',
+    );
+    expect((byTestId(harness, 'organization-name') as HTMLInputElement).value).toBe('Nord');
+    expect(document.activeElement).toBe(byTestId(harness, 'organization-logo-input'));
+  });
+
+  it('toasts the conflict instead of the logo when a refresh collides with an edit', async () => {
+    const harness: RouterTestingHarness = await open();
+    api['current'].mockResolvedValue({
+      ...ATELIER_NORD,
+      name: 'Atelier Nord Lyon',
+      logoId: 'upload-1',
+      version: 4,
+    });
+    type(harness, 'organization-name', 'Nord');
+
+    pick(harness, new File(['png'], 'logo.png', { type: 'image/png' }));
+    await expect.poll(() => toasts.error.mock.calls.length).toBe(1);
+
+    expect(toasts.error).toHaveBeenCalledWith(
+      'The organization changed in the meantime',
+      expect.anything(),
+    );
+    expect(toasts.success).not.toHaveBeenCalled();
+    expect((byTestId(harness, 'organization-name') as HTMLInputElement).value).toBe('Nord');
+  });
+
+  it('keeps the logo actions focusable but inert while a save runs', async () => {
+    let answer: (profile: OrganizationProfile) => void = (): void => undefined;
+    api['current'].mockResolvedValue({ ...ATELIER_NORD, logoId: 'logo-1' });
+    api['update'].mockReturnValue(
+      new Promise<OrganizationProfile>((resolve: (profile: OrganizationProfile) => void) => {
+        answer = resolve;
+      }),
+    );
+    const harness: RouterTestingHarness = await open();
+    type(harness, 'organization-name', 'Nord');
+    button('Save')?.click();
+    await expect.poll(() => api['update'].mock.calls.length).toBe(1);
+    harness.detectChanges();
+
+    const remove: HTMLButtonElement | null = byTestId(
+      harness,
+      'organization-logo-remove',
+    ) as HTMLButtonElement | null;
+    const input: HTMLElement | null = byTestId(harness, 'organization-logo-input');
+    expect(remove?.disabled).toBe(false);
+    expect(remove?.getAttribute('aria-disabled')).toBe('true');
+    expect(input?.getAttribute('aria-disabled')).toBe('true');
+    remove?.click();
+    const click: MouseEvent = new MouseEvent('click', { cancelable: true });
+    input?.dispatchEvent(click);
+    expect(click.defaultPrevented).toBe(true);
+    expect(api['removeLogo']).not.toHaveBeenCalled();
+
+    answer({ ...ATELIER_NORD, logoId: 'logo-1', name: 'Nord', version: 4 });
+    await expect
+      .poll(() => byTestId(harness, 'organization-logo-remove')?.getAttribute('aria-disabled'))
+      .toBeNull();
+  });
+
   it('keeps the edits through a logo change', async () => {
     const harness: RouterTestingHarness = await open();
     api['current'].mockResolvedValue({ ...ATELIER_NORD, logoId: 'upload-1', version: 4 });
@@ -561,5 +724,33 @@ describe('GeneralPage', () => {
 
     expect(await leaving).toBe(true);
     expect(button('Discard')).toBeUndefined();
+  });
+
+  it('asks once the save on its way is refused', async () => {
+    let refuse: (error: unknown) => void = (): void => undefined;
+    api['update'].mockReturnValue(
+      new Promise<OrganizationProfile>(
+        (_resolve: (profile: OrganizationProfile) => void, reject: (error: unknown) => void) => {
+          refuse = reject;
+        },
+      ),
+    );
+    const harness: RouterTestingHarness = await open();
+    type(harness, 'organization-name', 'Nord');
+    button('Save')?.click();
+    await expect.poll(() => api['update'].mock.calls.length).toBe(1);
+
+    const leaving: Promise<boolean> = TestBed.inject(Router).navigateByUrl(
+      '/atelier-nord/organization/members',
+    );
+    await Promise.resolve();
+    expect(button('Discard')).toBeUndefined();
+    refuse(problem(503, 'upstream.unavailable'));
+
+    await expect.poll(() => button('Keep editing')).toBeDefined();
+    button('Keep editing')?.click();
+    expect(await leaving).toBe(false);
+    expect(TestBed.inject(Router).url).toBe('/atelier-nord/organization/general');
+    expect((byTestId(harness, 'organization-name') as HTMLInputElement).value).toBe('Nord');
   });
 });

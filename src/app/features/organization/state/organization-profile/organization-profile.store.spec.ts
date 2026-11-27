@@ -111,6 +111,7 @@ describe('OrganizationProfileStore', () => {
   let api: Record<string, Mock>;
   let shown: WritableSignal<WorkspaceOrganization>;
   let revoked: string[];
+  let createUrl: Mock;
 
   /**
    * Function store
@@ -137,10 +138,11 @@ describe('OrganizationProfileStore', () => {
   beforeEach(() => {
     let created: number = 0;
     revoked = [];
-    URL.createObjectURL = vi.fn(() => {
+    createUrl = vi.fn(() => {
       created += 1;
       return `blob:logo-${String(created)}`;
     });
+    URL.createObjectURL = createUrl;
     URL.revokeObjectURL = vi.fn((url: string) => {
       revoked.push(url);
     });
@@ -205,9 +207,53 @@ describe('OrganizationProfileStore', () => {
     const result: OrganizationSaveResult = await instance.save({ slug: 'nord' });
 
     expect(api['update']).toHaveBeenCalledWith({ slug: 'nord' }, 3);
-    expect(result).toEqual({ outcome: 'saved', slug: 'nord', slugChanged: true });
+    expect(result).toEqual({ outcome: 'saved' });
     expect(instance.current()?.version).toBe(4);
     expect(instance.saving()).toBe(false);
+    expect(instance.movedTo()).toBe('nord');
+  });
+
+  it('reads no logo image again for a save that keeps the logo', async () => {
+    api['current'].mockResolvedValue({ ...ATELIER_NORD, logoId: 'logo-1' });
+    api['update'].mockResolvedValue({
+      ...ATELIER_NORD,
+      logoId: 'logo-1',
+      name: 'Nord',
+      version: 4,
+    });
+    const instance: InstanceType<typeof OrganizationProfileStore> = await store();
+    await expect.poll(() => instance.logoUrl()).toBe('blob:logo-1');
+
+    await instance.save({ name: 'Nord' });
+    await TestBed.inject(ApplicationRef).whenStable();
+
+    expect(api['logo']).toHaveBeenCalledTimes(1);
+    expect(instance.logoUrl()).toBe('blob:logo-1');
+    expect(revoked).toEqual([]);
+  });
+
+  it('aborts the read of a replaced logo and shows no image for it', async () => {
+    let late: (image: Blob) => void = (): void => undefined;
+    const instance: InstanceType<typeof OrganizationProfileStore> = await store();
+    api['logo'].mockReturnValueOnce(
+      new Promise<Blob>((resolve: (image: Blob) => void) => {
+        late = resolve;
+      }),
+    );
+    api['current'].mockResolvedValueOnce({ ...ATELIER_NORD, logoId: 'logo-1', version: 4 });
+    expect(await instance.uploadLogo(png())).toBe('updated');
+    await expect.poll(() => api['logo'].mock.calls.length).toBe(1);
+
+    api['current'].mockResolvedValueOnce({ ...ATELIER_NORD, logoId: 'logo-2', version: 5 });
+    expect(await instance.uploadLogo(png())).toBe('updated');
+    await expect.poll(() => instance.logoUrl()).toBe('blob:logo-1');
+    late(new Blob(['old'], { type: 'image/png' }));
+    await TestBed.inject(ApplicationRef).whenStable();
+
+    const first: AbortSignal = (api['logo'].mock.calls[0] as [AbortSignal])[0];
+    expect(first.aborted).toBe(true);
+    expect(createUrl).toHaveBeenCalledTimes(1);
+    expect(instance.logoUrl()).toBe('blob:logo-1');
   });
 
   it('sends nothing for an empty change', async () => {
@@ -240,6 +286,30 @@ describe('OrganizationProfileStore', () => {
     await saving;
     await expect.poll(() => settled).toBe(true);
     expect(instance.saving()).toBe(false);
+  });
+
+  it('keeps waiting in sent() for the save on its way after a skipped one', async () => {
+    let answer: (profile: OrganizationProfile) => void = (): void => undefined;
+    api['update'].mockReturnValue(
+      new Promise<OrganizationProfile>((resolve: (profile: OrganizationProfile) => void) => {
+        answer = resolve;
+      }),
+    );
+    const instance: InstanceType<typeof OrganizationProfileStore> = await store();
+    let settled: boolean = false;
+
+    const saving: Promise<OrganizationSaveResult> = instance.save({ name: 'Nord' });
+    expect(await instance.save({ name: 'Other' })).toEqual({ outcome: 'skipped' });
+    void instance.sent().then(() => {
+      settled = true;
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(settled).toBe(false);
+
+    answer({ ...ATELIER_NORD, name: 'Nord', version: 4 });
+    await saving;
+    await expect.poll(() => settled).toBe(true);
   });
 
   it.each([
@@ -282,6 +352,64 @@ describe('OrganizationProfileStore', () => {
 
     expect(api['current']).toHaveBeenCalledTimes(2);
     expect(instance.current()?.name).toBe('Atelier du Nord');
+  });
+
+  it('reads nothing more when the reread after a logo change meets a switch in progress', async () => {
+    const instance: InstanceType<typeof OrganizationProfileStore> = await store();
+    api['current'].mockRejectedValue(new OrganizationSwitchPendingError());
+
+    expect(await instance.uploadLogo(png())).toBe('updated');
+    await TestBed.inject(ApplicationRef).whenStable();
+
+    expect(api['current']).toHaveBeenCalledTimes(2);
+    expect(instance.organization.status()).not.toBe('error');
+    expect(instance.current()).toEqual(ATELIER_NORD);
+  });
+
+  it('publishes the same upload once after a transfer that ended without an answer', async () => {
+    api['sendLogo'].mockRejectedValue(new HttpErrorResponse({ status: 0 }));
+    const instance: InstanceType<typeof OrganizationProfileStore> = await store();
+
+    expect(await instance.uploadLogo(png())).toBe('updated');
+    expect(api['publishLogo']).toHaveBeenCalledTimes(1);
+    expect(api['publishLogo']).toHaveBeenCalledWith('upload-1', 3);
+  });
+
+  it('fails an uncertain transfer the publication finds not ready', async () => {
+    api['sendLogo'].mockRejectedValue(new HttpErrorResponse({ status: 0 }));
+    api['publishLogo'].mockRejectedValue(problem(409, 'media.upload-not-ready'));
+    const instance: InstanceType<typeof OrganizationProfileStore> = await store();
+
+    expect(await instance.uploadLogo(png())).toBe('failed');
+    expect(api['publishLogo']).toHaveBeenCalledTimes(1);
+    expect(instance.logoChange()).toBeNull();
+  });
+
+  it('fails a transfer storage refuses without publishing it', async () => {
+    api['sendLogo'].mockRejectedValue(problem(403, 'storage.signature-expired'));
+    const instance: InstanceType<typeof OrganizationProfileStore> = await store();
+
+    expect(await instance.uploadLogo(png())).toBe('failed');
+    expect(api['reserveLogo']).toHaveBeenCalledTimes(1);
+    expect(api['publishLogo']).not.toHaveBeenCalled();
+  });
+
+  it('sends nothing more once the page is gone during an upload', async () => {
+    let sent: () => void = (): void => undefined;
+    api['sendLogo'].mockReturnValue(
+      new Promise<void>((resolve: () => void) => {
+        sent = resolve;
+      }),
+    );
+    const instance: InstanceType<typeof OrganizationProfileStore> = await store();
+
+    const changing: Promise<OrganizationLogoOutcome> = instance.uploadLogo(png());
+    await expect.poll(() => api['sendLogo'].mock.calls.length).toBe(1);
+    TestBed.resetTestingModule();
+    sent();
+
+    expect(await changing).toBe('cancelled');
+    expect(api['publishLogo']).not.toHaveBeenCalled();
   });
 
   it.each([
@@ -403,8 +531,7 @@ describe('OrganizationProfileStore', () => {
 
     expect(api['removeLogo']).toHaveBeenCalledWith(3);
     expect(instance.logoUrl()).toBeNull();
-    TestBed.resetTestingModule();
-    expect(revoked).toContain('blob:logo-1');
+    expect(revoked).toEqual(['blob:logo-1']);
   });
 
   it('reads the organization again after a stale logo removal', async () => {
@@ -415,6 +542,16 @@ describe('OrganizationProfileStore', () => {
     expect(await instance.removeLogo()).toBe('outdated');
     await TestBed.inject(ApplicationRef).whenStable();
     expect(api['current']).toHaveBeenCalledTimes(2);
+  });
+
+  it('revokes the image shown when the page goes away', async () => {
+    api['current'].mockResolvedValue({ ...ATELIER_NORD, logoId: 'logo-1' });
+    const instance: InstanceType<typeof OrganizationProfileStore> = await store();
+    await expect.poll(() => instance.logoUrl()).toBe('blob:logo-1');
+
+    TestBed.resetTestingModule();
+
+    expect(revoked).toEqual(['blob:logo-1']);
   });
 
   it('exposes a failed read as the resource error', async () => {

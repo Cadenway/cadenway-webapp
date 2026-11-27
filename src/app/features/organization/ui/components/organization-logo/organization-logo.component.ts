@@ -1,4 +1,13 @@
-import { Component, input, type InputSignal, output, type OutputEmitterRef } from '@angular/core';
+import {
+  Component,
+  type ElementRef,
+  input,
+  type InputSignal,
+  output,
+  type OutputEmitterRef,
+  type Signal,
+  viewChild,
+} from '@angular/core';
 import { CwButton } from '@cadenway/ui/components/button';
 import { CwSpinner } from '@cadenway/ui/components/spinner';
 import { NgIcon } from '@ng-icons/core';
@@ -12,11 +21,13 @@ import { NgIcon } from '@ng-icons/core';
  * one), a hidden `input type=file` behind its label, `Remove`, disabled without a logo, and the
  * hint `Square PNG or SVG, 512 px recommended. Shown in the sidebar and emails.`.
  *
- * It holds no state: `logoUrl` is the image to show, `initials` the fallback, `busy` the change
- * under way (`upload` shows a spinner on the import button, `remove` on `Remove`), during which
- * both actions are disabled, as they are while `disabled`. Picking a file emits `picked` with it,
- * unchecked, and clears the input so the same file can be picked again; `Remove` emits `removed`.
- * The tile is decorative: the buttons carry the meaning.
+ * It holds no state: `logoUrl` is the image to show, `initials` the fallback, `hasLogo` whether
+ * there is a logo to change or remove, `busy` the change under way (`upload` shows a spinner on the
+ * import button, `remove` on `Remove`). While a change runs, or while `disabled`, both actions stay
+ * focusable with `aria-disabled="true"` and do nothing, so the focus is never lost. Picking a file
+ * emits `picked` with it, unchecked, and clears the input so the same file can be picked again;
+ * `Remove` emits `removed`. `focus()` moves the focus to the file input, for the page to call once
+ * a change ended. The tile is decorative: the buttons carry the meaning.
  */
 @Component({
   selector: 'cw-organization-logo',
@@ -48,19 +59,20 @@ import { NgIcon } from '@ng-icons/core';
             class="peer sr-only"
             aria-describedby="organization-logo-hint"
             data-testid="organization-logo-input"
-            [disabled]="locked()"
+            [attr.aria-disabled]="locked() ? 'true' : null"
+            (click)="refuseWhileLocked($event)"
             (change)="pick(file)"
           />
           <label
             for="organization-logo-file"
-            class="relative isolate inline-flex h-8 cursor-pointer items-center justify-center gap-1.5 overflow-hidden rounded-lg border border-input px-2.5 text-sm font-medium whitespace-nowrap transition-all peer-focus-visible:ring-2 peer-focus-visible:ring-ring peer-focus-visible:ring-offset-2 peer-focus-visible:ring-offset-background peer-disabled:pointer-events-none peer-disabled:opacity-50 hover:bg-accent"
+            class="relative isolate inline-flex h-8 cursor-pointer items-center justify-center gap-1.5 overflow-hidden rounded-lg border border-input px-2.5 text-sm font-medium whitespace-nowrap transition-all peer-focus-visible:ring-2 peer-focus-visible:ring-ring peer-focus-visible:ring-offset-2 peer-focus-visible:ring-offset-background peer-aria-disabled:pointer-events-none peer-aria-disabled:opacity-50 hover:bg-accent"
           >
             @if (busy() === 'upload') {
               <svg cwSpinner aria-hidden="true"></svg>
             } @else {
               <ng-icon name="phosphorUploadSimpleBold" class="size-4 shrink-0" aria-hidden="true" />
             }
-            @if (logoUrl()) {
+            @if (hasLogo()) {
               <span i18n="@@organization.general.logo-change">Change logo</span>
             } @else {
               <span i18n="@@organization.general.logo-import">Import a logo</span>
@@ -71,9 +83,10 @@ import { NgIcon } from '@ng-icons/core';
             variant="ghost"
             type="button"
             data-testid="organization-logo-remove"
-            [disabled]="!hasLogo() || locked()"
+            [disabled]="!hasLogo()"
+            [attr.aria-disabled]="locked() ? 'true' : null"
             [loading]="busy() === 'remove'"
-            (click)="removed.emit()"
+            (click)="remove()"
             i18n="@@organization.general.logo-remove"
           >
             Remove
@@ -170,9 +183,31 @@ export class OrganizationLogo {
    * @readonly
    */
   public readonly removed: OutputEmitterRef<void> = output();
+
+  /**
+   * Property fileInput
+   *
+   * @description
+   * The hidden file input, which `focus()` focuses.
+   *
+   * @type {Signal<ElementRef<HTMLInputElement>>}
+   * @readonly
+   */
+  private readonly fileInput: Signal<ElementRef<HTMLInputElement>> =
+    viewChild.required<ElementRef<HTMLInputElement>>('file');
   // #endregion
 
   // #region Methods
+  /**
+   * Method focus
+   *
+   * @description
+   * Moves the focus to the file input, the import button's control.
+   */
+  public focus(): void {
+    this.fileInput().nativeElement.focus();
+  }
+
   /**
    * Method locked
    *
@@ -183,6 +218,28 @@ export class OrganizationLogo {
    */
   protected locked(): boolean {
     return this.disabled() || this.busy() !== null;
+  }
+
+  /**
+   * Method refuseWhileLocked
+   *
+   * @description
+   * Keeps the file picker closed while the actions are locked.
+   *
+   * @param {Event} event - The input's click.
+   */
+  protected refuseWhileLocked(event: Event): void {
+    if (this.locked()) event.preventDefault();
+  }
+
+  /**
+   * Method remove
+   *
+   * @description
+   * Emits `removed`, unless the actions are locked.
+   */
+  protected remove(): void {
+    if (!this.locked()) this.removed.emit();
   }
 
   /**

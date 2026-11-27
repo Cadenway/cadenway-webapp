@@ -1,7 +1,7 @@
 import { HttpClient } from '@angular/common/http';
 import { inject, Service } from '@angular/core';
 import { OrganizationsService, ProfileMediaService } from '@cadenway/api-client';
-import { firstValueFrom } from 'rxjs';
+import { firstValueFrom, fromEvent, NEVER, type Observable, takeUntil } from 'rxjs';
 
 import { readProblem } from '@core/api';
 
@@ -136,12 +136,22 @@ export class OrganizationApi {
    *
    * @description
    * Reads the image of the current logo, a PNG whatever was uploaded; `404 media.not-found`
-   * without one.
+   * without one. Aborting the signal cancels the request, and the promise rejects with the
+   * signal's reason.
    *
+   * @param {AbortSignal} [signal] - Cancels the read.
    * @returns {Promise<Blob>} The image.
    */
-  public async logo(): Promise<Blob> {
-    return firstValueFrom(this.media.getOrganizationLogo());
+  public async logo(signal?: AbortSignal): Promise<Blob> {
+    signal?.throwIfAborted();
+    const aborted: Observable<Event> = signal === undefined ? NEVER : fromEvent(signal, 'abort');
+    const image: Blob | null = await firstValueFrom(
+      this.media.getOrganizationLogo().pipe(takeUntil(aborted)),
+      { defaultValue: null },
+    );
+    signal?.throwIfAborted();
+    if (image === null) throw new Error('The logo read ended without an image.');
+    return image;
   }
 
   /**

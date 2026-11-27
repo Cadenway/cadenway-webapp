@@ -169,13 +169,13 @@ export class OrganizationForm {
    * Property descriptionLength
    *
    * @description
-   * The characters of the description, as the count shows them.
+   * The characters of the description as it is sent, trimmed, as the count shows them.
    *
    * @type {Signal<number>}
    * @readonly
    */
   protected readonly descriptionLength: Signal<number> = computed(
-    (): number => this.form().description().value().length,
+    (): number => this.form().description().value().trim().length,
   );
   // #endregion
 

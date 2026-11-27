@@ -6,7 +6,7 @@ import {
   OrganizationsService,
   ProfileMediaService,
 } from '@cadenway/api-client';
-import { of } from 'rxjs';
+import { Observable, of } from 'rxjs';
 import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 
 import type { OrganizationProfile } from '../../../models/organization/organization-profile.interface';
@@ -142,6 +142,18 @@ describe('OrganizationApi', () => {
       ),
     ).toEqual(['website']);
     expect(api.refusedFields(new Error('offline'))).toEqual([]);
+  });
+
+  it('cancels the logo read once its signal aborts', async () => {
+    const unsubscribed: Mock = vi.fn();
+    media['getOrganizationLogo'].mockReturnValue(new Observable<Blob>(() => unsubscribed));
+    const controller: AbortController = new AbortController();
+
+    const reading: Promise<Blob> = api.logo(controller.signal);
+    controller.abort(new Error('replaced'));
+
+    await expect(reading).rejects.toThrow('replaced');
+    expect(unsubscribed).toHaveBeenCalledTimes(1);
   });
 
   it('reads the logo image', async () => {

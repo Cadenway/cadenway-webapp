@@ -1,7 +1,10 @@
 import {
+  computed,
   DestroyRef,
   inject,
+  linkedSignal,
   resource,
+  type ResourceLoaderParams,
   type ResourceRef,
   type Signal,
   type Type,
@@ -16,10 +19,11 @@ import {
   withState,
 } from '@ngrx/signals';
 
-import { hasProblemCode, OrganizationSwitchPendingError } from '@core/api';
+import { hasProblemCode, OrganizationSwitchPendingError, readProblem } from '@core/api';
 import {
   WORKSPACE_CONTEXT,
   type WorkspaceContextPort,
+  type WorkspaceOrganization,
 } from '@features/workspace/ports/workspace-context';
 
 import { OrganizationApi } from '../../data-access/services/organization-api/organization-api.service';
@@ -107,7 +111,7 @@ interface OrganizationProfileStoreInstance {
    *
    * @description
    * The read of the organization, the page's primary read: a rejection reaches the route's error
-   * boundary. A save or a logo change writes the latest organization into it.
+   * boundary. A save, a reread or a logo change writes the latest organization into it.
    *
    * @type {ResourceRef<OrganizationProfile | undefined>}
    * @readonly
@@ -118,13 +122,13 @@ interface OrganizationProfileStoreInstance {
    * Property logo
    *
    * @description
-   * The read of the logo image as an object URL, a secondary read keyed by the logo reference;
-   * idle without a logo. A failure shows the initials.
+   * The read of the logo image, a secondary read keyed by `<organization id>:<logo id>`, so a read
+   * of the organization that keeps its logo reads no image; idle without a logo.
    *
-   * @type {ResourceRef<string | undefined>}
+   * @type {ResourceRef<Blob | undefined>}
    * @readonly
    */
-  readonly logo: ResourceRef<string | undefined>;
+  readonly logo: ResourceRef<Blob | undefined>;
 
   /**
    * Property current
@@ -141,12 +145,25 @@ interface OrganizationProfileStoreInstance {
    * Property logoUrl
    *
    * @description
-   * The object URL of the logo image, or null while there is none to show.
+   * The object URL of the logo image, or null while there is none to show. The URL it replaces is
+   * revoked once the new one is shown, and as soon as the organization has no logo.
    *
    * @type {Signal<string | null>}
    * @readonly
    */
   readonly logoUrl: Signal<string | null>;
+
+  /**
+   * Property movedTo
+   *
+   * @description
+   * The organization's address when a read or a save shows one other than the workspace's, which
+   * the page then opens; null while they agree.
+   *
+   * @type {Signal<string | null>}
+   * @readonly
+   */
+  readonly movedTo: Signal<string | null>;
 
   /**
    * Property saving
@@ -189,7 +206,8 @@ interface OrganizationProfileStoreInstance {
    * Sends a change from the current version.
    *
    * @param {OrganizationProfileChange} change - What changes.
-   * @returns {Promise<OrganizationSaveResult>} How the save ended.
+   * @returns {Promise<OrganizationSaveResult>} How the save ended; `outdated` once the latest
+   * version is read again.
    */
   save(change: OrganizationProfileChange): Promise<OrganizationSaveResult>;
 
@@ -200,7 +218,8 @@ interface OrganizationProfileStoreInstance {
    * Checks, reserves, sends and publishes a new logo, then reads the organization again.
    *
    * @param {File} file - The picked file.
-   * @returns {Promise<OrganizationLogoOutcome>} How the change ended.
+   * @returns {Promise<OrganizationLogoOutcome>} How the change ended, once the organization is read
+   * again.
    */
   uploadLogo(file: File): Promise<OrganizationLogoOutcome>;
 
@@ -210,33 +229,61 @@ interface OrganizationProfileStoreInstance {
    * @description
    * Removes the logo, then reads the organization again.
    *
-   * @returns {Promise<OrganizationLogoOutcome>} How the change ended.
+   * @returns {Promise<OrganizationLogoOutcome>} How the change ended, once the organization is read
+   * again.
    */
   removeLogo(): Promise<OrganizationLogoOutcome>;
   // #endregion
 }
 
 /**
+ * Function isContextChange
+ *
+ * @description
+ * Whether a refusal comes from a changed organization context, which the workspace recovery
+ * handles: `412 organization.context-changed`, or a request held while a switch is in progress.
+ *
+ * @param {unknown} error - The refusal.
+ * @returns {boolean} True for a changed context.
+ */
+function isContextChange(error: unknown): boolean {
+  return (
+    error instanceof OrganizationSwitchPendingError ||
+    hasProblemCode(error, 'organization.context-changed')
+  );
+}
+
+/**
  * Function logoOutcomeOf
  *
  * @description
- * The outcome of a refused logo change.
+ * The outcome of a refused logo change; `409 media.upload-not-ready`, `upload-expired` and
+ * `upload-superseded` are failures.
  *
  * @param {unknown} error - The refusal.
  * @returns {OrganizationLogoOutcome} How it ended.
  */
 function logoOutcomeOf(error: unknown): OrganizationLogoOutcome {
-  if (
-    error instanceof OrganizationSwitchPendingError ||
-    hasProblemCode(error, 'organization.context-changed')
-  ) {
-    return 'context-changed';
-  }
+  if (isContextChange(error)) return 'context-changed';
   if (hasProblemCode(error, 'request.version-mismatch')) return 'outdated';
   if (hasProblemCode(error, 'media.unsupported-type')) return 'unsupported';
   if (hasProblemCode(error, 'media.file-too-large')) return 'too-large';
   if (hasProblemCode(error, 'media.invalid-image')) return 'invalid-image';
   return 'failed';
+}
+
+/**
+ * Function isUncertainTransfer
+ *
+ * @description
+ * Whether the transfer to storage ended without an answer (status 0): storage may have received
+ * the image, so the contract asks to try publishing the same upload before giving up.
+ *
+ * @param {unknown} error - The transfer's failure.
+ * @returns {boolean} True when the outcome is unknown.
+ */
+function isUncertainTransfer(error: unknown): boolean {
+  return readProblem(error)?.status === 0;
 }
 
 /**
@@ -253,44 +300,58 @@ function createOrganizationProfileStore(): Type<OrganizationProfileStoreInstance
     withProps(() => {
       const api: OrganizationApi = inject(OrganizationApi);
       const workspace: WorkspaceContextPort = inject(WORKSPACE_CONTEXT);
-      // Object URLs of the logo images read, revoked once replaced and with the store.
-      const urls: string[] = [];
       const organization: ResourceRef<OrganizationProfile | undefined> = resource({
         params: (): string => workspace.organization().id,
         loader: (): Promise<OrganizationProfile> => api.current(),
       });
+      const logo: ResourceRef<Blob | undefined> = resource<Blob, string | undefined>({
+        params: (): string | undefined => {
+          if (!organization.hasValue()) return undefined;
+          const shown: OrganizationProfile = organization.value();
+          return shown.logoId === null ? undefined : `${shown.id}:${shown.logoId}`;
+        },
+        loader: async ({
+          abortSignal,
+        }: ResourceLoaderParams<string | undefined>): Promise<Blob> => {
+          const image: Blob = await api.logo(abortSignal);
+          abortSignal.throwIfAborted();
+          return image;
+        },
+      });
+      // The image to show: the logo's, only while the organization shown has a logo.
+      const image: Signal<Blob | null> = computed((): Blob | null => {
+        if (!organization.hasValue() || organization.value().logoId === null) return null;
+        return logo.hasValue() ? logo.value() : null;
+      });
+      // The object URL shown, revoked once another replaces it and with the store.
+      let shownUrl: string | null = null;
+      const logoUrl: Signal<string | null> = linkedSignal<Blob | null, string | null>({
+        source: image,
+        computation: (next: Blob | null): string | null => {
+          if (shownUrl !== null) URL.revokeObjectURL(shownUrl);
+          shownUrl = next === null ? null : URL.createObjectURL(next);
+          return shownUrl;
+        },
+      });
       return {
         organization,
-        logo: resource({
-          params: (): { readonly organizationId: string; readonly logoId: string } | undefined => {
-            if (!organization.hasValue()) return undefined;
-            const shown: OrganizationProfile = organization.value();
-            return shown.logoId === null
-              ? undefined
-              : { organizationId: shown.id, logoId: shown.logoId };
-          },
-          loader: async (): Promise<string> => {
-            const url: string = URL.createObjectURL(await api.logo());
-            for (const previous of urls.splice(0)) URL.revokeObjectURL(previous);
-            urls.push(url);
-            return url;
-          },
+        logo,
+        logoUrl,
+        movedTo: computed((): string | null => {
+          if (!organization.hasValue()) return null;
+          const shown: OrganizationProfile = organization.value();
+          const context: WorkspaceOrganization = workspace.organization();
+          return shown.id === context.id && shown.slug !== context.slug ? shown.slug : null;
         }),
-        _revokeLogos: (): void => {
-          for (const url of urls.splice(0)) URL.revokeObjectURL(url);
+        _revokeLogo: (): void => {
+          if (shownUrl !== null) URL.revokeObjectURL(shownUrl);
+          shownUrl = null;
         },
       };
     }),
     withComputed((store) => ({
       current: (): OrganizationProfile | null =>
         store.organization.hasValue() ? store.organization.value() : null,
-      logoUrl: (): string | null => {
-        const shown: OrganizationProfile | null = store.organization.hasValue()
-          ? store.organization.value()
-          : null;
-        if ((shown?.logoId ?? null) === null) return null;
-        return store.logo.hasValue() ? store.logo.value() : null;
-      },
     })),
     withMethods(
       (
@@ -307,49 +368,42 @@ function createOrganizationProfileStore(): Type<OrganizationProfileStoreInstance
           (organizationId: string): (() => boolean) =>
           (): boolean =>
             !destroyRef.destroyed && workspace.organization().id === organizationId;
-        // Reads the organization after a logo change, for its logo reference and version; a failed
-        // read leaves it to a background reload.
+        // Reads the organization again, for a logo change's reference and version or after a
+        // stale version. A changed context or a switch in progress is the workspace recovery's: it
+        // reads nothing more, so the page keeps what it shows. Another failure leaves it to a
+        // background reload.
         const refresh: (stillWanted: () => boolean) => Promise<void> = async (
           stillWanted: () => boolean,
         ): Promise<void> => {
           try {
             const latest: OrganizationProfile = await api.current();
             if (stillWanted()) store.organization.set(latest);
-          } catch {
-            if (stillWanted()) store.organization.reload();
+          } catch (error: unknown) {
+            if (stillWanted() && !isContextChange(error)) store.organization.reload();
           }
         };
         const idle: () => boolean = (): boolean => !store.saving() && store.logoChange() === null;
 
-        const save: (change: OrganizationProfileChange) => Promise<OrganizationSaveResult> = async (
+        const send: (
+          current: OrganizationProfile,
+          change: OrganizationProfileChange,
+        ) => Promise<OrganizationSaveResult> = async (
+          current: OrganizationProfile,
           change: OrganizationProfileChange,
         ): Promise<OrganizationSaveResult> => {
-          const current: OrganizationProfile | null = store.current();
-          if (current === null || !idle() || Object.keys(change).length === 0) {
-            return { outcome: 'skipped' };
-          }
           const stillWanted: () => boolean = wantedFor(current.id);
           patchState(store, { saving: true });
           try {
             const updated: OrganizationProfile = await api.update(change, current.version);
             if (!stillWanted()) return { outcome: 'cancelled' };
             store.organization.set(updated);
-            return {
-              outcome: 'saved',
-              slug: updated.slug,
-              slugChanged: updated.slug !== current.slug,
-            };
+            return { outcome: 'saved' };
           } catch (error: unknown) {
             if (!stillWanted()) return { outcome: 'cancelled' };
-            if (
-              error instanceof OrganizationSwitchPendingError ||
-              hasProblemCode(error, 'organization.context-changed')
-            ) {
-              return { outcome: 'context-changed' };
-            }
+            if (isContextChange(error)) return { outcome: 'context-changed' };
             if (hasProblemCode(error, 'request.version-mismatch')) {
-              store.organization.reload();
-              return { outcome: 'outdated' };
+              await refresh(stillWanted);
+              return stillWanted() ? { outcome: 'outdated' } : { outcome: 'cancelled' };
             }
             if (hasProblemCode(error, 'organization.slug-taken')) {
               return { outcome: 'refused', refusals: [{ field: 'slug', reason: 'slug-taken' }] };
@@ -375,6 +429,20 @@ function createOrganizationProfileStore(): Type<OrganizationProfileStoreInstance
           }
         };
 
+        // Ends a refused logo change: a stale version reads the organization again first.
+        const refusedLogo: (
+          error: unknown,
+          stillWanted: () => boolean,
+        ) => Promise<OrganizationLogoOutcome> = async (
+          error: unknown,
+          stillWanted: () => boolean,
+        ): Promise<OrganizationLogoOutcome> => {
+          if (!stillWanted()) return 'cancelled';
+          const outcome: OrganizationLogoOutcome = logoOutcomeOf(error);
+          if (outcome === 'outdated') await refresh(stillWanted);
+          return stillWanted() ? outcome : 'cancelled';
+        };
+
         return {
           sent(): Promise<void> {
             return pending === null
@@ -386,7 +454,11 @@ function createOrganizationProfileStore(): Type<OrganizationProfileStoreInstance
           },
 
           save(change: OrganizationProfileChange): Promise<OrganizationSaveResult> {
-            const saving: Promise<OrganizationSaveResult> = save(change);
+            const current: OrganizationProfile | null = store.current();
+            if (current === null || !idle() || Object.keys(change).length === 0) {
+              return Promise.resolve({ outcome: 'skipped' });
+            }
+            const saving: Promise<OrganizationSaveResult> = send(current, change);
             pending = saving;
             void saving.finally((): void => {
               if (pending === saving) pending = null;
@@ -407,17 +479,20 @@ function createOrganizationProfileStore(): Type<OrganizationProfileStoreInstance
             try {
               const upload: OrganizationLogoUpload = await api.reserveLogo(file);
               if (!stillWanted()) return 'cancelled';
-              await api.sendLogo(upload, file);
+              try {
+                await api.sendLogo(upload, file);
+              } catch (error: unknown) {
+                // Storage may have the image: publishing the same upload once tells, and its
+                // refusal (`409 media.upload-not-ready` among others) ends the change.
+                if (!isUncertainTransfer(error)) throw error;
+              }
               if (!stillWanted()) return 'cancelled';
               await api.publishLogo(upload.uploadId, store.current()?.version ?? current.version);
               if (!stillWanted()) return 'cancelled';
               await refresh(stillWanted);
-              return 'updated';
+              return stillWanted() ? 'updated' : 'cancelled';
             } catch (error: unknown) {
-              if (!stillWanted()) return 'cancelled';
-              const outcome: OrganizationLogoOutcome = logoOutcomeOf(error);
-              if (outcome === 'outdated') store.organization.reload();
-              return outcome;
+              return await refusedLogo(error, stillWanted);
             } finally {
               patchState(store, { logoChange: null });
             }
@@ -433,12 +508,9 @@ function createOrganizationProfileStore(): Type<OrganizationProfileStoreInstance
               await api.removeLogo(current.version);
               if (!stillWanted()) return 'cancelled';
               await refresh(stillWanted);
-              return 'removed';
+              return stillWanted() ? 'removed' : 'cancelled';
             } catch (error: unknown) {
-              if (!stillWanted()) return 'cancelled';
-              const outcome: OrganizationLogoOutcome = logoOutcomeOf(error);
-              if (outcome === 'outdated') store.organization.reload();
-              return outcome;
+              return await refusedLogo(error, stillWanted);
             } finally {
               patchState(store, { logoChange: null });
             }
@@ -448,7 +520,7 @@ function createOrganizationProfileStore(): Type<OrganizationProfileStoreInstance
     ),
     withHooks((store) => ({
       onDestroy(): void {
-        store._revokeLogos();
+        store._revokeLogo();
       },
     })),
   );
@@ -460,18 +532,22 @@ function createOrganizationProfileStore(): Type<OrganizationProfileStoreInstance
  * @description
  * The current organization for the `Organization profile` section, provided by its page. The read
  * is the page's primary read, keyed by the workspace organization, so a page the router reuses for
- * another organization reads that one's. The logo image is a secondary read keyed by the logo
- * reference, shown through an object URL the store revokes once replaced and when it goes away.
+ * another organization reads that one's. The logo image is a secondary read keyed by
+ * `<organization id>:<logo id>`, so a save that keeps the logo reads no image again; its request
+ * is aborted when the key changes, and an aborted read shows nothing. The image shows through an
+ * object URL revoked once replaced, as soon as the organization has no logo, and with the store.
  *
  * A save sends only what changed, from the version read (`If-Match`). A logo change reserves an
- * upload, sends the image to its signed destination and publishes it, or removes the logo, each
+ * upload, sends the image to its signed destination and publishes it (a transfer that ended
+ * without an answer publishes the same upload once before failing), or removes the logo, each
  * from the organization's version, then reads the organization again for its new reference and
- * version. One write runs at a time: a save, an upload or a removal started while another runs
- * is skipped. Each is bound to the organization shown when it starts and to the page: once either
- * changes it sends nothing more, drops any late answer and ends `cancelled`. A stale version
- * (`412 request.version-mismatch`) reads the organization again; a changed organization context
- * (`412 organization.context-changed`, or a switch in progress) ends `context-changed`, which the
- * workspace recovery takes over.
+ * version. One write runs at a time: a save, an upload or a removal started while another runs is
+ * skipped, and a skipped save leaves `sent()` waiting for the one on its way. Each is bound to the
+ * organization shown when it starts and to the page: once either changes it sends nothing more,
+ * drops any late answer and ends `cancelled`. A stale version (`412 request.version-mismatch`)
+ * reads the organization again before ending `outdated`; a changed organization context (`412
+ * organization.context-changed`, or a switch in progress) ends `context-changed` and reads
+ * nothing, leaving it to the workspace recovery.
  *
  * @type {ReturnType<typeof createOrganizationProfileStore>}
  */

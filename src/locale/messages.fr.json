@@ -623,7 +623,7 @@
     "organization.billing.title": "Facturation",
     "organization.general.cancel": "Annuler",
     "organization.general.conflict": "L’organisation a changé entre-temps",
-    "organization.general.conflict-text": "Sa dernière version est affichée.",
+    "organization.general.conflict-text": "Sa dernière version s’affiche là où vous n’avez rien modifié : vérifiez vos modifications, puis enregistrez.",
     "organization.general.description": "Description",
     "organization.general.description-hint": "Affichée sur la page d'invitation.",
     "organization.general.description-lead": "Nom, adresse et identité visibles par les membres et dans les e-mails d'invitation.",
