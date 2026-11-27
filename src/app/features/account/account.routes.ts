@@ -11,8 +11,9 @@ import { unsavedChangesGuard } from '@shared/unsaved-changes';
  * @description
  * The account settings sections, mounted by Workspace below `/:org/account` inside the settings
  * shell. `''` opens `profile`; `profile`, `security`, `notifications`, `preferences` and
- * `api-tokens` load their page, and `profile` keeps unsaved edits with `unsavedChangesGuard`. A
- * failed primary read renders the router's default error component, `RouteErrorBoundary`, in the
+ * `api-tokens` load their page. `profile` keeps unsaved edits with `unsavedChangesGuard`, and
+ * `api-tokens` uses it to keep a token creation in progress or its secret. A failed primary read
+ * renders the router's default error component, `RouteErrorBoundary`, in the
  * shell, titled by the `unavailableTitle` the mounting route sets. An unknown section renders the
  * 404 inside the shell. A componentless parent gives the sections the English texts of the
  * password strength meter and the one-time code field.
@@ -75,6 +76,7 @@ export const ACCOUNT_ROUTES: Routes = [
       {
         path: 'api-tokens',
         title: $localize`:@@account.route.api-tokens:API tokens`,
+        canDeactivate: [unsavedChangesGuard],
         loadComponent: async (): Promise<Type<unknown>> =>
           (await import('./ui/pages/api-tokens-page/api-tokens-page.component')).ApiTokensPage,
       },
