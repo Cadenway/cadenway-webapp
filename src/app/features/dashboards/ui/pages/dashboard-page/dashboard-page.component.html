@@ -140,7 +140,7 @@
         [hidden]="store.hiddenLate()"
         [menu]="taskMenu.menu()"
         (opened)="rowActions.open($event)"
-        (menuOpened)="menuTask.set($event)"
+        (menuOpened)="menuKey.set($event)"
       />
     }
   }
@@ -164,7 +164,7 @@
   (duplicateRequested)="menuTarget && rowActions.duplicate(menuTarget)"
   (copyLinkRequested)="menuTarget && rowActions.copyLink(menuTarget)"
   (copyKeyRequested)="menuTarget && rowActions.copyKey(menuTarget)"
-  (deleteRequested)="menuTarget && rowActions.askDelete(menuTarget)"
+  (deleteRequested)="menuTarget && askDelete(menuTarget)"
 />
 
 <cw-task-cancel-dialog
@@ -180,7 +180,7 @@
   (openChange)="rowActions.setDeleteOpen($event)"
   [items]="rowActions.deleteItems()"
   [pending]="rowActions.deleting()"
-  (confirm)="rowActions.trash()"
+  (confirm)="confirmDelete()"
 >
   <h2 cwAlertDialogTitle>{{ rowActions.deleteTitle() }}</h2>
   <p cwAlertDialogDescription>{{ rowActions.deleteText() }}</p>

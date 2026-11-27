@@ -3,7 +3,8 @@ import { TestBed } from '@angular/core/testing';
 import { Subject } from 'rxjs';
 import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 
-import { TaskDetailOpener, type TaskSummary } from '@features/task';
+import { RealtimeConnection } from '@core/realtime';
+import { type Person, TaskDetailOpener, type TaskSummary } from '@features/task';
 import { WORKSPACE_CONTEXT } from '@features/workspace/ports/workspace-context';
 
 import { DashboardApi } from '../../data-access/services/dashboard-api/dashboard-api.service';
@@ -137,6 +138,7 @@ describe('DashboardStore', () => {
   let people: Mock;
   let organization: WritableSignal<{ id: string; slug: string }>;
   let closed: Subject<string>;
+  let reconnected: Subject<void>;
 
   beforeEach(() => {
     dashboard = vi.fn(() => Promise.resolve(dashboardOf()));
@@ -149,11 +151,13 @@ describe('DashboardStore', () => {
     );
     organization = signal({ id: 'org-atelier', slug: 'atelier-nord' });
     closed = new Subject<string>();
+    reconnected = new Subject<void>();
     TestBed.configureTestingModule({
       providers: [
         DashboardStore,
         { provide: DashboardApi, useValue: { dashboard, people } },
         { provide: WORKSPACE_CONTEXT, useValue: { organization } },
+        { provide: RealtimeConnection, useValue: { reconnected } },
         {
           provide: TaskDetailOpener,
           useValue: { closed, changed: new Subject<string>() },
@@ -179,6 +183,7 @@ describe('DashboardStore', () => {
     expect(passive).toBe(false);
     expect(store.lateTasks()).toEqual([lateTask]);
     expect(store.hiddenLate()).toBe(0);
+    await expect.poll(() => store.people().length).toBe(3);
     expect(
       store.workload().map((row) => [row.person.name, row.person.initials, row.count, row.zone]),
     ).toEqual([
@@ -187,6 +192,67 @@ describe('DashboardStore', () => {
       ['Hugo Dubois', 'HD', 2, 'normal'],
       ['Unknown member', '?', 2, 'normal'],
     ]);
+  });
+
+  it('shows the dashboard before the members, then names its people when they answer', async () => {
+    const members: Deferred<readonly Person[]> = deferred<readonly Person[]>();
+    people.mockReturnValueOnce(members.promise);
+    const store: DashboardStoreInstance = TestBed.inject(DashboardStore);
+
+    await expect.poll(() => store.loading()).toBe(false);
+    expect(store.workload()[0].person).toMatchObject({ name: 'Unknown member', initials: '?' });
+    expect(store.personOf('u-camille').name).toBe('Unknown member');
+
+    members.resolve([{ id: 'u-camille', name: 'Camille Martin', initials: 'CM', avatar: null }]);
+
+    await expect.poll(() => store.personOf('u-camille').name).toBe('Camille Martin');
+    expect(store.loading()).toBe(false);
+  });
+
+  it('keeps the page when the members fail, and reads them again on the next refresh', async () => {
+    people.mockRejectedValueOnce(new Error('forbidden'));
+    const store: DashboardStoreInstance = TestBed.inject(DashboardStore);
+    await expect.poll(() => store.loading()).toBe(false);
+    await expect.poll(() => people.mock.calls.length).toBe(1);
+    await new Promise((resolve) => setTimeout(resolve));
+    expect(store.people()).toEqual([]);
+    expect(store.workload().map((row) => row.person.name)).toContain('Unknown member');
+    const retry: Deferred<readonly Person[]> = deferred<readonly Person[]>();
+    people.mockReturnValueOnce(retry.promise);
+
+    store.refresh();
+
+    await expect.poll(() => people.mock.calls.length).toBe(2);
+    expect(store.loading()).toBe(false);
+    retry.resolve([{ id: 'u-camille', name: 'Camille Martin', initials: 'CM', avatar: null }]);
+    await expect.poll(() => store.personOf('u-camille').name).toBe('Camille Martin');
+    expect(store.loading()).toBe(false);
+  });
+
+  it('reads the members again once per new set of unknown assignees', async () => {
+    const store: DashboardStoreInstance = TestBed.inject(DashboardStore);
+    await expect.poll(() => store.people().length).toBe(3);
+    await expect.poll(() => people.mock.calls.length).toBe(2);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(people).toHaveBeenCalledTimes(2);
+
+    store.refresh();
+    await expect.poll(() => dashboard.mock.calls.length).toBe(2);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(people).toHaveBeenCalledTimes(2);
+
+    people.mockResolvedValueOnce([
+      { id: 'u-camille', name: 'Camille Martin', initials: 'CM', avatar: null },
+      { id: 'u-nina', name: 'Nina Perrin', initials: 'NP', avatar: null },
+    ]);
+    dashboard.mockResolvedValueOnce(
+      dashboardOf({ assignees: [{ userId: 'u-nina', openCount: 1 }] }),
+    );
+    store.refresh();
+
+    await expect.poll(() => store.personOf('u-nina').name).toBe('Nina Perrin');
+    expect(people).toHaveBeenCalledTimes(3);
+    expect(store.loading()).toBe(false);
   });
 
   it('counts the late tasks past the ten the contract returns', async () => {
@@ -273,6 +339,44 @@ describe('DashboardStore', () => {
     await expect.poll(() => dashboard.mock.calls.length).toBe(2);
     await new Promise((resolve) => setTimeout(resolve, REFRESH_AUDIT_MS));
     expect(dashboard).toHaveBeenCalledTimes(2);
+  });
+
+  it('reads again on a realtime reconnection and when the tab becomes visible', async () => {
+    vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible');
+    const store: DashboardStoreInstance = TestBed.inject(DashboardStore);
+    await expect.poll(() => store.loading()).toBe(false);
+
+    reconnected.next();
+    await expect.poll(() => dashboard.mock.calls.length).toBe(2);
+    expect(dashboard.mock.calls[1][1]).toBe(true);
+    await new Promise((resolve) => setTimeout(resolve, REFRESH_AUDIT_MS));
+
+    document.dispatchEvent(new Event('visibilitychange'));
+    await expect.poll(() => dashboard.mock.calls.length).toBe(3);
+    expect(dashboard.mock.calls[2][1]).toBe(true);
+  });
+
+  it('shows only the current organization after switching away and back', async () => {
+    const store: DashboardStoreInstance = TestBed.inject(DashboardStore);
+    await expect.poll(() => store.dashboard()?.openCount).toBe(24);
+    const lumen: Deferred<TeamDashboard> = deferred<TeamDashboard>();
+    const back: Deferred<TeamDashboard> = deferred<TeamDashboard>();
+    dashboard.mockReturnValueOnce(lumen.promise).mockReturnValueOnce(back.promise);
+
+    organization.set({ id: 'org-lumen', slug: 'lumen' });
+    await expect.poll(() => dashboard.mock.calls.length).toBe(2);
+    expect(store.dashboard()).toBeNull();
+    organization.set({ id: 'org-atelier', slug: 'atelier-nord' });
+    await expect.poll(() => dashboard.mock.calls.length).toBe(3);
+
+    lumen.resolve(dashboardOf({ openCount: 4 }));
+    await new Promise((resolve) => setTimeout(resolve));
+    expect(store.dashboard()?.openCount).not.toBe(4);
+
+    back.resolve(dashboardOf({ openCount: 25 }));
+    await expect.poll(() => store.dashboard()?.openCount).toBe(25);
+    await new Promise((resolve) => setTimeout(resolve));
+    expect(store.dashboard()?.openCount).toBe(25);
   });
 
   it('never shows an answer of the previous organization after a switch', async () => {

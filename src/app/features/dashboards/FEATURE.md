@@ -60,8 +60,18 @@ dashboard is shown, whatever its query parameters.
   is sent once that read settles.
 - Another organization drops the shown dashboard and members at once; an answer for an
   organization or a period no longer current is never kept.
-- Members that cannot be read leave their people `Unknown member` (`?`), never the page
-  unavailable; they are read again on the next refresh.
+- The page never waits for the members: their people read `Unknown member` (`?`) until the
+  members answer, then their names. A members read that fails, or runs again, never brings the
+  skeleton back nor makes the page unavailable; a failed one is read again on the next refresh.
+  A dashboard naming user ids the members do not hold (a new assignee) reads the members again,
+  once per new set of ids in the organization, so a former member never causes a loop.
+- The late rows keep the dashboard's read copy of each task (`LateTaskRow.source`) beside the
+  copy they draw. The menu remembers the key of the row it opened on and looks the read copy up
+  when an item runs; every write, `displayedTask` and `displayedStatus` take that read copy, so a
+  write started over a pending one, then its `Undo`, only put back a confirmed value.
+- After a confirmed deletion the focus goes to the row that took the deleted one's place, else
+  the one before it, else the `Late` heading (above the empty state); a refused deletion shows
+  the row again, which takes the focus.
 - The late tasks are the contract's first ten (gap G-D1); when `lateCount` is larger, a
   `+N more late tasks` line counts the others. A list the sidebar's directory does not hold leaves
   the list cell blank (gap G-T1); the dashboard only returns tasks of live lists.
@@ -73,14 +83,15 @@ dashboard is shown, whatever its query parameters.
 
 ## Brick gaps (`@cadenway/ui` 0.10.0)
 
-| Gap                     | What 0.10.0 lacks                                                | What the page does meanwhile                                                                                                                                               |
-| ----------------------- | ---------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| DS1 `cw-chart` emphasis | A per-category color: the lighter current week (`bg-chart-1/45`) | Every bar is `chart-1`; the tooltip and the announcement name the last week `W45 (current week)`, and the caption says the last bar is the current week, without `lighter` |
-| DS1 `cw-chart` values   | Value labels on vertical bars (the peak and the current week)    | No label over the bars; the tooltip, the hidden table and the visible table give every value                                                                               |
-| DS1 `cw-chart` table    | A visible table toggle                                           | The card's own ghost button swaps the chart for `table[cwTable]`                                                                                                           |
-| DS3 `cw-stat-group`     | Responsive columns (2 × 2 below `lg` with inner borders)         | `cw-stat-group` stays the one card, switched to two columns below `lg` with `max-lg:` utilities on it and its `cw-stat` children (page layout, no brick copy)              |
-| `cw-stat` value tone    | A colored value: the grenat `Late` count when above 0            | `sentiment="negative"` is set, which colors only a delta; the value stays foreground                                                                                       |
-| `cw-meter` header       | A leading avatar and the note beside the name                    | The initials sit before the meter; the note shows under the track                                                                                                          |
+| Gap                     | What 0.10.0 lacks                                                                           | What the page does meanwhile                                                                                                                                               |
+| ----------------------- | ------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| DS1 `cw-chart` emphasis | A per-category color: the lighter current week (`bg-chart-1/45`)                            | Every bar is `chart-1`; the tooltip and the announcement name the last week `W45 (current week)`, and the caption says the last bar is the current week, without `lighter` |
+| DS1 `cw-chart` values   | Value labels on vertical bars (the peak and the current week)                               | No label over the bars; the tooltip, the hidden table and the visible table give every value                                                                               |
+| DS1 `cw-chart` table    | A visible table toggle                                                                      | The card's own ghost button swaps the chart for `table[cwTable]`                                                                                                           |
+| DS3 `cw-stat-group`     | Responsive columns (2 × 2 below `lg` with inner borders)                                    | `cw-stat-group` stays the one card, switched to two columns below `lg` with `max-lg:` utilities on it and its `cw-stat` children (page layout, no brick copy)              |
+| `cw-stat` value tone    | A colored value: the grenat `Late` count when above 0                                       | `sentiment="negative"` is set, which colors only a delta; the value stays foreground                                                                                       |
+| `cw-meter` header       | A leading avatar and the note beside the name                                               | The initials sit before the meter; the note shows under the track                                                                                                          |
+| `cw-meter` value        | `aria-valuenow` is not clamped to `max`: an overloaded person reads `7` over a `max` of `6` | Nothing: the visible fill is full and `aria-valuetext` reads `7 / 6`; the clamp belongs in the brick                                                                       |
 
 ## Copy not taken word for word from the mockup
 

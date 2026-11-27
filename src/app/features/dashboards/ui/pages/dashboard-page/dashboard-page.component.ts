@@ -1,12 +1,15 @@
 import {
+  afterNextRender,
   Component,
   computed,
   inject,
+  Injector,
   input,
   type InputSignal,
   LOCALE_ID,
   signal,
   type Signal,
+  viewChild,
   type WritableSignal,
 } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
@@ -310,27 +313,81 @@ export class DashboardPage {
    * @readonly
    */
   protected readonly lateRows: Signal<readonly LateTaskRow[]> = computed(
-    (): readonly LateTaskRow[] =>
-      this.rowActions.rows(this.store.lateTasks()).map((task: TaskSummary): LateTaskRow => ({
-        task,
-        status: this.rowActions.displayedStatus(task),
-        listName: this.listNames().get(task.listId) ?? '',
-        people: task.assigneeIds.map((userId: string) => this.store.personOf(userId)),
-      })),
+    (): readonly LateTaskRow[] => {
+      const read: ReadonlyMap<string, TaskSummary> = new Map<string, TaskSummary>(
+        this.store.lateTasks().map((task: TaskSummary): [string, TaskSummary] => [task.key, task]),
+      );
+      return this.rowActions.rows(this.store.lateTasks()).map((task: TaskSummary): LateTaskRow => {
+        const source: TaskSummary = read.get(task.key) ?? task;
+        return {
+          task,
+          source,
+          status: this.rowActions.displayedStatus(source),
+          listName: this.listNames().get(task.listId) ?? '',
+          people: task.assigneeIds.map((userId: string) => this.store.personOf(userId)),
+        };
+      });
+    },
   );
+
+  /**
+   * Property menuKey
+   *
+   * @description
+   * Key of the late task whose context menu opened last, or null.
+   *
+   * @type {WritableSignal<string | null>}
+   * @readonly
+   */
+  protected readonly menuKey: WritableSignal<string | null> = signal<string | null>(null);
 
   /**
    * Property menuTask
    *
    * @description
-   * The late task whose context menu is open, or null.
+   * The read copy of that task, looked up when the menu acts, so every write and `Undo` starts
+   * from the dashboard's confirmed values; null once the dashboard no longer holds it.
    *
-   * @type {WritableSignal<TaskSummary | null>}
+   * @type {Signal<TaskSummary | null>}
    * @readonly
    */
-  protected readonly menuTask: WritableSignal<TaskSummary | null> = signal<TaskSummary | null>(
-    null,
+  protected readonly menuTask: Signal<TaskSummary | null> = computed(
+    (): TaskSummary | null =>
+      this.store.lateTasks().find((task: TaskSummary): boolean => task.key === this.menuKey()) ??
+      null,
   );
+
+  /**
+   * Property lateSection
+   *
+   * @description
+   * The late section, which takes the focus back after a deletion.
+   *
+   * @type {Signal<LateTasks | undefined>}
+   * @readonly
+   */
+  private readonly lateSection: Signal<LateTasks | undefined> = viewChild(LateTasks);
+
+  /**
+   * Property injector
+   *
+   * @description
+   * Schedules the focus after the render that follows a deletion.
+   *
+   * @type {Injector}
+   * @readonly
+   */
+  private readonly injector: Injector = inject(Injector);
+
+  /**
+   * Property deleteKey
+   *
+   * @description
+   * Key of the task whose deletion the confirmation asks for.
+   *
+   * @type {string | null}
+   */
+  private deleteKey: string | null = null;
 
   /**
    * Property menuTasks
@@ -369,6 +426,48 @@ export class DashboardPage {
   // #endregion
 
   // #region Methods
+  /**
+   * Method askDelete
+   *
+   * @description
+   * `Delete the task` of the menu: remembers the task, then opens the confirmation.
+   *
+   * @param {TaskSummary} task - The read copy of the task.
+   */
+  protected askDelete(task: TaskSummary): void {
+    this.deleteKey = task.key;
+    this.rowActions.askDelete(task);
+  }
+
+  /**
+   * Method confirmDelete
+   *
+   * @description
+   * The confirmation's action: moves the task to the trash, then gives the focus to the row that
+   * took its place, else the one before it, else the `Late` heading; a refused deletion brings
+   * the row back, which then takes the focus.
+   *
+   * @returns {Promise<void>} Resolves once the focus moved.
+   */
+  protected async confirmDelete(): Promise<void> {
+    const key: string | null = this.deleteKey;
+    const keys: readonly string[] = this.lateRows().map((row: LateTaskRow): string => row.task.key);
+    const index: number = key === null ? -1 : keys.indexOf(key);
+    const candidates: readonly string[] = [
+      ...(key === null ? [] : [key]),
+      ...(index >= 0 ? keys.slice(index + 1, index + 2) : []),
+      ...(index > 0 ? keys.slice(index - 1, index) : []),
+    ];
+    await this.rowActions.trash();
+    this.deleteKey = null;
+    afterNextRender(
+      (): void => {
+        this.lateSection()?.focusFirst(candidates);
+      },
+      { injector: this.injector },
+    );
+  }
+
   /**
    * Method completedHint
    *

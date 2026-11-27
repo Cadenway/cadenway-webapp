@@ -1,5 +1,10 @@
 <section class="flex flex-col gap-2" aria-labelledby="dashboards-late-title">
-  <h2 id="dashboards-late-title" class="text-base font-semibold" i18n="@@dashboards.late.title">
+  <h2
+    id="dashboards-late-title"
+    class="text-base font-semibold focus-visible:outline-none"
+    tabindex="-1"
+    i18n="@@dashboards.late.title"
+  >
     Late
   </h2>
   @if (rows().length > 0) {
@@ -8,8 +13,9 @@
         <li
           class="border-b border-border last:border-b-0"
           data-testid="late-task"
+          [attr.data-task-key]="row.task.key"
           [cwContextMenuTriggerFor]="menu()"
-          (opened)="menuOpened.emit(row.task)"
+          (opened)="menuOpened.emit(row.task.key)"
         >
           <cw-task-line
             variant="late"

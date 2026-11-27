@@ -174,6 +174,18 @@ interface DashboardLoads {
    * @type {boolean}
    */
   queued: boolean;
+
+  /**
+   * Property named
+   *
+   * @description
+   * The sets of unknown user ids, per organization, for which the members were read again: each
+   * set is asked once, so a former member never makes the page read the members in a loop.
+   *
+   * @type {Set<string>}
+   * @readonly
+   */
+  readonly named: Set<string>;
   // #endregion
 }
 
@@ -244,8 +256,8 @@ export interface DashboardStoreInstance {
    * Property loading
    *
    * @description
-   * Whether the page draws its skeleton: no answer for the organization yet, or its members not
-   * read. Reading it throws the read's failure when no answer for the organization and the
+   * Whether the page draws its skeleton: no answer for the organization yet; the members never
+   * hold it back. Reading it throws the read's failure when no answer for the organization and the
    * period is shown, so the route's error boundary replaces the page; a background refresh that
    * fails keeps the answer shown.
    *
@@ -393,7 +405,7 @@ function createDashboardStore(): Type<DashboardStoreInstance> {
     withProps((store) => {
       const api: DashboardApi = inject(DashboardApi);
       const workspace: WorkspaceContextPort = inject(WORKSPACE_CONTEXT);
-      const loads: DashboardLoads = { passive: false, queued: false };
+      const loads: DashboardLoads = { passive: false, queued: false, named: new Set<string>() };
       const organizationId: Signal<string> = computed((): string => workspace.organization().id);
       const read: Signal<DashboardRead> = computed(
         (): DashboardRead => {
@@ -473,9 +485,22 @@ function createDashboardStore(): Type<DashboardStoreInstance> {
         _directory: directory,
         loading: computed((): boolean => {
           if (shown()?.key !== store._read().key) store._dashboard.value();
-          const membersSettled: boolean =
-            members() !== null || store._members.error() !== undefined;
-          return shown() === null || !membersSettled;
+          return shown() === null;
+        }),
+        _unknownIds: computed((): string => {
+          const current: TeamDashboard | null = dashboard();
+          if (!current || members() === null || store._members.isLoading()) return '';
+          const named: ReadonlyMap<string, Person> = directory();
+          const ids: Set<string> = new Set<string>([
+            ...current.assignees.map((load: DashboardAssigneeLoad): string => load.userId),
+            ...current.overdueTasks.flatMap(
+              (task: TaskSummary): readonly string[] => task.assigneeIds,
+            ),
+          ]);
+          return [...ids]
+            .filter((id: string): boolean => !named.has(id))
+            .sort()
+            .join(',');
         }),
         stale: computed((): boolean => {
           const snapshot: DashboardSnapshot | null = shown();
@@ -528,6 +553,13 @@ function createDashboardStore(): Type<DashboardStoreInstance> {
             patchState(store, { _snapshot: snapshot });
           },
         ),
+        _nameUnknown: signalMethod<string>((ids: string): void => {
+          if (ids === '') return;
+          const asked: string = `${store._organizationId()}\u0000${ids}`;
+          if (store._loads.named.has(asked)) return;
+          store._loads.named.add(asked);
+          store._members.reload();
+        }),
         _settled: signalMethod<boolean>((loading: boolean): void => {
           if (loading || !store._loads.queued) return;
           store._loads.queued = false;
@@ -543,6 +575,7 @@ function createDashboardStore(): Type<DashboardStoreInstance> {
           ),
         );
         store._settled(computed((): boolean => store._dashboard.isLoading()));
+        store._nameUnknown(store._unknownIds);
         const view: Window | null = store._document.defaultView;
         const triggers: Observable<unknown>[] = [
           view ? fromEvent(view, 'focus') : EMPTY,
@@ -578,8 +611,11 @@ function createDashboardStore(): Type<DashboardStoreInstance> {
  * reconnection (no organization-wide notice exists, gap G-R2), once at the end of a 300 ms
  * burst, and when the page's own menu writes settle. A refresh asked while a read runs is sent
  * once it settles. Another organization drops the shown dashboard and members at once, and an
- * answer for an organization or period no longer current is never kept. Members that cannot
- * be read leave their people unknown (`Unknown member`), never the page unavailable.
+ * answer for an organization or period no longer current is never kept. The page never waits
+ * for the members: their people read `Unknown member` until the members answer, then their
+ * names, and a members read that fails or runs again never brings the skeleton back. A
+ * dashboard naming user ids the members do not hold reads the members again, once per new set
+ * of ids.
  *
  * @type {Type<DashboardStoreInstance>}
  */

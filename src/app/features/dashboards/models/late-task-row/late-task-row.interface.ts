@@ -14,12 +14,24 @@ export interface LateTaskRow {
    * Property task
    *
    * @description
-   * The task, with the values of its pending writes.
+   * The task as the line draws it, with the values of its pending writes.
    *
    * @type {TaskSummary}
    * @readonly
    */
   readonly task: TaskSummary;
+
+  /**
+   * Property source
+   *
+   * @description
+   * The task as the dashboard read it, without pending values: the copy the row writes take, so
+   * an `Undo` only ever puts back a confirmed value.
+   *
+   * @type {TaskSummary}
+   * @readonly
+   */
+  readonly source: TaskSummary;
 
   /**
    * Property status
