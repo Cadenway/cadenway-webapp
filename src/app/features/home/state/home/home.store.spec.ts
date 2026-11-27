@@ -456,13 +456,16 @@ describe('HomeStore', () => {
     people.mockRejectedValueOnce(new Error('unavailable'));
 
     store.loadPeople();
+    expect(store.peopleState()).toBe('loading');
     await settle();
     expect(store.people()).toEqual([]);
+    expect(store.peopleState()).toBe('failed');
 
     store.loadPeople();
     await settle();
 
     expect(people).toHaveBeenCalledTimes(2);
     expect(store.people().map((person: Person) => person.name)).toEqual(['Camille Martin']);
+    expect(store.peopleState()).toBe('ready');
   });
 });
