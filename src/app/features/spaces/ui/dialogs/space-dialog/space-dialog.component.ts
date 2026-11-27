@@ -40,6 +40,7 @@ import { NgIcon } from '@ng-icons/core';
 import type { LookColor, LookIcon } from '../../../models/look/look.type';
 import type { SpaceDetails, SpaceDraft } from '../../../models/space/space.interface';
 import { lookIconName, lookTone } from '../../../utils/look/look.util';
+import { prefixFromName } from '../../../utils/space-look/space-look.util';
 import { LookPicker } from '../look-picker/look-picker.component';
 
 /**
@@ -90,26 +91,6 @@ interface SpaceFormModel {
    */
   description: string;
   // #endregion
-}
-
-/**
- * Function prefixFromName
- *
- * @description
- * The prefix the dialog proposes for a name: its first three unaccented letters in capitals,
- * completed with `X` (`Human resources` gives `HUM`), as the mockup and the contract do.
- *
- * @param {string} name - The name typed.
- * @returns {string} The prefix, empty for an empty name.
- */
-export function prefixFromName(name: string): string {
-  if (!name.trim()) return '';
-  return name
-    .normalize('NFD')
-    .replace(/[^A-Za-z]/gu, '')
-    .slice(0, 3)
-    .toUpperCase()
-    .padEnd(3, 'X');
 }
 
 /**

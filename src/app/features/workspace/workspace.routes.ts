@@ -18,6 +18,11 @@ import { withHomeRailItem } from '@features/home/providers';
 import { withInbox } from '@features/inbox/providers';
 import { withMyTasksRailItem } from '@features/my-tasks/providers';
 import {
+  provideOnboarding,
+  withGettingStarted,
+  withOnboardingWizard,
+} from '@features/onboarding/providers';
+import {
   provideOrganizationUsage,
   withOrganizationSettingsLinks,
   withOrganizationSettingsNavigation,
@@ -106,6 +111,7 @@ export const WORKSPACE_ROUTES: Routes = [
       ...provideWorkspaceRuntime(),
       providePresence(),
       provideOrganizationUsage(),
+      provideOnboarding(),
       provideSpacesNavigation(),
     ],
     children: [
@@ -219,6 +225,8 @@ export const WORKSPACE_ROUTES: Routes = [
               withShortcutsDialog(),
               withTaskCreate(),
               withTaskDetail(),
+              withGettingStarted(),
+              withOnboardingWizard(),
             ],
           }),
         ],

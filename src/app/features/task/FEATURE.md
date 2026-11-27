@@ -36,11 +36,11 @@ the typed route error states belong to Errors.
 
 ## Public entry points
 
-| Entry point   | Consumers                                                                 |
-| ------------- | ------------------------------------------------------------------------- |
-| `.`           | spaces, search, inbox, home, my-tasks, dashboards, goals, trash, archives |
-| `providers`   | workspace                                                                 |
-| `task.routes` | workspace                                                                 |
+| Entry point   | Consumers                                                                             |
+| ------------- | ------------------------------------------------------------------------------------- |
+| `.`           | spaces, search, inbox, home, my-tasks, dashboards, goals, trash, archives, onboarding |
+| `providers`   | workspace                                                                             |
+| `task.routes` | workspace                                                                             |
 
 `providers` publishes, bound on the shells of `/:org` (the application shell and both settings
 shells, so the palette's `Create a task`, task results and `?task=<KEY>` work in the settings too):
@@ -49,6 +49,9 @@ shells, so the palette's `Create a task`, task results and `?task=<KEY>` work in
 - `withTaskDetail()` (`overlays`, order 30): `TaskDetailHost`, which renders the detail dialog of
   `?task=<KEY>` (loaded in its own chunk) on every workspace page and removes the parameter, keeping
   the others, once the dialog closes.
+
+Onboarding is a declared consumer of `.` ahead of its use: its checklist opens `TaskCreate` for
+`Create your first task` (step 9, getting-started package).
 
 `.` publishes:
 

@@ -524,6 +524,8 @@ describe('WORKSPACE_ROUTES', () => {
       'sidebar-archives',
       'shortcuts-button',
       'storage-banner',
+      'getting-started-host',
+      'onboarding-wizard-host',
     ]) {
       expect(element.querySelector(`[data-testid="${id}"]`), id).not.toBeNull();
     }
@@ -1662,6 +1664,8 @@ describe('WORKSPACE_ROUTES', () => {
       expect(element.querySelector(`[data-testid="${id}"]`), id).not.toBeNull();
     }
     expect(element.querySelector('[data-testid="goals-rail-item"]')).toBeNull();
+    expect(element.querySelector('[data-testid="onboarding-wizard-host"]')).toBeNull();
+    expect(element.querySelector('[data-testid="getting-started-host"]')).toBeNull();
     expect(
       element.querySelector('[data-testid="settings-back-to-app"]')?.getAttribute('href'),
     ).toBe('/atelier-nord');

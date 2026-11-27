@@ -55,6 +55,20 @@ async function render(
 }
 
 /**
+ * Function opened
+ *
+ * @description
+ * The address of the last navigation, serialized, and its options.
+ *
+ * @param {Mock} navigate - The navigation spy.
+ * @returns {[string, unknown]} The address and the options.
+ */
+function opened(navigate: Mock): [string, unknown] {
+  const call: unknown[] | undefined = navigate.mock.calls.at(-1);
+  return [String(call?.[0]), call?.[1]];
+}
+
+/**
  * Function submit
  *
  * @description
@@ -89,7 +103,25 @@ describe('OrganizationCreatePage', () => {
       inviteEmails: [],
       logo: null,
     });
-    expect(navigate).toHaveBeenCalledWith('/studio-nord', { replaceUrl: true });
+    expect(opened(navigate)).toEqual(['/studio-nord', { replaceUrl: true }]);
+  });
+
+  it('adds the notice of a logo that could not be uploaded to the address it opens', async () => {
+    for (const [destination, address] of [
+      ['/studio-nord?onboarding=start', '/studio-nord?onboarding=start&notice=logo-upload-failed'],
+      ['/studio-nord', '/studio-nord?notice=logo-upload-failed'],
+      ['/organizations', '/organizations'],
+    ] as const) {
+      TestBed.resetTestingModule();
+      const { host, fixture, navigate }: Awaited<ReturnType<typeof render>> = await render(
+        { ok: true, destination, logoFailed: true },
+        'Studio Nord',
+      );
+
+      await submit(host, fixture);
+
+      expect(opened(navigate)).toEqual([address, { replaceUrl: true }]);
+    }
   });
 
   it('marks the empty logo with the draft initials and sizes a chosen logo', async () => {
