@@ -270,6 +270,18 @@ export class MembersPage {
   protected readonly refused: WritableSignal<readonly string[]> = signal<readonly string[]>([]);
 
   /**
+   * Property kept
+   *
+   * @description
+   * Addresses the last invite left to send again (an unknown outcome, or an outcome that sent
+   * nothing), which replace the dialog's addresses.
+   *
+   * @type {WritableSignal<readonly string[]>}
+   * @readonly
+   */
+  protected readonly kept: WritableSignal<readonly string[]> = signal<readonly string[]>([]);
+
+  /**
    * Property table
    *
    * @description
@@ -404,6 +416,7 @@ export class MembersPage {
    */
   protected openInvite(): void {
     this.refused.set([]);
+    this.kept.set([]);
     this.dialogOrganization.set(this.workspace.organization().id);
     this.inviteOpen.set(true);
   }
@@ -497,9 +510,12 @@ export class MembersPage {
    * Method invite
    *
    * @description
-   * Sends the dialog's invitations and closes it once they are accepted; a refusal keeps it open,
-   * and addresses the API refused as invalid are named on its field. A dialog opened for another
-   * organization sends nothing and closes.
+   * Sends the dialog's invitations and closes it once every address is done; a refusal keeps it
+   * open, addresses the API refused as invalid are named on its field, and the addresses left to
+   * send again (an unknown outcome, or an outcome that sent nothing) replace its addresses. A
+   * dropped batch (the organization changed, or the gateway refused it for another session
+   * organization) closes it silently, and a dialog opened for another organization sends nothing
+   * and closes.
    *
    * @param {InviteRequest} request - Addresses and role.
    * @returns {Promise<void>} Resolves once the batch is settled.
@@ -510,11 +526,18 @@ export class MembersPage {
       return;
     }
     this.refused.set([]);
+    this.kept.set([]);
     const result: InviteResult = await this.invitations.invite(request.emails, request.role);
     if (result === 'sent') {
       this.inviteOpen.set(false);
-    } else if (result !== 'failed') {
+    } else if (result === 'dropped') {
+      this.closeDialogs();
+    } else if (result === 'failed') {
+      return;
+    } else if ('refused' in result) {
       this.refused.set(result.refused);
+    } else {
+      this.kept.set(result.kept);
     }
   }
 
@@ -551,6 +574,7 @@ export class MembersPage {
     this.confirmOpen.set(false);
     this.removing.set(null);
     this.refused.set([]);
+    this.kept.set([]);
     this.dialogOrganization.set(null);
   }
   // #endregion

@@ -251,9 +251,9 @@ function focusFirstError<T>(fields: FieldTree<T>): void {
  * what it gives) and `Cancel` / `Invite`. `Invite` stays enabled: an invalid submit shows the error
  * (no address, an invalid or refused one, more than 50, or more members than free seats) and
  * focuses the field. While `pending` the dialog cannot be closed and `Invite` shows its spinner.
- * The form starts empty, as a member, each time the dialog opens. Presentational: a valid submit
- * emits
- * `submitted`; the page sends it and closes the dialog on success.
+ * The form starts empty, as a member, each time the dialog opens, and the addresses the page
+ * `kept` to send again replace the typed ones. Presentational: a valid submit emits `submitted`;
+ * the page sends it and closes the dialog on success.
  */
 @Component({
   selector: 'cw-invite-dialog',
@@ -329,6 +329,18 @@ export class InviteDialog {
    * @readonly
    */
   public readonly refused: InputSignal<readonly string[]> = input<readonly string[]>([]);
+
+  /**
+   * Property kept
+   *
+   * @description
+   * Addresses left to send again after the last submit; a new non-empty list replaces the typed
+   * addresses, keeping the role, so `Invite` sends only them.
+   *
+   * @type {InputSignal<readonly string[]>}
+   * @readonly
+   */
+  public readonly kept: InputSignal<readonly string[]> = input<readonly string[]>([]);
 
   /**
    * Property submitted
@@ -533,8 +545,9 @@ export class InviteDialog {
    * Constructor
    *
    * @description
-   * Empties the form, as a member, each time the dialog opens, and forgets the refused
-   * addresses then and whenever the addresses change.
+   * Empties the form, as a member, each time the dialog opens, replaces the addresses with the
+   * kept ones whenever the page hands a new list, and forgets the refused addresses when it opens
+   * and whenever the addresses change.
    *
    * @constructor
    */
@@ -545,6 +558,16 @@ export class InviteDialog {
         this.model.set({ emails: '', role: 'member' });
         this.refusedShown.set([]);
         this.inviteForm().reset();
+      });
+    });
+    effect((): void => {
+      const kept: readonly string[] = this.kept();
+      if (kept.length === 0) return;
+      untracked((): void => {
+        this.model.update((model: InviteModel): InviteModel => ({
+          ...model,
+          emails: kept.join(', '),
+        }));
       });
     });
     let typed: string | null = null;

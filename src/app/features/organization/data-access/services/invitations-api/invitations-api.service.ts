@@ -103,11 +103,14 @@ export class InvitationsApi {
    *
    * @description
    * Invites addresses with one role. Rejects with `429 invitation.daily-limit-reached` when the
-   * batch exceeds the daily allowance, nothing being sent.
+   * batch exceeds the daily allowance, nothing being sent. The contract declares no
+   * `Idempotency-Key` for this operation: sending the same addresses again after an unknown
+   * outcome is safe because an address the first batch reached answers `already-invited`.
    *
    * @param {readonly string[]} emails - Distinct addresses, 1 to 50.
    * @param {AssignableMemberRole} role - Role of every address.
-   * @returns {Promise<InvitationOutcome>} How many were invited and skipped.
+   * @returns {Promise<InvitationOutcome>} How many were invited and skipped, and the addresses
+   * not sent.
    */
   public async invite(
     emails: readonly string[],

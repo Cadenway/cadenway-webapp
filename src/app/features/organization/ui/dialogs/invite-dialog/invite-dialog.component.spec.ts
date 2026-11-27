@@ -237,4 +237,23 @@ describe('InviteDialog', () => {
     await submit(fixture);
     expect(submitted).toHaveBeenCalledWith({ emails: ['p0@ateliernord.fr'], role: 'member' });
   });
+
+  it('replaces the addresses with those kept to send again, keeping the role', async () => {
+    const [fixture, submitted]: [ComponentFixture<InviteDialog>, Mock] = await open(null);
+    await pickGuest(fixture);
+    await type(fixture, addresses(3));
+    await submit(fixture);
+
+    fixture.componentRef.setInput('kept', ['p1@ateliernord.fr', 'p2@ateliernord.fr']);
+    await fixture.whenStable();
+    expect((find('invite-emails') as HTMLTextAreaElement).value).toBe(
+      'p1@ateliernord.fr, p2@ateliernord.fr',
+    );
+    await submit(fixture);
+
+    expect(submitted).toHaveBeenLastCalledWith({
+      emails: ['p1@ateliernord.fr', 'p2@ateliernord.fr'],
+      role: 'guest',
+    });
+  });
 });

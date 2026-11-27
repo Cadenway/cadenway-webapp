@@ -25,15 +25,16 @@ describe('invitation adapter', () => {
     });
   });
 
-  it('counts an unknown outcome as skipped', () => {
+  it('lists an unknown outcome as not sent, apart from the skipped addresses', () => {
     expect(
       toInvitationOutcome({
         invitations: [
           { email: 'marc.roux@ateliernord.fr', outcome: 'invited', invitationId: 'i1' },
           { email: 'ines.robert@ateliernord.fr', outcome: 'already-member', invitationId: null },
+          { email: 'paul@example.com', outcome: 'already-invited', invitationId: 'i4' },
           { email: 'lucie@example.com', outcome: 'seat-limit', invitationId: null },
         ],
       }),
-    ).toEqual({ invited: 1, skipped: 2 });
+    ).toEqual({ invited: 1, skipped: 2, notSent: ['lucie@example.com'] });
   });
 });

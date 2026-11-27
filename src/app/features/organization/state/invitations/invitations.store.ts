@@ -6,6 +6,7 @@ import {
   type Signal,
   type Type,
 } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { CwToastService } from '@cadenway/ui/components/toast';
 import {
   patchState,
@@ -17,8 +18,16 @@ import {
   withProps,
   withState,
 } from '@ngrx/signals';
+import type { Subscription } from 'rxjs';
 
-import { type ApiProblem, hasProblemCode, readProblem } from '@core/api';
+import {
+  type ApiProblem,
+  hasProblemCode,
+  isDroppedOrganizationWrite,
+  isUnknownWriteOutcome,
+  OrganizationPin,
+  readProblem,
+} from '@core/api';
 import {
   WORKSPACE_CONTEXT,
   type WorkspaceContextPort,
@@ -67,12 +76,50 @@ const EMAIL_ISSUE: RegExp = /^emails\.(\d+)$/u;
  * Type InviteResult
  *
  * @description
- * What became of a batch: `sent`, `failed` (the toast told why), or the addresses the API refused
- * as invalid, which the dialog shows on its field.
+ * What became of a batch: `sent` (every address is done), `failed` (a definite refusal, the toast
+ * told why), `dropped` (the organization changed or the gateway refused the request for another
+ * session organization: nothing is said), the addresses the API refused as invalid, which the
+ * dialog shows on its field, or the addresses `kept` for another send (the outcome is unknown, or
+ * the batch answered them with an outcome that sent nothing), which the dialog keeps.
  *
- * @type {'sent' | 'failed' | { readonly refused: readonly string[] }}
+ * @type {'sent' | 'failed' | 'dropped' | { readonly refused: readonly string[] } | { readonly kept: readonly string[] }}
  */
-export type InviteResult = 'sent' | 'failed' | { readonly refused: readonly string[] };
+export type InviteResult =
+  | 'sent'
+  | 'failed'
+  | 'dropped'
+  | { readonly refused: readonly string[] }
+  | { readonly kept: readonly string[] };
+
+/**
+ * Interface WriteFence
+ *
+ * @description
+ * Binds a write to the organization shown when it starts: once another organization is committed
+ * (`OrganizationPin.organizationChanges`) while the write is pending, it stays moved, a switch
+ * away and back included, so its answer changes nothing.
+ */
+interface WriteFence {
+  // #region Methods
+  /**
+   * Method moved
+   *
+   * @description
+   * Whether another organization was committed since the write started, or is shown now.
+   *
+   * @returns {boolean} Whether the answer belongs to another organization.
+   */
+  moved(): boolean;
+
+  /**
+   * Method release
+   *
+   * @description
+   * Stops listening to the organization changes once the write settled.
+   */
+  release(): void;
+  // #endregion
+}
 
 /**
  * Interface InvitationsRead
@@ -375,8 +422,13 @@ export interface InvitationsStoreInstance {
    *
    * @description
    * Sends a batch of invitations, then reads the list again. Success shows
-   * `<n> invitations sent`; a `400` naming addresses answers them as `refused`, any other refusal
-   * shows the failure toast.
+   * `<n> invitations sent`; addresses the batch answered with an outcome that sent nothing are
+   * `kept` with `<n> addresses could not be invited`; an unknown outcome (no answer, `408`, `5xx`,
+   * `409 idempotency.request-in-progress`) keeps every address with
+   * `The invitations may not have been sent`, since sending again is safe; a `400` naming addresses
+   * answers them as `refused`; any other refusal shows the failure toast. A batch whose
+   * organization changed while it was pending (a switch away and back included), or which the
+   * gateway refused for another session organization, ends `dropped` with no toast.
    *
    * @param {readonly string[]} emails - Distinct addresses, 1 to 50.
    * @param {AssignableMemberRole} role - Role of every address.
@@ -390,7 +442,9 @@ export interface InvitationsStoreInstance {
    * @description
    * Shows the invitation as sent again at once (`Expires in 7 days`) and resends it; a refusal
    * restores it with the failure toast, and an invitation answered or revoked meanwhile leaves the
-   * list, which is read again.
+   * list, which is read again. An unknown outcome restores it, reads the list again and says the
+   * invitation may not have been resent; a dropped resend (organization changed, a switch away and
+   * back included, or refused for another session organization) says nothing.
    *
    * @param {PendingInvitation} invitation - The invitation.
    * @returns {Promise<boolean>} Whether the resend was confirmed.
@@ -403,7 +457,8 @@ export interface InvitationsStoreInstance {
    * @description
    * Hides the invitation at once and revokes it; a refusal shows it again with the failure toast,
    * and an invitation answered meanwhile leaves the list, which is read again. The server has no
-   * undo, so the toast has none.
+   * undo, so the toast has none. An unknown outcome shows it again, reads the list again and says
+   * the invitation may not have been cancelled; a dropped revocation says nothing.
    *
    * @param {PendingInvitation} invitation - The invitation.
    * @returns {Promise<boolean>} Whether the revocation was confirmed.
@@ -469,6 +524,7 @@ function createInvitationsStore(): Type<InvitationsStoreInstance> {
       return {
         _api: api,
         _workspace: workspace,
+        _pin: inject(OrganizationPin),
         _toasts: inject(CwToastService),
         _issued: issued,
         invitations: resource({
@@ -589,7 +645,70 @@ function createInvitationsStore(): Type<InvitationsStoreInstance> {
           { description: invitation.email },
         );
       };
+      // Bound to the organization shown when the write starts. The flag is set once another
+      // organization is committed and never cleared, so a switch away and back while the write is
+      // pending still drops its answer, which a comparison of the current ids alone would let
+      // through.
+      const fence: () => WriteFence = (): WriteFence => {
+        const organization: string = store._workspace.organization().id;
+        let switched: boolean = false;
+        const changes: Subscription = store._pin.organizationChanges.subscribe((): void => {
+          switched = true;
+        });
+        return {
+          moved: (): boolean => switched || store._workspace.organization().id !== organization,
+          release: (): void => {
+            changes.unsubscribe();
+          },
+        };
+      };
+      const leave: () => void = (): void => {
+        patchState(store, { ...writes, inviting: false, _last: null });
+      };
+      const skippedLine: (count: number) => string = (count: number): string =>
+        takesSingular(count)
+          ? $localize`:@@organization.members.invite-skipped-one:${count}:count: address skipped: already a member or invited.`
+          : $localize`:@@organization.members.invite-skipped:${count}:count: addresses skipped: already members or invited.`;
+      const toastOutcome: (outcome: InvitationOutcome) => void = (
+        outcome: InvitationOutcome,
+      ): void => {
+        const skipped: string = outcome.skipped === 0 ? '' : skippedLine(outcome.skipped);
+        if (outcome.invited === 0) {
+          store._toasts.info($localize`:@@organization.members.invite-none:No invitation sent`, {
+            description: skipped,
+          });
+          return;
+        }
+        const expiry: string = $localize`:@@organization.members.invite-sent-text:They expire in 7 days.`;
+        store._toasts.success(
+          takesSingular(outcome.invited)
+            ? $localize`:@@organization.members.invite-sent-one:${outcome.invited}:count: invitation sent`
+            : $localize`:@@organization.members.invite-sent:${outcome.invited}:count: invitations sent`,
+          { description: skipped === '' ? expiry : `${expiry} ${skipped}` },
+        );
+      };
+      // A batch that left addresses unsent: the invited ones when there are some, then one failure
+      // summary, which counts the skipped addresses when none was invited, so none goes unsaid.
+      const toastKept: (outcome: InvitationOutcome, kept: number) => void = (
+        outcome: InvitationOutcome,
+        kept: number,
+      ): void => {
+        if (outcome.invited > 0) toastOutcome(outcome);
+        const lines: string[] = [];
+        if (outcome.invited === 0 && outcome.skipped > 0) lines.push(skippedLine(outcome.skipped));
+        lines.push(
+          $localize`:@@organization.members.invite-not-sent-text:The addresses stay in the list: press Invite to try again.`,
+        );
+        store._toasts.error(
+          takesSingular(kept)
+            ? $localize`:@@organization.members.invite-not-sent-one:${kept}:count: address could not be invited`
+            : $localize`:@@organization.members.invite-not-sent:${kept}:count: addresses could not be invited`,
+          { description: lines.join(' ') },
+        );
+      };
       return {
+        _leaveOrganization: leave,
+
         _onRead: signalMethod<unknown>((): void => {
           const snapshot: InvitationsSnapshot | null = store._current();
           if (snapshot !== null && snapshot !== store._last()) {
@@ -603,9 +722,7 @@ function createInvitationsStore(): Type<InvitationsStoreInstance> {
         }),
 
         _followOrganization: signalMethod<string>((organizationId: string): void => {
-          if (followed !== null && followed !== organizationId) {
-            patchState(store, { ...writes, inviting: false, _last: null });
-          }
+          if (followed !== null && followed !== organizationId) leave();
           followed = organizationId;
         }),
 
@@ -615,40 +732,41 @@ function createInvitationsStore(): Type<InvitationsStoreInstance> {
 
         async invite(emails: readonly string[], role: AssignableMemberRole): Promise<InviteResult> {
           if (!store.readable() || store.inviting() || emails.length === 0) return 'failed';
-          const organization: string = store._workspace.organization().id;
-          const moved: () => boolean = () => store._workspace.organization().id !== organization;
+          const write: WriteFence = fence();
           patchState(store, { inviting: true });
           try {
             const outcome: InvitationOutcome = await store._api.invite(emails, role);
-            if (moved()) return 'failed';
+            if (write.moved()) return 'dropped';
             bump();
-            const skipped: string =
-              outcome.skipped === 0
-                ? ''
-                : takesSingular(outcome.skipped)
-                  ? $localize`:@@organization.members.invite-skipped-one:${outcome.skipped}:count: address skipped: already a member or invited.`
-                  : $localize`:@@organization.members.invite-skipped:${outcome.skipped}:count: addresses skipped: already members or invited.`;
-            if (outcome.invited === 0) {
-              store._toasts.info(
-                $localize`:@@organization.members.invite-none:No invitation sent`,
-                {
-                  description: skipped,
-                },
-              );
-            } else {
-              const expiry: string = $localize`:@@organization.members.invite-sent-text:They expire in 7 days.`;
-              store._toasts.success(
-                takesSingular(outcome.invited)
-                  ? $localize`:@@organization.members.invite-sent-one:${outcome.invited}:count: invitation sent`
-                  : $localize`:@@organization.members.invite-sent:${outcome.invited}:count: invitations sent`,
-                { description: skipped === '' ? expiry : `${expiry} ${skipped}` },
-              );
+            const unsent: ReadonlySet<string> = new Set<string>(
+              outcome.notSent.map((email: string): string => email.toLowerCase()),
+            );
+            let kept: readonly string[] = emails.filter((email: string): boolean =>
+              unsent.has(email.toLowerCase()),
+            );
+            if (kept.length === 0) kept = outcome.notSent;
+            if (kept.length === 0) {
+              toastOutcome(outcome);
+              return 'sent';
             }
-            return 'sent';
+            toastKept(outcome, kept.length);
+            return { kept };
           } catch (error: unknown) {
-            if (moved()) return 'failed';
+            if (write.moved() || isDroppedOrganizationWrite(error)) return 'dropped';
             const refused: readonly string[] = refusedAddresses(error, emails);
             if (refused.length > 0) return { refused };
+            if (isUnknownWriteOutcome(error)) {
+              // Some may have gone out: the list is read again, and a second send answers
+              // `already-invited` for an address the first one reached.
+              bump();
+              store._toasts.warning(
+                $localize`:@@organization.members.invite-uncertain:The invitations may not have been sent`,
+                {
+                  description: $localize`:@@organization.members.invite-uncertain-text:Sending again is safe.`,
+                },
+              );
+              return { kept: emails };
+            }
             store._toasts.error(
               $localize`:@@organization.members.invite-failed:The invitations could not be sent`,
               hasProblemCode(error, 'invitation.daily-limit-reached')
@@ -659,14 +777,16 @@ function createInvitationsStore(): Type<InvitationsStoreInstance> {
             );
             return 'failed';
           } finally {
-            if (!moved()) patchState(store, { inviting: false });
+            write.release();
+            // A moved write's state was reset with the organization change, and another send may
+            // have started since.
+            if (!write.moved()) patchState(store, { inviting: false });
           }
         },
 
         async resend(invitation: PendingInvitation): Promise<boolean> {
           if (!store.readable() || busy(invitation.id)) return false;
-          const organization: string = store._workspace.organization().id;
-          const moved: () => boolean = () => store._workspace.organization().id !== organization;
+          const write: WriteFence = fence();
           const expiresAt: string = new Date(Date.now() + VALIDITY_MS).toISOString();
           patchState(store, { _resending: { ...store._resending(), [invitation.id]: expiresAt } });
           const drop: () => void = (): void => {
@@ -680,7 +800,7 @@ function createInvitationsStore(): Type<InvitationsStoreInstance> {
           };
           try {
             const updated: PendingInvitation = await store._api.resend(invitation.id);
-            if (moved()) return false;
+            if (write.moved()) return false;
             confirm(invitation.id, updated);
             drop();
             store._toasts.success(
@@ -689,10 +809,19 @@ function createInvitationsStore(): Type<InvitationsStoreInstance> {
             );
             return true;
           } catch (error: unknown) {
-            if (moved()) return false;
+            if (write.moved()) return false;
             drop();
+            if (isDroppedOrganizationWrite(error)) return false;
             if (CLOSED_CODES.some((code: string): boolean => hasProblemCode(error, code))) {
               closed(invitation);
+              return false;
+            }
+            if (isUnknownWriteOutcome(error)) {
+              bump();
+              store._toasts.warning(
+                $localize`:@@organization.members.resend-uncertain:The invitation may not have been resent`,
+                { description: invitation.email },
+              );
               return false;
             }
             const description: string | null = hasProblemCode(error, 'invitation.resend-throttled')
@@ -705,13 +834,14 @@ function createInvitationsStore(): Type<InvitationsStoreInstance> {
               description === null ? {} : { description },
             );
             return false;
+          } finally {
+            write.release();
           }
         },
 
         async revoke(invitation: PendingInvitation): Promise<boolean> {
           if (!store.readable() || busy(invitation.id)) return false;
-          const organization: string = store._workspace.organization().id;
-          const moved: () => boolean = () => store._workspace.organization().id !== organization;
+          const write: WriteFence = fence();
           patchState(store, { _revoking: [...store._revoking(), invitation.id] });
           const drop: () => void = (): void => {
             patchState(store, {
@@ -720,7 +850,7 @@ function createInvitationsStore(): Type<InvitationsStoreInstance> {
           };
           try {
             await store._api.revoke(invitation.id);
-            if (moved()) return false;
+            if (write.moved()) return false;
             confirm(invitation.id, null);
             drop();
             store._toasts.success(
@@ -729,16 +859,27 @@ function createInvitationsStore(): Type<InvitationsStoreInstance> {
             );
             return true;
           } catch (error: unknown) {
-            if (moved()) return false;
+            if (write.moved()) return false;
             drop();
+            if (isDroppedOrganizationWrite(error)) return false;
             if (CLOSED_CODES.some((code: string): boolean => hasProblemCode(error, code))) {
               closed(invitation);
+              return false;
+            }
+            if (isUnknownWriteOutcome(error)) {
+              bump();
+              store._toasts.warning(
+                $localize`:@@organization.members.cancel-uncertain:The invitation may not have been cancelled`,
+                { description: invitation.email },
+              );
               return false;
             }
             store._toasts.error(
               $localize`:@@organization.members.cancel-failed:The invitation could not be cancelled`,
             );
             return false;
+          } finally {
+            write.release();
           }
         },
       };
@@ -747,6 +888,11 @@ function createInvitationsStore(): Type<InvitationsStoreInstance> {
       onInit(store): void {
         store._onRead(computed((): unknown => [store._current(), store.invitations.isLoading()]));
         store._followOrganization(computed((): string => store._workspace.organization().id));
+        // A committed organization change resets the writes at once, before the workspace
+        // context reaches this store, so a switch away and back leaves nothing behind.
+        store._pin.organizationChanges.pipe(takeUntilDestroyed()).subscribe((): void => {
+          store._leaveOrganization();
+        });
       },
     }),
   );
@@ -757,12 +903,15 @@ function createInvitationsStore(): Type<InvitationsStoreInstance> {
  *
  * @description
  * The pending invitations of the members section, provided by `MembersPage` and tied to the
- * workspace organization: a switch drops the writes, and a write that settles after it changes
- * nothing. Only an owner or an administrator reads them, every page of them; for anyone else the
- * read stays idle. Resend and cancel are optimistic: the row changes at once, a refusal restores
- * it with the failure toast, and a confirmed write is applied to every read issued before it
- * settled, until a read issued after it lands. Inviting reads the list again, even while a read
- * is under way.
+ * workspace organization: a switch (the workspace's, or a commit of `OrganizationPin`) drops the
+ * writes, and a write pending through a switch, a switch away and back included, changes nothing
+ * and says nothing when it settles; so does one the gateway refused for another session
+ * organization. Only an owner or an administrator reads them, every page of them; for anyone else
+ * the read stays idle. Resend and cancel are optimistic: the row changes at once, a refusal
+ * restores it with the failure toast, an unknown outcome restores it and reads the list again
+ * with a warning, and a confirmed write is applied to every read issued before it settled, until
+ * a read issued after it lands. Inviting reads the list again, even while a read is under way; an
+ * unknown outcome is never reported as a failure.
  *
  * @type {Type<InvitationsStoreInstance>}
  */

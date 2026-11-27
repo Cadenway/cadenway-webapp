@@ -186,7 +186,7 @@ async function render(
     },
     invitations: {
       list: vi.fn(() => Promise.resolve(INVITATIONS)),
-      invite: vi.fn(() => Promise.resolve({ invited: 2, skipped: 0 })),
+      invite: vi.fn(() => Promise.resolve({ invited: 2, skipped: 0, notSent: [] })),
       resend: vi.fn(),
       revoke: vi.fn(),
     },
@@ -471,5 +471,58 @@ describe('MembersPage', () => {
       ['marc.roux@ateliernord.fr', 'lucie@example.com'],
       'member',
     );
+  });
+
+  it('keeps the dialog open with the addresses a batch did not send', async () => {
+    const [fixture, fakes]: [ComponentFixture<MembersPage>, Fakes] = await render('admin');
+    fakes.invitations.invite
+      .mockResolvedValueOnce({ invited: 1, skipped: 0, notSent: ['lucie@example.com'] })
+      .mockRejectedValueOnce(new HttpErrorResponse({ status: 503 }));
+
+    find('members-invite')?.click();
+    await fixture.whenStable();
+    const field: HTMLTextAreaElement = find('invite-emails') as HTMLTextAreaElement;
+    field.value = 'marc.roux@ateliernord.fr, lucie@example.com';
+    field.dispatchEvent(new Event('input'));
+    await fixture.whenStable();
+    find('invite-submit')?.click();
+    await vi.waitFor(async () => {
+      await fixture.whenStable();
+      expect((find('invite-emails') as HTMLTextAreaElement | null)?.value).toBe(
+        'lucie@example.com',
+      );
+    });
+
+    find('invite-submit')?.click();
+    await vi.waitFor(() => {
+      expect(fakes.toasts.warning).toHaveBeenCalled();
+    });
+    await fixture.whenStable();
+
+    expect(fakes.invitations.invite).toHaveBeenLastCalledWith(['lucie@example.com'], 'member');
+    expect((find('invite-emails') as HTMLTextAreaElement | null)?.value).toBe('lucie@example.com');
+    expect(fakes.toasts.error).toHaveBeenCalledTimes(1);
+  });
+
+  it('closes the dialog silently when the gateway drops the batch', async () => {
+    const [fixture, fakes]: [ComponentFixture<MembersPage>, Fakes] = await render('admin');
+    fakes.invitations.invite.mockRejectedValueOnce(
+      new HttpErrorResponse({ status: 412, error: { code: 'organization.context-changed' } }),
+    );
+
+    find('members-invite')?.click();
+    await fixture.whenStable();
+    const field: HTMLTextAreaElement = find('invite-emails') as HTMLTextAreaElement;
+    field.value = 'lucie@example.com';
+    field.dispatchEvent(new Event('input'));
+    await fixture.whenStable();
+    find('invite-submit')?.click();
+    await vi.waitFor(async () => {
+      await fixture.whenStable();
+      expect(find('invite-emails')).toBeNull();
+    });
+
+    expect(fakes.toasts.error).not.toHaveBeenCalled();
+    expect(fakes.toasts.warning).not.toHaveBeenCalled();
   });
 });
