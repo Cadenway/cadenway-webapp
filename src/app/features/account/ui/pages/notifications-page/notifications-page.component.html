@@ -1,0 +1,143 @@
+<div class="mx-auto flex w-full max-w-3xl flex-col gap-6 px-4 py-6 sm:px-8 sm:py-8">
+  @if (preferences(); as preferences) {
+    <header class="flex flex-col gap-1">
+      <h1 class="text-2xl font-semibold tracking-tight" i18n="@@account.notifications.title">
+        Notifications
+      </h1>
+      <p class="text-sm text-muted-foreground" i18n="@@account.notifications.lead">
+        Choose what you are notified about, and through which channel.
+      </p>
+    </header>
+
+    <cw-card role="region" aria-labelledby="account-notifications-matrix">
+      <h2
+        id="account-notifications-matrix"
+        class="px-4 text-base leading-5 font-semibold"
+        i18n="@@account.notifications.matrix-title"
+      >
+        Events
+      </h2>
+      <cw-notification-matrix
+        [channels]="preferences.channels"
+        [mentionHandle]="mentionHandle()"
+        (channelChanged)="changeChannel($event)"
+      />
+    </cw-card>
+
+    <cw-card class="px-4" role="region" aria-labelledby="account-notifications-digest">
+      <fieldset class="flex min-w-0 flex-col gap-3">
+        <legend
+          id="account-notifications-digest"
+          class="mb-1 text-base font-semibold"
+          i18n="@@account.notifications.digest-title"
+        >
+          Email summary
+        </legend>
+        <cw-radio-group
+          class="grid gap-3"
+          aria-labelledby="account-notifications-digest"
+          [value]="preferences.digest"
+          (valueChange)="chooseDigest($event)"
+        >
+          <div class="flex items-start gap-2">
+            <cw-radio-group-item
+              class="mt-0.5"
+              value="each"
+              id="account-notifications-digest-each"
+            />
+            <label class="flex flex-col gap-0.5" for="account-notifications-digest-each">
+              <span class="text-sm leading-5 font-medium">{{ digestOptions[0].label }}</span>
+              <span class="text-xs text-muted-foreground">{{ digestOptions[0].hint }}</span>
+            </label>
+          </div>
+          <div class="flex items-start gap-2">
+            <cw-radio-group-item
+              class="mt-0.5"
+              value="daily"
+              id="account-notifications-digest-daily"
+            />
+            <label class="flex flex-col gap-0.5" for="account-notifications-digest-daily">
+              <span class="text-sm leading-5 font-medium">{{ digestOptions[1].label }}</span>
+              <span class="text-xs text-muted-foreground">{{ digestOptions[1].hint }}</span>
+            </label>
+          </div>
+          <div class="flex items-start gap-2">
+            <cw-radio-group-item
+              class="mt-0.5"
+              value="weekly"
+              id="account-notifications-digest-weekly"
+            />
+            <label class="flex flex-col gap-0.5" for="account-notifications-digest-weekly">
+              <span class="text-sm leading-5 font-medium">{{ digestOptions[2].label }}</span>
+              <span class="text-xs text-muted-foreground">{{ digestOptions[2].hint }}</span>
+            </label>
+          </div>
+          <div class="flex items-start gap-2">
+            <cw-radio-group-item
+              class="mt-0.5"
+              value="never"
+              id="account-notifications-digest-never"
+            />
+            <label class="flex flex-col gap-0.5" for="account-notifications-digest-never">
+              <span class="text-sm leading-5 font-medium">{{ digestOptions[3].label }}</span>
+              <span class="text-xs text-muted-foreground">{{ digestOptions[3].hint }}</span>
+            </label>
+          </div>
+        </cw-radio-group>
+      </fieldset>
+    </cw-card>
+
+    <cw-card class="px-4" role="region" aria-labelledby="account-notifications-dnd">
+      <div class="flex items-start justify-between gap-4">
+        <div class="grid gap-0.5">
+          <h2 id="account-notifications-dnd" class="text-sm leading-5 font-medium">
+            {{ doNotDisturbLabel }}
+          </h2>
+          <p class="text-xs text-muted-foreground" i18n="@@account.notifications.dnd-text">
+            No mobile notifications from 19:00 to 8:00 or at weekends. Urgent mentions still get
+            through.
+          </p>
+        </div>
+        <cw-switch
+          class="shrink-0"
+          [ariaLabel]="doNotDisturbLabel"
+          [checked]="preferences.doNotDisturb"
+          (checkedChange)="changeDoNotDisturb($event)"
+        />
+      </div>
+    </cw-card>
+  } @else {
+    <div
+      class="flex flex-col gap-6"
+      role="status"
+      aria-busy="true"
+      aria-label="Loading the section"
+      i18n-aria-label="@@account.notifications.loading"
+    >
+      <div class="flex min-w-0 flex-1 flex-col gap-2" aria-hidden="true">
+        <div cwSkeleton class="h-7 w-56"></div>
+        <div cwSkeleton class="h-3 w-3/4"></div>
+      </div>
+      @for (card of skeletonCards; track $index) {
+        <div
+          class="flex flex-col gap-4 rounded-xl border border-border bg-card p-4"
+          aria-hidden="true"
+        >
+          <div class="flex flex-col gap-2">
+            <div cwSkeleton class="h-4 w-32"></div>
+            <div cwSkeleton class="h-3" [class]="card.title"></div>
+          </div>
+          @for (row of card.rows; track $index) {
+            <div class="flex items-center gap-4">
+              <div class="flex min-w-0 flex-1 flex-col gap-1.5">
+                <div cwSkeleton class="h-3" [class]="row"></div>
+                <div cwSkeleton class="h-2.5 w-1/2"></div>
+              </div>
+              <div cwSkeleton class="h-5 w-9 rounded-full"></div>
+            </div>
+          }
+        </div>
+      }
+    </div>
+  }
+</div>

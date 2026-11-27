@@ -28,6 +28,9 @@ parent provides the English texts of `cw-password-strength` and `cw-input-otp` t
 - Each page is a stub (WP0 of steps 7 and 8) showing the mockup's section title in the account
   column (`max-w-3xl`); packages A1 to A5 replace them. The stubs read no data, so they have no
   loading, error or empty state yet.
+- `notifications` is built (package A3): `NotificationsPage` reads the preferences through its
+  page-scoped `NotificationPreferencesStore`, shows the section skeleton while they load, and its
+  failed read reaches the error boundary below.
 - A failed primary read of a section renders the default error boundary in the shell, titled
   `Could not load this section` by the mounting route's `data`.
 
@@ -60,6 +63,9 @@ parent provides the English texts of `cw-password-strength` and `cw-input-otp` t
 ## Dependencies
 
 - `@cadenway/api-client`: `AuthService.reauthenticate` through `data-access/`.
+- `@cadenway/api-client`: `NotificationPreferencesService.getNotificationPreferences` and
+  `updateNotificationPreferences` (`notifications`) through `data-access/`; `@cadenway/ui`
+  `card`, `checkbox`, `radio-group`, `skeleton`, `switch` and `table` for that section.
 - Auth's `.` entry (`SignOut`), Workspace's `ports/workspace-context`, Errors' `errors.routes`,
   `@core/api` (problem reader), `@core/realtime`, `@core/theme`, `@shared/unsaved-changes`.
 - `@cadenway/ui` (`app-rail`, `avatar`, `button`, `dialog`, `input`, `input-otp`, `menu`,
@@ -98,6 +104,18 @@ parent provides the English texts of `cw-password-strength` and `cw-input-otp` t
 - `profile` keeps unsaved edits through `unsavedChangesGuard`; its page asks with Workspace's
   `cw-discard-changes-dialog`. The stub has no form, so it never asks yet; package A1 reports its
   form's dirty state.
+- `notifications` (`Compte.dc.html` lines 355-403): the `Events` matrix (7 events × in the app,
+  email, mobile, each box named `<event> in the app | by email | on mobile`), `Email summary`
+  and `Do not disturb`. Every change shows at once and saves with no Save and no success toast:
+  `NotificationPreferencesStore` (page-scoped on `NotificationsPage`) queues the writes, one after
+  the other, each a merge patch of that one setting with `If-Match` on the version the previous
+  write recorded; a later change of the same setting replaces a pending one, and a setting turned
+  back to its confirmed value sends nothing. On `412 request.version-mismatch` the data access
+  reads the preferences again and resends the setting once. Any other failure restores the
+  confirmed value of that setting (unless it was changed again since) and shows `Could not save`;
+  a new failure replaces the previous toast. The mention hint names the display name, or the
+  first name without one, as a mention does. Below 768 px the matrix becomes cards (the mockup's
+  `.cw-cards` rule), each box followed by its channel's name.
 - Known gap: the mockup's `Set a status message` item and the status message under the header are left out,
   since the backend has no status message yet.
 
@@ -111,4 +129,5 @@ parent provides the English texts of `cw-password-strength` and `cw-input-otp` t
 | `account.user-menu.sign-out-failed`, `account.user-menu.sign-out-failed-text`                                                                                                                                     | The mockup draws no refused sign-out.                                                          |
 | `account.reauthentication.*`                                                                                                                                                                                      | The mockup draws no reauthentication dialog (`auth.yaml` "Recent authentication").             |
 | `account.labels.*`                                                                                                                                                                                                | Texts of the password strength and one-time code bricks, worded as Auth's.                     |
+| `account.notifications.save-failed`, `account.notifications.save-failed-text`                                                                                                                                     | The mockup draws no refused save; the section saves at once.                                   |
 | `account.user-menu.avatar-unknown`, `account.user-menu.avatar-online`, `account.user-menu.avatar-away`, `account.user-menu.avatar-dnd`, `account.user-menu.avatar-invisible`, `account.user-menu.avatar-disabled` | Texts of the avatar brick, taken from its defaults.                                            |

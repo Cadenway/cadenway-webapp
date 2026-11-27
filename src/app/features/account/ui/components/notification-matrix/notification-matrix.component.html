@@ -1,0 +1,47 @@
+<cw-table-container>
+  <table
+    cwTable
+    class="min-w-[520px] max-md:block max-md:min-w-0"
+    aria-label="Notifications by channel"
+    i18n-aria-label="@@account.notifications.matrix-label"
+  >
+    <thead cwTableHeader class="max-md:hidden">
+      <tr cwTableRow>
+        <th cwTableHead class="pl-4" i18n="@@account.notifications.event">Event</th>
+        @for (column of columns; track column.channel) {
+          <th cwTableHead align="center" class="w-24">{{ column.label }}</th>
+        }
+      </tr>
+    </thead>
+    <tbody cwTableBody class="max-md:block">
+      @for (row of rows(); track row.event) {
+        <tr
+          cwTableRow
+          class="max-md:flex max-md:h-auto max-md:flex-wrap max-md:items-center max-md:gap-x-4 max-md:gap-y-2 max-md:p-3"
+          data-testid="notification-row"
+        >
+          <th scope="row" class="py-2 pr-3 pl-4 text-left font-normal max-md:basis-full max-md:p-0">
+            <span class="flex flex-col">
+              <span class="leading-5">{{ row.label }}</span>
+              <span class="text-xs text-muted-foreground">{{ row.hint }}</span>
+            </span>
+          </th>
+          @for (cell of row.cells; track cell.channel) {
+            <td cwTableCell align="center" class="max-md:flex max-md:items-center max-md:px-0">
+              <span class="inline-flex items-center gap-2">
+                <cw-checkbox
+                  [checked]="cell.enabled"
+                  [ariaLabel]="cell.ariaLabel"
+                  (checkedChange)="toggle(row.event, cell.channel, $event)"
+                />
+                <span class="text-xs text-muted-foreground md:hidden" aria-hidden="true">{{
+                  cell.label
+                }}</span>
+              </span>
+            </td>
+          }
+        </tr>
+      }
+    </tbody>
+  </table>
+</cw-table-container>
