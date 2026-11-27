@@ -101,6 +101,61 @@ const DISPLAY_NAME_LIMIT: number = 60;
 const FORM_FIELDS: readonly ProfileField[] = ['name', 'displayName', 'jobTitle', 'timeZone'];
 
 /**
+ * Constant PRESENCE_REFUSAL_WINDOW
+ *
+ * @description
+ * How long after a presence picked here a return of `ownStatus` to the presence before it counts
+ * as the gateway's refusal, in milliseconds. `PRESENCE` reports no acknowledgement, so a later
+ * change (another tab, the presence snapshot) is not taken for a refusal.
+ *
+ * @type {number}
+ */
+const PRESENCE_REFUSAL_WINDOW: number = 10_000;
+
+/**
+ * Interface PendingPresence
+ *
+ * @description
+ * A presence picked on this page, watched for a refusal.
+ */
+interface PendingPresence {
+  // #region Properties
+  /**
+   * Property status
+   *
+   * @description
+   * The presence picked.
+   *
+   * @type {PresenceStatus}
+   * @readonly
+   */
+  readonly status: PresenceStatus;
+
+  /**
+   * Property previous
+   *
+   * @description
+   * The presence before the pick, which `ownStatus` returns to when the gateway refuses it.
+   *
+   * @type {PresenceStatus | null}
+   * @readonly
+   */
+  readonly previous: PresenceStatus | null;
+
+  /**
+   * Property until
+   *
+   * @description
+   * When the watch ends, in milliseconds since the epoch.
+   *
+   * @type {number}
+   * @readonly
+   */
+  readonly until: number;
+  // #endregion
+}
+
+/**
  * Interface Snapshot
  *
  * @description
@@ -491,12 +546,25 @@ export class ProfilePage implements UnsavedChanges {
    * Property pendingPresence
    *
    * @description
-   * The last presence picked here, watched until it is replaced: if `ownStatus` leaves it without a
-   * new pick, the gateway refused it.
+   * The last presence picked here, watched for `PRESENCE_REFUSAL_WINDOW`: when `ownStatus` returns
+   * to the presence before it meanwhile, the gateway refused it; any other change ends the watch
+   * silently.
    *
-   * @type {PresenceStatus | null}
+   * @type {PendingPresence | null}
    */
-  private pendingPresence: PresenceStatus | null = null;
+  private pendingPresence: PendingPresence | null = null;
+
+  /**
+   * Property saveUnconfirmed
+   *
+   * @description
+   * Whether the last save lost its answer and the rereads never showed it: the draft stays unsaved
+   * with a note, until the next save, `Cancel` or a successful save.
+   *
+   * @type {WritableSignal<boolean>}
+   * @readonly
+   */
+  protected readonly saveUnconfirmed: WritableSignal<boolean> = signal(false);
 
   /**
    * Property presenceAvailable
@@ -655,18 +723,20 @@ export class ProfilePage implements UnsavedChanges {
    * Constructor
    *
    * @description
-   * Asks the browser to confirm leaving the tab while edits are unsaved, and reports a refused
-   * presence: when `ownStatus` leaves the presence picked here without a new pick, an error toast
-   * says so.
+   * Asks the browser to confirm leaving the tab while edits are unsaved or a photo change runs, and
+   * reports a refused presence: when `ownStatus` returns to the presence before a pick made here
+   * within `PRESENCE_REFUSAL_WINDOW`, an error toast says so.
    *
    * @constructor
    */
   public constructor() {
-    warnBeforeUnload((): boolean => this.dirty() && !this.store.deleted());
+    warnBeforeUnload((): boolean => this.hasUnsavedChanges());
     effect((): void => {
       const status: PresenceStatus | null = this.presence.ownStatus();
-      if (this.pendingPresence === null || status === this.pendingPresence) return;
+      const pending: PendingPresence | null = this.pendingPresence;
+      if (pending === null || status === pending.status) return;
       this.pendingPresence = null;
+      if (Date.now() > pending.until || status === null || status !== pending.previous) return;
       this.toasts.error(
         $localize`:@@account.profile.status-failed:The status could not be changed`,
         {
@@ -682,21 +752,22 @@ export class ProfilePage implements UnsavedChanges {
    * Method hasUnsavedChanges
    *
    * @description
-   * Whether leaving would lose edits; never once the deletion is scheduled.
+   * Whether leaving would lose edits or a photo change on its way; never once the deletion is
+   * scheduled.
    *
-   * @returns {boolean} True while the form differs from the saved account.
+   * @returns {boolean} True while the form differs from the saved account or a photo change runs.
    */
   public hasUnsavedChanges(): boolean {
-    return this.dirty() && !this.store.deleted();
+    return (this.dirty() || this.store.avatarChange() !== null) && !this.store.deleted();
   }
 
   /**
    * Method confirmDiscard
    *
    * @description
-   * Asks whether to discard the unsaved edits. A save already on its way may still be applied, so
-   * the page first waits for it to settle: once accepted, nothing is unsaved and the navigation
-   * goes; once refused, the person is asked.
+   * Asks whether to discard the unsaved edits. A save or a photo change already on its way may
+   * still be applied, so the page first waits for it to settle (a photo the page left would be
+   * dropped otherwise): once nothing is unsaved the navigation goes; otherwise the person is asked.
    *
    * @returns {Promise<boolean>} Resolves true on `Discard` or once the edits are saved; false on
    * `Keep editing`.
@@ -714,6 +785,7 @@ export class ProfilePage implements UnsavedChanges {
    * Drops the edits and shows the saved account again.
    */
   protected cancel(): void {
+    this.saveUnconfirmed.set(false);
     this.restart();
   }
 
@@ -731,6 +803,7 @@ export class ProfilePage implements UnsavedChanges {
       action: async (
         fields: FieldTree<ProfileFormValue>,
       ): Promise<ValidationError.WithOptionalFieldTree[] | undefined> => {
+        this.saveUnconfirmed.set(false);
         const result: ProfileSaveResult = await this.store.save(this.change());
         switch (result.outcome) {
           case 'saved':
@@ -758,6 +831,9 @@ export class ProfilePage implements UnsavedChanges {
                 description: $localize`:@@account.profile.save-failed-text:Your edits are kept. Try again in a moment.`,
               },
             );
+            return undefined;
+          case 'unconfirmed':
+            this.saveUnconfirmed.set(true);
             return undefined;
           case 'unreconciled':
           case 'skipped':
@@ -843,7 +919,11 @@ export class ProfilePage implements UnsavedChanges {
    */
   protected pickPresence(choice: PresenceChoice): void {
     if (!this.presenceAvailable() || choice.status === this.presence.ownStatus()) return;
-    this.pendingPresence = choice.status;
+    this.pendingPresence = {
+      status: choice.status,
+      previous: this.presence.ownStatus(),
+      until: Date.now() + PRESENCE_REFUSAL_WINDOW,
+    };
     this.presence.setPresence(choice.status);
     this.toasts.show($localize`:@@account.profile.status-toast:Status: ${choice.label}:status:`, {
       description: $localize`:@@account.profile.status-toast-text:${choice.hint}:hint:.`,
@@ -911,8 +991,9 @@ export class ProfilePage implements UnsavedChanges {
    * @description
    * Schedules the deletion once confirmed. Scheduled: the person is signed out and the signed-out
    * screen opens. An organization still owned closes the confirmation and toasts the organizations
-   * to hand over; another failure toasts and keeps the confirmation; a closed reauthentication
-   * keeps it silently.
+   * to hand over; a deletion whose answer was lost and that the account rereads cannot confirm
+   * closes the confirmation and asks the person to sign in again to check; another failure toasts
+   * and keeps the confirmation; a closed reauthentication keeps it silently.
    *
    * @returns {Promise<void>} Resolves once the deletion ended.
    */
@@ -944,6 +1025,15 @@ export class ProfilePage implements UnsavedChanges {
         this.toasts.error(
           $localize`:@@account.profile.delete-failed:The account could not be deleted`,
           { description: $localize`:@@account.profile.delete-failed-text:Try again in a moment.` },
+        );
+        return;
+      case 'unconfirmed':
+        this.deletionOpen.set(false);
+        this.toasts.warning(
+          $localize`:@@account.profile.delete-unconfirmed:The deletion could not be confirmed`,
+          {
+            description: $localize`:@@account.profile.delete-unconfirmed-text:Sign in again to check your account. If its deletion was scheduled, signing in cancels it.`,
+          },
         );
         return;
       case 'cancelled':
@@ -1071,6 +1161,14 @@ export class ProfilePage implements UnsavedChanges {
         this.toasts.error(
           $localize`:@@account.profile.photo-failed:The photo could not be changed`,
           { description: $localize`:@@account.profile.photo-failed-text:Try again in a moment.` },
+        );
+        break;
+      case 'unconfirmed':
+        this.toasts.warning(
+          $localize`:@@account.profile.photo-unconfirmed:The photo change could not be confirmed`,
+          {
+            description: $localize`:@@account.profile.photo-unconfirmed-text:It may still apply: check your photo in a moment.`,
+          },
         );
         break;
       case 'updated':

@@ -27,6 +27,8 @@ import { NgIcon } from '@ng-icons/core';
  * emits `picked` with it, unchecked, and clears the input so the same file can be picked again;
  * `Remove` emits `removed`. `focus()` moves the focus to the file input, for the page to call once
  * a change ended. The tile is decorative: the buttons and the card's text carry the meaning.
+ * While `failed`, an inline error says the photo could not be loaded, with `Retry`, which emits
+ * `retried`.
  */
 @Component({
   selector: 'cw-profile-photo',
@@ -87,6 +89,27 @@ import { NgIcon } from '@ng-icons/core';
         </button>
       </div>
     </div>
+    @if (failed()) {
+      <div
+        role="alert"
+        class="mt-3 flex flex-wrap items-center gap-2 text-xs text-destructive"
+        data-testid="profile-photo-failed"
+      >
+        <ng-icon name="phosphorWarningCircleFill" class="size-3.5 shrink-0" aria-hidden="true" />
+        <span i18n="@@account.profile.photo-load-failed">The photo could not be loaded.</span>
+        <button
+          cwButton
+          variant="outline"
+          size="sm"
+          type="button"
+          data-testid="profile-photo-retry"
+          (click)="retried.emit()"
+          i18n="@@account.profile.photo-retry"
+        >
+          Retry
+        </button>
+      </div>
+    }
   `,
 })
 export class ProfilePhoto {
@@ -147,6 +170,28 @@ export class ProfilePhoto {
    * @readonly
    */
   public readonly disabled: InputSignal<boolean> = input<boolean>(false);
+
+  /**
+   * Property failed
+   *
+   * @description
+   * Whether the image of the photo could not be read; an inline error offers `Retry`.
+   *
+   * @type {InputSignal<boolean>}
+   * @readonly
+   */
+  public readonly failed: InputSignal<boolean> = input<boolean>(false);
+
+  /**
+   * Property retried
+   *
+   * @description
+   * Emits when the person asks to read the photo again.
+   *
+   * @type {OutputEmitterRef<void>}
+   * @readonly
+   */
+  public readonly retried: OutputEmitterRef<void> = output();
 
   /**
    * Property picked

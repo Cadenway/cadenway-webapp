@@ -256,15 +256,18 @@ export interface ProfileFieldRefusal {
  * - `refused`: the gateway refused fields of the form, listed in `refusals`;
  * - `outdated`: the account changed meanwhile and was read again;
  * - `unreconciled`: the reread that should have told the outcome failed;
+ * - `unconfirmed`: the answer was lost and the account read again until 8 s later still does not
+ *   hold the change, which may yet land: the draft stays unsaved;
  * - `failed`: any other refusal;
  * - `skipped`: nothing was sent (nothing changed, nothing read, or another write runs);
  * - `cancelled`: the account or the page changed meanwhile, so the answer is dropped.
  *
- * @type {{ readonly outcome: 'saved' | 'outdated' | 'unreconciled' | 'failed' | 'skipped' | 'cancelled' } | { readonly outcome: 'refused'; readonly refusals: readonly ProfileFieldRefusal[] }}
+ * @type {{ readonly outcome: 'saved' | 'outdated' | 'unreconciled' | 'unconfirmed' | 'failed' | 'skipped' | 'cancelled' } | { readonly outcome: 'refused'; readonly refusals: readonly ProfileFieldRefusal[] }}
  */
 export type ProfileSaveResult =
   | {
-      readonly outcome: 'saved' | 'outdated' | 'unreconciled' | 'failed' | 'skipped' | 'cancelled';
+      readonly outcome:
+        'saved' | 'outdated' | 'unreconciled' | 'unconfirmed' | 'failed' | 'skipped' | 'cancelled';
     }
   | { readonly outcome: 'refused'; readonly refusals: readonly ProfileFieldRefusal[] };
 
@@ -274,11 +277,12 @@ export type ProfileSaveResult =
  * @description
  * How a photo change ended: `updated` or `removed` once the account is read again; `unsupported`,
  * `unreadable`, `too-large` and `invalid-image` for a refused file; `outdated` after a stale
- * version (the account is read again); `unreconciled` when that reread failed; `failed` for any
- * other refusal; `skipped` when nothing was sent; `cancelled` when the account or the page changed
- * meanwhile.
+ * version (the account is read again); `unreconciled` when that reread failed; `unconfirmed` when
+ * the answer of the publication or the removal was lost and the account read again until 8 s
+ * later shows the same photo; `failed` for any other refusal; `skipped` when nothing was sent;
+ * `cancelled` when the account or the page changed meanwhile.
  *
- * @type {'updated' | 'removed' | 'unsupported' | 'unreadable' | 'too-large' | 'invalid-image' | 'outdated' | 'unreconciled' | 'failed' | 'skipped' | 'cancelled'}
+ * @type {'updated' | 'removed' | 'unsupported' | 'unreadable' | 'too-large' | 'invalid-image' | 'outdated' | 'unreconciled' | 'unconfirmed' | 'failed' | 'skipped' | 'cancelled'}
  */
 export type AvatarOutcome =
   | 'updated'
@@ -289,6 +293,7 @@ export type AvatarOutcome =
   | 'invalid-image'
   | 'outdated'
   | 'unreconciled'
+  | 'unconfirmed'
   | 'failed'
   | 'skipped'
   | 'cancelled';
@@ -394,12 +399,14 @@ export type EmailRequestResult =
  * @description
  * How confirming the code ended: `confirmed` once the account holds the new address;
  * `wrong-code` for a wrong, expired or used code; `taken` when another account took the address
- * meanwhile (the change is dropped); `failed` for any other failure; `cancelled` when the account
- * or the page changed meanwhile.
+ * meanwhile (the change is dropped); `unconfirmed` when the answer was lost and the account read
+ * again until 8 s later still has its former address; `failed` for any other failure; `cancelled`
+ * when the account or the page changed meanwhile.
  *
- * @type {'confirmed' | 'wrong-code' | 'taken' | 'failed' | 'cancelled'}
+ * @type {'confirmed' | 'wrong-code' | 'taken' | 'unconfirmed' | 'failed' | 'cancelled'}
  */
-export type EmailConfirmOutcome = 'confirmed' | 'wrong-code' | 'taken' | 'failed' | 'cancelled';
+export type EmailConfirmOutcome =
+  'confirmed' | 'wrong-code' | 'taken' | 'unconfirmed' | 'failed' | 'cancelled';
 
 /**
  * Interface MyOrganization
@@ -448,14 +455,17 @@ export interface MyOrganization {
  * Type DeletionResult
  *
  * @description
- * How scheduling the deletion ended: `scheduled`, after which the session is gone; `owner` when
- * the person still owns organizations, listed by id; `failed` for any other failure; `cancelled`
- * when the reauthentication was closed, or the account or the page changed meanwhile.
+ * How scheduling the deletion ended: `scheduled` once the gateway answered so, after which the
+ * session is gone; `owner` when the person still owns organizations, listed by id;
+ * `unconfirmed` when the answer was lost and the account could no longer be read (the session may
+ * have been revoked by the deletion, or have ended for another reason, which the contract does not
+ * tell apart); `failed` for any other failure, the account still read after the rereads included;
+ * `cancelled` when the reauthentication was closed, or the account or the page changed meanwhile.
  *
- * @type {{ readonly outcome: 'scheduled' | 'failed' | 'cancelled' } | { readonly outcome: 'owner'; readonly organizationIds: readonly string[] }}
+ * @type {{ readonly outcome: 'scheduled' | 'unconfirmed' | 'failed' | 'cancelled' } | { readonly outcome: 'owner'; readonly organizationIds: readonly string[] }}
  */
 export type DeletionResult =
-  | { readonly outcome: 'scheduled' | 'failed' | 'cancelled' }
+  | { readonly outcome: 'scheduled' | 'unconfirmed' | 'failed' | 'cancelled' }
   | { readonly outcome: 'owner'; readonly organizationIds: readonly string[] };
 
 /**

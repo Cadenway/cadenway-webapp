@@ -18,7 +18,10 @@ export function offsetLabel(timeZone: string, at: Date): string {
         .formatToParts(at)
         .find((candidate: Intl.DateTimeFormatPart) => candidate.type === 'timeZoneName')?.value ??
       '';
-    return part.replace(/^GMT/u, 'UTC').replace('-', '−');
+    return part
+      .replace(/^GMT(?:[+-]0)?$/u, 'UTC')
+      .replace(/^GMT/u, 'UTC')
+      .replace('-', '−');
   } catch {
     return '';
   }
@@ -36,15 +39,16 @@ export function offsetLabel(timeZone: string, at: Date): string {
  */
 export function timeZoneLabel(timeZone: string, at: Date): string {
   const offset: string = offsetLabel(timeZone, at);
-  return offset === '' ? timeZone : `${timeZone} (${offset})`;
+  return offset === '' || offset === timeZone ? timeZone : `${timeZone} (${offset})`;
 }
 
 /**
  * Function timeZoneOptions
  *
  * @description
- * The options of `Time zone`: every IANA zone the browser knows, sorted by name, plus the saved
- * zone when the browser does not list it, so the saved value always shows.
+ * The options of `Time zone`: every IANA zone the browser knows, sorted by name, plus `UTC`, which
+ * some browsers leave out of the list, and the saved zone when the browser does not list it, so the
+ * saved value always shows.
  *
  * @param {string | null} saved - The saved zone, if any.
  * @param {Date} at - The instant the offsets are read at.
@@ -52,7 +56,9 @@ export function timeZoneLabel(timeZone: string, at: Date): string {
  */
 export function timeZoneOptions(saved: string | null, at: Date): readonly TimeZoneOption[] {
   const zones: string[] = [...Intl.supportedValuesOf('timeZone')];
-  if (saved !== null && saved !== '' && !zones.includes(saved)) zones.push(saved);
+  for (const extra of ['UTC', saved]) {
+    if (extra !== null && extra !== '' && !zones.includes(extra)) zones.push(extra);
+  }
   return zones
     .sort((a: string, b: string) => a.localeCompare(b, 'en'))
     .map((value: string): TimeZoneOption => ({ value, label: timeZoneLabel(value, at) }));

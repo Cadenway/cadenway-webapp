@@ -103,6 +103,7 @@ describe('ProfileStore', () => {
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     TestBed.resetTestingModule();
   });
 
@@ -216,18 +217,145 @@ describe('ProfileStore', () => {
     expect(store.deleted()).toBe(false);
   });
 
-  it('counts a deletion whose answer was lost as scheduled once the account no longer reads', async () => {
+  it('never counts a lost deletion as scheduled because the session no longer reads the account', async () => {
     api['scheduleDeletion'].mockRejectedValueOnce(new HttpErrorResponse({ status: 0 }));
     api['current'].mockRejectedValueOnce(new AccountChangedError());
 
-    expect(await store.scheduleDeletion()).toEqual({ outcome: 'scheduled' });
-    expect(store.deleted()).toBe(true);
+    expect(await store.scheduleDeletion()).toEqual({ outcome: 'unconfirmed' });
+    expect(store.deleted()).toBe(false);
   });
 
-  it('reports a failed deletion while the account still reads', async () => {
+  it('reports a lost deletion as failed when the account still reads after the delayed rereads', async () => {
+    vi.useFakeTimers();
     api['scheduleDeletion'].mockRejectedValueOnce(new HttpErrorResponse({ status: 503 }));
 
-    expect(await store.scheduleDeletion()).toEqual({ outcome: 'failed' });
+    const deleting: Promise<DeletionResult> = store.scheduleDeletion();
+    await vi.advanceTimersByTimeAsync(15_000);
+
+    expect(await deleting).toEqual({ outcome: 'failed' });
+    expect(api['current']).toHaveBeenCalledTimes(1 + 4);
     expect(store.deleted()).toBe(false);
+  });
+
+  it('keeps checking a lost save until a later reread holds it', async () => {
+    vi.useFakeTimers();
+    api['update'].mockRejectedValueOnce(new HttpErrorResponse({ status: 504 }));
+    api['current']
+      .mockResolvedValueOnce(CAMILLE)
+      .mockResolvedValueOnce({ ...CAMILLE, jobTitle: 'Product lead', version: 4 });
+
+    const saving: Promise<ProfileSaveResult> = store.save({ jobTitle: 'Product lead' });
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(store.saving()).toBe(true);
+    await vi.advanceTimersByTimeAsync(2_000);
+
+    expect(await saving).toEqual({ outcome: 'saved' });
+    expect(store.current()?.jobTitle).toBe('Product lead');
+  });
+
+  it('leaves a lost save unconfirmed when no reread within 14 s holds it', async () => {
+    vi.useFakeTimers();
+    api['update'].mockRejectedValueOnce(new HttpErrorResponse({ status: 0 }));
+
+    const saving: Promise<ProfileSaveResult> = store.save({ jobTitle: 'Product lead' });
+    await vi.advanceTimersByTimeAsync(15_000);
+
+    expect(await saving).toEqual({ outcome: 'unconfirmed' });
+    expect(api['current']).toHaveBeenCalledTimes(1 + 4);
+    expect(store.refreshFailed()).toBe(false);
+  });
+
+  it('confirms a lost address change once a delayed reread shows the new address', async () => {
+    vi.useFakeTimers();
+    api['confirmEmailChange'].mockRejectedValueOnce(new HttpErrorResponse({ status: 502 }));
+    api['current']
+      .mockResolvedValueOnce(CAMILLE)
+      .mockResolvedValueOnce(CAMILLE)
+      .mockResolvedValueOnce({ ...CAMILLE, email: 'camille@ateliernord.fr', version: 4 });
+
+    const confirming: Promise<string> = store.confirmEmailChange(
+      '731406',
+      'camille@ateliernord.fr',
+    );
+    await vi.advanceTimersByTimeAsync(7_000);
+
+    expect(await confirming).toBe('confirmed');
+  });
+
+  it('counts a lost publication as done once the account shows the new photo', async () => {
+    api['publishAvatar'].mockRejectedValueOnce(new HttpErrorResponse({ status: 503 }));
+    api['current'].mockResolvedValueOnce({ ...CAMILLE, avatarId: 'avatar-1', version: 4 });
+
+    expect(await store.uploadAvatar(new File(['png'], 'me.png', { type: 'image/png' }))).toBe(
+      'updated',
+    );
+    expect(store.current()?.avatarId).toBe('avatar-1');
+  });
+
+  it('counts a lost removal as done once the account has no photo', async () => {
+    api['current'].mockResolvedValueOnce({ ...CAMILLE, avatarId: 'avatar-1' });
+    TestBed.resetTestingModule();
+    TestBed.configureTestingModule({
+      providers: [
+        ProfileStore,
+        { provide: ProfileApi, useValue: api },
+        { provide: ReauthenticationService, useValue: { run } },
+        { provide: WORKSPACE_CONTEXT, useValue: { user: () => ({ id: userId() }) } },
+      ],
+    });
+    const withPhoto: InstanceType<typeof ProfileStore> = TestBed.inject(ProfileStore);
+    await expect.poll(() => withPhoto.current()?.avatarId).toBe('avatar-1');
+    api['removeAvatar'].mockRejectedValueOnce(new HttpErrorResponse({ status: 0 }));
+    api['current'].mockResolvedValueOnce({ ...CAMILLE, version: 4 });
+
+    expect(await withPhoto.removeAvatar()).toBe('removed');
+    expect(withPhoto.current()?.avatarId).toBeNull();
+  });
+
+  it('publishes the same upload once when the transfer times out or storage fails', async () => {
+    api['sendAvatar'].mockRejectedValueOnce(new HttpErrorResponse({ status: 503 }));
+    api['current'].mockResolvedValueOnce({ ...CAMILLE, avatarId: 'avatar-1', version: 4 });
+
+    expect(await store.uploadAvatar(new File(['png'], 'me.png', { type: 'image/png' }))).toBe(
+      'updated',
+    );
+    expect(api['publishAvatar']).toHaveBeenCalledWith('upload-1', 3, 'u-camille');
+  });
+
+  it('waits for a photo change on its way before letting the page go', async () => {
+    let publish: () => void = (): void => undefined;
+    api['publishAvatar'].mockReturnValueOnce(
+      new Promise<void>((resolve: () => void) => {
+        publish = resolve;
+      }),
+    );
+    api['current'].mockResolvedValueOnce({ ...CAMILLE, avatarId: 'avatar-1', version: 4 });
+    const uploading: Promise<unknown> = store.uploadAvatar(
+      new File(['png'], 'me.png', { type: 'image/png' }),
+    );
+    let sent: boolean = false;
+    void store.sent().then((): void => {
+      sent = true;
+    });
+    await expect.poll(() => api['publishAvatar'].mock.calls.length).toBe(1);
+    expect(sent).toBe(false);
+
+    publish();
+    await uploading;
+    await expect.poll(() => sent).toBe(true);
+  });
+
+  it('reads the photo again after a failed read', async () => {
+    api['avatar'].mockRejectedValueOnce(new HttpErrorResponse({ status: 503 }));
+    api['current'].mockResolvedValueOnce({ ...CAMILLE, avatarId: 'avatar-1', version: 4 });
+    await store.retryRefresh();
+
+    await expect.poll(() => store.avatarFailed()).toBe(true);
+    expect(api['avatar']).toHaveBeenCalledWith('u-camille', expect.any(AbortSignal));
+    store.retryAvatar();
+
+    await expect.poll(() => store.avatarFailed()).toBe(false);
+    await expect.poll(() => store.avatar.hasValue()).toBe(true);
+    expect(api['avatar']).toHaveBeenCalledTimes(2);
   });
 });

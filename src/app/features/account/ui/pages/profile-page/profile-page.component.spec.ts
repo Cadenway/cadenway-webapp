@@ -5,7 +5,16 @@ import { provideRouter, Router, withErrorBoundaries } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { provideCadenwayIcons } from '@cadenway/icons';
 import { CwToastService } from '@cadenway/ui/components/toast';
-import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  type Mock,
+  type MockInstance,
+  vi,
+} from 'vitest';
 
 import { RuntimeConfigStore } from '@core/config';
 import type { PresenceStatus } from '@core/realtime';
@@ -15,6 +24,7 @@ import { WORKSPACE_CONTEXT } from '@features/workspace/ports/workspace-context';
 import { WORKSPACE_REFRESH } from '@features/workspace/ports/workspace-refresh';
 import { unsavedChangesGuard } from '@shared/unsaved-changes';
 
+import { AccountChangedError } from '../../../data-access/services/notification-preferences-api/account-changed.error';
 import { ProfileApi } from '../../../data-access/services/profile-api/profile-api.service';
 import type { AccountProfile, ProfileChange } from '../../../models/profile/profile.interface';
 import { PRESENCE } from '../../../ports/presence/presence.token';
@@ -180,7 +190,7 @@ const revokeObjectURL: typeof URL.revokeObjectURL = URL.revokeObjectURL.bind(URL
 
 describe('ProfilePage', () => {
   let api: Record<string, Mock>;
-  let toasts: { success: Mock; error: Mock; show: Mock };
+  let toasts: { success: Mock; error: Mock; show: Mock; warning: Mock };
   let refresh: Mock;
   let signOut: { run: Mock };
   let ownStatus: WritableSignal<PresenceStatus | null>;
@@ -222,7 +232,7 @@ describe('ProfilePage', () => {
         ]),
       ),
     };
-    toasts = { success: vi.fn(), error: vi.fn(), show: vi.fn() };
+    toasts = { success: vi.fn(), error: vi.fn(), show: vi.fn(), warning: vi.fn() };
     TestBed.configureTestingModule({
       providers: [
         provideCadenwayIcons(),
@@ -266,6 +276,8 @@ describe('ProfilePage', () => {
   });
 
   afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
     URL.createObjectURL = createObjectURL;
     URL.revokeObjectURL = revokeObjectURL;
     document.body.innerHTML = '';
@@ -571,5 +583,116 @@ describe('ProfilePage', () => {
     await expect.poll(() => toasts.error.mock.calls.length).toBe(1);
     expect(toasts.error.mock.calls[0]?.[0]).toBe('Your organizations could not be loaded');
     expect(document.querySelector('[role="alertdialog"]')).toBeNull();
+  });
+
+  it('keeps the draft unsaved with a note when a lost save cannot be confirmed', async () => {
+    api['update'].mockRejectedValueOnce(new HttpErrorResponse({ status: 0 }));
+    const harness: RouterTestingHarness = await open();
+    vi.useFakeTimers();
+
+    type(harness, 'profile-job-title', 'Head of product');
+    byTestId(harness, 'profile-save')?.click();
+    await vi.advanceTimersByTimeAsync(15_000);
+    vi.useRealTimers();
+
+    await expect
+      .poll(() => byTestId(harness, 'profile-save-unconfirmed')?.textContent)
+      .toContain('Your change could not be confirmed.');
+    expect(byTestId(harness, 'profile-unsaved')).not.toBeNull();
+    expect((byTestId(harness, 'profile-job-title') as HTMLInputElement).value).toBe(
+      'Head of product',
+    );
+    expect(toasts.error).not.toHaveBeenCalled();
+    expect(toasts.success).not.toHaveBeenCalled();
+  });
+
+  it('waits for a photo upload on its way before leaving, so the photo is not dropped', async () => {
+    let publish: () => void = (): void => undefined;
+    api['publishAvatar'].mockReturnValueOnce(
+      new Promise<void>((resolve: () => void) => {
+        publish = resolve;
+      }),
+    );
+    api['current']
+      .mockResolvedValueOnce(CAMILLE)
+      .mockResolvedValueOnce({ ...CAMILLE, avatarId: 'avatar-1', version: 4 });
+    const harness: RouterTestingHarness = await open();
+
+    pick(harness, new File(['png'], 'camille.png', { type: 'image/png' }));
+    await expect.poll(() => api['publishAvatar'].mock.calls.length).toBe(1);
+    const leaving: Promise<boolean> = TestBed.inject(Router).navigateByUrl(
+      '/atelier-nord/account/security',
+    );
+    await new Promise<void>((resolve: () => void) => {
+      setTimeout(resolve, 50);
+    });
+    expect(TestBed.inject(Router).url).toBe('/atelier-nord/account/profile');
+
+    publish();
+
+    expect(await leaving).toBe(true);
+    expect(TestBed.inject(Router).url).toBe('/atelier-nord/account/security');
+    expect(document.querySelector('[role="alertdialog"]')).toBeNull();
+  });
+
+  it('offers to read the photo again when it could not be loaded', async () => {
+    api['current'].mockResolvedValue({ ...CAMILLE, avatarId: 'avatar-1' });
+    api['avatar'].mockRejectedValueOnce(problem(503, 'upstream.unavailable'));
+    const harness: RouterTestingHarness = await open();
+
+    await expect
+      .poll(() => byTestId(harness, 'profile-photo-failed')?.textContent)
+      .toContain('The photo could not be loaded.');
+    byTestId(harness, 'profile-photo-retry')?.click();
+
+    await expect
+      .poll(() => byTestId(harness, 'profile-photo-tile')?.querySelector('img')?.src)
+      .toBe('blob:photo');
+    expect(byTestId(harness, 'profile-photo-failed')).toBeNull();
+    expect(api['avatar']).toHaveBeenCalledTimes(2);
+  });
+
+  it('takes no later presence change for a refusal', async () => {
+    const harness: RouterTestingHarness = await open();
+    const now: number = Date.now();
+    const clock: MockInstance<() => number> = vi.spyOn(Date, 'now').mockReturnValue(now);
+
+    presenceCard('Away')?.querySelector<HTMLElement>('[role="radio"]')?.click();
+    harness.detectChanges();
+    ownStatus.set('do-not-disturb');
+    harness.detectChanges();
+
+    presenceCard('Invisible')?.querySelector<HTMLElement>('[role="radio"]')?.click();
+    harness.detectChanges();
+    clock.mockReturnValue(now + 11_000);
+    ownStatus.set('do-not-disturb');
+    harness.detectChanges();
+
+    await new Promise<void>((resolve: () => void) => {
+      setTimeout(resolve, 20);
+    });
+    expect(toasts.error).not.toHaveBeenCalled();
+  });
+
+  it('asks to sign in again when a lost deletion cannot be confirmed', async () => {
+    api['scheduleDeletion'].mockRejectedValueOnce(new HttpErrorResponse({ status: 0 }));
+    const harness: RouterTestingHarness = await open();
+    api['current'].mockRejectedValue(new AccountChangedError());
+
+    byTestId(harness, 'profile-delete')?.click();
+    await expect.poll(() => document.querySelector('[role="alertdialog"] input')).not.toBeNull();
+    const field: HTMLInputElement | null = document.querySelector('[role="alertdialog"] input');
+    if (field === null) throw new Error('No confirmation field');
+    field.value = 'Camille Martin';
+    field.dispatchEvent(new Event('input'));
+    harness.detectChanges();
+    document.querySelector<HTMLElement>('[data-testid="account-deletion-confirm"]')?.click();
+
+    await expect.poll(() => toasts.warning.mock.calls.length).toBe(1);
+    expect(toasts.warning).toHaveBeenCalledWith('The deletion could not be confirmed', {
+      description:
+        'Sign in again to check your account. If its deletion was scheduled, signing in cancels it.',
+    });
+    expect(signOut.run).not.toHaveBeenCalled();
   });
 });

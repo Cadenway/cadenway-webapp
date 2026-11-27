@@ -155,7 +155,7 @@ describe('ProfileApi', () => {
         of({ items: [{ id: 'org-lumen', name: 'Lumen', role: 'member' }], nextCursor: null }),
       );
 
-    expect(await api.myOrganizations()).toEqual([
+    expect(await api.myOrganizations('u-camille')).toEqual([
       { id: 'org-nord', name: 'Atelier Nord', owned: true },
       { id: 'org-lumen', name: 'Lumen', owned: false },
     ]);
@@ -168,7 +168,24 @@ describe('ProfileApi', () => {
   it('fails the organizations read on a repeated cursor', async () => {
     organizations.listMyOrganizations.mockReturnValue(of({ items: [], nextCursor: 'c1' }));
 
-    await expect(api.myOrganizations()).rejects.toThrow();
+    await expect(api.myOrganizations('u-camille')).rejects.toThrow();
+  });
+
+  it('reads the photo and the organizations under the shared lock, for the account only', async () => {
+    organizations.listMyOrganizations.mockReturnValue(of({ items: [], nextCursor: null }));
+
+    await api.avatar('u-camille');
+    await api.myOrganizations('u-camille');
+    expect(request.mock.calls.map((call: unknown[]) => (call[1] as LockOptions).mode)).toEqual([
+      'shared',
+      'shared',
+    ]);
+
+    auth.getCurrentUser.mockReturnValue(of({ ...CAMILLE, id: 'u-lucas' }));
+    await expect(api.avatar('u-camille')).rejects.toBeInstanceOf(AccountChangedError);
+    await expect(api.myOrganizations('u-camille')).rejects.toBeInstanceOf(AccountChangedError);
+    expect(media.getAvatar).toHaveBeenCalledTimes(1);
+    expect(organizations.listMyOrganizations).toHaveBeenCalledTimes(1);
   });
 
   it('names the refused fields of a 400', () => {

@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, type MockInstance, vi } from 'vitest';
 
 import { offsetLabel, timeZoneOptions } from '../../../models/profile/time-zone.util';
 import {
@@ -46,5 +46,18 @@ describe('profile adapter', () => {
       'Europe/Paris (UTC+1)',
     );
     expect(options.find((option) => option.value === 'Not/AZone')?.label).toBe('Not/AZone');
+    expect(options.find((option) => option.value === 'UTC')?.label).toBe('UTC');
+  });
+
+  it('always offers UTC, even when the browser leaves it out of its zones', () => {
+    const zones: MockInstance<typeof Intl.supportedValuesOf> = vi
+      .spyOn(Intl, 'supportedValuesOf')
+      .mockReturnValue(['Europe/Paris']);
+
+    expect(timeZoneOptions(null, new Date()).map((option) => option.value)).toEqual([
+      'Europe/Paris',
+      'UTC',
+    ]);
+    zones.mockRestore();
   });
 });

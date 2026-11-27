@@ -160,13 +160,17 @@ function countdown(seconds: number): string {
  *    `This is already your current address: …` against `currentEmail`), then `Send the code` asks
  *    for a code through the reauthentication; a closed reauthentication keeps the step. A refusal
  *    shows on the field: the current address, an address another account uses (kept until the
- *    address changes), a throttled address; any other failure toasts and keeps the step.
+ *    address changes), a throttled address; a throttled address the code of this dialog already
+ *    went to shows the second step again, counting down to the gateway's `resendAvailableAt`; any
+ *    other failure toasts and keeps the step.
  * 2. `Code sent to <email>`: a 3 + 3 one-time code, `Resend the code in m:ss` until the gateway's
  *    `resendAvailableAt` (then `Resend the code`, which asks again for the same address and toasts
  *    `Code resent`), and `Use another address` back to the first step. `Confirm the address` sends
  *    the code: a wrong or expired code shows on the field; an address another account took meanwhile
- *    goes back to the first step with that error; success closes the dialog, toasts
- *    `Email address changed` and emits `changed`.
+ *    goes back to the first step with that error; a confirmation whose answer was lost and that the
+ *    account rereads cannot confirm toasts a warning and keeps the step; success closes the
+ *    dialog, toasts `Email address changed` and emits `changed`. Closing the dialog forgets the
+ *    code typed.
  *
  * Submit stays enabled while a field is invalid: the error shows and the field takes the focus,
  * which also moves to the code field when the second step appears. While a request runs the
@@ -476,13 +480,16 @@ export class EmailChangeDialog {
    * Method openChanged
    *
    * @description
-   * Follows the dialog closing itself (Escape, the backdrop) and stops the countdown.
+   * Follows the dialog closing itself (Escape, the backdrop); once closed, the countdown stops and
+   * the code typed is forgotten.
    *
    * @param {boolean} open - The dialog's new open state.
    */
   protected openChanged(open: boolean): void {
     this.open.set(open);
-    if (!open) this.stopTicker();
+    if (open) return;
+    this.stopTicker();
+    this.codeForm().reset({ code: '' });
   }
 
   /**
@@ -576,18 +583,20 @@ export class EmailChangeDialog {
         const result: EmailRequestResult = await this.store.requestEmailChange(email);
         switch (result.outcome) {
           case 'sent':
-            this.sentTo.set(result.code.email);
+            this.sentTo.set(normalized(result.code.email));
             this.resendAt.set(result.code.resendAvailableAt);
-            this.codeForm().reset({ code: '' });
-            this.step.set('code');
-            this.startTicker();
-            this.focusLater((): void => {
-              this.codeForm.code().focusBoundControl();
-            });
+            this.showCodeStep();
             return undefined;
           case 'refused':
             if (result.reason === 'taken') {
               this.takenEmail.set(email);
+              return undefined;
+            }
+            if (result.reason === 'throttled' && this.sentTo() !== '' && email === this.sentTo()) {
+              // A code already went to this address: its step takes it, counting down to the
+              // next one.
+              this.resendAt.set(result.resendAvailableAt ?? this.resendAt());
+              this.showCodeStep();
               return undefined;
             }
             return [
@@ -650,6 +659,14 @@ export class EmailChangeDialog {
               this.addressForm.email().focusBoundControl();
             });
             return undefined;
+          case 'unconfirmed':
+            this.toasts.warning(
+              $localize`:@@account.profile.email-change-unconfirmed:The new address could not be confirmed`,
+              {
+                description: $localize`:@@account.profile.email-change-unconfirmed-text:Check your address in a moment. If it did not change, ask for a new code.`,
+              },
+            );
+            return undefined;
           case 'failed':
             this.toasts.error(
               $localize`:@@account.profile.email-change-failed:The address could not be changed`,
@@ -669,6 +686,21 @@ export class EmailChangeDialog {
     if (this.open() && this.step() === 'code' && this.codeForm.code().invalid()) {
       this.codeForm.code().focusBoundControl();
     }
+  }
+
+  /**
+   * Method showCodeStep
+   *
+   * @description
+   * Shows the second step, empty, starts the countdown and focuses the code field.
+   */
+  private showCodeStep(): void {
+    this.codeForm().reset({ code: '' });
+    this.step.set('code');
+    this.startTicker();
+    this.focusLater((): void => {
+      this.codeForm.code().focusBoundControl();
+    });
   }
 
   /**

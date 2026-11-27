@@ -64,6 +64,44 @@ const AVATAR_TYPES: readonly string[] = ['image/png', 'image/jpeg', 'image/webp'
 const MAX_AVATAR_BYTES: number = 5 * 1024 * 1024;
 
 /**
+ * Constant RECHECK_DELAYS
+ *
+ * @description
+ * When a write whose answer was lost is checked, in milliseconds after the previous check: at
+ * once, then 2, 4 and 8 s later, since the write may still land after the first reread.
+ *
+ * @type {readonly number[]}
+ */
+const RECHECK_DELAYS: readonly number[] = [0, 2000, 4000, 8000];
+
+/**
+ * Type Settlement
+ *
+ * @description
+ * What the rereads after a lost answer showed: `held` once the account holds the change;
+ * `not-held` when it was read but never held it; `unread` when it could not be read at all;
+ * `cancelled` when the account or the page changed meanwhile.
+ *
+ * @type {'held' | 'not-held' | 'unread' | 'cancelled'}
+ */
+type Settlement = 'held' | 'not-held' | 'unread' | 'cancelled';
+
+/**
+ * Function pause
+ *
+ * @description
+ * Waits before the next check.
+ *
+ * @param {number} milliseconds - The wait.
+ * @returns {Promise<void>} Resolves once it elapsed.
+ */
+function pause(milliseconds: number): Promise<void> {
+  return new Promise<void>((resolve: () => void) => {
+    setTimeout(resolve, milliseconds);
+  });
+}
+
+/**
  * Type AvatarChange
  *
  * @description
@@ -219,6 +257,17 @@ interface ProfileStoreInstance {
   readonly avatarUrl: Signal<string | null>;
 
   /**
+   * Property avatarFailed
+   *
+   * @description
+   * Whether the image of the account's photo could not be read; `retryAvatar()` reads it again.
+   *
+   * @type {Signal<boolean>}
+   * @readonly
+   */
+  readonly avatarFailed: Signal<boolean>;
+
+  /**
    * Property saving
    *
    * @description
@@ -301,11 +350,19 @@ interface ProfileStoreInstance {
    * Method sent
    *
    * @description
-   * Waits for the save on its way to settle; resolves at once when none is.
+   * Waits for the save or the photo change on its way to settle; resolves at once when none is.
    *
    * @returns {Promise<void>} Settles once nothing is on its way.
    */
   sent(): Promise<void>;
+
+  /**
+   * Method retryAvatar
+   *
+   * @description
+   * Reads the image of the photo again after a failed read.
+   */
+  retryAvatar(): void;
 
   /**
    * Method save
@@ -419,14 +476,16 @@ function avatarOutcomeOf(error: unknown): AvatarOutcome {
  * Function isUncertainTransfer
  *
  * @description
- * Whether the transfer to storage ended without an answer (status 0): storage may have received
- * the image, so the contract asks to try publishing the same upload before giving up.
+ * Whether the transfer to storage ended without telling its outcome (no answer, a timeout `408` or
+ * a server failure `5xx`): storage may have received the image, so the contract asks to try
+ * publishing the same upload before giving up.
  *
  * @param {unknown} error - The transfer's failure.
  * @returns {boolean} True when the outcome is unknown.
  */
 function isUncertainTransfer(error: unknown): boolean {
-  return readProblem(error)?.status === 0;
+  const status: number | undefined = readProblem(error)?.status;
+  return status === 0 || status === 408 || (status !== undefined && status >= 500);
 }
 
 /**
@@ -498,9 +557,11 @@ function createProfileStore(): Type<ProfileStoreInstance> {
           return shown.avatarId === null ? undefined : `${shown.id}:${shown.avatarId}`;
         },
         loader: async ({
+          params,
           abortSignal,
         }: ResourceLoaderParams<string | undefined>): Promise<Blob> => {
-          const image: Blob = await api.avatar(abortSignal);
+          // The key is `<account id>:<avatar id>`; neither holds a colon.
+          const image: Blob = await api.avatar(params.slice(0, params.indexOf(':')), abortSignal);
           abortSignal.throwIfAborted();
           return image;
         },
@@ -534,6 +595,10 @@ function createProfileStore(): Type<ProfileStoreInstance> {
       current: (): AccountProfile | null =>
         store.profile.hasValue() ? store.profile.value() : null,
       refreshFailed: (): boolean => store.refreshFailedFor() === workspace.user().id,
+      avatarFailed: (): boolean =>
+        store.profile.hasValue() &&
+        store.profile.value().avatarId !== null &&
+        store.avatar.status() === 'error',
     })),
     withMethods(
       (
@@ -576,6 +641,43 @@ function createProfileStore(): Type<ProfileStoreInstance> {
             return null;
           }
         };
+        // Checks a write whose answer was lost: reads the account at once, then 2, 4 and 8 s later,
+        // until it holds the change. Each read shows the account it brings; when none could be
+        // read, the page shows that it could not be refreshed.
+        const settle: (
+          userId: string,
+          stillWanted: () => boolean,
+          held: (profile: AccountProfile) => boolean,
+        ) => Promise<Settlement> = async (
+          userId: string,
+          stillWanted: () => boolean,
+          held: (profile: AccountProfile) => boolean,
+        ): Promise<Settlement> => {
+          let read: boolean = false;
+          for (const delay of RECHECK_DELAYS) {
+            if (delay > 0) await pause(delay);
+            if (!stillWanted()) return 'cancelled';
+            try {
+              const latest: AccountProfile = await api.current(userId);
+              if (!stillWanted()) return 'cancelled';
+              confirm(latest);
+              read = true;
+              if (held(latest)) return 'held';
+            } catch {
+              if (!stillWanted()) return 'cancelled';
+            }
+          }
+          if (!read) patchState(store, { refreshFailedFor: userId });
+          return read ? 'not-held' : 'unread';
+        };
+        // Keeps a write on its way for `sent()`.
+        const track: <T>(write: Promise<T>) => Promise<T> = <T>(write: Promise<T>): Promise<T> => {
+          pending = write;
+          void write.finally((): void => {
+            if (pending === write) pending = null;
+          });
+          return write;
+        };
         const idle: () => boolean = (): boolean =>
           !store.saving() && store.avatarChange() === null && !store.deleting();
 
@@ -612,10 +714,14 @@ function createProfileStore(): Type<ProfileStoreInstance> {
               }
             }
             if (isUnknownOutcome(error)) {
-              const latest: AccountProfile | null = await refresh(current.id, stillWanted);
-              if (!stillWanted()) return { outcome: 'cancelled' };
-              if (latest === null) return { outcome: 'unreconciled' };
-              return holds(latest, change) ? { outcome: 'saved' } : { outcome: 'failed' };
+              const settled: Settlement = await settle(
+                current.id,
+                stillWanted,
+                (latest: AccountProfile): boolean => holds(latest, change),
+              );
+              if (settled === 'held') return { outcome: 'saved' };
+              if (settled === 'not-held') return { outcome: 'unconfirmed' };
+              return settled === 'unread' ? { outcome: 'unreconciled' } : { outcome: 'cancelled' };
             }
             return { outcome: 'failed' };
           } finally {
@@ -640,6 +746,28 @@ function createProfileStore(): Type<ProfileStoreInstance> {
           if (!stillWanted()) return 'cancelled';
           return latest === null ? 'unreconciled' : 'outdated';
         };
+        // Ends a publication or a removal whose answer was lost: done once the account shows
+        // another photo reference than the one before.
+        const lostAvatar: (
+          outcome: 'updated' | 'removed',
+          before: string | null,
+          userId: string,
+          stillWanted: () => boolean,
+        ) => Promise<AvatarOutcome> = async (
+          outcome: 'updated' | 'removed',
+          before: string | null,
+          userId: string,
+          stillWanted: () => boolean,
+        ): Promise<AvatarOutcome> => {
+          const settled: Settlement = await settle(
+            userId,
+            stillWanted,
+            (latest: AccountProfile): boolean => latest.avatarId !== before,
+          );
+          if (settled === 'held') return outcome;
+          if (settled === 'not-held') return 'unconfirmed';
+          return settled === 'unread' ? 'unreconciled' : 'cancelled';
+        };
         // Ends an applied photo change once the account is read again.
         const appliedAvatar: (
           outcome: 'updated' | 'removed',
@@ -655,6 +783,89 @@ function createProfileStore(): Type<ProfileStoreInstance> {
           return latest === null ? 'unreconciled' : outcome;
         };
 
+        // Checks a deletion whose answer was lost. A scheduled deletion revokes this session in the
+        // same step, so a session that still reads the account after the last check means none was
+        // scheduled. A session that no longer reads it proves nothing: it may have been revoked by
+        // the deletion or have ended otherwise (`401 auth.session-expired` tells neither apart),
+        // so the outcome stays unconfirmed and the person is told to sign in again to check.
+        const lostDeletion: (
+          userId: string,
+          stillWanted: () => boolean,
+        ) => Promise<DeletionResult> = async (
+          userId: string,
+          stillWanted: () => boolean,
+        ): Promise<DeletionResult> => {
+          let readable: boolean = false;
+          for (const delay of RECHECK_DELAYS) {
+            if (delay > 0) await pause(delay);
+            if (!stillWanted()) return { outcome: 'cancelled' };
+            try {
+              await api.current(userId);
+              readable = true;
+            } catch (reread: unknown) {
+              if (!stillWanted()) return { outcome: 'cancelled' };
+              readable = false;
+              if (reread instanceof AccountChangedError) return { outcome: 'unconfirmed' };
+            }
+          }
+          return readable ? { outcome: 'failed' } : { outcome: 'unconfirmed' };
+        };
+        // Reserves, sends and publishes a photo, then reads the account again.
+        const upload: (current: AccountProfile, file: File) => Promise<AvatarOutcome> = async (
+          current: AccountProfile,
+          file: File,
+        ): Promise<AvatarOutcome> => {
+          const stillWanted: () => boolean = wantedFor(current.id);
+          patchState(store, { avatarChange: 'upload' });
+          try {
+            const reserved: AvatarUpload = await api.reserveAvatar(file, current.id);
+            if (!stillWanted()) return 'cancelled';
+            try {
+              await api.sendAvatar(reserved, file);
+            } catch (error: unknown) {
+              // Storage may have the image: publishing the same upload once tells, and its
+              // refusal (`409 media.upload-not-ready` among others) ends the change.
+              if (!isUncertainTransfer(error)) throw error;
+            }
+            if (!stillWanted()) return 'cancelled';
+            try {
+              await api.publishAvatar(
+                reserved.uploadId,
+                store.current()?.version ?? current.version,
+                current.id,
+              );
+            } catch (error: unknown) {
+              if (!stillWanted() || !isUnknownOutcome(error)) throw error;
+              return await lostAvatar('updated', current.avatarId, current.id, stillWanted);
+            }
+            if (!stillWanted()) return 'cancelled';
+            return await appliedAvatar('updated', current.id, stillWanted);
+          } catch (error: unknown) {
+            return await refusedAvatar(error, current.id, stillWanted);
+          } finally {
+            patchState(store, { avatarChange: null });
+          }
+        };
+        // Removes the photo, then reads the account again.
+        const remove: (current: AccountProfile) => Promise<AvatarOutcome> = async (
+          current: AccountProfile,
+        ): Promise<AvatarOutcome> => {
+          const stillWanted: () => boolean = wantedFor(current.id);
+          patchState(store, { avatarChange: 'remove' });
+          try {
+            await api.removeAvatar(current.version, current.id);
+            if (!stillWanted()) return 'cancelled';
+            return await appliedAvatar('removed', current.id, stillWanted);
+          } catch (error: unknown) {
+            if (stillWanted() && isUnknownOutcome(error)) {
+              return await lostAvatar('removed', current.avatarId, current.id, stillWanted);
+            }
+            return await refusedAvatar(error, current.id, stillWanted);
+          } finally {
+            patchState(store, { avatarChange: null });
+          }
+        };
+
         return {
           sent(): Promise<void> {
             return pending === null
@@ -665,66 +876,33 @@ function createProfileStore(): Type<ProfileStoreInstance> {
                 );
           },
 
+          retryAvatar(): void {
+            if (store.avatarFailed()) store.avatar.reload();
+          },
+
           save(change: ProfileChange): Promise<ProfileSaveResult> {
             const current: AccountProfile | null = store.current();
             if (current === null || !idle() || Object.keys(change).length === 0) {
               return Promise.resolve({ outcome: 'skipped' });
             }
-            const saving: Promise<ProfileSaveResult> = send(current, change);
-            pending = saving;
-            void saving.finally((): void => {
-              if (pending === saving) pending = null;
-            });
-            return saving;
+            return track(send(current, change));
           },
 
-          async uploadAvatar(file: File): Promise<AvatarOutcome> {
+          uploadAvatar(file: File): Promise<AvatarOutcome> {
             const current: AccountProfile | null = store.current();
-            if (current === null || !idle()) return 'skipped';
-            if (!AVATAR_TYPES.includes(file.type)) return 'unsupported';
-            if (file.size === 0) return 'unreadable';
-            if (file.size > MAX_AVATAR_BYTES) return 'too-large';
-            const stillWanted: () => boolean = wantedFor(current.id);
-            patchState(store, { avatarChange: 'upload' });
-            try {
-              const upload: AvatarUpload = await api.reserveAvatar(file, current.id);
-              if (!stillWanted()) return 'cancelled';
-              try {
-                await api.sendAvatar(upload, file);
-              } catch (error: unknown) {
-                // Storage may have the image: publishing the same upload once tells, and its
-                // refusal (`409 media.upload-not-ready` among others) ends the change.
-                if (!isUncertainTransfer(error)) throw error;
-              }
-              if (!stillWanted()) return 'cancelled';
-              await api.publishAvatar(
-                upload.uploadId,
-                store.current()?.version ?? current.version,
-                current.id,
-              );
-              if (!stillWanted()) return 'cancelled';
-              return await appliedAvatar('updated', current.id, stillWanted);
-            } catch (error: unknown) {
-              return await refusedAvatar(error, current.id, stillWanted);
-            } finally {
-              patchState(store, { avatarChange: null });
-            }
+            if (current === null || !idle()) return Promise.resolve('skipped');
+            if (!AVATAR_TYPES.includes(file.type)) return Promise.resolve('unsupported');
+            if (file.size === 0) return Promise.resolve('unreadable');
+            if (file.size > MAX_AVATAR_BYTES) return Promise.resolve('too-large');
+            return track(upload(current, file));
           },
 
-          async removeAvatar(): Promise<AvatarOutcome> {
+          removeAvatar(): Promise<AvatarOutcome> {
             const current: AccountProfile | null = store.current();
-            if (current === null || !idle() || current.avatarId === null) return 'skipped';
-            const stillWanted: () => boolean = wantedFor(current.id);
-            patchState(store, { avatarChange: 'remove' });
-            try {
-              await api.removeAvatar(current.version, current.id);
-              if (!stillWanted()) return 'cancelled';
-              return await appliedAvatar('removed', current.id, stillWanted);
-            } catch (error: unknown) {
-              return await refusedAvatar(error, current.id, stillWanted);
-            } finally {
-              patchState(store, { avatarChange: null });
+            if (current === null || !idle() || current.avatarId === null) {
+              return Promise.resolve('skipped');
             }
+            return track(remove(current));
           },
 
           async retryRefresh(): Promise<boolean> {
@@ -800,10 +978,15 @@ function createProfileStore(): Type<ProfileStoreInstance> {
               }
               if (hasProblemCode(error, 'auth.email-taken')) return 'taken';
               if (isUnknownOutcome(error)) {
-                // The address may have changed: the account read again tells.
-                const latest: AccountProfile | null = await refresh(current.id, stillWanted);
-                if (!stillWanted()) return 'cancelled';
-                return latest?.email.toLowerCase() === email.toLowerCase() ? 'confirmed' : 'failed';
+                // The address may have changed, or still change: the account read again tells.
+                const settled: Settlement = await settle(
+                  current.id,
+                  stillWanted,
+                  (latest: AccountProfile): boolean =>
+                    latest.email.toLowerCase() === email.toLowerCase(),
+                );
+                if (settled === 'held') return 'confirmed';
+                return settled === 'cancelled' ? 'cancelled' : 'unconfirmed';
               }
               return 'failed';
             } finally {
@@ -816,7 +999,9 @@ function createProfileStore(): Type<ProfileStoreInstance> {
             if (current === null) return null;
             const stillWanted: () => boolean = wantedFor(current.id);
             try {
-              const organizations: readonly MyOrganization[] = await api.myOrganizations();
+              const organizations: readonly MyOrganization[] = await api.myOrganizations(
+                current.id,
+              );
               return stillWanted() ? organizations : null;
             } catch {
               return null;
@@ -850,17 +1035,7 @@ function createProfileStore(): Type<ProfileStoreInstance> {
                   organizationIds: api.ownedOrganizationIds(error),
                 };
               }
-              if (isUnknownOutcome(error)) {
-                // A scheduled deletion revokes this session: the account no longer reads.
-                try {
-                  await api.current(current.id);
-                } catch (reread: unknown) {
-                  if (reread instanceof AccountChangedError && stillWanted()) {
-                    patchState(store, { deleted: true });
-                    return { outcome: 'scheduled' };
-                  }
-                }
-              }
+              if (isUnknownOutcome(error)) return await lostDeletion(current.id, stillWanted);
               return { outcome: 'failed' };
             } finally {
               patchState(store, { deleting: false });
@@ -889,22 +1064,29 @@ function createProfileStore(): Type<ProfileStoreInstance> {
  *
  * A save sends only what changed, from the version read (`If-Match`). A photo change reserves an
  * upload, sends the image to its signed destination and publishes it (a transfer that ended
- * without an answer publishes the same upload once before failing), or removes the photo, each
- * from the account's version, then reads the account again for its new reference and version. One
- * write runs at a time: a save, a photo change or the deletion started while another runs is
- * skipped, and a skipped save leaves `sent()` waiting for the one on its way. Every write is bound
- * to the account shown when it starts and to the page: once either changes it sends nothing more,
- * drops any late answer and ends `cancelled`; the data access also checks, before sending, that
- * the session still belongs to that account. A stale version (`412 request.version-mismatch`)
- * reads the account again before ending `outdated`; a write whose outcome is unknown (no answer, a
- * timeout or a `5xx`) reads it again and ends `saved` (or `confirmed` for a new address) when it
- * holds the change. A reread after a write that fails never reaches the error boundary: the last
- * confirmed account stays, `refreshFailed` holds until a read or a write confirms it, and
- * `retryRefresh()` reads it again.
+ * without telling its outcome, no answer, a `408` or a `5xx`, publishes the same upload once
+ * before failing), or removes the photo, each from the account's version, then reads the account
+ * again for its new reference and version. A failed read of the image sets `avatarFailed`, and
+ * `retryAvatar()` reads it again. One write runs at a time: a save, a photo change or the deletion
+ * started while another runs is skipped, and `sent()` waits for the save or the photo change on
+ * its way. Every write is bound to the account shown when it starts and to the page: once either
+ * changes it sends nothing more, drops any late answer and ends `cancelled`; the data access also
+ * checks, before sending, that the session still belongs to that account. A stale version
+ * (`412 request.version-mismatch`) reads the account again before ending `outdated`.
+ *
+ * A write whose answer was lost (no answer, a `408` or a `5xx`: a save, the photo's publication or
+ * removal, the address confirmation) may still land after a first reread, so the account is read
+ * at once, then 2, 4 and 8 s later: the write is done once the account holds it (`saved`,
+ * `updated`, `removed`, `confirmed`), and `unconfirmed` when it never does. When no reread
+ * succeeds the write ends `unreconciled`: the last confirmed account stays and `refreshFailed`
+ * holds until a read or a write confirms it; `retryRefresh()` reads it again. A reread never
+ * reaches the error boundary.
  *
  * The e-mail change request and the deletion run through `ReauthenticationService`; a closed
- * reauthentication ends `cancelled`. A deletion whose answer is lost counts as scheduled when the
- * account no longer reads (the scheduling revokes the session).
+ * reauthentication ends `cancelled`. Only the gateway's answer counts a deletion as `scheduled`:
+ * when its answer is lost, an account the session still reads after the last reread ends
+ * `failed`, and a session that no longer reads it (revoked by the deletion, or ended otherwise:
+ * the contract's `401 auth.session-expired` tells neither apart) ends `unconfirmed`.
  *
  * @type {ReturnType<typeof createProfileStore>}
  */

@@ -109,7 +109,7 @@ function submit(fixture: ComponentFixture<Host>): void {
 
 describe('EmailChangeDialog', () => {
   let store: { emailPending: Signal<boolean>; requestEmailChange: Mock; confirmEmailChange: Mock };
-  let toasts: { success: Mock; error: Mock };
+  let toasts: { success: Mock; error: Mock; warning: Mock };
   let fixture: ComponentFixture<Host>;
 
   beforeEach(async () => {
@@ -123,7 +123,7 @@ describe('EmailChangeDialog', () => {
       ),
       confirmEmailChange: vi.fn(() => Promise.resolve('confirmed')),
     };
-    toasts = { success: vi.fn(), error: vi.fn() };
+    toasts = { success: vi.fn(), error: vi.fn(), warning: vi.fn() };
     TestBed.configureTestingModule({
       providers: [
         provideCadenwayIcons(),
@@ -234,5 +234,60 @@ describe('EmailChangeDialog', () => {
     expect((byTestId(fixture, 'email-change-address') as HTMLInputElement).value).toBe(
       'camille@ateliernord.fr',
     );
+  });
+
+  it('forgets the code typed once the dialog closes', async () => {
+    typeAddress(fixture, 'camille@ateliernord.fr');
+    submit(fixture);
+    await expect.poll(() => byTestId(fixture, 'email-change-sent-to')).not.toBeNull();
+    typeCode(fixture, '731406');
+
+    byTestId(fixture, 'email-change-cancel')?.click();
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.componentInstance.dialog().open.set(true);
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    await expect
+      .poll(() => (document.getElementById('email-change-code') as HTMLInputElement | null)?.value)
+      .toBe('');
+  });
+
+  it('takes back the code step when the same address is throttled', async () => {
+    typeAddress(fixture, 'camille@ateliernord.fr');
+    submit(fixture);
+    await expect.poll(() => byTestId(fixture, 'email-change-back')).not.toBeNull();
+    byTestId(fixture, 'email-change-back')?.click();
+    fixture.detectChanges();
+    store.requestEmailChange.mockResolvedValueOnce({
+      outcome: 'refused',
+      reason: 'throttled',
+      resendAvailableAt: Date.now() + 45_000,
+    });
+
+    submit(fixture);
+
+    await expect
+      .poll(() => byTestId(fixture, 'email-change-sent-to')?.textContent)
+      .toContain('Code sent to camille@ateliernord.fr');
+    expect(byTestId(fixture, 'email-change-resend')?.textContent).toMatch(
+      /Resend the code in 0:4\d/u,
+    );
+    expect(byTestId(fixture, 'email-change-address-error')).toBeNull();
+  });
+
+  it('warns when a lost confirmation cannot be confirmed and keeps the code step', async () => {
+    store.confirmEmailChange.mockResolvedValueOnce('unconfirmed');
+    typeAddress(fixture, 'camille@ateliernord.fr');
+    submit(fixture);
+    await expect.poll(() => byTestId(fixture, 'email-change-sent-to')).not.toBeNull();
+    typeCode(fixture, '731406');
+
+    submit(fixture);
+
+    await expect.poll(() => toasts.warning.mock.calls.length).toBe(1);
+    expect(toasts.warning.mock.calls[0]?.[0]).toBe('The new address could not be confirmed');
+    expect(byTestId(fixture, 'email-change-sent-to')).not.toBeNull();
   });
 });

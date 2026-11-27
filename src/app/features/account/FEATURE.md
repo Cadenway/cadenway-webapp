@@ -199,10 +199,11 @@ parent provides the English texts of `cw-password-strength` and `cw-input-otp` t
   (lines 226-258, gap B3) are not rendered.
 - The read of the account is the primary read, keyed by `WORKSPACE_CONTEXT`'s user; its failure
   reaches the route's error boundary. It checks, under Auth's shared session lock, that the
-  session still holds that account. The photo is a secondary read keyed by
-  `<account id>:<avatar id>`; its object URL is revoked once replaced, as soon as the account has
-  no photo, and with the page; without a photo, or when its image cannot be read, the round tile
-  shows the initials of the saved name.
+  session still holds that account; so do the photo and the organizations reads. The photo is a
+  secondary read keyed by `<account id>:<avatar id>`; its object URL is revoked once replaced, as
+  soon as the account has no photo, and with the page; without a photo, or when its image cannot
+  be read, the round tile shows the initials of the saved name, and a failed read shows
+  `The photo could not be loaded.` with `Retry`, which reads it again.
 - The draft is kept apart from the saved account it started from. When a read brings a newer
   account (after a photo change, a stale version, a confirmed address), each field the person
   changed keeps their edit and every other field takes the new value; a field someone else
@@ -215,42 +216,59 @@ parent provides the English texts of `cw-password-strength` and `cw-input-otp` t
   120 characters, a display name of 60 at most, a job title of 120 at most, a time zone); an
   invalid submit shows the errors and focuses the first. A `400 request.invalid` issue on a field
   shows on it; `412 request.version-mismatch` reads the account again, merges and toasts the
-  conflict; a save whose answer is lost (no status, `408`, `5xx`) reads the account again and
-  counts as saved when it holds the change. A successful save, like a confirmed address, asks
-  Workspace to verify the person again (`WORKSPACE_REFRESH`), so the shell shows the new name.
+  conflict. A successful save, like a confirmed address, asks Workspace to verify the person again
+  (`WORKSPACE_REFRESH`), so the shell shows the new name.
+- A write whose answer is lost (no status, `408`, `5xx`: a save, the photo's publication or
+  removal, the address confirmation) may still land after a first reread, so the account is read
+  at once, then 2, 4 and 8 s later, and the write counts as done once the account holds it (for the
+  photo, once its reference changed). When none of the rereads holds it, the outcome stays
+  unconfirmed: a save keeps the draft unsaved with `Your change could not be confirmed.`, a photo
+  change and an address confirmation toast that they could not be confirmed; nothing reports a
+  failure. When no reread succeeds, the refresh alert shows.
 - `Time zone` is a searchable `cw-combobox` of every IANA zone the browser knows (plus the saved
-  one), each labelled with its current offset as the mockup writes it (`Europe/Paris (UTC+1)`).
+  one, and `UTC`, which some browsers leave out), each labelled with its current offset as the
+  mockup writes it (`Europe/Paris (UTC+1)`).
   The address shows read-only with a static `Verified` badge: the contract has no verification
   flag, and an unverified address cannot sign in.
 - The photo applies at once: a PNG, JPEG or WebP of 1 byte to 5 MiB is reserved
   (`Idempotency-Key`), sent to its signed destination with its fields first, then published with
-  `If-Match`; a transfer that ends without an answer publishes the same upload once before
-  failing. `Remove` deletes it with `If-Match`. Each change then reads the account again. Other
+  `If-Match`; a transfer that ends without telling its outcome (no status, `408`, `5xx`) publishes
+  the same upload once before failing. `Remove` deletes it with `If-Match`. Each change then reads the account again. Other
   types, an empty or too large file and an image storage refuses toast why; once a change ended,
   the file input takes the focus.
 - One write runs at a time (a save, a photo change, the deletion). Every write is bound to the
   account shown when it starts and to the page: once either changes it sends nothing more and
   drops any late answer. The data access also checks, under the exclusive session lock, that the
   session still holds the account before each write (`AccountChangedError` otherwise). Leaving
-  while a save is on its way waits for it, then leaves once saved or asks once refused.
+  while a save or a photo change is on its way waits for it (a photo change the page left would be
+  dropped), then leaves once nothing is unsaved or asks otherwise.
 - `Status and availability`: four radio cards (`Active`, `Do not disturb`, `Away`, `Invisible`)
   follow `PRESENCE.ownStatus` (nothing checked while unknown). A pick applies at once and toasts
-  `Status: <presence>`; when `ownStatus` leaves the picked presence without a new pick, an error
-  toast says the gateway refused it. While realtime is off the cards are disabled with a hint.
+  `Status: <presence>`. `PRESENCE` reports no acknowledgement of the gateway, so a refusal is
+  inferred: only when `ownStatus` returns to the presence before a pick made on this page within
+  10 s does an error toast say the gateway refused it; any other change, or one after that window
+  (another tab, the presence snapshot), ends the watch silently. While realtime is off the cards
+  are disabled with a hint.
 - `Change the address` opens `EmailChangeDialog` (lines 593-635), two steps with their bars. The
   address is checked as the mockup does (format, not the current address), then the code request
   runs through `ReauthenticationService` (a closed reauthentication keeps the step). The gateway's
   refusals show on the field: the current address, an address another account uses (kept until
-  it changes) and a throttled address. The second step takes the 3 + 3 code, counts down to the
+  it changes) and a throttled address; a throttled address the dialog's code already went to
+  shows the second step again, counting down to the gateway's `details.resendAvailableAt`. The second step takes the 3 + 3 code, counts down to the
   gateway's `resendAvailableAt` before `Resend the code` (which asks again for the same address),
   and goes back with `Use another address`. A wrong or expired code shows on the field; an address
-  taken meanwhile goes back to the first step with that error; a confirmation whose answer is lost
-  reads the account again and counts as done when it holds the new address.
+  taken meanwhile goes back to the first step with that error. Closing the dialog forgets the code
+  typed.
 - `Delete the account` first reads the person's organizations (every page; a failed read toasts
   and opens nothing), then asks through `cw-alert-dialog`: `You will leave <n> organizations.` and
   `<names> must first have another owner.` for those owned, typing the saved name. The deletion
-  runs through the reauthentication; once scheduled (or once a deletion whose answer was lost
-  leaves the account unreadable) the page lets the navigation go without asking and signs out
+  runs through the reauthentication. Only the gateway's answer counts it as scheduled: a deletion
+  whose answer is lost is read again (at once, then 2, 4 and 8 s later); an account the session
+  still reads after the last reread means none was scheduled (a failure toast), and a session that
+  no longer reads it proves nothing, since `401 auth.session-expired` covers a revoked and an
+  ended session alike: the confirmation closes and a warning asks the person to sign in again to
+  check (signing in cancels a scheduled deletion). Once scheduled, the page lets the navigation go
+  without asking and signs out
   through Auth's `SignOut`, which opens the signed-out screen (`/logged-out?reason=signed-out`,
   opened directly when the sign-out request fails). `409 account.organization-owner` closes the
   confirmation and toasts the organizations to hand over, named from `details.organizationIds`.
@@ -288,17 +306,19 @@ parent provides the English texts of `cw-password-strength` and `cw-input-otp` t
 
 Profile section (`account.profile.*`):
 
-| Unit                                                                                                                                                                   | Reason                                                                                                                        |
-| ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| `name-required`, `name-too-long`, `display-name-too-long`, `job-title-too-long`, `time-zone-invalid`                                                                   | The mockup checks no field.                                                                                                   |
-| `time-zone-placeholder`, `time-zone-search`, `time-zone-empty`, `time-zone-results`                                                                                    | Texts of the combobox brick; the mockup's select has 4 options and no search.                                                 |
-| `save-failed`, `save-failed-text`, `conflict`, `conflict-text`, `photo-conflict-text`                                                                                  | The mockup draws no refused or overtaken save.                                                                                |
-| `photo-too-large`, `photo-too-large-text`, `photo-invalid`, `photo-invalid-text`, `photo-failed`, `photo-failed-text`                                                  | Limits of the contract (`profile-media.yaml`); the mockup draws no refused upload.                                            |
-| `refresh-failed`, `refresh-retry`                                                                                                                                      | The mockup draws no failed reread after a write.                                                                              |
-| `status-failed`, `status-failed-text`, `status-unavailable`                                                                                                            | The mockup draws no refused presence and no state without realtime.                                                           |
-| `email-taken`, `email-throttled`, `code-required`, `code-wrong`, `code-send-failed`, `code-send-failed-text`, `email-change-failed`, `email-change-failed-text`        | Refusals of the contract (`auth.yaml`); `code-wrong` is Auth's wording of the same refusal, `email-throttled` the contract's. |
-| `email-back`                                                                                                                                                           | The mockup's line 626 wording, with an English source distinct from `email-change`.                                           |
-| `delete-leave-one`, `delete-owner-other`                                                                                                                               | The mockup's sentences for one organization left and several owned.                                                           |
-| `delete-check-failed`, `delete-check-failed-text`, `delete-owner-failed`, `delete-owner-failed-text`, `delete-owner-failed-any`, `delete-failed`, `delete-failed-text` | The mockup draws no refused deletion.                                                                                         |
-| `delete-confirm-label`                                                                                                                                                 | The brick shows the name after its label, so the end of the mockup's label (line 750) is left out.                            |
-| `loading`                                                                                                                                                              | The mockup's skeleton label (`Compte.dc.html` line 83), with this id.                                                         |
+| Unit                                                                                                                                                                            | Reason                                                                                                                        |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `name-required`, `name-too-long`, `display-name-too-long`, `job-title-too-long`, `time-zone-invalid`                                                                            | The mockup checks no field.                                                                                                   |
+| `time-zone-placeholder`, `time-zone-search`, `time-zone-empty`, `time-zone-results`                                                                                             | Texts of the combobox brick; the mockup's select has 4 options and no search.                                                 |
+| `save-failed`, `save-failed-text`, `conflict`, `conflict-text`, `photo-conflict-text`                                                                                           | The mockup draws no refused or overtaken save.                                                                                |
+| `photo-too-large`, `photo-too-large-text`, `photo-invalid`, `photo-invalid-text`, `photo-failed`, `photo-failed-text`                                                           | Limits of the contract (`profile-media.yaml`); the mockup draws no refused upload.                                            |
+| `refresh-failed`, `refresh-retry`                                                                                                                                               | The mockup draws no failed reread after a write.                                                                              |
+| `status-failed`, `status-failed-text`, `status-unavailable`                                                                                                                     | The mockup draws no refused presence and no state without realtime.                                                           |
+| `save-unconfirmed`, `photo-unconfirmed`, `photo-unconfirmed-text`, `email-change-unconfirmed`, `email-change-unconfirmed-text`, `delete-unconfirmed`, `delete-unconfirmed-text` | The mockup draws no write whose answer was lost.                                                                              |
+| `photo-load-failed`, `photo-retry`                                                                                                                                              | The mockup draws no failed read of the photo; `Retry` is the mockup's word.                                                   |
+| `email-taken`, `email-throttled`, `code-required`, `code-wrong`, `code-send-failed`, `code-send-failed-text`, `email-change-failed`, `email-change-failed-text`                 | Refusals of the contract (`auth.yaml`); `code-wrong` is Auth's wording of the same refusal, `email-throttled` the contract's. |
+| `email-back`                                                                                                                                                                    | The mockup's line 626 wording, with an English source distinct from `email-change`.                                           |
+| `delete-leave-one`, `delete-owner-other`                                                                                                                                        | The mockup's sentences for one organization left and several owned.                                                           |
+| `delete-check-failed`, `delete-check-failed-text`, `delete-owner-failed`, `delete-owner-failed-text`, `delete-owner-failed-any`, `delete-failed`, `delete-failed-text`          | The mockup draws no refused deletion.                                                                                         |
+| `delete-confirm-label`                                                                                                                                                          | The brick shows the name after its label, so the end of the mockup's label (line 750) is left out.                            |
+| `loading`                                                                                                                                                                       | The mockup's skeleton label (`Compte.dc.html` line 83), with this id.                                                         |

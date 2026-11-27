@@ -54,8 +54,10 @@
           [initials]="profile.initials"
           [busy]="store.avatarChange()"
           [disabled]="store.saving() || store.deleting()"
+          [failed]="store.avatarFailed()"
           (picked)="pickPhoto($event)"
           (removed)="removePhoto()"
+          (retried)="store.retryAvatar()"
         />
       </cw-card-content>
     </cw-card>
@@ -68,6 +70,16 @@
           </h2>
         </cw-card-title>
       </cw-card-header>
+      @if (saveUnconfirmed()) {
+        <cw-card-content>
+          <cw-alert role="alert" data-testid="profile-save-unconfirmed">
+            <cw-alert-description i18n="@@account.profile.save-unconfirmed"
+              >Your change could not be confirmed. It may still be applied: your edits are kept,
+              check your profile in a moment and save again if needed.</cw-alert-description
+            >
+          </cw-alert>
+        </cw-card-content>
+      }
       <cw-profile-form
         [form]="profileForm"
         [email]="profile.email"

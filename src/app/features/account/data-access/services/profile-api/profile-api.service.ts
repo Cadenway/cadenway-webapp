@@ -148,23 +148,11 @@ export class ProfileApi {
    * @throws {AccountChangedError} When the session belongs to another account, or to none.
    */
   public async current(userId: string, signal?: AbortSignal): Promise<AccountProfile> {
-    signal?.throwIfAborted();
-    const aborted: Observable<Event> = signal === undefined ? NEVER : fromEvent(signal, 'abort');
-    const profile: AccountProfile | null = await firstValueFrom(
-      withSessionLock(
-        () =>
-          defer(async (): Promise<AccountProfile> => {
-            const user: CurrentUser = await this.sessionUser();
-            if (user.id !== userId) throw new AccountChangedError();
-            return toAccountProfile(user);
-          }),
-        'shared',
-      ).pipe(takeUntil(aborted)),
-      { defaultValue: null },
+    return this.boundRead(
+      userId,
+      (user: CurrentUser): Promise<AccountProfile> => Promise.resolve(toAccountProfile(user)),
+      signal,
     );
-    signal?.throwIfAborted();
-    if (profile === null) throw new Error('The account read ended without an answer.');
-    return profile;
   }
 
   /**
@@ -238,22 +226,27 @@ export class ProfileApi {
    *
    * @description
    * Reads the image of the current photo, a PNG whatever was uploaded; `404 media.not-found`
-   * without one. Aborting the signal cancels the request, and the promise rejects with the
-   * signal's reason.
+   * without one. Like `current`, it runs under the shared session lock once the session is
+   * checked to hold the account. Aborting the signal cancels the request, and the promise rejects
+   * with the signal's reason.
    *
+   * @param {string} userId - The account whose photo is read.
    * @param {AbortSignal} [signal] - Cancels the read.
    * @returns {Promise<Blob>} The image.
+   * @throws {AccountChangedError} When the session belongs to another account, or to none.
    */
-  public async avatar(signal?: AbortSignal): Promise<Blob> {
-    signal?.throwIfAborted();
-    const aborted: Observable<Event> = signal === undefined ? NEVER : fromEvent(signal, 'abort');
-    const image: Blob | null = await firstValueFrom(
-      this.media.getAvatar().pipe(takeUntil(aborted)),
-      { defaultValue: null },
+  public async avatar(userId: string, signal?: AbortSignal): Promise<Blob> {
+    return this.boundRead(
+      userId,
+      async (): Promise<Blob> => {
+        const image: Blob | null = await firstValueFrom(this.media.getAvatar(), {
+          defaultValue: null,
+        });
+        if (image === null) throw new Error('The photo read ended without an image.');
+        return image;
+      },
+      signal,
     );
-    signal?.throwIfAborted();
-    if (image === null) throw new Error('The photo read ended without an image.');
-    return image;
   }
 
   /**
@@ -385,12 +378,28 @@ export class ProfileApi {
    * Method myOrganizations
    *
    * @description
-   * Reads every organization of the person, following the cursor.
+   * Reads every organization of the person, following the cursor, under the shared session lock
+   * once the session is checked to hold the account.
+   *
+   * @param {string} userId - The account whose organizations are read.
+   * @returns {Promise<readonly MyOrganization[]>} The organizations, in the gateway's order.
+   * @throws {AccountChangedError} When the session belongs to another account, or to none.
+   * @throws {Error} When the cursor does not end within `MAX_ORGANIZATION_PAGES` pages or repeats.
+   */
+  public async myOrganizations(userId: string): Promise<readonly MyOrganization[]> {
+    return this.boundRead(userId, () => this.organizationPages());
+  }
+
+  /**
+   * Method organizationPages
+   *
+   * @description
+   * Reads every page of the person's organizations, following the cursor.
    *
    * @returns {Promise<readonly MyOrganization[]>} The organizations, in the gateway's order.
    * @throws {Error} When the cursor does not end within `MAX_ORGANIZATION_PAGES` pages or repeats.
    */
-  public async myOrganizations(): Promise<readonly MyOrganization[]> {
+  private async organizationPages(): Promise<readonly MyOrganization[]> {
     const organizations: MyOrganization[] = [];
     const seen: Set<string> = new Set<string>();
     let cursor: string | undefined;
@@ -406,6 +415,45 @@ export class ProfileApi {
       cursor = next;
     }
     throw new Error('The organizations could not be read to the end.');
+  }
+
+  /**
+   * Method boundRead
+   *
+   * @description
+   * Runs a read under the shared session lock once the session is checked to belong to the
+   * account it is made for. Aborting the signal cancels it, and the promise rejects with the
+   * signal's reason.
+   *
+   * @template T
+   * @param {string} userId - The account the read is made for.
+   * @param {(user: CurrentUser) => Promise<T>} read - The request, given the session's account.
+   * @param {AbortSignal} [signal] - Cancels the read.
+   * @returns {Promise<T>} The request's result.
+   * @throws {AccountChangedError} When the session belongs to another account, or to none.
+   */
+  private async boundRead<T>(
+    userId: string,
+    read: (user: CurrentUser) => Promise<T>,
+    signal?: AbortSignal,
+  ): Promise<T> {
+    signal?.throwIfAborted();
+    const aborted: Observable<Event> = signal === undefined ? NEVER : fromEvent(signal, 'abort');
+    const answer: { readonly value: T } | null = await firstValueFrom(
+      withSessionLock(
+        () =>
+          defer(async (): Promise<{ readonly value: T }> => {
+            const user: CurrentUser = await this.sessionUser();
+            if (user.id !== userId) throw new AccountChangedError();
+            return { value: await read(user) };
+          }),
+        'shared',
+      ).pipe(takeUntil(aborted)),
+      { defaultValue: null },
+    );
+    signal?.throwIfAborted();
+    if (answer === null) throw new Error('The read ended without an answer.');
+    return answer.value;
   }
 
   /**
