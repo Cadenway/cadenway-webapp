@@ -1,3 +1,4 @@
+import { HttpErrorResponse } from '@angular/common/http';
 import { inject, Service } from '@angular/core';
 import {
   type InvitationBatchResult,
@@ -6,6 +7,8 @@ import {
   type OnboardingState,
 } from '@cadenway/api-client';
 import { firstValueFrom, fromEvent, map, type Observable, takeUntil } from 'rxjs';
+
+import { type ApiProblem, OrganizationSwitchPendingError, readProblem } from '@core/api';
 
 import type {
   OnboardingChecklistChange,
@@ -22,6 +25,45 @@ import {
   toInvitationOutcome,
   toOnboardingProgress,
 } from '../../adapters/onboarding/onboarding.adapter';
+
+/**
+ * Function isDroppedOnboardingWrite
+ *
+ * @description
+ * Whether a write was dropped for the organization it was meant for: the organization pin blocked
+ * it while the session was changing organization (`OrganizationSwitchPendingError`, nothing was
+ * sent), or the gateway refused it for another session organization
+ * (`412 organization.context-changed`, nothing was applied). Neither is the person's failure, and
+ * neither may be retried or rolled back in the next organization.
+ *
+ * @param {unknown} error - The failed write.
+ * @returns {boolean} Whether the write was dropped.
+ */
+export function isDroppedOnboardingWrite(error: unknown): boolean {
+  if (error instanceof OrganizationSwitchPendingError) return true;
+  const problem: ApiProblem | null = readProblem(error);
+  return problem?.status === 412 && problem.code === 'organization.context-changed';
+}
+
+/**
+ * Function isUncertainOnboardingWrite
+ *
+ * @description
+ * Whether a failed write may still have been applied: no answer (a network failure, an abort, a
+ * client timeout or any failure that is not a gateway answer), a `408`, a `5xx`, or
+ * `409 idempotency.request-in-progress` (the same `Idempotency-Key` is still being processed). A
+ * `finish` that failed so is sent again with the same key, which replays the original answer; any
+ * other `4xx` is a definite refusal.
+ *
+ * @param {unknown} error - The failed write.
+ * @returns {boolean} Whether the outcome is unknown.
+ */
+export function isUncertainOnboardingWrite(error: unknown): boolean {
+  if (isDroppedOnboardingWrite(error)) return false;
+  if (!(error instanceof HttpErrorResponse)) return true;
+  if (error.status === 0 || error.status === 408 || error.status >= 500) return true;
+  return error.status === 409 && readProblem(error)?.code === 'idempotency.request-in-progress';
+}
 
 /**
  * Function abortable
@@ -97,9 +139,9 @@ export class OnboardingApi {
    *
    * @description
    * Reads the person's onboarding in the current organization: the initial state at version 1
-   * before the first write.
+   * before the first write. Aborting the signal gives the read up and rejects.
    *
-   * @param {AbortSignal} [signal] - Abort signal of the caller.
+   * @param {AbortSignal} [signal] - Abort signal of the caller (an organization switch).
    * @returns {Promise<OnboardingProgress>} The progress.
    */
   public async get(signal?: AbortSignal): Promise<OnboardingProgress> {

@@ -1,10 +1,31 @@
+import { HttpErrorResponse } from '@angular/common/http';
 import { TestBed } from '@angular/core/testing';
 import { InvitationsService, MyTasksService, type OnboardingState } from '@cadenway/api-client';
 import { of } from 'rxjs';
 import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 
+import { OrganizationSwitchPendingError } from '@core/api';
+
 import type { OnboardingProgress } from '../../../models/onboarding/onboarding.interface';
-import { OnboardingApi } from './onboarding-api.service';
+import {
+  isDroppedOnboardingWrite,
+  isUncertainOnboardingWrite,
+  OnboardingApi,
+} from './onboarding-api.service';
+
+/**
+ * Function refusal
+ *
+ * @description
+ * A gateway answer with a status and an optional problem code.
+ *
+ * @param {number} status - HTTP status.
+ * @param {string} [code] - Problem code.
+ * @returns {HttpErrorResponse} The answer.
+ */
+function refusal(status: number, code?: string): HttpErrorResponse {
+  return new HttpErrorResponse({ status, error: code === undefined ? null : { code } });
+}
 
 /**
  * Function state
@@ -113,5 +134,41 @@ describe('OnboardingApi', () => {
       emails: ['ines.robert@ateliernord.fr', 'hugo.martin@ateliernord.fr'],
       role: 'member',
     });
+  });
+
+  it('passes the abort signal to the read', async () => {
+    const controller: AbortController = new AbortController();
+    controller.abort();
+
+    await expect(api.get(controller.signal)).rejects.toBeDefined();
+  });
+});
+
+describe('onboarding write outcomes', () => {
+  it('drops a write blocked by a switch or refused for another session organization', () => {
+    expect(isDroppedOnboardingWrite(new OrganizationSwitchPendingError())).toBe(true);
+    expect(isDroppedOnboardingWrite(refusal(412, 'organization.context-changed'))).toBe(true);
+    expect(isDroppedOnboardingWrite(refusal(412, 'request.version-mismatch'))).toBe(false);
+    expect(isUncertainOnboardingWrite(new OrganizationSwitchPendingError())).toBe(false);
+  });
+
+  it('calls a lost answer, a server failure or a key still in progress uncertain', () => {
+    for (const error of [
+      new Error('timeout'),
+      refusal(0),
+      refusal(408),
+      refusal(503),
+      refusal(409, 'idempotency.request-in-progress'),
+    ]) {
+      expect(isUncertainOnboardingWrite(error)).toBe(true);
+    }
+    for (const error of [
+      refusal(409, 'space.prefix-taken'),
+      refusal(409, 'onboarding.wizard-closed'),
+      refusal(403, 'organization.role-forbidden'),
+      refusal(422, 'idempotency.key-reused'),
+    ]) {
+      expect(isUncertainOnboardingWrite(error)).toBe(false);
+    }
   });
 });

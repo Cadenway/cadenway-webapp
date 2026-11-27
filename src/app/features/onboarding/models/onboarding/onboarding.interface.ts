@@ -75,7 +75,8 @@ export interface OnboardingWizard {
    * Property color
    *
    * @description
-   * The space color chosen; an unknown color reads as `violet`, the assistant's default.
+   * The space color chosen (`violet` until another is saved); a color a later contract adds reads
+   * as `gris`, which the assistant offers no swatch for.
    *
    * @type {LookColor}
    * @readonly

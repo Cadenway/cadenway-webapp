@@ -19,14 +19,14 @@ import type {
 import type { OnboardingWizardStatus } from '../../../models/onboarding/onboarding.type';
 
 /**
- * Constant DEFAULT_COLOR
+ * Constant UNKNOWN_COLOR
  *
  * @description
- * Color the contract gives an onboarding space when none is chosen, used for an unknown value.
+ * How a color a later contract adds shows (`LookColorValue`: an unknown value shows as `gris`).
  *
  * @type {LookColor}
  */
-const DEFAULT_COLOR: LookColor = 'violet';
+const UNKNOWN_COLOR: LookColor = 'gris';
 
 /**
  * Constant LOOK_COLORS
@@ -70,13 +70,13 @@ function toWizardStatus(value: string): OnboardingWizardStatus {
  * Function toLookColor
  *
  * @description
- * Reads the draft color, `violet` for an unknown value.
+ * Reads the draft color, `gris` for an unknown value, as the contract asks.
  *
  * @param {string} value - Gateway color.
  * @returns {LookColor} The color.
  */
 function toLookColor(value: string): LookColor {
-  return LOOK_COLORS.has(value) ? (value as LookColor) : DEFAULT_COLOR;
+  return LOOK_COLORS.has(value) ? (value as LookColor) : UNKNOWN_COLOR;
 }
 
 /**

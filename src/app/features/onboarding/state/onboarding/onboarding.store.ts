@@ -16,20 +16,25 @@ import {
   type WorkspaceContextPort,
 } from '@features/workspace/ports/workspace-context';
 
-import { OnboardingApi } from '../../data-access/services/onboarding-api/onboarding-api.service';
+import {
+  isDroppedOnboardingWrite,
+  isUncertainOnboardingWrite,
+  OnboardingApi,
+} from '../../data-access/services/onboarding-api/onboarding-api.service';
 import type {
   OnboardingDraft,
   OnboardingProgress,
   OnboardingSpace,
 } from '../../models/onboarding/onboarding.interface';
 import type { OnboardingChecklistPresentation } from '../../models/onboarding/onboarding.type';
+import { OnboardingWriteDroppedError } from './onboarding-write-dropped.error';
 
 /**
  * Constant REREAD_CODES
  *
  * @description
- * Refusals after which the state shown is out of date: another tab finished or dismissed the
- * assistant, the checklist is not available yet, or the version moved on.
+ * Definite refusals after which the state shown is out of date: another tab finished or dismissed
+ * the assistant, the checklist is not available yet, or the version moved on.
  *
  * @type {ReadonlySet<string>}
  */
@@ -40,29 +45,117 @@ const REREAD_CODES: ReadonlySet<string> = new Set([
 ]);
 
 /**
- * Constant ORGANIZATION_CHANGED
- *
- * @description
- * Message of the error a write rejects with when the workspace changed organization before it was
- * sent: it is never sent to the new organization.
- *
- * @type {string}
- */
-const ORGANIZATION_CHANGED: string =
-  'The workspace organization changed before the write was sent.';
-
-/**
  * Function isVersionMismatch
  *
  * @description
  * Whether a failure is the stale version refusal (`412 request.version-mismatch`), not the
- * organization pin's (`412 organization.context-changed`).
+ * organization pin's (`412 organization.context-changed`, a dropped write).
  *
  * @param {ApiProblem | null} problem - The failure read.
- * @returns {boolean} Whether to read again and send once more.
+ * @returns {boolean} Whether the version was stale.
  */
 function isVersionMismatch(problem: ApiProblem | null): boolean {
   return problem?.status === 412 && problem.code === 'request.version-mismatch';
+}
+
+/**
+ * Function draftShown
+ *
+ * @description
+ * Whether a progress leaves nothing to send for a draft change: the assistant is closed (a draft
+ * would be refused), or every member the change gives already has its value.
+ *
+ * @param {OnboardingProgress} progress - The progress read.
+ * @param {OnboardingDraft} draft - The change.
+ * @returns {boolean} Whether the change is settled.
+ */
+function draftShown(progress: OnboardingProgress, draft: OnboardingDraft): boolean {
+  const wizard: OnboardingProgress['wizard'] = progress.wizard;
+  return (
+    wizard.status !== 'in-progress' ||
+    ((draft.step === undefined || draft.step === wizard.step) &&
+      (draft.preset === undefined || draft.preset === wizard.preset) &&
+      (draft.name === undefined || draft.name === wizard.name) &&
+      (draft.prefix === undefined || draft.prefix === wizard.prefix) &&
+      (draft.color === undefined || draft.color === wizard.color))
+  );
+}
+
+/**
+ * Interface OnboardingWrite
+ *
+ * @description
+ * One write of the store: how to send it, and when a progress read shows nothing left to send.
+ */
+interface OnboardingWrite {
+  // #region Properties
+  /**
+   * Property send
+   *
+   * @description
+   * Sends the write from a version.
+   *
+   * @type {(version: number) => Promise<OnboardingProgress>}
+   * @readonly
+   */
+  readonly send: (version: number) => Promise<OnboardingProgress>;
+
+  /**
+   * Property settled
+   *
+   * @description
+   * Whether a progress read shows the write applied, or makes it moot (a closed assistant, a
+   * dismissed checklist): it is then not sent again.
+   *
+   * @type {(progress: OnboardingProgress) => boolean}
+   * @readonly
+   */
+  readonly settled: (progress: OnboardingProgress) => boolean;
+
+  /**
+   * Property recovers
+   *
+   * @description
+   * Whether the store reads and sends again by itself: once after a stale version, and a read
+   * after an uncertain outcome. False for `finish`, whose caller owns the idempotency key.
+   *
+   * @type {boolean}
+   * @readonly
+   */
+  readonly recovers: boolean;
+  // #endregion
+}
+
+/**
+ * Interface PendingPresentation
+ *
+ * @description
+ * A checklist presentation shown before the gateway confirms it.
+ */
+interface PendingPresentation {
+  // #region Properties
+  /**
+   * Property value
+   *
+   * @description
+   * The presentation shown.
+   *
+   * @type {OnboardingChecklistPresentation}
+   * @readonly
+   */
+  readonly value: OnboardingChecklistPresentation;
+
+  /**
+   * Property sequence
+   *
+   * @description
+   * Number of the `setPresentation` call that showed it; only that call clears it.
+   *
+   * @type {number}
+   * @readonly
+   */
+  readonly sequence: number;
+  // #endregion
 }
 
 /**
@@ -90,10 +183,10 @@ interface OnboardingStoreState {
    * @description
    * The checklist presentation shown before the gateway confirms it, or null.
    *
-   * @type {OnboardingChecklistPresentation | null}
+   * @type {PendingPresentation | null}
    * @readonly
    */
-  readonly _presentation: OnboardingChecklistPresentation | null;
+  readonly _presentation: PendingPresentation | null;
 
   /**
    * Property _organizationId
@@ -170,15 +263,35 @@ interface OnboardingRuns {
   reads: number;
 
   /**
+   * Property presentations
+   *
+   * @description
+   * Number of the latest `setPresentation` call.
+   *
+   * @type {number}
+   */
+  presentations: number;
+
+  /**
    * Property tail
    *
    * @description
-   * The last write queued: writes are sent one after the other, each from the version the previous
-   * one answered.
+   * The last write queued in this organization: writes are sent one after the other, each from the
+   * version the previous one answered. A switch starts a new queue.
    *
    * @type {Promise<unknown>}
    */
   tail: Promise<unknown>;
+
+  /**
+   * Property reading
+   *
+   * @description
+   * Aborts the reads of this organization; a switch aborts it and starts a new one.
+   *
+   * @type {AbortController}
+   */
+  reading: AbortController;
   // #endregion
 }
 
@@ -253,12 +366,16 @@ interface OnboardingStoreInstance {
    *
    * @description
    * Saves a draft change of the assistant. After `412 request.version-mismatch` it reads the
-   * progress and sends once more; after `409 onboarding.wizard-closed` it reads the progress, then
-   * rejects.
+   * progress and sends once more, unless the read shows the change or a closed assistant. After an
+   * uncertain outcome it reads the progress and resolves when the read shows the change. After
+   * `409 onboarding.wizard-closed` it reads the progress, then rejects.
    *
    * @param {OnboardingDraft} draft - The change.
-   * @returns {Promise<OnboardingProgress>} The progress saved.
-   * @throws {unknown} The client's error, or an `Error` when the organization changed first.
+   * @returns {Promise<OnboardingProgress>} The progress saved, or read.
+   * @throws {OnboardingWriteDroppedError} When the organization changed, or the write was dropped
+   * for another session organization.
+   * @throws {unknown} The client's error otherwise (`isUncertainOnboardingWrite` tells an unknown
+   * outcome from a refusal).
    */
   saveDraft(draft: OnboardingDraft): Promise<OnboardingProgress>;
 
@@ -266,10 +383,13 @@ interface OnboardingStoreInstance {
    * Method dismiss
    *
    * @description
-   * Closes the assistant for good (`Set up later`), with the same recovery as `saveDraft`.
+   * Closes the assistant for good (`Set up later`), with the same recovery as `saveDraft`; an
+   * assistant already closed counts as done.
    *
-   * @returns {Promise<OnboardingProgress>} The progress saved.
-   * @throws {unknown} The client's error, or an `Error` when the organization changed first.
+   * @returns {Promise<OnboardingProgress>} The progress saved, or read.
+   * @throws {OnboardingWriteDroppedError} When the organization changed, or the write was dropped
+   * for another session organization.
+   * @throws {unknown} The client's error otherwise.
    */
   dismiss(): Promise<OnboardingProgress>;
 
@@ -277,14 +397,18 @@ interface OnboardingStoreInstance {
    * Method finish
    *
    * @description
-   * Provisions the first space and finishes the assistant. It never sends twice by itself: an
-   * idempotency replay can repeat a stored refusal, so after `412` or `409` it reads the progress
-   * and rejects, and the caller decides the next key and body.
+   * Provisions the first space and finishes the assistant. It never sends twice by itself: after an
+   * uncertain outcome (`isUncertainOnboardingWrite`, `409 idempotency.request-in-progress`
+   * included) it rejects at once, and the caller sends again with the same key. After `412` or
+   * `409 onboarding.wizard-closed` it reads the progress, then rejects, and the caller decides the
+   * next key and body.
    *
    * @param {OnboardingSpace} space - The space to provision.
    * @param {string} idempotencyKey - Key of this body; the same key again after an unknown outcome.
    * @returns {Promise<OnboardingProgress>} The finished progress, with its provisioning.
-   * @throws {unknown} The client's error, or an `Error` when the organization changed first.
+   * @throws {OnboardingWriteDroppedError} When the organization changed, or the write was dropped
+   * for another session organization.
+   * @throws {unknown} The client's error otherwise.
    */
   finish(space: OnboardingSpace, idempotencyKey: string): Promise<OnboardingProgress>;
 
@@ -292,13 +416,17 @@ interface OnboardingStoreInstance {
    * Method setPresentation
    *
    * @description
-   * Expands, collapses or dismisses the checklist at once, then saves it; a failure restores the
-   * confirmed presentation and rejects, for the caller's failure toast. Nothing is sent before a
-   * space is provisioned, nor when the presentation is already the one shown.
+   * Expands, collapses or dismisses the checklist at once, then saves it. A definite refusal
+   * restores the confirmed presentation and rejects, for the caller's failure toast; an uncertain
+   * outcome reads the progress and keeps the presentation when the read shows it. Nothing is sent
+   * before a space is provisioned, nor when the presentation is already the one shown; after a
+   * stale version it is not sent again when the read shows it or a dismissed checklist.
    *
    * @param {OnboardingChecklistPresentation} presentation - The presentation.
-   * @returns {Promise<void>} Resolves once saved.
-   * @throws {unknown} The client's error, or an `Error` when the organization changed first.
+   * @returns {Promise<void>} Resolves once saved, or once a read shows it.
+   * @throws {OnboardingWriteDroppedError} When the organization changed, or the write was dropped
+   * for another session organization.
+   * @throws {unknown} The client's error otherwise.
    */
   setPresentation(presentation: OnboardingChecklistPresentation): Promise<void>;
 
@@ -310,7 +438,9 @@ interface OnboardingStoreInstance {
    * provisioning. Nothing is sent when the marker is already recorded.
    *
    * @returns {Promise<void>} Resolves once recorded.
-   * @throws {unknown} The client's error, or an `Error` when the organization changed first.
+   * @throws {OnboardingWriteDroppedError} When the organization changed, or the write was dropped
+   * for another session organization.
+   * @throws {unknown} The client's error otherwise.
    */
   recordInvitation(): Promise<void>;
 
@@ -322,7 +452,9 @@ interface OnboardingStoreInstance {
    * when the marker is already recorded.
    *
    * @returns {Promise<void>} Resolves once recorded.
-   * @throws {unknown} The client's error, or an `Error` when the organization changed first.
+   * @throws {OnboardingWriteDroppedError} When the organization changed, or the write was dropped
+   * for another session organization.
+   * @throws {unknown} The client's error otherwise.
    */
   recordBoardTried(): Promise<void>;
   // #endregion
@@ -349,16 +481,22 @@ function createOnboardingStore(): Type<OnboardingStoreInstance> {
     withProps(() => {
       const api: OnboardingApi = inject(OnboardingApi);
       const workspace: WorkspaceContextPort = inject(WORKSPACE_CONTEXT);
-      const runs: OnboardingRuns = { generation: 0, reads: 0, tail: Promise.resolve() };
+      const runs: OnboardingRuns = {
+        generation: 0,
+        reads: 0,
+        presentations: 0,
+        tail: Promise.resolve(),
+        reading: new AbortController(),
+      };
       return { _api: api, _workspace: workspace, _runs: runs };
     }),
     withComputed((store) => ({
       progress: (): OnboardingProgress | null => {
         const confirmed: OnboardingProgress | null = store._confirmed();
-        const presentation: OnboardingChecklistPresentation | null = store._presentation();
-        return confirmed === null || presentation === null
+        const pending: PendingPresentation | null = store._presentation();
+        return confirmed === null || pending === null
           ? confirmed
-          : { ...confirmed, checklist: { ...confirmed.checklist, presentation } };
+          : { ...confirmed, checklist: { ...confirmed.checklist, presentation: pending.value } };
       },
       loading: (): boolean => store._confirmed() === null && store._reading(),
       failed: (): boolean =>
@@ -367,11 +505,18 @@ function createOnboardingStore(): Type<OnboardingStoreInstance> {
     withMethods((store) => {
       const runs: OnboardingRuns = store._runs;
 
+      // The workspace commits another organization synchronously (the resolver), before the
+      // `_followOrganization` effect moves the generation: compare both, so nothing is sent or
+      // applied in between.
+      const live: (generation: number) => boolean = (generation: number): boolean =>
+        generation === runs.generation &&
+        store._workspace.organization().id === store._organizationId();
+
       const accept: (incoming: OnboardingProgress, generation: number) => void = (
         incoming: OnboardingProgress,
         generation: number,
       ): void => {
-        if (generation !== runs.generation) return;
+        if (!live(generation)) return;
         const shown: OnboardingProgress | null = store._confirmed();
         if (shown !== null && incoming.version < shown.version) return;
         patchState(store, { _confirmed: incoming });
@@ -380,55 +525,85 @@ function createOnboardingStore(): Type<OnboardingStoreInstance> {
       const read: () => Promise<OnboardingProgress | null> =
         async (): Promise<OnboardingProgress | null> => {
           const generation: number = runs.generation;
+          if (!live(generation)) return null;
           runs.reads += 1;
           const sequence: number = runs.reads;
-          const latest: () => boolean = (): boolean =>
-            generation === runs.generation && sequence === runs.reads;
+          const latest: () => boolean = (): boolean => live(generation) && sequence === runs.reads;
           patchState(store, { _reading: true });
           try {
-            accept(await store._api.get(), generation);
+            accept(await store._api.get(runs.reading.signal), generation);
             if (latest()) patchState(store, { _reading: false, _readFailed: false });
           } catch (error: unknown) {
             if (latest()) patchState(store, { _reading: false, _readFailed: true });
             throw error;
           }
-          return generation === runs.generation ? store._confirmed() : null;
+          return live(generation) ? store._confirmed() : null;
         };
 
-      const write: (
-        send: (version: number) => Promise<OnboardingProgress>,
-        retryOnStale: boolean,
-      ) => Promise<OnboardingProgress> = (
-        send: (version: number) => Promise<OnboardingProgress>,
-        retryOnStale: boolean,
+      const reread: (
+        generation: number,
+        error?: unknown,
+      ) => Promise<OnboardingProgress | null> = async (
+        generation: number,
+        error?: unknown,
+      ): Promise<OnboardingProgress | null> => {
+        const fresh: OnboardingProgress | null = await read().catch((): null => null);
+        if (!live(generation)) throw new OnboardingWriteDroppedError(error);
+        return fresh;
+      };
+
+      const attempt: (
+        write: OnboardingWrite,
+        version: number,
+        generation: number,
+        mayResend: boolean,
+      ) => Promise<OnboardingProgress> = async (
+        write: OnboardingWrite,
+        version: number,
+        generation: number,
+        mayResend: boolean,
+      ): Promise<OnboardingProgress> => {
+        if (!live(generation)) throw new OnboardingWriteDroppedError();
+        let saved: OnboardingProgress;
+        try {
+          saved = await write.send(version);
+        } catch (error: unknown) {
+          if (!live(generation) || isDroppedOnboardingWrite(error)) {
+            throw new OnboardingWriteDroppedError(error);
+          }
+          if (isUncertainOnboardingWrite(error)) {
+            if (!write.recovers) throw error;
+            const fresh: OnboardingProgress | null = await reread(generation, error);
+            if (fresh !== null && write.settled(fresh)) return fresh;
+            throw error;
+          }
+          const problem: ApiProblem | null = readProblem(error);
+          if (write.recovers && mayResend && isVersionMismatch(problem)) {
+            const fresh: OnboardingProgress | null = await reread(generation, error);
+            if (fresh === null) throw error;
+            if (write.settled(fresh)) return fresh;
+            return attempt(write, fresh.version, generation, false);
+          }
+          const code: string | null = problem?.code ?? null;
+          if (code !== null && REREAD_CODES.has(code)) {
+            await reread(generation, error);
+          }
+          throw error;
+        }
+        if (!live(generation)) throw new OnboardingWriteDroppedError();
+        accept(saved, generation);
+        return saved;
+      };
+
+      const queue: (write: OnboardingWrite) => Promise<OnboardingProgress> = (
+        write: OnboardingWrite,
       ): Promise<OnboardingProgress> => {
         const generation: number = runs.generation;
         const task: () => Promise<OnboardingProgress> = async (): Promise<OnboardingProgress> => {
-          const base: OnboardingProgress | null =
-            generation === runs.generation ? (store._confirmed() ?? (await read())) : null;
-          if (base === null || generation !== runs.generation) {
-            throw new Error(ORGANIZATION_CHANGED);
-          }
-          try {
-            const saved: OnboardingProgress = await send(base.version);
-            accept(saved, generation);
-            return saved;
-          } catch (error: unknown) {
-            if (generation !== runs.generation) throw error;
-            const problem: ApiProblem | null = readProblem(error);
-            if (retryOnStale && isVersionMismatch(problem)) {
-              const fresh: OnboardingProgress | null = await read();
-              if (fresh === null) throw error;
-              const saved: OnboardingProgress = await send(fresh.version);
-              accept(saved, generation);
-              return saved;
-            }
-            const code: string | null = problem?.code ?? null;
-            if (code !== null && REREAD_CODES.has(code)) {
-              await read().catch((): null => null);
-            }
-            throw error;
-          }
+          if (!live(generation)) throw new OnboardingWriteDroppedError();
+          const base: OnboardingProgress | null = store._confirmed() ?? (await read());
+          if (base === null || !live(generation)) throw new OnboardingWriteDroppedError();
+          return attempt(write, base.version, generation, true);
         };
         const run: Promise<OnboardingProgress> = runs.tail.then(task, task);
         runs.tail = run.catch((): undefined => undefined);
@@ -439,6 +614,9 @@ function createOnboardingStore(): Type<OnboardingStoreInstance> {
         _followOrganization: signalMethod<string>((organizationId: string): void => {
           if (organizationId === store._organizationId()) return;
           runs.generation += 1;
+          runs.tail = Promise.resolve();
+          runs.reading.abort();
+          runs.reading = new AbortController();
           patchState(store, {
             _organizationId: organizationId,
             _confirmed: null,
@@ -458,54 +636,69 @@ function createOnboardingStore(): Type<OnboardingStoreInstance> {
           await read().catch((): null => null);
         },
         saveDraft(draft: OnboardingDraft): Promise<OnboardingProgress> {
-          return write(
-            (version: number): Promise<OnboardingProgress> => store._api.saveDraft(draft, version),
-            true,
-          );
+          return queue({
+            send: (version: number): Promise<OnboardingProgress> =>
+              store._api.saveDraft(draft, version),
+            settled: (progress: OnboardingProgress): boolean => draftShown(progress, draft),
+            recovers: true,
+          });
         },
         dismiss(): Promise<OnboardingProgress> {
-          return write(
-            (version: number): Promise<OnboardingProgress> => store._api.dismiss(version),
-            true,
-          );
+          return queue({
+            send: (version: number): Promise<OnboardingProgress> => store._api.dismiss(version),
+            settled: (progress: OnboardingProgress): boolean =>
+              progress.wizard.status !== 'in-progress',
+            recovers: true,
+          });
         },
         finish(space: OnboardingSpace, idempotencyKey: string): Promise<OnboardingProgress> {
-          return write(
-            (version: number): Promise<OnboardingProgress> =>
+          return queue({
+            send: (version: number): Promise<OnboardingProgress> =>
               store._api.finish(space, version, idempotencyKey),
-            false,
-          );
+            settled: (): boolean => false,
+            recovers: false,
+          });
         },
         async setPresentation(presentation: OnboardingChecklistPresentation): Promise<void> {
           const shown: OnboardingProgress | null = store.progress();
           if (!shown?.provisioning || shown.checklist.presentation === presentation) return;
-          patchState(store, { _presentation: presentation });
+          runs.presentations += 1;
+          const sequence: number = runs.presentations;
+          const generation: number = runs.generation;
+          patchState(store, { _presentation: { value: presentation, sequence } });
           try {
-            await write(
-              (version: number): Promise<OnboardingProgress> =>
+            await queue({
+              send: (version: number): Promise<OnboardingProgress> =>
                 store._api.updateChecklist({ presentation }, version),
-              true,
-            );
+              settled: (progress: OnboardingProgress): boolean =>
+                progress.checklist.presentation === presentation ||
+                progress.checklist.presentation === 'dismissed',
+              recovers: true,
+            });
           } finally {
-            if (store._presentation() === presentation) patchState(store, { _presentation: null });
+            if (live(generation) && store._presentation()?.sequence === sequence) {
+              patchState(store, { _presentation: null });
+            }
           }
         },
         async recordInvitation(): Promise<void> {
           if (store._confirmed()?.checklist.invitationSent === true) return;
-          await write(
-            (version: number): Promise<OnboardingProgress> =>
+          await queue({
+            send: (version: number): Promise<OnboardingProgress> =>
               store._api.updateChecklist({ invitationSent: true }, version),
-            true,
-          );
+            settled: (progress: OnboardingProgress): boolean => progress.checklist.invitationSent,
+            recovers: true,
+          });
         },
         async recordBoardTried(): Promise<void> {
           const shown: OnboardingProgress | null = store._confirmed();
           if (!shown?.provisioning || shown.checklist.boardTried) return;
-          await write(
-            (version: number): Promise<OnboardingProgress> =>
+          await queue({
+            send: (version: number): Promise<OnboardingProgress> =>
               store._api.updateChecklist({ boardTried: true }, version),
-            true,
-          );
+            settled: (progress: OnboardingProgress): boolean => progress.checklist.boardTried,
+            recovers: true,
+          });
         },
       };
     }),
@@ -523,11 +716,16 @@ function createOnboardingStore(): Type<OnboardingStoreInstance> {
  *
  * @description
  * The person's onboarding in the current organization, provided once on the `/:org` route by
- * `provideOnboarding()` and shared by the assistant and the getting-started checklist, so both
- * show the same version and their writes are sent one after the other, each with the `If-Match` of
- * the version the previous one answered. Nothing is read until a screen calls `load()`; an
- * organization switch drops the progress shown and the answers still under way, and reads the new
- * organization's progress when a screen had asked for it. Leaving `/:org` destroys it.
+ * `provideOnboarding()` and shared by the assistant and the getting-started checklist (both step
+ * 9 packages), so both show the same version and their writes are sent one after the other, each
+ * with the `If-Match` of the version the previous one answered. Nothing is read until a screen
+ * calls `load()`. Every write and answer is fenced on the organization it started in: once the
+ * workspace shows another organization, nothing more of it is sent or applied, and its caller gets
+ * `OnboardingWriteDroppedError`. A switch then drops the progress, aborts the reads, starts a new
+ * write queue and reads the new organization's progress when a screen had asked for it. Leaving
+ * `/:org` destroys it. The reads are hand-rolled rather than a `resource()`: the writes share
+ * their version and queue, a failed refresh must keep the progress shown, and nothing reads until
+ * a screen asks.
  *
  * @type {Type<OnboardingStoreInstance>}
  */

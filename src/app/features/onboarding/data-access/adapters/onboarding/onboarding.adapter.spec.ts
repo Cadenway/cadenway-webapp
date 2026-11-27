@@ -71,13 +71,13 @@ describe('onboarding adapter', () => {
     });
   });
 
-  it('reads an unknown status as dismissed and an unknown color as violet', () => {
+  it('reads an unknown status as dismissed and an unknown color as gris', () => {
     expect(
       toOnboardingProgress({
         ...INITIAL,
         wizard: { ...INITIAL.wizard, status: 'not-offered', color: 'aurora' },
       }).wizard,
-    ).toMatchObject({ status: 'dismissed', color: 'violet' });
+    ).toMatchObject({ status: 'dismissed', color: 'gris' });
     expect(
       toOnboardingProgress({ ...INITIAL, wizard: { ...INITIAL.wizard, color: 'lagon' } }).wizard
         .color,
