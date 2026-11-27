@@ -1,0 +1,147 @@
+<cw-dialog
+  size="sm"
+  [open]="prompt() !== null"
+  [pending]="prompt()?.pending ?? false"
+  data-testid="reauthentication-dialog"
+  (openChange)="openChanged($event)"
+>
+  <cw-dialog-header>
+    <h2 cwDialogTitle i18n="@@account.reauthentication.title">Confirm it's you</h2>
+    @if (method() === 'code') {
+      <p cwDialogDescription i18n="@@account.reauthentication.code-description">
+        For your security, enter the 6-digit code from your authenticator app to continue.
+      </p>
+    } @else {
+      <p cwDialogDescription i18n="@@account.reauthentication.password-description">
+        For your security, enter your password to continue.
+      </p>
+    }
+  </cw-dialog-header>
+
+  <form id="reauthentication-form" class="flex flex-col gap-2" novalidate (submit)="send($event)">
+    @if (method() === 'code') {
+      <label
+        for="reauthentication-code"
+        class="text-sm leading-none font-medium"
+        i18n="@@account.reauthentication.code-label"
+        >Authentication code</label
+      >
+      <cw-input-otp
+        [id]="'reauthentication-code'"
+        ariaLabel="Authentication code"
+        i18n-ariaLabel="@@account.reauthentication.code-label"
+        [formField]="codeForm.code"
+        [ariaDescribedBy]="
+          (codeForm.code().touched() && codeForm.code().invalid()) || prompt()?.failure
+            ? 'reauthentication-help'
+            : ''
+        "
+      >
+        <cw-input-otp-group>
+          <cw-input-otp-slot [index]="0" />
+          <cw-input-otp-slot [index]="1" />
+          <cw-input-otp-slot [index]="2" />
+        </cw-input-otp-group>
+        <cw-input-otp-separator />
+        <cw-input-otp-group>
+          <cw-input-otp-slot [index]="3" />
+          <cw-input-otp-slot [index]="4" />
+          <cw-input-otp-slot [index]="5" />
+        </cw-input-otp-group>
+      </cw-input-otp>
+    } @else {
+      <label
+        for="reauthentication-password"
+        class="text-sm leading-none font-medium"
+        i18n="@@account.reauthentication.password-label"
+        >Password</label
+      >
+      <input
+        cwInput
+        id="reauthentication-password"
+        type="password"
+        autocomplete="current-password"
+        [formField]="passwordForm.password"
+        [attr.aria-describedby]="
+          (passwordForm.password().touched() && passwordForm.password().invalid()) ||
+          prompt()?.failure
+            ? 'reauthentication-help'
+            : null
+        "
+      />
+    }
+
+    @let fieldError =
+      method() === 'code'
+        ? codeForm.code().touched()
+          ? codeForm.code().errors()[0]?.message
+          : undefined
+        : passwordForm.password().touched()
+          ? passwordForm.password().errors()[0]?.message
+          : undefined;
+    @if (fieldError || prompt()?.failure) {
+      <p
+        id="reauthentication-help"
+        role="alert"
+        class="flex items-center gap-1 text-xs font-medium text-destructive"
+      >
+        <ng-icon name="phosphorWarningCircleFill" class="size-3.5 shrink-0" aria-hidden="true" />
+        @if (fieldError) {
+          {{ fieldError }}
+        } @else {
+          @switch (prompt()?.failure) {
+            @case ('password-incorrect') {
+              @if (prompt()?.remainingAttempts; as attempts) {
+                <span i18n="@@account.reauthentication.password-incorrect-attempts"
+                  >Incorrect password. Attempts left: {{ attempts }}.</span
+                >
+              } @else {
+                <span i18n="@@account.reauthentication.password-incorrect"
+                  >Incorrect password.</span
+                >
+              }
+            }
+            @case ('code-incorrect') {
+              <span i18n="@@account.reauthentication.code-incorrect"
+                >Incorrect or already used code.</span
+              >
+            }
+            @case ('locked') {
+              <span i18n="@@account.reauthentication.locked"
+                >Too many attempts. Try again in 15 minutes.</span
+              >
+            }
+            @default {
+              <span i18n="@@account.reauthentication.unavailable"
+                >The confirmation could not be sent. Try again in a moment.</span
+              >
+            }
+          }
+        }
+      </p>
+    }
+  </form>
+
+  <cw-dialog-footer>
+    <button
+      cwButton
+      type="button"
+      variant="outline"
+      [disabled]="prompt()?.pending ?? false"
+      (click)="cancel()"
+      i18n="@@account.reauthentication.cancel"
+    >
+      Cancel
+    </button>
+    <button
+      cwButton
+      type="submit"
+      form="reauthentication-form"
+      [disabled]="prompt()?.pending ?? false"
+      [loading]="prompt()?.pending ?? false"
+      i18n="@@account.reauthentication.confirm"
+    >
+      Confirm
+    </button>
+  </cw-dialog-footer>
+</cw-dialog>
