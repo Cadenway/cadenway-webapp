@@ -5,7 +5,10 @@ import { of, throwError } from 'rxjs';
 import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 
 import type { NotificationPreferences } from '../../../models/notification-preferences/notification-preferences.interface';
-import { NotificationPreferencesApi } from './notification-preferences-api.service';
+import {
+  isUncertainWrite,
+  NotificationPreferencesApi,
+} from './notification-preferences-api.service';
 
 /**
  * Function answer
@@ -112,5 +115,29 @@ describe('NotificationPreferencesApi', () => {
 
     await expect(api.change({ kind: 'digest', digest: 'never' }, 3)).rejects.toBe(unavailable);
     expect(service['getNotificationPreferences']).not.toHaveBeenCalled();
+  });
+
+  it('rejects with the resend refusal after a version mismatch', async () => {
+    const refused: HttpErrorResponse = new HttpErrorResponse({ status: 403 });
+    service['updateNotificationPreferences']
+      .mockReturnValueOnce(throwError(() => versionMismatch))
+      .mockReturnValueOnce(throwError(() => refused));
+
+    await expect(api.change({ kind: 'digest', digest: 'never' }, 3)).rejects.toBe(refused);
+    expect(service['getNotificationPreferences']).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('isUncertainWrite', () => {
+  it('treats no answer and server failures as unknown outcomes', () => {
+    expect(isUncertainWrite(new HttpErrorResponse({ status: 0 }))).toBe(true);
+    expect(isUncertainWrite(new HttpErrorResponse({ status: 503 }))).toBe(true);
+    expect(isUncertainWrite(new HttpErrorResponse({ status: 504 }))).toBe(true);
+    expect(isUncertainWrite(new Error('timeout'))).toBe(true);
+  });
+
+  it('treats a refusal as recording nothing', () => {
+    expect(isUncertainWrite(new HttpErrorResponse({ status: 403 }))).toBe(false);
+    expect(isUncertainWrite(versionMismatch)).toBe(false);
   });
 });

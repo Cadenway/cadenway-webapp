@@ -87,6 +87,27 @@ describe('NotificationMatrix', () => {
     ).toHaveLength(21);
   });
 
+  it('labels each box with its channel name, which toggles it when tapped', () => {
+    const changed: Mock<(change: NotificationChannelChange) => void> = vi.fn();
+    fixture.componentInstance.channelChanged.subscribe(changed);
+    const email: HTMLElement = box('Comments by email');
+    const label: HTMLLabelElement | null = (
+      fixture.nativeElement as HTMLElement
+    ).querySelector<HTMLLabelElement>(`label[for="${email.id}"]`);
+
+    expect(email.id).not.toBe('');
+    expect(label?.textContent.trim()).toBe('Email');
+    label?.click();
+
+    expect(changed).toHaveBeenCalledWith({
+      kind: 'channel',
+      event: 'comment',
+      channel: 'email',
+      enabled: true,
+    });
+    expect(email.getAttribute('aria-label')).toBe('Comments by email');
+  });
+
   it('emits the box ticked or cleared', () => {
     const changed: Mock<(change: NotificationChannelChange) => void> = vi.fn();
     fixture.componentInstance.channelChanged.subscribe(changed);

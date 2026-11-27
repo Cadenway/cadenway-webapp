@@ -7,7 +7,7 @@ import {
 } from '@cadenway/api-client';
 import { firstValueFrom, fromEvent, type Observable, takeUntil } from 'rxjs';
 
-import { hasProblemCode } from '@core/api';
+import { type ApiProblem, hasProblemCode, readProblem } from '@core/api';
 
 import type {
   NotificationChannels,
@@ -77,6 +77,22 @@ export function toNotificationPreferencesPatch(
     case 'doNotDisturb':
       return { doNotDisturb: change.enabled };
   }
+}
+
+/**
+ * Function isUncertainWrite
+ *
+ * @description
+ * Whether a failed write may still have been recorded: no answer (no HTTP status, offline, a
+ * timeout or any failure that is not a gateway answer) or a server failure (`5xx`), unlike a
+ * refusal (`4xx`), which recorded nothing.
+ *
+ * @param {unknown} error - The failure.
+ * @returns {boolean} Whether its outcome is unknown.
+ */
+export function isUncertainWrite(error: unknown): boolean {
+  const problem: ApiProblem | null = readProblem(error);
+  return problem === null || problem.status === 0 || problem.status >= 500;
 }
 
 /**

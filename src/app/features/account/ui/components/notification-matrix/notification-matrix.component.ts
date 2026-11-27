@@ -1,6 +1,8 @@
+import { _IdGenerator } from '@angular/cdk/a11y';
 import {
   Component,
   computed,
+  inject,
   input,
   type InputSignal,
   output,
@@ -88,10 +90,21 @@ interface MatrixCell {
   readonly channel: NotificationChannel;
 
   /**
+   * Property boxId
+   *
+   * @description
+   * Id of the box, which the channel name shown on a phone labels.
+   *
+   * @type {string}
+   * @readonly
+   */
+  readonly boxId: string;
+
+  /**
    * Property label
    *
    * @description
-   * Name of the channel, shown beside the box on a phone.
+   * Name of the channel, shown beside the box on a phone, where tapping it toggles the box.
    *
    * @type {string}
    * @readonly
@@ -265,7 +278,8 @@ function eventsOf(
  * row per event, with its hint, and one box per channel (`In the app`, `Email`, `Mobile`), each
  * named `<event> in the app | by email | on mobile`. The table scrolls sideways when narrower
  * than 520 px; below 768 px it becomes cards (the mockup's `.cw-cards` rule): the header row is
- * hidden, the event takes the whole width and the boxes follow it, each with its channel's name.
+ * hidden, the event takes the whole width and the boxes follow it, each with its channel's name
+ * as a `label` of the box, so tapping the name toggles it; the box keeps its full accessible name.
  * It shows `channels` as given and emits `channelChanged` for each box ticked or cleared; the
  * page saves it and passes the new value back.
  */
@@ -332,6 +346,17 @@ export class NotificationMatrix {
   protected readonly columns: readonly MatrixColumn[] = COLUMNS;
 
   /**
+   * Property idPrefix
+   *
+   * @description
+   * Prefix of the box ids, unique to this matrix.
+   *
+   * @type {string}
+   * @readonly
+   */
+  private readonly idPrefix: string = inject(_IdGenerator).getId('cw-notification-matrix-');
+
+  /**
    * Property rows
    *
    * @description
@@ -349,6 +374,7 @@ export class NotificationMatrix {
         hint,
         cells: COLUMNS.map((column: MatrixColumn): MatrixCell => ({
           channel: column.channel,
+          boxId: `${this.idPrefix}-${event}-${column.channel}`,
           label: column.label,
           ariaLabel: column.boxLabel(label),
           enabled: channels[event][column.channel],

@@ -30,13 +30,17 @@
             <td cwTableCell align="center" class="max-md:flex max-md:items-center max-md:px-0">
               <span class="inline-flex items-center gap-2">
                 <cw-checkbox
+                  [id]="cell.boxId"
                   [checked]="cell.enabled"
                   [ariaLabel]="cell.ariaLabel"
                   (checkedChange)="toggle(row.event, cell.channel, $event)"
                 />
-                <span class="text-xs text-muted-foreground md:hidden" aria-hidden="true">{{
-                  cell.label
-                }}</span>
+                <label
+                  class="cursor-pointer py-2 pr-1 text-xs text-muted-foreground md:hidden"
+                  aria-hidden="true"
+                  [for]="cell.boxId"
+                  >{{ cell.label }}</label
+                >
               </span>
             </td>
           }

@@ -111,11 +111,16 @@ parent provides the English texts of `cw-password-strength` and `cw-input-otp` t
   the other, each a merge patch of that one setting with `If-Match` on the version the previous
   write recorded; a later change of the same setting replaces a pending one, and a setting turned
   back to its confirmed value sends nothing. On `412 request.version-mismatch` the data access
-  reads the preferences again and resends the setting once. Any other failure restores the
-  confirmed value of that setting (unless it was changed again since) and shows `Could not save`;
-  a new failure replaces the previous toast. The mention hint names the display name, or the
-  first name without one, as a mention does. Below 768 px the matrix becomes cards (the mockup's
-  `.cw-cards` rule), each box followed by its channel's name.
+  reads the preferences again and resends the setting once. A refusal restores the confirmed
+  value of that setting (unless it was changed again since) and shows `Could not save`; a new
+  failure replaces the previous toast. A write without a known outcome (no answer, a timeout, a
+  `5xx`) reads the preferences again: when they hold the change it counts as saved, otherwise it
+  is restored as a refusal, and the queued changes are compared with what was read (when that
+  read fails, the next write reads first). The confirmed preferences live in the store, outside
+  the read's resource, so the writes still queued when the page closes are sent. The mention hint
+  names the display name, or the first name without one, as a mention does. Below 768 px the
+  matrix becomes cards (the mockup's `.cw-cards` rule), each box followed by its channel's name
+  as a `label` of the box, so tapping the name toggles it.
 - Known gap: the mockup's `Set a status message` item and the status message under the header are left out,
   since the backend has no status message yet.
 

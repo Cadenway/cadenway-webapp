@@ -1,5 +1,6 @@
 import {
   computed,
+  DestroyRef,
   inject,
   resource,
   type ResourceRef,
@@ -16,7 +17,10 @@ import {
   withState,
 } from '@ngrx/signals';
 
-import { NotificationPreferencesApi } from '../../data-access/services/notification-preferences-api/notification-preferences-api.service';
+import {
+  isUncertainWrite,
+  NotificationPreferencesApi,
+} from '../../data-access/services/notification-preferences-api/notification-preferences-api.service';
 import type {
   NotificationPreferenceChange,
   NotificationPreferences,
@@ -93,8 +97,9 @@ export interface NotificationPreferencesStoreInstance {
    *
    * @description
    * Shows a setting at once and saves it: writes are sent one after the other, each from the
-   * version the previous one recorded. A refused write puts the confirmed value back and raises
-   * an error toast, unless the setting was changed again since.
+   * version the previous one recorded, and still sent once the page is gone. A refused write
+   * puts the confirmed value back and raises an error toast, unless the setting was changed again
+   * since; a write without a known outcome is checked against the preferences read again.
    *
    * @param {NotificationPreferenceChange} change - The changed setting.
    */
@@ -188,6 +193,7 @@ function createNotificationPreferencesStore(): Type<NotificationPreferencesStore
       return {
         _api: api,
         _toasts: inject(CwToastService),
+        _destroyRef: inject(DestroyRef),
         saved: resource({
           loader: ({
             abortSignal,
@@ -206,10 +212,35 @@ function createNotificationPreferencesStore(): Type<NotificationPreferencesStore
     })),
     withMethods((store) => {
       // Writes run one after the other, so each one is sent from the version the previous one
-      // recorded and two writes never race on the same version.
+      // recorded and two writes never race on the same version. The queue keeps draining once
+      // the page and its resource are gone, from the values below, which outlive the resource.
       let queue: Promise<void> = Promise.resolve();
+      // The newest preferences the gateway confirmed, or null until the first change.
+      let confirmed: NotificationPreferences | null = null;
+      // Whether a write ended without a known outcome and the preferences could not be read
+      // again since: the next write reads them first.
+      let uncertain: boolean = false;
       // The failure toast still shown, replaced by the next failure rather than stacked.
       let failureToast: string | null = null;
+      const baseline: () => NotificationPreferences | null = (): NotificationPreferences | null =>
+        confirmed ?? (store.saved.hasValue() ? store.saved.value() : null);
+      const record: (next: NotificationPreferences) => void = (
+        next: NotificationPreferences,
+      ): void => {
+        confirmed = next;
+        if (!store._destroyRef.destroyed) store.saved.set(next);
+      };
+      // Reads the recorded preferences again; says whether it could.
+      const refresh: () => Promise<boolean> = async (): Promise<boolean> => {
+        try {
+          record(await store._api.read());
+          uncertain = false;
+          return true;
+        } catch {
+          uncertain = true;
+          return false;
+        }
+      };
       // Ends a write of a setting: drops its pending change when it is still the one that was
       // sent (a newer change keeps showing and is sent next); says whether it was dropped.
       const settle: (setting: string, sent: NotificationPreferenceChange) => boolean = (
@@ -227,27 +258,48 @@ function createNotificationPreferencesStore(): Type<NotificationPreferencesStore
         });
         return true;
       };
+      // Shows the confirmed value of a setting again and says the change was not saved.
+      const fail: (setting: string, sent: NotificationPreferenceChange) => void = (
+        setting: string,
+        sent: NotificationPreferenceChange,
+      ): void => {
+        if (!settle(setting, sent)) return;
+        if (failureToast !== null) store._toasts.dismiss(failureToast);
+        failureToast = store._toasts.error(
+          $localize`:@@account.notifications.save-failed:Could not save`,
+          {
+            description: $localize`:@@account.notifications.save-failed-text:The previous setting is back. Try again in a moment.`,
+          },
+        );
+      };
       const save: (setting: string) => Promise<void> = async (setting: string): Promise<void> => {
         const pending: PendingChanges = store._pending();
-        if (!(setting in pending) || !store.saved.hasValue()) return;
+        if (!(setting in pending)) return;
         const sent: NotificationPreferenceChange = pending[setting];
-        const base: NotificationPreferences = store.saved.value();
+        if (uncertain && !(await refresh())) {
+          fail(setting, sent);
+          return;
+        }
+        const base: NotificationPreferences | null = baseline();
+        if (base === null) return;
         if (holds(base, sent)) {
           settle(setting, sent);
           return;
         }
         try {
-          store.saved.set(await store._api.change(sent, base.version));
+          record(await store._api.change(sent, base.version));
           settle(setting, sent);
-        } catch {
-          if (!settle(setting, sent)) return;
-          if (failureToast !== null) store._toasts.dismiss(failureToast);
-          failureToast = store._toasts.error(
-            $localize`:@@account.notifications.save-failed:Could not save`,
-            {
-              description: $localize`:@@account.notifications.save-failed-text:The previous setting is back. Try again in a moment.`,
-            },
-          );
+        } catch (error: unknown) {
+          // A write without a known outcome may have been recorded: the newest preferences
+          // decide whether it was, and are what the next changes are compared with.
+          if (isUncertainWrite(error) && (await refresh())) {
+            const fresh: NotificationPreferences | null = baseline();
+            if (fresh !== null && holds(fresh, sent)) {
+              settle(setting, sent);
+              return;
+            }
+          }
+          fail(setting, sent);
         }
       };
       return {
@@ -271,7 +323,11 @@ function createNotificationPreferencesStore(): Type<NotificationPreferencesStore
  * once, with no Save, and is saved by a write queued behind the previous ones; a later change of
  * the same setting replaces a pending one, and a setting back to its confirmed value sends
  * nothing. A refused write restores the confirmed value of its setting (unless it was changed
- * again since) and shows one error toast. A write still queued when the page closes is sent.
+ * again since) and shows one error toast. A write without a known outcome (no answer, a timeout,
+ * a `5xx`) reads the preferences again: when they hold the change, it was saved; otherwise it is
+ * restored as a refusal, and the next changes are compared with what was read (when that read
+ * fails too, the next write reads first). The queue outlives the page: the writes still queued
+ * when it closes are sent, from the last confirmed preferences.
  *
  * @type {Type<NotificationPreferencesStoreInstance>}
  */

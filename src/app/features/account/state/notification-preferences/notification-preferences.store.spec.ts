@@ -1,5 +1,9 @@
+import { HttpErrorResponse } from '@angular/common/http';
+import { createEnvironmentInjector, EnvironmentInjector } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
+import { NotificationPreferencesService } from '@cadenway/api-client';
 import { CwToastService } from '@cadenway/ui/components/toast';
+import { of, throwError } from 'rxjs';
 import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 
 import { NotificationPreferencesApi } from '../../data-access/services/notification-preferences-api/notification-preferences-api.service';
@@ -59,6 +63,19 @@ function deferred<T>(): {
 }
 
 /**
+ * Constant forbidden
+ *
+ * @description
+ * A refusal of the gateway (`403`), which recorded nothing.
+ *
+ * @type {HttpErrorResponse}
+ */
+const forbidden: HttpErrorResponse = new HttpErrorResponse({
+  status: 403,
+  error: { type: 'about:blank', status: 403, code: 'account.write-forbidden' },
+});
+
+/**
  * Constant commentByEmail
  *
  * @description
@@ -81,8 +98,8 @@ describe('NotificationPreferencesStore', () => {
   let store: NotificationPreferencesStoreInstance;
 
   beforeEach(() => {
-    read = vi.fn<NotificationPreferencesApi['read']>(() => Promise.resolve(camille));
     recorded = camille;
+    read = vi.fn<NotificationPreferencesApi['read']>(() => Promise.resolve(recorded));
     change = vi.fn<NotificationPreferencesApi['change']>((next, version) => {
       recorded = { ...applied(recorded, next), version: version + 1 };
       return Promise.resolve(recorded);
@@ -163,7 +180,7 @@ describe('NotificationPreferencesStore', () => {
 
   it('rolls a refused change back to the confirmed value and says so', async () => {
     await loaded();
-    change.mockRejectedValueOnce(new Error('503'));
+    change.mockRejectedValueOnce(forbidden);
 
     store.change({ kind: 'doNotDisturb', enabled: false });
     expect(store.preferences()?.doNotDisturb).toBe(false);
@@ -173,6 +190,7 @@ describe('NotificationPreferencesStore', () => {
       description: 'The previous setting is back. Try again in a moment.',
     });
     expect(store.saved.value()?.version).toBe(1);
+    expect(read).toHaveBeenCalledTimes(1);
 
     store.change({ kind: 'doNotDisturb', enabled: false });
     await expect.poll(() => store.saved.value()?.doNotDisturb).toBe(false);
@@ -181,7 +199,7 @@ describe('NotificationPreferencesStore', () => {
 
   it('replaces the previous failure toast instead of stacking them', async () => {
     await loaded();
-    change.mockRejectedValue(new Error('offline'));
+    change.mockRejectedValue(forbidden);
 
     store.change(commentByEmail);
     store.change({ kind: 'digest', digest: 'never' });
@@ -235,5 +253,161 @@ describe('NotificationPreferencesStore', () => {
 
     await expect.poll(() => change.mock.calls.length).toBe(2);
     expect(change.mock.calls[1]).toEqual([{ kind: 'doNotDisturb', enabled: true }, 2]);
+  });
+
+  it('sends the writes still queued once the page is gone', async () => {
+    const page: EnvironmentInjector = createEnvironmentInjector(
+      [NotificationPreferencesStore],
+      TestBed.inject(EnvironmentInjector),
+    );
+    store = page.get(NotificationPreferencesStore);
+    TestBed.tick();
+    await expect.poll(() => store.preferences()).not.toBeNull();
+    const first: ReturnType<typeof deferred<NotificationPreferences>> =
+      deferred<NotificationPreferences>();
+    change.mockReturnValueOnce(first.promise);
+
+    store.change(commentByEmail);
+    store.change({ kind: 'digest', digest: 'weekly' });
+    store.change({ kind: 'doNotDisturb', enabled: false });
+    await expect.poll(() => change.mock.calls.length).toBe(1);
+    page.destroy();
+    recorded = { ...applied(camille, commentByEmail), version: 2 };
+    first.resolve(recorded);
+
+    await expect.poll(() => change.mock.calls.length).toBe(3);
+    expect(
+      change.mock.calls.map(
+        ([next, version]: [NotificationPreferenceChange, number]): [string, number] => [
+          next.kind,
+          version,
+        ],
+      ),
+    ).toEqual([
+      ['channel', 1],
+      ['digest', 2],
+      ['doNotDisturb', 3],
+    ]);
+    expect(recorded).toMatchObject({ digest: 'weekly', doNotDisturb: false, version: 4 });
+  });
+
+  it('reads again after a write without an answer, and sends a reversal made meanwhile', async () => {
+    await loaded();
+    const lost: ReturnType<typeof deferred<NotificationPreferences>> =
+      deferred<NotificationPreferences>();
+    change.mockImplementationOnce((next: NotificationPreferenceChange, version: number) => {
+      recorded = { ...applied(recorded, next), version: version + 1 };
+      return lost.promise;
+    });
+
+    store.change({ kind: 'doNotDisturb', enabled: false });
+    await expect.poll(() => change.mock.calls.length).toBe(1);
+    store.change({ kind: 'doNotDisturb', enabled: true });
+    lost.reject(new HttpErrorResponse({ status: 0 }));
+
+    await expect.poll(() => change.mock.calls.length).toBe(2);
+    expect(read).toHaveBeenCalledTimes(2);
+    expect(change.mock.calls[1]).toEqual([{ kind: 'doNotDisturb', enabled: true }, 2]);
+    await expect.poll(() => recorded.doNotDisturb).toBe(true);
+    expect(store.preferences()?.doNotDisturb).toBe(true);
+    expect(toasts.error).not.toHaveBeenCalled();
+  });
+
+  it('keeps a change whose answer was lost when the preferences read again hold it', async () => {
+    await loaded();
+    const lost: ReturnType<typeof deferred<NotificationPreferences>> =
+      deferred<NotificationPreferences>();
+    change.mockImplementationOnce((next: NotificationPreferenceChange, version: number) => {
+      recorded = { ...applied(recorded, next), version: version + 1 };
+      return lost.promise;
+    });
+
+    store.change({ kind: 'digest', digest: 'weekly' });
+    await expect.poll(() => change.mock.calls.length).toBe(1);
+    lost.reject(new HttpErrorResponse({ status: 504 }));
+
+    await expect.poll(() => store.saved.value()?.version).toBe(2);
+    expect(store.preferences()?.digest).toBe('weekly');
+    expect(toasts.error).not.toHaveBeenCalled();
+  });
+
+  it('restores a change whose answer was lost when the preferences read again lack it', async () => {
+    await loaded();
+    change.mockRejectedValueOnce(new HttpErrorResponse({ status: 503 }));
+
+    store.change({ kind: 'digest', digest: 'weekly' });
+
+    await expect.poll(() => toasts.error.mock.calls.length).toBe(1);
+    expect(read).toHaveBeenCalledTimes(2);
+    expect(store.preferences()?.digest).toBe('daily');
+  });
+
+  it('reads first at the next change when the read after a lost answer failed too', async () => {
+    await loaded();
+    change.mockRejectedValueOnce(new HttpErrorResponse({ status: 0 }));
+    read.mockRejectedValueOnce(new HttpErrorResponse({ status: 0 }));
+
+    store.change({ kind: 'digest', digest: 'weekly' });
+    await expect.poll(() => toasts.error.mock.calls.length).toBe(1);
+    expect(store.preferences()?.digest).toBe('daily');
+
+    recorded = { ...recorded, digest: 'never', version: 7 };
+    store.change({ kind: 'digest', digest: 'weekly' });
+
+    await expect.poll(() => change.mock.calls.length).toBe(2);
+    expect(read).toHaveBeenCalledTimes(3);
+    expect(change.mock.calls[1]).toEqual([{ kind: 'digest', digest: 'weekly' }, 7]);
+  });
+});
+
+describe('NotificationPreferencesStore over the gateway client', () => {
+  let client: { getNotificationPreferences: Mock; updateNotificationPreferences: Mock };
+  let toasts: { error: Mock; dismiss: Mock };
+
+  beforeEach(() => {
+    client = {
+      getNotificationPreferences: vi.fn(() => of(camille)),
+      updateNotificationPreferences: vi.fn(),
+    };
+    toasts = { error: vi.fn(() => 'toast-1'), dismiss: vi.fn() };
+    TestBed.configureTestingModule({
+      providers: [
+        NotificationPreferencesStore,
+        { provide: NotificationPreferencesService, useValue: client },
+        { provide: CwToastService, useValue: toasts },
+      ],
+    });
+  });
+
+  it('rolls back with a toast when the resend after a version mismatch is refused', async () => {
+    const store: NotificationPreferencesStoreInstance = TestBed.inject(
+      NotificationPreferencesStore,
+    );
+    TestBed.tick();
+    await expect.poll(() => store.preferences()).not.toBeNull();
+    client.getNotificationPreferences.mockReturnValue(of({ ...camille, version: 5 }));
+    client.updateNotificationPreferences
+      .mockReturnValueOnce(
+        throwError(
+          () =>
+            new HttpErrorResponse({
+              status: 412,
+              error: { type: 'about:blank', status: 412, code: 'request.version-mismatch' },
+            }),
+        ),
+      )
+      .mockReturnValueOnce(throwError(() => forbidden));
+
+    store.change({ kind: 'doNotDisturb', enabled: false });
+    expect(store.preferences()?.doNotDisturb).toBe(false);
+
+    await expect.poll(() => toasts.error.mock.calls.length).toBe(1);
+    expect(client.updateNotificationPreferences).toHaveBeenCalledTimes(2);
+    expect(
+      client.updateNotificationPreferences.mock.calls.map(
+        ([, options]: unknown[]): unknown => options,
+      ),
+    ).toEqual([{ headers: { 'If-Match': '"1"' } }, { headers: { 'If-Match': '"5"' } }]);
+    expect(store.preferences()?.doNotDisturb).toBe(true);
   });
 });
