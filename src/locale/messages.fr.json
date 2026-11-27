@@ -659,6 +659,8 @@
     "organization.general.name-required": "Saisissez le nom de l'organisation.",
     "organization.general.name-too-long": "120 caractères au maximum.",
     "organization.general.optional": "(facultatif)",
+    "organization.general.refresh-failed": "La dernière version de l’organisation n’a pas pu être chargée. Votre modification est peut-être déjà appliquée, et vos saisies sont conservées.",
+    "organization.general.refresh-retry": "Réessayer",
     "organization.general.save": "Enregistrer",
     "organization.general.save-failed": "Impossible d’enregistrer l’organisation",
     "organization.general.saved": "Organisation mise à jour",

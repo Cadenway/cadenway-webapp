@@ -640,6 +640,77 @@ describe('GeneralPage', () => {
     expect((byTestId(harness, 'organization-name') as HTMLInputElement).value).toBe('Nord');
   });
 
+  it('toasts the conflict for a field edited while the upload ran', async () => {
+    let published: () => void = (): void => undefined;
+    api['publishLogo'].mockReturnValue(
+      new Promise<void>((resolve: () => void) => {
+        published = resolve;
+      }),
+    );
+    const harness: RouterTestingHarness = await open();
+    pick(harness, new File(['png'], 'logo.png', { type: 'image/png' }));
+    await expect.poll(() => api['publishLogo'].mock.calls.length).toBe(1);
+
+    type(harness, 'organization-name', 'Nord');
+    api['current'].mockResolvedValue({
+      ...ATELIER_NORD,
+      name: 'Atelier Nord Lyon',
+      logoId: 'upload-1',
+      version: 4,
+    });
+    published();
+
+    await expect.poll(() => toasts.error.mock.calls.length).toBe(1);
+    expect(toasts.error).toHaveBeenCalledWith(
+      'The organization changed in the meantime',
+      expect.anything(),
+    );
+    expect(toasts.success).not.toHaveBeenCalled();
+    expect((byTestId(harness, 'organization-name') as HTMLInputElement).value).toBe('Nord');
+  });
+
+  it('keeps the draft and offers Retry when the reread after a logo change fails', async () => {
+    const harness: RouterTestingHarness = await open();
+    type(harness, 'organization-name', 'Nord');
+    api['current'].mockRejectedValueOnce(problem(503, 'upstream.unavailable'));
+
+    pick(harness, new File(['png'], 'logo.png', { type: 'image/png' }));
+
+    await expect
+      .poll(() => byTestId(harness, 'organization-refresh-failed')?.textContent ?? '')
+      .toContain('could not be loaded');
+    expect(toasts.success).not.toHaveBeenCalled();
+    expect(harness.routeNativeElement?.textContent).not.toContain('Could not load this section');
+    expect((byTestId(harness, 'organization-name') as HTMLInputElement).value).toBe('Nord');
+
+    api['current'].mockResolvedValue({
+      ...ATELIER_NORD,
+      website: 'https://nord.example',
+      logoId: 'upload-1',
+      version: 4,
+    });
+    byTestId(harness, 'organization-refresh-retry')?.click();
+
+    await expect.poll(() => byTestId(harness, 'organization-refresh-failed')).toBeNull();
+    expect((byTestId(harness, 'organization-website') as HTMLInputElement).value).toBe(
+      'https://nord.example',
+    );
+    expect((byTestId(harness, 'organization-name') as HTMLInputElement).value).toBe('Nord');
+  });
+
+  it('treats a save whose answer was lost as saved once the reread holds it', async () => {
+    api['update'].mockRejectedValue(new HttpErrorResponse({ status: 0 }));
+    const harness: RouterTestingHarness = await open();
+    api['current'].mockResolvedValue({ ...ATELIER_NORD, slug: 'nord', version: 4 });
+
+    type(harness, 'organization-slug', 'nord');
+    button('Save')?.click();
+
+    await expect.poll(() => TestBed.inject(Router).url).toBe('/nord/organization/general');
+    expect(toasts.success).toHaveBeenCalledWith('Organization updated', expect.anything());
+    expect(toasts.error).not.toHaveBeenCalled();
+  });
+
   it('keeps the logo actions focusable but inert while a save runs', async () => {
     let answer: (profile: OrganizationProfile) => void = (): void => undefined;
     api['current'].mockResolvedValue({ ...ATELIER_NORD, logoId: 'logo-1' });

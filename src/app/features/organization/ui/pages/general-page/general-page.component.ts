@@ -19,6 +19,8 @@ import {
   type ValidationError,
 } from '@angular/forms/signals';
 import { type Navigation, Router } from '@angular/router';
+import { CwAlert, CwAlertActions, CwAlertDescription } from '@cadenway/ui/components/alert';
+import { CwButton } from '@cadenway/ui/components/button';
 import { CwCard, CwCardContent, CwCardHeader, CwCardTitle } from '@cadenway/ui/components/card';
 import { CwSkeleton } from '@cadenway/ui/components/skeleton';
 import { CwToastService } from '@cadenway/ui/components/toast';
@@ -360,7 +362,10 @@ function withSlug(url: string, from: string, to: string): string | null {
  * silently.
  *
  * While the organization loads, a skeleton of the card shows (`Loading the section`); a failed
- * read reaches the route's error boundary, whose `Retry` runs the route again. The route guards
+ * read reaches the route's error boundary, whose `Retry` runs the route again. A reread after a
+ * write that fails (a logo change, a stale version, a save whose answer was lost) never does: the
+ * last confirmed organization and the draft stay, no success is toasted, and an inline alert says
+ * the organization could not be refreshed, with `Retry`. The route guards
  * the unsaved edits with `unsavedChangesGuard`, which asks through `cw-discard-changes-dialog`
  * once a save on its way has settled (never for the page's own move to its new address, which
  * keeps the draft), and the page asks the browser to confirm closing or reloading the tab while
@@ -369,6 +374,10 @@ function withSlug(url: string, from: string, to: string): string | null {
 @Component({
   selector: 'cw-organization-general-page',
   imports: [
+    CwAlert,
+    CwAlertActions,
+    CwAlertDescription,
+    CwButton,
     CwCard,
     CwCardContent,
     CwCardHeader,
@@ -753,6 +762,7 @@ export class GeneralPage implements UnsavedChanges {
               $localize`:@@organization.general.save-failed:The organization could not be saved`,
             );
             return undefined;
+          case 'unreconciled':
           case 'skipped':
           case 'cancelled':
           case 'context-changed':
@@ -778,9 +788,8 @@ export class GeneralPage implements UnsavedChanges {
    */
   protected async pickLogo(file: File): Promise<void> {
     const base: OrganizationProfileForm = this.snapshot().value;
-    const draft: OrganizationProfileForm = this.model();
     const outcome: OrganizationLogoOutcome = await this.store.uploadLogo(file);
-    if (outcome === 'updated' && !this.collided(base, draft)) {
+    if (outcome === 'updated' && !this.collided(base)) {
       this.toasts.success($localize`:@@organization.general.logo-updated:Logo updated`, {
         description: $localize`:@@organization.general.logo-updated-text:${file.name}:file: shows in the sidebar and emails.`,
       });
@@ -801,9 +810,8 @@ export class GeneralPage implements UnsavedChanges {
    */
   protected async removeLogo(): Promise<void> {
     const base: OrganizationProfileForm = this.snapshot().value;
-    const draft: OrganizationProfileForm = this.model();
     const outcome: OrganizationLogoOutcome = await this.store.removeLogo();
-    if (outcome === 'removed' && !this.collided(base, draft)) {
+    if (outcome === 'removed' && !this.collided(base)) {
       const initials: string = this.store.current()?.initials ?? '';
       this.toasts.success($localize`:@@organization.general.logo-removed:Logo removed`, {
         description: $localize`:@@organization.general.logo-removed-text:The initials ${initials}:initials: show instead.`,
@@ -812,6 +820,23 @@ export class GeneralPage implements UnsavedChanges {
       this.toastLogoFailure(outcome);
     }
     this.afterLogoChange(outcome);
+  }
+
+  /**
+   * Method refreshAgain
+   *
+   * @description
+   * Reads the organization again after a failed reread (`Retry`); the draft keeps the person's
+   * edits, the conflict is toasted when someone else changed one of them, and a new address is
+   * opened.
+   *
+   * @returns {Promise<void>} Resolves once the read ended.
+   */
+  protected async refreshAgain(): Promise<void> {
+    const base: OrganizationProfileForm = this.snapshot().value;
+    if (!(await this.store.retryRefresh()) || this.destroyRef.destroyed) return;
+    this.collided(base);
+    this.followAddress();
   }
 
   /**
@@ -830,14 +855,14 @@ export class GeneralPage implements UnsavedChanges {
    *
    * @description
    * Toasts the conflict when the saved organization, read again since `base`, changed a field the
-   * draft also changed, to another value.
+   * draft also changed, to another value. The draft is the one when the read settled, edits made
+   * while the write ran included: a field the person changed keeps their value in it.
    *
-   * @param {OrganizationProfileForm} base - The saved value before the read.
-   * @param {OrganizationProfileForm} draft - The draft before the read.
+   * @param {OrganizationProfileForm} base - The saved value before the write.
    * @returns {boolean} True when a conflict was toasted.
    */
-  private collided(base: OrganizationProfileForm, draft: OrganizationProfileForm): boolean {
-    if (collisions(base, draft, this.snapshot().value).length === 0) return false;
+  private collided(base: OrganizationProfileForm): boolean {
+    if (collisions(base, this.model(), this.snapshot().value).length === 0) return false;
     this.toastConflict();
     return true;
   }
@@ -922,6 +947,7 @@ export class GeneralPage implements UnsavedChanges {
         break;
       case 'updated':
       case 'removed':
+      case 'unreconciled':
       case 'skipped':
       case 'cancelled':
       case 'context-changed':

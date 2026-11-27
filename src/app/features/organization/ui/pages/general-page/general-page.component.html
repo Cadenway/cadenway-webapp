@@ -21,6 +21,30 @@
           <h2 id="general-identity-title" i18n="@@organization.general.identity">Identity</h2>
         </cw-card-title>
       </cw-card-header>
+      @if (store.refreshFailed()) {
+        <cw-card-content>
+          <cw-alert variant="destructive" role="alert" data-testid="organization-refresh-failed">
+            <cw-alert-description i18n="@@organization.general.refresh-failed"
+              >The latest version of the organization could not be loaded. Your change may already
+              be applied, and your edits are kept.</cw-alert-description
+            >
+            <cw-alert-actions>
+              <button
+                cwButton
+                variant="outline"
+                size="sm"
+                type="button"
+                data-testid="organization-refresh-retry"
+                [loading]="store.refreshing()"
+                (click)="refreshAgain()"
+                i18n="@@organization.general.refresh-retry"
+              >
+                Retry
+              </button>
+            </cw-alert-actions>
+          </cw-alert>
+        </cw-card-content>
+      }
       <cw-card-content>
         <cw-organization-logo
           [logoUrl]="store.logoUrl()"

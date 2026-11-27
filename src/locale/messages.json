@@ -747,6 +747,8 @@
     "organization.general.title": " Organization profile ",
     "organization.general.description-lead": " Name, address and identity seen by members and in invitation emails. ",
     "organization.general.identity": "Identity",
+    "organization.general.refresh-failed": "The latest version of the organization could not be loaded. Your change may already be applied, and your edits are kept.",
+    "organization.general.refresh-retry": " Retry ",
     "organization.general.loading": "Loading the section",
     "organization.general.language-fr": "Français",
     "organization.general.language-en": "English",

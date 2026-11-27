@@ -390,15 +390,22 @@ export interface OrganizationFieldRefusal {
  * end; `context-changed` when the gateway refused it for a changed organization context (`412
  * organization.context-changed`, or a switch in progress), which the workspace recovery takes over;
  * `outdated` when the organization changed in the meantime (`412 request.version-mismatch`, the
- * latest version has been read again); `failed` for any other refusal.
+ * latest version has been read again); `unreconciled` when the gateway may have applied it but
+ * the organization could not be read again to show it; `failed` for any other refusal.
  *
- * @type {{ readonly outcome: 'refused'; readonly refusals: readonly OrganizationFieldRefusal[] } | { readonly outcome: 'saved' | 'skipped' | 'cancelled' | 'context-changed' | 'outdated' | 'failed' }}
+ * @type {{ readonly outcome: 'refused'; readonly refusals: readonly OrganizationFieldRefusal[] } | { readonly outcome: 'saved' | 'skipped' | 'cancelled' | 'context-changed' | 'outdated' | 'unreconciled' | 'failed' }}
  */
 export type OrganizationSaveResult =
   | { readonly outcome: 'refused'; readonly refusals: readonly OrganizationFieldRefusal[] }
   | {
       readonly outcome:
-        'saved' | 'skipped' | 'cancelled' | 'context-changed' | 'outdated' | 'failed';
+        | 'saved'
+        | 'skipped'
+        | 'cancelled'
+        | 'context-changed'
+        | 'outdated'
+        | 'unreconciled'
+        | 'failed';
     };
 
 /**
@@ -408,9 +415,10 @@ export type OrganizationSaveResult =
  * How a logo change ended: `updated` or `removed`; `unsupported` for a file that is neither PNG
  * nor SVG; `too-large` for a file over 5 MiB; `unreadable` for an empty file; `invalid-image` for
  * an image storage refuses (not square, too large, not still or not safe); `skipped`,
- * `cancelled`, `context-changed`, `outdated` and `failed` as for a save.
+ * `cancelled`, `context-changed`, `outdated`, `unreconciled` (applied, or stale, but the
+ * organization could not be read again) and `failed` as for a save.
  *
- * @type {'updated' | 'removed' | 'unsupported' | 'too-large' | 'unreadable' | 'invalid-image' | 'skipped' | 'cancelled' | 'context-changed' | 'outdated' | 'failed'}
+ * @type {'updated' | 'removed' | 'unsupported' | 'too-large' | 'unreadable' | 'invalid-image' | 'skipped' | 'cancelled' | 'context-changed' | 'outdated' | 'unreconciled' | 'failed'}
  */
 export type OrganizationLogoOutcome =
   | 'updated'
@@ -423,4 +431,5 @@ export type OrganizationLogoOutcome =
   | 'cancelled'
   | 'context-changed'
   | 'outdated'
+  | 'unreconciled'
   | 'failed';

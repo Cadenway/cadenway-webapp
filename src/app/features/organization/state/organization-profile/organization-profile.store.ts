@@ -95,6 +95,29 @@ interface OrganizationProfileState {
    * @readonly
    */
   readonly logoChange: LogoChange;
+
+  /**
+   * Property refreshFailedFor
+   *
+   * @description
+   * The organization whose reread after a write failed, so what the page shows may lag behind the
+   * gateway; null once a read or a save confirmed it.
+   *
+   * @type {string | null}
+   * @readonly
+   */
+  readonly refreshFailedFor: string | null;
+
+  /**
+   * Property refreshing
+   *
+   * @description
+   * Whether `retryRefresh()` is reading the organization again.
+   *
+   * @type {boolean}
+   * @readonly
+   */
+  readonly refreshing: boolean;
   // #endregion
 }
 
@@ -186,6 +209,29 @@ interface OrganizationProfileStoreInstance {
    * @readonly
    */
   readonly logoChange: Signal<LogoChange>;
+
+  /**
+   * Property refreshFailed
+   *
+   * @description
+   * Whether the reread after a write failed for the organization shown: the last confirmed
+   * organization and the draft stay, and the page offers to read it again.
+   *
+   * @type {Signal<boolean>}
+   * @readonly
+   */
+  readonly refreshFailed: Signal<boolean>;
+
+  /**
+   * Property refreshing
+   *
+   * @description
+   * Whether `retryRefresh()` runs.
+   *
+   * @type {Signal<boolean>}
+   * @readonly
+   */
+  readonly refreshing: Signal<boolean>;
   // #endregion
 
   // #region Methods
@@ -233,6 +279,16 @@ interface OrganizationProfileStoreInstance {
    * again.
    */
   removeLogo(): Promise<OrganizationLogoOutcome>;
+
+  /**
+   * Method retryRefresh
+   *
+   * @description
+   * Reads the organization again after a failed reread, for the organization shown.
+   *
+   * @returns {Promise<boolean>} True once the organization is read and shown.
+   */
+  retryRefresh(): Promise<boolean>;
   // #endregion
 }
 
@@ -287,6 +343,37 @@ function isUncertainTransfer(error: unknown): boolean {
 }
 
 /**
+ * Function isUnknownOutcome
+ *
+ * @description
+ * Whether a save ended without telling whether the gateway applied it: no HTTP answer (status 0,
+ * or an error that is not one), a timeout (`408`) or a server failure (`5xx`).
+ *
+ * @param {unknown} error - The failure.
+ * @returns {boolean} True when the change may have been applied.
+ */
+function isUnknownOutcome(error: unknown): boolean {
+  const status: number | undefined = readProblem(error)?.status;
+  return status === undefined || status === 0 || status === 408 || status >= 500;
+}
+
+/**
+ * Function holds
+ *
+ * @description
+ * Whether a saved organization already holds every member of a change.
+ *
+ * @param {OrganizationProfile} profile - The saved organization.
+ * @param {OrganizationProfileChange} change - The change.
+ * @returns {boolean} True when nothing of the change is missing.
+ */
+function holds(profile: OrganizationProfile, change: OrganizationProfileChange): boolean {
+  return (Object.keys(change) as (keyof OrganizationProfileChange)[]).every(
+    (field: keyof OrganizationProfileChange): boolean => profile[field] === change[field],
+  );
+}
+
+/**
  * Function createOrganizationProfileStore
  *
  * @description
@@ -296,7 +383,12 @@ function isUncertainTransfer(error: unknown): boolean {
  */
 function createOrganizationProfileStore(): Type<OrganizationProfileStoreInstance> {
   return signalStore(
-    withState<OrganizationProfileState>({ saving: false, logoChange: null }),
+    withState<OrganizationProfileState>({
+      saving: false,
+      logoChange: null,
+      refreshFailedFor: null,
+      refreshing: false,
+    }),
     withProps(() => {
       const api: OrganizationApi = inject(OrganizationApi);
       const workspace: WorkspaceContextPort = inject(WORKSPACE_CONTEXT);
@@ -349,9 +441,10 @@ function createOrganizationProfileStore(): Type<OrganizationProfileStoreInstance
         },
       };
     }),
-    withComputed((store) => ({
+    withComputed((store, workspace: WorkspaceContextPort = inject(WORKSPACE_CONTEXT)) => ({
       current: (): OrganizationProfile | null =>
         store.organization.hasValue() ? store.organization.value() : null,
+      refreshFailed: (): boolean => store.refreshFailedFor() === workspace.organization().id,
     })),
     withMethods(
       (
@@ -368,18 +461,33 @@ function createOrganizationProfileStore(): Type<OrganizationProfileStoreInstance
           (organizationId: string): (() => boolean) =>
           (): boolean =>
             !destroyRef.destroyed && workspace.organization().id === organizationId;
-        // Reads the organization again, for a logo change's reference and version or after a
-        // stale version. A changed context or a switch in progress is the workspace recovery's: it
-        // reads nothing more, so the page keeps what it shows. Another failure leaves it to a
-        // background reload.
-        const refresh: (stillWanted: () => boolean) => Promise<void> = async (
+        // Shows an organization the gateway confirmed, which ends a failed reread.
+        const confirm: (profile: OrganizationProfile) => void = (
+          profile: OrganizationProfile,
+        ): void => {
+          store.organization.set(profile);
+          patchState(store, { refreshFailedFor: null });
+        };
+        // Reads the organization again after a write, for a logo change's reference and version,
+        // after a stale version or after a save whose outcome is unknown. A failure, a changed
+        // context or a switch in progress included, never reloads the primary read (its error
+        // would replace the page and the draft): the last confirmed organization stays, and the
+        // page shows that it could not be refreshed.
+        const refresh: (
+          organizationId: string,
           stillWanted: () => boolean,
-        ): Promise<void> => {
+        ) => Promise<OrganizationProfile | null> = async (
+          organizationId: string,
+          stillWanted: () => boolean,
+        ): Promise<OrganizationProfile | null> => {
           try {
             const latest: OrganizationProfile = await api.current();
-            if (stillWanted()) store.organization.set(latest);
-          } catch (error: unknown) {
-            if (stillWanted() && !isContextChange(error)) store.organization.reload();
+            if (!stillWanted()) return null;
+            confirm(latest);
+            return latest;
+          } catch {
+            if (stillWanted()) patchState(store, { refreshFailedFor: organizationId });
+            return null;
           }
         };
         const idle: () => boolean = (): boolean => !store.saving() && store.logoChange() === null;
@@ -396,14 +504,15 @@ function createOrganizationProfileStore(): Type<OrganizationProfileStoreInstance
           try {
             const updated: OrganizationProfile = await api.update(change, current.version);
             if (!stillWanted()) return { outcome: 'cancelled' };
-            store.organization.set(updated);
+            confirm(updated);
             return { outcome: 'saved' };
           } catch (error: unknown) {
             if (!stillWanted()) return { outcome: 'cancelled' };
             if (isContextChange(error)) return { outcome: 'context-changed' };
             if (hasProblemCode(error, 'request.version-mismatch')) {
-              await refresh(stillWanted);
-              return stillWanted() ? { outcome: 'outdated' } : { outcome: 'cancelled' };
+              const latest: OrganizationProfile | null = await refresh(current.id, stillWanted);
+              if (!stillWanted()) return { outcome: 'cancelled' };
+              return latest === null ? { outcome: 'unreconciled' } : { outcome: 'outdated' };
             }
             if (hasProblemCode(error, 'organization.slug-taken')) {
               return { outcome: 'refused', refusals: [{ field: 'slug', reason: 'slug-taken' }] };
@@ -423,6 +532,13 @@ function createOrganizationProfileStore(): Type<OrganizationProfileStoreInstance
                 };
               }
             }
+            if (isUnknownOutcome(error)) {
+              // The gateway may have applied the change: the saved organization tells.
+              const latest: OrganizationProfile | null = await refresh(current.id, stillWanted);
+              if (!stillWanted()) return { outcome: 'cancelled' };
+              if (latest === null) return { outcome: 'unreconciled' };
+              return holds(latest, change) ? { outcome: 'saved' } : { outcome: 'failed' };
+            }
             return { outcome: 'failed' };
           } finally {
             patchState(store, { saving: false });
@@ -432,15 +548,33 @@ function createOrganizationProfileStore(): Type<OrganizationProfileStoreInstance
         // Ends a refused logo change: a stale version reads the organization again first.
         const refusedLogo: (
           error: unknown,
+          organizationId: string,
           stillWanted: () => boolean,
         ) => Promise<OrganizationLogoOutcome> = async (
           error: unknown,
+          organizationId: string,
           stillWanted: () => boolean,
         ): Promise<OrganizationLogoOutcome> => {
           if (!stillWanted()) return 'cancelled';
           const outcome: OrganizationLogoOutcome = logoOutcomeOf(error);
-          if (outcome === 'outdated') await refresh(stillWanted);
-          return stillWanted() ? outcome : 'cancelled';
+          if (outcome !== 'outdated') return outcome;
+          const latest: OrganizationProfile | null = await refresh(organizationId, stillWanted);
+          if (!stillWanted()) return 'cancelled';
+          return latest === null ? 'unreconciled' : 'outdated';
+        };
+        // Ends an applied logo change once the organization is read again.
+        const appliedLogo: (
+          outcome: 'updated' | 'removed',
+          organizationId: string,
+          stillWanted: () => boolean,
+        ) => Promise<OrganizationLogoOutcome> = async (
+          outcome: 'updated' | 'removed',
+          organizationId: string,
+          stillWanted: () => boolean,
+        ): Promise<OrganizationLogoOutcome> => {
+          const latest: OrganizationProfile | null = await refresh(organizationId, stillWanted);
+          if (!stillWanted()) return 'cancelled';
+          return latest === null ? 'unreconciled' : outcome;
         };
 
         return {
@@ -489,10 +623,9 @@ function createOrganizationProfileStore(): Type<OrganizationProfileStoreInstance
               if (!stillWanted()) return 'cancelled';
               await api.publishLogo(upload.uploadId, store.current()?.version ?? current.version);
               if (!stillWanted()) return 'cancelled';
-              await refresh(stillWanted);
-              return stillWanted() ? 'updated' : 'cancelled';
+              return await appliedLogo('updated', current.id, stillWanted);
             } catch (error: unknown) {
-              return await refusedLogo(error, stillWanted);
+              return await refusedLogo(error, current.id, stillWanted);
             } finally {
               patchState(store, { logoChange: null });
             }
@@ -507,12 +640,23 @@ function createOrganizationProfileStore(): Type<OrganizationProfileStoreInstance
             try {
               await api.removeLogo(current.version);
               if (!stillWanted()) return 'cancelled';
-              await refresh(stillWanted);
-              return stillWanted() ? 'removed' : 'cancelled';
+              return await appliedLogo('removed', current.id, stillWanted);
             } catch (error: unknown) {
-              return await refusedLogo(error, stillWanted);
+              return await refusedLogo(error, current.id, stillWanted);
             } finally {
               patchState(store, { logoChange: null });
+            }
+          },
+
+          async retryRefresh(): Promise<boolean> {
+            const current: OrganizationProfile | null = store.current();
+            if (current === null || store.refreshing()) return false;
+            const stillWanted: () => boolean = wantedFor(current.id);
+            patchState(store, { refreshing: true });
+            try {
+              return (await refresh(current.id, stillWanted)) !== null;
+            } finally {
+              patchState(store, { refreshing: false });
             }
           },
         };
@@ -545,9 +689,13 @@ function createOrganizationProfileStore(): Type<OrganizationProfileStoreInstance
  * skipped, and a skipped save leaves `sent()` waiting for the one on its way. Each is bound to the
  * organization shown when it starts and to the page: once either changes it sends nothing more,
  * drops any late answer and ends `cancelled`. A stale version (`412 request.version-mismatch`)
- * reads the organization again before ending `outdated`; a changed organization context (`412
- * organization.context-changed`, or a switch in progress) ends `context-changed` and reads
- * nothing, leaving it to the workspace recovery.
+ * reads the organization again before ending `outdated`; a save whose outcome is unknown (no
+ * answer, a timeout or a `5xx`) reads it again too and ends `saved` when it holds the change,
+ * `failed` otherwise; a changed organization context (`412 organization.context-changed`, or a
+ * switch in progress) ends `context-changed`, leaving it to the workspace recovery. A reread after
+ * a write that fails never reaches the error boundary: the last confirmed organization stays,
+ * `refreshFailed` holds for that organization until a read or a save confirms it, the write ends
+ * `unreconciled`, and `retryRefresh()` reads it again.
  *
  * @type {ReturnType<typeof createOrganizationProfileStore>}
  */

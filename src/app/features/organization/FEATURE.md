@@ -158,8 +158,14 @@ loaded.` with `Retry`; the banner stays hidden until a retry succeeds.
   organization (the reread after a logo change or after a stale version), each field the person
   changed keeps their edit and every other field takes the new value; when someone else changed a
   field the person also changed, to another value, the conflict is toasted (instead of the logo's
-  success). The draft starts over only after a successful save, `Cancel`, or for another
-  organization.
+  success); the comparison uses the draft as it is when the read settles, so an edit made while
+  the write ran counts. The draft starts over only after a successful save, `Cancel`, or for
+  another organization.
+- A reread after a write (a logo change, a stale version, a save whose answer was lost) that
+  fails never reaches the error boundary: the last confirmed organization and the draft stay,
+  no success is toasted, and the card shows `The latest version of the organization could not
+be loaded.` with `Retry`, until a read or a save confirms the organization (another
+  organization forgets it).
 - `Save` sends only what changed (names and addresses trimmed, an empty description or website
   as `null`) from the version read (`If-Match`). The form checks the contract's rules before
   sending (a name of 1 to 120 characters, a slug of 2 to 63 lowercase letters, digits and single
@@ -169,7 +175,9 @@ loaded.` with `Retry`; the banner stays hidden until a retry succeeds.
   field. `412 request.version-mismatch` reads the organization again, merges it into the draft and
   toasts the conflict; any other refusal toasts the failure and keeps the edits; a
   `412 organization.context-changed` (or a switch in progress) keeps them silently for the
-  workspace recovery, and a reread that meets one reads nothing more.
+  workspace recovery. A save whose answer is lost (no status, `408` or `5xx`) reads the
+  organization again before reporting: when it holds the change the save counts as done (a
+  committed new slug is followed), otherwise it is a failure.
 - A successful save asks Workspace to verify the organization again (`WORKSPACE_REFRESH`), so the
   settings identity row and the shells show a new name. Once a save or a reread shows an address
   other than the workspace's, the page opens it: a navigation the person started meanwhile goes on
@@ -269,6 +277,7 @@ General section (`organization.general.*`):
 | `language-fr`, `language-de`                                                                                    | Autonyms, the same in every catalog: the English source keeps `Français` and `Deutsch`. |
 | `logo-too-large`, `logo-too-large-text`, `logo-invalid`, `logo-invalid-text`, `logo-failed`, `logo-failed-text` | Limits of the contract (`profile-media.yaml`); the mockup draws no refused upload.      |
 | `logo-removed-text`                                                                                             | The organization's own initials rather than the mockup's fixed `AN`.                    |
+| `refresh-failed`, `refresh-retry`                                                                               | The mockup draws no failed reread after a write.                                        |
 | `language-unknown`                                                                                              | A language a later contract adds needs its own state.                                   |
 | `loading`                                                                                                       | The mockup's `Chargement de la section` (`Organisation.dc.html` line 74), with this id. |
 

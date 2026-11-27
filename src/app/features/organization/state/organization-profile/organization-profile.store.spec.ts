@@ -358,12 +358,84 @@ describe('OrganizationProfileStore', () => {
     const instance: InstanceType<typeof OrganizationProfileStore> = await store();
     api['current'].mockRejectedValue(new OrganizationSwitchPendingError());
 
-    expect(await instance.uploadLogo(png())).toBe('updated');
+    expect(await instance.uploadLogo(png())).toBe('unreconciled');
     await TestBed.inject(ApplicationRef).whenStable();
 
     expect(api['current']).toHaveBeenCalledTimes(2);
     expect(instance.organization.status()).not.toBe('error');
     expect(instance.current()).toEqual(ATELIER_NORD);
+  });
+
+  it('keeps the last confirmed organization when the reread after a logo change fails', async () => {
+    const instance: InstanceType<typeof OrganizationProfileStore> = await store();
+    api['current'].mockRejectedValueOnce(problem(503, 'upstream.unavailable'));
+
+    expect(await instance.uploadLogo(png())).toBe('unreconciled');
+    await TestBed.inject(ApplicationRef).whenStable();
+
+    expect(instance.organization.status()).not.toBe('error');
+    expect(instance.current()).toEqual(ATELIER_NORD);
+    expect(instance.refreshFailed()).toBe(true);
+
+    api['current'].mockResolvedValueOnce({ ...ATELIER_NORD, logoId: 'upload-1', version: 4 });
+    expect(await instance.retryRefresh()).toBe(true);
+    expect(instance.refreshFailed()).toBe(false);
+    expect(instance.current()?.version).toBe(4);
+  });
+
+  it('ends a stale save unreconciled when its reread fails', async () => {
+    api['update'].mockRejectedValue(problem(412, 'request.version-mismatch'));
+    const instance: InstanceType<typeof OrganizationProfileStore> = await store();
+    api['current'].mockRejectedValue(problem(503, 'upstream.unavailable'));
+
+    expect(await instance.save({ name: 'Nord' })).toEqual({ outcome: 'unreconciled' });
+    expect(instance.organization.status()).not.toBe('error');
+    expect(instance.refreshFailed()).toBe(true);
+  });
+
+  it('forgets a failed reread for another organization', async () => {
+    const instance: InstanceType<typeof OrganizationProfileStore> = await store();
+    api['current'].mockRejectedValueOnce(problem(503, 'upstream.unavailable'));
+    await instance.uploadLogo(png());
+    expect(instance.refreshFailed()).toBe(true);
+
+    shown.set(organization('org-sud', 'atelier-sud'));
+
+    expect(instance.refreshFailed()).toBe(false);
+  });
+
+  it.each([
+    ['no answer', new HttpErrorResponse({ status: 0 })],
+    ['a gateway timeout', problem(504, 'upstream.timeout')],
+  ])(
+    'treats a save that ends with %s as saved once the reread holds it',
+    async (_case: string, error: Error) => {
+      api['update'].mockRejectedValue(error);
+      const instance: InstanceType<typeof OrganizationProfileStore> = await store();
+      api['current'].mockResolvedValue({ ...ATELIER_NORD, slug: 'nord', version: 4 });
+
+      expect(await instance.save({ slug: 'nord' })).toEqual({ outcome: 'saved' });
+      expect(instance.current()?.version).toBe(4);
+      expect(instance.movedTo()).toBe('nord');
+    },
+  );
+
+  it('fails a save whose answer was lost when the reread does not hold it', async () => {
+    api['update'].mockRejectedValue(new HttpErrorResponse({ status: 0 }));
+    const instance: InstanceType<typeof OrganizationProfileStore> = await store();
+
+    expect(await instance.save({ slug: 'nord' })).toEqual({ outcome: 'failed' });
+    expect(api['current']).toHaveBeenCalledTimes(2);
+  });
+
+  it('ends a save whose answer was lost unreconciled when the reread fails too', async () => {
+    api['update'].mockRejectedValue(new HttpErrorResponse({ status: 0 }));
+    const instance: InstanceType<typeof OrganizationProfileStore> = await store();
+    api['current'].mockRejectedValue(new HttpErrorResponse({ status: 0 }));
+
+    expect(await instance.save({ slug: 'nord' })).toEqual({ outcome: 'unreconciled' });
+    expect(instance.current()).toEqual(ATELIER_NORD);
+    expect(instance.refreshFailed()).toBe(true);
   });
 
   it('publishes the same upload once after a transfer that ended without an answer', async () => {
