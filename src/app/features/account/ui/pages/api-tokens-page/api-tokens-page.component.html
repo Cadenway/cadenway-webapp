@@ -1,4 +1,4 @@
-@let tokens = store.tokens.value();
+@let tokens = store.list();
 <div class="mx-auto flex w-full max-w-3xl flex-col gap-6 px-4 py-6 sm:px-8 sm:py-8">
   @if (tokens) {
     <header class="flex flex-wrap items-start gap-4">
@@ -35,7 +35,7 @@
         aria-label="Personal access tokens"
         i18n-aria-label="@@account.api-tokens.table"
       >
-        <thead cwTableHeader role="rowgroup" class="max-md:hidden">
+        <thead cwTableHeader role="rowgroup" class="max-md:sr-only">
           <tr cwTableRow role="row">
             <th cwTableHead role="columnheader" i18n="@@account.api-tokens.column-name">Name</th>
             <th
@@ -73,6 +73,8 @@
               cwTableRow
               role="row"
               class="max-md:flex max-md:h-auto max-md:flex-wrap max-md:items-center max-md:gap-x-3 max-md:gap-y-1.5 max-md:p-3"
+              [class.bg-selected]="token.id === store.highlightedId()"
+              [attr.data-highlighted]="token.id === store.highlightedId() ? 'true' : null"
               data-testid="token-row"
             >
               <td cwTableCell role="cell" class="py-2 max-md:block max-md:basis-full max-md:p-0">

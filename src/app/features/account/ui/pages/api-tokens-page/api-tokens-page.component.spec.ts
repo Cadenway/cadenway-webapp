@@ -2,12 +2,14 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { Component, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter, withErrorBoundaries, withRouterConfig } from '@angular/router';
+import { Router } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { provideCadenwayIcons } from '@cadenway/icons';
 import { CwToastService } from '@cadenway/ui/components/toast';
 import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 
 import { WORKSPACE_CONTEXT } from '@features/workspace/ports/workspace-context';
+import { unsavedChangesGuard } from '@shared/unsaved-changes';
 
 import { ApiTokensApi } from '../../../data-access/services/api-tokens-api/api-tokens-api.service';
 import type { ApiToken } from '../../../models/api-token/api-token.interface';
@@ -25,6 +27,18 @@ import { ApiTokensPage } from './api-tokens-page.component';
   template: '<p data-testid="boundary">Could not load this section</p>',
 })
 class FakeBoundary {}
+
+/**
+ * Component Elsewhere
+ *
+ * @description
+ * Another settings section to navigate to.
+ */
+@Component({
+  selector: 'cw-elsewhere',
+  template: '<p data-testid="elsewhere">Profile</p>',
+})
+class Elsewhere {}
 
 /**
  * Constant rows
@@ -73,7 +87,7 @@ const SECRET: string = `cw_pat_${'E'.repeat(36)}`;
 
 describe('ApiTokensPage', () => {
   let api: { list: Mock; create: Mock; revoke: Mock };
-  let toasts: { success: Mock; error: Mock };
+  let toasts: { success: Mock; error: Mock; warning: Mock };
   let writeText: Mock;
 
   beforeEach(() => {
@@ -87,7 +101,7 @@ describe('ApiTokensPage', () => {
       ),
       revoke: vi.fn(() => Promise.resolve()),
     };
-    toasts = { success: vi.fn(), error: vi.fn() };
+    toasts = { success: vi.fn(), error: vi.fn(), warning: vi.fn() };
     writeText = vi.fn(() => Promise.resolve());
     Object.defineProperty(navigator, 'clipboard', {
       value: { writeText },
@@ -97,7 +111,10 @@ describe('ApiTokensPage', () => {
       providers: [
         provideCadenwayIcons(),
         provideRouter(
-          [{ path: 'api-tokens', component: ApiTokensPage }],
+          [
+            { path: 'api-tokens', component: ApiTokensPage, canDeactivate: [unsavedChangesGuard] },
+            { path: 'profile', component: Elsewhere },
+          ],
           withErrorBoundaries({ defaultErrorComponent: FakeBoundary }),
           withRouterConfig({ onSameUrlNavigation: 'reload' }),
         ),
@@ -322,6 +339,99 @@ describe('ApiTokensPage', () => {
       expect(overlay('token-submit')).not.toBeNull();
     });
     expect(overlay('token-secret')).toBeNull();
+  });
+
+  /**
+   * Function submitName
+   *
+   * @description
+   * Opens the create dialog, types a name and submits it.
+   *
+   * @param {RouterTestingHarness} harness - The harness.
+   * @param {string} value - The name.
+   * @returns {Promise<void>} Resolves once submitted.
+   */
+  async function submitName(harness: RouterTestingHarness, value: string): Promise<void> {
+    view(harness).querySelector<HTMLButtonElement>('[data-testid="token-create"]')?.click();
+    await harness.fixture.whenStable();
+    const name: HTMLInputElement | null = document.querySelector<HTMLInputElement>('#token-name');
+    if (name === null) throw new Error('Expected the name field.');
+    name.value = value;
+    name.dispatchEvent(new Event('input'));
+    overlay('token-submit')?.click();
+  }
+
+  it('keeps the column headers for screen readers in the card layout', async () => {
+    const harness: RouterTestingHarness = await open();
+
+    const head: HTMLElement | null = view(harness).querySelector('thead');
+    expect(head?.classList).toContain('max-md:sr-only');
+    expect(head?.classList).not.toContain('max-md:hidden');
+    expect(head?.querySelectorAll('[role="columnheader"]')).toHaveLength(5);
+  });
+
+  it('closes the dialog onto the highlighted token when the answer of its creation was lost', async () => {
+    api.create.mockRejectedValueOnce(new HttpErrorResponse({ status: 0 }));
+    const harness: RouterTestingHarness = await open();
+    api.list.mockResolvedValueOnce([{ ...rows[0], id: 't4', name: 'GitLab sync' }, ...rows]);
+
+    await submitName(harness, 'GitLab sync');
+
+    await vi.waitFor(async () => {
+      await harness.fixture.whenStable();
+      expect(document.querySelector('[role="dialog"]')).toBeNull();
+    });
+    const highlighted: Element | null = view(harness).querySelector('[data-highlighted="true"]');
+    expect(highlighted?.textContent).toContain('GitLab sync');
+    expect(toasts.warning).toHaveBeenCalledWith('The token was created without its secret', {
+      description: 'Its secret could not be shown. Revoke it, then create another one.',
+    });
+  });
+
+  it('waits for a creation in progress before leaving, and stays to show its secret', async () => {
+    let answer: (value: unknown) => void = (): void => undefined;
+    api.create.mockReturnValueOnce(
+      new Promise((resolve: (value: unknown) => void): void => {
+        answer = resolve;
+      }),
+    );
+    const harness: RouterTestingHarness = await open();
+    await submitName(harness, 'GitLab sync');
+    await vi.waitFor(() => {
+      expect(api.create).toHaveBeenCalledOnce();
+    });
+
+    const leaving: Promise<boolean> = TestBed.inject(Router).navigateByUrl('/profile');
+    answer({
+      token: { ...rows[0], id: 't4', name: 'GitLab sync', lastUse: { kind: 'never' } },
+      secret: SECRET,
+    });
+
+    expect(await leaving).toBe(false);
+    await harness.fixture.whenStable();
+    expect(document.querySelector<HTMLInputElement>('[data-testid="token-secret"]')?.value).toBe(
+      SECRET,
+    );
+    expect(document.querySelector('[data-testid="elsewhere"]')).toBeNull();
+  });
+
+  it('leaves once a creation in progress was refused', async () => {
+    let refuse: (error: unknown) => void = (): void => undefined;
+    api.create.mockReturnValueOnce(
+      new Promise((_resolve: (value: unknown) => void, reject: (error: unknown) => void): void => {
+        refuse = reject;
+      }),
+    );
+    const harness: RouterTestingHarness = await open();
+    await submitName(harness, 'GitLab sync');
+    await vi.waitFor(() => {
+      expect(api.create).toHaveBeenCalledOnce();
+    });
+
+    const leaving: Promise<boolean> = TestBed.inject(Router).navigateByUrl('/profile');
+    refuse(new HttpErrorResponse({ status: 429 }));
+
+    expect(await leaving).toBe(true);
   });
 
   it('says the copy failed when the clipboard refuses', async () => {

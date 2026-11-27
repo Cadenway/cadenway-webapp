@@ -13,7 +13,11 @@ import {
 
 import { ApiTokensApi } from '../../data-access/services/api-tokens-api/api-tokens-api.service';
 import { ReauthenticationApi } from '../../data-access/services/reauthentication-api/reauthentication-api.service';
-import type { ApiToken, ApiTokenDraft } from '../../models/api-token/api-token.interface';
+import type {
+  ApiToken,
+  ApiTokenCreateOutcome,
+  ApiTokenDraft,
+} from '../../models/api-token/api-token.interface';
 import { ReauthenticationCancelledError } from '../../reauthentication/reauthentication-cancelled.error';
 import { ReauthenticationService } from '../../reauthentication/reauthentication.service';
 import { ApiTokensStore } from './api-tokens.store';
@@ -149,7 +153,56 @@ function reauthenticationRequired(): HttpErrorResponse {
  * @returns {string[]} The names.
  */
 function names(store: InstanceType<typeof ApiTokensStore>): string[] {
-  return (store.tokens.value() ?? []).map((item: ApiToken): string => item.name);
+  return (store.list() ?? []).map((item: ApiToken): string => item.name);
+}
+
+/**
+ * Interface Deferred
+ *
+ * @description
+ * A promise the spec settles by hand.
+ */
+interface Deferred<T> {
+  // #region Properties
+  /**
+   * Property promise
+   *
+   * @description
+   * The promise.
+   *
+   * @type {Promise<T>}
+   * @readonly
+   */
+  readonly promise: Promise<T>;
+
+  /**
+   * Property resolve
+   *
+   * @description
+   * Fulfils it.
+   *
+   * @type {(value: T) => void}
+   * @readonly
+   */
+  readonly resolve: (value: T) => void;
+  // #endregion
+}
+
+/**
+ * Function deferred
+ *
+ * @description
+ * Creates a promise the spec settles by hand.
+ *
+ * @template T
+ * @returns {Deferred<T>} The promise and its resolver.
+ */
+function deferred<T>(): Deferred<T> {
+  let resolve: (value: T) => void = (): void => undefined;
+  const promise: Promise<T> = new Promise<T>((done: (value: T) => void): void => {
+    resolve = done;
+  });
+  return { promise, resolve };
 }
 
 /**
@@ -167,7 +220,7 @@ async function settle(): Promise<void> {
 describe('ApiTokensStore', () => {
   let api: { list: Mock; create: Mock; revoke: Mock };
   let run: Mock;
-  let toasts: { success: Mock; error: Mock };
+  let toasts: { success: Mock; error: Mock; warning: Mock };
 
   beforeEach(() => {
     organization.set(ATELIER_NORD);
@@ -182,7 +235,7 @@ describe('ApiTokensStore', () => {
       revoke: vi.fn(() => Promise.resolve()),
     };
     run = vi.fn((operation: () => Promise<unknown>) => operation());
-    toasts = { success: vi.fn(), error: vi.fn() };
+    toasts = { success: vi.fn(), error: vi.fn(), warning: vi.fn() };
     TestBed.configureTestingModule({
       providers: [
         ApiTokensStore,
@@ -254,7 +307,9 @@ describe('ApiTokensStore', () => {
 
   it('shows the failure toast when the gateway refuses the creation', async () => {
     const store: InstanceType<typeof ApiTokensStore> = await loaded();
-    api.create.mockRejectedValueOnce(new HttpErrorResponse({ status: 503 }));
+    api.create.mockRejectedValueOnce(
+      new HttpErrorResponse({ status: 400, error: { code: 'request.invalid' } }),
+    );
 
     await store.create(draft);
 
@@ -363,6 +418,103 @@ describe('ApiTokensStore', () => {
     expect(store.revokingId()).toBeNull();
   });
 
+  it('highlights a token created without its answer and warns that its secret is gone', async () => {
+    const store: InstanceType<typeof ApiTokensStore> = await loaded();
+    api.create.mockRejectedValueOnce(new HttpErrorResponse({ status: 0 }));
+    api.list.mockResolvedValueOnce([
+      token('t4', 'GitLab sync'),
+      token('t1', 'GitLab continuous integration'),
+      token('t2', 'Trello import script'),
+    ]);
+
+    expect(await store.create(draft)).toBe('orphaned');
+
+    expect(store.secret()).toBeNull();
+    expect(store.highlightedId()).toBe('t4');
+    expect(names(store)[0]).toBe('GitLab sync');
+    expect(toasts.warning).toHaveBeenCalledWith('The token was created without its secret', {
+      description: 'Its secret could not be shown. Revoke it, then create another one.',
+    });
+    expect(toasts.error).not.toHaveBeenCalled();
+  });
+
+  it('warns that a token may not have been created when its answer was lost and none appeared', async () => {
+    const store: InstanceType<typeof ApiTokensStore> = await loaded();
+    api.create.mockRejectedValueOnce(new HttpErrorResponse({ status: 504 }));
+
+    expect(await store.create(draft)).toBe('unknown');
+
+    expect(api.list).toHaveBeenCalledTimes(2);
+    expect(store.highlightedId()).toBeNull();
+    expect(names(store)).toHaveLength(2);
+    expect(toasts.warning).toHaveBeenCalledWith('The token may not have been created', {
+      description: 'The answer was lost. Check the list before creating it again.',
+    });
+    expect(toasts.error).not.toHaveBeenCalled();
+  });
+
+  it('reports a refused creation as failed', async () => {
+    const store: InstanceType<typeof ApiTokensStore> = await loaded();
+    api.create.mockRejectedValueOnce(new HttpErrorResponse({ status: 429 }));
+
+    expect(await store.create(draft)).toBe('failed');
+
+    expect(api.list).toHaveBeenCalledOnce();
+    expect(toasts.error).toHaveBeenCalledOnce();
+  });
+
+  it('keeps a revocation confirmed while the list is read again after a back-and-forth switch', async () => {
+    const store: InstanceType<typeof ApiTokensStore> = await loaded();
+    const revoked: Deferred<undefined> = deferred<undefined>();
+    api.revoke.mockReturnValueOnce(revoked.promise);
+    const revocation: Promise<boolean> = store.revoke(token('t2', 'Trello import script'));
+
+    api.list.mockResolvedValueOnce([token('t9', 'Studio Sud backup')]);
+    organization.set(STUDIO_SUD);
+    await settle();
+    const staleRead: Deferred<readonly ApiToken[]> = deferred<readonly ApiToken[]>();
+    api.list.mockReturnValueOnce(staleRead.promise);
+    organization.set(ATELIER_NORD);
+    await vi.waitFor(() => {
+      expect(api.list).toHaveBeenCalledTimes(3);
+    });
+
+    revoked.resolve(undefined);
+    expect(await revocation).toBe(true);
+    staleRead.resolve([
+      token('t1', 'GitLab continuous integration'),
+      token('t2', 'Trello import script'),
+    ]);
+    await settle();
+
+    expect(names(store)).toEqual(['GitLab continuous integration']);
+
+    api.list.mockResolvedValueOnce([token('t1', 'GitLab continuous integration')]);
+    store.tokens.reload();
+    await settle();
+    expect(names(store)).toEqual(['GitLab continuous integration']);
+  });
+
+  it('keeps a creation confirmed while an older read of the list lands', async () => {
+    const store: InstanceType<typeof ApiTokensStore> = await loaded();
+    const created: Deferred<{ token: ApiToken; secret: string }> = deferred();
+    api.create.mockReturnValueOnce(created.promise);
+    const creation: Promise<ApiTokenCreateOutcome> = store.create(draft);
+    const olderRead: Deferred<readonly ApiToken[]> = deferred<readonly ApiToken[]>();
+    api.list.mockReturnValueOnce(olderRead.promise);
+    store.tokens.reload();
+    await vi.waitFor(() => {
+      expect(api.list).toHaveBeenCalledTimes(2);
+    });
+
+    created.resolve({ token: token('t4', 'GitLab sync'), secret: SECRET });
+    expect(await creation).toBe('created');
+    olderRead.resolve([token('t1', 'GitLab continuous integration')]);
+    await settle();
+
+    expect(names(store)).toEqual(['GitLab sync', 'GitLab continuous integration']);
+  });
+
   it('keeps a token on a 404 with another code and shows the failure toast', async () => {
     const store: InstanceType<typeof ApiTokensStore> = await loaded();
     api.revoke.mockRejectedValueOnce(
@@ -412,17 +564,17 @@ interface PendingCreation {
    * @description
    * Settles once the creation ended.
    *
-   * @type {Promise<void>}
+   * @type {Promise<ApiTokenCreateOutcome>}
    * @readonly
    */
-  readonly done: Promise<void>;
+  readonly done: Promise<ApiTokenCreateOutcome>;
   // #endregion
 }
 
 describe('ApiTokensStore with the real reauthentication', () => {
   let create: Mock;
   let reauthenticate: Mock;
-  let toasts: { success: Mock; error: Mock };
+  let toasts: { success: Mock; error: Mock; warning: Mock };
 
   beforeEach(() => {
     organization.set(ATELIER_NORD);
@@ -431,7 +583,7 @@ describe('ApiTokensStore with the real reauthentication', () => {
       .mockRejectedValueOnce(reauthenticationRequired())
       .mockResolvedValue({ token: token('t4', 'GitLab sync'), secret: SECRET });
     reauthenticate = vi.fn(() => Promise.resolve());
-    toasts = { success: vi.fn(), error: vi.fn() };
+    toasts = { success: vi.fn(), error: vi.fn(), warning: vi.fn() };
     TestBed.configureTestingModule({
       providers: [
         provideRouter([]),
@@ -465,7 +617,7 @@ describe('ApiTokensStore with the real reauthentication', () => {
     const store: InstanceType<typeof ApiTokensStore> = TestBed.inject(ApiTokensStore);
     const service: ReauthenticationService = TestBed.inject(ReauthenticationService);
     await settle();
-    const done: Promise<void> = store.create(draft);
+    const done: Promise<ApiTokenCreateOutcome> = store.create(draft);
     await vi.waitFor(() => {
       expect(service.prompt()).not.toBeNull();
     });

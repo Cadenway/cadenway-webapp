@@ -45,8 +45,11 @@ import { CwToastService } from '@cadenway/ui/components/toast';
 import { NgIcon } from '@ng-icons/core';
 import { take } from 'rxjs';
 
+import { type UnsavedChanges, warnBeforeUnload } from '@shared/unsaved-changes';
+
 import type {
   ApiToken,
+  ApiTokenCreateOutcome,
   ApiTokenDraft,
   ApiTokenExpiry,
   ApiTokenLastUse,
@@ -73,7 +76,12 @@ import { TokenCreateDialog } from '../../dialogs/token-create-dialog/token-creat
  * name, and its button spins while the gateway answers; once a revoked row left and the
  * confirmation closed, focus moves to the `Revoke` of the row that took its place (or the one
  * before it), or to the header's `Create a token` when no token is left. The table carries
- * explicit table, row, column header and cell roles, which its card layout would otherwise lose.
+ * explicit table, row, column header and cell roles, which its card layout would otherwise lose;
+ * below 768 px its header row stays for screen readers only. A creation whose answer was lost
+ * highlights the token it may have made and closes the dialog. Leaving the page waits for a
+ * creation in progress (`unsavedChangesGuard`): once it settles the person leaves, unless it
+ * brought a secret, which keeps the page with its dialog until `I have copied the token`; the
+ * browser asks before closing the tab meanwhile.
  */
 @Component({
   selector: 'cw-api-tokens-page',
@@ -111,7 +119,7 @@ import { TokenCreateDialog } from '../../dialogs/token-create-dialog/token-creat
   ],
   templateUrl: './api-tokens-page.component.html',
 })
-export class ApiTokensPage {
+export class ApiTokensPage implements UnsavedChanges {
   // #region Properties
   /**
    * Property store
@@ -253,9 +261,60 @@ export class ApiTokensPage {
     'revokeButton',
     { read: ElementRef },
   );
+
+  /**
+   * Property creation
+   *
+   * @description
+   * The creation in progress, which leaving the page waits for, or null.
+   *
+   * @type {Promise<ApiTokenCreateOutcome> | null}
+   */
+  private creation: Promise<ApiTokenCreateOutcome> | null = null;
+  // #endregion
+
+  // #region Constructor
+  /**
+   * Constructor
+   *
+   * @description
+   * Asks the browser to confirm closing the tab while a creation runs or its secret shows.
+   *
+   * @constructor
+   */
+  public constructor() {
+    warnBeforeUnload((): boolean => this.hasUnsavedChanges());
+  }
   // #endregion
 
   // #region Methods
+  /**
+   * Method hasUnsavedChanges
+   *
+   * @description
+   * Whether leaving now would lose a one-time result: a creation in progress, or the secret it
+   * brought.
+   *
+   * @returns {boolean} Whether to hold the navigation.
+   */
+  public hasUnsavedChanges(): boolean {
+    return this.store.creating() || this.store.secret() !== null;
+  }
+
+  /**
+   * Method confirmDiscard
+   *
+   * @description
+   * Waits for the creation in progress, then lets the person leave unless a secret now shows,
+   * which keeps the page and its dialog so the secret is not lost.
+   *
+   * @returns {Promise<boolean>} Whether to leave.
+   */
+  public async confirmDiscard(): Promise<boolean> {
+    if (this.creation !== null) await this.creation;
+    return this.store.secret() === null;
+  }
+
   /**
    * Method openCreate
    *
@@ -271,13 +330,20 @@ export class ApiTokensPage {
    * Method create
    *
    * @description
-   * Sends the dialog's draft; the dialog shows the secret once the store holds it.
+   * Sends the dialog's draft; the dialog shows the secret once the store holds it. When the
+   * answer was lost but the token exists, the dialog closes onto its highlighted row.
    *
    * @param {ApiTokenDraft} draft - The draft.
    * @returns {Promise<void>} Resolves once settled.
    */
-  protected create(draft: ApiTokenDraft): Promise<void> {
-    return this.store.create(draft);
+  protected async create(draft: ApiTokenDraft): Promise<void> {
+    const creation: Promise<ApiTokenCreateOutcome> = this.store.create(draft);
+    this.creation = creation;
+    try {
+      if ((await creation) === 'orphaned') this.createOpen.set(false);
+    } finally {
+      if (this.creation === creation) this.creation = null;
+    }
   }
 
   /**
@@ -355,7 +421,7 @@ export class ApiTokensPage {
   protected async confirmRevoke(): Promise<void> {
     const token: ApiToken | null = this.revokeTarget();
     if (token === null) return;
-    const index: number = (this.store.tokens.value() ?? []).findIndex(
+    const index: number = (this.store.list() ?? []).findIndex(
       (item: ApiToken): boolean => item.id === token.id,
     );
     const removed: boolean = await this.store.revoke(token);

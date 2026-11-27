@@ -22,6 +22,19 @@ export type ApiTokenScope = 'tasks:read' | 'tasks:write' | 'members:read' | 'web
 export type ApiTokenExpiration = '30-days' | '90-days' | '1-year' | 'never';
 
 /**
+ * Type ApiTokenCreateOutcome
+ *
+ * @description
+ * How a creation ended: `created` with its secret; `orphaned` when its answer was lost but the
+ * list shows the new token, whose secret is gone; `unknown` when its answer was lost and the list
+ * shows no new token; `failed` when the gateway refused it; `cancelled` when the person closed
+ * the reauthentication dialog or the organization changed.
+ *
+ * @type {'created' | 'orphaned' | 'unknown' | 'failed' | 'cancelled'}
+ */
+export type ApiTokenCreateOutcome = 'created' | 'orphaned' | 'unknown' | 'failed' | 'cancelled';
+
+/**
  * Type ApiTokenLastUse
  *
  * @description

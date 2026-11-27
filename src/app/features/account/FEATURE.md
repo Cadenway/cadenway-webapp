@@ -22,7 +22,7 @@ parent provides the English texts of `cw-password-strength` and `cw-input-otp` t
 | `security`      | `security-page` (`SecurityPage`)           | `Security and sign-in` |                                      |
 | `notifications` | `notifications-page` (`NotificationsPage`) | `Notifications`        |                                      |
 | `preferences`   | `preferences-page` (`PreferencesPage`)     | `Preferences`          |                                      |
-| `api-tokens`    | `api-tokens-page` (`ApiTokensPage`)        | `API tokens`           |                                      |
+| `api-tokens`    | `api-tokens-page` (`ApiTokensPage`)        | `API tokens`           | `canDeactivate: unsavedChangesGuard` |
 | `**`            | Errors' `ERRORS_ROUTES` (404 in the shell) |                        |                                      |
 
 - Each page is a stub (WP0 of steps 7 and 8) showing the mockup's section title in the account
@@ -106,8 +106,9 @@ parent provides the English texts of `cw-password-strength` and `cw-input-otp` t
   form's dirty state.
 - API tokens, list: it follows the cursor and is read again after an organization switch; a
   cursor that does not end within 20 pages, or repeats, fails the read (error boundary and
-  `Retry`) rather than show part of the list. The store then keeps it in step with its own
-  writes, so a write never sends the page to the error boundary.
+  `Retry`) rather than show part of the list. The store keeps its own confirmed writes over the
+  read list until a read issued after them lands, so neither a reload in progress (an A, B, A
+  switch) nor an older read hides them, and a write never sends the page to the error boundary.
 - API tokens, organization: a creation or a revocation acts in the organization the workspace
   showed when it started. Before each send, the retry after a reauthentication included, the
   store checks that the workspace still shows it and otherwise stops silently; the requests
@@ -121,7 +122,14 @@ parent provides the English texts of `cw-password-strength` and `cw-input-otp` t
   store's memory, shown once read-only with `Copy the token`, never logged, persisted or put in
   a toast. Focus moves to it when the step appears; a backdrop click no longer closes the dialog
   then. The step stays on screen during the exit animation and the secret is cleared once the
-  dialog has left.
+  dialog has left. A creation whose answer is lost (no status, a timeout, a `5xx`) may have
+  created the token: the list is read again; a new token of that name is highlighted, the dialog
+  closes and a warning asks to revoke it, since its secret is gone; otherwise a warning says the
+  token may not have been created. A refusal (`4xx`) shows the failure toast. The contract
+  declares no `Idempotency-Key` for `createApiToken`, so none is sent. Leaving the page waits for
+  a creation in progress (`unsavedChangesGuard`); once it settles the person leaves, unless it
+  brought a secret, which keeps the page until `I have copied the token`; the browser asks before
+  closing the tab meanwhile.
 - API tokens, revocation: `Revoke` asks through `cw-alert-dialog`, typing the token's name. Once
   the row left and the confirmation closed, focus moves to the `Revoke` now at its place (or the
   one before it), or to the header's `Create a token` when no token is left.
@@ -129,23 +137,24 @@ parent provides the English texts of `cw-password-strength` and `cw-input-otp` t
   expiry reads `In n days` up to 90 days (the longest day option), `In n years` when it falls on
   today's calendar date a whole number of years ahead (the `1 year` option), and a date
   otherwise; within 7 days it shows in grenat. Below 768 px the table becomes cards and keeps its
-  explicit table, row, column header and cell roles. Known gap: the API usage strip
+  explicit table, row, column header and cell roles; its header row stays for screen readers only
+  (`sr-only`). Known gap: the API usage strip
   (`Compte.dc.html` lines 535-540) is hidden until billing counts API calls (B15).
 - Known gap: the mockup's `Set a status message` item and the status message under the header are left out,
   since the backend has no status message yet.
 
 ## Copy not taken word for word from the mockup
 
-| Unit                                                                                                                                                                                                              | Reason                                                                                         |
-| ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
-| `account.user-menu.label-no-status`                                                                                                                                                                               | The mockup always knows the presence; here it is unknown until the snapshot or a local choice. |
-| `account.user-menu.status-unavailable`                                                                                                                                                                            | The mockup has no state without realtime.                                                      |
-| `account.user-menu.status-failed`, `account.user-menu.status-failed-text`                                                                                                                                         | The mockup draws no refused presence.                                                          |
-| `account.user-menu.sign-out-failed`, `account.user-menu.sign-out-failed-text`                                                                                                                                     | The mockup draws no refused sign-out.                                                          |
-| `account.reauthentication.*`                                                                                                                                                                                      | The mockup draws no reauthentication dialog (`auth.yaml` "Recent authentication").             |
-| `account.labels.*`                                                                                                                                                                                                | Texts of the password strength and one-time code bricks, worded as Auth's.                     |
-| `account.api-tokens.name-required`, `account.api-tokens.name-too-long`, `account.api-tokens.scopes-required`                                                                                                      | The mockup disables `Create the token` instead of showing field errors.                        |
-| `account.api-tokens.create-failed`, `account.api-tokens.create-failed-text`, `account.api-tokens.revoke-failed`, `account.api-tokens.revoke-failed-text`                                                          | The mockup draws no refused creation or revocation.                                            |
-| `account.api-tokens.revoke-label`                                                                                                                                                                                 | Accessible name of each row's `Revoke`, naming its token.                                      |
-| `account.api-tokens.used-days`, `account.api-tokens.expires-days`, `account.api-tokens.expires-years`, `account.api-tokens.used-minutes`, `account.api-tokens.used-hours`                                         | The mockup shows fixed samples; the singular and generic forms follow its wording.             |
-| `account.user-menu.avatar-unknown`, `account.user-menu.avatar-online`, `account.user-menu.avatar-away`, `account.user-menu.avatar-dnd`, `account.user-menu.avatar-invisible`, `account.user-menu.avatar-disabled` | Texts of the avatar brick, taken from its defaults.                                            |
+| Unit                                                                                                                                                                                                                                                                                                                                   | Reason                                                                                         |
+| -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| `account.user-menu.label-no-status`                                                                                                                                                                                                                                                                                                    | The mockup always knows the presence; here it is unknown until the snapshot or a local choice. |
+| `account.user-menu.status-unavailable`                                                                                                                                                                                                                                                                                                 | The mockup has no state without realtime.                                                      |
+| `account.user-menu.status-failed`, `account.user-menu.status-failed-text`                                                                                                                                                                                                                                                              | The mockup draws no refused presence.                                                          |
+| `account.user-menu.sign-out-failed`, `account.user-menu.sign-out-failed-text`                                                                                                                                                                                                                                                          | The mockup draws no refused sign-out.                                                          |
+| `account.reauthentication.*`                                                                                                                                                                                                                                                                                                           | The mockup draws no reauthentication dialog (`auth.yaml` "Recent authentication").             |
+| `account.labels.*`                                                                                                                                                                                                                                                                                                                     | Texts of the password strength and one-time code bricks, worded as Auth's.                     |
+| `account.api-tokens.name-required`, `account.api-tokens.name-too-long`, `account.api-tokens.scopes-required`                                                                                                                                                                                                                           | The mockup disables `Create the token` instead of showing field errors.                        |
+| `account.api-tokens.create-failed`, `account.api-tokens.create-failed-text`, `account.api-tokens.create-unknown`, `account.api-tokens.create-unknown-text`, `account.api-tokens.created-without-secret`, `account.api-tokens.created-without-secret-text`, `account.api-tokens.revoke-failed`, `account.api-tokens.revoke-failed-text` | The mockup draws no refused creation or revocation.                                            |
+| `account.api-tokens.revoke-label`                                                                                                                                                                                                                                                                                                      | Accessible name of each row's `Revoke`, naming its token.                                      |
+| `account.api-tokens.used-days`, `account.api-tokens.expires-days`, `account.api-tokens.expires-years`, `account.api-tokens.used-minutes`, `account.api-tokens.used-hours`                                                                                                                                                              | The mockup shows fixed samples; the singular and generic forms follow its wording.             |
+| `account.user-menu.avatar-unknown`, `account.user-menu.avatar-online`, `account.user-menu.avatar-away`, `account.user-menu.avatar-dnd`, `account.user-menu.avatar-invisible`, `account.user-menu.avatar-disabled`                                                                                                                      | Texts of the avatar brick, taken from its defaults.                                            |
