@@ -88,7 +88,10 @@ parent provides the English texts of `cw-password-strength` and `cw-input-otp` t
 - The reauthentication dialog submits with Submit enabled while invalid (the field error shows and
   the field takes focus), cannot be closed while its answer is checked, and keeps the reason of a
   refused answer: `Incorrect password.` (with the attempts left when known),
-  `Incorrect or already used code.`, the 15-minute lockout or an unavailable gateway. A `403` with
+  `Incorrect or already used code.` (with the attempts left when known), the 15-minute lockout or
+  an unavailable gateway, and takes focus back to the field; Confirm shows its spinner (`loading`)
+  while the answer is checked and keeps focus. A `401` on `reauthenticate` cancels the waiting
+  operations and opens `/login?next=<current address>`. A `403` with
   other methods (a password sent for an account with two-step verification) or
   `409 auth.two-step-not-enabled` switches what it asks for. Operations refused while it is open
   wait for the same confirmation.

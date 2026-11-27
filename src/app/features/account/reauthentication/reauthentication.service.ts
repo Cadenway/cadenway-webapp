@@ -1,4 +1,5 @@
 import { inject, Service, type Signal, signal, type WritableSignal } from '@angular/core';
+import { Router } from '@angular/router';
 
 import { type ApiProblem, readProblem } from '@core/api';
 
@@ -163,7 +164,9 @@ function remainingAttemptsFrom(problem: ApiProblem | null): number | null {
  * `ReauthenticationCancelledError`. Operations refused while the dialog is open wait for the same
  * confirmation. A refused answer keeps the dialog open with the reason (wrong password or code,
  * lockout, gateway unavailable); `403` with other methods (a password sent for an account with
- * two-step verification) or `409 auth.two-step-not-enabled` switches what it asks for. It is not
+ * two-step verification) or `409 auth.two-step-not-enabled` switches what it asks for. A `401`
+ * (the session ended) closes the dialog, rejects the waiting operations with
+ * `ReauthenticationCancelledError` and opens `/login?next=<current address>`. It is not
  * provided automatically: `provideReauthentication()` gives it to a settings route together with
  * the dialog contribution of its shell's `overlays`.
  */
@@ -180,6 +183,17 @@ export class ReauthenticationService {
    * @readonly
    */
   private readonly api: ReauthenticationApi = inject(ReauthenticationApi);
+
+  /**
+   * Property router
+   *
+   * @description
+   * Router sending an expired session to sign-in.
+   *
+   * @type {Router}
+   * @readonly
+   */
+  private readonly router: Router = inject(Router);
 
   /**
    * Property question
@@ -244,7 +258,8 @@ export class ReauthenticationService {
    *
    * @description
    * Sends what the person typed. On success the dialog closes and the waiting operations run
-   * again; on a refusal the dialog stays open with the reason, or asks for the other method.
+   * again; on a refusal the dialog stays open with the reason, or asks for the other method; on a
+   * `401` the waiting operations are cancelled and the person goes to sign-in.
    *
    * @param {ReauthenticationAnswer} answer - The password or the code.
    * @returns {Promise<void>} Resolves once the gateway answered.
@@ -258,6 +273,13 @@ export class ReauthenticationService {
       await this.api.reauthenticate(answer);
     } catch (error: unknown) {
       const problem: ApiProblem | null = readProblem(error);
+      if (problem?.status === 401) {
+        this.question.set(null);
+        this.waiting.set(null);
+        waiting.reject(new ReauthenticationCancelledError());
+        void this.router.navigate(['/login'], { queryParams: { next: this.router.url } });
+        return;
+      }
       const switched: ReauthenticationMethod | null =
         problem?.code === 'auth.two-step-not-enabled' ? 'password' : methodFrom(problem);
       this.question.set(

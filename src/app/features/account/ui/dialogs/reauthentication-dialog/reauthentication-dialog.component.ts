@@ -1,8 +1,10 @@
 import {
+  afterNextRender,
   Component,
   computed,
   effect,
   inject,
+  Injector,
   signal,
   type Signal,
   untracked,
@@ -104,10 +106,10 @@ function focusFirstError<T>(fields: FieldTree<T>): void {
  * authentication: `Confirm it's you`, then the current password, or the 6-digit code of the
  * authenticator app for an account with two-step verification, with `Cancel` and `Confirm`. The
  * mockup draws no such dialog, so its copy is the application's own. Submit stays enabled while
- * the field is invalid: an invalid submit shows the error and focuses the field; it is disabled
- * while the answer is checked, when the dialog cannot be closed either. A refused answer shows
- * its reason under the field (wrong password with the attempts left, wrong or used code, 15-minute
- * lockout, gateway unavailable) and empties the field. Closing it (`Cancel`, Escape, the close
+ * the field is invalid: an invalid submit shows the error and focuses the field; while the answer
+ * is checked it shows its spinner (`loading`, so it keeps focus) and the dialog cannot be closed.
+ * A refused answer shows its reason under the field (wrong password or code with the attempts
+ * left, 15-minute lockout, gateway unavailable), empties the field and focuses it again. Closing it (`Cancel`, Escape, the close
  * button) cancels the waiting operation. It is a settings shell `overlays` contribution.
  */
 @Component({
@@ -223,6 +225,17 @@ export class ReauthenticationDialog {
     required(path.code, { message });
     pattern(path.code, /^\d{6}$/u, { message });
   });
+
+  /**
+   * Property injector
+   *
+   * @description
+   * Injector scheduling the focus move after a refusal is rendered.
+   *
+   * @type {Injector}
+   * @readonly
+   */
+  private readonly injector: Injector = inject(Injector);
   // #endregion
 
   // #region Constructor
@@ -230,17 +243,32 @@ export class ReauthenticationDialog {
    * Constructor
    *
    * @description
-   * Empties both forms when a new question opens or an answer is refused.
+   * Empties both forms when a new question opens or an answer is refused, and once a checked
+   * answer is refused, moves focus back to the field, which may be the other method's.
    *
    * @constructor
    */
   public constructor() {
+    let checking: boolean = false;
     effect((): void => {
       const prompt: ReauthenticationPrompt | null = this.prompt();
-      if (prompt?.pending === true) return;
+      if (prompt?.pending === true) {
+        checking = true;
+        return;
+      }
+      const refused: boolean = checking && prompt !== null;
+      checking = false;
       untracked((): void => {
         this.passwordForm().reset({ password: '' });
         this.codeForm().reset({ code: '' });
+        if (!refused) return;
+        afterNextRender(
+          (): void => {
+            if (this.method() === 'code') this.codeForm.code().focusBoundControl();
+            else this.passwordForm.password().focusBoundControl();
+          },
+          { injector: this.injector },
+        );
       });
     });
   }

@@ -102,9 +102,15 @@
               }
             }
             @case ('code-incorrect') {
-              <span i18n="@@account.reauthentication.code-incorrect"
-                >Incorrect or already used code.</span
-              >
+              @if (prompt()?.remainingAttempts; as attempts) {
+                <span i18n="@@account.reauthentication.code-incorrect-attempts"
+                  >Incorrect or already used code. Attempts left: {{ attempts }}.</span
+                >
+              } @else {
+                <span i18n="@@account.reauthentication.code-incorrect"
+                  >Incorrect or already used code.</span
+                >
+              }
             }
             @case ('locked') {
               <span i18n="@@account.reauthentication.locked"
@@ -137,7 +143,6 @@
       cwButton
       type="submit"
       form="reauthentication-form"
-      [disabled]="prompt()?.pending ?? false"
       [loading]="prompt()?.pending ?? false"
       i18n="@@account.reauthentication.confirm"
     >

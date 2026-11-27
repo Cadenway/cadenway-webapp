@@ -156,6 +156,43 @@ describe('ReauthenticationDialog', () => {
     });
   });
 
+  it('keeps Confirm focusable while checking, then focuses the field after a refusal', async () => {
+    let refuse: (error: HttpErrorResponse) => void = (): void => undefined;
+    reauthenticate.mockReturnValueOnce(
+      new Promise<void>((_resolve: () => void, reject: (error: HttpErrorResponse) => void) => {
+        refuse = reject;
+      }),
+    );
+    void ask().catch(() => undefined);
+    await vi.waitFor(() => {
+      expect(button('Confirm')).toBeDefined();
+    });
+
+    type('wrong');
+    button('Confirm')?.focus();
+    button('Confirm')?.click();
+    await vi.waitFor(async () => {
+      await fixture.whenStable();
+      expect(button('Confirm')?.getAttribute('aria-busy')).toBe('true');
+    });
+    expect(button('Confirm')?.disabled).toBe(false);
+    expect(document.activeElement).toBe(button('Confirm'));
+    refuse(
+      new HttpErrorResponse({
+        status: 422,
+        error: { code: 'auth.password-incorrect', details: {} },
+      }),
+    );
+
+    await vi.waitFor(async () => {
+      await fixture.whenStable();
+      expect(document.activeElement).toBe(
+        dialog()?.querySelector('input[type="password"]') ?? undefined,
+      );
+    });
+    expect(dialog()?.querySelector('[role="alert"]')?.textContent).toContain('Incorrect password.');
+  });
+
   it('cancels the waiting operation from Cancel', async () => {
     const result: Promise<string> = ask();
     await vi.waitFor(() => {

@@ -1,5 +1,6 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { TestBed } from '@angular/core/testing';
+import { Router } from '@angular/router';
 import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 
 import { ReauthenticationApi } from '../data-access/services/reauthentication-api/reauthentication-api.service';
@@ -54,14 +55,17 @@ function rejecting(error: unknown): () => Promise<never> {
 
 describe('ReauthenticationService', () => {
   let reauthenticate: Mock<(answer: ReauthenticationAnswer) => Promise<void>>;
+  let navigate: Mock<(commands: readonly unknown[], extras?: unknown) => Promise<boolean>>;
   let service: ReauthenticationService;
 
   beforeEach(() => {
     reauthenticate = vi.fn(() => Promise.resolve());
+    navigate = vi.fn(() => Promise.resolve(true));
     TestBed.configureTestingModule({
       providers: [
         ReauthenticationService,
         { provide: ReauthenticationApi, useValue: { reauthenticate } },
+        { provide: Router, useValue: { url: '/atelier-nord/account/api-tokens', navigate } },
       ],
     });
     service = TestBed.inject(ReauthenticationService);
@@ -187,5 +191,124 @@ describe('ReauthenticationService', () => {
 
     await expect(results).resolves.toEqual(['first', 'second']);
     expect(reauthenticate).toHaveBeenCalledOnce();
+  });
+
+  /**
+   * Function opened
+   *
+   * @description
+   * Runs an operation refused once with the given methods and waits for the dialog.
+   *
+   * @param {readonly string[]} methods - `details.methods` of the refusal.
+   * @returns {Promise<{ readonly result: Promise<string> }>} The operation's result, once the dialog
+   * is open.
+   */
+  async function opened(methods: readonly string[]): Promise<{ readonly result: Promise<string> }> {
+    const result: Promise<string> = service.run(
+      vi
+        .fn<() => Promise<string>>()
+        .mockRejectedValueOnce(required(methods))
+        .mockResolvedValue('ok'),
+    );
+    await vi.waitFor(() => {
+      expect(service.prompt()).not.toBeNull();
+    });
+    return { result };
+  }
+
+  it('cancels every operation waiting for the same confirmation', async () => {
+    const first: Promise<string> = service.run(rejecting(required(['password'])));
+    const second: Promise<string> = service.run(rejecting(required(['password'])));
+    await vi.waitFor(() => {
+      expect(service.prompt()).not.toBeNull();
+    });
+    await Promise.resolve();
+
+    service.cancel();
+
+    await expect(first).rejects.toBeInstanceOf(ReauthenticationCancelledError);
+    await expect(second).rejects.toBeInstanceOf(ReauthenticationCancelledError);
+    expect(service.prompt()).toBeNull();
+  });
+
+  it('switches to the password when the code is refused for an account without an app', async () => {
+    reauthenticate.mockRejectedValueOnce(refusal(409, 'auth.two-step-not-enabled'));
+    void (await opened(['authenticator-app'])).result.catch(() => undefined);
+
+    await service.answer({ code: '123456' });
+
+    expect(service.prompt()).toEqual({
+      method: 'password',
+      pending: false,
+      failure: null,
+      remainingAttempts: null,
+    });
+  });
+
+  it('shows the attempts left after a wrong code, then the two-step lockout', async () => {
+    reauthenticate
+      .mockRejectedValueOnce(refusal(422, 'auth.two-step-code-invalid', { remainingAttempts: 1 }))
+      .mockRejectedValueOnce(refusal(429, 'auth.two-step-locked'));
+    void (await opened(['authenticator-app'])).result.catch(() => undefined);
+
+    await service.answer({ code: '000000' });
+    expect(service.prompt()).toEqual({
+      method: 'code',
+      pending: false,
+      failure: 'code-incorrect',
+      remainingAttempts: 1,
+    });
+    await service.answer({ code: '111111' });
+    expect(service.prompt()?.failure).toBe('locked');
+  });
+
+  it('ignores a cancel while the answer is being checked', async () => {
+    let confirm: () => void = (): void => undefined;
+    reauthenticate.mockReturnValueOnce(
+      new Promise<void>((resolve: () => void): void => {
+        confirm = resolve;
+      }),
+    );
+    const result: Promise<string> = (await opened(['password'])).result;
+
+    const answered: Promise<void> = service.answer({ password: 'correct horse battery' });
+    service.cancel();
+    expect(service.prompt()?.pending).toBe(true);
+    confirm();
+    await answered;
+
+    await expect(result).resolves.toBe('ok');
+  });
+
+  it('passes a second refusal of the repeated operation through without asking again', async () => {
+    const again: HttpErrorResponse = required(['password']);
+    const operation: Mock<() => Promise<string>> = vi
+      .fn<() => Promise<string>>()
+      .mockRejectedValueOnce(required(['password']))
+      .mockRejectedValueOnce(again);
+    const result: Promise<string> = service.run(operation);
+    await vi.waitFor(() => {
+      expect(service.prompt()).not.toBeNull();
+    });
+
+    await service.answer({ password: 'correct horse battery' });
+
+    await expect(result).rejects.toBe(again);
+    expect(operation).toHaveBeenCalledTimes(2);
+    expect(reauthenticate).toHaveBeenCalledOnce();
+    expect(service.prompt()).toBeNull();
+  });
+
+  it('sends an ended session to sign-in and cancels the waiting operation', async () => {
+    reauthenticate.mockRejectedValueOnce(refusal(401, 'auth.session-expired'));
+    const result: Promise<string> = (await opened(['password'])).result;
+
+    await service.answer({ password: 'correct horse battery' });
+
+    await expect(result).rejects.toBeInstanceOf(ReauthenticationCancelledError);
+    expect(service.prompt()).toBeNull();
+    expect(navigate).toHaveBeenCalledWith(['/login'], {
+      queryParams: { next: '/atelier-nord/account/api-tokens' },
+    });
   });
 });
