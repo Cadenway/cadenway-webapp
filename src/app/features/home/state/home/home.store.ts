@@ -135,8 +135,10 @@ interface ReadLoads {
    * Property last
    *
    * @description
-   * The read shown, with the organization it was for: a refresh of the same organization that
-   * fails shows it again instead of failing the page.
+   * The read shown, with the organization it was for and its `refreshFailed` flag: a refresh of
+   * the same organization that fails shows it again, flagged, instead of failing the page, and a
+   * refusal while the context is stale shows it as it is, so an earlier failure keeps its Retry
+   * until a refresh succeeds.
    *
    * @type {{ organizationId: string; read: HomeRead } | null}
    */
@@ -351,7 +353,9 @@ function createHomeStore(): Type<HomeStoreInstance> {
               loads.refused = true;
               return previous;
             }
-            return { ...previous, refreshFailed: true };
+            const failed: HomeRead = { ...previous, refreshFailed: true };
+            loads.last = { organizationId: params.organizationId, read: failed };
+            return failed;
           } finally {
             if (!abortSignal.aborted) loads.settledAt = Date.now();
           }
@@ -507,7 +511,8 @@ function createHomeStore(): Type<HomeStoreInstance> {
  * settled and less than 30 s after a read settled (`FOCUS_REFRESH_MS`); any other read asked for
  * while one runs is sent once it settles. A refresh that fails keeps the
  * previous values with `refreshFailed`; one refused while the organization context is stale keeps
- * them silently and is sent again once the context is verified. An organization switch drops the
+ * them silently, an earlier refresh failure still flagged, and is sent again once the context is
+ * verified. An organization switch drops the
  * values at once and reads anew: a read of the previous organization is aborted and never shown.
  * The members (`people`) are a secondary read made when the task menu first opens: a failure
  * leaves the menu's `Assign` empty until the next opening reads them again. The list and space

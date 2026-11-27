@@ -302,6 +302,27 @@ describe('HomeStore', () => {
     expect(read.mock.calls[2][1].passive).toBe(true);
   });
 
+  it('keeps the error of a failed refresh when a later refresh is refused by the context', async () => {
+    const store: HomeStoreInstance = await loaded();
+    read.mockRejectedValueOnce(new Error('unavailable'));
+    store.refresh();
+    await settle();
+    expect(store.read()?.refreshFailed).toBe(true);
+
+    read.mockRejectedValueOnce(new OrganizationSwitchPendingError());
+    store.refresh();
+    await settle();
+
+    expect(read).toHaveBeenCalledTimes(3);
+    expect(store.read()?.refreshFailed).toBe(true);
+
+    verified.next();
+    await settle();
+
+    expect(read).toHaveBeenCalledTimes(4);
+    expect(store.read()?.refreshFailed).toBe(false);
+  });
+
   it('sends one more read when refreshes are asked for while a read runs', async () => {
     const store: HomeStoreInstance = await loaded();
     const running: ReturnType<typeof deferred<HomeSnapshot>> = deferred<HomeSnapshot>();

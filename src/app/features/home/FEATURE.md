@@ -57,8 +57,8 @@ with the screen. `?notice=logo-upload-failed` reaches the page as its `notice` i
   through the template's read. A refresh that fails keeps every value of the previous read
   (`The home page could not be refreshed.` with `Retry`); a passive refresh refused while the
   organization context is stale (`OrganizationSwitchPendingError` or a `412
-organization.context-changed`) keeps them silently and is sent again once the context is
-  verified. A successful read with no priority shows the mockup's dashed paragraph; no current
+organization.context-changed`) keeps them silently, with the error of an earlier failed
+  refresh still shown, and is sent again once the context is verified. A successful read with no priority shows the mockup's dashed paragraph; no current
   sprint hides the sprint card, no list hides `Lists`.
 - Each read sends the local day it is made on (`today`), so a refresh after midnight counts the
   late and due tasks against the new day.
