@@ -44,6 +44,30 @@
         <ng-icon name="phosphorHouseBold" class="text-muted-foreground" aria-hidden="true" />
         <span i18n="@@search.palette.home">Home</span>
       </cw-command-item>
+      <cw-command-item
+        value="My tasks"
+        i18n-value="@@search.palette.my-tasks"
+        (selected)="go(['my-tasks'])"
+      >
+        <ng-icon name="phosphorCheckSquareBold" class="text-muted-foreground" aria-hidden="true" />
+        <span i18n="@@search.palette.my-tasks">My tasks</span>
+      </cw-command-item>
+      <cw-command-item
+        value="Dashboards"
+        i18n-value="@@search.palette.dashboards"
+        (selected)="go(['dashboards'])"
+      >
+        <ng-icon name="phosphorChartBarBold" class="text-muted-foreground" aria-hidden="true" />
+        <span i18n="@@search.palette.dashboards">Dashboards</span>
+      </cw-command-item>
+      <cw-command-item
+        value="Documents"
+        i18n-value="@@search.palette.documents"
+        (selected)="go(['docs'])"
+      >
+        <ng-icon name="phosphorFileTextBold" class="text-muted-foreground" aria-hidden="true" />
+        <span i18n="@@search.palette.documents">Documents</span>
+      </cw-command-item>
     </cw-command-group>
     @if (localLists().length > 0 || serverLists().length > 0) {
       <cw-command-group heading="Lists" i18n-heading="@@search.palette.lists">
