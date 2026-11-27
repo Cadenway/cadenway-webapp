@@ -214,7 +214,16 @@ test('sign-in with two-step verification, then the organization choice opens its
 
   await page.goto('/login');
   const submit = page.getByRole('button', { name: 'Sign in', exact: true });
-  await expect(submit).toBeDisabled();
+  // An empty form stays submittable: it shows its errors and focuses the first field.
+  await submit.click();
+  await expect(page.getByLabel('Email address')).toBeFocused();
+  await expect(
+    page.getByText(
+      'Enter the email address of your account, for example camille.martin@ateliernord.fr.',
+    ),
+  ).toBeVisible();
+  await expect(page.getByText('Enter your password.')).toBeVisible();
+  expect(gateway.calls).not.toContain('POST /v1/auth/sign-in');
   await page.getByLabel('Email address').fill(email);
   await page.getByLabel('Password', { exact: true }).fill(password);
   await submit.click();
@@ -318,14 +327,14 @@ test('a forgotten password is reset from the e-mail link', async ({ page }) => {
   await page.goto('/reset#token=synthetic-reset-token');
   await expect(page.getByText(`For the account ${email}.`)).toBeVisible();
   await expect(page).toHaveURL(/\/reset$/);
-  await page.getByLabel('New password').fill('atelier-nord-2027');
-  await page.getByLabel('Confirm the password').fill('atelier-nord-2027');
+  await page.getByLabel('New password').fill('Atelier-nord-2027');
+  await page.getByLabel('Confirm the password').fill('Atelier-nord-2027');
   await page.getByRole('button', { name: 'Save the password' }).click();
 
   await expect(page.getByRole('heading', { name: 'Password changed' })).toBeVisible();
   await expect(page.getByText('Your 3 other sessions were closed.')).toBeVisible();
   expect(gateway.bodies.get('POST /v1/auth/password-reset/confirmation')).toEqual([
-    { token: 'synthetic-reset-token', newPassword: 'atelier-nord-2027', closeOtherSessions: true },
+    { token: 'synthetic-reset-token', newPassword: 'Atelier-nord-2027', closeOtherSessions: true },
   ]);
 });
 

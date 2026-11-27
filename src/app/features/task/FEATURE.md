@@ -20,7 +20,7 @@ the typed route error states belong to Errors.
 
 `TASK_ROUTES` (`task.routes.ts`), mounted by Workspace below `/:org`:
 
-- `t/:taskKey`, the shareable deep link of a task (the create toast's `Open`, `Copy the link`):
+- `t/:taskKey`, the shareable deep link of a task (`Copy the link`):
   `taskLinkResolver` reads the task by key (`TaskApi.readLink`) once the workspace context is committed
   and redirects with a `RedirectCommand` to `/<slug>/l/<listId>/list?task=<KEY>`, replacing the
   address. A task it cannot read resolves the typed route error the read fails with (`toTaskRouteError`):
@@ -245,7 +245,7 @@ be done`, `Out of scope`, `Obsolete` and optional `Details`; `Keep the task` cha
   `createSubtask`, which takes no drafted subtasks or checklist. The parent key requires its list id.
 - The create dialog starts each opening afresh: the current user assigned, `To do` and
   `Medium`, unless the presets give a status, a priority or assignees (none for `Unassigned`). `Create more tasks` keeps it open and empties the name, the description,
-  and the subtasks while retaining the template's checklist. Its toast `Open` leads to `/<slug>/t/<key>`.
+  and the subtasks while retaining the template's checklist. Its toast `Open` opens the task's detail over the current page (`TaskDetailOpener`, `?task=<KEY>`).
   A refused creation's issues (422) stay on their fields until each field changes, and all go when
   another destination list is picked or the dialog opens again. An issue on a field edited, or a
   destination changed, while the creation ran is not shown; when none is left, the toast says the

@@ -1,6 +1,8 @@
 import { expect, test } from '@playwright/test';
 import type { Page, Request, Route } from '@playwright/test';
 
+import { workspaceRead } from './workspace-reads';
+
 const user = {
   id: '019a5f3c-8d2e-7c4a-9b1f-3e5d7a9c1b30',
   name: 'Camille Martin',
@@ -145,8 +147,6 @@ async function stubGateway(page: Page, failListOnce = false): Promise<Gateway> {
         });
       case `GET /v1/spaces/${product.id}/milestones`:
         return route.fulfill({ json: { items: [], nextCursor: null, total: 0 } });
-      case 'GET /v1/me/favorites':
-        return route.fulfill({ json: { items: [], nextCursor: null } });
       case `GET /v1/lists/${sprint14.id}`:
         if (failListOnce) {
           failListOnce = false;
@@ -159,6 +159,15 @@ async function stubGateway(page: Page, failListOnce = false): Promise<Gateway> {
         return route.fulfill({ json: { list: sprint14, counts } });
       case `GET /v1/lists/${sprint14.id}/grants`:
         return route.fulfill({ json: { items: [], nextCursor: null, total: 0 } });
+      case `GET /v1/lists/${sprint14.id}/task-groups`:
+        return route.fulfill({
+          json: {
+            groupBy: url.searchParams.get('groupBy') ?? 'status',
+            items: [],
+            nextCursor: null,
+            total: 0,
+          },
+        });
       case `QUERY /v1/lists/${sprint14.id}/tasks`:
         return route.fulfill({ json: { items: [], nextCursor: null, total: 1 } });
       case 'GET /v1/members':
@@ -183,7 +192,7 @@ async function stubGateway(page: Page, failListOnce = false): Promise<Gateway> {
         return route.fulfill({ status: 201, json: view });
       }
       default:
-        return route.fulfill(problem(404, 'route.not-found'));
+        return route.fulfill(workspaceRead(key) ?? problem(404, 'route.not-found'));
     }
   });
 
@@ -201,8 +210,10 @@ test('the sidebar lists the spaces with their lists', async ({ page }) => {
   await page.goto('/atelier-nord');
 
   const spaces = page.getByTestId('sidebar-spaces');
-  await expect(spaces.getByRole('button', { name: /Product/ })).toBeVisible();
-  await spaces.getByRole('button', { name: /Product/ }).click();
+  const space = spaces.getByRole('button', { name: /^Product/ });
+  await expect(space).toHaveAttribute('aria-expanded', 'false');
+  await space.click();
+  await expect(space).toHaveAttribute('aria-expanded', 'true');
   await expect(spaces.getByRole('link', { name: /Sprint 14/ })).toBeVisible();
   await expect(spaces.getByRole('link', { name: /Bugs/ })).toBeVisible();
 });
@@ -230,12 +241,21 @@ test('a list page shows its header, its filters and its group menu', async ({ pa
   await expect(page.getByTestId('list-description')).toContainText('25% done');
   await expect(page.getByTestId('list-goal')).toContainText('Ship the SSO sign-in');
 
-  await page.getByRole('button', { name: 'Filter' }).click();
+  await page
+    .getByRole('toolbar', { name: 'View tools' })
+    .getByRole('button', { name: 'Filter' })
+    .click();
   const filters = page.getByRole('dialog', { name: 'Filters' });
-  await expect(filters.getByText('To do')).toBeVisible();
-  await expect(filters.getByText('Me')).toBeVisible();
-  await expect(filters.getByText('Unassigned')).toBeVisible();
-  await filters.getByText('Urgent').click();
+  await expect(
+    filters.getByRole('group', { name: 'Status' }).getByRole('checkbox', { name: 'To do' }),
+  ).toBeVisible();
+  const assignee = filters.getByRole('group', { name: 'Assignee' });
+  await expect(assignee.getByRole('checkbox', { name: 'Me' })).toBeVisible();
+  await expect(assignee.getByRole('checkbox', { name: 'Unassigned' })).toBeVisible();
+  await filters
+    .getByRole('group', { name: 'Priority' })
+    .getByRole('checkbox', { name: 'Urgent' })
+    .click();
   await page.keyboard.press('Escape');
   await expect(page.getByTestId('view-chip')).toContainText('Priority');
 

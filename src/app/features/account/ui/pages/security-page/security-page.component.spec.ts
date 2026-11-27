@@ -81,6 +81,17 @@ const TWO_STEP_OFF: TwoStepOverview = {
 };
 
 /**
+ * Constant NOW
+ *
+ * @description
+ * The pinned clock of the page, mid-afternoon local time, so a session active two hours ago is
+ * still on the same day whenever the suite runs.
+ *
+ * @type {Date}
+ */
+const NOW: Date = new Date(2026, 10, 8, 15, 0);
+
+/**
  * Constant SESSIONS
  *
  * @description
@@ -95,7 +106,7 @@ const SESSIONS: readonly AccountSession[] = [
     deviceType: 'desktop',
     device: 'Firefox 132 · Windows 11',
     ipAddress: '192.0.2.14',
-    lastActiveAt: new Date().toISOString(),
+    lastActiveAt: NOW.toISOString(),
     inactivityTimeoutMinutes: 720,
   },
   {
@@ -104,7 +115,7 @@ const SESSIONS: readonly AccountSession[] = [
     deviceType: 'mobile',
     device: 'Cadenway · iPhone 15',
     ipAddress: '198.51.100.7',
-    lastActiveAt: new Date(Date.now() - 2 * 60 * 60_000).toISOString(),
+    lastActiveAt: new Date(NOW.getTime() - 2 * 60 * 60_000).toISOString(),
     inactivityTimeoutMinutes: 720,
   },
 ];
@@ -205,6 +216,8 @@ describe('SecurityPage', () => {
   }
 
   beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(NOW);
     api = {
       overview: vi.fn(() => Promise.resolve(overview(TWO_STEP_ON))),
       changePassword: vi.fn(() => Promise.resolve(new Date().toISOString())),
@@ -226,6 +239,7 @@ describe('SecurityPage', () => {
 
   afterEach(() => {
     Reflect.deleteProperty(navigator, 'clipboard');
+    vi.useRealTimers();
     vi.restoreAllMocks();
     TestBed.resetTestingModule();
   });
