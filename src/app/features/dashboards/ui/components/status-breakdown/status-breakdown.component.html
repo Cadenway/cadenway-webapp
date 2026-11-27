@@ -1,0 +1,31 @@
+<section
+  class="flex flex-col gap-3 rounded-xl border border-border bg-card p-4"
+  aria-labelledby="dashboards-status-title"
+>
+  <h2 id="dashboards-status-title" class="text-base font-semibold" i18n="@@dashboards.status.title">
+    By status
+  </h2>
+  @for (line of lines(); track line.status) {
+    <div
+      class="grid grid-cols-[7.5rem_minmax(0,1fr)_2rem] items-center gap-2 text-sm"
+      data-testid="status-line"
+    >
+      <span class="flex min-w-0 items-center gap-2">
+        <cw-status-icon [status]="line.status" size="4" />
+        <span class="truncate">{{ line.label }}</span>
+      </span>
+      <cw-progress
+        size="sm"
+        [value]="line.count"
+        [max]="max()"
+        [ariaLabel]="line.label"
+        [valueText]="'' + line.count"
+      />
+      <span class="text-right whitespace-nowrap text-muted-foreground tabular-nums">{{
+        line.count
+      }}</span>
+    </div>
+  } @empty {
+    <p class="text-sm text-muted-foreground" i18n="@@dashboards.status.empty">No task yet.</p>
+  }
+</section>
