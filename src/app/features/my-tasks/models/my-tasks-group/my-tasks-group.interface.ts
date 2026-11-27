@@ -38,7 +38,7 @@ export interface MyTaskRow {
    * Property status
    *
    * @description
-   * The status shown, a pending click included.
+   * The status shown, a pending click included, from the read copy of the task.
    *
    * @type {StatusKey}
    * @readonly

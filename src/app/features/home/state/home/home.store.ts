@@ -36,6 +36,7 @@ import {
   type Person,
   TaskCreate,
   TaskDetailOpener,
+  type TaskMenuPeopleState,
   type TaskMoveTarget,
   type TaskSummary,
 } from '@features/task';
@@ -213,6 +214,18 @@ export interface HomeStoreInstance {
   readonly people: Signal<readonly Person[]>;
 
   /**
+   * Property peopleState
+   *
+   * @description
+   * Where the read of `people` stands for the task menu's `Assign`: `loading` until they answer
+   * (and before the menu first opened), `failed` once their read failed, `ready` once read.
+   *
+   * @type {Signal<TaskMenuPeopleState>}
+   * @readonly
+   */
+  readonly peopleState: Signal<TaskMenuPeopleState>;
+
+  /**
    * Property listNames
    *
    * @description
@@ -270,7 +283,8 @@ export interface HomeStoreInstance {
    * Method loadPeople
    *
    * @description
-   * The task menu opens: reads the members the first time, and again when their read failed.
+   * The task menu opens, or `Assign`'s `Retry` is picked: reads the members the first time, and
+   * again when their read failed.
    */
   loadPeople(): void;
   // #endregion
@@ -395,6 +409,10 @@ function createHomeStore(): Type<HomeStoreInstance> {
         people: computed((): readonly Person[] =>
           store._people.hasValue() ? store._people.value() : [],
         ),
+        peopleState: computed((): TaskMenuPeopleState => {
+          if (store._people.status() === 'error') return 'failed';
+          return store._people.hasValue() ? 'ready' : 'loading';
+        }),
         listNames: computed(
           (): ReadonlyMap<string, string> =>
             new Map(
@@ -514,8 +532,8 @@ function createHomeStore(): Type<HomeStoreInstance> {
  * them silently, an earlier refresh failure still flagged, and is sent again once the context is
  * verified. An organization switch drops the
  * values at once and reads anew: a read of the previous organization is aborted and never shown.
- * The members (`people`) are a secondary read made when the task menu first opens: a failure
- * leaves the menu's `Assign` empty until the next opening reads them again. The list and space
+ * The members (`people`, `peopleState`) are a secondary read made when the task menu first opens:
+ * `Assign` shows them loading, then a failure with `Retry`; the next opening reads them again too. The list and space
  * names come from Spaces' `LIST_DIRECTORY`, which holds no archived list.
  *
  * @type {Type<HomeStoreInstance>}

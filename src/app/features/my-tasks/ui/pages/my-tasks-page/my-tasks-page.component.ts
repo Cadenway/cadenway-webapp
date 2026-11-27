@@ -233,11 +233,14 @@ export class MyTasksPage {
     (): readonly MyTasksGroupModel[] => {
       const read: MyTasksRead | undefined = this.store.read();
       if (!read) return [];
+      const sources: ReadonlyMap<string, TaskSummary> = new Map<string, TaskSummary>(
+        read.tasks.map((task: TaskSummary): [string, TaskSummary] => [task.key, task]),
+      );
       const rows: readonly MyTaskRow[] = this.rowActions
         .rows(read.tasks)
         .map((task: TaskSummary): MyTaskRow => ({
           task,
-          status: this.rowActions.displayedStatus(task),
+          status: this.rowActions.displayedStatus(sources.get(task.key) ?? task),
           listName: this.listName(task),
         }));
       if (read.tab === 'closed') return rows.length > 0 ? [{ key: 'closed', rows }] : [];
@@ -265,7 +268,9 @@ export class MyTasksPage {
    * Property menuTask
    *
    * @description
-   * The task the menu acts on, as the writes show it; null once it left the page.
+   * The read copy of that task, without pending values, looked up by key when the menu acts: every
+   * write and `Undo` starts from the confirmed values, so `Undo` never puts back a value still
+   * waiting for its answer; null once the task left the page (a deleted one included).
    *
    * @type {Signal<TaskSummary | null>}
    * @readonly
@@ -273,16 +278,19 @@ export class MyTasksPage {
   protected readonly menuTask: Signal<TaskSummary | null> = computed((): TaskSummary | null => {
     const key: string | null = this.menuKey();
     if (key === null) return null;
-    for (const group of this.groups())
-      for (const row of group.rows) if (row.task.key === key) return row.task;
-    return null;
+    const shown: boolean = this.groups().some((group: MyTasksGroupModel): boolean =>
+      group.rows.some((row: MyTaskRow): boolean => row.task.key === key),
+    );
+    if (!shown) return null;
+    return this.store.tasks().find((task: TaskSummary): boolean => task.key === key) ?? null;
   });
 
   /**
    * Property menuTasks
    *
    * @description
-   * What the menu acts on: the one task of the line, or nothing.
+   * What the menu shows: the one task of the line as the writes show it, for its checkmarks, or
+   * nothing.
    *
    * @type {Signal<readonly TaskSummary[]>}
    * @readonly
@@ -290,7 +298,7 @@ export class MyTasksPage {
   protected readonly menuTasks: Signal<readonly TaskSummary[]> = computed(
     (): readonly TaskSummary[] => {
       const task: TaskSummary | null = this.menuTask();
-      return task ? [task] : [];
+      return task ? [this.rowActions.displayedTask(task)] : [];
     },
   );
 
@@ -298,7 +306,7 @@ export class MyTasksPage {
    * Property menuStatus
    *
    * @description
-   * The status the menu checks.
+   * The status the menu checks, a pending click included.
    *
    * @type {Signal<StatusKey | null>}
    * @readonly

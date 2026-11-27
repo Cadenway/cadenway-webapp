@@ -11,7 +11,7 @@ import { RouterTestingHarness } from '@angular/router/testing';
 import { TasksService, type UpdateTaskClientResult } from '@cadenway/api-client';
 import type { PriorityKey, StatusKey } from '@cadenway/contracts';
 import { provideCadenwayIcons } from '@cadenway/icons';
-import { CwToastService } from '@cadenway/ui/components/toast';
+import { type CwToastOptions, CwToastService } from '@cadenway/ui/components/toast';
 import { type Observable, of, Subject } from 'rxjs';
 import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 
@@ -180,6 +180,8 @@ describe('MyTasksPage with the task row writes', () => {
     (key: string, body: { status: StatusKey }) => Observable<UpdateTaskClientResult>
   >;
   let bulk: Mock<TaskActionsApi['bulk']>;
+  let getTask: Mock<(key: string) => Observable<UpdateTaskClientResult>>;
+  let show: Mock<(title: string, options?: CwToastOptions) => string>;
   let detailChanged: Subject<string>;
 
   beforeEach(() => {
@@ -190,6 +192,8 @@ describe('MyTasksPage with the task row writes', () => {
       of(savedTask(body.status, 4)),
     );
     bulk = vi.fn();
+    getTask = vi.fn(() => of(savedTask('todo', 3)));
+    show = vi.fn(() => 't1');
     detailChanged = new Subject<string>();
     TestBed.configureTestingModule({
       providers: [
@@ -230,12 +234,12 @@ describe('MyTasksPage with the task row writes', () => {
         },
         {
           provide: TasksService,
-          useValue: { updateTask, getTask: vi.fn(() => of(savedTask('todo', 3))) },
+          useValue: { updateTask, getTask },
         },
         {
           provide: CwToastService,
           useValue: {
-            show: vi.fn(() => 't1'),
+            show,
             error: vi.fn(() => 't2'),
             warning: vi.fn(() => 't3'),
             dismiss: vi.fn(),
@@ -406,5 +410,46 @@ describe('MyTasksPage with the task row writes', () => {
     expect(line(element)).toContain('To do');
     await wait(520);
     expect(updateTask).not.toHaveBeenCalled();
+  });
+
+  it('undoes a write picked over a refused one back to the read value, not the pending one', async () => {
+    read.mockResolvedValue(pageOf(myTask({ priority: 'moyenne' })));
+    getTask.mockReturnValue(of({ ...savedTask('todo', 3), priority: 'moyenne' }));
+    let refuse: (outcome: TaskBulkOutcome) => void = (): void => undefined;
+    bulk.mockReturnValueOnce(
+      new Promise<TaskBulkOutcome>((resolve: (outcome: TaskBulkOutcome) => void): void => {
+        refuse = resolve;
+      }),
+    );
+    bulk.mockResolvedValue({
+      affected: 1,
+      done: [{ taskKey: 'CAD-470', version: 4, newTaskKey: null, trashEntryId: null }],
+      failed: [],
+      unknown: [],
+      notSent: [],
+    });
+    const {
+      harness,
+      element,
+      menu,
+    }: { harness: RouterTestingHarness; element: HTMLElement; menu: TaskMenu } = await open();
+
+    menu.priorityPicked.emit('haute' satisfies PriorityKey);
+    await expect.poll(() => bulk.mock.calls.length).toBe(1);
+    element
+      .querySelector('li[tabindex]')
+      ?.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, clientX: 8, clientY: 8 }));
+    await settle(harness);
+    expect(menu.tasks()[0]?.priority).toBe('haute');
+    menu.priorityPicked.emit('urgente' satisfies PriorityKey);
+    refuse({ affected: 0, done: [], failed: [{ taskKey: 'CAD-470' }], unknown: [], notSent: [] });
+
+    await expect.poll(() => bulk.mock.calls.length).toBe(2);
+    expect(bulk.mock.calls[1][1]).toEqual({ type: 'priority', priority: 'urgente' });
+    await expect.poll(() => show.mock.calls.length).toBe(1);
+    show.mock.calls[0][1]?.undo?.();
+
+    await expect.poll(() => bulk.mock.calls.length).toBe(3);
+    expect(bulk.mock.calls[2][1]).toEqual({ type: 'priority', priority: 'moyenne' });
   });
 });
