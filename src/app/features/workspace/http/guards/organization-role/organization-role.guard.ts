@@ -7,6 +7,7 @@ import {
 } from '@angular/router';
 
 import type { OrganizationRoleFallback } from '../../../models/organization-role-fallback/organization-role-fallback.interface';
+import { WORKSPACE_RECOVERY_NAVIGATION } from '../../../providers/workspace-runtime/workspace-revalidation.service';
 import type { WorkspaceRole } from '../../../models/workspace-context/workspace-context.interface';
 import { WorkspaceContextStore } from '../../../state/workspace-context/workspace-context.store';
 import { meetsRole } from '../../../utils/role-rank/role-rank.util';
@@ -44,4 +45,27 @@ export function organizationRoleGuard(
         : fallbacks.find((candidate: OrganizationRoleFallback) => meetsRole(role, candidate.least));
     return router.createUrlTree(['/', slug, ...(fallback?.path ?? [])]);
   };
+}
+
+/**
+ * Function shouldRecheckOrganizationRole
+ *
+ * @description
+ * The `runGuardsAndResolvers` of a route behind `organizationRoleGuard`: its guards run again
+ * when the slug changes, as for `/:org`, and on every workspace recovery navigation, which
+ * reverifies the organization and so the person's role. A person demoted while a restricted
+ * section is shown is then redirected off it.
+ *
+ * @param {ActivatedRouteSnapshot} from - The route as it is shown.
+ * @param {ActivatedRouteSnapshot} to - The route the navigation activates.
+ * @returns {boolean} Whether the guards of the route run again.
+ */
+export function shouldRecheckOrganizationRole(
+  from: ActivatedRouteSnapshot,
+  to: ActivatedRouteSnapshot,
+): boolean {
+  return (
+    from.paramMap.get('org') !== to.paramMap.get('org') ||
+    inject(Router).currentNavigation()?.extras.info === WORKSPACE_RECOVERY_NAVIGATION
+  );
 }

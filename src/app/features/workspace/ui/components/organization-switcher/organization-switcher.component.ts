@@ -82,10 +82,10 @@ const ROLE_NAMES: Readonly<Record<WorkspaceRole, string>> = {
  * the first time it opens, with skeletons while loading and an inline error with `Retry`;
  * choosing another one navigates to `/<slug>`, whose guard switches the session, and once that
  * organization is the workspace's, confirms with `Organization: <name>` (lines 8256-8262). Then
- * come
- * `Organization settings`, `Members and invitations` (with the member count) and
- * `Billing and quotas`, which open `/<slug>/organization/<section>`, and `Create or
- * join an organization`, which opens `/organizations`. It provides its own
+ * come `Organization settings` (administrators), `Members and invitations` (members, with the
+ * member count) and `Billing and quotas` (the owner), each shown only to the roles whose section
+ * guard lets them in, which open `/<slug>/organization/<section>`, and `Create or join an
+ * organization`, which opens `/organizations`. It provides its own
  * `OrganizationMenuStore` and follows an organization switch in place through the `workspace`
  * port. Its host is `display: contents`, so the item joins the rail group's layout.
  */

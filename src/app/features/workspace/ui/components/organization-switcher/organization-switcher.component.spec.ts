@@ -11,9 +11,11 @@ import type { OrganizationMenuEntry } from '../../../models/organization-menu-en
 import type {
   WorkspaceOrganization,
   WorkspaceResult,
+  WorkspaceRole,
 } from '../../../models/workspace-context/workspace-context.interface';
 import type { WorkspaceContextPort } from '../../../ports/workspace-context/workspace-context-port.interface';
 import { WORKSPACE_CONTEXT } from '../../../ports/workspace-context/workspace-context.token';
+import { meetsRole } from '../../../utils/role-rank/role-rank.util';
 import { OrganizationSwitcher } from './organization-switcher.component';
 
 /**
@@ -82,10 +84,20 @@ const ATELIER_NORD: WorkspaceOrganization = {
 const organization: WritableSignal<WorkspaceOrganization> = signal(ATELIER_NORD);
 
 /**
+ * Constant role
+ *
+ * @description
+ * Role of Camille in Atelier Nord, set per test.
+ *
+ * @type {WritableSignal<WorkspaceRole>}
+ */
+const role: WritableSignal<WorkspaceRole> = signal<WorkspaceRole>('owner');
+
+/**
  * Constant workspace
  *
  * @description
- * Camille in Atelier Nord, as the workspace port shows them.
+ * Atelier Nord, with the person's role of each test.
  *
  * @type {WorkspaceContextPort}
  */
@@ -99,9 +111,23 @@ const workspace: WorkspaceContextPort = {
     initials: 'CM',
   }),
   organization,
-  role: signal('owner'),
-  can: () => true,
+  role,
+  can: (least: WorkspaceRole): boolean => meetsRole(role(), least),
 };
+
+/**
+ * Function settingsItems
+ *
+ * @description
+ * Texts of the organization settings entries of the open menu.
+ *
+ * @returns {string[]} The entries shown, in order.
+ */
+function settingsItems(): string[] {
+  return ['Organization settings', 'Members and invitations', 'Billing and quotas'].filter(
+    (text: string) => item(text) !== undefined,
+  );
+}
 
 /**
  * Function item
@@ -131,6 +157,7 @@ describe('OrganizationSwitcher', () => {
     navigate = vi.fn(() => Promise.resolve(true));
     show = vi.fn();
     organization.set(ATELIER_NORD);
+    role.set('owner');
     TestBed.configureTestingModule({
       imports: [OrganizationSwitcher],
       providers: [
@@ -231,6 +258,23 @@ describe('OrganizationSwitcher', () => {
     item('Create or join an organization')?.click();
     expect(navigateByUrl).toHaveBeenCalledWith('/organizations');
   });
+
+  it.each([
+    ['owner', ['Organization settings', 'Members and invitations', 'Billing and quotas']],
+    ['admin', ['Organization settings', 'Members and invitations']],
+    ['member', ['Members and invitations']],
+    ['guest', []],
+  ] as const)(
+    'shows a %s only the settings entries their role may open',
+    async (current: WorkspaceRole, expected: readonly string[]) => {
+      role.set(current);
+      fixture.detectChanges();
+
+      await openMenu();
+
+      expect(settingsItems()).toEqual(expected);
+    },
+  );
 
   it('offers Retry when the list cannot be read', async () => {
     menuOrganizations.mockReturnValueOnce(

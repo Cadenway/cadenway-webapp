@@ -29,14 +29,16 @@ belong to Auth.
     `workspace.settings.account-navigation`; `Organization settings`,
     `workspace.settings.organization-navigation`) and titles the error boundary's unavailable state
     (`Could not load this section`, `workspace.settings.load-failed`). Each provides Account's
-    `provideReauthentication()` and these settings shell contributions:
+    `provideReauthentication()` and these settings shell contributions. `organization` also runs
+    `organizationRoleGuard('member')`, so a guest never sees its frame (not even its 404), again on
+    every recovery (`shouldRecheckOrganizationRole`):
 
-    | Slot                 | `account`                                                                                 | `organization`                                                              |
-    | -------------------- | ----------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
-    | `railNavigation`     | Workspace's organization square, Home's `Home`, Inbox's `Inbox`, Spaces' `Spaces`         | Same                                                                        |
-    | `railFooter`         | Search's `Search`, Workspace's theme button, Account's menu                               | Same                                                                        |
-    | `settingsNavigation` | Workspace's back link, Account's sections, Organization's section links                   | Workspace's back link, Organization's identity and sections, Account's link |
-    | `overlays`           | Search's command palette, Workspace's shortcuts dialog, Account's reauthentication dialog | Same                                                                        |
+    | Slot                 | `account`                                                                                                                       | `organization`                                                              |
+    | -------------------- | ------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
+    | `railNavigation`     | Workspace's organization square, Home's `Home`, Inbox's `Inbox`, Spaces' `Spaces` (`variant: 'settings'`)                       | Same                                                                        |
+    | `railFooter`         | Search's `Search`, Workspace's theme button, Account's menu                                                                     | Same                                                                        |
+    | `settingsNavigation` | Workspace's back link, Account's sections, Organization's section links                                                         | Workspace's back link, Organization's identity and sections, Account's link |
+    | `overlays`           | Search's command palette, Workspace's shortcuts dialog, Task's create dialog and task detail, Account's reauthentication dialog | Same                                                                        |
 
   - `''` loads `AppShell` with these contributions, and holds the screens of the other features.
     A new screen adds an empty-path `loadChildren` entry before `**` in this child's `children`:
@@ -73,8 +75,9 @@ belong to Auth.
 `WorkspaceRole` models. It is provided only inside `/:org`; code that may run outside a workspace
 injects it as optional.
 
-`http/guards/organization-role` publishes `organizationRoleGuard(least, fallbacks?)` and the
-`OrganizationRoleFallback` model. It lets a route below `/:org` open for a role at least `least`
+`http/guards/organization-role` publishes `organizationRoleGuard(least, fallbacks?)`,
+`shouldRecheckOrganizationRole` (the `runGuardsAndResolvers` of a guarded route: the slug changes, or
+a workspace recovery navigation reverifies the role) and the `OrganizationRoleFallback` model. It lets a route below `/:org` open for a role at least `least`
 (the order of `can()`), and otherwise redirects with a `UrlTree` to the first fallback the role
 meets, below `/<slug>`, or else to `/<slug>`.
 
@@ -116,7 +119,9 @@ answer, for a settings page's `confirmDiscard()` (`@shared/unsaved-changes`).
   `listMyOrganizations` the first time the menu opens, with skeletons and an inline `Retry`.
   Choosing another organization navigates to `/<slug>`, whose guard switches the session; once the
   navigation succeeds with that organization committed, the toast `Organization: <name>` confirms
-  it (a cancelled or redirected switch confirms nothing). The settings entries open `/<slug>/organization/general|members|billing` and `Create or join an organization` opens `/organizations`.
+  it (a cancelled or redirected switch confirms nothing). The settings entries open `/<slug>/organization/general|members|billing`, each shown only to the
+  roles its section lets in (`Organization settings` for administrators, `Members and invitations`
+  for members, `Billing and quotas` for the owner), and `Create or join an organization` opens `/organizations`.
 - `ShortcutsHelp` (root) only holds whether the shortcuts dialog is open; `?` opens it outside fields
   through `ShortcutsService`, for as long as the shell lives.
 - The same menu opens from the rail square (desktop only) and from the sidebar header's

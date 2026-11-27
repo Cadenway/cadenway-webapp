@@ -39,7 +39,8 @@ the typed route error states belong to Errors.
 | `providers`   | workspace             |
 | `task.routes` | workspace             |
 
-`providers` publishes, bound on `/:org`:
+`providers` publishes, bound on the shells of `/:org` (the application shell and both settings
+shells, so the palette's `Create a task`, task results and `?task=<KEY>` work in the settings too):
 
 - `withTaskCreate()` (`overlays`, order 20);
 - `withTaskDetail()` (`overlays`, order 30): `TaskDetailHost`, which renders the detail dialog of

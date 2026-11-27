@@ -39,6 +39,10 @@ import type { SettingsShell, SettingsShellRouteData } from '@layouts/settings-sh
 import { provideSettingsShellSlots } from '@layouts/settings-shell/providers';
 
 import { organizationGuard } from './http/guards/organization/organization.guard';
+import {
+  organizationRoleGuard,
+  shouldRecheckOrganizationRole,
+} from './http/guards/organization-role/organization-role.guard';
 import { sessionGuard } from './http/guards/session/session.guard';
 import { slugRedirectGuard } from './http/guards/slug-redirect/slug-redirect.guard';
 import { workspaceResolver } from './http/resolvers/workspace/workspace.resolver';
@@ -113,7 +117,7 @@ export const WORKSPACE_ROUTES: Routes = [
               withOrganizationHomeItem(),
               withHomeRailItem(),
               withInbox(),
-              withSpacesRailItem(),
+              withSpacesRailItem({ variant: 'settings' }),
             ],
             railFooter: [withSearchRailItem(), withThemeRailItem(), withUserMenu()],
             settingsNavigation: [
@@ -121,7 +125,13 @@ export const WORKSPACE_ROUTES: Routes = [
               withAccountSettingsNavigation(),
               withOrganizationSettingsLinks(),
             ],
-            overlays: [withCommandPalette(), withShortcutsDialog(), withReauthenticationDialog()],
+            overlays: [
+              withCommandPalette(),
+              withShortcutsDialog(),
+              withTaskCreate(),
+              withTaskDetail(),
+              withReauthenticationDialog(),
+            ],
           }),
         ],
         loadComponent: async (): Promise<Type<SettingsShell>> =>
@@ -131,6 +141,8 @@ export const WORKSPACE_ROUTES: Routes = [
       },
       {
         path: 'organization',
+        canActivate: [organizationRoleGuard('member')],
+        runGuardsAndResolvers: shouldRecheckOrganizationRole,
         data: {
           settingsNavigationLabel: $localize`:@@workspace.settings.organization-navigation:Organization settings`,
           unavailableTitle: $localize`:@@workspace.settings.load-failed:Could not load this section`,
@@ -142,7 +154,7 @@ export const WORKSPACE_ROUTES: Routes = [
               withOrganizationHomeItem(),
               withHomeRailItem(),
               withInbox(),
-              withSpacesRailItem(),
+              withSpacesRailItem({ variant: 'settings' }),
             ],
             railFooter: [withSearchRailItem(), withThemeRailItem(), withUserMenu()],
             settingsNavigation: [
@@ -150,7 +162,13 @@ export const WORKSPACE_ROUTES: Routes = [
               withOrganizationSettingsNavigation(),
               withAccountSettingsLink(),
             ],
-            overlays: [withCommandPalette(), withShortcutsDialog(), withReauthenticationDialog()],
+            overlays: [
+              withCommandPalette(),
+              withShortcutsDialog(),
+              withTaskCreate(),
+              withTaskDetail(),
+              withReauthenticationDialog(),
+            ],
           }),
         ],
         loadComponent: async (): Promise<Type<SettingsShell>> =>

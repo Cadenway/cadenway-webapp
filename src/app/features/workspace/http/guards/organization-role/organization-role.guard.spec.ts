@@ -132,6 +132,19 @@ describe('organizationRoleGuard', () => {
     expect(TestBed.inject(Router).url).toBe('/atelier-nord/organization/general');
   });
 
+  it('checks the role of the organization a switch opens, not the one it leaves', async () => {
+    roles = { 'atelier-nord': 'owner', lumen: 'member' };
+    const harness: RouterTestingHarness = await RouterTestingHarness.create();
+    await harness.navigateByUrl('/atelier-nord/organization/billing');
+    expect(TestBed.inject(Router).url).toBe('/atelier-nord/organization/billing');
+
+    await harness.navigateByUrl('/lumen/organization/billing');
+
+    expect(TestBed.inject(Router).url).toBe('/lumen/organization/general');
+    await harness.navigateByUrl('/atelier-nord/organization/billing');
+    expect(TestBed.inject(Router).url).toBe('/atelier-nord/organization/billing');
+  });
+
   it('ignores a role verified by a navigation that was cancelled', async () => {
     roles['atelier-nord'] = 'member';
     const harness: RouterTestingHarness = await RouterTestingHarness.create();
