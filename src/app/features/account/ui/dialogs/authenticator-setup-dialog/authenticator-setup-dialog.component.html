@@ -1,0 +1,213 @@
+@let current = step();
+@let codeError = codeForm.code().touched() ? codeForm.code().errors()[0]?.message : undefined;
+<cw-dialog
+  [open]="open()"
+  [pending]="pending()"
+  [showClose]="false"
+  [closeOnOverlayClick]="current !== 3"
+  data-testid="setup-dialog"
+  (openChange)="openChanged($event)"
+  (closed)="left()"
+>
+  <cw-dialog-header>
+    <h2 cwDialogTitle i18n="@@account.security.setup-title">Set up the authenticator app</h2>
+    <p cwDialogDescription i18n="@@account.security.setup-progress">Step {{ current }} of 3</p>
+  </cw-dialog-header>
+
+  <ol
+    class="grid grid-cols-3 gap-2"
+    aria-label="Steps"
+    i18n-aria-label="@@account.security.setup-steps"
+  >
+    @for (item of steps; track item.step) {
+      <li class="flex flex-col gap-1.5" [attr.aria-current]="item.step === current ? 'step' : null">
+        <span
+          class="h-1 rounded-full"
+          [class.bg-foreground]="item.step <= current"
+          [class.bg-track]="item.step > current"
+        ></span>
+        <span
+          class="text-xs whitespace-nowrap"
+          [class.font-medium]="item.step <= current"
+          [class.text-foreground]="item.step <= current"
+          [class.text-muted-foreground]="item.step > current"
+          >{{ item.label }}</span
+        >
+      </li>
+    }
+  </ol>
+
+  <form id="setup-form" class="flex flex-col gap-3" novalidate (submit)="next($event)">
+    @switch (current) {
+      @case (1) {
+        <div class="flex flex-col items-center gap-3">
+          <p
+            class="text-center text-sm text-muted-foreground"
+            i18n="@@account.security.setup-key-hint"
+          >
+            Enter this key in your authenticator app:
+          </p>
+          <div class="flex items-center gap-2 rounded-md bg-muted px-2.5 py-1.5">
+            <code class="font-mono text-xs tracking-wider" data-testid="setup-key">{{
+              groupedSecret()
+            }}</code>
+            <button
+              cwButton
+              type="button"
+              variant="ghost"
+              size="icon-xs"
+              aria-label="Copy the key"
+              i18n-aria-label="@@account.security.setup-copy-key"
+              data-testid="setup-copy-key"
+              (click)="copyKeyRequested.emit()"
+            >
+              <ng-icon name="phosphorCopyBold" class="size-3.5" aria-hidden="true" />
+            </button>
+          </div>
+        </div>
+      }
+      @case (2) {
+        <div class="flex flex-col gap-2">
+          <label
+            for="setup-code"
+            class="text-sm leading-none font-medium"
+            i18n="@@account.security.setup-code-label"
+            >Code shown by the app</label
+          >
+          <cw-input-otp
+            [id]="'setup-code'"
+            ariaLabel="Code shown by the app"
+            i18n-ariaLabel="@@account.security.setup-code-label"
+            [formField]="codeForm.code"
+            [ariaDescribedBy]="
+              codeError || shownFailure() ? 'setup-code-error setup-code-help' : 'setup-code-help'
+            "
+          >
+            <cw-input-otp-group>
+              <cw-input-otp-slot [index]="0" />
+              <cw-input-otp-slot [index]="1" />
+              <cw-input-otp-slot [index]="2" />
+            </cw-input-otp-group>
+            <cw-input-otp-separator />
+            <cw-input-otp-group>
+              <cw-input-otp-slot [index]="3" />
+              <cw-input-otp-slot [index]="4" />
+              <cw-input-otp-slot [index]="5" />
+            </cw-input-otp-group>
+          </cw-input-otp>
+          <p
+            id="setup-code-help"
+            class="text-xs text-muted-foreground"
+            i18n="@@account.security.setup-code-help"
+          >
+            The code changes every 30 seconds.
+          </p>
+          @if (codeError || shownFailure()) {
+            <p
+              id="setup-code-error"
+              role="alert"
+              class="flex items-center gap-1 text-xs font-medium text-destructive"
+            >
+              <ng-icon
+                name="phosphorWarningCircleFill"
+                class="size-3.5 shrink-0"
+                aria-hidden="true"
+              />
+              @if (codeError) {
+                {{ codeError }}
+              } @else {
+                <span i18n="@@account.security.setup-code-invalid"
+                  >Incorrect code. Enter the one your app shows now.</span
+                >
+              }
+            </p>
+          }
+        </div>
+      }
+      @case (3) {
+        <div
+          role="status"
+          class="flex w-full items-start gap-3 rounded-lg border border-border bg-card px-4 py-3 text-sm text-card-foreground"
+        >
+          <ng-icon
+            name="phosphorCheckCircleFill"
+            class="mt-0.5 size-4 shrink-0 text-jade"
+            aria-hidden="true"
+          />
+          <div class="flex min-w-0 flex-col">
+            <p class="leading-5 font-medium" i18n="@@account.security.setup-done-title">
+              App configured
+            </p>
+            <p class="leading-5 text-muted-foreground" i18n="@@account.security.setup-done-text">
+              Keep these backup codes offline: each one works only once.
+            </p>
+          </div>
+        </div>
+        <ul
+          class="grid grid-cols-2 gap-x-4 gap-y-1.5 rounded-lg border border-border p-3 font-mono text-sm tabular-nums"
+          aria-label="Backup codes"
+          i18n-aria-label="@@account.security.backup-list"
+          data-testid="setup-codes"
+        >
+          @for (code of backupCodes()?.codes ?? []; track code) {
+            <li>{{ code }}</li>
+          }
+        </ul>
+        <div class="flex flex-wrap gap-2">
+          <button
+            cwButton
+            type="button"
+            variant="outline"
+            size="sm"
+            data-testid="setup-copy-codes"
+            (click)="copyCodesRequested.emit()"
+          >
+            <ng-icon name="phosphorCopyBold" aria-hidden="true" />
+            <ng-container i18n="@@account.security.backup-copy">Copy</ng-container>
+          </button>
+          <button
+            cwButton
+            type="button"
+            variant="outline"
+            size="sm"
+            data-testid="setup-download-codes"
+            (click)="downloadRequested.emit()"
+          >
+            <ng-icon name="phosphorDownloadSimpleBold" aria-hidden="true" />
+            <ng-container i18n="@@account.security.backup-download">Download</ng-container>
+          </button>
+        </div>
+      }
+    }
+  </form>
+
+  <cw-dialog-footer>
+    <button
+      cwButton
+      type="button"
+      variant="outline"
+      [disabled]="pending()"
+      data-testid="setup-cancel"
+      (click)="dismiss()"
+    >
+      @if (current === 3) {
+        <ng-container i18n="@@account.security.close">Close</ng-container>
+      } @else {
+        <ng-container i18n="@@account.security.cancel">Cancel</ng-container>
+      }
+    </button>
+    <button cwButton type="submit" form="setup-form" [loading]="pending()" data-testid="setup-next">
+      @switch (current) {
+        @case (1) {
+          <ng-container i18n="@@account.security.setup-continue">Continue</ng-container>
+        }
+        @case (2) {
+          <ng-container i18n="@@account.security.setup-verify">Verify the code</ng-container>
+        }
+        @default {
+          <ng-container i18n="@@account.security.setup-saved">I have saved my codes</ng-container>
+        }
+      }
+    </button>
+  </cw-dialog-footer>
+</cw-dialog>

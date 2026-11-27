@@ -19,7 +19,7 @@ parent provides the English texts of `cw-password-strength` and `cw-input-otp` t
 | --------------- | ------------------------------------------ | ---------------------- | ------------------------------------ |
 | `''`            | redirects to `profile`                     |                        |                                      |
 | `profile`       | `profile-page` (`ProfilePage`)             | `Profile`              | `canDeactivate: unsavedChangesGuard` |
-| `security`      | `security-page` (`SecurityPage`)           | `Security and sign-in` |                                      |
+| `security`      | `security-page` (`SecurityPage`)           | `Security and sign-in` | `canDeactivate: unsavedChangesGuard` |
 | `notifications` | `notifications-page` (`NotificationsPage`) | `Notifications`        |                                      |
 | `preferences`   | `preferences-page` (`PreferencesPage`)     | `Preferences`          |                                      |
 | `api-tokens`    | `api-tokens-page` (`ApiTokensPage`)        | `API tokens`           | `canDeactivate: unsavedChangesGuard` |
@@ -37,6 +37,10 @@ parent provides the English texts of `cw-password-strength` and `cw-input-otp` t
 - `api-tokens` (package A5) replaces its stub: the page provides `ApiTokensStore` and reads the
   person's tokens of the current organization, with the section skeleton while loading, the
   route's error boundary for a failed read and `No active token` for an empty list.
+- `security` (package A2) replaces its stub: `SecurityPage` provides `SecurityStore`, reads the
+  account, its two-step verification and its sessions at once, shows the section skeleton while
+  loading and lets a failed read reach the error boundary. `unsavedChangesGuard` waits for a
+  write on its way and keeps backup codes shown once.
 
 ## Public entry points
 
@@ -78,6 +82,13 @@ parent provides the English texts of `cw-password-strength` and `cw-input-otp` t
 - API tokens: `@cadenway/api-client` `ApiTokensService` (`listApiTokens`, `createApiToken`,
   `revokeApiToken`) through `data-access/`, and `@cadenway/ui` `alert-dialog`, `badge`,
   `checkbox`, `empty`, `field`, `input-group`, `select`, `skeleton` and `table`.
+- Security: `@cadenway/api-client` `AuthService.getCurrentUser`, `AccountService.changePassword`,
+  `TwoStepVerificationService` (read, disable, authenticator setup and confirmation, backup
+  codes, security key registration, addition and removal) and `SessionsService`
+  (`listSessions`, `revokeSession`, `revokeOtherSessions`), each after `getCurrentUser` under
+  Auth's `withSessionLock`, through `data-access/`; `@simplewebauthn/browser` for the key
+  ceremony; `@cadenway/ui` `alert`, `alert-dialog`, `badge`, `card`, `dialog`, `input`,
+  `input-otp`, `password-strength` and `skeleton`.
 
 ## Invariants
 
@@ -182,6 +193,72 @@ parent provides the English texts of `cw-password-strength` and `cw-input-otp` t
 - Known gap: the mockup's `Set a status message` item and the status message under the header are left out,
   since the backend has no status message yet.
 
+### Security (`security`, package A2)
+
+- `security` (`Compte.dc.html` lines 267-353, dialogs 578-591, 637-693) shows the `Password`
+  card, `TwoStepCard` and `SessionsList`. The `Sign-in providers` card is not rendered: the
+  contract has no linked providers yet (gap B8). Sessions show the address only: the contract
+  derives no place from it.
+- `SecurityStore` (page-scoped on `SecurityPage`) reads the section as one primary read keyed
+  by `WORKSPACE_CONTEXT`'s user, so a page reused for another account reads that one's. Its
+  writes run one at a time through `ReauthenticationService.run`; each is bound to the account
+  shown when it starts and to the page: once either changes, nothing more is sent (the retry
+  after a reauthentication included), the answer is dropped and nothing is toasted.
+  `SecurityApi` also checks the session's account (`getCurrentUser`) under the session lock
+  before every read and write, so nothing reaches another account signed in from another tab.
+  A confirmed write applies its answer to the read: the password date, two-step verification
+  on or off, the keys, the backup codes left, the sessions. A key or session already gone
+  (`404`) counts as removed.
+- A write whose answer was lost (no status, `408`, `5xx`) may have been applied, or may still
+  be, so it is never sent again: the section is read again as a secondary read (never through
+  the error boundary) at once, then 2, 4 and 8 seconds later (`SECURITY_REREAD_DELAYS`), until a
+  read shows the write; each read that answers replaces the one shown. A newer password date
+  means the password changed; two-step verification now on means the setup committed, its codes
+  unseen; now off means it was turned off; a newer generation date means the codes were
+  replaced unseen; the key or session gone means it was removed; a key not shown before means
+  it was registered; no other session left means they were closed. When no read shows it, the
+  write is unconfirmed, never failed: a warning says so and stays until closed, with
+  `Generate new codes` when backup codes may have changed (also when they were replaced
+  unseen); the password dialog closes so the old current password is not sent again. A failure
+  before the write was sent (the session lock, the account check, the start of a key
+  registration) is a plain failure, with no read again.
+- Leaving waits for a write on its way (`sending`, which lasts until its result is settled, the
+  reread of a lost answer included; not a write waiting only for the reauthentication dialog),
+  then for the page's own generation or confirmation to receive its codes, then leaves unless
+  backup codes show; the browser asks before closing the tab meanwhile.
+- Once a removed key or a revoked session left and the confirmation closed, focus moves to the
+  `Remove` or `Revoke` now at its place (or the one before it), otherwise to `Add a key` or the
+  two-step card's button, or to `Sign out the others` (the sessions card's title when it is
+  disabled).
+- Secrets: passwords live in the password form only and are cleared at each opening and once
+  the dialog has left; the authenticator key and the backup codes are returned by the store to
+  the page, held in page signals while their dialog shows, and forgotten once it has left.
+  None reaches the store's state, a toast or a log; the `otpauth` address is not kept.
+- Password: `Change password` stays enabled while the form is invalid (no current password,
+  fewer than 12 characters, `The two passwords do not match.`); the strength meter is advisory,
+  since the contract sets no composition rule. `auth.password-incorrect` (with the attempts
+  left), `auth.account-locked`, `auth.password-too-short` and `auth.password-compromised` show
+  under their field until it changes; another failure toasts and keeps the dialog.
+- Two-step verification: the design system has no QR code brick, so the setup's step 1 shows
+  the key only, grouped by 4, with `Copy the key` (copied without spaces). Step 3 shows the
+  first backup codes with `Copy` and `Download`; a reconfiguration, which keeps the codes,
+  closes the dialog with its own toast. A refused code stays inline until the code changes; an
+  expired setup closes the dialog. While an organization requires two-step verification,
+  `Turn off` is disabled and described by the requirement line; the workspace organization is
+  named, other organizations are counted. `Turn off`, `Remove` and both session revocations ask
+  through one `cw-alert-dialog`. Requirements, primary methods and device types a later contract
+  adds are shown without a role, without `primary method` and as an unknown device.
+- Security keys need WebAuthn to be added: without it (`browserSupportsWebAuthn()`), only
+  `Add a key` is left out, so registered keys stay listed and removable, and the row shows only
+  when keys exist. `Add a key` asks for the name the contract requires (not drawn by the
+  mockup), then the gateway's options, the browser's prompt and the registration; a closed
+  prompt keeps the name dialog silently.
+- Backup codes download as `cadenway-backup-codes.txt` (`cadenway-codes-de-secours.txt` in
+  French) with the mockup's header naming the account and the generation date, through a
+  temporary object URL revoked a second later.
+- Below 768 px the rows wrap (`flex-wrap`), as the mockup draws them; dialogs take the brick's
+  phone width.
+
 ## Copy not taken word for word from the mockup
 
 | Unit                                                                                                                                                                                                                                                                                                                                   | Reason                                                                                         |
@@ -208,3 +285,28 @@ parent provides the English texts of `cw-password-strength` and `cw-input-otp` t
 | `account.labels.*`                                                                                                                                                                                                | Texts of the password strength and one-time code bricks, worded as Auth's.                     |
 | `account.notifications.save-failed`, `account.notifications.save-failed-text`                                                                                                                                     | The mockup draws no refused save; the section saves at once.                                   |
 | `account.user-menu.avatar-unknown`, `account.user-menu.avatar-online`, `account.user-menu.avatar-away`, `account.user-menu.avatar-dnd`, `account.user-menu.avatar-invisible`, `account.user-menu.avatar-disabled` | Texts of the avatar brick, taken from its defaults.                                            |
+
+Security section (`account.security.*`):
+
+| Unit                                                                                                                                                                                                                                                                                                                   | Reason                                                                                                                |
+| ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| `keys-list`, `key-added-used`, `key-added-unused`, `key-remove`, `key-remove-label`, `remove-key-title`, `remove-key-description`, `key-removed`, `key-removed-text`, `key-remove-failed`                                                                                                                              | The mockup draws no list of keys and no removal; the contract has both.                                               |
+| `key-name-title`, `key-name-description`, `key-name-label`, `key-name-placeholder`, `key-name-required`, `key-name-too-long`                                                                                                                                                                                           | The contract requires a key name the mockup does not ask for (`auth.yaml` "Nom de la clé").                           |
+| `key-failed`, `key-refused`, `key-expired`, `key-limit`                                                                                                                                                                                                                                                                | The mockup draws no refused key.                                                                                      |
+| `keys-summary` (`=0`, `=1`)                                                                                                                                                                                                                                                                                            | Singular and empty forms of the mockup's `N clés : …`.                                                                |
+| `session-active-minutes`, `session-active-days` (`=1`), `sessions-timeout-*`                                                                                                                                                                                                                                           | The mockup shows fixed samples; the other units follow its wording.                                                   |
+| `sessions-empty`, `session-unknown-device`, `session-revoke-label`                                                                                                                                                                                                                                                     | States and accessible names the mockup does not draw.                                                                 |
+| `sessions-closed-one`, `session-revoke-failed`, `sessions-close-failed`                                                                                                                                                                                                                                                | Singular form, and refusals the mockup does not draw.                                                                 |
+| `two-step-required-everyone`, `two-step-required-unknown`, `two-step-required-others`                                                                                                                                                                                                                                  | The mockup knows only the workspace organization's requirement for administrators.                                    |
+| `app-configured`                                                                                                                                                                                                                                                                                                       | The mockup's line without ` · méthode principale`, for another primary method.                                        |
+| `setup-key-hint`                                                                                                                                                                                                                                                                                                       | No QR code brick yet: the setup shows the key only, so the mockup's `Scannez ce code…` does not apply.                |
+| `setup-code-invalid`, `setup-code-required`, `setup-expired`, `setup-expired-text`, `setup-failed`, `setup-confirm-failed`                                                                                                                                                                                             | The mockup draws no refused or expired setup.                                                                         |
+| `app-replaced`, `app-replaced-text`                                                                                                                                                                                                                                                                                    | The mockup draws no reconfiguration, which keeps the backup codes.                                                    |
+| `backup-download`                                                                                                                                                                                                                                                                                                      | The mockup offers no download at the setup's step 3; the codes must be saved there too.                               |
+| `backup-dialog-description` (`=0`, `=1`)                                                                                                                                                                                                                                                                               | Singular and generic forms of `Les 7 codes précédents ne fonctionnent plus.`                                          |
+| `codes-failed`, `password-failed`, `two-step-disable-failed`, `try-again`                                                                                                                                                                                                                                              | The mockup draws no failed write.                                                                                     |
+| `codes-file`                                                                                                                                                                                                                                                                                                           | English source file name; the French one is the mockup's.                                                             |
+| `password-current-required`, `password-too-short`, `password-compromised`, `password-incorrect`, `password-incorrect-attempts`, `password-locked`                                                                                                                                                                      | The mockup disables `Modifier le mot de passe` and draws no refusal; the wording follows the reauthentication dialog. |
+| `disable-title`, `disable-description`, `disable-confirm`, `two-step-disabled`, `two-step-disabled-text`, `two-step-still-required`, `two-step-still-required-text`                                                                                                                                                    | The mockup turns two-step verification off with no confirmation, toast or refusal.                                    |
+| `password-unconfirmed`, `password-unconfirmed-text`, `setup-unconfirmed`, `setup-unconfirmed-text`, `two-step-enabled-unseen`, `two-step-enabled-unseen-text`, `codes-unseen`, `codes-unseen-text`, `codes-unconfirmed`, `codes-unconfirmed-text`, `two-step-disable-unconfirmed`, `two-step-disable-unconfirmed-text` | The mockup draws no lost answer; these warnings follow the read again of the section.                                 |
+| `key-unconfirmed`, `key-unconfirmed-text`, `key-remove-unconfirmed`, `key-remove-unconfirmed-text`, `session-revoke-unconfirmed`, `session-revoke-unconfirmed-text`, `sessions-close-unconfirmed`, `sessions-close-unconfirmed-text`                                                                                   | The mockup draws no lost answer; these neutral warnings follow the reads again of the section.                        |
