@@ -80,8 +80,14 @@ describe('unsavedChangesGuard', () => {
     TestBed.configureTestingModule({
       providers: [
         provideRouter([
-          { path: 'profile', component: FormPage, canDeactivate: [unsavedChangesGuard] },
+          {
+            path: 'profile',
+            component: FormPage,
+            canDeactivate: [unsavedChangesGuard],
+            runGuardsAndResolvers: 'always',
+          },
           { path: 'security', component: OtherPage },
+          { path: 'failed', component: OtherPage, canDeactivate: [unsavedChangesGuard] },
         ]),
       ],
     });
@@ -105,6 +111,29 @@ describe('unsavedChangesGuard', () => {
 
     expect(TestBed.inject(Router).url).toBe('/profile');
     expect(FormPage.answer).toHaveBeenCalledOnce();
+  });
+
+  it('leaves a component without unsaved-changes support, such as an error component', async () => {
+    await RouterTestingHarness.create('/failed');
+
+    expect(await TestBed.inject(Router).navigateByUrl('/security')).toBe(true);
+
+    expect(TestBed.inject(Router).url).toBe('/security');
+  });
+
+  it('reruns the route of a dirty page without asking, keeping the page', async () => {
+    FormPage.dirty = true;
+    const harness: RouterTestingHarness = await RouterTestingHarness.create('/profile');
+    const page: FormPage | null = harness.routeDebugElement?.componentInstance as FormPage | null;
+
+    const recovered: boolean = await TestBed.inject(Router).navigateByUrl('/profile', {
+      onSameUrlNavigation: 'reload',
+      info: Symbol('recovery'),
+    });
+
+    expect(recovered).toBe(true);
+    expect(FormPage.answer).not.toHaveBeenCalled();
+    expect(harness.routeDebugElement?.componentInstance).toBe(page);
   });
 
   it('leaves a dirty page once the person discards the changes', async () => {
