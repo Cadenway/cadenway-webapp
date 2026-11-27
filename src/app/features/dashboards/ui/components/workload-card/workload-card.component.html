@@ -1,0 +1,35 @@
+<section
+  class="flex flex-col gap-4 rounded-xl border border-border bg-card p-4"
+  aria-labelledby="dashboards-workload-title"
+>
+  <h2
+    id="dashboards-workload-title"
+    class="text-base font-semibold"
+    i18n="@@dashboards.workload.title"
+  >
+    Workload per person
+  </h2>
+  @for (row of rows(); track row.person.id) {
+    <div class="flex items-start gap-2" data-testid="workload-row">
+      <span
+        class="mt-px flex size-5 shrink-0 items-center justify-center rounded-full bg-secondary text-[9px] leading-none font-semibold text-secondary-foreground"
+        aria-hidden="true"
+        >{{ row.person.initials }}</span
+      >
+      <cw-meter
+        class="min-w-0 flex-1"
+        [value]="row.count"
+        [max]="threshold()"
+        [zone]="row.zone"
+        [label]="row.person.name"
+        [note]="notes[row.zone]"
+        [format]="format"
+      />
+    </div>
+  } @empty {
+    <p class="text-sm text-muted-foreground" i18n="@@dashboards.workload.empty">
+      No open task is assigned.
+    </p>
+  }
+  <p class="text-xs text-muted-foreground">{{ caption() }}</p>
+</section>
