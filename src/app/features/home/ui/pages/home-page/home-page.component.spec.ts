@@ -543,6 +543,26 @@ describe('HomePage', () => {
     );
   });
 
+  it("says in the menu's Assign that the members failed, and Retry reads them again", async () => {
+    people.mockRejectedValueOnce(new Error('unavailable'));
+    const { harness }: { harness: RouterTestingHarness } = await open();
+
+    const menu: TaskMenu = await menuOf(harness, 0);
+    await settle(harness);
+    expect(menu.peopleState()).toBe('failed');
+    expect(menu.people()).toEqual([]);
+
+    menu.peopleRetried.emit();
+    await settle(harness);
+
+    expect(people).toHaveBeenCalledTimes(2);
+    expect(menu.peopleState()).toBe('ready');
+    expect(menu.people().map((person: Person) => person.name)).toEqual([
+      'Camille Martin',
+      'Inès Robert',
+    ]);
+  });
+
   it('runs the menu writes on the read copy and checks the drawn one', async () => {
     rowActions.pending.set({ 'CAD-482': { priority: 'urgente' } });
     const { harness, element }: { harness: RouterTestingHarness; element: HTMLElement } =

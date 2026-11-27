@@ -202,11 +202,30 @@ describe('DashboardStore', () => {
     await expect.poll(() => store.loading()).toBe(false);
     expect(store.workload()[0].person).toMatchObject({ name: 'Unknown member', initials: '?' });
     expect(store.personOf('u-camille').name).toBe('Unknown member');
+    expect(store.peopleState()).toBe('loading');
 
     members.resolve([{ id: 'u-camille', name: 'Camille Martin', initials: 'CM', avatar: null }]);
 
     await expect.poll(() => store.personOf('u-camille').name).toBe('Camille Martin');
+    expect(store.peopleState()).toBe('ready');
     expect(store.loading()).toBe(false);
+  });
+
+  it('tells failed members from none, and Retry reads them again', async () => {
+    people.mockRejectedValueOnce(new Error('unavailable'));
+    const store: DashboardStoreInstance = TestBed.inject(DashboardStore);
+
+    await expect.poll(() => store.peopleState()).toBe('failed');
+    expect(people).toHaveBeenCalledTimes(1);
+    expect(store.people()).toEqual([]);
+
+    store.retryPeople();
+
+    await expect.poll(() => store.peopleState()).toBe('ready');
+    expect(store.people()).toHaveLength(3);
+    const calls: number = people.mock.calls.length;
+    store.retryPeople();
+    expect(people).toHaveBeenCalledTimes(calls);
   });
 
   it('keeps the page when the members fail, and reads them again on the next refresh', async () => {

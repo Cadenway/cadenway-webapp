@@ -2693,6 +2693,8 @@
     "spaces.rows.duplicate": "Duplicate",
     "spaces.rows.copy-link": "Copy the link",
     "spaces.rows.copy-key": "Copy the identifier",
+    "task.menu.people-failed": "Could not load the members.",
+    "task.menu.people-loading": "Loading the members",
     "spaces.rows.menu-many": "{$count} tasks selected",
     "spaces.rows.remind-many": "Remind me of these tasks tomorrow morning",
     "spaces.rows.remind": "Remind me tomorrow morning",

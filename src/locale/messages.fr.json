@@ -2705,6 +2705,8 @@
     "task.editor.up": "Haut",
     "task.label-picker.placeholder": "Étiquettes",
     "task.label-picker.search": "Rechercher ou créer une étiquette…",
+    "task.menu.people-failed": "Impossible de charger les membres.",
+    "task.menu.people-loading": "Chargement des membres",
     "task.milestone.blocked": "À risque",
     "task.milestone.blocked-hint": "Une dépendance menace la date",
     "task.milestone.cancelled": "Annulé",

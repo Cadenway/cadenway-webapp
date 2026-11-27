@@ -408,15 +408,18 @@ describe('MyTasksStore', () => {
     expect(people).not.toHaveBeenCalled();
 
     store.loadPeople();
+    expect(store.peopleState()).toBe('loading');
     await settle();
     expect(people).toHaveBeenCalledTimes(1);
     expect(store.people()).toEqual([]);
+    expect(store.peopleState()).toBe('failed');
 
     store.loadPeople();
     await settle();
 
     expect(people).toHaveBeenCalledTimes(2);
     expect(store.people().map((person: Person) => person.name)).toEqual(['Camille Martin']);
+    expect(store.peopleState()).toBe('ready');
     store.loadPeople();
     await settle();
     expect(people).toHaveBeenCalledTimes(2);

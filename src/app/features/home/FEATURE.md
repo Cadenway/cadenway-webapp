@@ -34,7 +34,7 @@ with the screen. `?notice=logo-upload-failed` reaches the page as its `notice` i
   page) for the menu's `Assign`.
 - Task's `.` entry: `TaskSummary`, `TaskLine`, `TaskMenu`, `TaskCancelDialog`,
   `TASK_ROW_ACTIONS_PROVIDERS`, `TaskRowActionsStore`, `TaskDetailOpener` (`closed`, `changed`),
-  `TaskCreate` (`open`, `created`), `TaskMoveTarget`, `Person`, `personOf`.
+  `TaskCreate` (`open`, `created`), `TaskMoveTarget`, `TaskMenuPeopleState`, `Person`, `personOf`.
 - Inbox's `.` entry: `InboxDigest` (`cw-inbox-digest`).
 - Spaces' `ports/list-directory` (`LIST_DIRECTORY`, optional) for the list names, the space names
   and `Move to`.
@@ -87,6 +87,9 @@ organization.context-changed`) keeps them silently, with the error of an earlier
   focus goes to the line that took its place, else the one before it, else the empty paragraph or
   the `My priorities` heading (both `tabindex="-1"`). Below 640 px
   the lines drop their priority (Task's line); below 1024 px the aside stacks under them.
+- The members are read on the first opening of the task menu, not when the page opens; `Assign`
+  shows them loading (`peopleState`), then a failure with `Retry`, which reads them again
+  (`loadPeople`), as the next opening does.
 - A list that `LIST_DIRECTORY` does not hold reads `Archived list` (gap G-T1, until `TaskSummary`
   carries its list's name) only when the directory holds at least one list of the task's space;
   otherwise the text after the key is left out. A space whose name the directory does not know is
@@ -106,9 +109,6 @@ organization.context-changed`) keeps them silently, with the error of an earlier
   on task-service `getHome`, then the gateway relay.
 - G-T1: `TaskSummary` carries no list name; archived lists read `Archived list`.
 - G-R1: no realtime notice for the caller's tasks across lists; see the refresh triggers above.
-- The members of `Assign` have no loading or error state: Task's `cw-task-menu` takes only
-  `people` and disables `Assign` while it is empty, so a failed members read looks like an empty
-  menu until the next opening reads them again.
 - The route relies on the router's default error component instead of declaring
   `errorComponent: RouteErrorBoundary`, because Errors' `.` entry does not list `home` among its
   consumers; the rendered state is the same.

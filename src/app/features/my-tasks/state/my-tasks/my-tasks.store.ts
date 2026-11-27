@@ -36,6 +36,7 @@ import {
   type Person,
   TaskCreate,
   TaskDetailOpener,
+  type TaskMenuPeopleState,
   type TaskMoveTarget,
   type TaskSummary,
 } from '@features/task';
@@ -363,6 +364,18 @@ export interface MyTasksStoreInstance {
   readonly people: Signal<readonly Person[]>;
 
   /**
+   * Property peopleState
+   *
+   * @description
+   * Where the read of `people` stands for the task menu's `Assign`: `loading` until they answer
+   * (and before the menu first opened), `failed` once their read failed, `ready` once read.
+   *
+   * @type {Signal<TaskMenuPeopleState>}
+   * @readonly
+   */
+  readonly peopleState: Signal<TaskMenuPeopleState>;
+
+  /**
    * Property listNames
    *
    * @description
@@ -443,7 +456,8 @@ export interface MyTasksStoreInstance {
    * Method loadPeople
    *
    * @description
-   * The task menu opens: reads the members the first time, and again when their read failed.
+   * The task menu opens, or `Assign`'s `Retry` is picked: reads the members the first time, and
+   * again when their read failed.
    */
   loadPeople(): void;
   // #endregion
@@ -617,6 +631,10 @@ function createMyTasksStore(): Type<MyTasksStoreInstance> {
         people: computed((): readonly Person[] =>
           store._people.hasValue() ? store._people.value() : [],
         ),
+        peopleState: computed((): TaskMenuPeopleState => {
+          if (store._people.status() === 'error') return 'failed';
+          return store._people.hasValue() ? 'ready' : 'loading';
+        }),
         listNames: computed(
           (): ReadonlyMap<string, string> =>
             new Map(
@@ -806,8 +824,8 @@ function createMyTasksStore(): Type<MyTasksStoreInstance> {
  * after it is dropped: such a change aborts a running `Show more` and frees the reads it held, so a
  * request of the previous context, even one that never answers, never queues the new context's
  * refreshes. The tab counts stay while another tab of the same organization is read.
- * The members (`people`) are a secondary read made when the task menu first opens: a failure
- * leaves the menu's `Assign` empty until the next opening reads them again. The list names come
+ * The members (`people`, `peopleState`) are a secondary read made when the task menu first opens:
+ * `Assign` shows them loading, then a failure with `Retry`; the next opening reads them again too. The list names come
  * from Spaces' `LIST_DIRECTORY`, which holds no archived list.
  *
  * @type {Type<MyTasksStoreInstance>}

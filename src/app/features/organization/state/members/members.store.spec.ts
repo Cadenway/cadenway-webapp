@@ -362,7 +362,8 @@ async function setup(overrides: Partial<ApiFake>, role: WorkspaceRole = 'owner')
  * Function settle
  *
  * @description
- * Lets the timers and the resource reads run.
+ * Runs the faked timers (the search debounce only, see the suite's set-up) and lets the
+ * resource reads settle.
  *
  * @returns {Promise<void>} Resolves once stable.
  */
@@ -417,7 +418,10 @@ function rowOf(store: MembersStoreInstance, id: string): MemberRow {
 
 describe('MembersStore', () => {
   beforeEach(() => {
-    vi.useFakeTimers();
+    // Only the search debounce runs on fake time: RxJS schedules it with `setInterval` and reads
+    // `Date`. `setTimeout` stays real, so `runAllTimersAsync` never runs a timer that reschedules
+    // itself, such as a workspace recovery retry left by another spec file of the worker.
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval', 'Date'] });
   });
 
   afterEach(() => {

@@ -36,7 +36,8 @@ Spaces): a link to `/<slug>/my-tasks` with the check square, filled and marked
   page) for the menu's `Assign`.
 - Task's `.` entry: `TaskSummary`, `TaskLine`, `TaskMenu`, `TaskCancelDialog`,
   `TASK_ROW_ACTIONS_PROVIDERS`, `TaskRowActionsStore`, `TaskDetailOpener` (`closed`, `changed`),
-  `TaskCreate` (`open`, `created`), `TaskMoveTarget`, `Person`, `personOf`, `isClosedStatus`.
+  `TaskCreate` (`open`, `created`), `TaskMoveTarget`, `TaskMenuPeopleState`, `Person`, `personOf`,
+  `isClosedStatus`.
 - Spaces' `ports/list-directory` (`LIST_DIRECTORY`, optional) for the list names, their spaces
   and `Move to`.
 - Workspace's `ports/workspace-context` (`WORKSPACE_CONTEXT`) for the organization and the slug.
@@ -68,8 +69,8 @@ organization.context-changed`) keeps the rows silently and is sent again once th
   (`The next tasks could not be loaded.` when it fails, the button trying again), and a refresh of
   `Done` reads again only the pages shown. A window focus reads the tab again only when no read
   settled in the last 30 s (`FOCUS_REFRESH_MS`). The members are read on the first opening of the
-  task menu, not when the page opens; a failure leaves `Assign` empty and the next opening reads
-  them again.
+  task menu, not when the page opens; `Assign` shows them loading (`peopleState`), then a failure
+  with `Retry`, which reads them again, as the next opening does.
 - No realtime event covers the caller's tasks across lists (gap G-R1): the tab is read again in
   the background, keeping its rows, after each settled write of the menu
   (`TaskRowActionsStore.changed`), on window focus (see above), after a realtime reconnection,
@@ -87,6 +88,10 @@ organization.context-changed`) keeps the rows silently and is sent again once th
   date). A line stays in the group of its read status and date until the next read, which a
   settled status write triggers; a pending status or value of the menu stays shown over a reread
   of an older copy; a deleted line hides at once (`TaskRowActionsStore.rows`).
+- The menu remembers the key of the line it opened on and looks the tab's read copy of that task
+  up when an item runs: every write, `displayedTask` and `displayedStatus` take that read copy, so
+  a write picked over a pending one, then its `Undo`, only put back a confirmed value. The
+  displayed copy (`rows`) only draws the lines and the menu's checkmarks.
 - The context menu opens from the list item around each `cw-task-line` (right click, Shift F10,
   the Menu key, a long press), not from the line itself, whose `opened` output would otherwise also
   receive the trigger's. The item has `tabindex="-1"` and hands the focus it receives itself (the
