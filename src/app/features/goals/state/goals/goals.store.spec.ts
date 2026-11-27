@@ -1380,21 +1380,116 @@ describe('GoalsStore', () => {
     expect(api.get).not.toHaveBeenCalled();
   });
 
-  it('reuses the idempotency key of a creation still running across a switch away and back', async () => {
-    api.create.mockReturnValueOnce(deferred<Goal>().promise);
+  it('waits for a creation still running across a switch away and back, then sends it again with its key after an unknown outcome', async () => {
+    const answer: Deferred<Goal> = deferred<Goal>();
+    api.create.mockReturnValueOnce(answer.promise);
     const store: InstanceType<typeof GoalsStore> = await loaded();
     void store.create(SUPPORT);
     await flush();
-
     commit(STUDIO_SUD);
     commit(ATELIER_NORD);
     TestBed.tick();
     await settle();
     expect(store.creating()).toBe(false);
-    await store.create(SUPPORT);
+
+    const again: Promise<string | null> = store.create(SUPPORT);
+    await flush();
+    expect(api.create).toHaveBeenCalledTimes(1);
+    vi.useFakeTimers();
+    try {
+      answer.reject(problem(504));
+      await vi.advanceTimersByTimeAsync(RETRY_DELAY_MS);
+      await expect(again).resolves.toBe('g9');
+    } finally {
+      vi.useRealTimers();
+    }
 
     expect(api.create).toHaveBeenCalledTimes(2);
     expect(api.create.mock.calls[1][3]).toBe(api.create.mock.calls[0][3]);
+    expect(toasts.success).toHaveBeenCalledTimes(1);
+  });
+
+  it('takes the goal a creation still running across a switch away and back created, then forgets its key', async () => {
+    const answer: Deferred<Goal> = deferred<Goal>();
+    api.create.mockReturnValueOnce(answer.promise);
+    const store: InstanceType<typeof GoalsStore> = await loaded();
+    void store.create(SUPPORT);
+    await flush();
+    commit(STUDIO_SUD);
+    commit(ATELIER_NORD);
+    TestBed.tick();
+    await settle();
+
+    const again: Promise<string | null> = store.create(SUPPORT);
+    await flush();
+    answer.resolve(goal({ id: 'g7', name: SUPPORT.name, version: 1, results: [] }));
+
+    await expect(again).resolves.toBe('g7');
+    expect(api.create).toHaveBeenCalledTimes(1);
+    expect(toasts.success).toHaveBeenCalledTimes(1);
+    expect(store.list()?.map((view: GoalView) => view.goal.id)).toContain('g7');
+    await store.create(SUPPORT);
+    expect(api.create).toHaveBeenCalledTimes(2);
+    expect(api.create.mock.calls[1][3]).not.toBe(api.create.mock.calls[0][3]);
+  });
+
+  it('waits for a key result still being added across a switch away and back, then sends it again with its key after an unknown outcome', async () => {
+    const answer: Deferred<KeyResultWrite> = deferred<KeyResultWrite>();
+    api.createResult.mockReturnValueOnce(answer.promise);
+    const store: InstanceType<typeof GoalsStore> = await loaded();
+    void store.addResult('g1', { label: 'Customer demos held', target: 12 });
+    await flush();
+    commit(STUDIO_SUD);
+    commit(ATELIER_NORD);
+    TestBed.tick();
+    await settle();
+    expect(store.addingTo()).toBeNull();
+
+    const again: Promise<boolean> = store.addResult('g1', {
+      label: 'Customer demos held',
+      target: 12,
+    });
+    await flush();
+    expect(api.createResult).toHaveBeenCalledTimes(1);
+    vi.useFakeTimers();
+    try {
+      answer.reject(problem(504));
+      await vi.advanceTimersByTimeAsync(RETRY_DELAY_MS);
+      await expect(again).resolves.toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+
+    expect(api.createResult).toHaveBeenCalledTimes(2);
+    expect(api.createResult.mock.calls[1][3]).toBe(api.createResult.mock.calls[0][3]);
+  });
+
+  it('takes the key result an addition still running across a switch away and back created, then forgets its key', async () => {
+    const answer: Deferred<KeyResultWrite> = deferred<KeyResultWrite>();
+    api.createResult.mockReturnValueOnce(answer.promise);
+    const store: InstanceType<typeof GoalsStore> = await loaded();
+    void store.addResult('g1', { label: 'Customer demos held', target: 12 });
+    await flush();
+    commit(STUDIO_SUD);
+    commit(ATELIER_NORD);
+    TestBed.tick();
+    await settle();
+
+    const again: Promise<boolean> = store.addResult('g1', {
+      label: 'Customer demos held',
+      target: 12,
+    });
+    await flush();
+    answer.resolve({
+      result: { ...signups(0), id: 'k10', label: 'Customer demos held' },
+      version: 4,
+    });
+
+    await expect(again).resolves.toBe(true);
+    expect(api.createResult).toHaveBeenCalledTimes(1);
+    await store.addResult('g1', { label: 'Customer demos held', target: 12 });
+    expect(api.createResult).toHaveBeenCalledTimes(2);
+    expect(api.createResult.mock.calls[1][3]).not.toBe(api.createResult.mock.calls[0][3]);
   });
 
   it('forgets the key of a goal created once the workspace switched away and back', async () => {

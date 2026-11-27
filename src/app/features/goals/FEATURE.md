@@ -89,7 +89,9 @@ result change could not be confirmed` shows and the goals are read again. A crea
   definitive answer (created or refused, even once a switch dropped it) and is sent again with it
   after an unknown outcome or `409 idempotency.request-in-progress`, one second apart, three sends
   in all; still unknown, `The goal could not be confirmed` or `The key result could not be
-confirmed` asks to submit again, which reuses the key. A deletion of unknown outcome whose goal is
+confirmed` asks to submit again, which reuses the key; a draft submitted again while an earlier
+  attempt of it still runs (after a switch and back) waits for it and takes what it created, or
+  sends again with the key it kept. A deletion of unknown outcome whose goal is
   still there, or cannot be read, shows `The deletion could not be confirmed`, and the goals are
   read again. Confirmed writes stay over the read
   goals until a read issued after them lands; a snapshot of one goal counts from when it was sent

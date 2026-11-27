@@ -1419,6 +1419,44 @@ function createGoalsStore(): Type<GoalsStoreInstance> {
         createKeys.set(draft, key);
         return key;
       };
+      // One attempt per draft at a time. A resubmission made while an earlier attempt of the same
+      // draft runs (a switch away and back ends the `creating` and `addingTo` flags, not the
+      // attempt) sends nothing until that attempt settles: created, its answer is taken; otherwise
+      // the draft is sent again with the key it kept (an unknown outcome) or a new one (it released
+      // its key). Only the attempt running on a key releases it, so no other attempt is left
+      // sending with a key that is gone.
+      const attempts: Map<string, Promise<unknown>> = new Map<string, Promise<unknown>>();
+      const once: <T>(
+        draftKey: string,
+        prior: Promise<unknown> | undefined,
+        attempt: (key: string) => Promise<T>,
+      ) => Promise<T> = async <T>(
+        draftKey: string,
+        prior: Promise<unknown> | undefined,
+        attempt: (key: string) => Promise<T>,
+      ): Promise<T> => {
+        for (let waiting: Promise<unknown> | undefined = prior; waiting !== undefined;) {
+          try {
+            return (await waiting) as T;
+          } catch {
+            // Not created: sent again below, with the key the attempt kept or a new one.
+          }
+          const next: Promise<unknown> | undefined = attempts.get(draftKey);
+          waiting = next === waiting ? undefined : next;
+        }
+        const running: Promise<T> = attempt(keyOf(draftKey));
+        attempts.set(draftKey, running);
+        try {
+          const value: T = await running;
+          createKeys.delete(draftKey);
+          return value;
+        } catch (error: unknown) {
+          if (definitive(error)) createKeys.delete(draftKey);
+          throw error;
+        } finally {
+          if (attempts.get(draftKey) === running) attempts.delete(draftKey);
+        }
+      };
       const settleUncertain: (
         goalId: string,
         resultId: string,
@@ -1636,15 +1674,14 @@ function createGoalsStore(): Type<GoalsStoreInstance> {
           if (store.creating() || quarter === null) return null;
           const generation: number = context.generation;
           const origin: string = context.organizationId;
-          const draftKey: string = JSON.stringify([origin, quarter.key, draft]);
-          const idempotencyKey: string = keyOf(draftKey);
+          const draftKey: string = JSON.stringify(['goal', origin, quarter.key, draft]);
+          const prior: Promise<unknown> | undefined = attempts.get(draftKey);
           patchState(store, { creating: true });
           hold();
           try {
-            const goal: Goal = await created(generation, () =>
-              store._api.create(draft, quarter, today(), idempotencyKey),
+            const goal: Goal = await once(draftKey, prior, (key: string) =>
+              created(generation, () => store._api.create(draft, quarter, today(), key)),
             );
-            createKeys.delete(draftKey);
             if (!live(generation)) return null;
             record({
               organizationId: organizationId(),
@@ -1657,7 +1694,6 @@ function createGoalsStore(): Type<GoalsStoreInstance> {
             });
             return goal.id;
           } catch (error: unknown) {
-            if (definitive(error)) createKeys.delete(draftKey);
             if (dropped(error, generation)) return null;
             if (isUncertainCreation(error)) {
               store._toasts.warning(
@@ -1779,27 +1815,36 @@ function createGoalsStore(): Type<GoalsStoreInstance> {
         async addResult(goalId: string, draft: KeyResultDraft): Promise<boolean> {
           if (store.addingTo() !== null || shown(goalId) === undefined) return false;
           const generation: number = context.generation;
-          const draftKey: string = JSON.stringify([context.organizationId, goalId, draft]);
-          let idempotencyKey: string = keyOf(draftKey);
+          const draftKey: string = JSON.stringify([
+            'result',
+            context.organizationId,
+            goalId,
+            draft,
+          ]);
+          const prior: Promise<unknown> | undefined = attempts.get(draftKey);
           let outcome: boolean = false;
-          const creation: (version: number) => Promise<KeyResultWrite> = (version: number) =>
-            created(generation, () =>
-              store._api.createResult(goalId, version, draft, idempotencyKey),
-            );
+          const attempt: (key: string) => Promise<KeyResultWrite> = async (
+            key: string,
+          ): Promise<KeyResultWrite> => {
+            let idempotencyKey: string = key;
+            const creation: (version: number) => Promise<KeyResultWrite> = (version: number) =>
+              created(generation, () =>
+                store._api.createResult(goalId, version, draft, idempotencyKey),
+              );
+            try {
+              return await send(generation, goalId, creation);
+            } catch (error: unknown) {
+              if (!isVersionMismatch(error)) throw error;
+              createKeys.delete(draftKey);
+              idempotencyKey = keyOf(draftKey);
+              await fresh(goalId, generation);
+              return send(generation, goalId, creation);
+            }
+          };
           patchState(store, { addingTo: goalId });
           await inLane(goalId, generation, async (): Promise<void> => {
             try {
-              let write: KeyResultWrite;
-              try {
-                write = await send(generation, goalId, creation);
-              } catch (error: unknown) {
-                if (!isVersionMismatch(error)) throw error;
-                createKeys.delete(draftKey);
-                idempotencyKey = keyOf(draftKey);
-                await fresh(goalId, generation);
-                write = await send(generation, goalId, creation);
-              }
-              createKeys.delete(draftKey);
+              const write: KeyResultWrite = await once(draftKey, prior, attempt);
               if (!live(generation)) return;
               const lane: GoalLane = laneOf(goalId);
               lane.version = write.version ?? lane.version;
@@ -1815,7 +1860,6 @@ function createGoalsStore(): Type<GoalsStoreInstance> {
                 });
               outcome = true;
             } catch (error: unknown) {
-              if (definitive(error)) createKeys.delete(draftKey);
               if (dropped(error, generation)) return;
               if (isUncertainCreation(error)) {
                 store._toasts.warning(
@@ -1987,7 +2031,9 @@ function createGoalsStore(): Type<GoalsStoreInstance> {
  * answer (created or refused, even once a switch dropped it) and is sent again with it after an
  * unknown outcome or
  * `409 idempotency.request-in-progress`, up to three times, then reported as unconfirmed; a resubmitted
- * identical draft reuses the key. The members are read again after a failure and for owners they
+ * identical draft reuses the key, and one submitted while an earlier attempt of it runs waits for it
+ * and takes what it created instead of sending a second request. The members are read again after
+ * a failure and for owners they
  * did not name, which read as former members only once a read says so.
  *
  * @type {ReturnType<typeof createGoalsStore>}
