@@ -71,15 +71,18 @@ the typed route error states belong to Errors.
   of the retry leaving the chunk unknown; per-task versions, copies and trash entries),
   `remind(taskKey, at)` and
   `restore(entryId)`, for the stores of the screens that act on several tasks.
-- `TaskRowActionsStore`, a SignalStore the page of rows outside a list provides on its route next
-  to `TaskStatusChangesStore`, typed `TaskRowActionsStoreInstance`: the writes of `cw-task-menu`
+- `TASK_ROW_ACTIONS_PROVIDERS`, what the page of rows outside a list provides on its route:
+  `TaskRowWriteLaneStore` (also bound as `TASK_WRITE_LANE`), `TaskStatusChangesStore` and
+  `TaskRowActionsStore`.
+- `TaskRowActionsStore`, typed `TaskRowActionsStoreInstance`: the writes of `cw-task-menu`
   for one task, `setStatus` (through `TaskStatusChangesStore`), `cancelKeys` with `confirmCancel`
   and `keepCancel` for `cw-task-cancel-dialog`, `setPriority`, `toggleAssignee(task, person)`,
   `moveTo(task, target)`, `remind`, `duplicate`, `copyLink`, `copyKey`, `askDelete` with
   `deleteOpen`, `deleteTitle`, `deleteText`, `deleteAction`, `deleteItems`, `deleting`,
   `setDeleteOpen` and `trash()` for the page's `cw-alert-dialog`; `open(task)`, `userId`,
-  `rows(tasks)`, `displayedTask(task)`, `displayedStatus(task)`, and the `changed` stream (task
-  keys) on which the page reads its rows again.
+  `sync(tasks)` (a `signalMethod` the page binds to its read tasks), `rows(tasks)`,
+  `displayedTask(task)`, `displayedStatus(task)`, and the `changed` stream (task keys) on which
+  the page reads its rows again.
 - `TaskCreate` (root): `open(options?)`, `useDefaults(defaults, destroyRef)`, `close()`, `isOpen`,
   `options`, `created`.
 - `TaskDetailOpener` (root): `open(taskKey, preview?, options?)` merges `?task=<KEY>` into the
@@ -167,17 +170,40 @@ the typed route error states belong to Errors.
   away from `Cancelled` sends its reason again without its note, which task summaries do not carry.
   A pending write flushed after destruction is dropped if its queued organization is no longer
   the committed organization.
-- `TaskRowActionsStore` is never provided at the root: the page of rows outside a list provides
-  it, with `TaskStatusChangesStore`, so its shown values and `Undo` toasts die with it. Those
-  pages have no realtime notice for their rows, so priority, assignee, move, duplicate and
-  deletion writes go through `TaskActionsApi.bulk` without an expected version, one write of a
-  task after the other; an `Undo` goes against the version its write returned, so a later change
-  refuses it (`The change could not be undone`). The written values show at once and stay until the
-  page's copy reaches the returned version; a refusal drops them with the failure toast, an
-  uncertain answer with a warning. A deletion is confirmed first, hides the row at once, counts the
-  subtasks in its toast, and its `Undo` restores the trash entry; a refused deletion brings the row
-  back. Each settled write and each status write emits `changed`. A write answered after an
-  organization change reports nothing; leaving the page dismisses its `Undo` toasts.
+- `TaskRowActionsStore`, its `TaskStatusChangesStore` and its write lane are never provided at the
+  root: the page of rows outside a list provides `TASK_ROW_ACTIONS_PROVIDERS`, so their shown
+  values, holds and `Undo` and `Open` toasts die with it.
+  - One write lane per task (`TaskRowWriteLaneStore`, bound as `TASK_WRITE_LANE`) carries the
+    status changes and the menu's other writes, so they never overlap. Each write goes after the
+    task's earlier writes and reads, at the newest known version: the page's copy, or the version
+    the lane last sent at, returned or read. A returned version is adopted only at known + 1;
+    another version, or a `TaskVersionConflict`, reads the task again and the next write waits for
+    that read. The page's own changes therefore never cause a `412`.
+  - Priority, assignee, move, duplicate and deletion go through `TaskActionsApi.bulk` with that
+    version. A refused chunk reads the task back: found past the version sent, it changed
+    elsewhere (warning, its values shown); otherwise the failure toast.
+  - An uncertain answer keeps the shown value, warns, and holds the task's next writes while the
+    task is read back after `ROW_RECONCILE_DELAYS_MS` (2, 4 and 8 s): a read past the version sent
+    settles the write (applied when it holds the written values), a deleted task settles a
+    deletion; once the reads still find the version sent, the write is taken as not applied (a
+    late commit then refuses the next write, sent at that version). A copy is never held.
+  - Shown values: the confirmed ones (a write's answer, a read) over a page copy older than their
+    version, then each waiting write's own; a refusal drops only its write's values. `sync`
+    prunes the confirmed values a page copy at their version or later replaced.
+  - `Undo` is offered only when the returned version is the one sent + 1 (the write was the task's
+    only change, the rule of `TaskDetailStore.acceptVersion`). It puts back the values confirmed
+    when the write started, never an earlier optimistic value, and is sent against the returned
+    version, so a later change refuses it (`The change could not be undone`); it does nothing once
+    the organization changed.
+  - A deletion is confirmed first, hides the row at once and counts the subtasks in its toast; its
+    `Undo` restores the trash entry. A refused deletion or restore shows the row again (a refused
+    restore also emits `changed`); `sync` shows a deleted task again once a read no longer holds
+    it, unless its deletion is still uncertain.
+  - Every queued write, reminder and restore checks the organization it was asked in before it
+    is sent. Each settled write, restore and status write emits `changed`. A write answered after
+    an organization change reports nothing; one answered after the page was left reports only
+    what failed; leaving the page dismisses its `Undo` and `Open` toasts, and an `Open` does
+    nothing in another organization.
 - `cw-task-menu` keeps the `spaces.rows.*` and `spaces.bulk.*` ids it had in Spaces, so moving it
   changed no catalog text.
 - `cw-task-line` is one button: its status icon never changes the status (the detail or the menu
@@ -504,4 +530,5 @@ people`), and the due trigger shows the short date without `Tomorrow ·` or the
 | `task.development.detected-description`                                                     | The mockup detects no key in a request's description.              |
 | `task.row-actions.failed`, `task.row-actions.delete-failed`                                 | The mockup draws no refused write.                                 |
 | `task.row-actions.undo-failed`, `remind-failed`, `restore-failed`                           | The mockup draws no refused undo, reminder or restore.             |
+| `task.row-actions.conflict`, `task.row-actions.conflict-text`                               | The mockup draws no conflicting write.                             |
 | `task.row-actions.unknown`, `task.row-actions.copy-failed`                                  | The mockup draws no uncertain write nor refused copy.              |

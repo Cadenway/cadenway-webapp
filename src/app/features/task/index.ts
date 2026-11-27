@@ -29,6 +29,7 @@ export type {
 export type { TaskProgress, TaskSummary } from './models/task-summary/task-summary.interface';
 export { TaskCreate } from './services/task-create/task-create.service';
 export { TaskDetailOpener } from './services/task-detail-opener/task-detail-opener.service';
+export { TASK_ROW_ACTIONS_PROVIDERS } from './state/task-row-actions/task-row-actions.providers';
 export {
   TaskRowActionsStore,
   type TaskRowActionsStoreInstance,

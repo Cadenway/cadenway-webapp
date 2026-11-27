@@ -2035,6 +2035,8 @@
     "task.recurrence.weekly": "Se répète : chaque semaine",
     "task.retry": "Réessayer",
     "task.row-actions.assigned": "{$name} assigné",
+    "task.row-actions.conflict": "{$key} modifiée ailleurs",
+    "task.row-actions.conflict-text": "Sa dernière version est affichée.",
     "task.row-actions.copy-failed": "Copie impossible",
     "task.row-actions.delete-action": "Supprimer la tâche",
     "task.row-actions.delete-failed": "La tâche n’a pas pu être supprimée",

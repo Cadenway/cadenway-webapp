@@ -1,9 +1,11 @@
 import { DOCUMENT } from '@angular/common';
 import { DestroyRef, inject, LOCALE_ID, type Signal, type Type } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import type { PriorityKey, StatusKey } from '@cadenway/contracts';
 import { CwToastService } from '@cadenway/ui/components/toast';
 import {
   patchState,
+  signalMethod,
   signalStore,
   withComputed,
   withHooks,
@@ -25,12 +27,16 @@ import type {
   TaskBulkAction,
   TaskBulkEntry,
   TaskBulkOutcome,
-  TaskBulkSelection,
 } from '../../models/task-bulk/task-bulk.interface';
 import type { TaskMoveTarget } from '../../models/task-move-target/task-move-target.interface';
 import type { TaskCancellation } from '../../models/task-status-change/task-status-change.interface';
 import type { TaskSummary } from '../../models/task-summary/task-summary.interface';
 import { TaskDetailOpener } from '../../services/task-detail-opener/task-detail-opener.service';
+import {
+  type TaskLaneRead,
+  type TaskRowWriteLaneInstance,
+  TaskRowWriteLaneStore,
+} from '../task-row-write-lane/task-row-write-lane.store';
 import {
   type TaskStatusChangesInstance,
   TaskStatusChangesStore,
@@ -47,6 +53,21 @@ import {
 const REMINDER_HOUR: number = 9;
 
 /**
+ * Constant ROW_RECONCILE_DELAYS_MS
+ *
+ * @description
+ * Waits, in milliseconds, before each read of a task whose write has no certain outcome, so a
+ * request still running on the server has time to commit first (as Spaces' `RECONCILE_DELAY_MS`,
+ * doubling). The task's next writes wait meanwhile; a read past the version sent settles the
+ * write, and once the reads are spent with the task still at that version, the write is taken as
+ * not applied: the next write goes at that version, so a late commit makes it refused and read
+ * again rather than overwritten.
+ *
+ * @type {readonly number[]}
+ */
+export const ROW_RECONCILE_DELAYS_MS: readonly number[] = [2_000, 4_000, 8_000];
+
+/**
  * Type RowFields
  *
  * @description
@@ -57,18 +78,19 @@ const REMINDER_HOUR: number = 9;
 type RowFields = Partial<Pick<TaskSummary, 'priority' | 'assigneeIds' | 'listId'>>;
 
 /**
- * Interface RowPatch
+ * Interface ConfirmedFields
  *
  * @description
- * What the menu's writes of one task show over the page's copy of it.
+ * Values of a task the gateway confirmed (a write's answer or a read), shown over a copy of the
+ * page older than their version.
  */
-interface RowPatch {
+interface ConfirmedFields {
   // #region Properties
   /**
    * Property fields
    *
    * @description
-   * The written values, the latest write winning.
+   * The confirmed values.
    *
    * @type {RowFields}
    * @readonly
@@ -76,29 +98,84 @@ interface RowPatch {
   readonly fields: RowFields;
 
   /**
-   * Property writes
+   * Property until
    *
    * @description
-   * Writes of the task still waiting for their answer; the patch shows while any is.
+   * The version they were confirmed at; a page copy at this version or later replaces them.
    *
    * @type {number}
    * @readonly
    */
-  readonly writes: number;
-
-  /**
-   * Property until
-   *
-   * @description
-   * The newest version a confirmed write returned: the patch shows over a copy of the task older
-   * than it, null when no write returned one.
-   *
-   * @type {number | null}
-   * @readonly
-   */
-  readonly until: number | null;
+  readonly until: number;
   // #endregion
 }
+
+/**
+ * Interface PendingFields
+ *
+ * @description
+ * The values of one write still waiting for a certain outcome.
+ */
+interface PendingFields {
+  // #region Properties
+  /**
+   * Property id
+   *
+   * @description
+   * Id of the write, so its settlement drops only its own values.
+   *
+   * @type {number}
+   * @readonly
+   */
+  readonly id: number;
+
+  /**
+   * Property fields
+   *
+   * @description
+   * The written values.
+   *
+   * @type {RowFields}
+   * @readonly
+   */
+  readonly fields: RowFields;
+  // #endregion
+}
+
+/**
+ * Type WriteKind
+ *
+ * @description
+ * How a write settles: `versioned` sets a target state (priority, assignee, list) whose returned
+ * version is adopted; `trash` removes the task; `copy` creates another task and never holds its
+ * source.
+ *
+ * @type {'versioned' | 'trash' | 'copy'}
+ */
+type WriteKind = 'versioned' | 'trash' | 'copy';
+
+/**
+ * Type Settlement
+ *
+ * @description
+ * How a write of the menu ended: applied (with the gateway's entry, the version it was sent at
+ * and the task as confirmed when it started), refused (`conflict` when a read found the task
+ * past the version sent), settled by a read after an uncertain answer, or not sent.
+ *
+ * @type {object}
+ */
+type Settlement =
+  | {
+      readonly kind: 'applied';
+      readonly entry: TaskBulkEntry;
+      readonly outcome: TaskBulkOutcome;
+      readonly sent: number;
+      readonly before: TaskSummary;
+    }
+  | { readonly kind: 'refused'; readonly conflict: boolean }
+  | { readonly kind: 'read-back'; readonly applied: boolean }
+  | { readonly kind: 'uncertain' }
+  | { readonly kind: 'not-sent' };
 
 /**
  * Interface RowToast
@@ -163,6 +240,17 @@ interface RowToast {
 interface RowWrite {
   // #region Properties
   /**
+   * Property kind
+   *
+   * @description
+   * How the write settles.
+   *
+   * @type {WriteKind}
+   * @readonly
+   */
+  readonly kind: WriteKind;
+
+  /**
    * Property action
    *
    * @description
@@ -177,7 +265,7 @@ interface RowWrite {
    * Property fields
    *
    * @description
-   * The values shown at once, rolled back when the write is refused.
+   * The values shown at once; dropped when the write is refused or not applied.
    *
    * @type {RowFields}
    * @readonly
@@ -185,27 +273,27 @@ interface RowWrite {
   readonly fields: RowFields;
 
   /**
-   * Property version
+   * Property expected
    *
    * @description
-   * The version the task must still be at (an `Undo`); absent to apply the action to the task as
-   * it is.
+   * The version an `Undo` must still find the task at; absent to send at the newest known one.
    *
    * @type {number | undefined}
    * @readonly
    */
-  readonly version?: number;
+  readonly expected?: number;
 
   /**
    * Property toast
    *
    * @description
-   * Builds the toast of the applied write from the gateway's entry; null for no toast (an `Undo`).
+   * Builds the toast of the applied write; `undoable` tells whether the write was the task's only
+   * change (returned version = sent + 1). Null for no toast (an `Undo`).
    *
-   * @type {((entry: TaskBulkEntry, outcome: TaskBulkOutcome) => RowToast) | null}
+   * @type {((applied: AppliedWrite) => RowToast) | null}
    * @readonly
    */
-  readonly toast: ((entry: TaskBulkEntry, outcome: TaskBulkOutcome) => RowToast) | null;
+  readonly toast: ((applied: AppliedWrite) => RowToast) | null;
 
   /**
    * Property failure
@@ -221,10 +309,75 @@ interface RowWrite {
 }
 
 /**
+ * Interface AppliedWrite
+ *
+ * @description
+ * What a toast builder learns of an applied write.
+ */
+interface AppliedWrite {
+  // #region Properties
+  /**
+   * Property entry
+   *
+   * @description
+   * The gateway's entry for the task.
+   *
+   * @type {TaskBulkEntry}
+   * @readonly
+   */
+  readonly entry: TaskBulkEntry;
+
+  /**
+   * Property outcome
+   *
+   * @description
+   * The whole outcome (`affected` counts the subtasks of a deletion).
+   *
+   * @type {TaskBulkOutcome}
+   * @readonly
+   */
+  readonly outcome: TaskBulkOutcome;
+
+  /**
+   * Property before
+   *
+   * @description
+   * The task as confirmed when the write started: what an `Undo` puts back.
+   *
+   * @type {TaskSummary}
+   * @readonly
+   */
+  readonly before: TaskSummary;
+
+  /**
+   * Property undoable
+   *
+   * @description
+   * Whether an `Undo` is offered: the returned version follows the one sent (sent + 1).
+   *
+   * @type {boolean}
+   * @readonly
+   */
+  readonly undoable: boolean;
+
+  /**
+   * Property organizationId
+   *
+   * @description
+   * Organization the write was sent in; its `Undo` and `Open` do nothing in another.
+   *
+   * @type {string}
+   * @readonly
+   */
+  readonly organizationId: string;
+  // #endregion
+}
+
+/**
  * Interface TaskRowActionsState
  *
  * @description
- * The deletion confirmation, the values shown at once and the tasks moved to the trash.
+ * The deletion confirmation, the values shown over the page's copies and the deleted tasks.
  */
 interface TaskRowActionsState {
   // #region Properties
@@ -262,26 +415,49 @@ interface TaskRowActionsState {
   readonly _deleteTask: TaskSummary | null;
 
   /**
-   * Property _patches
+   * Property _confirmed
    *
    * @description
-   * The values the writes show, by task key.
+   * Confirmed values by task key, with the version they hold until.
    *
-   * @type {Readonly<Partial<Record<string, RowPatch>>>}
+   * @type {Readonly<Partial<Record<string, ConfirmedFields>>>}
    * @readonly
    */
-  readonly _patches: Readonly<Partial<Record<string, RowPatch>>>;
+  readonly _confirmed: Readonly<Partial<Record<string, ConfirmedFields>>>;
+
+  /**
+   * Property _pending
+   *
+   * @description
+   * The values of the writes still waiting, by task key, oldest first.
+   *
+   * @type {Readonly<Partial<Record<string, readonly PendingFields[]>>>}
+   * @readonly
+   */
+  readonly _pending: Readonly<Partial<Record<string, readonly PendingFields[]>>>;
 
   /**
    * Property _hidden
    *
    * @description
-   * Keys of the tasks sent or moved to the trash, left out of the rows until restored.
+   * Keys of the tasks sent or moved to the trash, left out of the rows.
    *
    * @type {readonly string[]}
    * @readonly
    */
   readonly _hidden: readonly string[];
+
+  /**
+   * Property _trashing
+   *
+   * @description
+   * Keys of the hidden tasks whose deletion has no certain outcome yet: a page read never
+   * releases them.
+   *
+   * @type {readonly string[]}
+   * @readonly
+   */
+  readonly _trashing: readonly string[];
   // #endregion
 }
 
@@ -297,70 +473,80 @@ const initialState: TaskRowActionsState = {
   deleteOpen: false,
   deleting: false,
   _deleteTask: null,
-  _patches: {},
+  _confirmed: {},
+  _pending: {},
   _hidden: [],
+  _trashing: [],
 };
 
 /**
- * Function startPatch
+ * Function without
  *
  * @description
- * Shows the values of a write that is being sent.
+ * A record without one key.
  *
- * @param {Readonly<Partial<Record<string, RowPatch>>>} patches - The patches.
- * @param {string} key - Task key.
- * @param {RowFields} fields - The written values.
- * @returns {Readonly<Partial<Record<string, RowPatch>>>} The new patches.
+ * @param {Readonly<Partial<Record<string, T>>>} record - The record.
+ * @param {string} key - The key to leave out.
+ * @returns {Readonly<Partial<Record<string, T>>>} The record without it.
  */
-function startPatch(
-  patches: Readonly<Partial<Record<string, RowPatch>>>,
+function without<T>(
+  record: Readonly<Partial<Record<string, T>>>,
   key: string,
-  fields: RowFields,
-): Readonly<Partial<Record<string, RowPatch>>> {
-  const patch: RowPatch = patches[key] ?? { fields: {}, writes: 0, until: null };
-  return {
-    ...patches,
-    [key]: { ...patch, fields: { ...patch.fields, ...fields }, writes: patch.writes + 1 },
-  };
+): Readonly<Partial<Record<string, T>>> {
+  return Object.fromEntries(
+    Object.entries(record).filter(([other]: [string, unknown]): boolean => other !== key),
+  );
 }
 
 /**
- * Function settlePatch
+ * Function fieldsOf
  *
  * @description
- * Settles one write of a task: an applied write keeps its values until a copy of the task reaches
- * the version it returned; a write without a certain outcome or refused drops the values it set
- * (a later write's values stay). The patch goes once no write waits and nothing holds it.
+ * The row fields of a task as read.
  *
- * @param {Readonly<Partial<Record<string, RowPatch>>>} patches - The patches.
- * @param {string} key - Task key.
- * @param {RowFields} fields - The values the write set.
- * @param {number | null} version - The version the applied write returned, null otherwise.
- * @returns {Readonly<Partial<Record<string, RowPatch>>>} The new patches.
+ * @param {TaskSummary} task - The task.
+ * @returns {RowFields} Its priority, assignees and list.
  */
-function settlePatch(
-  patches: Readonly<Partial<Record<string, RowPatch>>>,
-  key: string,
-  fields: RowFields,
-  version: number | null,
-): Readonly<Partial<Record<string, RowPatch>>> {
-  const patch: RowPatch | undefined = patches[key];
-  if (!patch) return patches;
-  let kept: RowFields = patch.fields;
-  if (version === null) {
-    kept = Object.fromEntries(
-      Object.entries(patch.fields).filter(
-        ([field, value]: [string, unknown]): boolean => fields[field as keyof RowFields] !== value,
-      ),
+function fieldsOf(task: TaskSummary): RowFields {
+  return { priority: task.priority, assigneeIds: task.assigneeIds, listId: task.listId };
+}
+
+/**
+ * Function holds
+ *
+ * @description
+ * Whether a task read holds the values a write sets (assignees compared as sets).
+ *
+ * @param {TaskSummary} task - The task read.
+ * @param {RowFields} fields - The written values.
+ * @returns {boolean} Whether every value matches.
+ */
+function holds(task: TaskSummary, fields: RowFields): boolean {
+  if (fields.priority !== undefined && task.priority !== fields.priority) return false;
+  if (fields.listId !== undefined && task.listId !== fields.listId) return false;
+  if (fields.assigneeIds !== undefined) {
+    const read: ReadonlySet<string> = new Set(task.assigneeIds);
+    return (
+      read.size === fields.assigneeIds.length &&
+      fields.assigneeIds.every((id: string): boolean => read.has(id))
     );
   }
-  const writes: number = patch.writes - 1;
-  const until: number | null = version === null ? patch.until : Math.max(patch.until ?? 0, version);
-  const rest: Readonly<Partial<Record<string, RowPatch>>> = Object.fromEntries(
-    Object.entries(patches).filter(([other]: [string, unknown]): boolean => other !== key),
-  );
-  if (writes === 0 && (until === null || Object.keys(kept).length === 0)) return rest;
-  return { ...rest, [key]: { fields: kept, writes, until } };
+  return true;
+}
+
+/**
+ * Function pause
+ *
+ * @description
+ * Resolves after a delay.
+ *
+ * @param {number} ms - The delay, in milliseconds.
+ * @returns {Promise<void>} Resolves once it is spent.
+ */
+function pause(ms: number): Promise<void> {
+  return new Promise<void>((resolve: () => void): void => {
+    setTimeout(resolve, ms);
+  });
 }
 
 /**
@@ -377,8 +563,8 @@ export interface TaskRowActionsStoreInstance {
    *
    * @description
    * Emits the key of a task once one of its writes settled, applied, refused or uncertain, its
-   * `Undo` included, and after each status write of the route's `TaskStatusChangesStore`: the page
-   * reads its rows again.
+   * `Undo` and a restore included, and after each status write of the route's
+   * `TaskStatusChangesStore`: the page reads its rows again.
    *
    * @type {Observable<string>}
    * @readonly
@@ -476,11 +662,24 @@ export interface TaskRowActionsStoreInstance {
 
   // #region Methods
   /**
+   * Method sync
+   *
+   * @description
+   * Follows the page's read of its tasks (a signal, or each read): drops the confirmed values a
+   * copy at their version or later replaced, so they never come back, and shows again a deleted
+   * task once a read no longer holds it (a restore made elsewhere then shows). A deletion
+   * without a certain outcome stays hidden.
+   *
+   * @param {readonly TaskSummary[] | Signal<readonly TaskSummary[]>} tasks - The page's tasks.
+   */
+  sync(tasks: readonly TaskSummary[] | Signal<readonly TaskSummary[]>): void;
+
+  /**
    * Method rows
    *
    * @description
-   * The page's tasks as the writes show them: without the tasks sent to the trash, each with the
-   * values its writes set until the page's copy reaches the version they returned. Reactive.
+   * The page's tasks as the writes show them: without the deleted tasks, each with the values its
+   * writes set. Reactive.
    *
    * @param {readonly TaskSummary[]} tasks - The tasks as the page read them.
    * @returns {readonly TaskSummary[]} The rows to draw.
@@ -491,7 +690,8 @@ export interface TaskRowActionsStoreInstance {
    * Method displayedTask
    *
    * @description
-   * One task as the writes show it (its status apart: `displayedStatus`). Reactive.
+   * One task as the writes show it (its status apart: `displayedStatus`): the confirmed values
+   * over a copy older than them, then the values of the writes still waiting. Reactive.
    *
    * @param {TaskSummary} task - The page's copy.
    * @returns {TaskSummary} The task to draw.
@@ -523,9 +723,9 @@ export interface TaskRowActionsStoreInstance {
    * Method setStatus
    *
    * @description
-   * `Status` of the menu, through the route's `TaskStatusChangesStore`: shown at once, sent 460 ms
-   * after the last click with its toast and `Undo`; `Cancelled` asks the reason first
-   * (`cancelKeys`).
+   * `Status` of the menu, through the route's `TaskStatusChangesStore` and the shared lane: shown
+   * at once, sent 460 ms after the last click with its toast and `Undo`; `Cancelled` asks the
+   * reason first (`cancelKeys`).
    *
    * @param {TaskSummary} task - The task.
    * @param {StatusKey} status - The status.
@@ -558,8 +758,9 @@ export interface TaskRowActionsStoreInstance {
    *
    * @param {TaskSummary} task - The task.
    * @param {PriorityKey} priority - The priority.
+   * @returns {Promise<void>} Resolves once settled.
    */
-  setPriority(task: TaskSummary, priority: PriorityKey): void;
+  setPriority(task: TaskSummary, priority: PriorityKey): Promise<void>;
 
   /**
    * Method toggleAssignee
@@ -569,8 +770,9 @@ export interface TaskRowActionsStoreInstance {
    *
    * @param {TaskSummary} task - The task.
    * @param {Person} person - The person.
+   * @returns {Promise<void>} Resolves once settled.
    */
-  toggleAssignee(task: TaskSummary, person: Person): void;
+  toggleAssignee(task: TaskSummary, person: Person): Promise<void>;
 
   /**
    * Method moveTo
@@ -580,14 +782,16 @@ export interface TaskRowActionsStoreInstance {
    *
    * @param {TaskSummary} task - The task.
    * @param {TaskMoveTarget} target - The destination list.
+   * @returns {Promise<void>} Resolves once settled.
    */
-  moveTo(task: TaskSummary, target: TaskMoveTarget): void;
+  moveTo(task: TaskSummary, target: TaskMoveTarget): Promise<void>;
 
   /**
    * Method remind
    *
    * @description
-   * `Remind me tomorrow morning`: the caller's reminder tomorrow at 9.
+   * `Remind me tomorrow morning`: the caller's reminder tomorrow at 9, after the task's earlier
+   * writes, never sent once the organization changed.
    *
    * @param {TaskSummary} task - The task.
    * @returns {Promise<void>} Resolves once reported.
@@ -684,6 +888,7 @@ function createTaskRowActionsStore(): Type<TaskRowActionsStoreInstance> {
           changes.asObservable(),
           statuses.completed.pipe(map(({ task }: { task: TaskSummary }): string => task.key)),
         ),
+        _lane: inject<TaskRowWriteLaneInstance>(TaskRowWriteLaneStore),
         _api: inject(TaskActionsApi),
         _workspace: inject<WorkspaceContextPort>(WORKSPACE_CONTEXT),
         _toasts: inject(CwToastService),
@@ -691,8 +896,8 @@ function createTaskRowActionsStore(): Type<TaskRowActionsStoreInstance> {
         _document: inject(DOCUMENT),
         _locale: inject(LOCALE_ID),
         _destroyRef: inject(DestroyRef),
-        _undoToasts: new Set<string>(),
-        _queues: new Map<string, Promise<unknown>>(),
+        _shownToasts: new Set<string>(),
+        _writeIds: { next: 0 },
       };
     }),
     withComputed((store) => ({
@@ -712,38 +917,76 @@ function createTaskRowActionsStore(): Type<TaskRowActionsStoreInstance> {
     })),
     withMethods((store) => {
       const toasts: CwToastService = store._toasts;
+      const lane: TaskRowWriteLaneInstance = store._lane;
       const organization: () => string = (): string => store._workspace.organization().id;
+      const failure: string = $localize`:@@task.row-actions.failed:The task could not be changed`;
+      const undoFailure: string = $localize`:@@task.row-actions.undo-failed:The change could not be undone`;
 
-      const enqueue: <T>(key: string, run: () => Promise<T>) => Promise<T> = <T>(
-        key: string,
-        run: () => Promise<T>,
-      ): Promise<T> => {
-        const previous: Promise<unknown> = store._queues.get(key) ?? Promise.resolve();
-        const next: Promise<T> = previous.then(run, run);
-        const tail: Promise<unknown> = next.catch((): undefined => undefined);
-        store._queues.set(key, tail);
-        void tail.then((): void => {
-          if (store._queues.get(key) === tail) store._queues.delete(key);
-        });
-        return next;
-      };
-
-      const keepUndoToast: (id: string) => void = (id: string): void => {
+      const keepToast: (id: string) => void = (id: string): void => {
         const shown: ReadonlySet<string> = new Set(
           toasts.toasts().map((item: { readonly id: string }): string => item.id),
         );
-        for (const kept of store._undoToasts) if (!shown.has(kept)) store._undoToasts.delete(kept);
-        store._undoToasts.add(id);
+        for (const kept of store._shownToasts)
+          if (!shown.has(kept)) store._shownToasts.delete(kept);
+        store._shownToasts.add(id);
+      };
+
+      const confirmedTask: (task: TaskSummary) => TaskSummary = (
+        task: TaskSummary,
+      ): TaskSummary => {
+        const confirmed: ConfirmedFields | undefined = store._confirmed()[task.key];
+        return confirmed && task.version < confirmed.until
+          ? { ...task, ...confirmed.fields }
+          : task;
       };
 
       const displayedTask: (task: TaskSummary) => TaskSummary = (
         task: TaskSummary,
       ): TaskSummary => {
-        const patch: RowPatch | undefined = store._patches()[task.key];
-        if (!patch) return task;
-        return patch.writes > 0 || (patch.until !== null && task.version < patch.until)
-          ? { ...task, ...patch.fields }
-          : task;
+        const pending: readonly PendingFields[] = store._pending()[task.key] ?? [];
+        return pending.reduce(
+          (shown: TaskSummary, write: PendingFields): TaskSummary => ({
+            ...shown,
+            ...write.fields,
+          }),
+          confirmedTask(task),
+        );
+      };
+
+      const confirm: (key: string, fields: RowFields, until: number) => void = (
+        key: string,
+        fields: RowFields,
+        until: number,
+      ): void => {
+        patchState(store, (state: TaskRowActionsState) => {
+          const current: ConfirmedFields | undefined = state._confirmed[key];
+          if (current && current.until > until) return {};
+          return {
+            _confirmed: {
+              ...state._confirmed,
+              [key]: { fields: { ...(current?.fields ?? {}), ...fields }, until },
+            },
+          };
+        });
+      };
+
+      const hide: (key: string, trashing: boolean) => void = (
+        key: string,
+        trashing: boolean,
+      ): void => {
+        patchState(store, (state: TaskRowActionsState) => ({
+          _hidden: state._hidden.includes(key) ? state._hidden : [...state._hidden, key],
+          _trashing: trashing
+            ? [...state._trashing.filter((other: string) => other !== key), key]
+            : state._trashing.filter((other: string) => other !== key),
+        }));
+      };
+
+      const show: (key: string) => void = (key: string): void => {
+        patchState(store, (state: TaskRowActionsState) => ({
+          _hidden: state._hidden.filter((other: string): boolean => other !== key),
+          _trashing: state._trashing.filter((other: string): boolean => other !== key),
+        }));
       };
 
       const open: (key: string, task?: TaskSummary) => void = (
@@ -763,7 +1006,10 @@ function createTaskRowActionsStore(): Type<TaskRowActionsStoreInstance> {
         );
       };
 
-      const showToast: (message: RowToast) => void = (message: RowToast): void => {
+      const showToast: (message: RowToast, organizationId: string) => void = (
+        message: RowToast,
+        organizationId: string,
+      ): void => {
         const copy: string | null = message.open ?? null;
         const undo: (() => void) | null = message.undo;
         const id: string = toasts.show(message.title, {
@@ -773,7 +1019,7 @@ function createTaskRowActionsStore(): Type<TaskRowActionsStoreInstance> {
                 action: {
                   label: $localize`:@@task.row-actions.open:Open`,
                   run: (): void => {
-                    open(copy);
+                    if (organization() === organizationId) open(copy);
                   },
                 },
               }
@@ -781,54 +1027,176 @@ function createTaskRowActionsStore(): Type<TaskRowActionsStoreInstance> {
               ? { undo }
               : {}),
         });
-        if (!copy && undo) keepUndoToast(id);
+        if (copy || undo) keepToast(id);
       };
 
-      const perform: (task: TaskSummary, write: RowWrite) => Promise<TaskBulkEntry | null> = async (
+      const settleUncertain: (
+        key: string,
+        write: RowWrite,
+        sent: number,
+        organizationId: string,
+      ) => Promise<Settlement> = async (
+        key: string,
+        write: RowWrite,
+        sent: number,
+        organizationId: string,
+      ): Promise<Settlement> => {
+        for (const delay of ROW_RECONCILE_DELAYS_MS) {
+          await pause(delay);
+          if (organization() !== organizationId) return { kind: 'not-sent' };
+          const read: TaskLaneRead = await lane.reconcile(key);
+          if (read.kind === 'gone') return { kind: 'read-back', applied: write.kind === 'trash' };
+          if (read.kind === 'read' && read.task.version > sent) {
+            return {
+              kind: 'read-back',
+              applied: write.kind === 'versioned' && holds(read.task, write.fields),
+            };
+          }
+        }
+        return { kind: 'read-back', applied: false };
+      };
+
+      const send: (
         task: TaskSummary,
         write: RowWrite,
-      ): Promise<TaskBulkEntry | null> => {
+        version: number,
+        organizationId: string,
+      ) => Promise<Settlement> = async (
+        task: TaskSummary,
+        write: RowWrite,
+        version: number,
+        organizationId: string,
+      ): Promise<Settlement> => {
         const key: string = task.key;
-        const organizationId: string = organization();
-        patchState(store, (state: TaskRowActionsState) => ({
-          _patches: startPatch(state._patches, key, write.fields),
-        }));
-        const selection: TaskBulkSelection =
-          write.version === undefined ? { taskKey: key } : { taskKey: key, version: write.version };
-        const outcome: TaskBulkOutcome = await enqueue(key, () =>
-          store._api.bulk(
-            [selection],
-            write.action,
-            (): boolean => organization() === organizationId,
-          ),
+        if (organization() !== organizationId) return { kind: 'not-sent' };
+        const sent: number = write.expected ?? version;
+        const before: TaskSummary = confirmedTask(task);
+        const outcome: TaskBulkOutcome = await store._api.bulk(
+          [{ taskKey: key, version: sent }],
+          write.action,
+          (): boolean => organization() === organizationId,
         );
-        const entry: TaskBulkEntry | null = outcome.done.length > 0 ? outcome.done[0] : null;
-        patchState(store, (state: TaskRowActionsState) => ({
-          _patches: settlePatch(state._patches, key, write.fields, entry ? entry.version : null),
-        }));
-        if (organization() !== organizationId || outcome.notSent.length > 0) return null;
-        store._changes.next(key);
+        if (outcome.notSent.length > 0) return { kind: 'not-sent' };
+        if (outcome.done.length > 0) {
+          const entry: TaskBulkEntry = outcome.done[0];
+          if (write.kind === 'versioned') {
+            if (entry.version === null) {
+              await lane.reconcile(key);
+            } else {
+              confirm(key, write.fields, entry.version);
+              lane.acceptVersion(entry.version, write.fields, key);
+            }
+          }
+          return { kind: 'applied', entry, outcome, sent, before };
+        }
         if (outcome.unknown.length > 0) {
-          toasts.warning(
-            $localize`:@@task.row-actions.unknown:The outcome is unknown. The task is being refreshed.`,
-          );
-          return null;
+          if (organization() === organizationId) {
+            toasts.warning(
+              $localize`:@@task.row-actions.unknown:The outcome is unknown. The task is being refreshed.`,
+            );
+          }
+          if (write.kind === 'copy') return { kind: 'uncertain' };
+          return settleUncertain(key, write, sent, organizationId);
         }
-        if (!entry) {
-          toasts.error(write.failure);
-          return null;
-        }
-        if (write.toast && !store._destroyRef.destroyed) showToast(write.toast(entry, outcome));
-        return entry;
+        const read: TaskLaneRead = await lane.reconcile(key);
+        return { kind: 'refused', conflict: read.kind === 'read' && read.task.version > sent };
       };
 
-      const undoFailure: string = $localize`:@@task.row-actions.undo-failed:The change could not be undone`;
-
-      const reverse: (task: TaskSummary, write: Omit<RowWrite, 'toast' | 'failure'>) => void = (
+      const perform: (task: TaskSummary, write: RowWrite) => Promise<Settlement> = async (
         task: TaskSummary,
-        write: Omit<RowWrite, 'toast' | 'failure'>,
+        write: RowWrite,
+      ): Promise<Settlement> => {
+        const key: string = task.key;
+        const organizationId: string = organization();
+        const id: number = ++store._writeIds.next;
+        patchState(store, (state: TaskRowActionsState) => ({
+          _pending: {
+            ...state._pending,
+            [key]: [...(state._pending[key] ?? []), { id, fields: write.fields }],
+          },
+        }));
+        let settlement: Settlement;
+        try {
+          settlement = await lane.write(
+            key,
+            (version: number): Promise<Settlement> => send(task, write, version, organizationId),
+            task.version,
+          );
+        } catch {
+          settlement = { kind: 'refused', conflict: false };
+        }
+        patchState(store, (state: TaskRowActionsState) => {
+          const rest: readonly PendingFields[] = (state._pending[key] ?? []).filter(
+            (pending: PendingFields): boolean => pending.id !== id,
+          );
+          return {
+            _pending:
+              rest.length > 0 ? { ...state._pending, [key]: rest } : without(state._pending, key),
+          };
+        });
+        if (organization() !== organizationId || settlement.kind === 'not-sent') {
+          return settlement;
+        }
+        store._changes.next(key);
+        const live: boolean = !store._destroyRef.destroyed;
+        switch (settlement.kind) {
+          case 'applied': {
+            if (!write.toast || !live) break;
+            const { entry, outcome, sent, before }: Extract<Settlement, { kind: 'applied' }> =
+              settlement;
+            showToast(
+              write.toast({
+                entry,
+                outcome,
+                before,
+                undoable: entry.version !== null && entry.version === sent + 1,
+                organizationId,
+              }),
+              organizationId,
+            );
+            break;
+          }
+          case 'refused':
+            if (settlement.conflict) {
+              toasts.warning(
+                $localize`:@@task.row-actions.conflict:${key}:key: changed elsewhere`,
+                {
+                  description: $localize`:@@task.row-actions.conflict-text:Its latest version is shown.`,
+                },
+              );
+            } else {
+              toasts.error(write.failure);
+            }
+            break;
+          case 'read-back':
+            if (!settlement.applied) toasts.error(write.failure);
+            break;
+          case 'uncertain':
+            break;
+        }
+        return settlement;
+      };
+
+      const reverse: (
+        task: TaskSummary,
+        applied: AppliedWrite,
+        action: TaskBulkAction,
+        fields: RowFields,
+      ) => void = (
+        task: TaskSummary,
+        applied: AppliedWrite,
+        action: TaskBulkAction,
+        fields: RowFields,
       ): void => {
-        void perform(task, { ...write, toast: null, failure: undoFailure });
+        if (organization() !== applied.organizationId || applied.entry.version === null) return;
+        void perform(task, {
+          kind: 'versioned',
+          action,
+          fields,
+          expected: applied.entry.version,
+          toast: null,
+          failure: undoFailure,
+        });
       };
 
       const copy: (text: string, title: string) => Promise<void> = async (
@@ -845,28 +1213,65 @@ function createTaskRowActionsStore(): Type<TaskRowActionsStoreInstance> {
         }
       };
 
-      const restore: (key: string, entryId: string) => Promise<void> = async (
-        key: string,
+      const restore: (
+        task: TaskSummary,
         entryId: string,
+        organizationId: string,
+      ) => Promise<void> = async (
+        task: TaskSummary,
+        entryId: string,
+        organizationId: string,
       ): Promise<void> => {
-        const organizationId: string = organization();
-        try {
-          await enqueue(key, () => store._api.restore(entryId));
-        } catch {
-          if (organization() !== organizationId) return;
+        const key: string = task.key;
+        if (organization() !== organizationId) return;
+        const restored: boolean | null = await lane
+          .write(
+            key,
+            async (): Promise<boolean | null> => {
+              if (organization() !== organizationId) return null;
+              try {
+                await store._api.restore(entryId);
+              } catch {
+                return false;
+              }
+              await lane.reconcile(key);
+              return true;
+            },
+            task.version,
+          )
+          .catch((): boolean => false);
+        if (restored === null || organization() !== organizationId) return;
+        show(key);
+        store._changes.next(key);
+        if (!restored) {
           toasts.error(
             $localize`:@@task.row-actions.restore-failed:The task could not be restored`,
           );
-          return;
         }
-        if (organization() !== organizationId) return;
-        patchState(store, (state: TaskRowActionsState) => ({
-          _hidden: state._hidden.filter((hidden: string): boolean => hidden !== key),
-        }));
-        store._changes.next(key);
       };
 
+      const sync: (tasks: readonly TaskSummary[] | Signal<readonly TaskSummary[]>) => void =
+        signalMethod<readonly TaskSummary[]>((tasks: readonly TaskSummary[]): void => {
+          const read: ReadonlyMap<string, TaskSummary> = new Map(
+            tasks.map((task: TaskSummary): [string, TaskSummary] => [task.key, task]),
+          );
+          patchState(store, (state: TaskRowActionsState) => ({
+            _confirmed: Object.fromEntries(
+              Object.entries(state._confirmed).filter(
+                ([key, confirmed]: [string, ConfirmedFields | undefined]): boolean => {
+                  const copyOf: TaskSummary | undefined = read.get(key);
+                  return !copyOf || !confirmed || copyOf.version < confirmed.until;
+                },
+              ),
+            ),
+            _hidden: state._hidden.filter(
+              (key: string): boolean => state._trashing.includes(key) || read.has(key),
+            ),
+          }));
+        });
+
       return {
+        sync,
         rows(tasks: readonly TaskSummary[]): readonly TaskSummary[] {
           const hidden: ReadonlySet<string> = new Set(store._hidden());
           return tasks
@@ -889,83 +1294,85 @@ function createTaskRowActionsStore(): Type<TaskRowActionsStoreInstance> {
         keepCancel(): void {
           store._statuses.keepTask();
         },
-        setPriority(task: TaskSummary, priority: PriorityKey): void {
-          const shown: TaskSummary = displayedTask(task);
-          const before: PriorityKey = shown.priority;
-          if (before === priority) return;
+        async setPriority(task: TaskSummary, priority: PriorityKey): Promise<void> {
+          if (displayedTask(task).priority === priority) return;
           const word: string = PRIORITY_LABELS[priority].toLocaleLowerCase(store._locale);
           const key: string = task.key;
-          void perform(task, {
+          await perform(task, {
+            kind: 'versioned',
             action: { type: 'priority', priority },
             fields: { priority },
-            failure: $localize`:@@task.row-actions.failed:The task could not be changed`,
-            toast: (entry: TaskBulkEntry): RowToast => ({
+            failure,
+            toast: (applied: AppliedWrite): RowToast => ({
               title: $localize`:@@task.row-actions.priority-toast:${key}:key: · ${word}:priority: priority`,
               description: $localize`:@@task.row-actions.priority-changed:Priority changed.`,
-              undo:
-                entry.version === null
-                  ? null
-                  : (): void => {
-                      reverse(task, {
-                        action: { type: 'priority', priority: before },
-                        fields: { priority: before },
-                        version: entry.version ?? undefined,
-                      });
-                    },
+              undo: applied.undoable
+                ? (): void => {
+                    const previous: PriorityKey = applied.before.priority;
+                    reverse(
+                      task,
+                      applied,
+                      { type: 'priority', priority: previous },
+                      { priority: previous },
+                    );
+                  }
+                : null,
             }),
           });
         },
-        toggleAssignee(task: TaskSummary, person: Person): void {
+        async toggleAssignee(task: TaskSummary, person: Person): Promise<void> {
           const assigned: readonly string[] = displayedTask(task).assigneeIds;
           const has: boolean = assigned.includes(person.id);
           const after: readonly string[] = has
             ? assigned.filter((id: string): boolean => id !== person.id)
             : [...assigned, person.id];
           const name: string = person.name;
-          void perform(task, {
+          await perform(task, {
+            kind: 'versioned',
             action: { type: has ? 'unassign' : 'assign', userId: person.id },
             fields: { assigneeIds: after },
-            failure: $localize`:@@task.row-actions.failed:The task could not be changed`,
-            toast: (entry: TaskBulkEntry): RowToast => ({
+            failure,
+            toast: (applied: AppliedWrite): RowToast => ({
               title: has
                 ? $localize`:@@task.row-actions.unassigned:${name}:name: removed`
                 : $localize`:@@task.row-actions.assigned:${name}:name: assigned`,
               description: task.key,
-              undo:
-                entry.version === null
-                  ? null
-                  : (): void => {
-                      reverse(task, {
-                        action: { type: has ? 'assign' : 'unassign', userId: person.id },
-                        fields: { assigneeIds: assigned },
-                        version: entry.version ?? undefined,
-                      });
-                    },
+              undo: applied.undoable
+                ? (): void => {
+                    reverse(
+                      task,
+                      applied,
+                      { type: has ? 'assign' : 'unassign', userId: person.id },
+                      { assigneeIds: applied.before.assigneeIds },
+                    );
+                  }
+                : null,
             }),
           });
         },
-        moveTo(task: TaskSummary, target: TaskMoveTarget): void {
-          const before: string = displayedTask(task).listId;
-          if (before === target.listId) return;
+        async moveTo(task: TaskSummary, target: TaskMoveTarget): Promise<void> {
+          if (displayedTask(task).listId === target.listId) return;
           const key: string = task.key;
           const name: string = target.name;
-          void perform(task, {
+          await perform(task, {
+            kind: 'versioned',
             action: { type: 'move', listId: target.listId },
             fields: { listId: target.listId },
-            failure: $localize`:@@task.row-actions.failed:The task could not be changed`,
-            toast: (entry: TaskBulkEntry): RowToast => ({
+            failure,
+            toast: (applied: AppliedWrite): RowToast => ({
               title: $localize`:@@task.row-actions.moved:${key}:key: moved`,
               description: $localize`:@@task.row-actions.moved-text:To ${name}:name:.`,
-              undo:
-                entry.version === null
-                  ? null
-                  : (): void => {
-                      reverse(task, {
-                        action: { type: 'move', listId: before },
-                        fields: { listId: before },
-                        version: entry.version ?? undefined,
-                      });
-                    },
+              undo: applied.undoable
+                ? (): void => {
+                    const previous: string = applied.before.listId;
+                    reverse(
+                      task,
+                      applied,
+                      { type: 'move', listId: previous },
+                      { listId: previous },
+                    );
+                  }
+                : null,
             }),
           });
         },
@@ -974,38 +1381,51 @@ function createTaskRowActionsStore(): Type<TaskRowActionsStoreInstance> {
           at.setDate(at.getDate() + 1);
           at.setHours(REMINDER_HOUR, 0, 0, 0);
           const organizationId: string = organization();
-          try {
-            await enqueue(task.key, () => store._api.remind(task.key, at));
-          } catch {
-            if (organization() === organizationId) {
-              toasts.error(
-                $localize`:@@task.row-actions.remind-failed:The reminder could not be set`,
-              );
-            }
+          const key: string = task.key;
+          const sent: boolean | null = await lane
+            .write(
+              key,
+              async (): Promise<boolean | null> => {
+                if (organization() !== organizationId) return null;
+                try {
+                  await store._api.remind(key, at);
+                  return true;
+                } catch {
+                  return false;
+                }
+              },
+              task.version,
+            )
+            .catch((): boolean => false);
+          if (sent === null || organization() !== organizationId) return;
+          if (!sent) {
+            toasts.error(
+              $localize`:@@task.row-actions.remind-failed:The reminder could not be set`,
+            );
             return;
           }
-          if (organization() !== organizationId || store._destroyRef.destroyed) return;
+          if (store._destroyRef.destroyed) return;
           const day: string = new Intl.DateTimeFormat(store._locale, {
             weekday: 'short',
             day: 'numeric',
             month: 'short',
           }).format(at);
           const when: string = `${day.charAt(0).toLocaleUpperCase(store._locale)}${day.slice(1)}`;
-          const key: string = task.key;
           toasts.show($localize`:@@task.row-actions.reminded:Reminder set`, {
             description: $localize`:@@task.row-actions.reminded-text:${when}:date:, 9 AM · ${key}:key:`,
           });
         },
         async duplicate(task: TaskSummary): Promise<void> {
           await perform(task, {
+            kind: 'copy',
             action: { type: 'duplicate' },
             fields: {},
-            failure: $localize`:@@task.row-actions.failed:The task could not be changed`,
-            toast: (entry: TaskBulkEntry): RowToast => ({
+            failure,
+            toast: (applied: AppliedWrite): RowToast => ({
               title: $localize`:@@task.row-actions.duplicated:Task duplicated`,
-              description: entry.newTaskKey ?? '',
+              description: applied.entry.newTaskKey ?? '',
               undo: null,
-              open: entry.newTaskKey,
+              open: applied.entry.newTaskKey,
             }),
           });
         },
@@ -1030,18 +1450,17 @@ function createTaskRowActionsStore(): Type<TaskRowActionsStoreInstance> {
           const task: TaskSummary | null = store._deleteTask();
           if (!task || store.deleting()) return;
           const key: string = task.key;
-          patchState(store, (state: TaskRowActionsState) => ({
-            deleting: true,
-            _hidden: state._hidden.includes(key) ? state._hidden : [...state._hidden, key],
-          }));
-          const entry: TaskBulkEntry | null = await perform(task, {
+          patchState(store, { deleting: true });
+          hide(key, true);
+          const settlement: Settlement = await perform(task, {
+            kind: 'trash',
             action: { type: 'trash' },
             fields: {},
             failure: $localize`:@@task.row-actions.delete-failed:The task could not be deleted`,
-            toast: (done: TaskBulkEntry, outcome: TaskBulkOutcome): RowToast => {
-              const subtasks: number = Math.max(0, outcome.affected - 1);
+            toast: (applied: AppliedWrite): RowToast => {
+              const subtasks: number = Math.max(0, applied.outcome.affected - 1);
               const kept: string = $localize`:@@task.row-actions.deleted-text:Kept 30 days in the trash.`;
-              const entryId: string | null = done.trashEntryId;
+              const entryId: string | null = applied.entry.trashEntryId;
               return {
                 title: $localize`:@@task.row-actions.deleted:${key}:key: deleted`,
                 description:
@@ -1054,26 +1473,38 @@ function createTaskRowActionsStore(): Type<TaskRowActionsStoreInstance> {
                   entryId === null
                     ? null
                     : (): void => {
-                        void restore(key, entryId);
+                        void restore(task, entryId, applied.organizationId);
                       },
               };
             },
           });
-          patchState(store, (state: TaskRowActionsState) => ({
-            deleting: false,
-            deleteOpen: false,
-            _deleteTask: null,
-            _hidden: entry
-              ? state._hidden
-              : state._hidden.filter((hidden: string) => hidden !== key),
-          }));
+          const trashed: boolean =
+            settlement.kind === 'applied' ||
+            (settlement.kind === 'read-back' && settlement.applied);
+          if (trashed) hide(key, false);
+          else show(key);
+          patchState(store, { deleting: false, deleteOpen: false, _deleteTask: null });
         },
       };
     }),
     withHooks({
+      onInit(store): void {
+        store._lane.reads.pipe(takeUntilDestroyed()).subscribe((task: TaskSummary): void => {
+          patchState(store, (state: TaskRowActionsState) => {
+            const current: ConfirmedFields | undefined = state._confirmed[task.key];
+            if (current && current.until > task.version) return {};
+            return {
+              _confirmed: {
+                ...state._confirmed,
+                [task.key]: { fields: fieldsOf(task), until: task.version },
+              },
+            };
+          });
+        });
+      },
       onDestroy(store): void {
-        for (const id of store._undoToasts) store._toasts.dismiss(id);
-        store._undoToasts.clear();
+        for (const id of store._shownToasts) store._toasts.dismiss(id);
+        store._shownToasts.clear();
       },
     }),
   );
@@ -1084,19 +1515,28 @@ function createTaskRowActionsStore(): Type<TaskRowActionsStoreInstance> {
  *
  * @description
  * The writes of Task's `cw-task-menu` for rows that belong to no list page (Home, My tasks,
- * Dashboards), page-scoped: the route provides it with `TaskStatusChangesStore`, whose status
- * writes it uses and whose cancel reason dialog it exposes (`cancelKeys`). Priority, assignees,
- * `Move to`, `Duplicate` and the confirmed deletion go through `TaskActionsApi.bulk`, one write of
- * a task after the other; the reminder through `TaskActionsApi.remind`. These pages read their
- * rows without realtime notices, so a write applies the action to the task as it is (no
- * expected version) rather than being refused for a version the page read minutes ago; its `Undo`
- * is sent against the version the write returned, so it never overwrites a later change. The
- * values show at once (`rows`, `displayedTask`) until the page's copy reaches the returned
- * version; a refusal or an uncertain answer drops them with a toast. A deleted task leaves the
- * rows at once and comes back when the deletion is refused or its `Undo` restores it. Each settled
- * write emits `changed`, as does each status write, so the page reads its rows again. A write
- * answered once the organization changed reports nothing; one answered after the page was left
- * reports only what failed; leaving the page dismisses its `Undo` toasts.
+ * Dashboards), page-scoped: the route provides `TASK_ROW_ACTIONS_PROVIDERS`, so it shares one
+ * write lane per task (`TaskRowWriteLaneStore`) with the route's `TaskStatusChangesStore`, whose
+ * status writes it uses and whose cancel reason dialog it exposes (`cancelKeys`).
+ *
+ * Priority, assignees, `Move to`, `Duplicate` and the confirmed deletion go through
+ * `TaskActionsApi.bulk`, the reminder through `TaskActionsApi.remind`, each after the task's
+ * earlier writes and never sent once the organization changed. Every write carries the newest
+ * known version (the page's copy, or the version the lane last sent at, returned or read): a
+ * refusal reads the task back, and one found past the version sent was a conflict
+ * (`changed elsewhere`, its values shown); a returned version is adopted only at known + 1.
+ *
+ * Values show at once: the confirmed ones (a write's answer, a read back) over a page copy
+ * older than their version, then each waiting write's own; a refusal drops only its write's
+ * values. A write without a certain outcome keeps its values and holds the task's next writes
+ * while the task is read back after `ROW_RECONCILE_DELAYS_MS`; it settles once a read is past the
+ * version sent, or, the reads spent, is taken as not applied. `Undo` is offered only when the
+ * returned version is the one sent + 1 (the write was the task's only change), puts back the
+ * values confirmed when the write started, and is sent against the returned version. A deletion
+ * hides the row at once; its `Undo` restores the trash entry; a refused deletion or restore shows
+ * the row again. Each settled write emits `changed`, as does each status write. A write answered
+ * once the organization changed reports nothing; one answered after the page was left reports
+ * only what failed; leaving the page dismisses its `Undo` and `Open` toasts.
  *
  * @type {Type<TaskRowActionsStoreInstance>}
  */

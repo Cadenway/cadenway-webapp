@@ -1,5 +1,10 @@
 import { HttpErrorResponse } from '@angular/common/http';
-import { signal, type WritableSignal } from '@angular/core';
+import {
+  createEnvironmentInjector,
+  EnvironmentInjector,
+  signal,
+  type WritableSignal,
+} from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import type { StatusKey } from '@cadenway/contracts';
 import { CwToastService, type CwToastOptions } from '@cadenway/ui/components/toast';
@@ -23,11 +28,13 @@ import type { TaskMoveTarget } from '../../models/task-move-target/task-move-tar
 import type { TaskSummary } from '../../models/task-summary/task-summary.interface';
 import { TaskDetailOpener } from '../../services/task-detail-opener/task-detail-opener.service';
 import { personOf } from '../../utils/person/person.util';
+import { STATUS_SETTLE_MS } from '../task-status-changes/task-status-changes.store';
+import { TASK_ROW_ACTIONS_PROVIDERS } from './task-row-actions.providers';
 import {
-  STATUS_SETTLE_MS,
-  TaskStatusChangesStore,
-} from '../task-status-changes/task-status-changes.store';
-import { TaskRowActionsStore, type TaskRowActionsStoreInstance } from './task-row-actions.store';
+  ROW_RECONCILE_DELAYS_MS,
+  TaskRowActionsStore,
+  type TaskRowActionsStoreInstance,
+} from './task-row-actions.store';
 
 /**
  * Constant task
@@ -89,7 +96,7 @@ type Bulk = TaskActionsApi['bulk'];
  * Function applied
  *
  * @description
- * The outcome of a write applied to one task.
+ * The outcome of a write applied to CAD-482.
  *
  * @param {Partial<TaskBulkEntry>} [entry] - What the gateway returned besides the key.
  * @param {number} [affected] - Tasks affected, subtasks included.
@@ -137,22 +144,46 @@ const uncertain: TaskBulkOutcome = {
   notSent: [],
 };
 
+/**
+ * Function deferred
+ *
+ * @description
+ * A bulk answer the spec releases when it wants.
+ *
+ * @returns {{ promise: Promise<TaskBulkOutcome>; release: (outcome: TaskBulkOutcome) => void }}
+ * The pending answer and its release.
+ */
+function deferred(): {
+  promise: Promise<TaskBulkOutcome>;
+  release: (outcome: TaskBulkOutcome) => void;
+} {
+  let release: (outcome: TaskBulkOutcome) => void = () => undefined;
+  const promise: Promise<TaskBulkOutcome> = new Promise<TaskBulkOutcome>((resolve) => {
+    release = resolve;
+  });
+  return { promise, release };
+}
+
 describe('TaskRowActionsStore', () => {
   let bulk: Mock<Bulk>;
   let remind: Mock<(taskKey: string, at: Date) => Promise<void>>;
   let restore: Mock<(entryId: string) => Promise<void>>;
   let changeStatus: Mock<TaskApi['changeStatus']>;
+  let read: Mock<(key: string) => Observable<TaskSummary>>;
   let open: Mock<TaskDetailOpener['open']>;
   let show: Mock<(title: string, options?: CwToastOptions) => string>;
   let error: Mock<(title: string, options?: CwToastOptions) => string>;
   let warning: Mock<(title: string, options?: CwToastOptions) => string>;
+  let dismiss: Mock<(id: string) => void>;
   let organization: WritableSignal<WorkspaceOrganization>;
+  let page: EnvironmentInjector;
 
   /**
    * Function setup
    *
    * @description
-   * Provides the store and the route's status store with faked data access, opener and toasts.
+   * Provides the page's row providers in their own injector (destroyed to leave the page), with
+   * faked data access, opener and toasts.
    *
    * @returns {TaskRowActionsStoreInstance} The store.
    */
@@ -172,19 +203,21 @@ describe('TaskRowActionsStore', () => {
     };
     TestBed.configureTestingModule({
       providers: [
-        TaskStatusChangesStore,
-        TaskRowActionsStore,
         { provide: TaskActionsApi, useValue: { bulk, remind, restore } },
-        { provide: TaskApi, useValue: { changeStatus, read: vi.fn() } },
+        { provide: TaskApi, useValue: { changeStatus, read } },
         { provide: TaskDetailOpener, useValue: { open } },
         { provide: WORKSPACE_CONTEXT, useValue: workspace },
         {
           provide: CwToastService,
-          useValue: { show, error, warning, dismiss: vi.fn(), toasts: signal([]) },
+          useValue: { show, error, warning, dismiss, toasts: signal([{ id: 't1' }]) },
         },
       ],
     });
-    return TestBed.inject(TaskRowActionsStore);
+    page = createEnvironmentInjector(
+      TASK_ROW_ACTIONS_PROVIDERS,
+      TestBed.inject(EnvironmentInjector),
+    );
+    return page.get(TaskRowActionsStore);
   }
 
   beforeEach(() => {
@@ -195,10 +228,12 @@ describe('TaskRowActionsStore', () => {
       (_key: string, version: number, status: StatusKey): Observable<TaskSummary> =>
         of({ ...task, status, version: version + 1 }),
     );
+    read = vi.fn(() => of(task));
     open = vi.fn(() => Promise.resolve(true));
     show = vi.fn(() => 't1');
     error = vi.fn(() => 't2');
     warning = vi.fn(() => 't3');
+    dismiss = vi.fn();
     organization = signal({
       id: 'o1',
       slug: 'atelier-nord',
@@ -210,66 +245,78 @@ describe('TaskRowActionsStore', () => {
     vi.useRealTimers();
   });
 
-  it('shows a priority at once, sends it and keeps it until a read reaches its version', async () => {
+  it('sends a priority at the shown version and keeps it until a read reaches its version', async () => {
     const store: TaskRowActionsStoreInstance = setup();
     const changed: string[] = [];
     store.changed.subscribe((key: string) => changed.push(key));
 
-    store.setPriority(task, 'urgente');
-
+    const done: Promise<void> = store.setPriority(task, 'urgente');
     expect(store.displayedTask(task).priority).toBe('urgente');
-    await vi.waitFor(() => {
-      expect(show).toHaveBeenCalledOnce();
-    });
+    await done;
+
     expect(bulk).toHaveBeenCalledExactlyOnceWith(
-      [{ taskKey: 'CAD-482' }],
+      [{ taskKey: 'CAD-482', version: 3 }],
       { type: 'priority', priority: 'urgente' },
       expect.any(Function),
     );
     const [title, options]: [string, CwToastOptions?] = show.mock.calls[0];
     expect(title).toBe('CAD-482 · urgent priority');
     expect(options?.description).toBe('Priority changed.');
+    expect(options?.undo).toBeTypeOf('function');
     expect(changed).toEqual(['CAD-482']);
     expect(store.rows([task])[0].priority).toBe('urgente');
     expect(store.rows([{ ...task, version: 4, priority: 'basse' }])[0].priority).toBe('basse');
+    expect(read).not.toHaveBeenCalled();
   });
 
   it('puts the confirmed priority back with the failure toast when the write is refused', async () => {
     bulk.mockResolvedValue(refused);
     const store: TaskRowActionsStoreInstance = setup();
 
-    store.setPriority(task, 'urgente');
+    const done: Promise<void> = store.setPriority(task, 'urgente');
     expect(store.displayedTask(task).priority).toBe('urgente');
+    await done;
 
-    await vi.waitFor(() => {
-      expect(error).toHaveBeenCalledWith('The task could not be changed');
-    });
+    expect(error).toHaveBeenCalledExactlyOnceWith('The task could not be changed');
     expect(store.displayedTask(task).priority).toBe('haute');
     expect(show).not.toHaveBeenCalled();
   });
 
-  it('warns and drops the shown value when the answer is uncertain', async () => {
-    bulk.mockResolvedValue(uncertain);
+  it('reads a refused task back and warns when it changed elsewhere, showing its values', async () => {
+    bulk.mockResolvedValue(refused);
+    read.mockReturnValue(of({ ...task, priority: 'basse', version: 5 }));
     const store: TaskRowActionsStoreInstance = setup();
 
-    store.moveTo(task, backlog);
+    await store.setPriority(task, 'urgente');
 
-    await vi.waitFor(() => {
-      expect(warning).toHaveBeenCalledWith('The outcome is unknown. The task is being refreshed.');
+    expect(warning).toHaveBeenCalledWith('CAD-482 changed elsewhere', {
+      description: 'Its latest version is shown.',
     });
-    expect(store.displayedTask(task).listId).toBe('sprint-14');
+    expect(error).not.toHaveBeenCalled();
+    expect(store.displayedTask(task).priority).toBe('basse');
   });
 
-  it('undoes a move against the version the move returned', async () => {
+  it('offers no Undo when the returned version shows another change, and reads the task', async () => {
+    bulk.mockResolvedValue(applied({ version: 6 }));
+    read.mockReturnValue(of({ ...task, priority: 'urgente', version: 6 }));
     const store: TaskRowActionsStoreInstance = setup();
 
-    store.moveTo(task, backlog);
+    await store.setPriority(task, 'urgente');
+
+    expect(show.mock.calls[0][1]?.undo).toBeUndefined();
     await vi.waitFor(() => {
-      expect(show).toHaveBeenCalledOnce();
+      expect(read).toHaveBeenCalledWith('CAD-482');
     });
+  });
+
+  it('undoes a move against the version it returned, back to the confirmed list', async () => {
+    const store: TaskRowActionsStoreInstance = setup();
+
+    await store.moveTo(task, backlog);
     const [title, options]: [string, CwToastOptions?] = show.mock.calls[0];
     expect(title).toBe('CAD-482 moved');
     expect(options?.description).toBe('To Backlog.');
+    bulk.mockResolvedValue(applied({ version: 5 }));
 
     options?.undo?.();
 
@@ -282,33 +329,112 @@ describe('TaskRowActionsStore', () => {
     ]);
   });
 
-  it('says so when an undo is refused because the task changed since', async () => {
+  it('takes the Undo snapshot from the confirmed state when the write starts', async () => {
+    const first: ReturnType<typeof deferred> = deferred();
+    bulk.mockImplementationOnce(() => first.promise);
     const store: TaskRowActionsStoreInstance = setup();
-    store.setPriority(task, 'basse');
-    await vi.waitFor(() => {
-      expect(show).toHaveBeenCalledOnce();
-    });
-    bulk.mockResolvedValue(refused);
+
+    const urgent: Promise<void> = store.setPriority(task, 'urgente');
+    const low: Promise<void> = store.setPriority(task, 'basse');
+    expect(store.displayedTask(task).priority).toBe('basse');
+    first.release(refused);
+    await Promise.all([urgent, low]);
+    expect(store.displayedTask(task).priority).toBe('basse');
 
     show.mock.calls[0][1]?.undo?.();
 
     await vi.waitFor(() => {
-      expect(error).toHaveBeenCalledWith('The change could not be undone');
+      expect(bulk).toHaveBeenCalledTimes(3);
     });
+    expect(bulk.mock.calls[2][1]).toEqual({ type: 'priority', priority: 'haute' });
+  });
+
+  it('keeps an applied value when a later write of the task is refused', async () => {
+    const store: TaskRowActionsStoreInstance = setup();
+    await store.setPriority(task, 'urgente');
+    bulk.mockResolvedValue(refused);
+    read.mockReturnValue(of({ ...task, priority: 'urgente', version: 4 }));
+
+    await store.moveTo(task, backlog);
+
+    expect(store.displayedTask(task)).toMatchObject({ priority: 'urgente', listId: 'sprint-14' });
+    expect(error).toHaveBeenCalledWith('The task could not be changed');
+  });
+
+  it('sends a second write at the version the first one returned', async () => {
+    const store: TaskRowActionsStoreInstance = setup();
+    await store.setPriority(task, 'urgente');
+    bulk.mockResolvedValue(applied({ version: 5 }));
+
+    await store.moveTo(task, backlog);
+
+    expect(bulk.mock.calls[1][0]).toEqual([{ taskKey: 'CAD-482', version: 4 }]);
+    expect(show.mock.calls[1][1]?.undo).toBeTypeOf('function');
+  });
+
+  it('sends the writes of one task one after the other', async () => {
+    const first: ReturnType<typeof deferred> = deferred();
+    bulk.mockImplementationOnce(() => first.promise);
+    const store: TaskRowActionsStoreInstance = setup();
+
+    const urgent: Promise<void> = store.setPriority(task, 'urgente');
+    const moved: Promise<void> = store.moveTo(task, backlog);
+    await Promise.resolve();
+
+    expect(bulk).toHaveBeenCalledOnce();
+    expect(store.displayedTask(task)).toMatchObject({ priority: 'urgente', listId: 'backlog' });
+    first.release(applied());
+    await Promise.all([urgent, moved]);
+    expect(bulk).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps an uncertain value and holds the next write until a read back settles it', async () => {
+    vi.useFakeTimers();
+    bulk.mockResolvedValueOnce(uncertain);
+    read.mockReturnValue(of({ ...task, listId: 'backlog', version: 4 }));
+    const store: TaskRowActionsStoreInstance = setup();
+
+    void store.moveTo(task, backlog);
+    await vi.advanceTimersByTimeAsync(0);
+    void store.setPriority(task, 'urgente');
+    await vi.advanceTimersByTimeAsync(ROW_RECONCILE_DELAYS_MS[0] - 1);
+
+    expect(warning).toHaveBeenCalledWith('The outcome is unknown. The task is being refreshed.');
+    expect(store.displayedTask(task).listId).toBe('backlog');
+    expect(bulk).toHaveBeenCalledOnce();
+    await vi.advanceTimersByTimeAsync(1);
+
+    expect(read).toHaveBeenCalledWith('CAD-482');
+    expect(store.displayedTask(task).listId).toBe('backlog');
+    expect(bulk).toHaveBeenCalledTimes(2);
+    expect(bulk.mock.calls[1][0]).toEqual([{ taskKey: 'CAD-482', version: 4 }]);
+    expect(error).not.toHaveBeenCalled();
+  });
+
+  it('drops an uncertain value once the reads still find the task at the version sent', async () => {
+    vi.useFakeTimers();
+    bulk.mockResolvedValue(uncertain);
+    const store: TaskRowActionsStoreInstance = setup();
+
+    void store.moveTo(task, backlog);
+    for (const delay of ROW_RECONCILE_DELAYS_MS) await vi.advanceTimersByTimeAsync(delay);
+
+    expect(read).toHaveBeenCalledTimes(ROW_RECONCILE_DELAYS_MS.length);
+    expect(store.displayedTask(task).listId).toBe('sprint-14');
+    expect(error).toHaveBeenCalledWith('The task could not be changed');
   });
 
   it('removes an assignee the task has, and assigns one it has not', async () => {
     const store: TaskRowActionsStoreInstance = setup();
 
-    store.toggleAssignee(task, personOf('u1', 'Camille Martin'));
+    const removed: Promise<void> = store.toggleAssignee(task, personOf('u1', 'Camille Martin'));
     expect(store.displayedTask(task).assigneeIds).toEqual([]);
-    await vi.waitFor(() => {
-      expect(show).toHaveBeenCalledOnce();
-    });
-    store.toggleAssignee({ ...task, assigneeIds: [], version: 4 }, personOf('u2', 'Inès Roy'));
-    await vi.waitFor(() => {
-      expect(show).toHaveBeenCalledTimes(2);
-    });
+    await removed;
+    bulk.mockResolvedValue(applied({ version: 5 }));
+    await store.toggleAssignee(
+      { ...task, assigneeIds: [], version: 4 },
+      personOf('u2', 'Inès Roy'),
+    );
 
     expect(bulk.mock.calls.map((call) => call[1])).toEqual<TaskBulkAction[]>([
       { type: 'unassign', userId: 'u1' },
@@ -318,28 +444,6 @@ describe('TaskRowActionsStore', () => {
       'Camille Martin removed',
       'Inès Roy assigned',
     ]);
-  });
-
-  it('sends the writes of one task one after the other', async () => {
-    let release: (outcome: TaskBulkOutcome) => void = () => undefined;
-    bulk.mockImplementationOnce(
-      () =>
-        new Promise<TaskBulkOutcome>((resolve) => {
-          release = resolve;
-        }),
-    );
-    const store: TaskRowActionsStoreInstance = setup();
-
-    store.setPriority(task, 'urgente');
-    store.moveTo(task, backlog);
-    await Promise.resolve();
-
-    expect(bulk).toHaveBeenCalledOnce();
-    expect(store.displayedTask(task)).toMatchObject({ priority: 'urgente', listId: 'backlog' });
-    release(applied());
-    await vi.waitFor(() => {
-      expect(bulk).toHaveBeenCalledTimes(2);
-    });
   });
 
   it('confirms a deletion, hides the task, then restores it with Undo', async () => {
@@ -387,10 +491,32 @@ describe('TaskRowActionsStore', () => {
     expect(error).toHaveBeenCalledWith('The task could not be deleted');
   });
 
-  it('says so when the restore of a deleted task is refused', async () => {
+  it('keeps a deletion without a certain outcome hidden until a read finds the task gone', async () => {
+    vi.useFakeTimers();
+    bulk.mockResolvedValue(uncertain);
+    read.mockReturnValue(throwError(() => new HttpErrorResponse({ status: 404 })));
+    const store: TaskRowActionsStoreInstance = setup();
+
+    store.askDelete(task);
+    const trashed: Promise<void> = store.trash();
+    store.sync([task]);
+    await vi.advanceTimersByTimeAsync(0);
+    store.sync([]);
+    expect(store.rows([task])).toEqual([]);
+    await vi.advanceTimersByTimeAsync(ROW_RECONCILE_DELAYS_MS[0]);
+    await trashed;
+
+    expect(store.rows([task])).toEqual([]);
+    expect(store.deleting()).toBe(false);
+    expect(error).not.toHaveBeenCalled();
+  });
+
+  it('shows a restored task again, with changed, when its restore is refused', async () => {
     bulk.mockResolvedValue(applied({ trashEntryId: 'trash-1' }));
     restore.mockRejectedValue(new HttpErrorResponse({ status: 404 }));
     const store: TaskRowActionsStoreInstance = setup();
+    const changed: string[] = [];
+    store.changed.subscribe((key: string) => changed.push(key));
     store.askDelete(task);
     await store.trash();
 
@@ -399,10 +525,28 @@ describe('TaskRowActionsStore', () => {
     await vi.waitFor(() => {
       expect(error).toHaveBeenCalledWith('The task could not be restored');
     });
-    expect(store.rows([task])).toEqual([]);
+    expect(changed).toEqual(['CAD-482', 'CAD-482']);
+    expect(store.rows([task])).toHaveLength(1);
   });
 
-  it('opens the copy of a duplicated task from its toast', async () => {
+  it('shows a deleted task again once a read no longer holds it, and prunes confirmed values', async () => {
+    bulk.mockResolvedValueOnce(applied());
+    const store: TaskRowActionsStoreInstance = setup();
+    await store.setPriority(task, 'urgente');
+    store.sync([{ ...task, version: 4, priority: 'urgente' }]);
+
+    expect(store.displayedTask(task).priority).toBe('haute');
+    bulk.mockResolvedValueOnce(applied({ version: null, trashEntryId: 'trash-1' }));
+    store.askDelete(task);
+    await store.trash();
+    store.sync([task]);
+    expect(store.rows([task])).toEqual([]);
+    store.sync([]);
+
+    expect(store.rows([task])).toHaveLength(1);
+  });
+
+  it('opens the copy of a duplicated task from its toast, only in its organization', async () => {
     bulk.mockResolvedValue(applied({ newTaskKey: 'CAD-501' }));
     const store: TaskRowActionsStoreInstance = setup();
 
@@ -414,6 +558,25 @@ describe('TaskRowActionsStore', () => {
     expect(options?.undo).toBeUndefined();
     options?.action?.run();
     expect(open).toHaveBeenCalledWith('CAD-501', undefined);
+    organization.set({ id: 'o2', slug: 'other', name: 'Other' } as WorkspaceOrganization);
+    options?.action?.run();
+    expect(open).toHaveBeenCalledOnce();
+  });
+
+  it('dismisses its toasts when the page is left and shows no success toast after', async () => {
+    const store: TaskRowActionsStoreInstance = setup();
+    await store.setPriority(task, 'urgente');
+    const late: ReturnType<typeof deferred> = deferred();
+    bulk.mockImplementationOnce(() => late.promise);
+    const moved: Promise<void> = store.moveTo(task, backlog);
+    await Promise.resolve();
+
+    page.destroy();
+    late.release(applied({ version: 5 }));
+    await moved;
+
+    expect(dismiss).toHaveBeenCalledWith('t1');
+    expect(show).toHaveBeenCalledOnce();
   });
 
   it('sets a reminder tomorrow at 9 and says when it fails', async () => {
@@ -430,6 +593,34 @@ describe('TaskRowActionsStore', () => {
     remind.mockRejectedValue(new HttpErrorResponse({ status: 503 }));
     await store.remind(task);
     expect(error).toHaveBeenCalledWith('The reminder could not be set');
+  });
+
+  it('never sends a queued reminder once the organization changed', async () => {
+    const first: ReturnType<typeof deferred> = deferred();
+    bulk.mockImplementationOnce(() => first.promise);
+    const store: TaskRowActionsStoreInstance = setup();
+
+    const urgent: Promise<void> = store.setPriority(task, 'urgente');
+    const reminded: Promise<void> = store.remind(task);
+    await Promise.resolve();
+    organization.set({ id: 'o2', slug: 'other', name: 'Other' } as WorkspaceOrganization);
+    first.release(applied());
+    await Promise.all([urgent, reminded]);
+
+    expect(remind).not.toHaveBeenCalled();
+    expect(show).not.toHaveBeenCalled();
+    expect(error).not.toHaveBeenCalled();
+  });
+
+  it('sends no Undo once the organization changed', async () => {
+    const store: TaskRowActionsStoreInstance = setup();
+    await store.setPriority(task, 'urgente');
+    organization.set({ id: 'o2', slug: 'other', name: 'Other' } as WorkspaceOrganization);
+
+    show.mock.calls[0][1]?.undo?.();
+    await Promise.resolve();
+
+    expect(bulk).toHaveBeenCalledOnce();
   });
 
   it('copies the shareable link and the key of the task', async () => {
@@ -464,7 +655,7 @@ describe('TaskRowActionsStore', () => {
     });
   });
 
-  it('changes a status through the route status store and reports its completion', async () => {
+  it('changes a status through the shared lane and reports its completion', async () => {
     vi.useFakeTimers();
     const store: TaskRowActionsStoreInstance = setup();
     const changed: string[] = [];
@@ -476,6 +667,26 @@ describe('TaskRowActionsStore', () => {
 
     expect(changeStatus).toHaveBeenCalledExactlyOnceWith('CAD-482', 3, 'progress', null);
     expect(changed).toEqual(['CAD-482']);
+  });
+
+  it('sends a status change after a menu write, at the version that write returned', async () => {
+    vi.useFakeTimers();
+    const first: ReturnType<typeof deferred> = deferred();
+    bulk.mockImplementationOnce(() => first.promise);
+    const store: TaskRowActionsStoreInstance = setup();
+
+    const urgent: Promise<void> = store.setPriority(task, 'urgente');
+    store.setStatus(task, 'progress');
+    await vi.advanceTimersByTimeAsync(STATUS_SETTLE_MS);
+    expect(changeStatus).not.toHaveBeenCalled();
+    first.release(applied());
+    await urgent;
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(changeStatus).toHaveBeenCalledExactlyOnceWith('CAD-482', 4, 'progress', null);
+    expect(read).not.toHaveBeenCalled();
+    await store.moveTo(task, backlog);
+    expect(bulk.mock.calls[1][0]).toEqual([{ taskKey: 'CAD-482', version: 5 }]);
   });
 
   it('puts the confirmed status back when the status write is refused', async () => {
@@ -503,22 +714,15 @@ describe('TaskRowActionsStore', () => {
   });
 
   it('reports nothing for a write answered once the organization changed', async () => {
-    let release: (outcome: TaskBulkOutcome) => void = () => undefined;
-    bulk.mockImplementationOnce(
-      () =>
-        new Promise<TaskBulkOutcome>((resolve) => {
-          release = resolve;
-        }),
-    );
+    const first: ReturnType<typeof deferred> = deferred();
+    bulk.mockImplementationOnce(() => first.promise);
     const store: TaskRowActionsStoreInstance = setup();
 
-    store.setPriority(task, 'urgente');
+    const urgent: Promise<void> = store.setPriority(task, 'urgente');
     await Promise.resolve();
     organization.set({ id: 'o2', slug: 'other', name: 'Other' } as WorkspaceOrganization);
-    release(applied());
-    await new Promise<void>((resolve) => {
-      setTimeout(resolve);
-    });
+    first.release(applied());
+    await urgent;
 
     expect(show).not.toHaveBeenCalled();
     expect(error).not.toHaveBeenCalled();
