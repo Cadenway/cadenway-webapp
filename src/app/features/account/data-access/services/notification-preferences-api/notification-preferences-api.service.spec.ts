@@ -1,14 +1,17 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { TestBed } from '@angular/core/testing';
-import { NotificationPreferencesService } from '@cadenway/api-client';
+import { AuthService, NotificationPreferencesService } from '@cadenway/api-client';
 import { of, throwError } from 'rxjs';
-import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 
 import type { NotificationPreferences } from '../../../models/notification-preferences/notification-preferences.interface';
+import { AccountChangedError } from './account-changed.error';
 import {
   isUncertainWrite,
+  isVersionMismatch,
   NotificationPreferencesApi,
 } from './notification-preferences-api.service';
+import { WriteNotSentError } from './write-not-sent.error';
 
 /**
  * Function answer
@@ -50,7 +53,9 @@ const versionMismatch: HttpErrorResponse = new HttpErrorResponse({
 });
 
 describe('NotificationPreferencesApi', () => {
-  let service: Record<string, Mock>;
+  let service: { getNotificationPreferences: Mock; updateNotificationPreferences: Mock };
+  let auth: { getCurrentUser: Mock };
+  let request: Mock;
   let api: NotificationPreferencesApi;
 
   beforeEach(() => {
@@ -58,73 +63,88 @@ describe('NotificationPreferencesApi', () => {
       getNotificationPreferences: vi.fn(() => of(answer(3))),
       updateNotificationPreferences: vi.fn(() => of(answer(4))),
     };
+    auth = { getCurrentUser: vi.fn(() => of({ id: 'u-camille' })) };
+    request = vi.fn(
+      (_name: string, _options: LockOptions, run: () => Promise<void>): Promise<void> => run(),
+    );
+    vi.stubGlobal('navigator', { locks: { request } });
     TestBed.configureTestingModule({
-      providers: [{ provide: NotificationPreferencesService, useValue: service }],
+      providers: [
+        { provide: NotificationPreferencesService, useValue: service },
+        { provide: AuthService, useValue: auth },
+      ],
     });
     api = TestBed.inject(NotificationPreferencesApi);
   });
 
-  it('reads the preferences as display models', async () => {
-    const preferences: NotificationPreferences = await api.read();
-    expect(preferences.version).toBe(3);
-    expect(preferences.channels.billing).toEqual({ inApp: true, email: true, mobile: false });
-    expect(preferences.digest).toBe('daily');
+  afterEach(() => {
+    vi.unstubAllGlobals();
   });
 
-  it('sends one matrix box as a merge patch against its version', async () => {
-    const saved: NotificationPreferences = await api.change(
+  it('reads the preferences of the signed-in account as display models, under the shared lock', async () => {
+    const preferences: NotificationPreferences = await api.read('u-camille');
+    expect(preferences.version).toBe(3);
+    expect(preferences.channels.billing).toEqual({ inApp: true, email: true, mobile: false });
+    expect(request.mock.calls[0]?.[1]).toMatchObject({ mode: 'shared' });
+  });
+
+  it('refuses to read the preferences of another account', async () => {
+    auth.getCurrentUser.mockReturnValueOnce(of({ id: 'u-lucas' }));
+    await expect(api.read('u-camille')).rejects.toBeInstanceOf(AccountChangedError);
+    expect(service.getNotificationPreferences).not.toHaveBeenCalled();
+  });
+
+  it('sends one matrix box as a merge patch against its version, under the exclusive lock', async () => {
+    const saved: NotificationPreferences = await api.write(
       { kind: 'channel', event: 'statusChange', channel: 'mobile', enabled: true },
       3,
+      'u-camille',
     );
     expect(saved.version).toBe(4);
-    expect(service['updateNotificationPreferences']).toHaveBeenCalledWith(
+    expect(service.updateNotificationPreferences).toHaveBeenCalledWith(
       { channels: { statusChange: { mobile: true } } },
       { headers: { 'If-Match': '"3"' } },
     );
+    expect(request.mock.calls[0]?.[1]).toMatchObject({ mode: 'exclusive' });
   });
 
   it('sends the digest and the quiet hours alone', async () => {
-    await api.change({ kind: 'digest', digest: 'weekly' }, 3);
-    await api.change({ kind: 'doNotDisturb', enabled: false }, 4);
+    await api.write({ kind: 'digest', digest: 'weekly' }, 3, 'u-camille');
+    await api.write({ kind: 'doNotDisturb', enabled: false }, 4, 'u-camille');
     expect(
-      service['updateNotificationPreferences'].mock.calls.map(
-        ([patch]: unknown[]): unknown => patch,
-      ),
+      service.updateNotificationPreferences.mock.calls.map(([patch]: unknown[]): unknown => patch),
     ).toEqual([{ digest: 'weekly' }, { doNotDisturb: false }]);
   });
 
-  it('reads again and resends once after a version mismatch', async () => {
-    service['updateNotificationPreferences']
-      .mockReturnValueOnce(throwError(() => versionMismatch))
-      .mockReturnValueOnce(of(answer(6)));
-    service['getNotificationPreferences'].mockReturnValueOnce(of(answer(5)));
+  it('sends nothing once another account or no account holds the session', async () => {
+    auth.getCurrentUser
+      .mockReturnValueOnce(of({ id: 'u-lucas' }))
+      .mockReturnValueOnce(throwError(() => new HttpErrorResponse({ status: 401 })));
 
-    const saved: NotificationPreferences = await api.change({ kind: 'digest', digest: 'never' }, 3);
-
-    expect(saved.version).toBe(6);
-    expect(
-      service['updateNotificationPreferences'].mock.calls.map(
-        ([, options]: unknown[]): unknown => options,
-      ),
-    ).toEqual([{ headers: { 'If-Match': '"3"' } }, { headers: { 'If-Match': '"5"' } }]);
+    await expect(
+      api.write({ kind: 'digest', digest: 'never' }, 3, 'u-camille'),
+    ).rejects.toBeInstanceOf(AccountChangedError);
+    await expect(
+      api.write({ kind: 'digest', digest: 'never' }, 3, 'u-camille'),
+    ).rejects.toBeInstanceOf(AccountChangedError);
+    expect(service.updateNotificationPreferences).not.toHaveBeenCalled();
   });
 
-  it('rejects any other refusal as it is', async () => {
-    const unavailable: HttpErrorResponse = new HttpErrorResponse({ status: 503 });
-    service['updateNotificationPreferences'].mockReturnValueOnce(throwError(() => unavailable));
-
-    await expect(api.change({ kind: 'digest', digest: 'never' }, 3)).rejects.toBe(unavailable);
-    expect(service['getNotificationPreferences']).not.toHaveBeenCalled();
+  it('says a write was not sent when the identity check fails', async () => {
+    auth.getCurrentUser.mockReturnValueOnce(throwError(() => new HttpErrorResponse({ status: 0 })));
+    const failure: unknown = await api
+      .write({ kind: 'digest', digest: 'never' }, 3, 'u-camille')
+      .catch((error: unknown) => error);
+    expect(failure).toBeInstanceOf(WriteNotSentError);
+    expect(isUncertainWrite(failure)).toBe(false);
+    expect(service.updateNotificationPreferences).not.toHaveBeenCalled();
   });
 
-  it('rejects with the resend refusal after a version mismatch', async () => {
-    const refused: HttpErrorResponse = new HttpErrorResponse({ status: 403 });
-    service['updateNotificationPreferences']
-      .mockReturnValueOnce(throwError(() => versionMismatch))
-      .mockReturnValueOnce(throwError(() => refused));
-
-    await expect(api.change({ kind: 'digest', digest: 'never' }, 3)).rejects.toBe(refused);
-    expect(service['getNotificationPreferences']).toHaveBeenCalledTimes(1);
+  it('rejects a refusal of the patch as it is', async () => {
+    service.updateNotificationPreferences.mockReturnValueOnce(throwError(() => versionMismatch));
+    await expect(api.write({ kind: 'digest', digest: 'never' }, 3, 'u-camille')).rejects.toBe(
+      versionMismatch,
+    );
   });
 });
 
@@ -136,8 +156,15 @@ describe('isUncertainWrite', () => {
     expect(isUncertainWrite(new Error('timeout'))).toBe(true);
   });
 
-  it('treats a refusal as recording nothing', () => {
+  it('treats a refusal, a write never sent and a changed account as recording nothing', () => {
     expect(isUncertainWrite(new HttpErrorResponse({ status: 403 }))).toBe(false);
     expect(isUncertainWrite(versionMismatch)).toBe(false);
+    expect(isUncertainWrite(new WriteNotSentError(new Error('locks')))).toBe(false);
+    expect(isUncertainWrite(new AccountChangedError())).toBe(false);
+  });
+
+  it('recognises the version mismatch', () => {
+    expect(isVersionMismatch(versionMismatch)).toBe(true);
+    expect(isVersionMismatch(new HttpErrorResponse({ status: 412 }))).toBe(false);
   });
 });

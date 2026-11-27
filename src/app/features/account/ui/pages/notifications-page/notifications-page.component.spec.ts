@@ -1,3 +1,4 @@
+import { HttpErrorResponse } from '@angular/common/http';
 import { Component, input, type InputSignal, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter, withErrorBoundaries, withRouterConfig } from '@angular/router';
@@ -16,7 +17,7 @@ import type {
   NotificationPreferenceChange,
   NotificationPreferences,
 } from '../../../models/notification-preferences/notification-preferences.interface';
-import { applied } from '../../../state/notification-preferences/notification-preferences.store';
+import { applied } from '../../../services/notification-preferences-sync/notification-preferences-sync.service';
 import { NotificationsPage } from './notifications-page.component';
 
 /**
@@ -98,14 +99,14 @@ const workspace: WorkspaceContextPort = {
 
 describe('NotificationsPage', () => {
   let read: Mock<NotificationPreferencesApi['read']>;
-  let change: Mock<NotificationPreferencesApi['change']>;
+  let write: Mock<NotificationPreferencesApi['write']>;
   let toasts: { error: Mock; dismiss: Mock };
   let recorded: NotificationPreferences;
 
   beforeEach(() => {
-    read = vi.fn<NotificationPreferencesApi['read']>(() => Promise.resolve(camille));
     recorded = camille;
-    change = vi.fn<NotificationPreferencesApi['change']>((next, version) => {
+    read = vi.fn<NotificationPreferencesApi['read']>(() => Promise.resolve(recorded));
+    write = vi.fn<NotificationPreferencesApi['write']>((next, version) => {
       recorded = { ...applied(recorded, next), version: version + 1 };
       return Promise.resolve(recorded);
     });
@@ -118,7 +119,7 @@ describe('NotificationsPage', () => {
           withErrorBoundaries({ defaultErrorComponent: FakeBoundary }),
           withRouterConfig({ onSameUrlNavigation: 'reload' }),
         ),
-        { provide: NotificationPreferencesApi, useValue: { read, change } },
+        { provide: NotificationPreferencesApi, useValue: { read, write } },
         { provide: CwToastService, useValue: toasts },
         { provide: WORKSPACE_CONTEXT, useValue: workspace },
       ],
@@ -228,10 +229,11 @@ describe('NotificationsPage', () => {
     byName(host, 'switch', 'Do not disturb').click();
     harness.detectChanges();
 
-    await expect.poll(() => change.mock.calls.length).toBe(3);
+    await expect.poll(() => write.mock.calls.length).toBe(3);
     expect(
-      change.mock.calls.map(
-        ([next]: [NotificationPreferenceChange, number]): NotificationPreferenceChange => next,
+      write.mock.calls.map(
+        ([next]: [NotificationPreferenceChange, number, string]): NotificationPreferenceChange =>
+          next,
       ),
     ).toEqual([
       { kind: 'channel', event: 'comment', channel: 'email', enabled: true },
@@ -244,7 +246,7 @@ describe('NotificationsPage', () => {
   });
 
   it('puts a refused change back with an error toast', async () => {
-    change.mockRejectedValueOnce(new Error('503'));
+    write.mockRejectedValueOnce(new HttpErrorResponse({ status: 403 }));
     const harness: RouterTestingHarness = await open();
     const host: HTMLElement = hostOf(harness);
 

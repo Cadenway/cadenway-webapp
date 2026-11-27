@@ -29,8 +29,9 @@ parent provides the English texts of `cw-password-strength` and `cw-input-otp` t
   column (`max-w-3xl`); packages A1 to A5 replace them. The stubs read no data, so they have no
   loading, error or empty state yet.
 - `notifications` is built (package A3): `NotificationsPage` reads the preferences through its
-  page-scoped `NotificationPreferencesStore`, shows the section skeleton while they load, and its
-  failed read reaches the error boundary below.
+  page-scoped `NotificationPreferencesStore`, a view over the session-scoped
+  `NotificationPreferencesSync`, shows the section skeleton while they load, and its failed read
+  reaches the error boundary below.
 - A failed primary read of a section renders the default error boundary in the shell, titled
   `Could not load this section` by the mounting route's `data`.
 
@@ -64,9 +65,10 @@ parent provides the English texts of `cw-password-strength` and `cw-input-otp` t
 
 - `@cadenway/api-client`: `AuthService.reauthenticate` through `data-access/`.
 - `@cadenway/api-client`: `NotificationPreferencesService.getNotificationPreferences` and
-  `updateNotificationPreferences` (`notifications`) through `data-access/`; `@cadenway/ui`
-  `card`, `checkbox`, `radio-group`, `skeleton`, `switch` and `table` for that section.
-- Auth's `.` entry (`SignOut`), Workspace's `ports/workspace-context`, Errors' `errors.routes`,
+  `updateNotificationPreferences`, each after `AuthService.getCurrentUser` under Auth's
+  `withSessionLock` (`notifications`), through `data-access/`; `@cadenway/ui` `card`,
+  `checkbox`, `radio-group`, `skeleton`, `switch` and `table` for that section.
+- Auth's `.` entry (`SignOut`, `withSessionLock`), Workspace's `ports/workspace-context`, Errors' `errors.routes`,
   `@core/api` (problem reader), `@core/realtime`, `@core/theme`, `@shared/unsaved-changes`.
 - `@cadenway/ui` (`app-rail`, `avatar`, `button`, `dialog`, `input`, `input-otp`, `menu`,
   `password-strength`, `toast`) and `@cadenway/icons`.
@@ -106,21 +108,34 @@ parent provides the English texts of `cw-password-strength` and `cw-input-otp` t
   form's dirty state.
 - `notifications` (`Compte.dc.html` lines 355-403): the `Events` matrix (7 events × in the app,
   email, mobile, each box named `<event> in the app | by email | on mobile`), `Email summary`
-  and `Do not disturb`. Every change shows at once and saves with no Save and no success toast:
-  `NotificationPreferencesStore` (page-scoped on `NotificationsPage`) queues the writes, one after
-  the other, each a merge patch of that one setting with `If-Match` on the version the previous
-  write recorded; a later change of the same setting replaces a pending one, and a setting turned
-  back to its confirmed value sends nothing. On `412 request.version-mismatch` the data access
-  reads the preferences again and resends the setting once. A refusal restores the confirmed
-  value of that setting (unless it was changed again since) and shows `Could not save`; a new
-  failure replaces the previous toast. A write without a known outcome (no answer, a timeout, a
-  `5xx`) reads the preferences again: when they hold the change it counts as saved, otherwise it
-  is restored as a refusal, and the queued changes are compared with what was read (when that
-  read fails, the next write reads first). The confirmed preferences live in the store, outside
-  the read's resource, so the writes still queued when the page closes are sent. The mention hint
-  names the display name, or the first name without one, as a mention does. Below 768 px the
-  matrix becomes cards (the mockup's `.cw-cards` rule), each box followed by its channel's name
-  as a `label` of the box, so tapping the name toggles it.
+  and `Do not disturb`. Every change shows at once and saves with no Save and no success toast.
+  The mention hint names the display name, or the first name without one, as a mention does.
+  Below 768 px the matrix becomes cards (the mockup's `.cw-cards` rule), each box followed by its
+  channel's name as a `label` of the box, so tapping the name toggles it.
+- `NotificationPreferencesSync` (`services/notification-preferences-sync`, root-scoped
+  `@Service()`) holds the notification preferences for the browser session: the newest confirmed
+  preferences, the pending changes and the write queue, shared by every instance of the page.
+  `NotificationPreferencesStore` (page-scoped on `NotificationsPage`) is a view over it, bound
+  to `WORKSPACE_CONTEXT`'s user: its read starts from the sync's confirmed preferences while
+  writes are pending, so a reopened page shows the pending choices, and the writes still queued
+  when the page closes are sent.
+  - Binding another account resets the sync: unsent changes are dropped and late answers are
+    ignored. Each read and write first checks the session's account (`getCurrentUser`) under the
+    exclusive or shared session lock that sign-in and sign-out take; a session held by another
+    account or none (`401`) stops the sync the same way, so nothing is sent to another account
+    and no `412` is retried there.
+  - Writes run in the order of the changes, one at a time, each a merge patch of one setting
+    with `If-Match` on the newest confirmed version; a later change of a setting replaces a
+    pending one, and a setting turned back to its confirmed value sends nothing.
+  - `412 request.version-mismatch` adopts the preferences read again as the confirmed ones and
+    resends the setting once against them, unless they already hold it.
+  - A write without a known outcome (no answer, a timeout, a `5xx`) reads the preferences again:
+    when they hold the change it counts as saved; otherwise the write itself is resent once
+    against the version read, since the first one may still land after that read (a `412` on
+    the resend is settled by a last read).
+  - Only a refused write, or a resend that still fails, restores the confirmed value of its
+    setting (unless it was changed again since) and shows `Could not save`, replacing the
+    previous failure toast; when the outcome stays unknown, the next write reads first.
 - Known gap: the mockup's `Set a status message` item and the status message under the header are left out,
   since the backend has no status message yet.
 
