@@ -13,13 +13,12 @@ import {
 } from '@features/workspace/ports/workspace-context';
 
 import { InvitationsApi } from '../../data-access/services/invitations-api/invitations-api.service';
-import { MembersApi } from '../../data-access/services/members-api/members-api.service';
 import type {
   InvitationList,
   PendingInvitation,
 } from '../../models/invitation/invitation.interface';
-import type { MemberPage, OrganizationMember } from '../../models/member/member.interface';
 import { MembersStore } from '../members/members.store';
+import { SubscriptionStore } from '../subscription/subscription.store';
 import {
   type InviteResult,
   InvitationsStore,
@@ -90,43 +89,6 @@ const STUDIO: PendingInvitation = {
  * @type {InvitationList}
  */
 const LIST: InvitationList = { items: [MARC, STUDIO], total: 2 };
-
-/**
- * Function membersPage
- *
- * @description
- * A page of members as the members data access answers it.
- *
- * @param {readonly OrganizationMember[]} items - The members.
- * @returns {MemberPage} The page.
- */
-function membersPage(items: readonly OrganizationMember[]): MemberPage {
-  return {
-    items,
-    total: items.length,
-    counts: { owner: 0, admin: 0, member: items.length, guest: 0 },
-    nextCursor: null,
-    truncated: false,
-  };
-}
-
-/**
- * Constant MARC_MEMBER
- *
- * @description
- * Marc Roux once he accepted his invitation.
- *
- * @type {OrganizationMember}
- */
-const MARC_MEMBER: OrganizationMember = {
-  id: 'm-mr',
-  userId: 'u-mr',
-  name: 'Marc Roux',
-  email: 'Marc.Roux@ateliernord.fr',
-  role: 'member',
-  twoStepVerification: null,
-  version: 1,
-};
 
 /**
  * Constant ATELIER_NORD
@@ -223,17 +185,6 @@ interface Harness {
   readonly pin: OrganizationPin;
 
   /**
-   * Property members
-   *
-   * @description
-   * Fake of the members data access.
-   *
-   * @type {Record<'page', Mock>}
-   * @readonly
-   */
-  readonly members: Record<'page', Mock>;
-
-  /**
    * Property membersStore
    *
    * @description
@@ -243,6 +194,17 @@ interface Harness {
    * @readonly
    */
   readonly membersStore: Record<'retry', Mock>;
+
+  /**
+   * Property subscription
+   *
+   * @description
+   * Fake of the shared subscription store, whose seats an owner reads.
+   *
+   * @type {Record<'retry', Mock>}
+   * @readonly
+   */
+  readonly subscription: Record<'retry', Mock>;
   // #endregion
 }
 
@@ -269,10 +231,8 @@ async function setup(
     revoke: vi.fn(() => Promise.resolve()),
     ...overrides,
   };
-  const members: Record<'page', Mock> = {
-    page: vi.fn(() => Promise.resolve(membersPage([]))),
-  };
   const membersStore: Record<'retry', Mock> = { retry: vi.fn() };
+  const subscription: Record<'retry', Mock> = { retry: vi.fn() };
   const toasts: Record<ToastTone, Mock> = {
     success: vi.fn(),
     error: vi.fn(),
@@ -300,15 +260,15 @@ async function setup(
       { provide: CwToastService, useValue: toasts },
       { provide: WORKSPACE_CONTEXT, useValue: workspace },
       { provide: INVITATION_SETTLE_DELAYS_MS, useValue: delays },
-      { provide: MembersApi, useValue: members },
       { provide: MembersStore, useValue: membersStore },
+      { provide: SubscriptionStore, useValue: subscription },
     ],
   });
   const pin: OrganizationPin = TestBed.inject(OrganizationPin);
   pin.set(ATELIER_NORD.id);
   const store: InvitationsStoreInstance = TestBed.inject(InvitationsStore);
   await stable();
-  return { store, api, toasts, organization, pin, members, membersStore };
+  return { store, api, toasts, organization, pin, membersStore, subscription };
 }
 
 /**
@@ -866,65 +826,52 @@ describe('InvitationsStore', () => {
       expect(store.items()[1]).toEqual(resentStudio);
     });
 
-    it('confirms a cancellation refused after an unknown attempt once the list lacks it', async () => {
-      const { store, api, toasts }: Harness = await setup({
-        revoke: vi
-          .fn()
-          .mockRejectedValueOnce(refusal(503, {}))
-          .mockRejectedValueOnce(refusal(403, { code: 'organization.role-forbidden' })),
-      });
+    it('claims no outcome of an invitation gone after an unknown cancellation', async () => {
+      const { store, api, toasts, membersStore, subscription }: Harness = await setup(
+        {
+          revoke: vi
+            .fn()
+            .mockRejectedValueOnce(refusal(503, {}))
+            .mockRejectedValueOnce(refusal(403, { code: 'organization.role-forbidden' })),
+        },
+        'owner',
+      );
       api.list.mockResolvedValue({ items: [STUDIO], total: 1 });
-
-      await expect(store.revoke(MARC)).resolves.toBe(true);
-
-      expect(store.items()).toEqual([STUDIO]);
-      expect(toasts.success).toHaveBeenCalledWith('Invitation cancelled', {
-        description: 'marc.roux@ateliernord.fr',
-      });
-      expect(toasts.error).not.toHaveBeenCalled();
-    });
-
-    it('says an invitation gone after an unknown cancellation was accepted when its invitee joined', async () => {
-      const { store, api, toasts, members, membersStore }: Harness = await setup({
-        revoke: vi
-          .fn()
-          .mockRejectedValueOnce(refusal(503, {}))
-          .mockRejectedValueOnce(refusal(403, { code: 'organization.role-forbidden' })),
-      });
-      api.list.mockResolvedValue({ items: [STUDIO], total: 1 });
-      members.page.mockResolvedValue(membersPage([MARC_MEMBER]));
 
       await expect(store.revoke(MARC)).resolves.toBe(false);
+      await stable();
 
-      expect(members.page).toHaveBeenCalledWith(
-        { search: 'marc.roux@ateliernord.fr', roles: [] },
-        100,
-        null,
-      );
       expect(store.items()).toEqual([STUDIO]);
       expect(toasts.success).not.toHaveBeenCalled();
       expect(toasts.error).not.toHaveBeenCalled();
-      expect(toasts.info).toHaveBeenCalledWith(
-        'The invitation was accepted before it could be cancelled',
-        { description: 'marc.roux@ateliernord.fr is now a member of the organization.' },
-      );
+      expect(toasts.warning).not.toHaveBeenCalled();
+      expect(toasts.info).toHaveBeenCalledTimes(1);
+      expect(toasts.info).toHaveBeenCalledWith('This invitation is no longer pending', {
+        description:
+          'The invitation of marc.roux@ateliernord.fr may have been cancelled, accepted or declined: the members list shows who joined.',
+      });
       expect(membersStore.retry).toHaveBeenCalledTimes(1);
+      expect(subscription.retry).toHaveBeenCalledTimes(1);
     });
 
-    it('claims nothing of an invitation gone after an unknown cancellation when the members fail', async () => {
-      const { store, api, toasts, members }: Harness = await setup({
-        revoke: vi.fn().mockRejectedValue(refusal(503, {})),
+    it('says a cancellation answered as declined was declined', async () => {
+      const { store, toasts, membersStore }: Harness = await setup({
+        revoke: vi
+          .fn()
+          .mockRejectedValue(
+            refusal(409, { code: 'invitation.answered', details: { status: 'refused' } }),
+          ),
       });
-      api.list.mockResolvedValue({ items: [STUDIO], total: 1 });
-      members.page.mockRejectedValue(refusal(503, {}));
 
       await expect(store.revoke(MARC)).resolves.toBe(false);
 
+      expect(store.items()).toEqual([STUDIO]);
       expect(toasts.success).not.toHaveBeenCalled();
-      expect(toasts.info).not.toHaveBeenCalled();
-      expect(toasts.warning).toHaveBeenCalledWith('The invitation may not have been cancelled', {
-        description: 'marc.roux@ateliernord.fr',
-      });
+      expect(toasts.info).toHaveBeenCalledWith(
+        'The invitation was declined before it could be cancelled',
+        { description: 'marc.roux@ateliernord.fr' },
+      );
+      expect(membersStore.retry).not.toHaveBeenCalled();
     });
 
     it('says a cancellation answered as accepted was accepted', async () => {
