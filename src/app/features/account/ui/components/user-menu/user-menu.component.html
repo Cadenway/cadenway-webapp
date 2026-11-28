@@ -9,6 +9,7 @@
     cwAppRailItemMedia
     [name]="workspace.user().name"
     [presence]="avatarPresence()"
+    ring="canvas"
     aria-hidden="true"
   />
   {{ label() }}
@@ -22,7 +23,12 @@
   i18n-ariaLabel="@@account.user-menu.aria-label"
 >
   <div class="flex items-center gap-2 px-2 py-1.5">
-    <cw-avatar [name]="workspace.user().name" [presence]="avatarPresence()" aria-hidden="true" />
+    <cw-avatar
+      [name]="workspace.user().name"
+      [presence]="avatarPresence()"
+      ring="popover"
+      aria-hidden="true"
+    />
     <span class="flex min-w-0 flex-col">
       <span class="truncate font-medium">{{ workspace.user().name }}</span>
       <span class="truncate text-xs text-muted-foreground">{{ workspace.user().email }}</span>
@@ -37,16 +43,14 @@
         }
       </span>
       <ng-container i18n="@@account.user-menu.status">Status</ng-container>
-      <span class="ml-auto pl-6 text-xs text-muted-foreground">{{ current()?.label }}</span>
+      <cw-menu-item-value>{{ current()?.label }}</cw-menu-item-value>
     </button>
   } @else {
     <button cwMenuItem disabled data-testid="user-menu-status">
       <span class="size-4 shrink-0" aria-hidden="true"></span>
       <ng-container i18n="@@account.user-menu.status">Status</ng-container>
-      <span
-        class="ml-auto pl-6 text-xs text-muted-foreground"
-        i18n="@@account.user-menu.status-unavailable"
-        >Unavailable</span
+      <cw-menu-item-value i18n="@@account.user-menu.status-unavailable"
+        >Unavailable</cw-menu-item-value
       >
     </button>
   }
@@ -70,7 +74,7 @@
       aria-hidden="true"
     />
     <ng-container i18n="@@account.user-menu.theme">Theme</ng-container>
-    <span class="ml-auto pl-6 text-xs text-muted-foreground">{{ themeName() }}</span>
+    <cw-menu-item-value>{{ themeName() }}</cw-menu-item-value>
   </button>
   <cw-menu-separator />
   <button cwMenuItem (triggered)="leave()" data-testid="user-menu-sign-out">
