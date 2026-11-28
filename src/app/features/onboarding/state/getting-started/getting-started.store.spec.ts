@@ -1190,6 +1190,33 @@ describe('GettingStartedStore', () => {
         expect(toasts.toasts()).toHaveLength(2);
       });
 
+      it('says addresses of unknown outcome may not have been invited once the host is destroyed', async () => {
+        const answer: () => void = holdFirstBatch();
+        api.invite
+          .mockResolvedValueOnce({
+            invited: 49,
+            skipped: 0,
+            alreadyInvited: 0,
+            notSent: ['member50@ateliernord.fr'],
+            unknown: [],
+          })
+          .mockRejectedValueOnce(problem(503, 'service.unavailable'));
+        const store: GettingStartedStore = await setup();
+        store.start('invite');
+
+        const sending: Promise<void> = store.invite(many);
+        host.destroy();
+        answer();
+        await sending;
+
+        expect(api.invite).toHaveBeenCalledTimes(3);
+        expect(toasts.success).toHaveBeenCalledWith('99 invitations sent', { description: '' });
+        expect(toasts.error).not.toHaveBeenCalled();
+        expect(toasts.warning).toHaveBeenCalledWith('21 addresses may not have been invited', {
+          description: 'Sending them again from “Getting started” or the Members page is safe.',
+        });
+      });
+
       it('says nothing once the organization changed, even with the host destroyed', async () => {
         const answer: () => void = holdFirstBatch();
         const store: GettingStartedStore = await setup();

@@ -692,9 +692,12 @@ function createGettingStartedStore(): Type<GettingStartedStoreInstance> {
       // The summary of a send whose host was destroyed while its batches went on: the dialog is
       // gone and cannot keep the addresses left unsent, so the failure toast counts them and says
       // where to invite them again. These toasts outlive the store.
-      const toastDetached: (send: InviteSend, unsent: number) => void = (
+      // `unknown`: some of the addresses left have an unknown outcome, so the toast does not say
+      // they could not be invited, only that they may not have been and that sending is safe.
+      const toastDetached: (send: InviteSend, unsent: number, unknown: boolean) => void = (
         send: InviteSend,
         unsent: number,
+        unknown: boolean,
       ): void => {
         if (send.invited > 0 || unsent === 0) {
           toastOutcome({ invited: send.invited, skipped: send.skipped }, false);
@@ -712,6 +715,20 @@ function createGettingStartedStore(): Type<GettingStartedStoreInstance> {
           lines.push(
             $localize`:@@onboarding.getting-started.invite-failed-limit:The daily invitation limit is reached: try again later.`,
           );
+        }
+        if (unknown) {
+          lines.push(
+            $localize`:@@onboarding.getting-started.invite-uncertain-later:Sending them again from “Getting started” or the Members page is safe.`,
+          );
+          show(
+            'warning',
+            takesSingular(unsent)
+              ? $localize`:@@onboarding.getting-started.invite-uncertain-count-one:${unsent}:count: address may not have been invited`
+              : $localize`:@@onboarding.getting-started.invite-uncertain-count-other:${unsent}:count: addresses may not have been invited`,
+            { description: lines.join(' ') },
+            false,
+          );
+          return;
         }
         lines.push(
           $localize`:@@onboarding.getting-started.invite-not-sent-later:Invite them again from “Getting started” or the Members page.`,
@@ -909,6 +926,9 @@ function createGettingStartedStore(): Type<GettingStartedStoreInstance> {
           // Addresses a batch settled (invited, already invited or already a member), in lower
           // case: never sent again. Every other address of the list stays in the dialog.
           const settled: Set<string> = new Set<string>();
+          // Addresses of unknown outcome, in lower case: a lost batch's, and those an answer left
+          // out or gave conflicting results. Never settled.
+          const unsure: Set<string> = new Set<string>();
           const send: InviteSend = { invited: 0, skipped: 0, notSent: 0, refusal: null };
           let uncertain: boolean = false;
           let dropped: boolean = false;
@@ -929,6 +949,7 @@ function createGettingStartedStore(): Type<GettingStartedStoreInstance> {
                 (outcome.unknown ?? []).map((email: string): string => email.toLowerCase()),
               );
               if (unknown.size > 0) uncertain = true;
+              for (const address of unknown) unsure.add(address);
               for (const email of batch) {
                 const address: string = email.toLowerCase();
                 if (!unsent.has(address) && !unknown.has(address)) settled.add(address);
@@ -952,6 +973,7 @@ function createGettingStartedStore(): Type<GettingStartedStoreInstance> {
               }
               if (isUnknownWriteOutcome(error)) {
                 uncertain = true;
+                for (const email of batch) unsure.add(email.toLowerCase());
                 continue;
               }
               // A definite refusal (a daily limit, a role) would refuse the next batches too.
@@ -967,7 +989,7 @@ function createGettingStartedStore(): Type<GettingStartedStoreInstance> {
             (email: string): boolean => !settled.has(email.toLowerCase()),
           );
           if (store._lifecycle.destroyed) {
-            if (!dropped) toastDetached(send, kept.length);
+            if (!dropped) toastDetached(send, kept.length, unsure.size > 0);
             return;
           }
           if (!current()) return;
