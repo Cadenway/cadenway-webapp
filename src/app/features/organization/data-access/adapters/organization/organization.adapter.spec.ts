@@ -2,7 +2,6 @@ import type { Organization as OrganizationDto } from '@cadenway/api-client';
 import { describe, expect, it } from 'vitest';
 
 import {
-  organizationInitials,
   refusedFields,
   toOrganizationLogoUpload,
   toOrganizationPatch,
@@ -57,10 +56,11 @@ describe('organization adapter', () => {
     expect(profile.defaultLanguage).toBeNull();
   });
 
-  it('takes the first letters of the first two words', () => {
-    expect(organizationInitials('  atelier   nord sud ')).toBe('AN');
-    expect(organizationInitials('Lumen')).toBe('L');
-    expect(organizationInitials('   ')).toBe('');
+  it('derives the same initials as the rail: first and last words, two letters of one word', () => {
+    expect(toOrganizationProfile({ ...ATELIER_NORD, name: 'Atelier Nord Est' }).initials).toBe(
+      'AE',
+    );
+    expect(toOrganizationProfile({ ...ATELIER_NORD, name: 'Cadenway' }).initials).toBe('CA');
   });
 
   it('patches only the changed members, null clearing', () => {

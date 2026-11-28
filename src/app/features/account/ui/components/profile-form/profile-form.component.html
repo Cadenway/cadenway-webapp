@@ -23,7 +23,12 @@
           class="flex items-center gap-1 text-xs font-medium text-destructive"
           data-testid="profile-name-error"
         >
-          <ng-icon name="phosphorWarningCircleFill" class="size-3.5 shrink-0" aria-hidden="true" />
+          <ng-icon
+            name="phosphorWarningCircleFill"
+            size="0.875rem"
+            class="shrink-0"
+            aria-hidden="true"
+          />
           {{ form().name().errors()[0]?.message }}
         </p>
       }
@@ -64,7 +69,12 @@
           class="flex items-center gap-1 text-xs font-medium text-destructive"
           data-testid="profile-display-name-error"
         >
-          <ng-icon name="phosphorWarningCircleFill" class="size-3.5 shrink-0" aria-hidden="true" />
+          <ng-icon
+            name="phosphorWarningCircleFill"
+            size="0.875rem"
+            class="shrink-0"
+            aria-hidden="true"
+          />
           {{ form().displayName().errors()[0]?.message }}
         </p>
       }
@@ -89,7 +99,7 @@
           />
           <cw-input-group-addon align="inline-end">
             <span class="inline-flex items-center gap-1 text-xs font-medium text-jade-text">
-              <ng-icon name="phosphorCheckCircleFill" class="size-3.5" aria-hidden="true" />
+              <ng-icon name="phosphorCheckCircleFill" size="0.875rem" aria-hidden="true" />
               <ng-container i18n="@@account.profile.email-verified">Verified</ng-container>
             </span>
           </cw-input-group-addon>
@@ -133,7 +143,12 @@
           class="flex items-center gap-1 text-xs font-medium text-destructive"
           data-testid="profile-job-title-error"
         >
-          <ng-icon name="phosphorWarningCircleFill" class="size-3.5 shrink-0" aria-hidden="true" />
+          <ng-icon
+            name="phosphorWarningCircleFill"
+            size="0.875rem"
+            class="shrink-0"
+            aria-hidden="true"
+          />
           {{ form().jobTitle().errors()[0]?.message }}
         </p>
       }
@@ -161,7 +176,12 @@
           class="flex items-center gap-1 text-xs font-medium text-destructive"
           data-testid="profile-time-zone-error"
         >
-          <ng-icon name="phosphorWarningCircleFill" class="size-3.5 shrink-0" aria-hidden="true" />
+          <ng-icon
+            name="phosphorWarningCircleFill"
+            size="0.875rem"
+            class="shrink-0"
+            aria-hidden="true"
+          />
           {{ form().timeZone().errors()[0]?.message }}
         </p>
       }

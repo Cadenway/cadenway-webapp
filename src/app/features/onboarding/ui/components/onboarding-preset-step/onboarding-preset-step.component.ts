@@ -34,7 +34,8 @@ import type { OnboardingPreset } from '../../../models/onboarding/onboarding.typ
         <cw-radio-group-item variant="card" [indicator]="false" [value]="choice.value">
           <span class="flex items-start gap-3">
             <ng-icon
-              class="mt-0.5 size-5 shrink-0"
+              size="1.25rem"
+              class="mt-0.5 shrink-0"
               [class.text-primary]="preset() === choice.value"
               [class.text-muted-foreground]="preset() !== choice.value"
               [name]="choice.icon"

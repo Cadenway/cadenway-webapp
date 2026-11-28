@@ -36,7 +36,8 @@ import {
       >
         <ng-icon
           name="phosphorUserCircleBold"
-          class="size-4 shrink-0 text-muted-foreground"
+          size="1rem"
+          class="shrink-0 text-muted-foreground"
           aria-hidden="true"
         />
         <ng-container i18n="@@account.navigation.profile-and-security"

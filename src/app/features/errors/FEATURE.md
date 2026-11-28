@@ -36,7 +36,8 @@ running a route again.
 - `@cadenway/api-client`: `AccessRequestsService.createAccessRequest` and
   `TrashService.restoreTrashEntry`, through `ErrorRecovery`.
 - Workspace's `ports/workspace-context`, optional, for the trash link of the current workspace.
-- `@core/api` problem readers, `@core/config` (`statusUrl`), `@cadenway/ui` and `@cadenway/icons`.
+- `@core/api` problem readers, `@core/config` (`statusUrl`), `@core/ui-labels`
+  (`provideCadenwayUiLabels`, on the 404 route), `@cadenway/ui` and `@cadenway/icons`.
 
 ## Invariants
 

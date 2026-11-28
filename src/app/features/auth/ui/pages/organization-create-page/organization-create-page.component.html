@@ -102,7 +102,7 @@
           </div>
           @if (logoError()) {
             <p role="alert" class="flex items-center gap-1 text-xs font-medium text-destructive">
-              <ng-icon name="phosphorWarningCircleFill" class="size-3.5" aria-hidden="true" />
+              <ng-icon name="phosphorWarningCircleFill" size="0.875rem" aria-hidden="true" />
               <span i18n="@@auth.organization-create.logo-error"
                 >This file is not a usable image: choose a PNG or an SVG.</span
               >
@@ -128,7 +128,7 @@
         />
         @if (createForm.name().invalid() && createForm.name().touched()) {
           <p role="alert" class="flex items-center gap-1 text-xs font-medium text-destructive">
-            <ng-icon name="phosphorWarningCircleFill" class="size-3.5" aria-hidden="true" />
+            <ng-icon name="phosphorWarningCircleFill" size="0.875rem" aria-hidden="true" />
             {{ createForm.name().errors()[0]?.message }}
           </p>
         }
@@ -254,7 +254,7 @@
         ></textarea>
         @if (createForm.invites().invalid() && createForm.invites().touched()) {
           <p role="alert" class="flex items-center gap-1 text-xs font-medium text-destructive">
-            <ng-icon name="phosphorWarningCircleFill" class="size-3.5" aria-hidden="true" />
+            <ng-icon name="phosphorWarningCircleFill" size="0.875rem" aria-hidden="true" />
             {{ createForm.invites().errors()[0]?.message }}
           </p>
         } @else {

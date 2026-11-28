@@ -1,20 +1,9 @@
 import type { CurrentUser, MyOrganization } from '@cadenway/api-client';
 import { describe, expect, it } from 'vitest';
 
-import { initialsOf, toWorkspaceOrganization, toWorkspaceUser } from './workspace-context.adapter';
+import { toWorkspaceOrganization, toWorkspaceUser } from './workspace-context.adapter';
 
 describe('workspace context adapter', () => {
-  it.each([
-    ['Atelier Nord', 'AN'],
-    ['Lumen Cooperative', 'LC'],
-    ['  camille   martin  ', 'CM'],
-    ['Élodie de la Tour', 'ÉT'],
-    ['Cadenway', 'CA'],
-    ['', ''],
-  ])('derives the initials of “%s” as “%s”', (name: string, initials: string) => {
-    expect(initialsOf(name)).toBe(initials);
-  });
-
   it('keeps the displayed fields of the signed-in account', () => {
     const user: CurrentUser = {
       id: '019a5f3c-8d2e-7c4a-9b1f-3e5d7a9c1b30',

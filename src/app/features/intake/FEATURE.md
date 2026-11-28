@@ -11,8 +11,9 @@ request creates belongs to the task service and is read through Task.
 `INTAKE_ROUTES` is mounted below `/f` by `APP_ROUTES`, before the workspace, so `f` is a reserved
 organization slug (`RESERVED_SLUGS`).
 
-- `:publicKey` loads `IntakePage` (title `Request form`) with the icons. It needs no session and
-  renders without a shell, on the canvas. A failed read renders the default error boundary: the
+- `:publicKey` loads `IntakePage` (title `Request form`) with the icons and Core's brick
+  labels (`provideCadenwayUiLabels`). It needs no session and renders without a shell, on the
+  canvas. A failed read renders the default error boundary: the
   gateway's `404` (unknown, disabled, archived or removed form alike) and a malformed key (`400`)
   are not found; anything else is unavailable with `Retry`.
 
@@ -37,7 +38,7 @@ It provides the English texts of its bricks itself. It also publishes `INTAKE_FI
 - `@cadenway/api-client` through `data-access/`: `PublicIntakeService` (`getPublicIntakeForm`,
   `startPublicIntakeAttachmentUpload`, `completePublicIntakeAttachmentUpload`,
   `submitPublicIntakeForm`), and `HttpClient` for the signed upload to object storage only.
-- `@core/api` (problem reader) and `@shared/route-errors`.
+- `@core/api` (problem reader), `@core/ui-labels` and `@shared/route-errors`.
 - `@cadenway/ui` (`button`, `calendar`, `date-picker`, `dropzone`, `input`, `priority-icon`,
   `select`, `skeleton`, `textarea`) and `@cadenway/icons`.
 

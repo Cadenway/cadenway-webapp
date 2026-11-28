@@ -102,7 +102,8 @@
             >
               <ng-icon
                 name="phosphorWarningCircleFill"
-                class="size-4 shrink-0"
+                size="1rem"
+                class="shrink-0"
                 aria-hidden="true"
               />
               <span class="min-w-0 flex-1">{{ message }}</span>
@@ -127,6 +128,7 @@
                 cwButton
                 type="button"
                 variant="ghost"
+                size="lg"
                 [disabled]="store.finishing() || store.inviting()"
                 (click)="back()"
                 data-testid="onboarding-back"
@@ -139,6 +141,7 @@
             <button
               cwButton
               type="button"
+              size="lg"
               [loading]="store.finishing() || store.inviting()"
               [disabled]="store.step() === 'space' && store.nameBlank()"
               (click)="next()"
@@ -164,7 +167,12 @@
             class="flex flex-wrap items-center gap-2 text-sm text-destructive"
             data-testid="onboarding-load-error"
           >
-            <ng-icon name="phosphorWarningCircleFill" class="size-4 shrink-0" aria-hidden="true" />
+            <ng-icon
+              name="phosphorWarningCircleFill"
+              size="1rem"
+              class="shrink-0"
+              aria-hidden="true"
+            />
             <span class="min-w-0 flex-1" i18n="@@onboarding.wizard.load-failed"
               >Your setup could not be loaded.</span
             >

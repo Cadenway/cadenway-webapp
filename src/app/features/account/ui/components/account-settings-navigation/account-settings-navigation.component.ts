@@ -52,7 +52,8 @@ import type { AccountSection } from '../../../models/account-section/account-sec
           >
             <ng-icon
               [name]="active.isActive ? section.activeIcon : section.icon"
-              class="size-4 shrink-0"
+              size="1rem"
+              class="shrink-0"
               [class]="active.isActive ? 'text-primary' : 'text-muted-foreground'"
               aria-hidden="true"
             />

@@ -56,7 +56,7 @@
         />
         @if (signupForm.name().touched() && signupForm.name().invalid()) {
           <p id="su-name-help" class="flex items-center gap-1 text-xs font-medium text-destructive">
-            <ng-icon name="phosphorWarningCircleFill" class="size-3.5" aria-hidden="true" />
+            <ng-icon name="phosphorWarningCircleFill" size="0.875rem" aria-hidden="true" />
             {{ signupForm.name().errors()[0]?.message }}
           </p>
         }
@@ -79,7 +79,7 @@
             id="su-email-help"
             class="flex items-center gap-1 text-xs font-medium text-destructive"
           >
-            <ng-icon name="phosphorWarningCircleFill" class="size-3.5" aria-hidden="true" />
+            <ng-icon name="phosphorWarningCircleFill" size="0.875rem" aria-hidden="true" />
             <span i18n="@@auth.signup.email-taken-link"
               >An account already uses this address:
               <a routerLink="/login" class="font-medium underline underline-offset-4">sign in</a
@@ -91,7 +91,7 @@
             id="su-email-help"
             class="flex items-center gap-1 text-xs font-medium text-destructive"
           >
-            <ng-icon name="phosphorWarningCircleFill" class="size-3.5" aria-hidden="true" />
+            <ng-icon name="phosphorWarningCircleFill" size="0.875rem" aria-hidden="true" />
             {{ signupForm.email().errors()[0]?.message }}
           </p>
         } @else {
@@ -145,7 +145,7 @@
         <cw-password-strength #strength [value]="model().password" [minLength]="12" />
         @if (signupForm.password().touched() && signupForm.password().invalid()) {
           <p role="alert" class="flex items-center gap-1 text-xs font-medium text-destructive">
-            <ng-icon name="phosphorWarningCircleFill" class="size-3.5" aria-hidden="true" />
+            <ng-icon name="phosphorWarningCircleFill" size="0.875rem" aria-hidden="true" />
             {{ signupForm.password().errors()[0]?.message }}
           </p>
         }
@@ -186,7 +186,7 @@
             role="alert"
             class="flex items-center gap-1 pl-6 text-xs font-medium text-destructive"
           >
-            <ng-icon name="phosphorWarningCircleFill" class="size-3.5" aria-hidden="true" />
+            <ng-icon name="phosphorWarningCircleFill" size="0.875rem" aria-hidden="true" />
             {{ signupForm.acceptTerms().errors()[0]?.message }}
           </p>
         }
