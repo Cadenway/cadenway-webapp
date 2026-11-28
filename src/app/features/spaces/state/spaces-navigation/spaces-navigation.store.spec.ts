@@ -626,6 +626,37 @@ describe('SpacesNavigationStore', () => {
     }
   });
 
+  it('takes an overview read a page lent before the first organization was followed', async () => {
+    const lent: SpaceOverview = { spaceId: 'sp-product', taskCount: 7, lists: [] };
+    store.shareOverviewRead('sp-product', Promise.resolve(lent), store.overviewOrder.next());
+    TestBed.tick();
+
+    await expect.poll(() => store.overviews.hasValue()).toBe(true);
+    expect(api.overview).not.toHaveBeenCalledWith(
+      'sp-product',
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
+    );
+    expect(store.overviews.value()?.['sp-product']).toBe(lent);
+  });
+
+  it('forgets an overview read lent in the previous organization on a switch', async () => {
+    await expect.poll(() => store.overviews.hasValue()).toBe(true);
+    store.shareOverviewRead(
+      'sp-product',
+      new Promise<SpaceOverview>(() => undefined),
+      store.overviewOrder.next(),
+    );
+    api.overview.mockClear();
+    organization.set({ id: 'org-2', slug: 'lumen' });
+    TestBed.tick();
+
+    await expect
+      .poll(() => api.overview.mock.calls.map((call: unknown[]) => call[0]))
+      .toContain('sp-product');
+  });
+
   it('reads the counts of the space of the created task again, and only that space', async () => {
     await expect.poll(() => store.overviews.hasValue()).toBe(true);
     const reads: number = api.overview.mock.calls.length;

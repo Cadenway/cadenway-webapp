@@ -1059,9 +1059,13 @@ function createSpacesNavigationStore(): Type<SpacesNavigationStoreInstance> {
           if (organizationId === store._organizationId()) return;
           creationKey = null;
           listCreationKey = null;
-          store._offered.clear();
-          store._shared.clear();
-          store._landed.clear();
+          // The first organization keeps what a page of it lent or offered before this ran (a
+          // full load opens the page's overview read first); only a switch forgets them.
+          if (store._organizationId() !== null) {
+            store._offered.clear();
+            store._shared.clear();
+            store._landed.clear();
+          }
           patchState(store, {
             _organizationId: organizationId,
             dialog: null,

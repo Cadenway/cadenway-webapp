@@ -1053,7 +1053,9 @@ colors with the same words.
     own (`SpacesNavigationStore.overviewOrder`), lends its read to a sidebar that holds no
     overview yet (`shareOverviewRead`: the sidebar's next read of the space takes its answer
     instead of reading it again, waiting no longer than its own page timeout of 10 s and never
-    past its cancellation, and reads it itself if the lent read fails or stalls), gives its result to the sidebar
+    past its cancellation, and reads it itself if the lent read fails or stalls; on a full load the
+    page lends before the navigation follows its first organization, and only a later switch
+    forgets what was lent or offered), gives its result to the sidebar
     (`offerOverview`, which a sidebar read begun earlier never replaces), and takes a newer
     sidebar value received during its read when that read ends, even if its own failed, so both
     converge on the newest counts.
