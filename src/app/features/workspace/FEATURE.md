@@ -115,6 +115,7 @@ answer, for a settings page's `confirmDiscard()` (`@shared/unsaved-changes`).
 - The routes of Spaces, Task, My tasks, Dashboards, Goals, Docs, Trash and Archives, mounted under
   `/:org`.
 - `@core/shortcuts` (`?`) and `@core/theme`.
+- `@shared/initials` (`initialsOf`) for the organization and user initials of the context.
 - Account's `account.routes` and Organization's `organization.routes`, mounted in the settings
   shell, and Errors' `.` entry (`RouteErrorData`).
 - `@layouts/app-shell`, `@layouts/app-shell/providers`, `@layouts/settings-shell` and

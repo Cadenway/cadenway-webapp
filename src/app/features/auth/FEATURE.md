@@ -54,7 +54,8 @@ was scheduled, whose session the gateway already ended.
   `ProfileMediaService`) through `data-access/`; `@simplewebauthn/browser` for the security key.
 - `@layouts/auth-layout` and `@layouts/auth-layout/providers` (root route only), `@core/theme`,
   `@core/config` (`siteUrl`), `@core/api` (`readProblem`), `@core/ui-labels`
-  (`provideCadenwayUiLabels`, on the root route).
+  (`provideCadenwayUiLabels`, on the root route), `@shared/initials` (`initialsOf`, the
+  organization marks of `/organizations` and `/organizations/new`).
 
 ## Invariants
 
