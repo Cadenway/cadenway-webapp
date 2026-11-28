@@ -1,6 +1,6 @@
 import {
   computed,
-  type DestroyRef,
+  DestroyRef,
   DOCUMENT,
   inject,
   Service,
@@ -12,13 +12,26 @@ import type { CwSidebarState } from '@cadenway/ui/components/sidebar';
 import type { ShellSidebar } from '@shared/layout-slot';
 
 /**
+ * Constant DESKTOP
+ *
+ * @description
+ * Widths where `cw-sidebar` (`overlayBelow="lg"`) pushes the content instead of floating over it.
+ *
+ * @type {string}
+ */
+const DESKTOP: string = '(width >= 64rem)';
+
+/**
  * Service AppShellSidebar
  *
  * @description
  * State of the space sidebar of `AppShell`, provided by the shell component and reached by its
  * routed screens through `SHELL_SIDEBAR`. It mirrors the `cw-sidebar` state in both directions,
  * remembers the control that opened the sidebar so the shell can return focus to it, and counts the
- * screens that render the expand toggle themselves.
+ * screens that render the expand toggle themselves. The desktop state (from 1024 px) and the
+ * floating one (the phone drawer and the tablet overlay, which `cw-sidebar` closes on entry) are
+ * kept apart: a change made while the sidebar floats leaves the desktop choice alone, and coming
+ * back to a desktop width restores that choice.
  */
 @Service({ autoProvided: false })
 export class AppShellSidebar implements ShellSidebar {
@@ -109,6 +122,28 @@ export class AppShellSidebar implements ShellSidebar {
    * @type {boolean}
    */
   private focusRequested: boolean = false;
+
+  /**
+   * Property desktopState
+   *
+   * @description
+   * The state last chosen at a desktop width, restored when the window comes back to one; it
+   * starts expanded.
+   *
+   * @type {CwSidebarState}
+   */
+  private desktopState: CwSidebarState = 'expanded';
+
+  /**
+   * Property desktop
+   *
+   * @description
+   * Query of the desktop widths, or null without `matchMedia` (treated as a desktop width).
+   *
+   * @type {MediaQueryList | null}
+   * @readonly
+   */
+  private readonly desktop: MediaQueryList | null;
   // #endregion
 
   // #region Constructor
@@ -116,7 +151,8 @@ export class AppShellSidebar implements ShellSidebar {
    * Constructor
    *
    * @description
-   * Derives the public read-only signals.
+   * Derives the public read-only signals and follows the desktop widths, restoring the desktop
+   * state whenever the window widens back to them.
    *
    * @constructor
    */
@@ -124,6 +160,17 @@ export class AppShellSidebar implements ShellSidebar {
     this.state = this.stateValue.asReadonly();
     this.expanded = computed((): boolean => this.stateValue() === 'expanded');
     this.toggleClaimed = computed((): boolean => this.claims() > 0);
+    const view: Window | null = this.document.defaultView;
+    this.desktop = typeof view?.matchMedia === 'function' ? view.matchMedia(DESKTOP) : null;
+    const desktop: MediaQueryList | null = this.desktop;
+    if (!desktop) return;
+    const restore: (event: MediaQueryListEvent) => void = (event: MediaQueryListEvent): void => {
+      if (event.matches) this.stateValue.set(this.desktopState);
+    };
+    desktop.addEventListener('change', restore);
+    inject(DestroyRef).onDestroy((): void => {
+      desktop.removeEventListener('change', restore);
+    });
   }
   // #endregion
 
@@ -137,13 +184,13 @@ export class AppShellSidebar implements ShellSidebar {
    */
   public toggle(): void {
     if (this.expanded()) {
-      this.stateValue.set('collapsed');
+      this.set('collapsed');
       return;
     }
     const active: Element | null = this.document.activeElement;
     this.opener = active instanceof HTMLElement && active !== this.document.body ? active : null;
     this.focusRequested = true;
-    this.stateValue.set('expanded');
+    this.set('expanded');
   }
 
   /**
@@ -171,7 +218,7 @@ export class AppShellSidebar implements ShellSidebar {
    */
   public sync(state: CwSidebarState): void {
     if (state === 'collapsed') this.focusRequested = false;
-    this.stateValue.set(state);
+    this.set(state);
   }
 
   /**
@@ -198,6 +245,19 @@ export class AppShellSidebar implements ShellSidebar {
    */
   public returnTarget(): HTMLElement | null {
     return this.opener?.isConnected ? this.opener : null;
+  }
+
+  /**
+   * Method set
+   *
+   * @description
+   * Applies a state and, at a desktop width, keeps it as the desktop choice.
+   *
+   * @param {CwSidebarState} state - The new state.
+   */
+  private set(state: CwSidebarState): void {
+    if (this.desktop?.matches ?? true) this.desktopState = state;
+    this.stateValue.set(state);
   }
   // #endregion
 }

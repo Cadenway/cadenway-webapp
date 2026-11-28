@@ -32,8 +32,17 @@ nothing. A selector's name does not always give its entry point: use the third c
 | Shell | `nav[cwAppRail]` + `[cwAppRailItem]` (tab bar below 768 px), `cw-sidebar`, `nav[cwBreadcrumb]`, `cw-page-header`, `cw-toolbar`, `[cwTooltip]`, `cw-banner`, `cw-logo variant="lockup"` | `app-rail`, `sidebar`, `breadcrumb`, `page-header`, `toolbar`, `tooltip`, `banner`, `logo` |
 | Command palette | `cw-command-dialog` | `command` |
 
-`styles.css`: `@import "tailwindcss"; @import "@cadenway/tokens/tokens.css"; @import "@cadenway/tokens/theme.css";
+`styles.css`: `@layer ng-icon, theme, base, components, utilities; @import "tailwindcss"; @import "@cadenway/tokens/tokens.css"; @import "@cadenway/tokens/theme.css";
 @source "../node_modules/@cadenway/ui";`.
+
+**Icon size**: give `<ng-icon>` its size with the `size` input in rem (`size="0.875rem"` for 14 px,
+`size="1rem"` for 16 px), never a `size-*` class: ng-icon's unlayered host style (`width: var(--ng-icon__size, 1em)`)
+beats the Tailwind utilities, so a `size-*` class leaves the icon at 1em. Inside a brick that sizes its icons
+itself (`icon-xs` buttons, menu items, rail items, `cw-empty-media`), give no size at all. For the same reason a
+Tailwind utility that must override ng-icon's `display` (`hidden`) needs the important modifier (`hidden!`).
+Icon color, by contrast, is a plain `text-*` utility: ng-icon puts its color rule in `@layer ng-icon`, which
+`styles.css` declares before Tailwind's layers (`@layer ng-icon, theme, base, components, utilities;`), so keep
+that declaration first.
 
 **Brick copy and locale** (`@cadenway/ui` 0.4.0 and later): the application's source copy is English.
 The bricks' French defaults are replaced by the layout or feature that renders them, with `$localize` texts given to each

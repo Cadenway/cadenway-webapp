@@ -14,7 +14,7 @@
   </header>
 
   @if (read) {
-    <cw-tabs variant="bar" [value]="selected()" (valueChange)="pick($event)">
+    <cw-tabs variant="bar" class="gap-5" [value]="selected()" (valueChange)="pick($event)">
       <cw-tabs-list
         class="border-b border-border"
         ariaLabel="Archived item type"
@@ -30,7 +30,7 @@
 
       <cw-tab-panel value="lists">
         <div
-          class="mt-5 flex flex-col gap-3 outline-none"
+          class="flex flex-col gap-3 outline-none"
           tabindex="-1"
           data-archives-panel="lists"
           data-testid="archives-lists-panel"
@@ -80,7 +80,7 @@
               </div>
             }
           } @else {
-            <cw-empty variant="outline" data-testid="archives-empty">
+            <cw-empty variant="outline" class="border-input py-16" data-testid="archives-empty">
               <cw-empty-header>
                 <cw-empty-media>
                   <ng-icon name="phosphorArchiveBold" aria-hidden="true" />
@@ -98,7 +98,7 @@
 
       <cw-tab-panel value="tasks">
         <div
-          class="mt-5 flex flex-col gap-3 outline-none"
+          class="flex flex-col gap-3 outline-none"
           tabindex="-1"
           data-archives-panel="tasks"
           data-testid="archives-tasks-panel"
@@ -149,7 +149,7 @@
               </div>
             }
           } @else {
-            <cw-empty variant="outline" data-testid="archives-empty">
+            <cw-empty variant="outline" class="border-input py-16" data-testid="archives-empty">
               <cw-empty-header>
                 <cw-empty-media>
                   <ng-icon name="phosphorArchiveBold" aria-hidden="true" />

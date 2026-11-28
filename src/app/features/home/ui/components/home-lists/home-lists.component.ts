@@ -51,6 +51,7 @@ const OPEN_OTHER: string = $localize`:@@home.stats.assigned-hint.other:open task
             >
               <ng-icon
                 name="phosphorListBulletsBold"
+                size="1rem"
                 class="shrink-0 text-muted-foreground"
                 aria-hidden="true"
               />

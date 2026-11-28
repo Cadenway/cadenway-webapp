@@ -30,7 +30,12 @@
         role="alert"
         class="flex items-center gap-1 text-xs font-medium text-destructive"
       >
-        <ng-icon name="phosphorWarningCircleFill" class="size-3.5 shrink-0" aria-hidden="true" />
+        <ng-icon
+          name="phosphorWarningCircleFill"
+          size="0.875rem"
+          class="shrink-0"
+          aria-hidden="true"
+        />
         {{ goalForm.name().errors()[0]?.message }}
       </p>
     }
@@ -62,7 +67,12 @@
     </cw-toggle-group>
     @if (goalForm.owner().touched() && goalForm.owner().invalid()) {
       <p role="alert" class="flex items-center gap-1 text-xs font-medium text-destructive">
-        <ng-icon name="phosphorWarningCircleFill" class="size-3.5 shrink-0" aria-hidden="true" />
+        <ng-icon
+          name="phosphorWarningCircleFill"
+          size="0.875rem"
+          class="shrink-0"
+          aria-hidden="true"
+        />
         {{ goalForm.owner().errors()[0]?.message }}
       </p>
     }
@@ -84,7 +94,12 @@
       </cw-select>
       @if (goalForm.space().touched() && goalForm.space().invalid()) {
         <p role="alert" class="flex items-center gap-1 text-xs font-medium text-destructive">
-          <ng-icon name="phosphorWarningCircleFill" class="size-3.5 shrink-0" aria-hidden="true" />
+          <ng-icon
+            name="phosphorWarningCircleFill"
+            size="0.875rem"
+            class="shrink-0"
+            aria-hidden="true"
+          />
           {{ goalForm.space().errors()[0]?.message }}
         </p>
       }
@@ -110,7 +125,12 @@
       />
       @if (goalForm.result().touched() && goalForm.result().invalid()) {
         <p role="alert" class="flex items-center gap-1 text-xs font-medium text-destructive">
-          <ng-icon name="phosphorWarningCircleFill" class="size-3.5 shrink-0" aria-hidden="true" />
+          <ng-icon
+            name="phosphorWarningCircleFill"
+            size="0.875rem"
+            class="shrink-0"
+            aria-hidden="true"
+          />
           {{ goalForm.result().errors()[0]?.message }}
         </p>
       }
@@ -131,7 +151,12 @@
       />
       @if (goalForm.target().touched() && goalForm.target().invalid()) {
         <p role="alert" class="flex items-center gap-1 text-xs font-medium text-destructive">
-          <ng-icon name="phosphorWarningCircleFill" class="size-3.5 shrink-0" aria-hidden="true" />
+          <ng-icon
+            name="phosphorWarningCircleFill"
+            size="0.875rem"
+            class="shrink-0"
+            aria-hidden="true"
+          />
           {{ goalForm.target().errors()[0]?.message }}
         </p>
       }

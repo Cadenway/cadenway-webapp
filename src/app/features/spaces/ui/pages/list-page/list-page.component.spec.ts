@@ -161,7 +161,6 @@ describe('ListPage', () => {
         {
           provide: SidebarApi,
           useValue: {
-            seats: vi.fn(() => Promise.resolve({ plan: 'team', free: 7 })),
             trashCount: vi.fn(() => Promise.resolve(0)),
             archiveCount: vi.fn(() => Promise.resolve(0)),
           },

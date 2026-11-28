@@ -56,6 +56,7 @@ describe('HomeStats', () => {
     const host: HTMLElement = await render({ assigned: 1, late: 0, dueToday: 0, done: 1 });
 
     expect(cells(host)[0]).toBe('Assigned to me 1 open task');
+    expect(cells(host)[2]).toBe('Today 0 due today');
     expect(cells(host)[3]).toBe('Done 1 task completed in total');
     expect(
       host.querySelector('[data-testid="home-stats-late"]')?.classList.contains('text-grenat-text'),

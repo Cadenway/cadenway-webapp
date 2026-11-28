@@ -62,10 +62,10 @@ organization`) and `Actions` (one theme action that toggles, named after the the
 
 ## Copy not taken word for word from the mockup
 
-| Unit                                                                         | Reason                                                  |
-| ---------------------------------------------------------------------------- | ------------------------------------------------------- |
-| `search.palette.tasks`                                                       | The mockup lists tasks only as recent tasks.            |
-| `search.palette.theme-light`, `search.palette.theme-dark`                    | The mockup shows one toggle; each label is its wording. |
-| `search.palette.failed`, `search.retry`                                      | The mockup draws no failed search.                      |
-| `search.palette.sign-out-failed`, `search.palette.sign-out-failed-text`      | The mockup draws no refused sign-out.                   |
-| `search.palette.results-*`, `search.palette.loading`, `search.palette.close` | Texts of the command brick.                             |
+| Unit                                                                    | Reason                                                  |
+| ----------------------------------------------------------------------- | ------------------------------------------------------- |
+| `search.palette.tasks`                                                  | The mockup lists tasks only as recent tasks.            |
+| `search.palette.theme-light`, `search.palette.theme-dark`               | The mockup shows one toggle; each label is its wording. |
+| `search.palette.failed`, `search.retry`                                 | The mockup draws no failed search.                      |
+| `search.palette.sign-out-failed`, `search.palette.sign-out-failed-text` | The mockup draws no refused sign-out.                   |
+| `search.palette.results-*`, `search.palette.loading`                    | Texts of the command brick.                             |

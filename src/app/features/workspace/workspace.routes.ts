@@ -2,6 +2,7 @@ import type { Type } from '@angular/core';
 import type { Routes } from '@angular/router';
 import { provideCadenwayIcons } from '@cadenway/icons';
 
+import { provideCadenwayUiLabels } from '@core/ui-labels';
 import {
   providePresence,
   provideReauthentication,
@@ -107,6 +108,7 @@ export const WORKSPACE_ROUTES: Routes = [
     runGuardsAndResolvers: shouldRevalidateWorkspace,
     providers: [
       provideCadenwayIcons(),
+      provideCadenwayUiLabels(),
       provideWorkspaceContext(),
       ...provideWorkspaceRuntime(),
       providePresence(),

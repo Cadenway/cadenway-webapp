@@ -13,8 +13,8 @@
       class="absolute -right-1 -bottom-1 flex size-4 items-center justify-center rounded-full bg-popover ring-2 ring-popover"
     >
       <ng-icon
+        size="0.75rem"
         [name]="icon()"
-        class="size-3"
         [class.text-primary]="notification().kind === 'mention'"
         [class.text-muted-foreground]="notification().kind !== 'mention'"
       />

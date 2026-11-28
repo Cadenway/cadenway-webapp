@@ -10,7 +10,8 @@ import type { GoalStats as GoalFigures } from '../../../models/goal/goal.interfa
  * The statistics strip of the goals page (`App.dc.html` lines 1578-1580 and 5170-5175): `Goals`
  * with the quarter, `Average progress` with the expected progress, `On track` with the achieved
  * goals and `At risk or behind`. Four `cw-stat` in a `cw-stat-group`, laid out two by two below
- * 1024 px with inner borders, which the brick does not offer yet (DS3). Presentational.
+ * 1024 px with inner borders, which the brick does not offer yet (DS3). The labels are medium
+ * weight, as the mockup draws them (line 1579), which the brick does not set. Presentational.
  */
 @Component({
   selector: 'cw-goal-stats',
@@ -18,7 +19,7 @@ import type { GoalStats as GoalFigures } from '../../../models/goal/goal.interfa
   template: `
     @let figures = stats();
     <cw-stat-group
-      class="max-lg:grid-flow-row max-lg:grid-cols-2 max-lg:[&>*:nth-child(2)]:border-e-0 max-lg:[&>*:nth-child(n+3)]:border-t max-lg:[&>*:nth-child(3)]:border-s-0"
+      class="max-lg:grid-flow-row max-lg:grid-cols-2 max-lg:[&>*:nth-child(2)]:border-e-0 max-lg:[&>*:nth-child(n+3)]:border-t max-lg:[&>*:nth-child(3)]:border-s-0 [&>cw-stat>:first-child]:font-medium"
       [ariaLabel]="groupLabel"
     >
       <cw-stat [label]="countLabel" [value]="figures.count" [comparison]="quarterLabel()" />

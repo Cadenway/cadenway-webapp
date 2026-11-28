@@ -7,6 +7,7 @@ The application frame of mockup `App.dc.html` (lines 17-300): the banners across
 ## Sidebar
 
 - **Behavior.** The sidebar keeps the default `cw-sidebar` behavior. It starts expanded, pushes the content from 768 px, and is a drawer with a backdrop below 768 px.
+- **Desktop state.** `AppShellSidebar` keeps the state chosen from 1024 px apart from the floating one (the phone drawer, the tablet overlay), which `cw-sidebar` closes on entry: a change made while the sidebar floats leaves the desktop choice alone, and widening back to 1024 px restores it (a sidebar closed as a phone drawer opens again on a desktop).
 - From 768 to 1023 px the expanded sidebar floats over the content (`overlayBelow="lg"`, closed by
   default, Escape or an outside click closes it), and its backdrop stays inside the main panel
   (`backdrop="container"`), clear of the phone tab bar.

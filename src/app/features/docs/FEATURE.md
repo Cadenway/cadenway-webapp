@@ -84,6 +84,9 @@ is shown, whatever the query parameters.
   in edit mode with an empty title field (a never edited `Untitled` document at version 1). The
   mockup's "current space" is not available to this page: the last space shown in the tab is held
   by Spaces' navigation store, which no port publishes yet.
+- `Untitled` is stored in the caller's language: the contract's `DocumentTitle` requires a
+  non-blank title (`minLength: 1`, `pattern: \S`) on creation and on save, so the title cannot be
+  left empty and rendered with a localized fallback until the contract allows it.
 - Every write is bound to the organization shown when it starts (and, on the document page, to the
   document): once either changes or the page goes away it sends nothing more and ends without a
   toast, and `saving` or `deletingId` never describe another document of a reused page. An unknown

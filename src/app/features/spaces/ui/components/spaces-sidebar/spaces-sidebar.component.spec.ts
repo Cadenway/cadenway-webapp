@@ -1,4 +1,5 @@
 import { WORKSPACE_CONTEXT } from '@features/workspace/ports/workspace-context';
+import { PLAN_SEATS } from '@features/organization/ports/plan-seats';
 
 import { Component, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
@@ -197,10 +198,10 @@ describe('SpacesSidebar', () => {
           },
         },
         { provide: ListsApi, useValue: lists },
+        { provide: PLAN_SEATS, useValue: { seats: signal({ plan: 'team', free: 7 }) } },
         {
           provide: SidebarApi,
           useValue: {
-            seats: vi.fn(() => Promise.resolve({ plan: 'team', free: 7 })),
             trashCount: vi.fn(() => Promise.resolve(2)),
             archiveCount: vi.fn(() => Promise.resolve(5)),
           },
@@ -298,6 +299,28 @@ describe('SpacesSidebar', () => {
         ?.querySelector('[aria-label="Edit the space Product"]')
         ?.getAttribute('title'),
     ).toBe('Edit the space Product');
+  });
+
+  it('reads a list row’s count once, as a number of tasks after its name', async () => {
+    const harness: RouterTestingHarness = await RouterTestingHarness.create(
+      '/atelier-nord/l/l-sprint14',
+    );
+
+    await expect.poll(() => text(harness, 'sidebar-spaces')).toContain('Sprint 14');
+    const row: HTMLAnchorElement | null | undefined = harness.routeNativeElement?.querySelector(
+      '[data-testid="sidebar-spaces"] a[href="/atelier-nord/l/l-sprint14"]',
+    );
+    const spoken: string[] = Array.from(
+      row?.querySelectorAll<HTMLElement>('span:not([aria-hidden="true"])') ?? [],
+      (part: HTMLElement): string => part.textContent.trim(),
+    ).filter((part: string): boolean => part !== '');
+
+    expect(spoken).toEqual(['Sprint 14', ', 28 tasks']);
+    const hidden: string[] = Array.from(
+      row?.querySelectorAll<HTMLElement>(':scope > [aria-hidden="true"]') ?? [],
+      (part: HTMLElement): string => part.textContent.trim(),
+    );
+    expect(hidden).toContain('28');
   });
 
   it('shows the favorite spaces in the rail, which open their overview', async () => {

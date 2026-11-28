@@ -25,10 +25,7 @@ import { type CreatedTask, TaskCreate } from '@features/task';
 import { WORKSPACE_CONTEXT } from '@features/workspace/ports/workspace-context';
 
 import { ListsApi } from '../../data-access/services/lists-api/lists-api.service';
-import {
-  type SeatSummary,
-  SidebarApi,
-} from '../../data-access/services/sidebar-api/sidebar-api.service';
+import { SidebarApi } from '../../data-access/services/sidebar-api/sidebar-api.service';
 import { SpacesApi } from '../../data-access/services/spaces-api/spaces-api.service';
 import type { Favorite, FavoriteKind } from '../../models/favorite/favorite.interface';
 import type { SpaceDetails, SpaceDraft } from '../../models/space/space.interface';
@@ -323,18 +320,6 @@ interface SpacesNavigationStoreInstance {
    * @readonly
    */
   readonly lastSpacesUrl: Signal<string | null>;
-
-  /**
-   * Property seats
-   *
-   * @description
-   * The plan and its free seats, for the `Invite your team` suggestion; idle until an
-   * organization is followed.
-   *
-   * @type {ResourceRef<SeatSummary | undefined>}
-   * @readonly
-   */
-  readonly seats: ResourceRef<SeatSummary | undefined>;
 
   /**
    * Property trashCount
@@ -720,11 +705,6 @@ function createSpacesNavigationStore(): Type<SpacesNavigationStoreInstance> {
         _spaceEdits: spaceEdits,
         listEdited: listEdits.asObservable(),
         spaceEdited: spaceEdits.asObservable(),
-        seats: resource({
-          params: byOrganization,
-          loader: ({ abortSignal }: { abortSignal: AbortSignal }): Promise<SeatSummary> =>
-            counts.seats(abortSignal),
-        }),
         trashCount: resource({
           params: byOrganization,
           loader: ({ abortSignal }: { abortSignal: AbortSignal }): Promise<number> =>

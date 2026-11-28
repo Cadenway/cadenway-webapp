@@ -19,6 +19,7 @@ configured in `api/client/`. The shell belongs to
 | `@core/shortcuts` | Scoped keyboard shortcut registration.                       |
 | `@core/routing`   | Route title, focus and the reserved first segments (slugs).  |
 | `@core/locale`    | Locale of the load, chosen and installed before bootstrap.   |
+| `@core/ui-labels` | The English texts of the `@cadenway/ui` bricks.              |
 
 ## Dependencies
 
@@ -68,6 +69,13 @@ The root transport provides Angular HTTP to the generated `@cadenway/api-client`
   is logged. `$localize.locale`, read by Angular's default `LOCALE_ID`, and `<html lang>` name the
   active locale. `LocaleService` reads it and switches by reloading the page with `?lang=`; no
   screen offers the switch yet.
+- `provideCadenwayUiLabels()` gives English texts, with `@@core.ui-labels.*` ids, to the
+  `@cadenway/ui` bricks every area renders and no feature names (key names, the close buttons of
+  alerts, banners and sheets, the sidebar defaults, the spinner, the split button menu, the
+  priority words); their built-in texts are French. The `/:org` route provides it from its own
+  concern, `@core/ui-labels`, because its brick entry points would add about 330 kB to the initial
+  bundle from the root or from `@core/locale`, which `main.ts` loads. A feature's own labels
+  provider below it still wins.
 - The resolved theme is reflected in `data-theme` on the document element.
 - After a path change, focus moves to the innermost route focus target or `main` without scrolling;
   initial and query-only navigation leave focus alone. While an `aria-modal` window holds the focus

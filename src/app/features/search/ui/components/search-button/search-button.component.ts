@@ -22,7 +22,7 @@ import { CommandPalette } from '../../../services/command-palette/command-palett
       data-testid="search-button"
       (click)="palette.setOpen(true)"
     >
-      <ng-icon name="phosphorMagnifyingGlassBold" aria-hidden="true" />
+      <ng-icon name="phosphorMagnifyingGlassBold" size="1rem" aria-hidden="true" />
       <ng-container i18n="@@search.sidebar.label">Search…</ng-container>
       <span class="ml-auto inline-flex items-center gap-1" aria-hidden="true">
         <kbd cwKbd size="sm" i18n="@@search.key-ctrl">Ctrl</kbd>
