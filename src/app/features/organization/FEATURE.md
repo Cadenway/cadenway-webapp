@@ -39,8 +39,10 @@ section has `organizationSectionGuard(<section>)` (`http/guards/organization-sec
   (`Organisation.dc.html` line 321); Quotas reads the same `getBillingSubscription`.
 - Each page is a stub (WP0 of steps 7 and 8) showing the mockup's section title in the
   organization column (`max-w-4xl`); packages O1 to O6 replace them. General (O1) and Security (O5) are built. Integrations and the Audit
-  log stay stubs until their backends exist (B7, B11). The stubs read no data, so they have no
-  loading, error or empty state yet.
+  log stay stubs until their backends exist (B7, B11): each shows the mockup's lead under its
+  title and an outlined "not available yet" state (`organization.integrations.unavailable`,
+  `organization.audit-log.unavailable`). The stubs read no data, so they have no loading or
+  error state yet.
 - A failed primary read of a section renders the default error boundary in the shell, titled
   `Could not load this section` by the mounting route's `data`.
 
@@ -78,7 +80,8 @@ section has `organizationSectionGuard(<section>)` (`http/guards/organization-sec
   `skeleton`, `spinner`, `textarea` and `toast`.
 - Workspace's `ports/workspace-context`, `ports/workspace-refresh` (General) and
   `http/guards/organization-role`, Errors' `errors.routes`,
-  `@shared/unsaved-changes`, `@shared/batch-outcomes` (the invitation adapter matches each
+  `@shared/unsaved-changes`, `@shared/initials` (the organization's initials),
+  `@shared/batch-outcomes` (the invitation adapter matches each
   address sent to its own result).
 - `@cadenway/ui` (`banner`, `button`) and `@cadenway/icons`.
 - Members section: `MembersService` (`listMembers`, `changeMemberRole`, `removeMember`) and
@@ -179,7 +182,8 @@ loaded.` with `Retry`; the banner stays hidden until a retry succeeds.
   logo image is a secondary read keyed by `<organization id>:<logo id>`, so a save that keeps the
   logo reads no image; a replaced read is aborted and shows nothing. Its object URL is revoked once
   another is shown, as soon as the organization has no logo, and with the page; without a logo,
-  or when its image cannot be read, the tile shows the initials of the saved name.
+  or when its image cannot be read, the tile shows the initials of the saved name, from
+  `@shared/initials` (the first letters of its first and last words).
 - The draft is kept apart from the saved organization it started from. When a read brings a newer
   organization (the reread after a logo change or after a stale version), each field the person
   changed keeps their edit and every other field takes the new value; when someone else changed a

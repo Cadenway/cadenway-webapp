@@ -37,7 +37,7 @@
     </div>
   } @else {
     <header class="flex flex-wrap items-start gap-4">
-      <div class="flex min-w-0 flex-1 flex-col gap-1">
+      <div class="flex min-w-0 flex-1 basis-64 flex-col gap-1">
         <h1 class="text-2xl font-semibold tracking-tight" i18n="@@organization.members.title">
           Members
         </h1>
@@ -104,7 +104,7 @@
           role="status"
           data-testid="members-truncated"
         >
-          <ng-icon name="phosphorInfoBold" class="size-3.5 shrink-0" aria-hidden="true" />
+          <ng-icon name="phosphorInfoBold" size="0.875rem" class="shrink-0" aria-hidden="true" />
           <ng-container i18n="@@organization.members.presence-truncated"
             >Only the first 2,000 members are filtered by presence: choose a role to narrow the
             list.</ng-container

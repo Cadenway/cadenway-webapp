@@ -195,9 +195,11 @@ route), `withGettingStarted()` and `withOnboardingWizard()` (the `overlays` cont
   preset `agency`, the import card `Later`) renders without `NG0950` since `@cadenway/ui` 0.12.0,
   whose `cw-radio-group` skips the items whose `value` is not bound yet.
 - Deviations from the mockup's accents: the checked template and import cards' icon (and the
-  import card's name) are `text-primary`, as in the mockup; the segments of the step bar, the
-  checked cards' border and fill and the checked swatch's ring keep the design system's ink tones
-  where the mockup uses primary, since the token rule forbids primary fills.
+  import card's name) are `text-primary`, as in the mockup; the segments of the step bar and the
+  checked cards' border and fill keep the design system's ink tones where the mockup uses
+  primary, since the token rule forbids primary fills. The checked swatch is the mockup's 32 px
+  ring, `ring-primary/60` (a ring, not a fill). The space name field and the `Back` / `Continue`
+  buttons are `size="lg"` (`h-9`), as the mockup draws them.
 - `OnboardingStore` is route-scoped on `/:org` (`provideOnboarding()`) and shared by both hosts;
   leaving `/:org` destroys it. It reads nothing until a screen calls `load()`, then holds the
   latest progress the gateway answered (`progress`, null while unread or when the first read
