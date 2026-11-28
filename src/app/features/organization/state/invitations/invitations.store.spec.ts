@@ -1078,7 +1078,8 @@ describe('InvitationsStore', () => {
       expect(toasts.success).not.toHaveBeenCalled();
       expect(toasts.error).not.toHaveBeenCalled();
       expect(toasts.warning).toHaveBeenLastCalledWith('The invitation may not have been resent', {
-        description: 'This invitation was just resent: try again in an hour.',
+        description:
+          'The invitation was sent less than an hour ago, so it cannot be resent yet: try again later.',
       });
       expect(store.items()[1]).toEqual(STUDIO);
     });

@@ -1652,6 +1652,7 @@
     "organization.members.resend": "Renvoyer",
     "organization.members.resend-failed": "Impossible de renvoyer l’invitation",
     "organization.members.resend-failed-limit": "La limite quotidienne d’invitations est atteinte : réessayez plus tard.",
+    "organization.members.resend-throttled-unsettled": "L’invitation a été envoyée il y a moins d’une heure et ne peut pas encore être renvoyée : réessayez plus tard.",
     "organization.members.resend-throttled": "Cette invitation vient d’être renvoyée : réessayez dans une heure.",
     "organization.members.resend-uncertain": "L’invitation n’a peut-être pas été renvoyée",
     "organization.members.retry": "Réessayer",

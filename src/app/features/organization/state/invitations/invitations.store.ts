@@ -1027,7 +1027,7 @@ function createInvitationsStore(): Type<InvitationsStoreInstance> {
               if (!live()) return false;
               if (found !== undefined && found.expiresAt !== before) return resent(found);
               return unsettled(
-                $localize`:@@organization.members.resend-throttled:This invitation was just resent: try again in an hour.`,
+                $localize`:@@organization.members.resend-throttled-unsettled:The invitation was sent less than an hour ago, so it cannot be resent yet: try again later.`,
               );
             }
             drop();

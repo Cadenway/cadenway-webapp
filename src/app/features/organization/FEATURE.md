@@ -293,7 +293,8 @@ be loaded.` with `Retry`, until a read or a save confirms the organization (anot
   expiry. A later resend answered `429 invitation.resend-throttled` proves nothing (the original
   invitation, or any resend within the hour, throttles too): the list is read, and it counts as
   resent only when its expiry differs from the one before the unknown resend; otherwise the toast
-  warns `The invitation may not have been resent` with the throttle text. No expiry is shown that
+  warns `The invitation may not have been resent`, saying the invitation was sent less than an
+  hour ago so it cannot be resent yet (never that it was just resent). No expiry is shown that
   the API did not answer. Once a cancellation attempt was unknown, a later refusal (a `403` after a
   role change, say) is not reported as a failure either: the row shows again with the warning.
 - Outcomes are claimed only from the API's own answers: `Invitation cancelled` only when a revoke
