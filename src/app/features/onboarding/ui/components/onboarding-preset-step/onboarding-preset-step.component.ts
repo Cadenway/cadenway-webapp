@@ -1,4 +1,3 @@
-import { NgTemplateOutlet } from '@angular/common';
 import { Component, model, type ModelSignal } from '@angular/core';
 import { CwRadioGroup, CwRadioGroupItem } from '@cadenway/ui/components/radio-group';
 import { NgIcon } from '@ng-icons/core';
@@ -17,13 +16,11 @@ import type { OnboardingPreset } from '../../../models/onboarding/onboarding.typ
  * template` of four cards without a radio dot, each with its icon, name, line and list names. It
  * edits `preset` and sends nothing. The checked card's icon is `text-primary`, as in the mockup;
  * its border and fill use the design system's ink tone where the mockup tints them violet (a
- * token rule of the card radio). The four cards are written out rather than repeated with `@for`:
- * the radio group reads every item's value while rendering the first one, before a repeated item
- * has its inputs, so a draft whose template is not the first throws NG0950.
+ * token rule of the card radio).
  */
 @Component({
   selector: 'cw-onboarding-preset-step',
-  imports: [CwRadioGroup, CwRadioGroupItem, NgIcon, NgTemplateOutlet],
+  imports: [CwRadioGroup, CwRadioGroupItem, NgIcon],
   template: `
     <cw-radio-group
       class="grid grid-cols-1 gap-2 sm:grid-cols-2"
@@ -33,36 +30,25 @@ import type { OnboardingPreset } from '../../../models/onboarding/onboarding.typ
       [value]="preset()"
       (valueChange)="pick($event)"
     >
-      <cw-radio-group-item variant="card" [indicator]="false" [value]="presets[0].value">
-        <ng-container *ngTemplateOutlet="card; context: { $implicit: presets[0] }" />
-      </cw-radio-group-item>
-      <cw-radio-group-item variant="card" [indicator]="false" [value]="presets[1].value">
-        <ng-container *ngTemplateOutlet="card; context: { $implicit: presets[1] }" />
-      </cw-radio-group-item>
-      <cw-radio-group-item variant="card" [indicator]="false" [value]="presets[2].value">
-        <ng-container *ngTemplateOutlet="card; context: { $implicit: presets[2] }" />
-      </cw-radio-group-item>
-      <cw-radio-group-item variant="card" [indicator]="false" [value]="presets[3].value">
-        <ng-container *ngTemplateOutlet="card; context: { $implicit: presets[3] }" />
-      </cw-radio-group-item>
+      @for (choice of presets; track choice.value) {
+        <cw-radio-group-item variant="card" [indicator]="false" [value]="choice.value">
+          <span class="flex items-start gap-3">
+            <ng-icon
+              class="mt-0.5 size-5 shrink-0"
+              [class.text-primary]="preset() === choice.value"
+              [class.text-muted-foreground]="preset() !== choice.value"
+              [name]="choice.icon"
+              aria-hidden="true"
+            />
+            <span class="flex min-w-0 flex-col gap-0.5">
+              <span class="text-sm font-medium">{{ choice.label }}</span>
+              <span class="text-xs text-muted-foreground">{{ choice.text }}</span>
+              <span class="mt-1 truncate text-xs text-muted-foreground">{{ choice.lists }}</span>
+            </span>
+          </span>
+        </cw-radio-group-item>
+      }
     </cw-radio-group>
-
-    <ng-template #card let-choice>
-      <span class="flex items-start gap-3">
-        <ng-icon
-          class="mt-0.5 size-5 shrink-0"
-          [class.text-primary]="preset() === choice.value"
-          [class.text-muted-foreground]="preset() !== choice.value"
-          [name]="choice.icon"
-          aria-hidden="true"
-        />
-        <span class="flex min-w-0 flex-col gap-0.5">
-          <span class="text-sm font-medium">{{ choice.label }}</span>
-          <span class="text-xs text-muted-foreground">{{ choice.text }}</span>
-          <span class="mt-1 truncate text-xs text-muted-foreground">{{ choice.lists }}</span>
-        </span>
-      </span>
-    </ng-template>
   `,
 })
 export class OnboardingPresetStep {

@@ -99,7 +99,12 @@ confirmed` asks to submit again, which reuses the key; a draft submitted again w
   write is bound to the organization generation it started in: after a switch, even back to the
   same organization, nothing more is sent, patched or toasted, and the forms and the confirmation
   close; after a switch away and back the goals are read again, and once more when a write started
-  before it settles, so what that write completed shows. A write is also sent, and its answer applied, only while the workspace and
+  before it settles, so what that write completed shows. That catch-up read stays owed until a read
+  of the goals issued after it lands for the organization: a failed one keeps the goals shown,
+  silently like any background read, and is sent again after 2, 4 and 8 s
+  (`GOAL_SETTLE_BACKOFF_MS`), then on the next background occasion (a focus, a visible tab, a
+  realtime reconnection, a task detail that closes or changes); a switch away and back within one
+  tick keeps it owed, a switch to another organization drops it. A write is also sent, and its answer applied, only while the workspace and
   `OrganizationPin` both name the organization the goals were read for and the pin was not
   committed to another organization, or cleared, since (the resolver commits both synchronously,
   before the store reacts; `organizationChanges` is heard until the page is gone and its writes
@@ -129,5 +134,6 @@ confirmed` asks to submit again, which reuses the key; a draft submitted again w
 - A list-progress result names its list from `LIST_DIRECTORY`, or reads `Calculated from its list`
   for an archived list the sidebar does not show (gap G-G2).
 - The expected progress is a tick drawn over `cw-progress`, which has no marker (G-G5, DS2); the
-  statistics strip is laid out two by two below 1024 px over `cw-stat-group` (DS3). Below 640 px
+  statistics strip is laid out two by two below 1024 px over `cw-stat-group` (DS3), with its
+  labels in medium weight, which `cw-stat` does not set (`App.dc.html` line 1579). Below 640 px
   the progress bar takes its own line.

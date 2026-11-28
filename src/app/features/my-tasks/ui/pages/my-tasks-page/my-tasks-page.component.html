@@ -21,7 +21,7 @@
   </header>
 
   @if (counts) {
-    <cw-tabs variant="bar" [value]="shownTab()" (valueChange)="selectTab($event)">
+    <cw-tabs variant="bar" class="gap-5" [value]="shownTab()" (valueChange)="selectTab($event)">
       <cw-tabs-list
         class="border-b border-border"
         ariaLabel="Filter my tasks"

@@ -1,4 +1,4 @@
-import type { SeatSummary } from '../../data-access/services/sidebar-api/sidebar-api.service';
+import type { PlanSeats } from '@features/organization/ports/plan-seats';
 
 /**
  * Interface SidebarTip
@@ -143,10 +143,10 @@ function inviteTip(free: number, plan: string): SidebarTip {
  * the account opens its security settings. The mockup's Slack and Figma tips name integrations no
  * service provides; they are left out.
  *
- * @param {SeatSummary | null} seats - The plan and its free seats, or null while unknown.
+ * @param {PlanSeats | null} seats - The plan and its free seats, or null while unknown.
  * @returns {readonly SidebarTip[]} The suggestions, in the mockup's order.
  */
-export function sidebarTips(seats: SeatSummary | null = null): readonly SidebarTip[] {
+export function sidebarTips(seats: PlanSeats | null = null): readonly SidebarTip[] {
   const invite: readonly SidebarTip[] =
     seats !== null && seats.free > 0 ? [inviteTip(seats.free, planLabel(seats.plan))] : [];
   return [

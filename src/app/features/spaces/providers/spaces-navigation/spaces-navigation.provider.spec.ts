@@ -48,7 +48,7 @@ describe('provideSpacesNavigation', () => {
     readonly overview: Mock;
     readonly favorites: Mock;
   };
-  let sidebar: { readonly seats: Mock; readonly trashCount: Mock; readonly archiveCount: Mock };
+  let sidebar: { readonly trashCount: Mock; readonly archiveCount: Mock };
 
   beforeEach(() => {
     spacesApi = {
@@ -63,7 +63,6 @@ describe('provideSpacesNavigation', () => {
       favorites: vi.fn(() => Promise.resolve([])),
     };
     sidebar = {
-      seats: vi.fn(() => Promise.resolve({ plan: 'team', free: 7 })),
       trashCount: vi.fn(() => Promise.resolve(2)),
       archiveCount: vi.fn(() => Promise.resolve(3)),
     };

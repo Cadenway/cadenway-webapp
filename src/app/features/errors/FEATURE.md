@@ -42,10 +42,11 @@ running a route again.
 
 - The boundary passes what the page threw; a resource read in its error state throws an error
   whose `cause` is the loader's rejection, so the page follows the `cause` chain to the typed error.
-- States: not found (`Back to home` to `/home`), access denied (optional message to the
-  owner, `Request access`, then `Request sent`), deleted task (`Restore the task`, then
-  the route runs again; `Already restored` for a `trash-entry.not-found`; `Open the trash` to
-  `/<slug>/trash`), and unavailable for any other failure (`Could not load this page`,
+- States: not found (`Back to home` to `/home`; the mockup's secondary `Search`, `App.dc.html`
+  line 4203, waits for an entry of Search that opens its palette), access denied (optional
+  message to the owner, `Request access`, then `Request sent`), deleted task
+  (`Restore the task`, then the route runs again; `Already restored` for a
+  `trash-entry.not-found`; `Open the trash` to `/<slug>/trash`), and unavailable for any other failure (`Could not load this page`,
   `Error <status> · ref. <requestId>` when known, `Retry`).
 - Retry runs the route again with a same-URL navigation and `onSameUrlNavigation: 'reload'`: the
   router re-creates a page whose outlet shows its error component, and re-runs the guards and

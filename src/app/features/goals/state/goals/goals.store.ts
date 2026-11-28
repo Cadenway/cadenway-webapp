@@ -388,6 +388,52 @@ interface PendingEdit {
 }
 
 /**
+ * Interface Reconciliation
+ *
+ * @description
+ * A catch-up read the goals shown still owe: a write completed while the workspace was away from
+ * its organization, so only a read of the goals issued after it shows what it changed. A background
+ * read that fails keeps the older goals, so the catch-up stays owed until a read issued after it
+ * lands for that organization.
+ */
+interface Reconciliation {
+  // #region Properties
+  /**
+   * Property organizationId
+   *
+   * @description
+   * The organization whose goals must be read again.
+   *
+   * @type {string}
+   * @readonly
+   */
+  readonly organizationId: string;
+
+  /**
+   * Property after
+   *
+   * @description
+   * Reads of the goals issued when the catch-up was asked for; only a read with a greater issue
+   * number is sent after the write completed.
+   *
+   * @type {number}
+   * @readonly
+   */
+  readonly after: number;
+
+  /**
+   * Property attempt
+   *
+   * @description
+   * Retries already scheduled after a failed catch-up read, bounded by `GOAL_SETTLE_BACKOFF_MS`.
+   *
+   * @type {number}
+   */
+  attempt: number;
+  // #endregion
+}
+
+/**
  * Interface PeopleRead
  *
  * @description
@@ -1284,6 +1330,44 @@ function createGoalsStore(): Type<GoalsStoreInstance> {
         store.goals.reload();
       };
 
+      // A catch-up read is a background read, whose failure keeps the goals of before the write:
+      // it stays owed (`reconciling`) until a read issued after it lands for its organization. A
+      // failed one is sent again after each wait of `GOAL_SETTLE_BACKOFF_MS`, then on the page's
+      // next refresh occasion (a focus, a visible tab, a realtime reconnection, a task detail that
+      // closes or changes); a new catch-up starts the waits again. A switch to another
+      // organization drops it, since that organization's goals are read anew.
+      const backoff: readonly number[] = inject(GOAL_SETTLE_BACKOFF_MS);
+      let reconciling: Reconciliation | null = null;
+      let catchUpRetry: ReturnType<typeof setTimeout> | null = null;
+      const stopCatchUp: () => void = (): void => {
+        reconciling = null;
+        if (catchUpRetry !== null) clearTimeout(catchUpRetry);
+        catchUpRetry = null;
+      };
+      const startCatchUp: () => void = (): void => {
+        stopCatchUp();
+        reconciling = {
+          organizationId: context.organizationId,
+          after: store._readsIssued(),
+          attempt: 0,
+        };
+        refresh();
+      };
+      const caughtUp: (owed: Reconciliation) => boolean = (owed: Reconciliation): boolean =>
+        store._loads.landed > owed.after &&
+        store._loads.last?.organizationId === owed.organizationId;
+      const retryCatchUp: () => void = (): void => {
+        const owed: Reconciliation | null = reconciling;
+        if (owed === null || catchUpRetry !== null || owed.attempt >= backoff.length) return;
+        if (context.destroyed || !store.goals.hasValue()) return;
+        catchUpRetry = setTimeout((): void => {
+          catchUpRetry = null;
+          if (reconciling === owed) refresh();
+        }, backoff[owed.attempt]);
+        owed.attempt += 1;
+      };
+      inject(DestroyRef).onDestroy(stopCatchUp);
+
       // A write that settles once the workspace left its organization may have been recorded, but
       // its answer is not applied. Back on that organization the goals are read once more instead,
       // coalesced with a read in flight: at once for a write of an older generation, at the reset
@@ -1300,7 +1384,7 @@ function createGoalsStore(): Type<GoalsStoreInstance> {
           alive(context.generation) &&
           origin === context.organizationId
         )
-          refresh();
+          startCatchUp();
       };
 
       // A definitive answer to a creation (created, or refused by the gateway) ends its idempotency
@@ -1316,7 +1400,6 @@ function createGoalsStore(): Type<GoalsStoreInstance> {
       const scheduled: Set<string> = new Set<string>();
       const bursts: Map<string, PendingEdit> = new Map<string, PendingEdit>();
       const burst: number = inject(GOAL_EDIT_BURST_MS);
-      const backoff: readonly number[] = inject(GOAL_SETTLE_BACKOFF_MS);
       const laneOf: (goalId: string) => GoalLane = (goalId: string): GoalLane => {
         let lane: GoalLane | undefined = lanes.get(goalId);
         if (lane === undefined) {
@@ -1921,9 +2004,14 @@ function createGoalsStore(): Type<GoalsStoreInstance> {
           });
         },
         _settled: signalMethod<boolean>((loading: boolean): void => {
-          if (loading || !store._loads.queued) return;
-          store._loads.queued = false;
-          refresh();
+          if (loading) return;
+          if (reconciling !== null && caughtUp(reconciling)) stopCatchUp();
+          if (store._loads.queued) {
+            store._loads.queued = false;
+            refresh();
+            return;
+          }
+          retryCatchUp();
         }),
         _checkOwners: signalMethod<string | null>((ids: string | null): void => {
           if (ids === null) return;
@@ -1935,8 +2023,13 @@ function createGoalsStore(): Type<GoalsStoreInstance> {
         _followOrganization: signalMethod<{ organizationId: string; revision: number }>(
           ({ organizationId }: { organizationId: string; revision: number }): void => {
             if (organizationId === context.organizationId && !context.left) return;
-            const catchUp: boolean = unseen && organizationId === context.organizationId;
+            // Back on the same organization, a write that settled while it was left, or a
+            // catch-up read still owed, is read again from the reset; another organization drops
+            // the catch-up, since its goals are read anew.
+            const catchUp: boolean =
+              (unseen || reconciling !== null) && organizationId === context.organizationId;
             unseen = false;
+            stopCatchUp();
             context.generation += 1;
             context.organizationId = organizationId;
             context.left = false;
@@ -1953,7 +2046,7 @@ function createGoalsStore(): Type<GoalsStoreInstance> {
               addingTo: null,
               creating: false,
             });
-            if (catchUp) refresh();
+            if (catchUp) startCatchUp();
           },
         ),
       };
@@ -2026,7 +2119,10 @@ function createGoalsStore(): Type<GoalsStoreInstance> {
  * before the store reacts, after the page is gone, after a switch and back, or once the workspace
  * is left (the pin cleared), is dropped instead of reaching the gateway under another
  * `If-Organization-Match`. After a switch away and back the goals are read again, and once more
- * when a write started before it settles, so what it completed shows. A creation keeps its
+ * when a write started before it settles, so what it completed shows; that catch-up stays owed
+ * until a read issued after it lands, a failed one being sent again after each wait of
+ * `GOAL_SETTLE_BACKOFF_MS`, then on the next background occasion, and a switch to another
+ * organization drops it. A creation keeps its
  * idempotency key, per organization and across a switch and back, until a definitive
  * answer (created or refused, even once a switch dropped it) and is sent again with it after an
  * unknown outcome or

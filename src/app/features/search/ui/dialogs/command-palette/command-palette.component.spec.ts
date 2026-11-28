@@ -310,6 +310,16 @@ describe('CommandPaletteDialog', () => {
     });
   });
 
+  it('names only the arrows and Enter in its footer, as the mockup does', async () => {
+    TestBed.inject(CommandPalette).setOpen(true);
+    await fixture.whenStable();
+
+    const footer: HTMLElement | null = document.querySelector('cw-command-footer');
+    expect(footer?.textContent).toContain('navigate');
+    expect(footer?.textContent).toContain('open');
+    expect(footer?.textContent).not.toContain('close');
+  });
+
   it('offers `Billing and quotas` and one theme action that toggles', async () => {
     TestBed.inject(CommandPalette).setOpen(true);
     await fixture.whenStable();

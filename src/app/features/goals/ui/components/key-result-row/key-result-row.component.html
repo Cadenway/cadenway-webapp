@@ -1,5 +1,5 @@
 @let item = result();
-<ng-icon [name]="icon()" class="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+<ng-icon [name]="icon()" size="1rem" class="shrink-0 text-muted-foreground" aria-hidden="true" />
 <span class="flex min-w-0 flex-1 flex-col">
   <span class="text-sm">{{ item.label }}</span>
   @if (hint()) {
@@ -85,7 +85,7 @@
       (click)="listOpened.emit(item.listId)"
     >
       <span data-testid="result-value">{{ value() }}</span>
-      <ng-icon name="phosphorArrowRightBold" class="size-3" aria-hidden="true" />
+      <ng-icon name="phosphorArrowRightBold" size="0.75rem" aria-hidden="true" />
     </button>
   }
 }

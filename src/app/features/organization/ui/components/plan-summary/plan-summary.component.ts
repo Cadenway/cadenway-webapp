@@ -34,14 +34,15 @@ import { planName } from '../../../utils/plan-label/plan-label.util';
         [routerLink]="billingLink()"
         data-testid="plan-summary"
       >
-        <ng-icon name="phosphorUsersThreeBold" class="size-3.5" aria-hidden="true" />
+        <ng-icon size="0.875rem" name="phosphorUsersThreeBold" aria-hidden="true" />
         {{ label(subscription) }}
       </a>
     } @else if (store.failed()) {
       <div class="flex items-center gap-1.5 text-xs text-muted-foreground" role="alert">
         <ng-icon
+          size="0.875rem"
           name="phosphorWarningCircleBold"
-          class="size-3.5 text-destructive"
+          class="text-destructive"
           aria-hidden="true"
         />
         <span class="min-w-0 flex-1 truncate" i18n="@@organization.plan-summary.failed"

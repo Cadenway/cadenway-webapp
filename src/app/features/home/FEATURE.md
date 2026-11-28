@@ -73,9 +73,11 @@ organization.context-changed`) keeps them silently, with the error of an earlier
   organization's values.
 - Counters (`cw-stat` in a `cw-stat-group`): four columns from 1024 px, a 2×2 grid with inner
   borders below (the group's one-row layout is overridden on the page, brick gap DS3); `Late` is
-  grenat above 0. Each hint takes the plural form of its count (`Intl.PluralRules` of
-  `$localize.locale`). `Done` counts every done task assigned to the caller (`stats.done`, gap
-  G-H1), so its hint says `in total` instead of the mockup's "since the start of the sprint".
+  grenat above 0. The `Assigned to me` and `Done` hints take the plural form of their count
+  (`Intl.PluralRules` of `$localize.locale`); `Today` keeps the mockup's one `due today` hint
+  (`App.dc.html` line 6655) whatever the count. `Done` counts every done task assigned to the
+  caller (`stats.done`, gap G-H1), so its hint says `in total` instead of the mockup's "since
+  the start of the sprint".
 - `My priorities` shows `getHome`'s priorities (seven at most) as `priority` lines. The context menu
   opens from the list item around each line (right click, Shift F10, the Menu key, a long press),
   not from the line itself; the item has `tabindex="-1"` and hands the focus it receives itself (the
@@ -120,7 +122,6 @@ organization.context-changed`) keeps them silently, with the error of an earlier
 | `home.notice.close`              | Close                                 | Fermer                               | Not in the mockup                                          |
 | `home.notice.logo-upload-failed` | The organization was created, …       | L’organisation a été créée, …        | Not in the mockup                                          |
 | `home.stats.assigned-hint.one`   | open task                             | tâche ouverte                        | Singular of the mockup's `tâches ouvertes`                 |
-| `home.stats.due-today-hint.one`  | due today                             | échéance du jour                     | Singular of the mockup's `échéances du jour`               |
 | `home.stats.done-hint.one`       | task completed in total               | tâche terminée au total              | Not in the mockup (gap G-H1)                               |
 | `home.stats.done-hint.other`     | tasks completed in total              | tâches terminées au total            | Not in the mockup (gap G-H1)                               |
 | `home.stale.text`                | The home page could not be refreshed. | L’accueil n’a pas pu être actualisé. | Not in the mockup                                          |

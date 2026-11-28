@@ -72,7 +72,12 @@ const CLOCK_MS: number = 60_000;
  * the empty states, skeletons while loading, an inline error with `Retry`, and `Show everything
  * on the home screen`, which opens `/<slug>`. Opening a notification marks it read and opens
  * its task's detail over the current page (`?task=<key>`); a reminder offers `Postpone to
- * tomorrow morning` and `Mark as done`, confirmed by a toast. Writes are optimistic; a refusal restores the row and shows an error toast. It provides
+ * tomorrow morning` and `Mark as done`, confirmed by a toast. Writes are optimistic; a refusal restores the row and shows an error toast.
+ * The popover opens 4 px right of the 56 px rail (`left-full ml-1`, line 139): the 36 px item
+ * sits 10 px inside the rail's edge, hence a 14 px side offset. On a phone its sheet runs from
+ * 8 px below the top to the tab bar (`max-md:top-2 bottom-16`). The tabs are 36 px high with no
+ * gap above the panels (line 146), and the empty states are the compact `cw-empty size="sm"`
+ * (line 166). It provides
  * its own `InboxStore` and acts as a page of the shell. Its host is `display: contents`, so the
  * item joins the rail group's layout.
  */

@@ -51,12 +51,17 @@ section has `organizationSectionGuard(<section>)` (`http/guards/organization-sec
 | `organization.routes` | workspace |
 | `providers`           | workspace |
 | `utils/plan-label`    | workspace |
+| `ports/plan-seats`    | spaces    |
 
-- `providers` publishes `provideOrganizationUsage()` (the shared `SubscriptionStore`, on `/:org`),
+- `providers` publishes `provideOrganizationUsage()` (the shared `SubscriptionStore` and
+  `PLAN_SEATS`, on `/:org`),
   `withPlanSummary()` (`sidebarFooter`, order 10), `withStorageBanner()` (`banners`, order 0),
   and for the settings shell routes `withOrganizationSettingsNavigation()` (`settingsNavigation`,
   order 10, the organization settings) and `withOrganizationSettingsLinks()`
   (`settingsNavigation`, order 20, the account settings).
+- `ports/plan-seats` publishes `PLAN_SEATS` (`PlanSeatsPort`: `seats`, a signal of the plan key
+  and the free seats, never below zero, or null while the `SubscriptionStore` shows no
+  subscription, as for every role but owner), so other features reuse the one subscription read.
 - `utils/plan-label` publishes `planName(plan)`: `Free`, `Team`, `Enterprise`, or the key
   itself for a later plan.
 

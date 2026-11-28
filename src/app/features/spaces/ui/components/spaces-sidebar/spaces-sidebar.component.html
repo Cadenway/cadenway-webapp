@@ -58,7 +58,7 @@
       data-testid="sidebar-create-space"
       (click)="createSpace()"
     >
-      <ng-icon name="phosphorPlusBold" class="size-3.5" aria-hidden="true" />
+      <ng-icon name="phosphorPlusBold" aria-hidden="true" />
     </button>
     @if (navigation.spaces.status() === 'error') {
       <div
@@ -109,7 +109,7 @@
             [attr.title]="editLabel(view.space)"
             (click)="editSpace(view.space)"
           >
-            <ng-icon name="phosphorPencilSimpleBold" class="size-3.5" aria-hidden="true" />
+            <ng-icon name="phosphorPencilSimpleBold" aria-hidden="true" />
           </button>
           <a
             cwSidebarSpaceAction
@@ -120,7 +120,7 @@
             [attr.aria-label]="overviewLabel(view.space)"
             [attr.title]="overviewLabel(view.space)"
           >
-            <ng-icon name="phosphorSquaresFourBold" class="size-3.5" aria-hidden="true" />
+            <ng-icon name="phosphorSquaresFourBold" aria-hidden="true" />
           </a>
           @if (navigation.overviews.hasValue() && !navigation.overviews.value()[view.space.id]) {
             <div role="alert">
@@ -135,6 +135,7 @@
               cwSidebarItem
               [icon]="listIcon(summary)"
               [count]="summary.counts.total"
+              [countLabel]="taskCountLabel(summary.counts.total)"
               [routerLink]="['/', slug(), 'l', summary.list.id]"
               routerLinkActive
               #listActive="routerLinkActive"

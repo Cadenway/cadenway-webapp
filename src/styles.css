@@ -4,7 +4,11 @@
  * `source('.')` limits Tailwind's class detection to `src/`: without it the read-only mockup copy
  * under `docs/maquette/` would put its own classes in the bundle.
  *
+ * The layer order puts `ng-icon` first, so lowest: ng-icons injects its color rule at run time
+ * in `@layer ng-icon`, which would otherwise land after Tailwind's layers and beat every `text-*`
+ * utility on an `<ng-icon>`. The icon size is not layered: see the `cw-ui-consumer` skill.
  */
+@layer ng-icon, theme, base, components, utilities;
 @import 'tailwindcss' source('.');
 @import '@cadenway/tokens/tokens.css';
 @import '@cadenway/tokens/theme.css';

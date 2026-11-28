@@ -19,6 +19,7 @@ configured in `api/client/`. The shell belongs to
 | `@core/shortcuts` | Scoped keyboard shortcut registration.                                                 |
 | `@core/routing`   | Route title, focus and the reserved first segments (slugs).                            |
 | `@core/locale`    | Locale of the load, chosen and installed before bootstrap.                             |
+| `@core/ui-labels` | The English texts of the `@cadenway/ui` bricks.                                        |
 
 ## Dependencies
 
@@ -72,8 +73,17 @@ The root transport provides Angular HTTP to the generated `@cadenway/api-client`
   answer, an unreadable `2xx`, `408`, `5xx`, `409 idempotency.request-in-progress`); `isDroppedOrganizationWrite` calls
   it dropped when the pin blocked it during a switch or the gateway answered
   `412 organization.context-changed`. Features never report either as a definite failure.
+- `provideCadenwayUiLabels()` gives English texts, with `@@core.ui-labels.*` ids, to the
+  `@cadenway/ui` bricks every area renders and no feature names (key names, the close buttons of
+  alerts, banners and sheets, the sidebar defaults, the spinner, the split button menu, the
+  priority words); their built-in texts are French. The `/:org` route provides it from its own
+  concern, `@core/ui-labels`, because its brick entry points would add about 330 kB to the initial
+  bundle from the root or from `@core/locale`, which `main.ts` loads. A feature's own labels
+  provider below it still wins.
 - The resolved theme is reflected in `data-theme` on the document element.
 - After a path change, focus moves to the innermost route focus target or `main` without scrolling;
-  initial and query-only navigation leave focus alone.
+  initial and query-only navigation leave focus alone. While an `aria-modal` window holds the focus
+  (one kept open across the navigation, or one still closing), the move waits until no modal window
+  is left, then runs after the window restored its focus.
 - Shortcuts ignore editable targets unless allowed, repeated and composing events; single-key
   shortcuts can be disabled in memory. Registrations end with their owning scope.

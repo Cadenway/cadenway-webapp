@@ -24,17 +24,6 @@ interface HomeStatsHints {
   readonly assigned: string;
 
   /**
-   * Property dueToday
-   *
-   * @description
-   * Hint of `Today`.
-   *
-   * @type {string}
-   * @readonly
-   */
-  readonly dueToday: string;
-
-  /**
    * Property done
    *
    * @description
@@ -53,7 +42,7 @@ interface HomeStatsHints {
  * @description
  * The texts of the counters strip.
  *
- * @type {'assigned' | 'assignedOne' | 'assignedOther' | 'late' | 'lateHint' | 'dueToday' | 'dueTodayOne' | 'dueTodayOther' | 'done' | 'doneOne' | 'doneOther'}
+ * @type {'assigned' | 'assignedOne' | 'assignedOther' | 'late' | 'lateHint' | 'dueToday' | 'dueTodayHint' | 'done' | 'doneOne' | 'doneOther'}
  */
 type HomeStatsCopyKey =
   | 'assigned'
@@ -62,8 +51,7 @@ type HomeStatsCopyKey =
   | 'late'
   | 'lateHint'
   | 'dueToday'
-  | 'dueTodayOne'
-  | 'dueTodayOther'
+  | 'dueTodayHint'
   | 'done'
   | 'doneOne'
   | 'doneOther';
@@ -74,7 +62,8 @@ type HomeStatsCopyKey =
  * @description
  * The labels and hints of the counters (`App.dc.html` lines 6653-6656). The mockup's `Done` hint
  * says "since the start of the sprint", which the contract does not count (gap G-H1): `stats.done`
- * counts every done task assigned to the caller, so the hint says so.
+ * counts every done task assigned to the caller, so the hint says so. The `Today` hint keeps the
+ * mockup's one wording whatever the count.
  *
  * @type {Readonly<Record<HomeStatsCopyKey, string>>}
  */
@@ -85,8 +74,7 @@ const HOME_STATS_COPY: Readonly<Record<HomeStatsCopyKey, string>> = {
   late: $localize`:@@home.stats.late:Late`,
   lateHint: $localize`:@@home.stats.late-hint:to reschedule`,
   dueToday: $localize`:@@home.stats.due-today:Today`,
-  dueTodayOne: $localize`:@@home.stats.due-today-hint.one:due today`,
-  dueTodayOther: $localize`:@@home.stats.due-today-hint.other:due today`,
+  dueTodayHint: $localize`:@@home.stats.due-today-hint:due today`,
   done: $localize`:@@home.stats.done:Done`,
   doneOne: $localize`:@@home.stats.done-hint.one:task completed in total`,
   doneOther: $localize`:@@home.stats.done-hint.other:tasks completed in total`,
@@ -97,8 +85,8 @@ const HOME_STATS_COPY: Readonly<Record<HomeStatsCopyKey, string>> = {
  *
  * @description
  * The counters strip of the home screen (`App.dc.html` lines 1690-1698): `Assigned to me`, `Late`
- * (grenat above 0), `Today` and `Done`, each with its value and a hint in the plural form of its
- * count (`Intl.PluralRules` of the running locale). Four `cw-stat` in one `cw-stat-group`: four
+ * (grenat above 0), `Today` and `Done`, each with its value and a hint; the hints of `Assigned to
+ * me` and `Done` take the plural form of their count (`Intl.PluralRules` of the running locale). Four `cw-stat` in one `cw-stat-group`: four
  * columns from 1024 px, a 2×2 grid with inner borders below (the group's one-row layout is
  * overridden here, brick gap DS3). Presentational: one input.
  */
@@ -122,7 +110,7 @@ const HOME_STATS_COPY: Readonly<Record<HomeStatsCopyKey, string>> = {
         class="max-lg:border-t max-lg:border-border"
         [label]="copy.dueToday"
         [value]="shown.dueToday"
-        [comparison]="hints().dueToday"
+        [comparison]="copy.dueTodayHint"
       />
       <cw-stat
         class="max-lg:border-t max-lg:border-border"
@@ -172,9 +160,6 @@ export class HomeStats {
       assigned: takesSingular(stats.assigned)
         ? HOME_STATS_COPY.assignedOne
         : HOME_STATS_COPY.assignedOther,
-      dueToday: takesSingular(stats.dueToday)
-        ? HOME_STATS_COPY.dueTodayOne
-        : HOME_STATS_COPY.dueTodayOther,
       done: takesSingular(stats.done) ? HOME_STATS_COPY.doneOne : HOME_STATS_COPY.doneOther,
     };
   });

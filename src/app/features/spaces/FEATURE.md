@@ -908,7 +908,6 @@ colors with the same words.
   `listSavedViews`, `createSavedView`, `updateSavedView`, `duplicateSavedView`, `deleteSavedView`),
   `ArchivesService` (`archiveList`, `unarchiveList`, `listArchivedLists` and `listArchivedTasks`
   for the footer count), `TrashService.listTrash` (the footer count),
-  `BillingService.getBillingSubscription` (the free seats of `Invite your team`),
   `AccessService.listListGrants`, and for the `Share` dialog (`ListAccessApi`) `setListGrant`,
   `removeListGrant`, `ListsService.getList` and `updateList` (`organizationAccess`),
   `SpacesService.getSpace` and `MembersService.listMembers`,
@@ -928,6 +927,9 @@ colors with the same words.
 - Errors' `.` entry: the `RouteErrorData` type of the `list` route's `data`.
 - Workspace's `ports/workspace-context` (the signed-in member, `Me` in the assignee filter, and
   the role that enables `Automations`).
+- Organization's `ports/plan-seats` (`PLAN_SEATS`, injected as optional by the sidebar): the plan
+  and free seats of `Invite your team`, from the shell's one subscription read, null for the
+  roles other than owner.
 - `@cadenway/ui` (`alert-dialog`, `app-rail`, `avatar`, `breadcrumb`, `button`, `checkbox`,
   `context-menu`, `data-table`, `date-picker`, `dialog`, `empty`, `priority-icon`, `inline-edit`,
   `input`, `menu`, `popover`, `progress`, `radio-group`, `sidebar`, `skeleton`, `status-icon`,
@@ -945,7 +947,7 @@ colors with the same words.
     unknown space or a full read in flight makes every overview be read again after it.
     Favorites change optimistically and a refusal restores the previous list. The
     current sprint is the first sprint, in sidebar order, whose dates hold the caller's today.
-    It also holds the free seats, the trash and archive counts (one item read each, for their
+    It also holds the trash and archive counts (one item read each, for their
     `total`), the last spaces address of the tab, and the open dialog (`dialog`, opened with
     `openDialog` by the rail, the sidebar, the overview and the list page, rendered by the
     sidebar). Its writes: `updateSpace`, `deleteSpace`, `updateList` and `archiveList` change the

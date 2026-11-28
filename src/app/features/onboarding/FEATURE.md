@@ -78,8 +78,8 @@ route), `withGettingStarted()` and `withOnboardingWizard()` (the `overlays` cont
 - `@shared/layout-slot` (`SlotContribution`, `SlotFeature`, `ShellOverlay`: the assistant holds
   `onboarding.wizard` while it shows, the invite dialog opens as `onboarding.invite-dialog`, and
   the checklist hides while `onboarding.wizard` is open).
-- `@cadenway/ui` (`button`, `dialog` with `size="screen"`, `input`, `logo`, `progress`,
-  `radio-group` cards without indicator, `skeleton`, `stepper` with `variant="segments"`,
+- `@cadenway/ui` (`button`, `dialog` with `size="screen"` and `closeOnNavigation` false,
+  `input`, `logo`, `progress`, `radio-group` cards without indicator, repeated with `@for`, `skeleton`, `stepper` with `variant="segments"`,
   `toast`, `toggle-group`) and `@cadenway/icons`.
 
 ## Invariants
@@ -101,8 +101,9 @@ route), `withGettingStarted()` and `withOnboardingWizard()` (the `overlays` cont
   guest (`can('member')`; `finishOnboarding` refuses one), whose parameter is removed at once.
 - The window (`OnboardingWizard`) is an edge-to-edge `cw-dialog` (`size="screen"`) without a close
   button that Escape and a click outside do not close: only `Set up later` dismisses, since
-  dismissal is final. The dialog brick also closes itself on a history move (Back, Forward: the
-  CDK's `closeOnNavigation`); the window then shows itself again at once, focused on its title.
+  dismissal is final. A history move (Back, Forward) or a router navigation within the
+  workspace does not close it either: it sets `closeOnNavigation` to false (`@cadenway/ui`
+  0.12.0), so the same window stays open, focused where it was.
   It is named by the card's `h1` (`cwDialogTitle` imposes an `h2`), which takes the focus on open,
   after each screen change and after a Retry removes its alert; a screen change is announced as
   `Step n of 4: <name>`. The step bar is `cw-stepper variant="segments"` (not clickable), with
@@ -185,14 +186,10 @@ route), `withGettingStarted()` and `withOnboardingWizard()` (the `overlays` cont
   `invited`, `already-member` or `already-invited`; "sending an invitation does not consume a
   seat", `members.yaml`), so the assistant has no seat-limit message; any other outcome counts
   as not sent.
-- The template cards and the import cards are written out instead of repeated with `@for`
-  (`@cadenway/ui` 0.11.0 bug). Under `@for`, `cw-radio-group`'s `tabStop` computed reads every
-  item's `value()` while the first item renders, before the later repeated items have their
-  inputs; when the checked item is not the first, it throws
-  `NG0950: Input "value" is required but no value is available yet`. Reproduction: the `Template`
-  screen under `@for` with the draft preset `agency` (checked item index 2) throws on render; the
-  `Import` screen would too, since `Later` is index 3. Account's presence picker uses `@for` and
-  works because its checked item comes first.
+- The template cards and the import cards are repeated with `@for` over their choices, in
+  their order, with the same values and names. A checked card other than the first (the draft
+  preset `agency`, the import card `Later`) renders without `NG0950` since `@cadenway/ui` 0.12.0,
+  whose `cw-radio-group` skips the items whose `value` is not bound yet.
 - Deviations from the mockup's accents: the checked template and import cards' icon (and the
   import card's name) are `text-primary`, as in the mockup; the segments of the step bar, the
   checked cards' border and fill and the checked swatch's ring keep the design system's ink tones

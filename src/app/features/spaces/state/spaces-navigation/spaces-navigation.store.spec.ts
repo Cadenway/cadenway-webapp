@@ -203,7 +203,7 @@ describe('SpacesNavigationStore', () => {
   let store: InstanceType<typeof SpacesNavigationStore>;
   let creations: Subject<CreatedTask>;
   let lists: Record<string, Mock>;
-  let sidebar: { readonly seats: Mock; readonly trashCount: Mock; readonly archiveCount: Mock };
+  let sidebar: { readonly trashCount: Mock; readonly archiveCount: Mock };
   const today: string = todayIso();
   const roadmap: Favorite = {
     id: 'f1',
@@ -252,7 +252,6 @@ describe('SpacesNavigationStore', () => {
       remove: vi.fn(),
     };
     sidebar = {
-      seats: vi.fn(() => Promise.resolve({ plan: 'team', free: 7 })),
       trashCount: vi.fn(() => Promise.resolve(2)),
       archiveCount: vi.fn(() => Promise.resolve(3)),
     };
@@ -283,11 +282,10 @@ describe('SpacesNavigationStore', () => {
     expect(store.favoriteOf('list', 'l-roadmap')).toEqual(roadmap);
   });
 
-  it('reads the free seats and the trash and archive counts of the organization', async () => {
+  it('reads the trash and archive counts of the organization', async () => {
     await expect.poll(() => store.archiveCount.hasValue()).toBe(true);
-    await expect.poll(() => store.trashCount.hasValue() && store.seats.hasValue()).toBe(true);
+    await expect.poll(() => store.trashCount.hasValue()).toBe(true);
 
-    expect(store.seats.value()).toEqual({ plan: 'team', free: 7 });
     expect(store.trashCount.value()).toBe(2);
     expect(store.archiveCount.value()).toBe(3);
   });

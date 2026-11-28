@@ -17,13 +17,18 @@
   #popover
   side="right"
   align="start"
+  sideOffset="14"
   size="xl"
   padding="none"
   [ariaLabel]="title"
   [open]="open()"
   (openChange)="setOpen($event)"
 >
-  <div #popoverContent class="flex min-w-0 flex-col" data-testid="inbox-popover">
+  <div
+    #popoverContent
+    class="flex min-w-0 flex-col max-md:min-h-[calc(100dvh-4.5rem-2px)]"
+    data-testid="inbox-popover"
+  >
     <div class="flex h-11 items-center gap-2 border-b border-border pr-2 pl-3.5">
       <p
         class="min-w-0 truncate rounded-sm text-sm font-medium focus-visible:outline-none"
@@ -44,16 +49,16 @@
         type="button"
         variant="ghost"
         size="sm"
-        class="ml-auto shrink-0 gap-1 px-1.5 text-xs text-muted-foreground"
+        class="ml-auto shrink-0 text-xs text-muted-foreground"
         [disabled]="unread() === 0"
         (click)="markAllRead()"
       >
-        <ng-icon name="phosphorChecksBold" class="size-3.5" aria-hidden="true" />
+        <ng-icon name="phosphorChecksBold" size="0.875rem" aria-hidden="true" />
         <ng-container i18n="@@inbox.mark-all">Mark all as read</ng-container>
       </button>
     </div>
 
-    <cw-tabs variant="bar" size="sm" [value]="tab()" (valueChange)="tab.set($event)">
+    <cw-tabs variant="bar" class="flex-1 gap-0!" [value]="tab()" (valueChange)="tab.set($event)">
       <cw-tabs-list
         class="border-b border-border px-3.5"
         ariaLabel="Inbox content"
@@ -96,7 +101,7 @@
             <div cwSkeleton class="h-14 w-full"></div>
           </div>
         } @else if (store.notifications.status() === 'error') {
-          <cw-empty>
+          <cw-empty size="sm">
             <cw-empty-header>
               <cw-empty-media tone="destructive">
                 <ng-icon name="phosphorWarningCircleBold" aria-hidden="true" />
@@ -120,7 +125,7 @@
           </cw-empty>
         } @else if (store.notifications.hasValue()) {
           @if (store.notifications.value().items.length === 0) {
-            <cw-empty>
+            <cw-empty size="sm">
               <cw-empty-header>
                 <cw-empty-media>
                   <ng-icon name="phosphorCheckCircleBold" aria-hidden="true" />
@@ -155,7 +160,7 @@
             <div cwSkeleton class="h-14 w-full"></div>
           </div>
         } @else if (store.reminders.status() === 'error') {
-          <cw-empty>
+          <cw-empty size="sm">
             <cw-empty-header>
               <cw-empty-media tone="destructive">
                 <ng-icon name="phosphorWarningCircleBold" aria-hidden="true" />
@@ -179,7 +184,7 @@
           </cw-empty>
         } @else if (store.reminders.hasValue()) {
           @if (store.reminders.value().items.length === 0) {
-            <cw-empty>
+            <cw-empty size="sm">
               <cw-empty-header>
                 <cw-empty-media>
                   <ng-icon name="phosphorCheckCircleBold" aria-hidden="true" />
@@ -217,7 +222,7 @@
         (click)="openHome()"
       >
         <ng-container i18n="@@inbox.see-all">Show everything on the home screen</ng-container>
-        <ng-icon name="phosphorArrowRightBold" class="size-3.5" aria-hidden="true" />
+        <ng-icon name="phosphorArrowRightBold" size="0.875rem" aria-hidden="true" />
       </button>
     </div>
   </div>

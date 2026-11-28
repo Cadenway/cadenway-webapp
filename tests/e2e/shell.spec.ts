@@ -165,7 +165,7 @@ test.beforeEach(async ({ page }) => {
 });
 
 test('the shell renders its rail, sidebar and banner', async ({ page }) => {
-  await stubGateway(page);
+  const gateway = await stubGateway(page);
 
   await page.goto('/atelier-nord');
 
@@ -178,6 +178,7 @@ test('the shell renders its rail, sidebar and banner', async ({ page }) => {
   ).toBeVisible();
   await expect(page.getByRole('link', { name: 'Team plan · 18 / 25 seats' })).toBeVisible();
   await expect(page.getByText('Storage nearly full')).toBeVisible();
+  expect(gateway.calls.filter((call) => call === 'GET /v1/billing/subscription')).toHaveLength(1);
 });
 
 test('Ctrl K opens the palette and a search shows its results', async ({ page }) => {
@@ -188,6 +189,7 @@ test('Ctrl K opens the palette and a search shows its results', async ({ page })
   await page.keyboard.press('Control+k');
   const palette = page.getByRole('dialog', { name: 'Command palette' });
   await expect(palette).toBeVisible();
+  await expect(palette.getByText('Enter', { exact: true })).toBeVisible();
   await palette.getByRole('combobox').fill('sso');
 
   await expect(palette.getByRole('option', { name: /SSO flow review/ })).toBeVisible();
