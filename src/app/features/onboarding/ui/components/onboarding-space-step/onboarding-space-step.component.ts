@@ -90,7 +90,7 @@ const SPACE_NAME_MAX_LENGTH: number = 80;
               aria-hidden="true"
             >
               @if (color() === choice.value) {
-                <ng-icon name="phosphorCheckBold" class="size-3.5" />
+                <ng-icon name="phosphorCheckBold" size="0.875rem" />
               }
             </span>
           </button>

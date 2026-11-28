@@ -66,7 +66,12 @@ import { NgIcon } from '@ng-icons/core';
           @if (busy() === 'upload') {
             <svg cwSpinner aria-hidden="true"></svg>
           } @else {
-            <ng-icon name="phosphorUploadSimpleBold" class="size-4 shrink-0" aria-hidden="true" />
+            <ng-icon
+              name="phosphorUploadSimpleBold"
+              size="1rem"
+              class="shrink-0"
+              aria-hidden="true"
+            />
           }
           @if (hasPhoto()) {
             <span i18n="@@account.profile.photo-change">Change photo</span>
@@ -95,7 +100,12 @@ import { NgIcon } from '@ng-icons/core';
         class="mt-3 flex flex-wrap items-center gap-2 text-xs text-destructive"
         data-testid="profile-photo-failed"
       >
-        <ng-icon name="phosphorWarningCircleFill" class="size-3.5 shrink-0" aria-hidden="true" />
+        <ng-icon
+          name="phosphorWarningCircleFill"
+          size="0.875rem"
+          class="shrink-0"
+          aria-hidden="true"
+        />
         <span i18n="@@account.profile.photo-load-failed">The photo could not be loaded.</span>
         <button
           cwButton

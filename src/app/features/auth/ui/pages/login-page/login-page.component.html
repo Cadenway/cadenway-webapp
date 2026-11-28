@@ -111,12 +111,12 @@
             id="login-email-help"
             class="flex items-center gap-1 text-xs font-medium text-destructive"
           >
-            <ng-icon name="phosphorWarningCircleFill" class="size-3.5" aria-hidden="true" />
+            <ng-icon name="phosphorWarningCircleFill" size="0.875rem" aria-hidden="true" />
             {{ loginForm.email().errors()[0]?.message }}
           </p>
         } @else if (flow.prefilled()) {
           <p class="flex items-center gap-1.5 text-xs text-muted-foreground" aria-live="polite">
-            <ng-icon name="phosphorUserSwitchBold" class="size-3.5" aria-hidden="true" />
+            <ng-icon name="phosphorUserSwitchBold" size="0.875rem" aria-hidden="true" />
             <span i18n="@@auth.login.prefilled"
               >Account remembered on this device: enter its password.</span
             >
@@ -176,7 +176,7 @@
             id="login-password-help"
             class="flex items-center gap-1 text-xs font-medium text-destructive"
           >
-            <ng-icon name="phosphorWarningCircleFill" class="size-3.5" aria-hidden="true" />
+            <ng-icon name="phosphorWarningCircleFill" size="0.875rem" aria-hidden="true" />
             {{ loginForm.password().errors()[0]?.message }}
           </p>
         }

@@ -17,7 +17,8 @@
   >
     <ng-icon
       name="phosphorWarningCircleBold"
-      class="size-4 shrink-0 text-destructive"
+      size="1rem"
+      class="shrink-0 text-destructive"
       aria-hidden="true"
     />
     <span
@@ -59,7 +60,7 @@
                   class="flex size-8 shrink-0 items-center justify-center rounded-full border border-dashed border-input text-muted-foreground"
                   aria-hidden="true"
                 >
-                  <ng-icon name="phosphorEnvelopeSimpleBold" class="size-3.5" />
+                  <ng-icon name="phosphorEnvelopeSimpleBold" size="0.875rem" />
                 </span>
                 <span class="flex min-w-0 flex-col">
                   <span class="truncate leading-5">{{ invitation.email }}</span>
@@ -82,7 +83,8 @@
                 @if (invitation.expired) {
                   <ng-icon
                     name="phosphorWarningCircleFill"
-                    class="size-3.5 shrink-0 text-destructive"
+                    size="0.875rem"
+                    class="shrink-0 text-destructive"
                     aria-hidden="true"
                   />
                 }

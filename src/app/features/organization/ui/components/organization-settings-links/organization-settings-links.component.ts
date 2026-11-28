@@ -79,7 +79,8 @@ interface OrganizationLink {
             >
               <ng-icon
                 [name]="item.section.icon"
-                class="size-4 shrink-0 text-muted-foreground"
+                size="1rem"
+                class="shrink-0 text-muted-foreground"
                 aria-hidden="true"
               />
               {{ item.section.label }}

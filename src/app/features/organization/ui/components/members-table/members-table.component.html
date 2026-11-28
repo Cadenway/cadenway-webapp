@@ -50,7 +50,7 @@
           <td cwTableCell class="max-md:block max-md:px-0">
             @if (member.role === 'owner') {
               <span cwBadge variant="outline" data-testid="member-owner">
-                <ng-icon name="phosphorCrownSimpleBold" class="size-3" aria-hidden="true" />
+                <ng-icon name="phosphorCrownSimpleBold" size="0.75rem" aria-hidden="true" />
                 <ng-container i18n="@@organization.members.role-owner">Owner</ng-container>
               </span>
             } @else if (canEdit(member)) {
@@ -80,7 +80,8 @@
                 <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
                   <ng-icon
                     name="phosphorCheckCircleFill"
-                    class="size-3.5 text-jade"
+                    size="0.875rem"
+                    class="text-jade"
                     aria-hidden="true"
                   />
                   <ng-container i18n="@@organization.members.two-step-on">Set up</ng-container>
@@ -89,7 +90,8 @@
                 <span class="flex items-center gap-1.5 text-xs font-medium text-grenat-text">
                   <ng-icon
                     name="phosphorWarningCircleFill"
-                    class="size-3.5 text-destructive"
+                    size="0.875rem"
+                    class="text-destructive"
                     aria-hidden="true"
                   />
                   <ng-container i18n="@@organization.members.two-step-off">Not set up</ng-container>

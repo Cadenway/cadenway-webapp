@@ -85,7 +85,12 @@
         role="alert"
         class="flex items-center gap-1 text-xs font-medium text-destructive"
       >
-        <ng-icon name="phosphorWarningCircleFill" class="size-3.5 shrink-0" aria-hidden="true" />
+        <ng-icon
+          name="phosphorWarningCircleFill"
+          size="0.875rem"
+          class="shrink-0"
+          aria-hidden="true"
+        />
         @if (fieldError) {
           {{ fieldError }}
         } @else {

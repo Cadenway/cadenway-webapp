@@ -12,10 +12,20 @@
       <ng-container i18n="@@account.security.two-step-title">Two-step verification</ng-container>
       <span cwBadge variant="outline" data-testid="two-step-status">
         @if (state.enabled) {
-          <ng-icon name="phosphorCheckCircleFill" class="size-3 text-jade" aria-hidden="true" />
+          <ng-icon
+            name="phosphorCheckCircleFill"
+            size="0.75rem"
+            class="text-jade"
+            aria-hidden="true"
+          />
           <ng-container i18n="@@account.security.two-step-on">Enabled</ng-container>
         } @else {
-          <ng-icon name="phosphorProhibitFill" class="size-3 text-grenat" aria-hidden="true" />
+          <ng-icon
+            name="phosphorProhibitFill"
+            size="0.75rem"
+            class="text-grenat"
+            aria-hidden="true"
+          />
           <ng-container i18n="@@account.security.two-step-off">Disabled</ng-container>
         }
       </span>
