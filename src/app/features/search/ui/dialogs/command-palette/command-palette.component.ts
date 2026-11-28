@@ -120,7 +120,10 @@ const paletteFilter: CwCommandFilter = (
  * loading row and an inline error with `Retry`), `Settings` (`Profile and
  * security`, `Organization settings`, `Switch organization`) and `Actions` (the
  * light and dark themes, `Sign out`). Local items are filtered by their label; nothing
- * matching shows `No results for “…”.`. The arrows and Enter follow the brick. It provides
+ * matching shows `No results for “…”.` as text only, without the brick's icon (line 2810). The
+ * footer names the arrows and Enter only (line 2815): the mockup's Esc hint sits in the header,
+ * which `cw-command-dialog` 0.12.0 reserves for the input. The arrows and Enter follow the brick;
+ * Escape first clears a typed text, then closes (the brick's behavior). It provides
  * its own `CommandPaletteStore` and is an `overlays` slot contribution.
  */
 @Component({
@@ -146,7 +149,7 @@ const paletteFilter: CwCommandFilter = (
       emptyText: $localize`:@@search.palette.empty:No results for “${SEARCH_TOKEN}:search:”.`,
       navigateLabel: $localize`:@@search.palette.navigate:navigate`,
       runLabel: $localize`:@@search.palette.run:open`,
-      closeLabel: $localize`:@@search.palette.close:close`,
+      closeLabel: '',
       listLabel: $localize`:@@search.palette.results:Results`,
       loadingLabel: $localize`:@@search.palette.loading:Searching…`,
       resultsNone: $localize`:@@search.palette.results-none:No results`,

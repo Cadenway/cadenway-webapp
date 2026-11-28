@@ -21,7 +21,8 @@ belong to Auth.
   `/home` cannot redirect to itself while organization-service does not refuse such slugs yet.
 - `/:org` runs `sessionGuard`, then `organizationGuard`, then `workspaceResolver`, with
   guards rerun when the slug changes or context revalidation is requested. It is componentless:
-  it provides `provideCadenwayIcons()` and the workspace-wide services (the workspace runtime and
+  it provides `provideCadenwayIcons()`, Core's `provideCadenwayUiLabels()` (the English texts of
+  the `@cadenway/ui` bricks every screen renders) and the workspace-wide services (the workspace runtime and
   context, Account's `providePresence()`, Organization's `provideOrganizationUsage()`,
   Onboarding's `provideOnboarding()` and Spaces' `provideSpacesNavigation()`), and its children
   mount the shells, in this order:

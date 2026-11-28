@@ -24,7 +24,7 @@ import { ShortcutsHelp } from '../../../services/shortcuts-help/shortcuts-help.s
       data-testid="shortcuts-button"
       (click)="help.setOpen(true)"
     >
-      <ng-icon name="phosphorKeyboardBold" class="size-3.5" aria-hidden="true" />
+      <ng-icon size="0.875rem" name="phosphorKeyboardBold" aria-hidden="true" />
       <ng-container i18n="@@workspace.shortcuts.button">Keyboard shortcuts</ng-container>
       <kbd cwKbd size="sm" class="ml-auto">?</kbd>
     </button>
