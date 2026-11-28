@@ -1,3 +1,5 @@
+import { timeParts, type TimeParts } from '@core/locale';
+
 /**
  * Type ReminderPresetKey
  *
@@ -159,17 +161,19 @@ export function daysFrom(now: Date, day: Date): number {
  * Function reminderTimeLabel
  *
  * @description
- * How the time of a reminder reads, in the single format of the mockup's reminder popover
- * (`REM_PRESETS` of `App.dc.html`): `11:00` or `14:19` in English, `11 h` or `14 h 19` in the
- * French catalog. Every time of the popover (presets, hour picker, custom moment) goes through
- * it, so a time with minutes never switches to another format.
+ * How the time of a reminder reads, in the application's time format for the locale
+ * (`timeParts`): `11:00 AM` or `2:19 PM` in English, `11 h` or `14 h 19` in the French catalog
+ * (`REM_PRESETS` of `App.dc.html`). Every time of the popover (presets, hour picker, custom
+ * moment) goes through it, so a time with minutes never switches to another format.
  *
- * @param {number} hour - Hour, 0 to 23.
- * @param {number} minute - Minute, 0 to 59.
+ * @param {Date} instant - The instant, read in the browser's time zone.
+ * @param {string} locale - The application locale (`LOCALE_ID`).
  * @returns {string} The label.
  */
-export function reminderTimeLabel(hour: number, minute: number): string {
-  if (minute === 0) return $localize`:@@task.detail.reminder.hour:${hour}:hour::00`;
-  const minutes: string = String(minute).padStart(2, '0');
-  return $localize`:@@task.detail.reminder.hour-minute:${hour}:hour::${minutes}:minute:`;
+export function reminderTimeLabel(instant: Date, locale: string): string {
+  const { hour, minute, period }: TimeParts = timeParts(instant, locale);
+  if (instant.getMinutes() === 0) {
+    return $localize`:@@task.detail.reminder.hour:${hour}:hour::00${period}:period:`;
+  }
+  return $localize`:@@task.detail.reminder.hour-minute:${hour}:hour::${minute}:minute:${period}:period:`;
 }

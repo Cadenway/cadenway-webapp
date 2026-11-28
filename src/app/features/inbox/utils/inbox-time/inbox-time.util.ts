@@ -1,5 +1,7 @@
 import { formatDate } from '@angular/common';
 
+import { timeParts, type TimeParts } from '@core/locale';
+
 import type { InboxReminder } from '../../models/inbox-reminder/inbox-reminder.interface';
 
 /**
@@ -92,8 +94,9 @@ export function relativeTime(instant: string, now: Date, locale: string): string
  * Function reminderTime
  *
  * @description
- * When a reminder is due, as the mockup writes it: `Today, 9:00`, `Tomorrow, 15:00`, else
- * `Mon 16 Nov, 9:00`.
+ * When a reminder is due, as the mockup writes it, the time in the application's time format for
+ * the locale (`timeParts`): `Today, 9:00 AM`, `Tomorrow, 3:00 PM`, else `Mon 16 Nov, 9:00 AM` in
+ * English, `9 h` and `15 h 30` in the French catalog.
  *
  * @param {string} instant - ISO 8601 instant.
  * @param {Date} now - The current moment.
@@ -102,12 +105,11 @@ export function relativeTime(instant: string, now: Date, locale: string): string
  */
 export function reminderTime(instant: string, now: Date, locale: string): string {
   const moment: Date = new Date(instant);
-  const hour: number = moment.getHours();
-  const minutes: string = String(moment.getMinutes()).padStart(2, '0');
+  const { hour, minute, period }: TimeParts = timeParts(moment, locale);
   const time: string =
     moment.getMinutes() === 0
-      ? $localize`:@@inbox.time.at-hour:${hour}:hour::00`
-      : $localize`:@@inbox.time.at-time:${hour}:hour::${minutes}:minutes:`;
+      ? $localize`:@@inbox.time.at-hour:${hour}:hour::00${period}:period:`
+      : $localize`:@@inbox.time.at-time:${hour}:hour::${minute}:minutes:${period}:period:`;
   const days: number = daysBetween(now, moment);
   if (days === 0) return $localize`:@@inbox.time.today:Today, ${time}:time:`;
   if (days === 1) return $localize`:@@inbox.time.tomorrow:Tomorrow, ${time}:time:`;

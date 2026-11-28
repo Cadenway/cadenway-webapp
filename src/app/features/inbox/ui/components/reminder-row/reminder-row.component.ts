@@ -20,7 +20,7 @@ import { reminderTime } from '../../../utils/inbox-time/inbox-time.util';
  *
  * @description
  * One pending reminder of the `Reminders` tab (mockup `App.dc.html` lines 160-164): the alarm, the
- * due time (`Today, 9:00`, followed by `· late` in red once due), the task key and
+ * due time (`Today, 9:00 AM`, followed by `· late` in red once due), the task key and
  * name, the note, then `Postpone to tomorrow morning` (`snoozed`) and `Mark as done`
  * (`completed`). The text part is a button that emits `opened`.
  */
