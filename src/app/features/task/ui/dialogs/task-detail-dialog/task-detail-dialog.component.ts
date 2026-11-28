@@ -80,7 +80,8 @@ import { TaskParentPickerDialog } from '../task-parent-picker-dialog/task-parent
  * Component TaskDetailDialog
  *
  * @description
- * The task detail (`App.dc.html` lines 2027-2673), a `cw-dialog` over the current page: the
+ * The task detail (`App.dc.html` lines 2027-2673), a `cw-dialog` over the current page, the
+ * mockup's 88dvh by 1024 px panel (`size="tall"`) with a flush body (`padding="none"`): the bar
  * header (`cw-task-detail-header`), then the body: the left column (`cw-task-detail-tabs`) and the
  * aside `Properties of the task` (`cw-task-properties-panel`, `md:w-96`, its own scroll), side by
  * side from 768 px, the aside below the content and the whole panel full screen under it. While

@@ -954,5 +954,32 @@ export class TaskDetailTabs {
       });
     }
   }
+
+  /**
+   * Method countLabel
+   *
+   * @description
+   * Spoken form of a tab's counter (`5 subtasks`, `2 comments`), read after the tab's name;
+   * undefined without a count, so the brick reads nothing more.
+   *
+   * @param {'subtasks' | 'comments'} tab - The tab.
+   * @param {number | undefined} count - The tab's count.
+   * @returns {string | undefined} The spoken count.
+   */
+  protected countLabel(
+    tab: 'subtasks' | 'comments',
+    count: number | undefined,
+  ): string | undefined {
+    if (count === undefined) return undefined;
+    const one: boolean = new Intl.PluralRules($localize.locale ?? 'en').select(count) === 'one';
+    if (tab === 'subtasks') {
+      return one
+        ? $localize`:@@task.tabs.subtasks-count-one:${count}:count: subtask`
+        : $localize`:@@task.tabs.subtasks-count-other:${count}:count: subtasks`;
+    }
+    return one
+      ? $localize`:@@task.tabs.comments-count-one:${count}:count: comment`
+      : $localize`:@@task.tabs.comments-count-other:${count}:count: comments`;
+  }
   // #endregion
 }

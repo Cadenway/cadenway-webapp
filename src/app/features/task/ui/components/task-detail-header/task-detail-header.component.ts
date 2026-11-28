@@ -61,7 +61,7 @@ import {
     NgIcon,
     TaskReminderMenu,
   ],
-  host: { class: 'flex items-start gap-2' },
+  host: { class: 'flex min-w-0 flex-1 items-start gap-2' },
   templateUrl: './task-detail-header.component.html',
 })
 export class TaskDetailHeader {

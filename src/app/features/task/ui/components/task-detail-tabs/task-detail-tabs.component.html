@@ -10,10 +10,22 @@
     class="shrink-0 overflow-x-auto border-b border-border px-4"
   >
     <button cwTab value="details" i18n="@@task.tabs.details">Details</button>
-    <button cwTab value="subtasks" [count]="subtaskCount()" i18n="@@task.tabs.subtasks">
+    <button
+      cwTab
+      value="subtasks"
+      [count]="subtaskCount()"
+      [countLabel]="countLabel('subtasks', subtaskCount())"
+      i18n="@@task.tabs.subtasks"
+    >
       Subtasks
     </button>
-    <button cwTab value="comments" [count]="commentCount()" i18n="@@task.tabs.comments">
+    <button
+      cwTab
+      value="comments"
+      [count]="commentCount()"
+      [countLabel]="countLabel('comments', commentCount())"
+      i18n="@@task.tabs.comments"
+    >
       Comments
     </button>
     <button cwTab value="activity" i18n="@@task.tabs.activity">Activity</button>

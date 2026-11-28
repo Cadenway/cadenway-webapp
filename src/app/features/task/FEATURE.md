@@ -458,14 +458,15 @@ large` and an empty file with `Empty file`, a name already attached skipped, fil
   none); avatars draw initials (members give an avatar id, no address). The people and label
   triggers show the combobox's own content (the chosen option, `(me)` included, or `n
 people`), and the due trigger shows the short date without `Tomorrow ·` or the
-  `Today` tone, until `cw-combobox` and `cw-date-picker` take a trigger template; the dialog
-  is `size="xl"` (the mockup's `max-w-4xl`) but centred, not at `top-[8vh]`, and its header keeps
-  the brick's padding instead of the mockup's `px-5 py-3` bar. Its footer wraps on a phone: the
-  `Create more tasks` switch, then the buttons.
-- Detail gaps: `cw-dialog` has no size for the mockup's panel (`top-[6vh] h-[88vh] max-w-5xl`):
-  the detail uses `size="full"` (the viewport less 2 rem) with `scrollable`; the header cancels
-  part of the brick's `px-6 py-4` (`-mx-2 -my-1`, the mockup's `px-4 py-3`, aligned with the
-  tabs) and the body all of its padding; a `sheet`-like size is a design-system need. The reminder button does not mark which preset the pending reminder came from unless its
+  `Today` tone, until `cw-combobox` and `cw-date-picker` take a trigger template. The dialog is
+  `size="xl"` (the mockup's `max-w-4xl`) pinned at `top-[8vh]` (`placement="top"`), with a flush
+  scrolling body (`padding="none"`, `scrollable`) and the mockup's `px-5 py-3` bar header
+  (`variant="bar"`) and `px-5` footer. Its footer wraps on a phone: the `Create more tasks`
+  switch, then the buttons.
+- Detail: the panel is the mockup's `top-[6vh] h-[88vh] max-w-5xl` (`size="tall"`), its body
+  flush (`padding="none"`) and its header the `px-4 py-3` bar (`variant="bar"`), aligned with the
+  tabs.
+- Detail gaps: the reminder button does not mark which preset the pending reminder came from unless its
   instant matches one; the
   afternoon preset is left out after 15 h (the mockup always shows it). The parent picker cannot
   check the depth and size of a search hit from another list. The header's follow button shows
@@ -521,50 +522,51 @@ people`), and the due trigger shows the short date without `Tomorrow ·` or the
 
 ## Copy not taken word for word from the mockup
 
-| Unit                                                                                        | Reason                                                             |
-| ------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
-| `task.combobox.*`                                                                           | Texts of the combobox brick, taken from its built-in defaults.     |
-| `task.create.due-*` but `due-today`, `due-tomorrow`, `due-friday`, `due-sprint`, `due-none` | Texts of the date picker brick, taken from its built-in defaults.  |
-| `task.people-picker.search`, `task.label-picker.search`                                     | The mockup's menus have no search field.                           |
-| `task.priority-picker.label`, `task.status-picker.menu`, `task.create.destination`          | Accessible names the mockup does not write out.                    |
-| `task.create.name-required`                                                                 | The mockup disables `Create the task` without showing an error.    |
-| `task.create.lists-failed`, `task.retry`, `task.create.no-list`                             | The mockup draws no failed or empty read of the lists.             |
-| `task.create.failed`, `task.create.failed-text`                                             | The mockup draws no refused creation.                              |
-| `task.status-change.failed*`, `task.status-change.conflict*`                                | The mockup draws no refused or conflicting status change.          |
-| `task.status-change.cancel-failed-*`                                                        | The mockup draws no refused cancellation.                          |
-| `task.title-cell.subtasks`, `task.title-cell.checklist`, `task.title-cell.comments`         | Screen reader texts and tooltips the mockup does not write out.    |
-| `task.cancel-dialog.close`, `task.create.close`                                             | Close button of the dialog brick.                                  |
-| `task.detail.failed*`, `task.detail.*-failed`, `task.detail.conflict*`                      | The mockup draws no refused or conflicting write.                  |
-| `task.detail.parent.failed`, `task.detail.parent.loading`, `task.detail.list.*`             | The mockup's pickers are popovers without a failed read or search. |
-| `task.detail.trashed-with-one`, `task.detail.reminder.hour*`, `task.detail.reminder.*-at`   | Singular form and time formats the mockup writes inline.           |
-| `task.detail.watch-one`, `task.detail.unwatch-one`                                          | The singular of the follower count, plural in the mockup.          |
-| `task.detail.confirm-*`, `task.detail.dialog-close`, `task.detail.copy-failed`              | Texts of the bricks and of a refused clipboard.                    |
-| `task.detail.reminder.note-placeholder`                                                     | The English source names no person; the French keeps the mockup's. |
-| `task.editor.*`, `task.composer.*` but their mockup words, `task.comments.mention`          | Texts of the block editor and composer bricks, their defaults.     |
-| `task.attachments.kind-*`, `*-of`, `processing*`, `uploading`, `failed`, `sending`          | Texts of the attachment brick, its defaults.                       |
-| `task.attachments.working`, `done`, `remove`, `max`, `reject`, `limit`, `file*`             | Texts of the attachment and drop zone bricks, their defaults.      |
-| `task.sections.avatar-*`, `task.sections.time.*`, `task.sections.size.*`                    | Avatar brick texts, time and size formats the mockup inlines.      |
-| `task.*.read-failed`, `task.*.loading`, `task.*.more-failed`, `task.activity.empty`         | The mockup draws no failed, loading or empty read of these parts.  |
-| `task.comments.load-more`, `task.activity.show-more`                                        | The mockup's lists are not paged.                                  |
-| `task.approval.failed`, `task.attachments.upload-failed`, `task.attachments.remove-failed`  | The mockup draws no refused write.                                 |
-| `task.comments.*-failed`, `task.subtasks.create-failed`                                     | The mockup draws no refused write.                                 |
-| `task.properties.*-failed`, `task.properties.failed-text`                                   | The mockup draws no refused write.                                 |
-| `task.properties.conflict-text`                                                             | The mockup draws no conflicting write.                             |
-| `task.properties.approvers-invalid`, `task.properties.dependency-cycle`                     | Refusals the mockup does not draw.                                 |
-| `task.properties.people-loading`, `task.properties.labels-none`                             | Loading and empty menus the mockup does not draw.                  |
-| `task.properties.unknown-member`                                                            | A former member the mockup does not draw.                          |
-| `task.properties.due-yesterday`, `task.properties.due-*-month`                              | Taken from the spec and the calendar brick.                        |
-| `task.properties.time-entries`                                                              | The mockup writes `Saisies · 3 saisies`; the count is kept once.   |
-| `task.activity.automation`                                                                  | The mockup names no automation actor.                              |
-| `task.description.restored*`, `discard`, `keep`, `kept-*`                                   | The mockup draws no failed description save nor a kept draft.      |
-| `task.attachments.empty`, `task.attachments.empty-text`                                     | The mockup draws no refused empty file.                            |
-| `task.development.read-failed`, `loading`, `more-failed`, `show-more`, `list`               | The mockup draws no failed, loading or paged read of the links.    |
-| `task.development.checks-failed-some`, `task.development.checks-failed`                     | The mockup writes one failed check; counts from the contract.      |
-| `task.development.checks-failed-short`                                                      | The mockup's `11/12` counts suites still running as passed.        |
-| `task.development.detected-description`                                                     | The mockup detects no key in a request's description.              |
-| `task.row-actions.failed`, `task.row-actions.delete-failed`                                 | The mockup draws no refused write.                                 |
-| `task.row-actions.undo-failed`, `remind-failed`, `restore-failed`                           | The mockup draws no refused undo, reminder or restore.             |
-| `task.row-actions.conflict`, `task.row-actions.conflict-text`                               | The mockup draws no conflicting write.                             |
-| `task.row-actions.unconfirmed`, `task.row-actions.unconfirmed-text`                         | The mockup draws no unanswered write.                              |
-| `task.row-actions.unknown`, `task.row-actions.copy-failed`                                  | The mockup draws no uncertain write nor refused copy.              |
-| `task.menu.people-loading`, `task.menu.people-failed`                                       | The mockup's `Assign` draws no loading nor failed read of members. |
+| Unit                                                                                        | Reason                                                                                  |
+| ------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| `task.combobox.*`                                                                           | Texts of the combobox brick, taken from its built-in defaults.                          |
+| `task.create.due-*` but `due-today`, `due-tomorrow`, `due-friday`, `due-sprint`, `due-none` | Texts of the date picker brick, taken from its built-in defaults.                       |
+| `task.people-picker.search`, `task.label-picker.search`                                     | The mockup's menus have no search field.                                                |
+| `task.priority-picker.label`, `task.status-picker.menu`, `task.create.destination`          | Accessible names the mockup does not write out.                                         |
+| `task.create.name-required`                                                                 | The mockup disables `Create the task` without showing an error.                         |
+| `task.create.lists-failed`, `task.retry`, `task.create.no-list`                             | The mockup draws no failed or empty read of the lists.                                  |
+| `task.create.failed`, `task.create.failed-text`                                             | The mockup draws no refused creation.                                                   |
+| `task.status-change.failed*`, `task.status-change.conflict*`                                | The mockup draws no refused or conflicting status change.                               |
+| `task.status-change.cancel-failed-*`                                                        | The mockup draws no refused cancellation.                                               |
+| `task.title-cell.subtasks`, `task.title-cell.checklist`, `task.title-cell.comments`         | Screen reader texts and tooltips the mockup does not write out.                         |
+| `task.tabs.subtasks-count-*`, `task.tabs.comments-count-*`                                  | Spoken counts of the detail tabs (`cwTab` `countLabel`); the mockup shows bare numbers. |
+| `task.cancel-dialog.close`, `task.create.close`                                             | Close button of the dialog brick.                                                       |
+| `task.detail.failed*`, `task.detail.*-failed`, `task.detail.conflict*`                      | The mockup draws no refused or conflicting write.                                       |
+| `task.detail.parent.failed`, `task.detail.parent.loading`, `task.detail.list.*`             | The mockup's pickers are popovers without a failed read or search.                      |
+| `task.detail.trashed-with-one`, `task.detail.reminder.hour*`, `task.detail.reminder.*-at`   | Singular form and time formats the mockup writes inline.                                |
+| `task.detail.watch-one`, `task.detail.unwatch-one`                                          | The singular of the follower count, plural in the mockup.                               |
+| `task.detail.confirm-*`, `task.detail.dialog-close`, `task.detail.copy-failed`              | Texts of the bricks and of a refused clipboard.                                         |
+| `task.detail.reminder.note-placeholder`                                                     | The English source names no person; the French keeps the mockup's.                      |
+| `task.editor.*`, `task.composer.*` but their mockup words, `task.comments.mention`          | Texts of the block editor and composer bricks, their defaults.                          |
+| `task.attachments.kind-*`, `*-of`, `processing*`, `uploading`, `failed`, `sending`          | Texts of the attachment brick, its defaults.                                            |
+| `task.attachments.working`, `done`, `remove`, `max`, `reject`, `limit`, `file*`             | Texts of the attachment and drop zone bricks, their defaults.                           |
+| `task.sections.avatar-*`, `task.sections.time.*`, `task.sections.size.*`                    | Avatar brick texts, time and size formats the mockup inlines.                           |
+| `task.*.read-failed`, `task.*.loading`, `task.*.more-failed`, `task.activity.empty`         | The mockup draws no failed, loading or empty read of these parts.                       |
+| `task.comments.load-more`, `task.activity.show-more`                                        | The mockup's lists are not paged.                                                       |
+| `task.approval.failed`, `task.attachments.upload-failed`, `task.attachments.remove-failed`  | The mockup draws no refused write.                                                      |
+| `task.comments.*-failed`, `task.subtasks.create-failed`                                     | The mockup draws no refused write.                                                      |
+| `task.properties.*-failed`, `task.properties.failed-text`                                   | The mockup draws no refused write.                                                      |
+| `task.properties.conflict-text`                                                             | The mockup draws no conflicting write.                                                  |
+| `task.properties.approvers-invalid`, `task.properties.dependency-cycle`                     | Refusals the mockup does not draw.                                                      |
+| `task.properties.people-loading`, `task.properties.labels-none`                             | Loading and empty menus the mockup does not draw.                                       |
+| `task.properties.unknown-member`                                                            | A former member the mockup does not draw.                                               |
+| `task.properties.due-yesterday`, `task.properties.due-*-month`                              | Taken from the spec and the calendar brick.                                             |
+| `task.properties.time-entries`                                                              | The mockup writes `Saisies · 3 saisies`; the count is kept once.                        |
+| `task.activity.automation`                                                                  | The mockup names no automation actor.                                                   |
+| `task.description.restored*`, `discard`, `keep`, `kept-*`                                   | The mockup draws no failed description save nor a kept draft.                           |
+| `task.attachments.empty`, `task.attachments.empty-text`                                     | The mockup draws no refused empty file.                                                 |
+| `task.development.read-failed`, `loading`, `more-failed`, `show-more`, `list`               | The mockup draws no failed, loading or paged read of the links.                         |
+| `task.development.checks-failed-some`, `task.development.checks-failed`                     | The mockup writes one failed check; counts from the contract.                           |
+| `task.development.checks-failed-short`                                                      | The mockup's `11/12` counts suites still running as passed.                             |
+| `task.development.detected-description`                                                     | The mockup detects no key in a request's description.                                   |
+| `task.row-actions.failed`, `task.row-actions.delete-failed`                                 | The mockup draws no refused write.                                                      |
+| `task.row-actions.undo-failed`, `remind-failed`, `restore-failed`                           | The mockup draws no refused undo, reminder or restore.                                  |
+| `task.row-actions.conflict`, `task.row-actions.conflict-text`                               | The mockup draws no conflicting write.                                                  |
+| `task.row-actions.unconfirmed`, `task.row-actions.unconfirmed-text`                         | The mockup draws no unanswered write.                                                   |
+| `task.row-actions.unknown`, `task.row-actions.copy-failed`                                  | The mockup draws no uncertain write nor refused copy.                                   |
+| `task.menu.people-loading`, `task.menu.people-failed`                                       | The mockup's `Assign` draws no loading nor failed read of members.                      |
