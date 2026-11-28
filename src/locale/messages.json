@@ -1573,7 +1573,7 @@
     "organization.members.invite-emails": "Email addresses",
     "organization.members.invite-placeholder": "marc.roux@ateliernord.fr, lucie@example.com",
     "organization.members.invite-role": "Role",
-    "organization.members.invite-role-locked": " The role stays the one sent: these addresses may already be invited with it. ",
+    "organization.members.invite-role-locked": " The role stays the one sent until this dialog closes: the addresses sent may already be invited with it. ",
     "organization.members.cancel": "Cancel",
     "organization.members.invite": "Invite",
     "organization.members.invite-role-member": "Member — access to the shared spaces",

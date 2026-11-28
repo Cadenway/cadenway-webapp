@@ -1604,7 +1604,7 @@
     "organization.members.invite-role": "Rôle",
     "organization.members.invite-role-admin": "Administrateur — gère membres et réglages",
     "organization.members.invite-role-guest": "Invité — accès à des listes précises, gratuit",
-    "organization.members.invite-role-locked": "Le rôle reste celui envoyé : ces adresses sont peut-être déjà invitées avec ce rôle.",
+    "organization.members.invite-role-locked": "Le rôle reste celui envoyé jusqu’à la fermeture de cette fenêtre : les adresses envoyées sont peut-être déjà invitées avec ce rôle.",
     "organization.members.invite-role-member": "Membre — accès aux espaces partagés",
     "organization.members.invite-seats": "{$count} sièges disponibles sur le plan {$plan}.",
     "organization.members.invite-seats-one": "{$count} siège disponible sur le plan {$plan}.",

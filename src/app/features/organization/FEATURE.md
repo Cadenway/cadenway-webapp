@@ -320,9 +320,11 @@ resent` from a resend that answered, or from the invitation itself listed with a
   `already-member` and `already-invited`, which the contract counts as not sent; the adapter lists
   them in `notSent`) stays in the dialog, which keeps only those addresses and its role (both
   fields are disabled while the batch is sent, so they hold the submitted snapshot; after a batch
-  of unknown outcome the role stays the one sent, disabled with
-  `The role stays the one sent: these addresses may already be invited with it.`, until the
-  addresses are cleared or the dialog closes), with
+  of unknown outcome the role stays the one sent, disabled with the `invite-role-locked` hint,
+  until the dialog closes: clearing or editing the addresses does not unlock it, since a second
+  send of an address the lost batch reached answers `already-invited` and keeps that
+  invitation's role, which the toast never restates (it counts such addresses as skipped, already
+  a member or invited)), with
   `{n} address(es) could not be invited` / `The addresses stay in the list: press Invite to try again.`,
   after the invited ones' toast when some were invited, else with the skipped count first. A batch
   of unknown outcome keeps every address in the dialog, reads the list again and warns

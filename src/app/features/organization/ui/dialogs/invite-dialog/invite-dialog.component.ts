@@ -348,8 +348,10 @@ export class InviteDialog {
    * Property roleLocked
    *
    * @description
-   * Whether a batch of unknown outcome was sent from this dialog: the addresses it holds may
-   * already be invited with the role sent, so the role stays fixed while addresses remain.
+   * Whether a batch of unknown outcome was sent from this dialog: any of its addresses may already
+   * be invited with the role sent, and a second send of one answers `already-invited` without
+   * changing that role, so the role stays fixed, whatever the field holds, until the page closes
+   * the dialog.
    *
    * @type {InputSignal<boolean>}
    * @readonly
@@ -433,19 +435,6 @@ export class InviteDialog {
   );
 
   /**
-   * Property roleFixed
-   *
-   * @description
-   * Whether the role is kept as sent: `roleLocked` while the field still holds an address.
-   *
-   * @type {Signal<boolean>}
-   * @readonly
-   */
-  protected readonly roleFixed: Signal<boolean> = computed(
-    (): boolean => this.roleLocked() && this.model().emails.trim() !== '',
-  );
-
-  /**
    * Property inviteForm
    *
    * @description
@@ -460,7 +449,7 @@ export class InviteDialog {
    */
   protected readonly inviteForm: FieldTree<InviteModel> = form(this.model, (path) => {
     disabled(path, { when: (): boolean => this.pending() });
-    disabled(path.role, { when: (): boolean => this.roleFixed() });
+    disabled(path.role, { when: (): boolean => this.roleLocked() });
     validate(path.emails, (context: FieldContext<string>) => {
       const { valid, invalid }: ParsedAddresses = parseAddresses(context.value());
       const refused: ReadonlySet<string> = new Set<string>(

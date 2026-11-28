@@ -625,6 +625,46 @@ describe('MembersPage', () => {
     });
   });
 
+  it('locks the role after a batch of unknown outcome until the dialog closes', async () => {
+    const [fixture, fakes]: [ComponentFixture<MembersPage>, Fakes] = await render('admin');
+    fakes.invitations.invite.mockRejectedValueOnce(new HttpErrorResponse({ status: 503 }));
+    const roleDisabled: () => boolean = (): boolean => {
+      const trigger: HTMLElement | null | undefined = find(
+        'invite-role',
+      )?.querySelector<HTMLElement>('[role="combobox"], button');
+      return (
+        trigger?.hasAttribute('disabled') === true ||
+        trigger?.getAttribute('aria-disabled') === 'true'
+      );
+    };
+
+    find('members-invite')?.click();
+    await fixture.whenStable();
+    const field: HTMLTextAreaElement = find('invite-emails') as HTMLTextAreaElement;
+    field.value = 'lucie@example.com';
+    field.dispatchEvent(new Event('input'));
+    await fixture.whenStable();
+    find('invite-submit')?.click();
+    await vi.waitFor(async () => {
+      await fixture.whenStable();
+      expect(find('invite-role-locked')).not.toBeNull();
+    });
+    expect(roleDisabled()).toBe(true);
+
+    [...document.querySelectorAll<HTMLButtonElement>('[role="dialog"] button')]
+      .find((button: HTMLButtonElement) => button.textContent.trim() === 'Cancel')
+      ?.click();
+    await vi.waitFor(async () => {
+      await fixture.whenStable();
+      expect(find('invite-emails')).toBeNull();
+    });
+    find('members-invite')?.click();
+    await fixture.whenStable();
+
+    expect(find('invite-role-locked')).toBeNull();
+    expect(roleDisabled()).toBe(false);
+  });
+
   it('closes the dialog silently when the gateway drops the batch', async () => {
     const [fixture, fakes]: [ComponentFixture<MembersPage>, Fakes] = await render('admin');
     fakes.invitations.invite.mockRejectedValueOnce(

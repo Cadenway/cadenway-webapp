@@ -288,8 +288,17 @@ describe('InviteDialog', () => {
     }
   });
 
-  it('keeps the role sent while it holds addresses kept from a batch of unknown outcome', async () => {
+  it('keeps the role sent after a batch of unknown outcome, even once the field is cleared', async () => {
     const [fixture, submitted]: [ComponentFixture<InviteDialog>, Mock] = await open(null);
+    const roleDisabled: () => boolean = (): boolean => {
+      const trigger: HTMLElement | null | undefined = find(
+        'invite-role',
+      )?.querySelector<HTMLElement>('[role="combobox"], button');
+      return (
+        trigger?.hasAttribute('disabled') === true ||
+        trigger?.getAttribute('aria-disabled') === 'true'
+      );
+    };
     await pickGuest(fixture);
     await type(fixture, addresses(2));
     await submit(fixture);
@@ -297,24 +306,17 @@ describe('InviteDialog', () => {
     fixture.componentRef.setInput('roleLocked', true);
     await fixture.whenStable();
 
-    const trigger: HTMLElement | null | undefined = find('invite-role')?.querySelector<HTMLElement>(
-      '[role="combobox"], button',
-    );
-    expect(
-      trigger?.hasAttribute('disabled') === true ||
-        trigger?.getAttribute('aria-disabled') === 'true',
-    ).toBe(true);
+    expect(roleDisabled()).toBe(true);
     expect(text(find('invite-role-locked'))).toBe(
-      'The role stays the one sent: these addresses may already be invited with it.',
+      'The role stays the one sent until this dialog closes: the addresses sent may already be invited with it.',
     );
-    await submit(fixture);
-    expect(submitted).toHaveBeenLastCalledWith({
-      emails: ['p0@ateliernord.fr', 'p1@ateliernord.fr'],
-      role: 'guest',
-    });
-
     await type(fixture, '');
-    expect(find('invite-role-locked')).toBeNull();
+    expect(roleDisabled()).toBe(true);
+    expect(find('invite-role-locked')).not.toBeNull();
+    await type(fixture, 'p1@ateliernord.fr');
+    await submit(fixture);
+
+    expect(submitted).toHaveBeenLastCalledWith({ emails: ['p1@ateliernord.fr'], role: 'guest' });
   });
 
   it('replaces the addresses with those kept to send again, keeping the role', async () => {
