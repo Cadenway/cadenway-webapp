@@ -163,8 +163,11 @@ for `Create your first task`, and reads its progress again after each `created`.
   read is fresh. The directory read is bound to the organization id and `OrganizationPin`
   revision it began with: readers of another context start their own read, and once the context
   changes the old read requests no further page and fails with `OrganizationSwitchPendingError`.
-  An approval reader passes the confirmed task version it follows (`atLeast`): when the shared
-  read answers an older version (it began before a write), that reader reads again.
+  Approval reads are shared by organization context and task key, and an answer received after
+  its context changed fails the same way. An approval reader passes the confirmed task version it
+  follows (`atLeast`) and checks every answer against it, its retries included: while an answer
+  is older (a read begun before a write), it reads again (a read it has not received yet, or a new
+  one), twice at most, then keeps the latest answer for its version follower to refresh later.
 - `@core/realtime` (`watch({ kind: 'task' })`) for the open detail; Errors' `.` entry
   (`RouteErrorPanel`) for the detail's not-found, deleted-task and unavailable states; Spaces'
   `ports/list-directory` (`LIST_DIRECTORY`) for `Move to…`.
