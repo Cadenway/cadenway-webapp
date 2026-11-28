@@ -964,7 +964,8 @@ colors with the same words.
     milestone count, members, labels and saved views (secondary reads), the header's and the
     selection bar's writes. The header's member names and the member directory
     (`organizationMembers`) share the directory's first page while both read it
-    (`ListsApi.listMembers` and `organizationMembers`), so a list page opens with one request.
+    (`ListsApi.listMembers` and `organizationMembers`), so a list page opens with one request:
+    the header asks for it together with the list's grants, not once they answer.
     The shared page is bound to the organization id and `OrganizationPin` revision it was asked
     in; `organizationMembers` requests no further page once the context changed and rejects with
     `OrganizationSwitchPendingError`. It watches the list's realtime room while the page lives and

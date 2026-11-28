@@ -212,6 +212,24 @@ describe('ListsApi', () => {
     expect(members['listMembers']).toHaveBeenCalledTimes(2);
   });
 
+  it('shares the first directory page with the assignees even when the grants answer last', async () => {
+    const grants: Subject<unknown> = new Subject<unknown>();
+    (TestBed.inject(AccessService).listListGrants as unknown as Mock).mockReturnValueOnce(grants);
+    const directory: Subject<unknown> = new Subject<unknown>();
+    members['listMembers'].mockReturnValueOnce(directory);
+    const header: Promise<ListMembers> = api.listMembers('l-bugs');
+    const assignees: Promise<readonly ListMember[]> = api.organizationMembers();
+    directory.next({ items: [{ userId: 'u1', name: 'Inès Robert' }], nextCursor: null, total: 1 });
+    directory.complete();
+
+    expect(await assignees).toHaveLength(1);
+    grants.next({ items: [{ userId: 'u1' }], nextCursor: null, total: 1 });
+    grants.complete();
+
+    expect((await header).items[0]?.name).toBe('Inès Robert');
+    expect(members['listMembers']).toHaveBeenCalledTimes(1);
+  });
+
   it('shares no directory page across organizations and stops a read once it changed', async () => {
     const pin: OrganizationPin = TestBed.inject(OrganizationPin);
     pin.set('org-atelier');
