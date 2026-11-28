@@ -23,7 +23,7 @@
       @for (member of rows(); track member.id) {
         <tr
           cwTableRow
-          class="group/row max-md:flex max-md:h-auto max-md:flex-wrap max-md:items-center max-md:gap-x-3 max-md:gap-y-1.5 max-md:p-3"
+          class="group/row h-11 max-md:flex max-md:h-auto max-md:flex-wrap max-md:items-center max-md:gap-x-3 max-md:gap-y-1.5 max-md:p-3"
           data-testid="member-row"
         >
           <td cwTableCell class="max-md:block max-md:min-w-0 max-md:basis-full max-md:px-0">
@@ -138,7 +138,7 @@
         } @else {
           <tr class="max-md:block">
             <td [attr.colspan]="columns()" class="max-md:block">
-              <cw-empty class="p-4" data-testid="members-empty">
+              <cw-empty size="sm" data-testid="members-empty">
                 <cw-empty-header>
                   <cw-empty-media>
                     <ng-icon name="phosphorUsersBold" aria-hidden="true" />

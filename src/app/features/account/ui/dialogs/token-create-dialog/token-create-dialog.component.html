@@ -102,42 +102,45 @@
 
       <fieldset
         cwFieldSet
-        class="flex min-w-0 flex-col gap-2"
         [attr.aria-describedby]="
           createForm.scopes().touched() && createForm.scopes().invalid()
             ? 'token-scopes-error'
             : null
         "
       >
-        <legend cwFieldLegend class="mb-1" i18n="@@account.api-tokens.scopes-label">Scopes</legend>
-        @for (option of scopeOptions; track option.scope; let index = $index) {
-          <div class="flex items-start gap-2">
-            <cw-checkbox
-              class="mt-0.5"
-              [id]="scopeId(index)"
-              [formField]="createForm.scopes[option.scope]"
-            />
-            <label [for]="scopeId(index)" class="flex flex-col gap-0.5">
-              <span class="font-mono text-xs leading-5">{{ option.scope }}</span>
-              <span class="text-xs text-muted-foreground">{{ option.hint }}</span>
-            </label>
-          </div>
-        }
-        @if (createForm.scopes().touched() && createForm.scopes().invalid()) {
-          <p
-            id="token-scopes-error"
-            role="alert"
-            class="flex items-center gap-1 text-xs font-medium text-destructive"
-          >
-            <ng-icon
-              name="phosphorWarningCircleFill"
-              size="0.875rem"
-              class="shrink-0"
-              aria-hidden="true"
-            />
-            {{ createForm.scopes().errors()[0]?.message }}
-          </p>
-        }
+        <legend class="mb-1 text-sm font-medium" i18n="@@account.api-tokens.scopes-label">
+          Scopes
+        </legend>
+        <div class="flex flex-col gap-2">
+          @for (option of scopeOptions; track option.scope; let index = $index) {
+            <div class="flex items-start gap-2">
+              <cw-checkbox
+                class="mt-0.5"
+                [id]="scopeId(index)"
+                [formField]="createForm.scopes[option.scope]"
+              />
+              <label [for]="scopeId(index)" class="flex flex-col gap-0.5">
+                <span class="font-mono text-xs leading-5">{{ option.scope }}</span>
+                <span class="text-xs text-muted-foreground">{{ option.hint }}</span>
+              </label>
+            </div>
+          }
+          @if (createForm.scopes().touched() && createForm.scopes().invalid()) {
+            <p
+              id="token-scopes-error"
+              role="alert"
+              class="flex items-center gap-1 text-xs font-medium text-destructive"
+            >
+              <ng-icon
+                name="phosphorWarningCircleFill"
+                size="0.875rem"
+                class="shrink-0"
+                aria-hidden="true"
+              />
+              {{ createForm.scopes().errors()[0]?.message }}
+            </p>
+          }
+        </div>
       </fieldset>
     </form>
   }

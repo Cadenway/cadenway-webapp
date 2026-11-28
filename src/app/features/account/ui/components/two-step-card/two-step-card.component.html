@@ -225,17 +225,19 @@
       </li>
     </ul>
   } @else {
-    <cw-alert variant="destructive" class="mx-4 w-auto" data-testid="two-step-off-alert">
-      <cw-alert-title i18n="@@account.security.two-step-off-title"
-        >Your account is protected only by a password.</cw-alert-title
-      >
-      @if (own) {
-        @let name = organization().name;
-        <cw-alert-description i18n="@@account.security.two-step-off-required"
-          >{{ name }} will ask you for verification at your next sign-in: set it up
-          now.</cw-alert-description
+    <div class="px-4">
+      <cw-alert variant="destructive" data-testid="two-step-off-alert">
+        <cw-alert-title i18n="@@account.security.two-step-off-title"
+          >Your account is protected only by a password.</cw-alert-title
         >
-      }
-    </cw-alert>
+        @if (own) {
+          @let name = organization().name;
+          <cw-alert-description i18n="@@account.security.two-step-off-required"
+            >{{ name }} will ask you for verification at your next sign-in: set it up
+            now.</cw-alert-description
+          >
+        }
+      </cw-alert>
+    </div>
   }
 </cw-card>

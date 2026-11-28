@@ -51,7 +51,8 @@ const PRESENCE_FILTERS: readonly MemberPresenceFilter[] = ['all', 'online', 'off
  * `Search for a member` (full width on a phone, 256 px from `sm`), the role tabs `Filter by role`
  * (`All`, `Administrators` counting the owner, `Members`, `Guests`, each with its count), the
  * presence tabs `Filter by presence` (`All`, `Online` with a jade dot, `Offline`) and
- * `<n> online`, announced politely. It wraps on a narrow screen. Presentational: the page owns the
+ * `<n> online`, announced politely. It wraps on a narrow screen, and the role tabs, wider than a
+ * 390 px phone, scroll sideways inside their own box instead of widening the page. Presentational: the page owns the
  * filters and passes them in; each change is emitted.
  */
 @Component({
