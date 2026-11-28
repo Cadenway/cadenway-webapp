@@ -37,12 +37,10 @@ const SPACE_NAME_MAX_LENGTH: number = 80;
  * The assistant's `Space` screen (`App.dc.html` lines 2684-2687): the space name, `aria-invalid`
  * while blank (the assistant then cannot continue), and the color among Spaces' swatches without
  * `gris` (line 5254), as a single-choice toggle group like Spaces' look picker. The key prefix is
- * not shown: the assistant derives it from the name. The name field is the 36 px (`lg`) input. Each
- * swatch is the mockup's 32 px ring (`p-0.5`, `ring-primary/60` once checked) rather than the toggle
- * item's grey 40 x 28 pill: the toggle group keeps the radio semantics and the keyboard, and the
- * important modifiers replace the item's size, radius, padding and selected background, which its
- * own classes would otherwise win (a swatch item is a design-system need). It edits `name` and
- * `color` and sends nothing.
+ * not shown: the assistant derives it from the name. The name field is the 36 px (`lg`) input. The
+ * colors are a `swatch` toggle group: the mockup's 32 px circles, ringed `ring-primary/60` once
+ * checked, each filled by its colored span with a check when chosen. It edits `name` and `color`
+ * and sends nothing.
  */
 @Component({
   selector: 'cw-onboarding-space-step',
@@ -74,8 +72,7 @@ const SPACE_NAME_MAX_LENGTH: number = 80;
       >
       <cw-toggle-group
         type="single"
-        size="sm"
-        class="flex flex-wrap gap-2"
+        variant="swatch"
         ariaLabel="Color"
         i18n-ariaLabel="@@onboarding.wizard.space.color"
         data-testid="onboarding-space-colors"
@@ -85,13 +82,12 @@ const SPACE_NAME_MAX_LENGTH: number = 80;
         @for (choice of colors; track choice.value) {
           <button
             cwToggleGroupItem
-            class="size-8! min-w-8! rounded-full! p-0.5! ring-2 ring-transparent transition-shadow hover:bg-transparent! aria-checked:ring-primary/60 data-[state=on]:bg-transparent!"
             [value]="choice.value"
             [attr.aria-label]="choice.label"
             [attr.title]="choice.label"
           >
             <span
-              class="flex size-7 items-center justify-center rounded-full text-background"
+              class="flex items-center justify-center text-background"
               [class]="choice.swatch"
               aria-hidden="true"
             >

@@ -74,7 +74,7 @@ interface WizardStepLabel {
  * closes and that has no close button, since only `Set up later` dismisses it, for good. The
  * window is named by the card's `h1` (`cwDialogTitle` imposes an `h2`), which takes the focus on
  * open and after each screen change, announced as `Step n of 4: <name>`. The segmented step bar
- * (`cw-stepper variant="segments"`, not clickable) and the `Step n of 4` line follow the screen
+ * (`cw-stepper variant="segments" tone="primary"`, not clickable) and the `Step n of 4` line follow the screen
  * shown. Until the progress is read the card shows a skeleton; a failed read shows an inline error
  * whose Retry reads it again. After a Retry removes its alert the focus goes to the title. A
  * history move (Back, Forward) or a router navigation does not close it (`closeOnNavigation` is
