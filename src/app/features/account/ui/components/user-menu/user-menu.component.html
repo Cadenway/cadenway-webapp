@@ -108,7 +108,13 @@
   </cw-menu-radio-group>
 </cw-menu>
 
-<cw-menu #themeMenu side="right" ariaLabel="Theme" i18n-ariaLabel="@@account.user-menu.theme">
+<cw-menu
+  #themeMenu
+  side="right"
+  minWidth="40"
+  ariaLabel="Theme"
+  i18n-ariaLabel="@@account.user-menu.theme"
+>
   <cw-menu-radio-group [value]="theme.resolved()" (valueChange)="chooseTheme($event)">
     <button cwMenuItemRadio value="light">
       <ng-icon name="phosphorSunBold" aria-hidden="true" />
