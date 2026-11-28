@@ -28,7 +28,7 @@ import { takesSingular } from '../../../utils/plural/plural.util';
  * more. A click on a row emits `opened`; its context menu (right click, Shift F10, the Menu key)
  * opens the page's task menu, `menu`, after `menuOpened` gave the row's key. `focusFirst` gives
  * the focus back after a deletion. Without a late task, a
- * dashed box says so (`No late task.`). Presentational: inputs and outputs.
+ * dashed box says so (`No late tasks.`). Presentational: inputs and outputs.
  */
 @Component({
   selector: 'cw-late-tasks',

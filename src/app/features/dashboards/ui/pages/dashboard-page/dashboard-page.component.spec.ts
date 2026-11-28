@@ -392,7 +392,7 @@ describe('DashboardPage', () => {
     const harness: RouterTestingHarness = await RouterTestingHarness.create(
       '/atelier-nord/dashboards',
     );
-    await expect.poll(() => text(harness, 'late-empty')).toBe('No late task.');
+    await expect.poll(() => text(harness, 'late-empty')).toBe('No late tasks.');
 
     dashboard.mockResolvedValueOnce(
       dashboardOf({
@@ -584,7 +584,7 @@ describe('DashboardPage', () => {
     await expect.poll(() => alertButton('Delete the task')).toBeDefined();
     alertButton('Delete the task')?.click();
 
-    await expect.poll(() => text(harness, 'late-empty')).toBe('No late task.');
+    await expect.poll(() => text(harness, 'late-empty')).toBe('No late tasks.');
     await expect.poll(() => document.activeElement?.textContent.trim()).toBe('Late');
   });
 

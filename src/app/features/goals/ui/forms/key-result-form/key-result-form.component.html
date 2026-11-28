@@ -33,7 +33,12 @@
         class="flex items-center gap-1 text-xs font-medium text-destructive"
         [id]="fieldId('label-error')"
       >
-        <ng-icon name="phosphorWarningCircleFill" class="size-3.5 shrink-0" aria-hidden="true" />
+        <ng-icon
+          name="phosphorWarningCircleFill"
+          size="0.875rem"
+          class="shrink-0"
+          aria-hidden="true"
+        />
         {{ resultForm.label().errors()[0]?.message }}
       </p>
     }
@@ -66,7 +71,12 @@
         class="flex items-center gap-1 text-xs font-medium text-destructive"
         [id]="fieldId('target-error')"
       >
-        <ng-icon name="phosphorWarningCircleFill" class="size-3.5 shrink-0" aria-hidden="true" />
+        <ng-icon
+          name="phosphorWarningCircleFill"
+          size="0.875rem"
+          class="shrink-0"
+          aria-hidden="true"
+        />
         {{ resultForm.target().errors()[0]?.message }}
       </p>
     }

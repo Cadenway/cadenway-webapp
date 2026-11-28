@@ -5,7 +5,6 @@
       <a
         cwButton
         variant="ghost"
-        size="sm"
         class="-ml-2 text-muted-foreground hover:text-foreground"
         data-testid="document-back"
         [routerLink]="docsLink()"
@@ -96,7 +95,12 @@
         <p
           class="flex items-center gap-1.5 border-b border-border pt-2 pb-4 text-xs text-muted-foreground"
         >
-          <ng-icon name="phosphorPencilSimpleBold" class="size-3.5 shrink-0" aria-hidden="true" />
+          <ng-icon
+            name="phosphorPencilSimpleBold"
+            size="0.875rem"
+            class="shrink-0"
+            aria-hidden="true"
+          />
           @let editedSpace = spaceName();
           <span class="truncate" i18n="@@docs.document.editing"
             >{{ editedSpace }} · editing in progress</span
@@ -110,7 +114,8 @@
           >
             <ng-icon
               name="phosphorWarningBold"
-              class="mt-0.5 size-4 shrink-0 text-destructive"
+              size="1rem"
+              class="mt-0.5 shrink-0 text-destructive"
               aria-hidden="true"
             />
             <span>{{ notice }}</span>
@@ -148,7 +153,7 @@
           </p>
         </header>
         @if (doc.body.trim() === '') {
-          <cw-empty variant="outline" size="sm" data-testid="document-empty">
+          <cw-empty variant="outline" class="rounded-lg! border-input" data-testid="document-empty">
             <cw-empty-header>
               <cw-empty-description>
                 @if (store.canEdit()) {
