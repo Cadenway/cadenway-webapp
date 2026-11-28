@@ -805,6 +805,59 @@ describe('OnboardingWizardStore', () => {
     });
   });
 
+  describe('a batch of unknown outcome sent again', () => {
+    const emails: string[] = Array.from(
+      { length: 100 },
+      (_email: unknown, index: number) => `member${String(index)}@ateliernord.fr`,
+    );
+
+    it('replays it with its body and key, and sends a leftover address apart', async () => {
+      const { store, fakes }: Setup = setup(progress(2, { step: 'team' }));
+      fakes.invite
+        .mockResolvedValueOnce({
+          invited: 49,
+          skipped: 0,
+          alreadyInvited: 0,
+          notSent: ['member0@ateliernord.fr'],
+        })
+        .mockRejectedValueOnce(new HttpErrorResponse({ status: 503 }));
+      store.changeEmails(emails);
+
+      await store.next();
+      expect(store.step()).toBe('team');
+      await store.next();
+
+      const calls: unknown[][] = fakes.invite.mock.calls;
+      expect(calls).toHaveLength(4);
+      expect(calls[2]).toEqual([emails.slice(50), calls[1]?.[1]]);
+      expect(calls[3]?.[0]).toEqual(['member0@ateliernord.fr']);
+      expect(new Set([calls[0]?.[1], calls[1]?.[1], calls[3]?.[1]]).size).toBe(3);
+      expect(store.step()).toBe('import');
+    });
+
+    it('takes a new key for that batch only once one of its addresses was edited', async () => {
+      const { store, fakes }: Setup = setup(progress(2, { step: 'team' }));
+      fakes.invite
+        .mockRejectedValueOnce(new HttpErrorResponse({ status: 0 }))
+        .mockRejectedValueOnce(new HttpErrorResponse({ status: 0 }));
+      store.changeEmails(emails);
+
+      await store.next();
+      const edited: string[] = emails.map((email: string) =>
+        email === 'member3@ateliernord.fr' ? 'lea.petit@ateliernord.fr' : email,
+      );
+      store.changeEmails(edited);
+      await store.next();
+
+      const calls: unknown[][] = fakes.invite.mock.calls;
+      expect(calls).toHaveLength(4);
+      expect(calls[2]).toEqual([emails.slice(50), calls[1]?.[1]]);
+      expect(calls[3]?.[0]).toEqual(edited.slice(0, 50));
+      expect(calls[3]?.[1]).not.toBe(calls[0]?.[1]);
+      expect(calls[3]?.[1]).not.toBe(calls[1]?.[1]);
+    });
+  });
+
   it('sends each batch of 50 under its own key', async () => {
     const { store, fakes }: Setup = setup(progress(2, { step: 'team' }));
     store.changeEmails(

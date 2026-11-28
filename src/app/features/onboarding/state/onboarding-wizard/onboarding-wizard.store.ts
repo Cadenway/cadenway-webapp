@@ -35,6 +35,11 @@ import {
   onboardingPresets,
 } from '../../constants/presets/onboarding-presets.constants';
 import { OnboardingApi } from '../../data-access/services/onboarding-api/onboarding-api.service';
+import {
+  type InviteBatch,
+  planInviteBatches,
+  type UnresolvedInviteBatch,
+} from '../../utils/invite-batches/invite-batches.util';
 import type {
   OnboardingInvitationOutcome,
   OnboardingProgress,
@@ -649,9 +654,11 @@ interface OnboardingWizardStoreInstance {
    * inviting. Leaving the `Team` screen first invites the addresses not sent yet as members, in
    * batches of 50, when the person may invite: organization invitations hold on their own, so a
    * reload afterwards loses none (the addresses are not part of the draft, gap G6). An address
-   * sent is never sent again. Each batch carries the `Idempotency-Key` of its body, kept while its
-   * outcome is unknown (or after a `429`, which stores nothing) and renewed once the body changes
-   * or after any other answer. A batch whose outcome is unknown (`422 idempotency.key-reused`
+   * sent is never sent again. Each batch carries the `Idempotency-Key` of its body, kept with that
+   * exact body while its outcome is unknown (or after a `429`, which stores nothing): the next
+   * `Continue` sends such a batch again first, unchanged, when all its addresses are still to send,
+   * then the other addresses in new batches under new keys; editing or removing one of its
+   * addresses, or any other answer, drops its key. A batch whose outcome is unknown (`422 idempotency.key-reused`
    * included, never taken as a refusal) keeps its addresses unsent, shows a toast and keeps the
    * screen, so `Continue` sends them again safely, the same body under the same key; a refused batch (a `429`
    * daily limit included) shows the failure toast and the screen still changes. Within a batch,
@@ -794,11 +801,12 @@ function createOnboardingWizardStore(): Type<OnboardingWizardStoreInstance> {
           });
       };
 
-      // The `Idempotency-Key` of each batch body (organization and addresses, in order) whose
-      // outcome is unknown, or which a `429` refused (nothing is stored): a second Continue sends
-      // that body again under the same key, so the gateway replays the first answer. Any other
-      // answer drops it.
-      const batchKeys: Map<string, string> = new Map<string, string>();
+      // The batches sent whose outcome is unknown, or which a `429` refused (nothing is stored),
+      // each with its exact body, its key and its organization: a second Continue replays each
+      // one whose addresses are all still to send, unchanged and under its key, so the gateway
+      // replays its first answer (`planInviteBatches`). Any other answer drops it, and so does a
+      // Continue that changed its body (an address edited or removed).
+      let unresolved: readonly UnresolvedInviteBatch[] = [];
 
       // Returns whether the person may move on: false only when a batch's outcome is unknown, so
       // its addresses stay unsent and a second Continue sends them again (the same body under the
@@ -816,16 +824,38 @@ function createOnboardingWizardStore(): Type<OnboardingWizardStoreInstance> {
         let uncertain: boolean = false;
         let unsent: number = 0;
         let reached: boolean = false;
-        for (let start: number = 0; start < pending.length; start += INVITE_BATCH_SIZE) {
+        const mine: (item: UnresolvedInviteBatch) => boolean = (
+          item: UnresolvedInviteBatch,
+        ): boolean => item.organizationId === organizationId;
+        const plan: readonly InviteBatch[] = planInviteBatches(
+          pending,
+          unresolved.filter(mine).map((item: UnresolvedInviteBatch): InviteBatch => item.batch),
+          INVITE_BATCH_SIZE,
+          (): string => crypto.randomUUID(),
+        );
+        // An unresolved batch left out of the plan has another body now: its key is dropped.
+        unresolved = unresolved.filter(
+          (item: UnresolvedInviteBatch): boolean => !mine(item) || plan.includes(item.batch),
+        );
+        const resolve: (planned: InviteBatch, kept: boolean) => void = (
+          planned: InviteBatch,
+          kept: boolean,
+        ): void => {
+          unresolved = unresolved.filter(
+            (item: UnresolvedInviteBatch): boolean => item.batch !== planned,
+          );
+          if (kept) unresolved = [...unresolved, { organizationId, batch: planned }];
+        };
+        for (const planned of plan) {
           if (!live(organizationId)) return false;
-          const batch: readonly string[] = pending.slice(start, start + INVITE_BATCH_SIZE);
-          const fingerprint: string = JSON.stringify([organizationId, batch]);
-          const key: string = batchKeys.get(fingerprint) ?? crypto.randomUUID();
-          batchKeys.set(fingerprint, key);
+          const batch: readonly string[] = planned.emails;
           try {
-            const outcome: OnboardingInvitationOutcome = await store._api.invite(batch, key);
+            const outcome: OnboardingInvitationOutcome = await store._api.invite(
+              batch,
+              planned.key,
+            );
             // A readable answer is definite: this key would only replay it.
-            batchKeys.delete(fingerprint);
+            resolve(planned, false);
             if (!live(organizationId)) return false;
             const notSent: ReadonlySet<string> = new Set(
               (outcome.notSent ?? []).map((email: string): string => email.toLowerCase()),
@@ -849,14 +879,12 @@ function createOnboardingWizardStore(): Type<OnboardingWizardStoreInstance> {
             // `422 idempotency.key-reused`: another body was sent under the key, a fault of this
             // client and never a refusal of the addresses; the key is renewed and the outcome
             // stays unknown.
-            const unknown: boolean =
-              hasProblemCode(error, 'idempotency.key-reused') || isUnknownWriteOutcome(error);
-            if (
-              hasProblemCode(error, 'idempotency.key-reused') ||
-              (!unknown && readProblem(error)?.status !== 429)
-            ) {
-              batchKeys.delete(fingerprint);
-            }
+            const keyReused: boolean = hasProblemCode(error, 'idempotency.key-reused');
+            const unknown: boolean = keyReused || isUnknownWriteOutcome(error);
+            resolve(
+              planned,
+              !keyReused && (isUnknownWriteOutcome(error) || readProblem(error)?.status === 429),
+            );
             if (!live(organizationId)) return false;
             if (unknown) uncertain = true;
             else failed = true;

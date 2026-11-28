@@ -170,15 +170,20 @@ route), `withGettingStarted()` and `withOnboardingWizard()` (the `overlays` cont
   carries an `Idempotency-Key` (`crypto.randomUUID()`, as `finishOnboarding`), one per batch body:
   the organization and the 50 addresses at most of that batch, in order. The gateway scopes it to
   the organization, the person and the operation, and replays the original `200` for the same body
-  for 24 hours. Each store keeps the key of a batch body while its outcome is unknown (no answer,
-  an unreadable `2xx`, `408`, `5xx`, `503 upstream.unavailable` while the serving release cannot
-  replay keyed batches, `409 idempotency.request-in-progress`) and after a `429` (nothing is
-  stored), so sending that body again, when the addresses left fall into the same batch, reuses
-  it. A key is renewed once the body changes (other addresses, or the same ones cut into other
-  batches) and after any definite answer (a readable `200`, whatever its outcomes, or another
-  refusal); the dialog's keys are dropped with the organization. `422 idempotency.key-reused`
+  for 24 hours. Each store keeps every batch sent whose outcome is unknown (no answer, an
+  unreadable `2xx`, `408`, `5xx`, `503 upstream.unavailable` while the serving release cannot
+  replay keyed batches, `409 idempotency.request-in-progress`), or which a `429` refused (nothing
+  is stored), with its exact body and key. The next send (`Continue`, `Invite`) is cut by
+  `utils/invite-batches` (`planInviteBatches`): each kept batch whose addresses are all still to
+  send goes out first, unchanged and under its own key, whatever became of the other addresses (an
+  address an earlier batch left unsent never joins it); the remaining addresses are cut into new
+  batches of 50 under new keys. A kept batch one of whose addresses was edited or removed has
+  another body: its key is dropped and its other addresses join the new batches, while the other
+  kept batches still replay. A key is also dropped after any definite answer (a readable `200`,
+  whatever its outcomes, or another refusal); the dialog's batches are dropped with the
+  organization, and the assistant's are kept per organization. `422 idempotency.key-reused`
   (another body under the key) is a fault of this client, never a refusal of the addresses: the
-  key is renewed and the batch counts as of unknown outcome, with the same warning.
+  key is dropped and the batch counts as of unknown outcome, with the same warning.
 - The invitation marker: once a batch invited an address or found one `already-invited`, the
   assistant records `invitationSent` at once (`recordInvitation`), which the contract allows
   during the assistant (`updateOnboardingChecklist`: "the caller can record an invitation outcome

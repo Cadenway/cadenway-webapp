@@ -1070,6 +1070,55 @@ describe('GettingStartedStore', () => {
         return api.invite.mock.calls.map((call: unknown[]): string => call[1] as string);
       }
 
+      it('replays a batch of unknown outcome with its body and key, apart from a leftover address', async () => {
+        api.invite
+          .mockResolvedValueOnce({
+            invited: 49,
+            skipped: 0,
+            alreadyInvited: 0,
+            notSent: [many[0]],
+          })
+          .mockRejectedValueOnce(problem(503, 'upstream.unavailable'))
+          .mockResolvedValueOnce({ invited: 20, skipped: 0, alreadyInvited: 0 });
+        const store: GettingStartedStore = await setup();
+        store.start('invite');
+
+        await store.invite(many);
+        expect(store.inviteKept()).toEqual([many[0], ...many.slice(50, 100)]);
+        api.invite
+          .mockResolvedValueOnce({ invited: 0, skipped: 50, alreadyInvited: 50 })
+          .mockResolvedValueOnce({ invited: 1, skipped: 0, alreadyInvited: 0 });
+        await store.invite(store.inviteKept());
+
+        const calls: unknown[][] = api.invite.mock.calls;
+        expect(calls).toHaveLength(5);
+        expect(calls[3]).toEqual([many.slice(50, 100), calls[1]?.[1]]);
+        expect(calls[4]?.[0]).toEqual([many[0]]);
+        expect(new Set(keys()).size).toBe(4);
+        expect(store.inviteOpen()).toBe(false);
+      });
+
+      it('takes a new key for an unresolved batch only once one of its addresses was edited', async () => {
+        api.invite
+          .mockRejectedValueOnce(new HttpErrorResponse({ status: 0 }))
+          .mockRejectedValueOnce(new HttpErrorResponse({ status: 0 }))
+          .mockResolvedValueOnce({ invited: 20, skipped: 0, alreadyInvited: 0 });
+        const store: GettingStartedStore = await setup();
+        store.start('invite');
+
+        await store.invite(many);
+        const edited: string[] = store
+          .inviteKept()
+          .map((email: string) => (email === many[3] ? 'lea.petit@ateliernord.fr' : email));
+        await store.invite(edited);
+
+        const calls: unknown[][] = api.invite.mock.calls;
+        expect(calls).toHaveLength(5);
+        expect(calls[3]).toEqual([many.slice(50, 100), calls[1]?.[1]]);
+        expect(calls[4]?.[0]).toEqual(edited.slice(0, 50));
+        expect(calls[4]?.[1]).not.toBe(calls[0]?.[1]);
+      });
+
       it('is one per batch of 50', async () => {
         api.invite.mockImplementation((batch: readonly string[]) =>
           Promise.resolve({ invited: batch.length, skipped: 0, alreadyInvited: 0 }),

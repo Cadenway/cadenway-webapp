@@ -45,6 +45,11 @@ import type {
   GettingStartedItem,
   GettingStartedItemKey,
 } from '../../models/getting-started/getting-started-item.interface';
+import {
+  type InviteBatch,
+  planInviteBatches,
+  type UnresolvedInviteBatch,
+} from '../../utils/invite-batches/invite-batches.util';
 import type {
   OnboardingInvitationOutcome,
   OnboardingProgress,
@@ -462,9 +467,10 @@ interface GettingStartedStoreInstance {
    * @description
    * Invites the addresses as members of the organization the dialog was opened in, in batches of
    * 50 (the `inviteMembers` limit), each under the `Idempotency-Key` of its body, toasts the
-   * outcome and closes the dialog. A batch body whose outcome was unknown (or which a `429`
-   * refused) is sent again under the same key, so the gateway replays its first answer; a key is
-   * renewed once the body changes and after any other answer. `422 idempotency.key-reused` counts
+   * outcome and closes the dialog. A batch whose outcome was unknown (or which a `429` refused)
+   * is sent again first, with its exact body and key, when all its addresses are still to send, so
+   * the gateway replays its first answer; the other addresses go in new batches under new keys.
+   * Editing or removing one of its addresses, or any other answer, drops its key. `422 idempotency.key-reused` counts
    * as an unknown outcome, never as a refusal of the addresses. Right after the first
    * batch that reaches an address (invited now, or already invited), it records the checklist's
    * invitation marker. The batches go on while the organization is the one the dialog was opened
@@ -581,11 +587,12 @@ function createGettingStartedStore(): Type<GettingStartedStoreInstance> {
     }),
     withMethods((store) => {
       let followed: string | null = null;
-      // The `Idempotency-Key` of each batch body (organization and addresses, in order) whose
-      // outcome is unknown, or which a `429` refused (nothing is stored): sending that body again
-      // sends it under the same key, so the gateway replays the first answer. Any other answer
-      // drops it, and an organization change drops them all.
-      const batchKeys: Map<string, string> = new Map<string, string>();
+      // The batches sent whose outcome is unknown, or which a `429` refused (nothing is stored),
+      // each with its exact body, its key and its organization: the next send replays each one
+      // whose addresses are all still to send, unchanged and under its key, so the gateway
+      // replays its first answer (`planInviteBatches`). Any other answer drops it, so does a
+      // send that changed its body, and an organization change drops them all.
+      let unresolved: readonly UnresolvedInviteBatch[] = [];
 
       // `tracked` toasts are dismissed with the store (an organization change, its destruction); a
       // toast shown once the host is gone is not.
@@ -645,7 +652,7 @@ function createGettingStartedStore(): Type<GettingStartedStoreInstance> {
       };
 
       const leaveOrganization: () => void = (): void => {
-        batchKeys.clear();
+        unresolved = [];
         clearTrailingRead();
         setInviteOpen(false);
         dismissToasts();
@@ -944,18 +951,41 @@ function createGettingStartedStore(): Type<GettingStartedStoreInstance> {
           let uncertain: boolean = false;
           let dropped: boolean = false;
           let recorded: boolean = false;
-          for (let start: number = 0; start < emails.length; start += INVITE_BATCH_SIZE) {
+          const target: string = organization ?? '';
+          const mine: (item: UnresolvedInviteBatch) => boolean = (
+            item: UnresolvedInviteBatch,
+          ): boolean => item.organizationId === target;
+          const plan: readonly InviteBatch[] = planInviteBatches(
+            emails,
+            unresolved.filter(mine).map((item: UnresolvedInviteBatch): InviteBatch => item.batch),
+            INVITE_BATCH_SIZE,
+            (): string => crypto.randomUUID(),
+          );
+          // An unresolved batch left out of the plan has another body now: its key is dropped.
+          unresolved = unresolved.filter(
+            (item: UnresolvedInviteBatch): boolean => !mine(item) || plan.includes(item.batch),
+          );
+          const resolve: (planned: InviteBatch, kept: boolean) => void = (
+            planned: InviteBatch,
+            kept: boolean,
+          ): void => {
+            unresolved = unresolved.filter(
+              (item: UnresolvedInviteBatch): boolean => item.batch !== planned,
+            );
+            if (kept) unresolved = [...unresolved, { organizationId: target, batch: planned }];
+          };
+          for (const planned of plan) {
             // Never sent to another organization; a destroyed host does not stop the batches the
             // person asked for.
             if (moved()) break;
-            const batch: readonly string[] = emails.slice(start, start + INVITE_BATCH_SIZE);
-            const fingerprint: string = JSON.stringify([organization, batch]);
-            const key: string = batchKeys.get(fingerprint) ?? crypto.randomUUID();
-            batchKeys.set(fingerprint, key);
+            const batch: readonly string[] = planned.emails;
             try {
-              const outcome: OnboardingInvitationOutcome = await store._api.invite(batch, key);
+              const outcome: OnboardingInvitationOutcome = await store._api.invite(
+                batch,
+                planned.key,
+              );
               // A readable answer is definite: this key would only replay it.
-              batchKeys.delete(fingerprint);
+              resolve(planned, false);
               const unsent: ReadonlySet<string> = new Set(
                 (outcome.notSent ?? []).map((email: string): string => email.toLowerCase()),
               );
@@ -987,12 +1017,10 @@ function createGettingStartedStore(): Type<GettingStartedStoreInstance> {
               // of its own and never a refusal of the addresses; the key is renewed and the
               // outcome stays unknown.
               const keyReused: boolean = hasProblemCode(error, 'idempotency.key-reused');
-              if (
-                keyReused ||
-                (!isUnknownWriteOutcome(error) && readProblem(error)?.status !== 429)
-              ) {
-                batchKeys.delete(fingerprint);
-              }
+              resolve(
+                planned,
+                !keyReused && (isUnknownWriteOutcome(error) || readProblem(error)?.status === 429),
+              );
               if (isDroppedOrganizationWrite(error)) {
                 dropped = true;
                 break;
