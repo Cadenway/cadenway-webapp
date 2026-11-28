@@ -1,4 +1,4 @@
-<cw-dialog [(open)]="open" [showClose]="false" data-testid="share-dialog">
+<cw-dialog [(open)]="open" size="md" [showClose]="false" data-testid="share-dialog">
   <cw-dialog-header>
     <h2 cwDialogTitle class="truncate leading-tight">{{ title() }}</h2>
     <p cwDialogDescription i18n="@@spaces.share.text">
@@ -73,21 +73,31 @@
               id="share-email-error"
               class="flex items-center gap-1 text-xs font-medium text-destructive"
             >
-              <ng-icon name="phosphorWarningCircleFill" class="size-3.5" aria-hidden="true" />
+              <ng-icon name="phosphorWarningCircleFill" size="0.875rem" aria-hidden="true" />
               @for (error of inviteForm.email().errors(); track error.kind) {
                 {{ error.message }}
               }
             </p>
           } @else if (inviteNote() === 'unknown') {
             <p id="share-email-note" class="flex items-start gap-1.5 text-xs text-muted-foreground">
-              <ng-icon name="phosphorInfoBold" class="mt-px size-3.5 shrink-0" aria-hidden="true" />
+              <ng-icon
+                name="phosphorInfoBold"
+                class="mt-px shrink-0"
+                size="0.875rem"
+                aria-hidden="true"
+              />
               <span i18n="@@spaces.share.not-member"
                 >This person is not in the organization: invite them first.</span
               >
             </p>
           } @else if (inviteNote() === 'owner') {
             <p id="share-email-note" class="flex items-start gap-1.5 text-xs text-muted-foreground">
-              <ng-icon name="phosphorInfoBold" class="mt-px size-3.5 shrink-0" aria-hidden="true" />
+              <ng-icon
+                name="phosphorInfoBold"
+                class="mt-px shrink-0"
+                size="0.875rem"
+                aria-hidden="true"
+              />
               <span i18n="@@spaces.share.already-owner"
                 >This person owns the space and already has access to the list.</span
               >

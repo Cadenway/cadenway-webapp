@@ -196,7 +196,8 @@ export interface TaskActivityStoreInstance {
    * Method show
    *
    * @description
-   * Marks the tab shown or hidden; showing it reads the first page again.
+   * Marks the tab shown or hidden; opening it reads the first page again, a repeated selection of
+   * the shown tab reads nothing.
    *
    * @param {boolean} active - Whether the tab is shown.
    */
@@ -274,8 +275,10 @@ function createTaskActivityStore(): Type<TaskActivityStoreInstance> {
       };
       return {
         show(active: boolean): void {
+          // A tab shown again without being left in between (a repeated selection) reads nothing.
+          const opened: boolean = active && !store.active();
           patchState(store, { active });
-          if (active) void load();
+          if (opened) void load();
         },
 
         load,

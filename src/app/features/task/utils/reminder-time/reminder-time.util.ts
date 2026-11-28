@@ -154,3 +154,22 @@ export function reminderDays(now: Date): readonly Date[] {
 export function daysFrom(now: Date, day: Date): number {
   return Math.round((at(day, 0, 12).getTime() - at(now, 0, 12).getTime()) / 86_400_000);
 }
+
+/**
+ * Function reminderTimeLabel
+ *
+ * @description
+ * How the time of a reminder reads, in the single format of the mockup's reminder popover
+ * (`REM_PRESETS` of `App.dc.html`): `11:00` or `14:19` in English, `11 h` or `14 h 19` in the
+ * French catalog. Every time of the popover (presets, hour picker, custom moment) goes through
+ * it, so a time with minutes never switches to another format.
+ *
+ * @param {number} hour - Hour, 0 to 23.
+ * @param {number} minute - Minute, 0 to 59.
+ * @returns {string} The label.
+ */
+export function reminderTimeLabel(hour: number, minute: number): string {
+  if (minute === 0) return $localize`:@@task.detail.reminder.hour:${hour}:hour::00`;
+  const minutes: string = String(minute).padStart(2, '0');
+  return $localize`:@@task.detail.reminder.hour-minute:${hour}:hour::${minutes}:minute:`;
+}

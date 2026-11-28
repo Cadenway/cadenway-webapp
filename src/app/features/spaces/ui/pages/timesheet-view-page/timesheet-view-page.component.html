@@ -12,7 +12,7 @@
       cwButton
       type="button"
       variant="outline"
-      size="icon-sm"
+      size="icon"
       [attr.aria-label]="previousLabel"
       (click)="store.previousWeek()"
     >
@@ -22,7 +22,7 @@
       cwButton
       type="button"
       variant="outline"
-      size="icon-sm"
+      size="icon"
       [attr.aria-label]="nextLabel"
       (click)="store.nextWeek()"
     >
@@ -44,7 +44,6 @@
         cwButton
         type="button"
         variant="outline"
-        size="sm"
         (click)="store.showThisWeek()"
         i18n="@@spaces.timesheet.back-to-this-week"
       >

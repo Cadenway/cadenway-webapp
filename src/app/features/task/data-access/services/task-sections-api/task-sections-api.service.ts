@@ -14,12 +14,10 @@ import {
   type GetTaskApprovalClientResult,
   type GetTaskAttachmentDownloadClientResult,
   type GetTaskClientResult,
-  type ListMembersClientResult,
   type ListTaskActivityClientResult,
   type ListTaskAttachmentsClientResult,
   type ListTaskCommentsClientResult,
   type ListTaskParticipantsClientResult,
-  MembersService,
   type StartTaskAttachmentUploadClientResult,
   TaskActivityService,
   TasksService,
@@ -53,7 +51,7 @@ import {
   toTaskCommentPage,
   toTaskDetailTask,
 } from '../../adapters/task-detail/task-detail.adapter';
-import { toPerson } from '../../adapters/person/person.adapter';
+import { TaskMembersApi } from '../task-members-api/task-members-api.service';
 
 /**
  * Constant PAGE_SIZE
@@ -180,15 +178,15 @@ export class TaskSectionsApi {
   private readonly attachments: AttachmentsService = inject(AttachmentsService);
 
   /**
-   * Property members
+   * Property directory
    *
    * @description
-   * Generated member operations.
+   * The organization's member directory, shared with the properties panel's read.
    *
-   * @type {MembersService}
+   * @type {TaskMembersApi}
    * @readonly
    */
-  private readonly members: MembersService = inject(MembersService);
+  private readonly directory: TaskMembersApi = inject(TaskMembersApi);
 
   /**
    * Property http
@@ -673,16 +671,7 @@ export class TaskSectionsApi {
    * @returns {Promise<readonly Person[]>} The people.
    */
   public async people(): Promise<readonly Person[]> {
-    const found: Person[] = [];
-    let cursor: string | undefined;
-    do {
-      const page: ListMembersClientResult = await firstValueFrom(
-        this.members.listMembers({ limit: PAGE_SIZE, ...(cursor ? { cursor } : {}) }),
-      );
-      found.push(...page.items.map(toPerson));
-      cursor = page.nextCursor ?? undefined;
-    } while (cursor);
-    return found;
+    return firstValueFrom(this.directory.people());
   }
   // #endregion
 }

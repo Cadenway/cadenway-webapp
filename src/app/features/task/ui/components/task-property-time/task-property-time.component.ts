@@ -191,7 +191,7 @@ interface TimeEntryRow {
         >
           <ng-icon
             [name]="running() ? 'phosphorStopFill' : 'phosphorPlayFill'"
-            class="size-3"
+            size="0.75rem"
             aria-hidden="true"
           />
           @if (running()) {
@@ -204,13 +204,14 @@ interface TimeEntryRow {
       #popover
       side="bottom"
       align="end"
+      size="lg"
       padding="none"
       ariaLabel="Add time spent"
       i18n-ariaLabel="@@task.properties.time-dialog"
       [open]="open()"
       (openChange)="openChange($event)"
     >
-      <div class="flex w-80 flex-col gap-3 p-3">
+      <div class="flex flex-col gap-3 p-3">
         <p
           class="text-xs font-medium text-muted-foreground"
           i18n="@@task.properties.time-add-title"
@@ -309,7 +310,7 @@ interface TimeEntryRow {
               [loading]="pending()"
               (click)="addDraft()"
             >
-              <ng-icon name="phosphorPlusBold" class="size-3.5" aria-hidden="true" />
+              <ng-icon name="phosphorPlusBold" size="0.875rem" aria-hidden="true" />
               <ng-container i18n="@@task.properties.time-add">Add</ng-container>
             </button>
           </div>
@@ -354,7 +355,7 @@ interface TimeEntryRow {
                       [attr.aria-label]="removeLabel(row)"
                       (click)="confirming.set(row.entry)"
                     >
-                      <ng-icon name="phosphorXBold" class="size-3" aria-hidden="true" />
+                      <ng-icon name="phosphorXBold" size="0.75rem" aria-hidden="true" />
                     </button>
                   }
                 </li>

@@ -1,4 +1,4 @@
-<cw-dialog [(open)]="open" scrollable data-testid="automations-dialog">
+<cw-dialog [(open)]="open" size="lg" scrollable data-testid="automations-dialog">
   <cw-dialog-header>
     <h2 cwDialogTitle i18n="@@spaces.automations.title">Automations</h2>
     <p cwDialogDescription>{{ description() }}</p>
@@ -48,7 +48,7 @@
                 class="flex size-8 shrink-0 items-center justify-center rounded-md border border-border bg-background"
                 aria-hidden="true"
               >
-                <ng-icon [name]="row.icon" class="size-4 text-muted-foreground" />
+                <ng-icon [name]="row.icon" class="text-muted-foreground" size="1rem" />
               </span>
               <span class="flex min-w-0 flex-1 flex-col leading-tight">
                 <span class="truncate text-sm font-medium">{{ row.when }}</span>
@@ -182,19 +182,19 @@
               (valueChange)="pickAction($event)"
             >
               <button cwToggleGroupItem value="assign">
-                <ng-icon [name]="actionIcons.assign" class="size-3.5" aria-hidden="true" />
+                <ng-icon [name]="actionIcons.assign" size="0.875rem" aria-hidden="true" />
                 {{ actionWords.assign }}
               </button>
               <button cwToggleGroupItem value="priority">
-                <ng-icon [name]="actionIcons.priority" class="size-3.5" aria-hidden="true" />
+                <ng-icon [name]="actionIcons.priority" size="0.875rem" aria-hidden="true" />
                 {{ actionWords.priority }}
               </button>
               <button cwToggleGroupItem value="notify">
-                <ng-icon [name]="actionIcons.notify" class="size-3.5" aria-hidden="true" />
+                <ng-icon [name]="actionIcons.notify" size="0.875rem" aria-hidden="true" />
                 {{ actionWords.notify }}
               </button>
               <button cwToggleGroupItem value="comment">
-                <ng-icon [name]="actionIcons.comment" class="size-3.5" aria-hidden="true" />
+                <ng-icon [name]="actionIcons.comment" size="0.875rem" aria-hidden="true" />
                 {{ actionWords.comment }}
               </button>
             </cw-toggle-group>
@@ -304,7 +304,8 @@
           <p class="text-sm" data-testid="automation-preview">
             <ng-icon
               name="phosphorLightningBold"
-              class="mr-1 size-3.5 align-[-2px] text-primary"
+              class="mr-1 align-[-2px] text-primary"
+              size="0.875rem"
               aria-hidden="true"
             />{{ preview() }}
           </p>
@@ -357,7 +358,8 @@
             <li class="flex items-center gap-2 py-1 text-sm">
               <ng-icon
                 name="phosphorLightningFill"
-                class="size-3.5 shrink-0 text-primary"
+                class="shrink-0 text-primary"
+                size="0.875rem"
                 aria-hidden="true"
               />
               <span class="min-w-0 flex-1 truncate">{{ run.text }}</span>

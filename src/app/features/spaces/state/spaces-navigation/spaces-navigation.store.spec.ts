@@ -575,6 +575,57 @@ describe('SpacesNavigationStore', () => {
     await expect.poll(() => store.overviews.hasValue()).toBe(true);
   });
 
+  it('waits for a stalled lent overview read no longer than a page of its own', async () => {
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+    try {
+      let listSpaces: (value: readonly SpaceDetails[]) => void = () => undefined;
+      api.spaces.mockImplementationOnce(
+        () =>
+          new Promise<readonly SpaceDetails[]>(
+            (resolve: (value: readonly SpaceDetails[]) => void) => {
+              listSpaces = resolve;
+            },
+          ),
+      );
+      api.overview.mockImplementation((spaceId: string): Promise<SpaceOverview> =>
+        Promise.resolve({ spaceId, taskCount: 0, lists: [] }),
+      );
+      await expect.poll(() => api.spaces.mock.calls.length).toBe(1);
+      store.shareOverviewRead(
+        '0',
+        new Promise<SpaceOverview>(() => undefined),
+        store.overviewOrder.next(),
+      );
+      listSpaces(
+        Array.from({ length: 6 }, (_unused: unknown, index: number) =>
+          space(String(index), String(index)),
+        ),
+      );
+      await expect.poll(() => api.overview.mock.calls.length).toBe(3);
+      expect(api.overview).not.toHaveBeenCalledWith(
+        '0',
+        expect.anything(),
+        expect.anything(),
+        10_000,
+      );
+
+      vi.advanceTimersByTime(10_000);
+
+      await expect.poll(() => api.overview.mock.calls.length).toBe(6);
+      await expect.poll(() => store.overviews.hasValue()).toBe(true);
+      expect(Object.keys(store.overviews.value() ?? {}).sort()).toEqual([
+        '0',
+        '1',
+        '2',
+        '3',
+        '4',
+        '5',
+      ]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('reads the counts of the space of the created task again, and only that space', async () => {
     await expect.poll(() => store.overviews.hasValue()).toBe(true);
     const reads: number = api.overview.mock.calls.length;

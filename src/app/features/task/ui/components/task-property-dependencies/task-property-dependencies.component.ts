@@ -194,14 +194,19 @@ export interface DependencyLink {
             [attr.aria-label]="removeLabel(dependency)"
             (click)="removed.emit(dependency)"
           >
-            <ng-icon name="phosphorXBold" class="size-3" aria-hidden="true" />
+            <ng-icon name="phosphorXBold" size="0.75rem" aria-hidden="true" />
           </button>
         }
       </span>
     }
     @if (conflict(); as text) {
       <p class="flex items-center gap-1.5 px-2 py-0.5 text-xs text-grenat-text">
-        <ng-icon name="phosphorWarningCircleFill" class="size-3.5 shrink-0" aria-hidden="true" />
+        <ng-icon
+          name="phosphorWarningCircleFill"
+          class="shrink-0"
+          size="0.875rem"
+          aria-hidden="true"
+        />
         {{ text }}
       </p>
     }
@@ -212,7 +217,7 @@ export interface DependencyLink {
         [cwPopoverTrigger]="popover"
         data-testid="task-property-dependency-add"
       >
-        <ng-icon name="phosphorPlusBold" class="size-3" aria-hidden="true" />
+        <ng-icon name="phosphorPlusBold" size="0.75rem" aria-hidden="true" />
         <ng-container i18n="@@task.properties.dependency-add">Add a dependency</ng-container>
       </button>
     }
@@ -220,13 +225,14 @@ export interface DependencyLink {
       #popover
       side="top"
       align="end"
+      size="lg"
       padding="none"
       ariaLabel="Add a dependency"
       i18n-ariaLabel="@@task.properties.dependency-add"
       [open]="open()"
       (openChange)="openChange($event)"
     >
-      <div class="flex w-80 flex-col gap-1.5 p-1">
+      <div class="flex flex-col gap-1.5 p-1">
         <cw-toggle-group
           type="single"
           size="sm"
@@ -246,7 +252,8 @@ export interface DependencyLink {
         >
           <ng-icon
             name="phosphorMagnifyingGlassBold"
-            class="size-3.5 text-muted-foreground"
+            class="text-muted-foreground"
+            size="0.875rem"
             aria-hidden="true"
           />
           <label [for]="searchId" class="sr-only" i18n="@@task.properties.dependency-search"

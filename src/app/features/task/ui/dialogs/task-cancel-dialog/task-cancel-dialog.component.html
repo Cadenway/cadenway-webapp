@@ -1,4 +1,4 @@
-<cw-dialog [open]="open()" (openChange)="openChange($event)">
+<cw-dialog size="md" [open]="open()" (openChange)="openChange($event)">
   <cw-dialog-header>
     <h2 cwDialogTitle>
       @if ((taskKeys()?.length ?? 0) > 1) {

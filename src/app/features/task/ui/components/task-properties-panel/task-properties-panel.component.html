@@ -4,7 +4,7 @@
 @if (store.task(); as task) {
   <dl class="grid grid-cols-[8.5rem_minmax(0,1fr)] items-start gap-x-1 gap-y-px">
     <dt class="flex h-8 items-center gap-2 px-2 text-sm whitespace-nowrap text-muted-foreground">
-      <ng-icon name="phosphorCircleHalfBold" aria-hidden="true" />
+      <ng-icon name="phosphorCircleHalfBold" size="1rem" aria-hidden="true" />
       <span i18n="@@task.properties.status">Status</span>
     </dt>
     <dd class="relative flex min-h-8 items-center" data-testid="task-property-status">
@@ -20,7 +20,7 @@
     </dd>
 
     <dt class="flex h-8 items-center gap-2 px-2 text-sm whitespace-nowrap text-muted-foreground">
-      <ng-icon name="phosphorUsersBold" aria-hidden="true" />
+      <ng-icon name="phosphorUsersBold" size="1rem" aria-hidden="true" />
       <span i18n="@@task.properties.assignees">Assignees</span>
     </dt>
     <dd class="relative">
@@ -36,7 +36,7 @@
     </dd>
 
     <dt class="flex h-8 items-center gap-2 px-2 text-sm whitespace-nowrap text-muted-foreground">
-      <ng-icon name="phosphorCalendarBlankBold" aria-hidden="true" />
+      <ng-icon name="phosphorCalendarBlankBold" size="1rem" aria-hidden="true" />
       <span i18n="@@task.properties.due">Due date</span>
     </dt>
     <dd class="relative">
@@ -51,7 +51,7 @@
     </dd>
 
     <dt class="flex h-8 items-center gap-2 px-2 text-sm whitespace-nowrap text-muted-foreground">
-      <ng-icon name="phosphorCellSignalHighBold" aria-hidden="true" />
+      <ng-icon name="phosphorCellSignalHighBold" size="1rem" aria-hidden="true" />
       <span i18n="@@task.properties.priority">Priority</span>
     </dt>
     <dd class="relative">
@@ -64,7 +64,7 @@
 
     @if (!task.milestone) {
       <dt class="flex h-8 items-center gap-2 px-2 text-sm whitespace-nowrap text-muted-foreground">
-        <ng-icon name="phosphorTimerBold" aria-hidden="true" />
+        <ng-icon name="phosphorTimerBold" size="1rem" aria-hidden="true" />
         <span i18n="@@task.properties.estimate">Estimate</span>
       </dt>
       <dd class="relative">
@@ -78,7 +78,7 @@
     }
 
     <dt class="flex h-8 items-center gap-2 px-2 text-sm whitespace-nowrap text-muted-foreground">
-      <ng-icon name="phosphorClockCountdownBold" aria-hidden="true" />
+      <ng-icon name="phosphorClockCountdownBold" size="1rem" aria-hidden="true" />
       <span i18n="@@task.properties.time">Time spent</span>
     </dt>
     <dd class="relative">
@@ -101,7 +101,7 @@
     </dd>
 
     <dt class="flex h-8 items-center gap-2 px-2 text-sm whitespace-nowrap text-muted-foreground">
-      <ng-icon name="phosphorTagBold" aria-hidden="true" />
+      <ng-icon name="phosphorTagBold" size="1rem" aria-hidden="true" />
       <span i18n="@@task.properties.labels">Labels</span>
     </dt>
     <dd class="relative">
@@ -116,7 +116,7 @@
     </dd>
 
     <dt class="flex h-8 items-center gap-2 px-2 text-sm whitespace-nowrap text-muted-foreground">
-      <ng-icon name="phosphorListBulletsBold" aria-hidden="true" />
+      <ng-icon name="phosphorListBulletsBold" size="1rem" aria-hidden="true" />
       <span i18n="@@task.properties.list">List</span>
     </dt>
     <dd class="relative">
@@ -131,7 +131,7 @@
     </dd>
 
     <dt class="flex h-8 items-center gap-2 px-2 text-sm whitespace-nowrap text-muted-foreground">
-      <ng-icon name="phosphorRepeatBold" aria-hidden="true" />
+      <ng-icon name="phosphorRepeatBold" size="1rem" aria-hidden="true" />
       <span i18n="@@task.properties.recurrence">Repeat</span>
     </dt>
     <dd class="relative">
@@ -145,7 +145,7 @@
     </dd>
 
     <dt class="flex h-8 items-center gap-2 px-2 text-sm whitespace-nowrap text-muted-foreground">
-      <ng-icon name="phosphorBellSimpleBold" aria-hidden="true" />
+      <ng-icon name="phosphorBellSimpleBold" size="1rem" aria-hidden="true" />
       <span i18n="@@task.properties.watchers">Followers</span>
     </dt>
     <dd class="relative">
@@ -161,7 +161,7 @@
     </dd>
 
     <dt class="flex h-8 items-center gap-2 px-2 text-sm whitespace-nowrap text-muted-foreground">
-      <ng-icon name="phosphorDiamondBold" aria-hidden="true" />
+      <ng-icon name="phosphorDiamondBold" size="1rem" aria-hidden="true" />
       <span i18n="@@task.properties.milestone">Milestone</span>
     </dt>
     <dd>
@@ -177,7 +177,7 @@
 
     @if (!task.milestone) {
       <dt class="flex h-8 items-center gap-2 px-2 text-sm whitespace-nowrap text-muted-foreground">
-        <ng-icon name="phosphorSealCheckBold" aria-hidden="true" />
+        <ng-icon name="phosphorSealCheckBold" size="1rem" aria-hidden="true" />
         <span i18n="@@task.properties.approval">Approval</span>
       </dt>
       <dd class="relative">
@@ -194,7 +194,7 @@
     }
 
     <dt class="flex h-8 items-center gap-2 px-2 text-sm whitespace-nowrap text-muted-foreground">
-      <ng-icon name="phosphorFlowArrowBold" aria-hidden="true" />
+      <ng-icon name="phosphorFlowArrowBold" size="1rem" aria-hidden="true" />
       <span i18n="@@task.properties.dependencies">Dependencies</span>
     </dt>
     <dd class="relative min-w-0">

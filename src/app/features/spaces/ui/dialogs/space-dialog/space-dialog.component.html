@@ -17,7 +17,7 @@
         aria-hidden="true"
       >
         @if (markIcon(); as name) {
-          <ng-icon [name]="name" class="size-6" />
+          <ng-icon [name]="name" size="1.5rem" />
         } @else {
           <span class="text-xl font-semibold">{{ initial() }}</span>
         }
@@ -134,7 +134,12 @@
         >
           <cw-radio-group-item value="organization" variant="card">
             <span class="flex items-center gap-1.5 text-sm font-medium">
-              <ng-icon name="phosphorUsersThreeBold" class="size-4 shrink-0" aria-hidden="true" />
+              <ng-icon
+                name="phosphorUsersThreeBold"
+                class="shrink-0"
+                size="1rem"
+                aria-hidden="true"
+              />
               {{ organizationLabel() }}
             </span>
             <span
@@ -145,7 +150,7 @@
           </cw-radio-group-item>
           <cw-radio-group-item value="private" variant="card">
             <span class="flex items-center gap-1.5 text-sm font-medium">
-              <ng-icon name="phosphorLockKeyBold" class="size-4 shrink-0" aria-hidden="true" />
+              <ng-icon name="phosphorLockKeyBold" class="shrink-0" size="1rem" aria-hidden="true" />
               <ng-container i18n="@@spaces.space-dialog.private">Private</ng-container>
             </span>
             <span class="text-xs text-muted-foreground" i18n="@@spaces.space-dialog.private-text"
