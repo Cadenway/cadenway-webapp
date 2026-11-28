@@ -121,9 +121,9 @@ const paletteFilter: CwCommandFilter = (
  * security`, `Organization settings`, `Switch organization`) and `Actions` (the
  * light and dark themes, `Sign out`). Local items are filtered by their label; nothing
  * matching shows `No results for “…”.` as text only, without the brick's icon (line 2810). The
- * footer names the arrows and Enter only, in the dense `sm` keys of line 2815: the mockup's Esc hint
- * sits in the header, which `cw-command-dialog` reserves for the input. The arrows and Enter follow the brick;
- * Escape first clears a typed text, then closes (the brick's behavior). It provides
+ * footer names the arrows and Enter only, in the dense `sm` keys of line 2815; the mockup's Esc
+ * hint ends the field's row (`fieldEnd`, line 2784). The arrows and Enter follow the brick; Escape
+ * closes the palette at once, a typed text included (`clearOnEscape` off, as in the mockup). It provides
  * its own `CommandPaletteStore` and is an `overlays` slot contribution.
  */
 @Component({

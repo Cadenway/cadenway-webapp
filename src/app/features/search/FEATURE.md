@@ -48,7 +48,8 @@ out what would open the palette when it is missing.
 - `CommandPalette` (root) only holds whether the palette is open, through the shared `ShellOverlay`,
   so the palette never opens over the keyboard shortcuts dialog. Ctrl K (⌘ K) opens it through
   `ShortcutsService`, outside fields only, and leaves an open palette open; the brick's own shortcut
-  is off.
+  is off. Escape closes it at once, even with a typed text (`clearOnEscape` off, as in the
+  mockup), and the field's row ends with the mockup's `Esc` key hint (`fieldEnd`).
 - The groups are `Suggestions` (`Create a task`, which closes the palette and opens Task's
   creation dialog; its key hint is N, the shortcut that opens that dialog, where the mockup draws C),
   `Recent tasks`, `Go to`, `Lists`, `Tasks`, `Settings` (`Profile and

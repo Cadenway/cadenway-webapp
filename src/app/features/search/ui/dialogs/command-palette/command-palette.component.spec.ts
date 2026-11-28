@@ -310,6 +310,26 @@ describe('CommandPaletteDialog', () => {
     });
   });
 
+  it('ends the field row with the Esc hint and closes at once on Escape, a typed text included', async () => {
+    TestBed.inject(CommandPalette).setOpen(true);
+    await fixture.whenStable();
+    const input: HTMLInputElement | null = document.querySelector('input[role="combobox"]');
+    if (!input) throw new Error('No palette field');
+    const hint: HTMLElement | null = document.querySelector(
+      '[data-testid="command-palette-escape"]',
+    );
+    expect(hint?.getAttribute('aria-hidden')).toBe('true');
+    expect(hint?.closest('cw-command-footer')).toBeNull();
+    expect(hint?.parentElement?.contains(input)).toBe(true);
+
+    input.value = 'sso';
+    input.dispatchEvent(new Event('input'));
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    await fixture.whenStable();
+
+    expect(TestBed.inject(CommandPalette).isOpen()).toBe(false);
+  });
+
   it('names only the arrows and Enter in its footer, in dense keys, as the mockup does', async () => {
     TestBed.inject(CommandPalette).setOpen(true);
     await fixture.whenStable();
