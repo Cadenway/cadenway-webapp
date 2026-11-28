@@ -1221,6 +1221,11 @@ gateway checks them and `ORGANIZATION_PIN_OPERATIONS` lists them.
 - `cw-sidebar-item` takes no color: the lists and favorite lists of the sidebar show their icon
   without their color, until the design system adds one. A favorite saved view shows the funnel:
   `Favorite` carries no icon.
+- The current `cwSidebarItem` (`@cadenway/ui` 0.13.0) shows the Fill weight of its Bold icon. Every
+  list icon has its Fill weight in `@cadenway/icons` 0.4.0, but `phosphorFunnelSimpleFill` is not
+  registered, so a current favorite saved view shows no icon, where the mockup keeps the Bold
+  funnel (`App.dc.html` line 8295). The fix belongs in the design system: that Fill weight in
+  `@cadenway/icons`, or an active-icon input on `cwSidebarItem`.
 - A favorite saved view's menu holds `Open` only: renaming, duplicating and deleting a view
   live on its list page.
 - The Git section of `Automations` stays hidden until B6 is decided. The Slack and

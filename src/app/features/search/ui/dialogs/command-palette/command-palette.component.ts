@@ -13,7 +13,7 @@ import {
   CwCommandLoading,
   provideCwCommandLabels,
 } from '@cadenway/ui/components/command';
-import { CwKbd } from '@cadenway/ui/components/kbd';
+import { CwKbd, injectCwKbdLabels, type CwKbdLabels } from '@cadenway/ui/components/kbd';
 import { CwStatusIcon } from '@cadenway/ui/components/status-icon';
 import { CwToastService } from '@cadenway/ui/components/toast';
 import { NgIcon } from '@ng-icons/core';
@@ -121,8 +121,8 @@ const paletteFilter: CwCommandFilter = (
  * security`, `Organization settings`, `Switch organization`) and `Actions` (the
  * light and dark themes, `Sign out`). Local items are filtered by their label; nothing
  * matching shows `No results for “…”.` as text only, without the brick's icon (line 2810). The
- * footer names the arrows and Enter only (line 2815): the mockup's Esc hint sits in the header,
- * which `cw-command-dialog` 0.12.0 reserves for the input. The arrows and Enter follow the brick;
+ * footer names the arrows and Enter only, in the dense `sm` keys of line 2815: the mockup's Esc hint
+ * sits in the header, which `cw-command-dialog` reserves for the input. The arrows and Enter follow the brick;
  * Escape first clears a typed text, then closes (the brick's behavior). It provides
  * its own `CommandPaletteStore` and is an `overlays` slot contribution.
  */
@@ -147,9 +147,6 @@ const paletteFilter: CwCommandFilter = (
     provideCwCommandLabels(() => ({
       dialogLabel: $localize`:@@search.palette.label:Command palette`,
       emptyText: $localize`:@@search.palette.empty:No results for “${SEARCH_TOKEN}:search:”.`,
-      navigateLabel: $localize`:@@search.palette.navigate:navigate`,
-      runLabel: $localize`:@@search.palette.run:open`,
-      closeLabel: '',
       listLabel: $localize`:@@search.palette.results:Results`,
       loadingLabel: $localize`:@@search.palette.loading:Searching…`,
       resultsNone: $localize`:@@search.palette.results-none:No results`,
@@ -183,6 +180,17 @@ export class CommandPaletteDialog {
    * @readonly
    */
   protected readonly filter: CwCommandFilter = paletteFilter;
+
+  /**
+   * Property keyLabels
+   *
+   * @description
+   * Key names of the footer (`Enter`), from the application's kbd labels.
+   *
+   * @type {CwKbdLabels}
+   * @readonly
+   */
+  protected readonly keyLabels: CwKbdLabels = injectCwKbdLabels();
 
   /**
    * Property serverResult

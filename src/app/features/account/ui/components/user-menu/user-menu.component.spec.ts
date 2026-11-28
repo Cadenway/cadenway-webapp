@@ -1,8 +1,9 @@
-import { signal, type WritableSignal } from '@angular/core';
+import { getDebugNode, signal, type WritableSignal } from '@angular/core';
 import { type ComponentFixture, TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 import { Router } from '@angular/router';
 import { provideCadenwayIcons } from '@cadenway/icons';
+import { CwAvatar } from '@cadenway/ui/components/avatar';
 import { CwToastService } from '@cadenway/ui/components/toast';
 import { CwTooltip } from '@cadenway/ui/components/tooltip';
 import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
@@ -164,6 +165,30 @@ describe('UserMenu', () => {
       expect(trigger.querySelector('cw-presence-dot')).toBeNull();
     },
   );
+
+  it('rings the rail avatar with the canvas and the menu avatar with the popover', async () => {
+    status.set('online');
+    await openMenu();
+
+    const rings: string[] = [...document.querySelectorAll('cw-avatar')].map((avatar: Element) =>
+      (getDebugNode(avatar)?.componentInstance as CwAvatar).ring(),
+    );
+    expect(rings).toEqual(['canvas', 'popover']);
+  });
+
+  it('shows the current status and theme as values of their submenu items', async () => {
+    status.set('away');
+    await openMenu();
+
+    for (const [name, value] of [
+      ['Status', 'Away'],
+      ['Theme', 'Light'],
+    ] as const) {
+      const values: NodeListOf<Element> = item(name).querySelectorAll('cw-menu-item-value');
+      expect(values).toHaveLength(1);
+      expect(values[0].textContent.trim()).toBe(value);
+    }
+  });
 
   it('disables `Status` without realtime, and never confirms anything', async () => {
     connection.set('disabled');

@@ -310,7 +310,7 @@ describe('CommandPaletteDialog', () => {
     });
   });
 
-  it('names only the arrows and Enter in its footer, as the mockup does', async () => {
+  it('names only the arrows and Enter in its footer, in dense keys, as the mockup does', async () => {
     TestBed.inject(CommandPalette).setOpen(true);
     await fixture.whenStable();
 
@@ -318,6 +318,9 @@ describe('CommandPaletteDialog', () => {
     expect(footer?.textContent).toContain('navigate');
     expect(footer?.textContent).toContain('open');
     expect(footer?.textContent).not.toContain('close');
+    const keys: Element[] = Array.from(footer?.querySelectorAll('kbd') ?? []);
+    expect(keys.slice(0, 2).map((key: Element) => key.textContent.trim())).toEqual(['↑', '↓']);
+    expect(keys.map((key: Element) => key.getAttribute('data-size'))).toEqual(['sm', 'sm', 'sm']);
   });
 
   it('offers `Billing and quotas` and one theme action that toggles', async () => {

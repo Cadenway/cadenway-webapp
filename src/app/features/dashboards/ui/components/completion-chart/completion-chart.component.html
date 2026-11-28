@@ -26,7 +26,10 @@
   @if (view() === 'chart') {
     <cw-chart
       type="bar"
+      size="lg"
       x="week"
+      [current]="currentWeek()"
+      valueLabels="peak"
       [legend]="false"
       [data]="data()"
       [series]="series"
@@ -35,7 +38,7 @@
       [categoryHeader]="weekHeader"
     />
     <p class="text-xs text-muted-foreground" i18n="@@dashboards.chart.caption">
-      The last bar is the current week.
+      The last, lighter bar is the current week.
     </p>
   } @else {
     <cw-table-container>

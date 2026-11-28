@@ -76,12 +76,13 @@ interface CompletionBar {
  *
  * @description
  * The `Tasks completed per week` card of the dashboard (`App.dc.html` lines 1812-1849): a bar per
- * week (`cw-chart`, `chart-1`), labelled `W45` after the ISO week, and a ghost button that swaps
- * it for a table of the same values (`Show the table`, `Show the chart`). The chart's summary
- * lists every value; the current week, the last one, reads `W45 (current week)` in the tooltip
- * and the announcement. `cw-chart` 0.10.0 cannot lighten that bar nor write values over the
- * bars (gap DS1), so the caption only says the last bar is the current week. `busy` marks the
- * card while another period loads. Presentational: inputs and the `view` model.
+ * week (`cw-chart`, `size="lg"`, `chart-1`), labelled `W45` after the ISO week, and a ghost button
+ * that swaps it for a table of the same values (`Show the table`, `Show the chart`). The current
+ * week, the last one, is the chart's `current` category: its bar is lighter and reads
+ * `W45 (current week)` in the tooltip and the announcement. `valueLabels="peak"` writes the
+ * highest weeks' and the current week's values over their bars (lines 1819-1828). The chart's
+ * summary lists every value. `busy` marks the card while another period loads. Presentational:
+ * inputs and the `view` model.
  */
 @Component({
   selector: 'cw-completion-chart',
@@ -217,6 +218,20 @@ export class CompletionChart {
   });
 
   /**
+   * Property currentWeek
+   *
+   * @description
+   * The label of the last week, the one in progress, which the chart draws lighter; null without
+   * any week.
+   *
+   * @type {Signal<string | null>}
+   * @readonly
+   */
+  protected readonly currentWeek: Signal<string | null> = computed(
+    (): string | null => this.bars().at(-1)?.label ?? null,
+  );
+
+  /**
    * Property categoryFormat
    *
    * @description
@@ -227,7 +242,7 @@ export class CompletionChart {
    */
   protected readonly categoryFormat: Signal<CwChartCategoryFormat> = computed(
     (): CwChartCategoryFormat => {
-      const current: string | undefined = this.bars().at(-1)?.label;
+      const current: string | null = this.currentWeek();
       return (week: string): string =>
         week === current
           ? $localize`:@@dashboards.chart.current-week:${week}:week: (current week)`

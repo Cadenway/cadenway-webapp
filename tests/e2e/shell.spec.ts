@@ -207,6 +207,17 @@ test('the inbox marks everything read and its badge clears', async ({ page }) =>
   await inbox.click();
   const popover = page.getByTestId('inbox-popover');
   await expect(popover.getByText('Nora Robert')).toBeVisible();
+  await expect(inbox).toHaveAttribute('aria-expanded', 'true');
+  const tint = (element: Element): string[] => {
+    const style: CSSStyleDeclaration = getComputedStyle(element);
+    return [style.backgroundColor, style.color];
+  };
+  const current: string[] = await page
+    .getByRole('navigation')
+    .locator('[aria-current="page"]')
+    .first()
+    .evaluate(tint);
+  await expect.poll(() => inbox.evaluate(tint)).toEqual(current);
   await expect(popover.getByRole('img', { name: 'Unread' })).toBeVisible();
   await popover.getByRole('button', { name: 'Mark all as read' }).click();
 

@@ -11,6 +11,7 @@ import { RouterTestingHarness } from '@angular/router/testing';
 import { By } from '@angular/platform-browser';
 import { TasksService } from '@cadenway/api-client';
 import { provideCadenwayIcons } from '@cadenway/icons';
+import { CwChart } from '@cadenway/ui/components/chart';
 import { CwToastService, type CwToastOptions } from '@cadenway/ui/components/toast';
 import { of } from 'rxjs';
 import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
@@ -357,6 +358,22 @@ describe('DashboardPage', () => {
     expect(late).toContain('Sprint 14');
     expect(late).toContain('Camille Martin, Hugo Dubois');
     expect(page(harness).querySelector('[data-testid="late-more"]')).toBeNull();
+  });
+
+  it('draws the current week lighter and labels the peak and the current week', async () => {
+    const harness: RouterTestingHarness = await RouterTestingHarness.create(
+      '/atelier-nord/dashboards',
+    );
+    await expect.poll(() => page(harness).querySelector('cw-chart [role="img"]')).not.toBeNull();
+
+    const chart: CwChart = harness.fixture.debugElement.query(By.directive(CwChart))
+      .componentInstance as CwChart;
+    expect(chart.size()).toBe('lg');
+    expect(chart.current()).toBe('W45');
+    expect(chart.valueLabels()).toBe('peak');
+    expect(chart.legend()).toBe(false);
+    expect(page(harness).querySelector('cw-chart')?.getAttribute('data-size')).toBe('lg');
+    expect(page(harness).textContent).toContain('The last, lighter bar is the current week.');
   });
 
   it('swaps the chart for a table of the same weeks', async () => {
