@@ -84,16 +84,17 @@ const EMAIL_ISSUE: RegExp = /^emails\.(\d+)$/u;
  * told why), `dropped` (the organization changed or the gateway refused the request for another
  * session organization: nothing is said), the addresses the API refused as invalid, which the
  * dialog shows on its field, or the addresses `kept` for another send (the outcome is unknown, or
- * the batch answered them with an outcome that sent nothing), which the dialog keeps.
+ * the batch answered them with an outcome that sent nothing), which the dialog keeps; `uncertain`
+ * when the outcome is unknown, so the role they may already have been invited with stays.
  *
- * @type {'sent' | 'failed' | 'dropped' | { readonly refused: readonly string[] } | { readonly kept: readonly string[] }}
+ * @type {'sent' | 'failed' | 'dropped' | { readonly refused: readonly string[] } | { readonly kept: readonly string[]; readonly uncertain: boolean }}
  */
 export type InviteResult =
   | 'sent'
   | 'failed'
   | 'dropped'
   | { readonly refused: readonly string[] }
-  | { readonly kept: readonly string[] };
+  | { readonly kept: readonly string[]; readonly uncertain: boolean };
 
 /**
  * Interface WriteFence
@@ -448,9 +449,10 @@ export interface InvitationsStoreInstance {
    * restores it with the failure toast, and an invitation answered or revoked meanwhile leaves the
    * list, which is read again. An unknown outcome is never resent (a second resend within the hour
    * is throttled): the row stays shown as resent and busy while the list is read after each wait of
-   * `INVITATION_SETTLE_DELAYS_MS`, until it shows a new expiry (resent) or no longer holds the
-   * invitation; after the last wait it is restored, read again, and the toast says the invitation
-   * may not have been resent. A later resend answered `429 invitation.resend-throttled` proves
+   * `INVITATION_SETTLE_DELAYS_MS`, until the invitation itself shows a new expiry (resent); a read
+   * that does not meet it proves nothing. After the last wait it is restored, the invitations,
+   * members and seats are read again, and the toast says the invitation may not have been resent
+   * and points at the lists. A later resend answered `429 invitation.resend-throttled` proves
    * nothing (the original invitation throttles too): the list is read, and it counts as resent
    * only when it shows another expiry than before the unknown resend, else the warning says the
    * invitation may not have been resent, with the throttle as description. A dropped resend (organization changed, a switch away and back included, refused for
@@ -470,9 +472,9 @@ export interface InvitationsStoreInstance {
    * undo, so the toast has none. An unknown outcome keeps it hidden and busy and revokes again after
    * each wait of `INVITATION_SETTLE_DELAYS_MS` (revoking again answers `204`). Once an attempt
    * was unknown, a later refusal, or every attempt staying unknown, is not taken as a failure: the
-   * list is read, and a listed one is shown again with the warning that it may not have been
-   * cancelled; a missing one only says it is no longer pending (it may have been cancelled,
-   * accepted or declined), with the members and seats read again. Outcomes come only from the
+   * row shows again with the warning that it may not have been cancelled and points at the lists,
+   * which are read again with the members and seats; its absence from a read claims nothing (the
+   * list is paged by cursor and cannot tell why an invitation left it). Outcomes come only from the
    * API's own answers: `Invitation cancelled` from a revoke that succeeded, accepted or declined
    * from `409 invitation.answered` and its `details.status`. A dropped revocation says nothing.
    *
@@ -656,18 +658,22 @@ function createInvitationsStore(): Type<InvitationsStoreInstance> {
       // Invitations whose last resend ended with an unknown outcome, with the expiry the API held
       // before it: only a list showing another expiry proves a resend went out.
       const uncertainResends: Map<string, string> = new Map<string, string>();
-      // The invitation as the API lists it now: null once it left the pending list, undefined when
-      // the list could not be read.
-      const readInvitation: (id: string) => Promise<PendingInvitation | null | undefined> = async (
+      // The invitation as one read of the list shows it; undefined when the read failed or did not
+      // meet it. Its absence proves nothing: the list is paged by cursor, most recent first, and
+      // another resend can move an invitation ahead of the cursor between two pages.
+      const readInvitation: (id: string) => Promise<PendingInvitation | undefined> = async (
         id: string,
-      ): Promise<PendingInvitation | null | undefined> => {
+      ): Promise<PendingInvitation | undefined> => {
         try {
           const list: InvitationList = await store._api.list();
-          return list.items.find((item: PendingInvitation): boolean => item.id === id) ?? null;
+          return list.items.find((item: PendingInvitation): boolean => item.id === id);
         } catch {
           return undefined;
         }
       };
+      // Where an invitation of unknown outcome stands is left to the lists, read again.
+      const standing: (email: string) => string = (email: string): string =>
+        $localize`:@@organization.members.invitation-unsettled-text:The pending invitations and the members show where the invitation to ${email}:email: stands.`;
       // An invitee may have joined: the page's members and, for the owner, the seats are read again.
       const refreshMembers: () => void = (): void => {
         store._members?.retry();
@@ -698,23 +704,6 @@ function createInvitationsStore(): Type<InvitationsStoreInstance> {
         store._toasts.info(
           $localize`:@@organization.members.invitation-closed:This invitation is no longer pending`,
           { description: invitation.email },
-        );
-      };
-      // Gone from the pending list after a write of unknown outcome, with no answer of the API
-      // saying why: cancelled, accepted and declined invitations all leave it, and the contract
-      // has no read of one invitation, so nothing more is claimed. The members are read again so
-      // that an invitee who joined shows.
-      const gone: (invitation: PendingInvitation) => void = (
-        invitation: PendingInvitation,
-      ): void => {
-        confirm(invitation.id, null);
-        bump();
-        refreshMembers();
-        store._toasts.info(
-          $localize`:@@organization.members.invitation-closed:This invitation is no longer pending`,
-          {
-            description: $localize`:@@organization.members.invitation-closed-unknown:The invitation of ${invitation.email}:email: may have been cancelled, accepted or declined: the members list shows who joined.`,
-          },
         );
       };
       // Bound to the organization shown when the write starts. The flag is set once another
@@ -823,7 +812,7 @@ function createInvitationsStore(): Type<InvitationsStoreInstance> {
               return 'sent';
             }
             toastKept(outcome, kept.length);
-            return { kept };
+            return { kept, uncertain: false };
           } catch (error: unknown) {
             if (write.moved() || isDroppedOrganizationWrite(error)) return 'dropped';
             const refused: readonly string[] = refusedAddresses(error, emails);
@@ -838,7 +827,7 @@ function createInvitationsStore(): Type<InvitationsStoreInstance> {
                   description: $localize`:@@organization.members.invite-uncertain-text:Sending again is safe.`,
                 },
               );
-              return { kept: emails };
+              return { kept: emails, uncertain: true };
             }
             store._toasts.error(
               $localize`:@@organization.members.invite-failed:The invitations could not be sent`,
@@ -887,9 +876,12 @@ function createInvitationsStore(): Type<InvitationsStoreInstance> {
             );
             return true;
           };
+          // No answer of the API settled it: the lists are read again (the invitee may have joined)
+          // and nothing is claimed.
           const unsettled: (description: string) => false = (description: string): false => {
             drop();
             bump();
+            refreshMembers();
             store._toasts.warning(
               $localize`:@@organization.members.resend-uncertain:The invitation may not have been resent`,
               { description },
@@ -904,43 +896,28 @@ function createInvitationsStore(): Type<InvitationsStoreInstance> {
             if (write.moved()) return false;
             if (isUnknownWriteOutcome(error)) {
               // Never sent again (a second resend within the hour is refused): the row stays shown
-              // as resent and busy while the list is read after each wait, until it shows another
-              // expiry. One read right away could still return the list from before the resend.
+              // as resent and busy while the list is read after each wait, until the invitation
+              // itself shows another expiry. One read right away could still return the list from
+              // before the resend, and a read that does not meet the invitation proves nothing.
               uncertainResends.set(invitation.id, before);
               for (const ms of delays) {
                 await wait(ms);
                 if (!live()) return false;
-                const found: PendingInvitation | null | undefined = await readInvitation(
-                  invitation.id,
-                );
+                const found: PendingInvitation | undefined = await readInvitation(invitation.id);
                 if (!live()) return false;
-                if (found === undefined) continue;
-                if (found === null) {
-                  uncertainResends.delete(invitation.id);
-                  drop();
-                  gone(invitation);
-                  return false;
-                }
-                if (found.expiresAt !== before) return resent(found);
+                if (found !== undefined && found.expiresAt !== before) return resent(found);
               }
-              return unsettled(invitation.email);
+              return unsettled(standing(invitation.email));
             }
             // A throttle after a resend of unknown outcome proves nothing: the original invitation
-            // or an earlier resend within the hour is throttled too. Only the list tells.
+            // or an earlier resend within the hour is throttled too. Only the invitation listed
+            // with another expiry tells.
             if (
               uncertainResends.has(invitation.id) &&
               hasProblemCode(error, 'invitation.resend-throttled')
             ) {
-              const found: PendingInvitation | null | undefined = await readInvitation(
-                invitation.id,
-              );
+              const found: PendingInvitation | undefined = await readInvitation(invitation.id);
               if (!live()) return false;
-              if (found === null) {
-                uncertainResends.delete(invitation.id);
-                drop();
-                gone(invitation);
-                return false;
-              }
               if (found !== undefined && found.expiresAt !== before) return resent(found);
               return unsettled(
                 $localize`:@@organization.members.resend-throttled:This invitation was just resent: try again in an hour.`,
@@ -1009,12 +986,15 @@ function createInvitationsStore(): Type<InvitationsStoreInstance> {
             }
             return false;
           };
+          // No answer of the API settled it: the row shows again, the lists are read again (the
+          // invitee may have joined) and nothing is claimed.
           const unsettled: () => false = (): false => {
             drop();
             bump();
+            refreshMembers();
             store._toasts.warning(
               $localize`:@@organization.members.cancel-uncertain:The invitation may not have been cancelled`,
-              { description: invitation.email },
+              { description: standing(invitation.email) },
             );
             return false;
           };
@@ -1055,18 +1035,9 @@ function createInvitationsStore(): Type<InvitationsStoreInstance> {
                   closed(invitation);
                   return false;
                 }
-                if (uncertain) {
-                  // The list tells whether it is still pending, but not why it left: only the
-                  // API's own answer may say cancelled, accepted or declined.
-                  const found: PendingInvitation | null | undefined = await readInvitation(
-                    invitation.id,
-                  );
-                  if (!live()) return false;
-                  if (found !== null) return unsettled();
-                  drop();
-                  gone(invitation);
-                  return false;
-                }
+                // An earlier attempt may have revoked it, and no read of the lists can tell: only
+                // the API's own answer may say cancelled, accepted or declined.
+                if (uncertain) return unsettled();
                 drop();
                 store._toasts.error(
                   $localize`:@@organization.members.cancel-failed:The invitation could not be cancelled`,

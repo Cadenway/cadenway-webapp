@@ -515,7 +515,10 @@ describe('InvitationsStore', () => {
         });
         const emails: readonly string[] = ['lucie@example.com', 'paul@example.com'];
 
-        await expect(store.invite(emails, 'member')).resolves.toEqual({ kept: emails });
+        await expect(store.invite(emails, 'member')).resolves.toEqual({
+          kept: emails,
+          uncertain: true,
+        });
         await stable();
 
         expect(store.inviting()).toBe(false);
@@ -536,7 +539,10 @@ describe('InvitationsStore', () => {
       });
       const emails: readonly string[] = ['lucie@example.com', 'paul@example.com'];
 
-      await expect(store.invite(emails, 'admin')).resolves.toEqual({ kept: emails });
+      await expect(store.invite(emails, 'admin')).resolves.toEqual({
+        kept: emails,
+        uncertain: true,
+      });
       await expect(store.invite(emails, 'admin')).resolves.toBe('sent');
 
       expect(api.invite).toHaveBeenNthCalledWith(2, emails, 'admin');
@@ -556,7 +562,7 @@ describe('InvitationsStore', () => {
 
     await expect(
       store.invite(['lucie@example.com', 'marc.roux@ateliernord.fr', 'paul@example.com'], 'member'),
-    ).resolves.toEqual({ kept: ['paul@example.com'] });
+    ).resolves.toEqual({ kept: ['paul@example.com'], uncertain: false });
 
     expect(toasts.success).toHaveBeenCalledWith('1 invitation sent', {
       description: 'They expire in 7 days. 1 address skipped: already a member or invited.',
@@ -711,14 +717,16 @@ describe('InvitationsStore', () => {
     expect(store.items()).toEqual([MARC, STUDIO]);
     expect(toasts.error).not.toHaveBeenCalled();
     expect(toasts.warning).toHaveBeenCalledWith('The invitation may not have been resent', {
-      description: 'atelier@nordstudio.fr',
+      description:
+        'The pending invitations and the members show where the invitation to atelier@nordstudio.fr stands.',
     });
     expect(toasts.warning).toHaveBeenCalledWith('The invitation may not have been cancelled', {
-      description: 'marc.roux@ateliernord.fr',
+      description:
+        'The pending invitations and the members show where the invitation to marc.roux@ateliernord.fr stands.',
     });
     expect(api.resend).toHaveBeenCalledTimes(1);
     expect(api.revoke).toHaveBeenCalledTimes(4);
-    expect(api.list).toHaveBeenCalledTimes(7);
+    expect(api.list).toHaveBeenCalledTimes(6);
   });
 
   it('restores a resend dropped for another session organization, silently', async () => {
@@ -789,7 +797,8 @@ describe('InvitationsStore', () => {
 
       await expect(store.resend(STUDIO)).resolves.toBe(false);
       expect(toasts.warning).toHaveBeenCalledWith('The invitation may not have been resent', {
-        description: 'atelier@nordstudio.fr',
+        description:
+          'The pending invitations and the members show where the invitation to atelier@nordstudio.fr stands.',
       });
       await expect(store.resend(STUDIO)).resolves.toBe(false);
       await stable();
@@ -826,7 +835,7 @@ describe('InvitationsStore', () => {
       expect(store.items()[1]).toEqual(resentStudio);
     });
 
-    it('claims no outcome of an invitation gone after an unknown cancellation', async () => {
+    it('claims nothing from an invitation a read misses after an unknown cancellation', async () => {
       const { store, api, toasts, membersStore, subscription }: Harness = await setup(
         {
           revoke: vi
@@ -844,14 +853,31 @@ describe('InvitationsStore', () => {
       expect(store.items()).toEqual([STUDIO]);
       expect(toasts.success).not.toHaveBeenCalled();
       expect(toasts.error).not.toHaveBeenCalled();
-      expect(toasts.warning).not.toHaveBeenCalled();
-      expect(toasts.info).toHaveBeenCalledTimes(1);
-      expect(toasts.info).toHaveBeenCalledWith('This invitation is no longer pending', {
+      expect(toasts.info).not.toHaveBeenCalled();
+      expect(toasts.warning).toHaveBeenCalledWith('The invitation may not have been cancelled', {
         description:
-          'The invitation of marc.roux@ateliernord.fr may have been cancelled, accepted or declined: the members list shows who joined.',
+          'The pending invitations and the members show where the invitation to marc.roux@ateliernord.fr stands.',
       });
       expect(membersStore.retry).toHaveBeenCalledTimes(1);
       expect(subscription.retry).toHaveBeenCalledTimes(1);
+    });
+
+    it('claims nothing from an invitation a read misses after an unknown resend', async () => {
+      const { store, api, toasts, membersStore }: Harness = await setup({
+        resend: vi.fn().mockRejectedValue(refusal(503, {})),
+      });
+      api.list.mockResolvedValue({ items: [MARC], total: 1 });
+
+      await expect(store.resend(STUDIO)).resolves.toBe(false);
+
+      expect(api.resend).toHaveBeenCalledTimes(1);
+      expect(toasts.success).not.toHaveBeenCalled();
+      expect(toasts.info).not.toHaveBeenCalled();
+      expect(toasts.warning).toHaveBeenCalledWith('The invitation may not have been resent', {
+        description:
+          'The pending invitations and the members show where the invitation to atelier@nordstudio.fr stands.',
+      });
+      expect(membersStore.retry).toHaveBeenCalledTimes(1);
     });
 
     it('says a cancellation answered as declined was declined', async () => {
@@ -908,7 +934,8 @@ describe('InvitationsStore', () => {
       expect(store.items()).toEqual([MARC, STUDIO]);
       expect(toasts.error).not.toHaveBeenCalled();
       expect(toasts.warning).toHaveBeenCalledWith('The invitation may not have been cancelled', {
-        description: 'marc.roux@ateliernord.fr',
+        description:
+          'The pending invitations and the members show where the invitation to marc.roux@ateliernord.fr stands.',
       });
     });
 

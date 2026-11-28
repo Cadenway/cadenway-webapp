@@ -64,6 +64,15 @@
           <cw-select-option [value]="option.value">{{ option.label }}</cw-select-option>
         }
       </cw-select>
+      @if (roleFixed()) {
+        <p
+          class="text-xs text-muted-foreground"
+          data-testid="invite-role-locked"
+          i18n="@@organization.members.invite-role-locked"
+        >
+          The role stays the one sent: these addresses may already be invited with it.
+        </p>
+      }
     </div>
   </form>
 

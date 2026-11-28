@@ -294,6 +294,18 @@ export class MembersPage {
   protected readonly kept: WritableSignal<readonly string[]> = signal<readonly string[]>([]);
 
   /**
+   * Property roleLocked
+   *
+   * @description
+   * Whether a batch of unknown outcome was sent from the open dialog: its role may already have
+   * been given to the kept addresses, so the dialog keeps it until it closes.
+   *
+   * @type {WritableSignal<boolean>}
+   * @readonly
+   */
+  protected readonly roleLocked: WritableSignal<boolean> = signal<boolean>(false);
+
+  /**
    * Property table
    *
    * @description
@@ -429,6 +441,7 @@ export class MembersPage {
   protected openInvite(): void {
     this.refused.set([]);
     this.kept.set([]);
+    this.roleLocked.set(false);
     this.dialog.update((generation: number): number => generation + 1);
     this.dialogOrganization.set(this.workspace.organization().id);
     this.inviteOpen.set(true);
@@ -554,6 +567,7 @@ export class MembersPage {
     } else if ('refused' in result) {
       this.refused.set(result.refused);
     } else {
+      if (result.uncertain) this.roleLocked.set(true);
       this.kept.set(result.kept);
     }
   }
@@ -593,6 +607,7 @@ export class MembersPage {
     this.removing.set(null);
     this.refused.set([]);
     this.kept.set([]);
+    this.roleLocked.set(false);
     this.dialogOrganization.set(null);
   }
   // #endregion

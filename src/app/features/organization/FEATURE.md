@@ -290,22 +290,22 @@ be loaded.` with `Retry`, until a read or a save confirms the organization (anot
   resent only when its expiry differs from the one before the unknown resend; otherwise the toast
   warns `The invitation may not have been resent` with the throttle text. No expiry is shown that
   the API did not answer. Once a cancellation attempt was unknown, a later refusal (a `403` after a
-  role change, say) is not reported as a failure: the list is read, and a listed one is shown
-  again with the warning.
+  role change, say) is not reported as a failure either: the row shows again with the warning.
 - Outcomes are claimed only from the API's own answers: `Invitation cancelled` only when a revoke
   answers success; `The invitation was accepted before it could be cancelled` /
   `<email> is now a member of the organization.` (with the page's `MembersStore` and, for the
   owner, the seats read again) or `The invitation was declined before it could be cancelled` only
-  from `409 invitation.answered` and its `details.status` (`accepted` or `refused`). An invitation
-  that left the pending list after a write of unknown outcome, with no such answer, is reported as
-  `This invitation is no longer pending` with `invitation-closed-unknown` (it may have been
-  cancelled, accepted or declined, and the members list shows who joined), and the members and
-  seats are read again so that an invitee who joined shows: cancelled, accepted and declined
-  invitations all leave the list, and the contract has no read of one invitation with its terminal
-  status. The waits stop once the organization changes (a switch away and back included) or the page is gone. When every attempt
+  from `409 invitation.answered` and its `details.status` (`accepted` or `refused`); `Invitation
+resent` from a resend that answered, or from the invitation itself listed with another expiry.
+  Absence claims nothing: one traversal of a list paged by cursor, most recent first, can miss an
+  invitation another resend moved ahead of the cursor, and cancelled, accepted and declined
+  invitations all leave it. So a write of unknown outcome that no answer settled ends with the
+  warning (`The invitation may not have been cancelled` / `...resent`) and
+  `The pending invitations and the members show where the invitation to <email> stands.`, and the
+  invitations, the members and, for the owner, the seats are read again. The waits stop once the organization changes (a switch away and back included) or the page is gone. When every attempt
   stays unknown, the row is restored, the list read again, and the toast warns
-  `The invitation may not have been resent` / `The invitation may not have been cancelled` with
-  the address. A write dropped for another session organization (`OrganizationSwitchPendingError`,
+  `The invitation may not have been resent` / `The invitation may not have been cancelled` the
+  same way. A write dropped for another session organization (`OrganizationSwitchPendingError`,
   `412 organization.context-changed`) restores the row, or closes the invite dialog, with no
   toast: the workspace recovery takes over.
 - `<n> free seats` (summary) and `<n> seats available on the <plan> plan.` (dialog) show to the
@@ -319,7 +319,10 @@ be loaded.` with `Retry`, until a read or a save confirms the organization (anot
 - An address the batch answered with another outcome (`InvitationResult.outcome` beyond `invited`,
   `already-member` and `already-invited`, which the contract counts as not sent; the adapter lists
   them in `notSent`) stays in the dialog, which keeps only those addresses and its role (both
-  fields are disabled while the batch is sent, so they hold the submitted snapshot), with
+  fields are disabled while the batch is sent, so they hold the submitted snapshot; after a batch
+  of unknown outcome the role stays the one sent, disabled with
+  `The role stays the one sent: these addresses may already be invited with it.`, until the
+  addresses are cleared or the dialog closes), with
   `{n} address(es) could not be invited` / `The addresses stay in the list: press Invite to try again.`,
   after the invited ones' toast when some were invited, else with the skipped count first. A batch
   of unknown outcome keeps every address in the dialog, reads the list again and warns
@@ -328,9 +331,10 @@ be loaded.` with `Retry`, until a read or a save confirms the organization (anot
   `Idempotency-Key` (`@cadenway/contracts` 0.44.0), so none is sent and the retry relies on that
   answer (a contract gap, to raise in cadenway-api-contracts).
 - Contract gaps of the invitations (to raise in cadenway-api-contracts): `inviteMembers` takes no
-  `Idempotency-Key`, and no operation reads one invitation with its terminal status (revoked,
-  accepted, refused, expired), so an invitation that left the pending list after a write of unknown
-  outcome cannot be said cancelled, accepted or declined.
+  `Idempotency-Key`; no operation reads one invitation with its terminal status (revoked,
+  accepted, refused, expired); and `listInvitations` pages are not read from one snapshot. So the
+  state of an invitation after a write of unknown outcome can only come from a later answer of the
+  API about that invitation.
 - Counts pick their singular or plural text with `Intl.PluralRules($localize.locale)`, so French
   reads `0 membre` as the mockup does.
 - Screen readers hear a row's presence as `Status: Active | Away | Do not disturb | Offline`
@@ -467,7 +471,7 @@ Members section (`organization.members.*`):
 | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
 | `role-failed`, `role-failed-seats`, `remove-failed`, `resend-failed`, `resend-failed-limit`, `cancel-failed`, `invite-failed`, `invite-failed-limit`                                                    | The mockup draws no refused write.                                                                     |
 | `role-stale`, `role-stale-text`, `invitation-closed`                                                                                                                                                    | The mockup draws no write overtaken by another person's.                                               |
-| `cancel-accepted`, `cancel-accepted-text`, `cancel-refused`, `invitation-closed-unknown`                                                                                                                | The mockup draws no cancellation overtaken by an answer, nor an unknown one.                           |
+| `cancel-accepted`, `cancel-accepted-text`, `cancel-refused`, `invitation-unsettled-text`, `invite-role-locked`                                                                                          | The mockup draws no cancellation overtaken by an answer, nor an unknown one.                           |
 | `invite-uncertain`, `invite-uncertain-text`, `invite-not-sent`, `invite-not-sent-one`, `invite-not-sent-text`, `resend-uncertain`, `cancel-uncertain`                                                   | The mockup draws no write of unknown outcome or address left unsent; the wording follows Onboarding's. |
 | `resend-throttled`                                                                                                                                                                                      | Copy of the contract (`resendInvitation`); the mockup draws no throttled resend.                       |
 | `invite-none`, `invite-skipped`, `invite-skipped-one`                                                                                                                                                   | The mockup draws no address already a member or invited.                                               |
