@@ -131,7 +131,7 @@ const DECISION_ICONS: Readonly<Record<'approved' | 'changes-requested' | 'waitin
               >
               <ng-icon
                 [name]="chip.icon"
-                class="size-3.5"
+                size="0.875rem"
                 [class.text-jade]="chip.decision === 'approved'"
                 [class.text-balise]="chip.decision === 'changes-requested'"
                 [class.text-muted-foreground]="chip.decision === null"

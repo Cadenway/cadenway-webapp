@@ -1,8 +1,10 @@
 import {
   Component,
   computed,
+  inject,
   input,
   type InputSignal,
+  LOCALE_ID,
   output,
   type OutputEmitterRef,
   type Signal,
@@ -457,10 +459,27 @@ export class TaskDetailHeader {
   protected readonly watchLabel: Signal<string> = computed((): string => {
     const watchers: TaskWatchers | null = this.watchers();
     const count: number = watchers?.total ?? 0;
-    return watchers?.following
-      ? $localize`:@@task.detail.unwatch:Stop following this task (${count}:count: followers)`
+    const one: boolean = this.plurals.select(count) === 'one';
+    if (watchers?.following) {
+      return one
+        ? $localize`:@@task.detail.unwatch-one:Stop following this task (${count}:count: follower)`
+        : $localize`:@@task.detail.unwatch:Stop following this task (${count}:count: followers)`;
+    }
+    return one
+      ? $localize`:@@task.detail.watch-one:Follow this task (${count}:count: follower)`
       : $localize`:@@task.detail.watch:Follow this task (${count}:count: followers)`;
   });
+
+  /**
+   * Property plurals
+   *
+   * @description
+   * Plural rules of the application locale, for the follower count.
+   *
+   * @type {Intl.PluralRules}
+   * @readonly
+   */
+  private readonly plurals: Intl.PluralRules = new Intl.PluralRules(inject(LOCALE_ID));
   // #endregion
 
   // #region Methods

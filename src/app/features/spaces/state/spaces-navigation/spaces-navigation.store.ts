@@ -18,7 +18,18 @@ import {
 } from '@ngrx/signals';
 import { rxMethod } from '@ngrx/signals/rxjs-interop';
 import { tapResponse } from '@ngrx/operators';
-import { concatMap, EMPTY, from, type Observable, pipe, Subject } from 'rxjs';
+import {
+  concatMap,
+  EMPTY,
+  firstValueFrom,
+  from,
+  fromEvent,
+  type Observable,
+  pipe,
+  Subject,
+  takeUntil,
+  timeout,
+} from 'rxjs';
 
 import { hasProblemCode } from '@core/api';
 import { type CreatedTask, TaskCreate } from '@features/task';
@@ -49,6 +60,29 @@ import { isWithin, todayIso } from '../../utils/calendar-date/calendar-date.util
  * @type {number}
  */
 const OVERVIEW_PAGE_TIMEOUT_MS: number = 10_000;
+
+/**
+ * Function boundedLentRead
+ *
+ * @description
+ * Waits for a space overview read another reader lent the sidebar, no longer than the sidebar
+ * would wait for a page of its own and never past the sidebar read's cancellation: the lent read
+ * has no timeout of its own, so a stalled one must not hold back the batch it is waited in.
+ *
+ * @param {Promise<SpaceOverview>} read - The lent read.
+ * @param {AbortSignal} signal - The sidebar read's cancellation.
+ * @param {number} timeoutMs - Longest wait, in milliseconds.
+ * @returns {Promise<SpaceOverview>} The overview; rejects on the read's failure, on timeout or on
+ * cancellation (an empty sequence).
+ */
+function boundedLentRead(
+  read: Promise<SpaceOverview>,
+  signal: AbortSignal,
+  timeoutMs: number,
+): Promise<SpaceOverview> {
+  signal.throwIfAborted();
+  return firstValueFrom(from(read).pipe(timeout(timeoutMs), takeUntil(fromEvent(signal, 'abort'))));
+}
 
 /**
  * Type Reloadable
@@ -100,6 +134,39 @@ export interface OverviewReadOrder {
    * @param {number} order - The read's place from `next`.
    */
   record(overview: SpaceOverview, order: number): void;
+  // #endregion
+}
+
+/**
+ * Interface OrderedOverview
+ *
+ * @description
+ * A space overview a sidebar read obtained, with the place of the read that returned it: its
+ * own, or that of a read another reader lent it (`shareOverviewRead`).
+ */
+interface OrderedOverview {
+  // #region Properties
+  /**
+   * Property overview
+   *
+   * @description
+   * The overview read.
+   *
+   * @type {SpaceOverview}
+   * @readonly
+   */
+  readonly overview: SpaceOverview;
+
+  /**
+   * Property order
+   *
+   * @description
+   * The read's place, from `OverviewReadOrder.next` when it began.
+   *
+   * @type {number}
+   * @readonly
+   */
+  readonly order: number;
   // #endregion
 }
 
@@ -358,6 +425,23 @@ interface SpacesNavigationStoreInstance {
    * @param {number} order - The read's place, from `overviewOrder.next()` when it began.
    */
   offerOverview(overview: SpaceOverview, order: number): void;
+
+  /**
+   * Method shareOverviewRead
+   *
+   * @description
+   * Lends the sidebar a space overview read that another reader has just begun, at its place in
+   * the read order, while the sidebar holds no overviews yet (its first read, or after a failed
+   * one). The sidebar's next read of that space takes its answer, waiting for it while it runs,
+   * instead of calling the gateway again; when it fails or is aborted, the sidebar reads the space
+   * itself. A sidebar that holds overviews reads on its own, since it reads again for newer
+   * counts.
+   *
+   * @param {string} spaceId - The space read.
+   * @param {Promise<SpaceOverview>} read - The read in flight.
+   * @param {number} order - The read's place, from `overviewOrder.next()` when it began.
+   */
+  shareOverviewRead(spaceId: string, read: Promise<SpaceOverview>, order: number): void;
 
   /**
    * Method setExpanded
@@ -620,6 +704,14 @@ function createSpacesNavigationStore(): Type<SpacesNavigationStoreInstance> {
         string,
         { overview: SpaceOverview; order: number }
       >();
+      // A read of a space begun by a reader of a space overview before the sidebar held any
+      // overview, which the sidebar's next read of that space takes (waiting for it while it runs)
+      // instead of reading the space twice; that read forgets them all, and a failed one is
+      // forgotten at once.
+      const shared: Map<string, { read: Promise<SpaceOverview>; order: number }> = new Map<
+        string,
+        { read: Promise<SpaceOverview>; order: number }
+      >();
       let lastOrder: number = 0;
       const overviewOrder: OverviewReadOrder = {
         next: (): number => ++lastOrder,
@@ -661,6 +753,7 @@ function createSpacesNavigationStore(): Type<SpacesNavigationStoreInstance> {
         _taskCreate: inject(TaskCreate),
         _landed: landed,
         _offered: offered,
+        _shared: shared,
         overviewOrder,
         spaces,
         overviews: resource({
@@ -680,20 +773,44 @@ function createSpacesNavigationStore(): Type<SpacesNavigationStoreInstance> {
             for (let offset: number = 0; offset < params.ids.length; offset += 4) {
               abortSignal.throwIfAborted();
               const batch: readonly string[] = params.ids.slice(offset, offset + 4);
-              const batchOrders: readonly number[] = batch.map((): number => overviewOrder.next());
-              const settled: PromiseSettledResult<SpaceOverview>[] = await Promise.allSettled(
-                batch.map((id: string): Promise<SpaceOverview> =>
-                  api.overview(id, today, abortSignal, OVERVIEW_PAGE_TIMEOUT_MS),
-                ),
+              const settled: PromiseSettledResult<OrderedOverview>[] = await Promise.allSettled(
+                batch.map(async (id: string): Promise<OrderedOverview> => {
+                  const lent: { read: Promise<SpaceOverview>; order: number } | undefined =
+                    shared.get(id);
+                  if (lent !== undefined) {
+                    try {
+                      return {
+                        overview: await boundedLentRead(
+                          lent.read,
+                          abortSignal,
+                          OVERVIEW_PAGE_TIMEOUT_MS,
+                        ),
+                        order: lent.order,
+                      };
+                    } catch {
+                      // A failed, stalled or cancelled lent read: the sidebar reads the space
+                      // itself, within its own page timeout, unless its read was cancelled.
+                      abortSignal.throwIfAborted();
+                    }
+                  }
+                  const order: number = overviewOrder.next();
+                  const overview: SpaceOverview = await api.overview(
+                    id,
+                    today,
+                    abortSignal,
+                    OVERVIEW_PAGE_TIMEOUT_MS,
+                  );
+                  return { overview, order };
+                }),
               );
-              settled.forEach(
-                (result: PromiseSettledResult<SpaceOverview>, index: number): void => {
-                  if (result.status !== 'fulfilled') return;
-                  byId[result.value.spaceId] = result.value;
-                  overviewOrder.record(result.value, batchOrders[index]);
-                },
-              );
+              settled.forEach((result: PromiseSettledResult<OrderedOverview>): void => {
+                if (result.status !== 'fulfilled') return;
+                byId[result.value.overview.spaceId] = result.value.overview;
+                overviewOrder.record(result.value.overview, result.value.order);
+              });
             }
+            // Every lent read served this read or began after the spaces it follows.
+            shared.clear();
             for (const id of params.ids) {
               const newer: { overview: SpaceOverview; order: number } | undefined = offered.get(id);
               const read: number = id in byId ? (readOrders.get(byId[id]) ?? 0) : 0;
@@ -943,6 +1060,7 @@ function createSpacesNavigationStore(): Type<SpacesNavigationStoreInstance> {
           creationKey = null;
           listCreationKey = null;
           store._offered.clear();
+          store._shared.clear();
           store._landed.clear();
           patchState(store, {
             _organizationId: organizationId,
@@ -971,6 +1089,16 @@ function createSpacesNavigationStore(): Type<SpacesNavigationStoreInstance> {
             overview.spaceId in current ? current[overview.spaceId] : undefined;
           if (held !== undefined && (store.overviewOrder.of(held) ?? 0) >= order) return;
           store.overviews.set({ ...current, [overview.spaceId]: overview });
+        },
+        shareOverviewRead(spaceId: string, read: Promise<SpaceOverview>, order: number): void {
+          // Only the sidebar's first read waits for it: a read asked once the sidebar holds
+          // overviews wants counts newer than any read begun before.
+          if (store.overviews.hasValue()) return;
+          const lent: { read: Promise<SpaceOverview>; order: number } = { read, order };
+          store._shared.set(spaceId, lent);
+          read.catch((): void => {
+            if (store._shared.get(spaceId) === lent) store._shared.delete(spaceId);
+          });
         },
         setExpanded(spaceId: string, open: boolean): void {
           patchState(store, { expanded: { ...store.expanded(), [spaceId]: open } });

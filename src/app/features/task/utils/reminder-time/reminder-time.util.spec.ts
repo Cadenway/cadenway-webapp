@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
-import { type ReminderPreset, reminderDays, reminderPresets } from './reminder-time.util';
+import {
+  type ReminderPreset,
+  reminderDays,
+  reminderPresets,
+  reminderTimeLabel,
+} from './reminder-time.util';
 
 describe('reminderPresets', () => {
   it('offers the mockup moments from Sunday 8 November, 10 h', () => {
@@ -55,5 +60,14 @@ describe('reminderDays', () => {
     expect(days).toHaveLength(14);
     expect(days[0]).toEqual(new Date(2026, 10, 8));
     expect(days[13]).toEqual(new Date(2026, 10, 21));
+  });
+});
+
+describe('reminderTimeLabel', () => {
+  it('reads a whole hour and a time with minutes in the same format', () => {
+    expect(reminderTimeLabel(11, 0)).toBe('11:00');
+    expect(reminderTimeLabel(9, 0)).toBe('9:00');
+    expect(reminderTimeLabel(14, 19)).toBe('14:19');
+    expect(reminderTimeLabel(8, 5)).toBe('8:05');
   });
 });

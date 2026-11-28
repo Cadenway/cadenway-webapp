@@ -16,7 +16,7 @@
 >
   <ng-icon
     [name]="reminder() ? 'phosphorAlarmFill' : 'phosphorAlarmBold'"
-    class="size-4"
+    size="1rem"
     aria-hidden="true"
   />
   @if (when(); as when) {
@@ -28,13 +28,14 @@
   #popover
   side="bottom"
   align="end"
+  size="xl"
   padding="none"
   ariaLabel="Reminder"
   i18n-ariaLabel="@@task.detail.reminder.dialog"
   [open]="open()"
   (openChange)="setOpen($event)"
 >
-  <div class="flex w-max max-w-sm min-w-72 flex-col p-1" data-testid="task-detail-reminder-popover">
+  <div class="flex flex-col p-1" data-testid="task-detail-reminder-popover">
     <p
       class="px-2 py-1.5 text-xs font-medium text-muted-foreground"
       i18n="@@task.detail.reminder.title"
@@ -49,14 +50,15 @@
       >
         <ng-icon
           [name]="preset.icon"
-          class="size-4 shrink-0 text-muted-foreground"
+          class="shrink-0 text-muted-foreground"
+          size="1rem"
           aria-hidden="true"
         />
         <span class="flex-1">{{ preset.label }}</span>
         <span class="pl-4 text-xs text-muted-foreground tabular-nums">{{ preset.when }}</span>
         <span class="flex w-4 shrink-0 justify-end">
           @if (reminder()?.at === preset.at.toISOString()) {
-            <ng-icon name="phosphorCheckBold" class="size-4 text-primary" aria-hidden="true" />
+            <ng-icon name="phosphorCheckBold" class="text-primary" size="1rem" aria-hidden="true" />
           }
         </span>
       </button>
@@ -69,7 +71,8 @@
       >
         <ng-icon
           name="phosphorCalendarPlusBold"
-          class="size-4 shrink-0 text-muted-foreground"
+          class="shrink-0 text-muted-foreground"
+          size="1rem"
           aria-hidden="true"
         />
         <span class="flex-1" i18n="@@task.detail.reminder.custom">Choose a date and a time…</span>
@@ -173,7 +176,7 @@
         class="relative flex w-full cursor-default items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm whitespace-nowrap text-destructive outline-hidden transition-colors select-none hover:bg-muted focus-visible:bg-muted"
         (click)="remove()"
       >
-        <ng-icon name="phosphorBellSlashBold" class="size-4 shrink-0" aria-hidden="true" />
+        <ng-icon name="phosphorBellSlashBold" class="shrink-0" size="1rem" aria-hidden="true" />
         <ng-container i18n="@@task.detail.reminder.delete">Delete the reminder</ng-container>
       </button>
     }

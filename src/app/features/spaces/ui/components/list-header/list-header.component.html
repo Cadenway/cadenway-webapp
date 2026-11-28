@@ -25,7 +25,7 @@
           aria-hidden="true"
         >
           @if (spaceIcon(current); as name) {
-            <ng-icon [name]="name" class="size-2.5" />
+            <ng-icon [name]="name" size="0.625rem" />
           } @else {
             {{ current.name.charAt(0).toUpperCase() }}
           }
@@ -52,7 +52,7 @@
         data-testid="list-edit"
         (click)="editRequested.emit()"
       >
-        <ng-icon [name]="icon()" class="size-[18px]" aria-hidden="true" />
+        <ng-icon [name]="icon()" size="1.125rem" aria-hidden="true" />
       </button>
       <h1
         class="min-w-0 truncate text-2xl font-semibold tracking-tight"
@@ -93,7 +93,7 @@
     }
     @if (list().sprint?.goal; as goal) {
       <p class="flex items-center gap-1.5 text-sm text-muted-foreground" data-testid="list-goal">
-        <ng-icon name="phosphorTargetBold" class="size-4 shrink-0" aria-hidden="true" />
+        <ng-icon name="phosphorTargetBold" class="shrink-0" size="1rem" aria-hidden="true" />
         <span class="truncate">{{ goal }}</span>
         @if (dialogs().includes('sprint-report')) {
           <button
@@ -105,7 +105,7 @@
             data-testid="list-sprint-report"
             (click)="dialogRequested.emit('sprint-report')"
           >
-            <ng-icon name="phosphorChartLineDownBold" class="size-3.5" aria-hidden="true" />
+            <ng-icon name="phosphorChartLineDownBold" size="0.875rem" aria-hidden="true" />
             <ng-container i18n="@@spaces.header.sprint-report">Sprint report</ng-container>
           </button>
         }
@@ -133,7 +133,6 @@
         cwButton
         type="button"
         variant="outline"
-        size="sm"
         data-testid="list-share"
         (click)="dialogRequested.emit('share')"
       >
@@ -145,7 +144,7 @@
       cwButton
       type="button"
       variant="ghost"
-      size="icon-sm"
+      size="icon"
       [cwMenuTriggerFor]="listMenu"
       aria-label="More actions on the list"
       i18n-aria-label="@@spaces.header.more"

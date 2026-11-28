@@ -123,11 +123,12 @@ for `Create your first task`, and reads its progress again after each `created`.
   `RemindersService.getTaskReminder`, `setTaskReminder`, `updateReminderNote` and
   `deleteReminder`, `SpacesService.createTaskTemplate`, `TaskQueriesService.listTasks` and
   `SearchService.search` (the parent picker);
-  `ListsService.listLists`; `MembersService.listMembers` (owners, admins and members). Every
-  collection is read to its last cursor page.
+  `ListsService.listLists`; the assignable people of `TaskMembersApi` (owners, admins and
+  members). Every collection is read to its last cursor page.
 - For the properties panel (`TaskPropertyApi`, `TaskTimeApi`): `TasksService.assignTask`,
   `unassignTask` (the new version from the `ETag`), `addTaskLabel`, `removeTaskLabel`,
-  `listTaskWatchers` (to its last page), `getTaskApproval`, `requestTaskApproval` (`If-Match`),
+  `listTaskWatchers` (to its last page), `getTaskApproval`,
+  `requestTaskApproval` (`If-Match`),
   `listTaskDependencies`, `createTaskDependency` (`Idempotency-Key`), `deleteTaskDependency`,
   `listDependencyCandidates`; `TaskTimeService.listTaskTimeEntries`, `createTaskTimeEntry`
   (`Idempotency-Key`), `deleteTaskTimeEntry`, `getTaskStatusDurations`; `ListsService.getList`
@@ -149,9 +150,21 @@ for `Create your first task`, and reads its progress again after each `created`.
   (the parent's parent, for the depth); `TaskActivityService.listTaskActivity`;
   `AttachmentsService.listTaskAttachments`, `startTaskAttachmentUpload` (`Idempotency-Key`), the
   signed form post to object storage (`HttpClient`, never to the API), `completeTaskAttachmentUpload`,
-  `deleteTaskAttachment` (`If-Match`) and `getTaskAttachmentDownload`; `MembersService.listMembers`
-  (every role, guests included). `@cadenway/ui` `tabs`, `block-editor`, `comment-composer`,
-  `markdown`, `attachment`, `dropzone`, `checkbox`, `progress`, `avatar`, `context-menu`.
+  `deleteTaskAttachment` (`If-Match`) and `getTaskAttachmentDownload`; the people of
+  `TaskMembersApi` (every role, guests included). `@cadenway/ui` `tabs`, `block-editor`,
+  `comment-composer`, `markdown`, `attachment`, `dropzone`, `checkbox`, `progress`, `avatar`,
+  `context-menu`.
+- Shared reads: `TaskMembersApi` reads `MembersService.listMembers` to its last page once for
+  every role and gives the assignable people (guests left out) and all the people from it. It
+  shares the read in flight with the readers that ask meanwhile (the tabs and the properties
+  panel open together) and keeps nothing once it ends, so a later read is fresh. The read is bound
+  to the organization id and `OrganizationPin` revision it began with: readers of another context
+  start their own read, and once the context changes the old read requests no further page and
+  fails with `OrganizationSwitchPendingError`. The approval is not shared: the approval card and
+  the properties panel each call `getTaskApproval` (`cache: 'no-store'`), so opening a detail
+  reads it twice. That duplicate request is accepted: a shared approval read must stay correct
+  across organization switches, writes that land while it runs and stalled requests, which costs
+  more than the request it saves.
 - `@core/realtime` (`watch({ kind: 'task' })`) for the open detail; Errors' `.` entry
   (`RouteErrorPanel`) for the detail's not-found, deleted-task and unavailable states; Spaces'
   `ports/list-directory` (`LIST_DIRECTORY`) for `Move to…`.
@@ -309,7 +322,8 @@ the task` with `Retry`; otherwise Errors' `RouteErrorPanel` renders the typed ro
     week 9 h, the day before the due date 9 h; custom day among 14 and hour among six, a past
     hour refused; the note saved on change while a reminder exists, one note write after the
     other, the last typed winning and a refusal rolling back only the latest to the last
-    confirmed note; `Delete the reminder`),
+    confirmed note; `Delete the reminder`; every time in one format, `reminderTimeLabel`:
+    `11:00` or `14:19`, `11 h` or `14 h 19` in French, as the mockup's `Aujourd’hui, 11 h`),
     `Copy the link` (`<origin>/<slug>/t/<KEY>`), `More actions` (`Copy the identifier`,
     `Duplicate` with `Open`, `Move to…`, `Archive` with `Undo`, `Save as a template`,
     `Convert to a subtask of…` or `Move to another task…`, `Detach from <key>`, `Delete`
@@ -395,7 +409,8 @@ large` and an empty file with `Empty file`, a name already attached skipped, fil
     named on a last line `Attachments: …`, `<n> / 5,000`, Ctrl or Cmd Enter, the brick's error
     with `Retry` keeping the text and its `Idempotency-Key` for the same body and reply target). The
     tab's count corrects the first page's total only until the detail reads that page again. Posting and deleting a comment read
-    the detail again (they change the task's version). `Activity`: read each time the tab opens,
+    the detail again (they change the task's version). `Activity`: read each time the tab opens
+    (not again when the shown tab is selected once more),
     again while shown when the version moves; actor (member, automation, `GitHub` or `GitLab`, a
     service by name), what changed and when, `Show more`. Every list has its loading, inline
     error with `Retry` and empty state. Writing needs `edit`; commenting needs `comment` or
@@ -444,11 +459,13 @@ large` and an empty file with `Empty file`, a name already attached skipped, fil
   triggers show the combobox's own content (the chosen option, `(me)` included, or `n
 people`), and the due trigger shows the short date without `Tomorrow ·` or the
   `Today` tone, until `cw-combobox` and `cw-date-picker` take a trigger template; the dialog
-  is `size="lg"`, not the mockup's `max-w-4xl`.
+  is `size="xl"` (the mockup's `max-w-4xl`) but centred, not at `top-[8vh]`, and its header keeps
+  the brick's padding instead of the mockup's `px-5 py-3` bar. Its footer wraps on a phone: the
+  `Create more tasks` switch, then the buttons.
 - Detail gaps: `cw-dialog` has no size for the mockup's panel (`top-[6vh] h-[88vh] max-w-5xl`):
-  the detail uses `size="full"` (the viewport less 2 rem) with `scrollable`, so the header has the
-  brick's `px-6 py-4` and the body cancels its padding; a `sheet`-like size is a design-system
-  need. The reminder button does not mark which preset the pending reminder came from unless its
+  the detail uses `size="full"` (the viewport less 2 rem) with `scrollable`; the header cancels
+  part of the brick's `px-6 py-4` (`-mx-2 -my-1`, the mockup's `px-4 py-3`, aligned with the
+  tabs) and the body all of its padding; a `sheet`-like size is a design-system need. The reminder button does not mark which preset the pending reminder came from unless its
   instant matches one; the
   afternoon preset is left out after 15 h (the mockup always shows it). The parent picker cannot
   check the depth and size of a search hit from another list. The header's follow button shows
@@ -519,7 +536,8 @@ people`), and the due trigger shows the short date without `Tomorrow ·` or the
 | `task.cancel-dialog.close`, `task.create.close`                                             | Close button of the dialog brick.                                  |
 | `task.detail.failed*`, `task.detail.*-failed`, `task.detail.conflict*`                      | The mockup draws no refused or conflicting write.                  |
 | `task.detail.parent.failed`, `task.detail.parent.loading`, `task.detail.list.*`             | The mockup's pickers are popovers without a failed read or search. |
-| `task.detail.trashed-with-one`, `task.detail.reminder.hour`, `task.detail.reminder.*-at`    | Singular form and time formats the mockup writes inline.           |
+| `task.detail.trashed-with-one`, `task.detail.reminder.hour*`, `task.detail.reminder.*-at`   | Singular form and time formats the mockup writes inline.           |
+| `task.detail.watch-one`, `task.detail.unwatch-one`                                          | The singular of the follower count, plural in the mockup.          |
 | `task.detail.confirm-*`, `task.detail.dialog-close`, `task.detail.copy-failed`              | Texts of the bricks and of a refused clipboard.                    |
 | `task.detail.reminder.note-placeholder`                                                     | The English source names no person; the French keeps the mockup's. |
 | `task.editor.*`, `task.composer.*` but their mockup words, `task.comments.mention`          | Texts of the block editor and composer bricks, their defaults.     |

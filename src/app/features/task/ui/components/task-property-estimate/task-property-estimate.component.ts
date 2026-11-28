@@ -59,7 +59,7 @@ import {
       [open]="open()"
       (openChange)="openChange($event)"
     >
-      <div class="flex w-max max-w-sm min-w-64 flex-col gap-1 p-1">
+      <div class="flex flex-col gap-1 p-1">
         <input
           #field
           cdkFocusInitial
@@ -95,7 +95,7 @@ import {
               [disabled]="base() < 60"
               (click)="setTotal(base() - 60)"
             >
-              <ng-icon name="phosphorMinusBold" class="size-3.5" aria-hidden="true" />
+              <ng-icon name="phosphorMinusBold" size="0.875rem" aria-hidden="true" />
             </button>
             <span
               class="flex-1 text-center text-sm whitespace-nowrap tabular-nums"
@@ -110,7 +110,7 @@ import {
               i18n-aria-label="@@task.properties.estimate-hour-more"
               (click)="setTotal(base() + 60)"
             >
-              <ng-icon name="phosphorPlusBold" class="size-3.5" aria-hidden="true" />
+              <ng-icon name="phosphorPlusBold" size="0.875rem" aria-hidden="true" />
             </button>
           </div>
           <div
@@ -127,7 +127,7 @@ import {
               [disabled]="base() <= 0"
               (click)="quarterDown()"
             >
-              <ng-icon name="phosphorMinusBold" class="size-3.5" aria-hidden="true" />
+              <ng-icon name="phosphorMinusBold" size="0.875rem" aria-hidden="true" />
             </button>
             <span
               class="flex-1 text-center text-sm whitespace-nowrap tabular-nums"
@@ -142,7 +142,7 @@ import {
               i18n-aria-label="@@task.properties.estimate-minutes-more"
               (click)="setTotal(base() + 15 - (base() % 15))"
             >
-              <ng-icon name="phosphorPlusBold" class="size-3.5" aria-hidden="true" />
+              <ng-icon name="phosphorPlusBold" size="0.875rem" aria-hidden="true" />
             </button>
           </div>
         </div>
@@ -169,7 +169,8 @@ import {
               @if (option === estimateMinutes()) {
                 <ng-icon
                   name="phosphorCheckBold"
-                  class="ml-auto size-4 shrink-0 pl-4 text-primary"
+                  class="ml-auto shrink-0 pl-4 text-primary"
+                  size="1rem"
                   aria-hidden="true"
                 />
               }

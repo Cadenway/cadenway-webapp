@@ -11,7 +11,12 @@
         data-testid="task-detail-parent"
         (click)="parentOpened.emit(parent)"
       >
-        <ng-icon name="phosphorArrowBendLeftUpBold" class="size-3 shrink-0" aria-hidden="true" />
+        <ng-icon
+          name="phosphorArrowBendLeftUpBold"
+          class="shrink-0"
+          size="0.75rem"
+          aria-hidden="true"
+        />
         <span class="truncate" i18n="@@task.detail.subtask-of"
           >Subtask of <span class="font-mono">{{ parent.key }}</span> · {{ parent.name }}</span
         >
@@ -29,7 +34,7 @@
   </div>
   @if (cancelText(); as text) {
     <p class="flex items-center gap-1.5 text-xs text-muted-foreground">
-      <ng-icon name="phosphorXCircleBold" class="size-3.5 shrink-0" aria-hidden="true" />
+      <ng-icon name="phosphorXCircleBold" class="shrink-0" size="0.875rem" aria-hidden="true" />
       <ng-container i18n="@@task.detail.cancelled">Cancelled: {{ text }}</ng-container>
     </p>
   }
@@ -49,7 +54,8 @@
     <p role="alert" class="flex items-center gap-2 text-xs text-muted-foreground">
       <ng-icon
         name="phosphorWarningCircleBold"
-        class="size-3.5 shrink-0 text-destructive"
+        class="shrink-0 text-destructive"
+        size="0.875rem"
         aria-hidden="true"
       />
       <span class="min-w-0 flex-1" i18n="@@task.detail.watchers-read-failed"
@@ -71,7 +77,8 @@
     <p role="alert" class="flex items-center gap-2 text-xs text-muted-foreground">
       <ng-icon
         name="phosphorWarningCircleBold"
-        class="size-3.5 shrink-0 text-destructive"
+        class="shrink-0 text-destructive"
+        size="0.875rem"
         aria-hidden="true"
       />
       <span class="min-w-0 flex-1" i18n="@@task.detail.reminder-read-failed"
@@ -109,7 +116,7 @@
   >
     <ng-icon
       [name]="watchers()?.following ? 'phosphorBellRingingFill' : 'phosphorBellSimpleBold'"
-      class="size-4"
+      size="1rem"
       aria-hidden="true"
     />
     {{ watchers()?.total ?? '' }}
