@@ -134,5 +134,6 @@ confirmed` asks to submit again, which reuses the key; a draft submitted again w
 - A list-progress result names its list from `LIST_DIRECTORY`, or reads `Calculated from its list`
   for an archived list the sidebar does not show (gap G-G2).
 - The expected progress is a tick drawn over `cw-progress`, which has no marker (G-G5, DS2); the
-  statistics strip is laid out two by two below 1024 px over `cw-stat-group` (DS3). Below 640 px
+  statistics strip is laid out two by two below 1024 px over `cw-stat-group` (DS3), with its
+  labels in medium weight, which `cw-stat` does not set (`App.dc.html` line 1579). Below 640 px
   the progress bar takes its own line.

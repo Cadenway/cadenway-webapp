@@ -50,7 +50,7 @@ import type { HomePriorityRow } from '../../../models/home-rows/home-rows.interf
         </h2>
         <a cwButton variant="ghost" size="sm" [routerLink]="allLink()">
           <ng-container i18n="@@home.priorities.all">See all my tasks</ng-container>
-          <ng-icon name="phosphorArrowRightBold" class="size-3.5" aria-hidden="true" />
+          <ng-icon name="phosphorArrowRightBold" size="0.875rem" aria-hidden="true" />
         </a>
       </div>
       @if (rows().length > 0) {

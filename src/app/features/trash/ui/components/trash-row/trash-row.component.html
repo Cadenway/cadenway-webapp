@@ -12,7 +12,7 @@
         class="inline-flex shrink-0 items-center gap-1 rounded-md border border-border px-1.5 text-xs leading-5 text-muted-foreground"
         data-testid="trash-row-parent"
       >
-        <ng-icon name="phosphorTreeStructureBold" class="size-3" aria-hidden="true" />
+        <ng-icon name="phosphorTreeStructureBold" size="0.75rem" aria-hidden="true" />
         {{ entry.parentKey }}
       </span>
     }
@@ -71,21 +71,21 @@
   cwButton
   type="button"
   variant="outline"
-  size="xs"
+  size="sm"
   [loading]="row().pending === 'restore'"
   [attr.aria-disabled]="blocked() ? 'true' : null"
   [attr.aria-label]="restoreLabel()"
   data-testid="trash-row-restore"
   (click)="requestRestore()"
 >
-  <ng-icon name="phosphorArrowCounterClockwiseBold" class="size-3.5" aria-hidden="true" />
+  <ng-icon name="phosphorArrowCounterClockwiseBold" size="0.875rem" aria-hidden="true" />
   <ng-container i18n="@@trash.row.restore">Restore</ng-container>
 </button>
 <button
   cwButton
   type="button"
   variant="ghost"
-  size="icon-xs"
+  size="icon-sm"
   class="text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
   [loading]="row().pending === 'purge'"
   [attr.aria-disabled]="blocked() ? 'true' : null"
@@ -94,5 +94,5 @@
   data-testid="trash-row-purge"
   (click)="requestPurge()"
 >
-  <ng-icon name="phosphorTrashBold" class="size-3.5" aria-hidden="true" />
+  <ng-icon name="phosphorTrashBold" size="0.875rem" aria-hidden="true" />
 </button>
