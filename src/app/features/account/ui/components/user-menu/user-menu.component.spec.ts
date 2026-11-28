@@ -4,6 +4,7 @@ import { By } from '@angular/platform-browser';
 import { Router } from '@angular/router';
 import { provideCadenwayIcons } from '@cadenway/icons';
 import { CwAvatar } from '@cadenway/ui/components/avatar';
+import { CwMenu } from '@cadenway/ui/components/menu';
 import { CwToastService } from '@cadenway/ui/components/toast';
 import { CwTooltip } from '@cadenway/ui/components/tooltip';
 import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
@@ -174,6 +175,18 @@ describe('UserMenu', () => {
       (getDebugNode(avatar)?.componentInstance as CwAvatar).ring(),
     );
     expect(rings).toEqual(['canvas', 'popover']);
+  });
+
+  it('opens the account menu 4 px beside the rail, at least 240 px wide', async () => {
+    await openMenu();
+
+    const menu: CwMenu = fixture.debugElement.query(By.directive(CwMenu))
+      .componentInstance as CwMenu;
+    expect(menu.sideOffset()).toBe(14);
+    expect(menu.minWidth()).toBe('60');
+    expect(document.querySelector('[role="menu"][aria-label="Account"]')?.className).toContain(
+      'min-w-[min(15rem,calc(100vw-1rem))]',
+    );
   });
 
   it('shows the current status and theme as values of their submenu items', async () => {

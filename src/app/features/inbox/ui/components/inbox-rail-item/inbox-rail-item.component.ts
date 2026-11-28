@@ -511,5 +511,31 @@ export class InboxRailItem {
       description: $localize`:@@inbox.write-failed-text:The server did not answer. Try again in a moment.`,
     });
   }
+
+  /**
+   * Method unreadCountLabel
+   *
+   * @description
+   * Spoken form of the `Notifications` tab's counter (`3 unread`), read after the tab's name.
+   *
+   * @param {number} count - Unread notifications.
+   * @returns {string} The spoken count.
+   */
+  protected unreadCountLabel(count: number): string {
+    return $localize`:@@inbox.tab-notifications-count:${count}:count: unread`;
+  }
+
+  /**
+   * Method pendingCountLabel
+   *
+   * @description
+   * Spoken form of the `Reminders` tab's counter (`2 pending`), read after the tab's name.
+   *
+   * @param {number} count - Pending reminders.
+   * @returns {string} The spoken count.
+   */
+  protected pendingCountLabel(count: number): string {
+    return $localize`:@@inbox.tab-reminders-count:${count}:count: pending`;
+  }
   // #endregion
 }

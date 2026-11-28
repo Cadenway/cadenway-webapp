@@ -1,7 +1,8 @@
-import { Component, signal } from '@angular/core';
+import { Component, getDebugNode, signal } from '@angular/core';
 import { type ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideRouter, Router } from '@angular/router';
 import { provideCadenwayIcons } from '@cadenway/icons';
+import { CwDialog, CwDialogHeader } from '@cadenway/ui/components/dialog';
 import { CwToastService } from '@cadenway/ui/components/toast';
 import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 
@@ -218,6 +219,18 @@ describe('TaskDetailHost', () => {
         'In progress',
       );
       expect(document.querySelector('aside[aria-label="Properties of the task"]')).not.toBeNull();
+      expect(dialog()?.querySelector('[data-size]')?.getAttribute('data-size')).toBe('tall');
+      const header: Element | null | undefined = dialog()?.querySelector('cw-dialog-header');
+      expect(
+        (getDebugNode(header)?.componentInstance as CwDialogHeader | undefined)?.variant(),
+      ).toBe('bar');
+      expect(header?.className).not.toContain('-mx-2');
+      expect(
+        (
+          getDebugNode(document.querySelector('cw-task-detail-dialog cw-dialog'))
+            ?.componentInstance as CwDialog | undefined
+        )?.padding(),
+      ).toBe('none');
     },
     FIRST_OPEN_MS,
   );

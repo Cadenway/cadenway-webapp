@@ -1,6 +1,8 @@
-import { signal, type WritableSignal } from '@angular/core';
+import { getDebugNode, signal, type WritableSignal } from '@angular/core';
 import { HttpErrorResponse } from '@angular/common/http';
 import { type ComponentFixture, TestBed } from '@angular/core/testing';
+import { By } from '@angular/platform-browser';
+import { CwDialog, CwDialogHeader } from '@cadenway/ui/components/dialog';
 import { CwToastService, type CwToastOptions } from '@cadenway/ui/components/toast';
 import { Observable, of, Subject, throwError } from 'rxjs';
 import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
@@ -226,6 +228,26 @@ describe('TaskCreateDialog', () => {
 
     expect(TestBed.inject(TaskCreate).isOpen()).toBe(true);
     expect(document.querySelector('[role="dialog"] h2')?.textContent.trim()).toBe('Create a task');
+  });
+
+  it('pins the 896 px window near the top with a bar header and a flush scrolling body', async () => {
+    TestBed.inject(TaskCreate).open({ listId: 'sprint-14' });
+    await fixture.whenStable();
+
+    const dialog: CwDialog = fixture.debugElement.query(By.directive(CwDialog))
+      .componentInstance as CwDialog;
+    expect([dialog.size(), dialog.placement(), dialog.padding(), dialog.scrollable()]).toEqual([
+      'xl',
+      'top',
+      'none',
+      true,
+    ]);
+    const header: CwDialogHeader | undefined = getDebugNode(
+      document.querySelector('[role="dialog"] cw-dialog-header'),
+    )?.componentInstance as CwDialogHeader | undefined;
+    expect(header?.variant()).toBe('bar');
+    expect(document.querySelector('[role="dialog"] cw-dialog-header')?.className).toContain('px-5');
+    expect(document.querySelector('[role="dialog"] cw-dialog-footer')?.className).toContain('px-5');
   });
 
   it('ignores N while a task detail is open', async () => {

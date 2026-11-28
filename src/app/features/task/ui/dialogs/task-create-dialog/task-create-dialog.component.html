@@ -1,135 +1,132 @@
 <cw-dialog
   size="xl"
+  placement="top"
+  padding="none"
+  scrollable
   [open]="taskCreate.isOpen()"
   (openChange)="openChange($event)"
   [pending]="store.creating()"
 >
-  <cw-dialog-header>
-    <div class="flex flex-wrap items-center gap-2 pr-8">
-      <h2 cwDialogTitle i18n="@@task.create.title">Create a task</h2>
-      @if (parentKey(); as parent) {
-        <span class="text-xs text-muted-foreground" i18n="@@task.create.subtask-of"
-          >Subtask of <span class="font-mono">{{ parent }}</span></span
+  <cw-dialog-header variant="bar" class="px-5">
+    <h2 cwDialogTitle i18n="@@task.create.title">Create a task</h2>
+    @if (parentKey(); as parent) {
+      <span class="text-xs text-muted-foreground" i18n="@@task.create.subtask-of"
+        >Subtask of <span class="font-mono">{{ parent }}</span></span
+      >
+    } @else {
+      <span class="text-xs text-muted-foreground" i18n="@@task.create.in">in</span>
+      @if (store.destinationsFailed()) {
+        <span class="text-xs text-destructive" role="alert" i18n="@@task.create.lists-failed"
+          >The lists could not be read.</span
         >
+        <button cwButton type="button" variant="outline" size="xs" (click)="store.retry()">
+          {{ retryLabel }}
+        </button>
       } @else {
-        <span class="text-xs text-muted-foreground" i18n="@@task.create.in">in</span>
-        @if (store.destinationsFailed()) {
-          <span class="text-xs text-destructive" role="alert" i18n="@@task.create.lists-failed"
-            >The lists could not be read.</span
-          >
-          <button cwButton type="button" variant="outline" size="xs" (click)="store.retry()">
-            {{ retryLabel }}
-          </button>
-        } @else {
-          <button
-            cwButton
-            type="button"
-            variant="outline"
-            size="xs"
-            [cwMenuTriggerFor]="lists"
-            [disabled]="store.destinationsLoading()"
-            data-testid="task-create-destination"
-          >
-            <ng-icon
-              name="phosphorListBulletsBold"
-              class="text-muted-foreground"
-              aria-hidden="true"
-            />
-            @if (store.destination(); as destination) {
-              <span class="truncate">{{ destination.spaceName }}</span>
-              <ng-icon
-                name="phosphorCaretRightBold"
-                size="0.75rem"
-                class="text-muted-foreground"
-                aria-hidden="true"
-              />
-              <span class="truncate">{{ destination.listName }}</span>
-            } @else {
-              <span i18n="@@task.create.no-list">No list</span>
-            }
-            <ng-icon
-              name="phosphorCaretDownBold"
-              size="0.75rem"
-              class="text-muted-foreground"
-              aria-hidden="true"
-            />
-          </button>
-          <cw-menu #lists ariaLabel="Destination list" i18n-ariaLabel="@@task.create.destination">
-            @for (destination of store.destinations(); track destination.listId) {
-              <button
-                cwMenuItem
-                type="button"
-                [selected]="destination.listId === store.destination()?.listId"
-                (triggered)="store.chooseList(destination.listId)"
-              >
-                <ng-icon name="phosphorListBulletsBold" aria-hidden="true" />
-                <span class="truncate">{{ destination.listName }}</span>
-                <span class="ml-auto pl-3 text-xs text-muted-foreground">{{
-                  destination.spaceName
-                }}</span>
-              </button>
-            }
-          </cw-menu>
-        }
-      }
-      @if (store.nextKey(); as nextKey) {
-        <span class="font-mono text-xs text-muted-foreground" data-testid="task-create-next-key">{{
-          nextKey
-        }}</span>
-      }
-      @if (!parentKey()) {
         <button
           cwButton
           type="button"
           variant="outline"
           size="xs"
-          class="h-7"
-          [cwMenuTriggerFor]="templates"
-          data-testid="task-create-template"
+          [cwMenuTriggerFor]="lists"
+          [disabled]="store.destinationsLoading()"
+          data-testid="task-create-destination"
         >
           <ng-icon
-            name="phosphorStackSimpleBold"
+            name="phosphorListBulletsBold"
             class="text-muted-foreground"
             aria-hidden="true"
           />
-          @if (template(); as chosen) {
-            <span>{{ chosen.name }}</span>
+          @if (store.destination(); as destination) {
+            <span class="truncate">{{ destination.spaceName }}</span>
+            <ng-icon
+              name="phosphorCaretRightBold"
+              size="0.75rem"
+              class="text-muted-foreground"
+              aria-hidden="true"
+            />
+            <span class="truncate">{{ destination.listName }}</span>
           } @else {
-            <span i18n="@@task.create.template">Template</span>
+            <span i18n="@@task.create.no-list">No list</span>
           }
+          <ng-icon
+            name="phosphorCaretDownBold"
+            size="0.75rem"
+            class="text-muted-foreground"
+            aria-hidden="true"
+          />
         </button>
-        <cw-menu #templates ariaLabel="Task templates" i18n-ariaLabel="@@task.create.templates">
-          <cw-menu-label i18n="@@task.create.template-heading">Start from a template</cw-menu-label>
-          @if (store.templatesFailed()) {
-            <span role="alert" i18n="@@task.create.read-failed"
-              >Could not load this information.</span
-            >
-            <button cwMenuItem type="button" (triggered)="store.retrySecondary('templates')">
-              {{ retryLabel }}
-            </button>
-          }
-          @for (option of store.templates(); track option.id) {
+        <cw-menu #lists ariaLabel="Destination list" i18n-ariaLabel="@@task.create.destination">
+          @for (destination of store.destinations(); track destination.listId) {
             <button
               cwMenuItem
               type="button"
-              [selected]="option.id === model().templateId"
-              (triggered)="pickTemplate(option)"
+              [selected]="destination.listId === store.destination()?.listId"
+              (triggered)="store.chooseList(destination.listId)"
             >
-              <span class="flex min-w-0 flex-col">
-                <span>{{ option.name }}</span>
-                @if (templateHint(option); as hint) {
-                  <span class="text-xs text-muted-foreground">{{ hint }}</span>
-                }
-              </span>
+              <ng-icon name="phosphorListBulletsBold" aria-hidden="true" />
+              <span class="truncate">{{ destination.listName }}</span>
+              <span class="ml-auto pl-3 text-xs text-muted-foreground">{{
+                destination.spaceName
+              }}</span>
             </button>
           }
         </cw-menu>
       }
-    </div>
+    }
+    @if (store.nextKey(); as nextKey) {
+      <span class="font-mono text-xs text-muted-foreground" data-testid="task-create-next-key">{{
+        nextKey
+      }}</span>
+    }
+    @if (!parentKey()) {
+      <button
+        cwButton
+        type="button"
+        variant="outline"
+        size="xs"
+        class="h-7"
+        [cwMenuTriggerFor]="templates"
+        data-testid="task-create-template"
+      >
+        <ng-icon name="phosphorStackSimpleBold" class="text-muted-foreground" aria-hidden="true" />
+        @if (template(); as chosen) {
+          <span>{{ chosen.name }}</span>
+        } @else {
+          <span i18n="@@task.create.template">Template</span>
+        }
+      </button>
+      <cw-menu #templates ariaLabel="Task templates" i18n-ariaLabel="@@task.create.templates">
+        <cw-menu-label i18n="@@task.create.template-heading">Start from a template</cw-menu-label>
+        @if (store.templatesFailed()) {
+          <span role="alert" i18n="@@task.create.read-failed"
+            >Could not load this information.</span
+          >
+          <button cwMenuItem type="button" (triggered)="store.retrySecondary('templates')">
+            {{ retryLabel }}
+          </button>
+        }
+        @for (option of store.templates(); track option.id) {
+          <button
+            cwMenuItem
+            type="button"
+            [selected]="option.id === model().templateId"
+            (triggered)="pickTemplate(option)"
+          >
+            <span class="flex min-w-0 flex-col">
+              <span>{{ option.name }}</span>
+              @if (templateHint(option); as hint) {
+                <span class="text-xs text-muted-foreground">{{ hint }}</span>
+              }
+            </span>
+          </button>
+        }
+      </cw-menu>
+    }
   </cw-dialog-header>
 
-  <div class="grid gap-6 md:grid-cols-[minmax(0,1fr)_14rem]">
-    <div class="flex min-w-0 flex-col gap-4">
+  <div class="grid md:grid-cols-[minmax(0,1fr)_16rem]">
+    <div class="flex min-w-0 flex-col gap-4 px-5 pt-4 pb-5">
       <div class="flex flex-col gap-2">
         <label for="task-create-name" class="sr-only" i18n="@@task.create.name">Task name</label>
         <input
@@ -208,7 +205,10 @@
       }
     </div>
 
-    <aside class="flex flex-col gap-2" aria-labelledby="task-create-properties">
+    <aside
+      class="flex flex-col gap-2 border-t border-border p-4 md:border-t-0 md:border-l"
+      aria-labelledby="task-create-properties"
+    >
       <p
         id="task-create-properties"
         class="text-xs font-medium text-muted-foreground"
@@ -271,7 +271,7 @@
     </aside>
   </div>
 
-  <cw-dialog-footer class="flex-wrap items-center">
+  <cw-dialog-footer class="flex-wrap items-center px-5">
     @if (footerErrors().length > 0) {
       <div role="alert" class="basis-full text-xs text-destructive">
         @for (error of footerErrors(); track $index) {

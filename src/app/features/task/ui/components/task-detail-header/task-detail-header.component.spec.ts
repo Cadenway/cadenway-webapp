@@ -203,6 +203,11 @@ describe('TaskDetailHeader', () => {
 
     reminder.click();
     await fixture.whenStable();
+    const panel: Element | null | undefined = document
+      .querySelector('[data-testid="task-detail-reminder-popover"]')
+      ?.closest('[role="dialog"]');
+    expect(panel?.className).toContain('w-max');
+    expect(panel?.className).toContain('min-w-[min(18rem,calc(100vw-1rem))]');
     const popover: () => HTMLElement = () => {
       const found: HTMLElement | null = document.querySelector(
         '[data-testid="task-detail-reminder-popover"]',

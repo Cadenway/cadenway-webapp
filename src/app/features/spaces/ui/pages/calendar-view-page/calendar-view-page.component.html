@@ -6,6 +6,8 @@
   <section class="flex min-w-[720px] flex-1 flex-col gap-2">
     <cw-calendar-view
       #grid
+      variant="outlined"
+      toolbar="title"
       [weekStartsOn]="1"
       [items]="calendar.gridItems()"
       [trackBy]="trackBy"

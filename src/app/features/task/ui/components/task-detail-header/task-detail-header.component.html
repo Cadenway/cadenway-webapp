@@ -171,7 +171,13 @@
   </button>
 </div>
 
-<cw-menu #more align="end" ariaLabel="Actions on the task" i18n-ariaLabel="@@task.detail.menu">
+<cw-menu
+  #more
+  align="end"
+  minWidth="56"
+  ariaLabel="Actions on the task"
+  i18n-ariaLabel="@@task.detail.menu"
+>
   <button cwMenuItem (triggered)="keyCopied.emit()">
     <ng-icon name="phosphorHashBold" aria-hidden="true" />
     <ng-container i18n="@@task.detail.copy-key">Copy the identifier</ng-container>

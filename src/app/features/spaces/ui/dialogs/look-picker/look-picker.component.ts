@@ -32,8 +32,8 @@ const DEFAULT_ICON: string = 'default';
  * @description
  * The `Icon` and `Color` groups of the space and list dialogs (`lookPicker` in
  * `App.dc.html`): a single choice among the default (the space's initial, or the list's default
- * icon) and the seventeen icons, then among the thirteen colors, each named for assistive
- * technologies. Presentational: `icon` and `color` are two-way models.
+ * icon) and the seventeen icons, then among the thirteen colors (a `swatch` toggle group of 32 px
+ * circles), each named for assistive technologies. Presentational: `icon` and `color` are two-way models.
  */
 @Component({
   selector: 'cw-look-picker',
@@ -80,8 +80,7 @@ const DEFAULT_ICON: string = 'default';
       <span class="text-sm leading-none font-medium" i18n="@@spaces.look.color">Color</span>
       <cw-toggle-group
         type="single"
-        size="sm"
-        class="flex flex-wrap gap-2"
+        variant="swatch"
         ariaLabel="Color"
         i18n-ariaLabel="@@spaces.look.color"
         data-testid="look-colors"
@@ -91,13 +90,12 @@ const DEFAULT_ICON: string = 'default';
         @for (choice of colors; track choice.value) {
           <button
             cwToggleGroupItem
-            class="rounded-full"
             [value]="choice.value"
             [attr.aria-label]="choice.label"
             [attr.title]="choice.label"
           >
             <span
-              class="flex size-6 items-center justify-center rounded-full text-background"
+              class="flex items-center justify-center text-background"
               [class]="choice.swatch"
               aria-hidden="true"
             >

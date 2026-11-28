@@ -1,14 +1,15 @@
-<cw-toolbar ariaLabel="View tools" i18n-ariaLabel="@@spaces.tools.label" data-testid="view-tools">
+<cw-toolbar
+  wrap
+  ariaLabel="View tools"
+  i18n-ariaLabel="@@spaces.tools.label"
+  data-testid="view-tools"
+>
   @if (has('milestones')) {
     <button
       cwButton
       cwToolbarItem
       type="button"
-      [variant]="milestonesOnly() ? 'ghost' : 'outline'"
-      [class.border]="milestonesOnly()"
-      [class.border-primary/50]="milestonesOnly()"
-      [class.bg-primary/10]="milestonesOnly()"
-      [class.text-primary]="milestonesOnly()"
+      variant="outline"
       [attr.aria-pressed]="milestonesOnly()"
       title="Show milestones only"
       i18n-title="@@spaces.tools.milestones-title"
@@ -281,13 +282,17 @@
   side="bottom"
   align="start"
   size="xl"
+  width="content"
   padding="none"
   ariaLabel="Filters"
   i18n-ariaLabel="@@spaces.filter.dialog"
   [open]="filterOpen()"
   (openChange)="filterOpen.set($event)"
 >
-  <div class="grid grid-cols-2 gap-x-2 gap-y-3 p-3" data-testid="view-filter-dialog">
+  <div
+    class="grid w-[34rem] max-w-full grid-cols-2 gap-x-2 gap-y-3 p-3 sm:grid-cols-4"
+    data-testid="view-filter-dialog"
+  >
     @for (section of sections(); track section.field) {
       @if (section.options.length > 0) {
         <fieldset class="flex min-w-0 flex-col gap-0.5">
@@ -335,7 +340,7 @@
   </div>
 </cw-popover>
 
-<cw-menu #sortMenu ariaLabel="Sort" i18n-ariaLabel="@@spaces.sort.menu">
+<cw-menu #sortMenu minWidth="56" ariaLabel="Sort" i18n-ariaLabel="@@spaces.sort.menu">
   <cw-menu-label i18n="@@spaces.sort.title">Sort by</cw-menu-label>
   <cw-menu-radio-group [value]="config().sort.field" (valueChange)="pickSort($event)">
     @for (option of sortOptions; track option.value) {
@@ -360,7 +365,7 @@
   </button>
 </cw-menu>
 
-<cw-menu #groupMenu ariaLabel="Group" i18n-ariaLabel="@@spaces.group.menu">
+<cw-menu #groupMenu minWidth="52" ariaLabel="Group" i18n-ariaLabel="@@spaces.group.menu">
   <cw-menu-label i18n="@@spaces.group.title">Group by</cw-menu-label>
   <cw-menu-radio-group [value]="groupValue()" (valueChange)="pickGroup($event)">
     @for (option of groupOptions; track option.value) {
@@ -369,7 +374,12 @@
   </cw-menu-radio-group>
 </cw-menu>
 
-<cw-menu #columnsMenu ariaLabel="Columns shown" i18n-ariaLabel="@@spaces.columns.menu">
+<cw-menu
+  #columnsMenu
+  minWidth="52"
+  ariaLabel="Columns shown"
+  i18n-ariaLabel="@@spaces.columns.menu"
+>
   <cw-menu-label i18n="@@spaces.columns.menu">Columns shown</cw-menu-label>
   @for (column of columnOptions(); track column.value) {
     <button
@@ -384,7 +394,12 @@
   }
 </cw-menu>
 
-<cw-menu #subtaskMenu ariaLabel="Subtask display" i18n-ariaLabel="@@spaces.subtasks.menu">
+<cw-menu
+  #subtaskMenu
+  minWidth="64"
+  ariaLabel="Subtask display"
+  i18n-ariaLabel="@@spaces.subtasks.menu"
+>
   <cw-menu-radio-group [value]="config().subtasks" (valueChange)="pickSubtasks($event)">
     @for (mode of subtaskModes; track mode.value) {
       <button cwMenuItemRadio [value]="mode.value">

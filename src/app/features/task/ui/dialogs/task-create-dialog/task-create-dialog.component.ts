@@ -289,7 +289,9 @@ function addDays(date: Date, days: number): Date {
  * @description
  * The task create dialog of mockup `App.dc.html` (lines 2820-2975, logic near line 7232), on
  * `cw-dialog`, an `overlays` slot contribution bound by `withTaskCreate()`. `N` opens it outside
- * fields and `TaskCreate.open` opens it from any screen with presets. The header picks the
+ * fields and `TaskCreate.open` opens it from any screen with presets. The 896 px window is pinned
+ * 8vh from the top (`placement="top"`), so it grows downwards, and scrolls its flush body between
+ * the bar header and the footer (`padding="none"`, `scrollable`). The header picks the
  * destination list (`in` Product › Sprint 14, with `Retry` when the lists cannot be
  * read), shows the next key and offers the space's saved templates. The body holds the required
  * name, a plain description (the block editor comes in step 5) and the subtask drafts (Enter

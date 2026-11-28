@@ -1,15 +1,14 @@
 <cw-dialog
-  size="full"
-  scrollable
+  size="tall"
+  padding="none"
   [showClose]="false"
   [open]="open()"
   (openChange)="dialogOpenChange($event)"
   (closed)="closed.emit()"
 >
-  <cw-dialog-header>
+  <cw-dialog-header variant="bar">
     @if (store.header(); as header) {
       <cw-task-detail-header
-        class="-mx-2 -my-1"
         [header]="header"
         [statusLabel]="statusLabel()"
         [parent]="store.parent()"
@@ -47,7 +46,7 @@
     }
   </cw-dialog-header>
 
-  <div class="-mx-6 -my-3 flex min-h-0 flex-col md:h-[calc(100%+1.5rem)]" data-testid="task-detail">
+  <div class="flex min-h-0 flex-col md:h-full" data-testid="task-detail">
     @if (store.ready()) {
       <div class="flex min-h-0 flex-1 flex-col md:flex-row">
         <div class="flex min-w-0 flex-1 flex-col md:min-h-0">

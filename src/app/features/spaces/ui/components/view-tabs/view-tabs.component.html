@@ -60,7 +60,7 @@
   </div>
 </cw-tabs>
 
-<cw-menu #addMenu ariaLabel="Add a view" i18n-ariaLabel="@@spaces.views.add">
+<cw-menu #addMenu minWidth="56" ariaLabel="Add a view" i18n-ariaLabel="@@spaces.views.add">
   <cw-menu-label i18n="@@spaces.views.title">Views of the list</cw-menu-label>
   @for (layout of layouts(); track layout) {
     <button cwMenuItem (triggered)="layoutPicked.emit(layout)">

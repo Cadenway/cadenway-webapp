@@ -155,7 +155,13 @@
   </div>
 </header>
 
-<cw-menu #listMenu align="end" ariaLabel="List actions" i18n-ariaLabel="@@spaces.header.menu">
+<cw-menu
+  #listMenu
+  align="end"
+  minWidth="56"
+  ariaLabel="List actions"
+  i18n-ariaLabel="@@spaces.header.menu"
+>
   <button cwMenuItem [disabled]="!list().canEdit" (triggered)="editRequested.emit()">
     <ng-icon name="phosphorPencilSimpleBold" aria-hidden="true" />
     {{ renameLabel() }}

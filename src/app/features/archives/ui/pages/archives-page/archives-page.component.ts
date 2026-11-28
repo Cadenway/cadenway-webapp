@@ -806,5 +806,26 @@ export class ArchivesPage {
       ? $localize`:@@archives.row.archived-on:archived on ${date}:date:`
       : $localize`:@@archives.row.archived-by:archived on ${date}:date: by ${name}:name:`;
   }
+
+  /**
+   * Method tabCountLabel
+   *
+   * @description
+   * Spoken form of a tab's counter (`3 lists`, `12 tasks`), read after the tab's name.
+   *
+   * @param {'lists' | 'tasks'} tab - The tab.
+   * @param {number} count - The tab's count.
+   * @returns {string} The spoken count.
+   */
+  protected tabCountLabel(tab: 'lists' | 'tasks', count: number): string {
+    if (tab === 'lists') {
+      return this.isOne(count)
+        ? $localize`:@@archives.tabs.lists-count-one:${count}:count: list`
+        : $localize`:@@archives.tabs.lists-count-other:${count}:count: lists`;
+    }
+    return this.isOne(count)
+      ? $localize`:@@archives.tabs.tasks-count-one:${count}:count: task`
+      : $localize`:@@archives.tabs.tasks-count-other:${count}:count: tasks`;
+  }
   // #endregion
 }

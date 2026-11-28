@@ -4,6 +4,8 @@
   [open]="palette.isOpen()"
   (openChange)="palette.setOpen($event)"
   [shortcut]="false"
+  [clearOnEscape]="false"
+  [fieldEnd]="escapeHint"
   [filter]="filter"
   [loading]="store.loading()"
   (searchChange)="store.search($event)"
@@ -215,3 +217,7 @@
     >
   </cw-command-footer>
 </cw-command-dialog>
+
+<ng-template #escapeHint>
+  <kbd cwKbd aria-hidden="true" data-testid="command-palette-escape">{{ keyLabels.escape }}</kbd>
+</ng-template>

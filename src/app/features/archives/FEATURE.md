@@ -96,4 +96,5 @@ place (`replaceUrl`), dropping it for `Lists`. Spaces' sidebar footer links to i
 restored` and `<KEY> could not be restored`, the missing-right toasts `You cannot restore
 <name or KEY>` / `Restoring takes the edit right on the list.`, and the neutral notices `The
 restore of <name or KEY> could not be confirmed` / `The archives were read again: check whether
-it is back.`
+it is back.`, and the tabs' spoken counts `<n> list(s)` and `<n> task(s)` (`archives.tabs.*-count-*`,
+  read after the tab's name through `cwTab` `countLabel`).

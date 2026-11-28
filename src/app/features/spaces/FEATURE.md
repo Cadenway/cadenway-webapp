@@ -708,7 +708,10 @@ The `Calendar` view (`ui/pages/calendar-view-page`, `App.dc.html` lines 775-828,
 6380-6415, day menu lines 7324-7330) shows the list's tasks on their due date in
 `cw-calendar-view`: a Monday-first month grid of six weeks (or the brick's week view), three tasks
 a day, then `+N others`, and the `No due date` panel beside it from 1280 px, below it under (the
-grid keeps 720 px and scrolls across).
+grid keeps 720 px and scrolls across). The grid is the mockup's `outlined` look; its header is the
+`title` toolbar (the month as an `h2`, then `Today` and the arrows in the `Calendar navigation`
+group) and the brick's month and week toggle. The mockup draws no toggle (month only); the toggle
+stays because the week view exists and has no other pointer control (the M and S keys also switch).
 
 - `CalendarViewStore` (`state/calendar-view`, route-scoped through `CALENDAR_VIEW_PROVIDERS`, with
   `ListTasksApi`, Task's `TaskStatusChangesStore` and two `ListTasksStore` instances) holds the
@@ -761,8 +764,7 @@ grid keeps 720 px and scrolls across).
     follow the write. An `Undo` that takes a due date away hides the task from the grid at once,
     and the panel shows it once the unwindowed read answers.
   - The toast's day leaves out the mockup's `Today, …` and `(late)` variants of `dueInfo().long`.
-  - The mockup's `Calendar navigation` group name has no place in the brick's header. The brick's
-    week view and its texts are not in the mockup.
+  - The brick's week view and its texts are not in the mockup.
 - Copy not taken word for word from the mockup:
 
   | Unit                                                                                                                                                                                                                                    | Reason                                                                       |
@@ -1220,12 +1222,8 @@ gateway checks them and `ORGANIZATION_PIN_OPERATIONS` lists them.
   overview, not in the sidebar, until the design system adds one.
 - `cw-sidebar-item` takes no color: the lists and favorite lists of the sidebar show their icon
   without their color, until the design system adds one. A favorite saved view shows the funnel:
-  `Favorite` carries no icon.
-- The current `cwSidebarItem` (`@cadenway/ui` 0.13.0) shows the Fill weight of its Bold icon. Every
-  list icon has its Fill weight in `@cadenway/icons` 0.4.0, but `phosphorFunnelSimpleFill` is not
-  registered, so a current favorite saved view shows no icon, where the mockup keeps the Bold
-  funnel (`App.dc.html` line 8295). The fix belongs in the design system: that Fill weight in
-  `@cadenway/icons`, or an active-icon input on `cwSidebarItem`.
+  `Favorite` carries no icon. A current list shows the Fill weight of its icon; a current favorite
+  saved view keeps the Bold funnel (`activeIcon` null), as the mockup does (`App.dc.html` line 8295).
 - A favorite saved view's menu holds `Open` only: renaming, duplicating and deleting a view
   live on its list page.
 - The Git section of `Automations` stays hidden until B6 is decided. The Slack and
@@ -1239,13 +1237,9 @@ gateway checks them and `ORGANIZATION_PIN_OPERATIONS` lists them.
   publishes `planName` to Workspace only.
 - Realtime notices without a list or space id cannot be attributed to the open list and do not
   refresh its counts; the notice contract needs to include that context.
-- `cw-popover` has no width beyond `xl` (`w-96`): the filter dialog lays its sections out in two
-  columns inside the `xl` panel, not the mockup's `w-[34rem]` panel with four columns from 640 px.
-  `cw-toolbar` moves the tools that do not fit into its `More options` menu where the mockup's row
-  wraps, and `button[cwButton]` `outline` keeps its transparent background when pressed, so
-  `Milestones` switches to `ghost` with the mockup's violet border and tint while pressed.
 - The sheet edits on a double click, Enter or F2 (the table brick's contract), so its hint says
-  so where the mockup's says a click.
+  so where the mockup's says a click: with `editOn="click"` Enter would edit the name instead of
+  opening the task, and keyboard users would lose their direct way to open it.
 - The filter dialog counts the visible tasks (`n of m tasks`, `ViewTools.visibleCount`), hides
   `Subtasks: …` without subtasks (`hasSubtasks`) and offers the signed-in member once as `Me`
   (`userId`). The mockup's `listHasKids` looks at every task of the list; `hasSubtasks` looks at the

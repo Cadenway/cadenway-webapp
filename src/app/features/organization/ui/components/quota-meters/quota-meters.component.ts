@@ -130,12 +130,12 @@ export function quotaZone(used: number, limit: number): QuotaZone {
  *
  * @description
  * The `<plan> plan limits` card of the quotas section (`Organisation.dc.html` lines 397-408):
- * the title with `alert threshold at 80%`, then one `cw-meter` per quota with a limit, its value
- * at the right of its label, its zone forced from `QuotaMeter.zone` (so the 90 % critical zone
- * holds rather than the brick's 95 %) and its note; a quota without a limit shows its label,
- * value and note without a gauge. The mockup's 80 % mark on each gauge is not drawn: `cw-meter`
- * draws a mark only as a capacity, whose overrun it would color and count. Presentational: the
- * page writes the texts.
+ * the title with the `alert threshold at 80%` legend and its mark glyph, then one `cw-meter` per
+ * quota with a limit, its value at the right of its label, the 80 % alert mark on its track
+ * (`marker`, which changes neither the zone nor the value text), its zone forced from
+ * `QuotaMeter.zone` (so the 90 % critical zone holds rather than the brick's 95 %) and its note; a
+ * quota without a limit shows its label, value and note without a gauge. Presentational: the page
+ * writes the texts.
  */
 @Component({
   selector: 'cw-quota-meters',

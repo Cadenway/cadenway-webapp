@@ -516,5 +516,21 @@ export class MyTasksPage {
     if (name !== undefined) return name;
     return this.store.listedSpaces().has(task.spaceId) ? ARCHIVED_LIST : '';
   }
+
+  /**
+   * Method taskCountLabel
+   *
+   * @description
+   * Spoken form of a tab's counter (`12 tasks`), read after the tab's name; singular or plural by
+   * the plural rules of the running locale.
+   *
+   * @param {number} count - The tab's count.
+   * @returns {string} The spoken count.
+   */
+  protected taskCountLabel(count: number): string {
+    return new Intl.PluralRules($localize.locale ?? 'en').select(count) === 'one'
+      ? $localize`:@@my-tasks.tabs.count-one:${count}:count: task`
+      : $localize`:@@my-tasks.tabs.count-other:${count}:count: tasks`;
+  }
   // #endregion
 }

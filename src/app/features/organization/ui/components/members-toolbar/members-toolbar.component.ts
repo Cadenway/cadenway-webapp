@@ -17,6 +17,7 @@ import {
 import { CwTab, CwTabs, CwTabsList } from '@cadenway/ui/components/tabs';
 import { NgIcon } from '@ng-icons/core';
 
+import { takesSingular } from '../../../models/member/plural-form.util';
 import type {
   MemberPresenceFilter,
   MemberRoleCounts,
@@ -286,6 +287,23 @@ export class MembersToolbar {
       (key: MemberPresenceFilter): boolean => key === value,
     );
     if (presence !== undefined) this.presenceChanged.emit(presence);
+  }
+
+  /**
+   * Method memberCountLabel
+   *
+   * @description
+   * Spoken form of a tab's counter (`18 members`), read after the tab's name; undefined while the
+   * count is unknown, so the brick reads the bare number.
+   *
+   * @param {number | undefined} count - The tab's count.
+   * @returns {string | undefined} The spoken count.
+   */
+  protected memberCountLabel(count: number | undefined): string | undefined {
+    if (count === undefined) return undefined;
+    return takesSingular(count)
+      ? $localize`:@@organization.members.tab-count-one:${count}:count: member`
+      : $localize`:@@organization.members.tab-count-other:${count}:count: members`;
   }
   // #endregion
 }

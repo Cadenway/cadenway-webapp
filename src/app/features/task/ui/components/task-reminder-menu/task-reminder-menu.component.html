@@ -28,14 +28,14 @@
   #popover
   side="bottom"
   align="end"
-  size="xl"
+  width="content"
   padding="none"
   ariaLabel="Reminder"
   i18n-ariaLabel="@@task.detail.reminder.dialog"
   [open]="open()"
   (openChange)="setOpen($event)"
 >
-  <div class="flex flex-col p-1" data-testid="task-detail-reminder-popover">
+  <div class="flex max-w-sm flex-col p-1" data-testid="task-detail-reminder-popover">
     <p
       class="px-2 py-1.5 text-xs font-medium text-muted-foreground"
       i18n="@@task.detail.reminder.title"

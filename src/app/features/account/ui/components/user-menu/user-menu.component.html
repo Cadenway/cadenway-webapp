@@ -19,6 +19,8 @@
   #accountMenu
   side="right"
   align="end"
+  minWidth="60"
+  sideOffset="14"
   ariaLabel="Account"
   i18n-ariaLabel="@@account.user-menu.aria-label"
 >
@@ -83,7 +85,13 @@
   </button>
 </cw-menu>
 
-<cw-menu #statusMenu side="right" ariaLabel="Status" i18n-ariaLabel="@@account.user-menu.status">
+<cw-menu
+  #statusMenu
+  side="right"
+  minWidth="60"
+  ariaLabel="Status"
+  i18n-ariaLabel="@@account.user-menu.status"
+>
   <cw-menu-radio-group
     [value]="presence.ownStatus() ?? undefined"
     (valueChange)="choosePresence($event)"

@@ -247,6 +247,9 @@ describe('ListPage', () => {
     await expect.poll(() => find('view-filter-dialog')).not.toBeNull();
 
     const dialog: HTMLElement | null = find('view-filter-dialog');
+    expect(dialog?.closest('[role="dialog"]')?.className).toContain('w-max');
+    expect(dialog?.className).toContain('w-[34rem]');
+    expect(dialog?.className).toContain('sm:grid-cols-4');
     expect(dialog?.textContent).toContain('To do');
     expect(dialog?.textContent).not.toContain('To triage');
     expect(dialog?.textContent).toContain('Me');

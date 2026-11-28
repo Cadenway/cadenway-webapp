@@ -20,10 +20,22 @@
         ariaLabel="Archived item type"
         i18n-ariaLabel="@@archives.tabs.label"
       >
-        <button cwTab type="button" value="lists" [count]="store.listCount()">
+        <button
+          cwTab
+          type="button"
+          value="lists"
+          [count]="store.listCount()"
+          [countLabel]="tabCountLabel('lists', store.listCount())"
+        >
           <ng-container i18n="@@archives.tabs.lists">Lists</ng-container>
         </button>
-        <button cwTab type="button" value="tasks" [count]="store.taskCount()">
+        <button
+          cwTab
+          type="button"
+          value="tasks"
+          [count]="store.taskCount()"
+          [countLabel]="tabCountLabel('tasks', store.taskCount())"
+        >
           <ng-container i18n="@@archives.tabs.tasks">Tasks</ng-container>
         </button>
       </cw-tabs-list>

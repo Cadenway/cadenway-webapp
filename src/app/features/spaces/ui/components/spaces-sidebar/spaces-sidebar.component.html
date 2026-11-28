@@ -21,6 +21,7 @@
         <a
           cwSidebarItem
           [icon]="view.icon"
+          [activeIcon]="view.favorite.kind === 'saved-view' ? null : undefined"
           [routerLink]="favoriteLink(view.favorite)"
           [queryParams]="favoriteQuery(view.favorite)"
           routerLinkActive
