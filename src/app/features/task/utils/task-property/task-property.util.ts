@@ -275,8 +275,8 @@ export function shortDayLabel(iso: string, today: string, locale: string): strin
  * Function longDayLabel
  *
  * @description
- * The full date of a day (`Monday 9 November`, the year when it is not the current one),
- * prefixed by `Today, ` for today.
+ * The full date of a day, as the locale writes a full weekday date (`Monday, November 9` in
+ * English, the year when it is not the current one), prefixed by `Today, ` for today.
  *
  * @param {string} iso - The day.
  * @param {string} today - Today.
@@ -285,7 +285,12 @@ export function shortDayLabel(iso: string, today: string, locale: string): strin
  */
 export function longDayLabel(iso: string, today: string, locale: string): string {
   const sameYear: boolean = iso.slice(0, 4) === today.slice(0, 4);
-  const date: string = formatDate(dateOf(iso), sameYear ? 'EEEE d MMMM' : 'EEEE d MMMM y', locale);
+  const date: string = new Intl.DateTimeFormat(locale, {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+    ...(sameYear ? {} : { year: 'numeric' }),
+  }).format(dateOf(iso));
   return dayOffset(iso, today) === 0
     ? $localize`:@@task.properties.due-today-long:Today, ${date}:date:`
     : date.charAt(0).toLocaleUpperCase(locale) + date.slice(1);
