@@ -833,7 +833,7 @@
     "dashboards.route.title": "Dashboards",
     "dashboards.people.unknown": "Unknown member",
     "dashboards.chart.title": " Tasks completed per week ",
-    "dashboards.chart.caption": " The last bar is the current week. ",
+    "dashboards.chart.caption": " The last, lighter bar is the current week. ",
     "dashboards.chart.week": "Week",
     "dashboards.chart.series": "Completed",
     "dashboards.chart.week-label": "W{$week}",
