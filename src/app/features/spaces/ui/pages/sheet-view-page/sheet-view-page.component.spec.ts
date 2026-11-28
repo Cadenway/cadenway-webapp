@@ -395,9 +395,9 @@ describe('SheetViewPage', () => {
     expect(host.textContent.replace(/\s+/gu, ' ')).toContain(
       'Click a cell to edit it · arrows to move · Enter validates, Esc cancels.',
     );
-    const cell: HTMLElement | undefined = [
-      ...host.querySelectorAll<HTMLElement>('td[data-cw-cell][data-cw-col="estimate"]'),
-    ][0];
+    const cell: HTMLElement | null = host.querySelector<HTMLElement>(
+      'td[data-cw-cell][data-cw-col="estimate"]',
+    );
     expect(cell?.querySelector('cw-sheet-cell-editor')).toBeNull();
     cell?.click();
     await vi.waitFor(() => {

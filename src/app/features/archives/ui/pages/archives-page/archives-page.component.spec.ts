@@ -299,7 +299,9 @@ describe('ArchivesPage', () => {
     const tabs: string[] = Array.from(root(harness).querySelectorAll('[role="tab"]')).map(
       (tab: Element) => {
         const copy: Element = tab.cloneNode(true) as Element;
-        copy.querySelectorAll('[aria-hidden="true"]').forEach((part: Element) => part.remove());
+        copy.querySelectorAll('[aria-hidden="true"]').forEach((part: Element) => {
+          part.remove();
+        });
         return copy.textContent.replace(/\s+/gu, ' ').trim();
       },
     );

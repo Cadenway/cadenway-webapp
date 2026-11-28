@@ -358,7 +358,9 @@ describe('MyTasksPage', () => {
   function spoken(element: Element | undefined): string {
     const copy: Node | undefined = element?.cloneNode(true);
     if (!(copy instanceof Element)) return '';
-    copy.querySelectorAll('[aria-hidden="true"]').forEach((part: Element) => part.remove());
+    copy.querySelectorAll('[aria-hidden="true"]').forEach((part: Element) => {
+      part.remove();
+    });
     return copy.textContent.replace(/\s+/gu, ' ').trim();
   }
 
