@@ -17,8 +17,8 @@ configured in `api/client/`. The shell belongs to
 | `@core/realtime`  | Workspace-scoped connection, rooms, presence, and notices.                             |
 | `@core/theme`     | Theme preference and document synchronization.                                         |
 | `@core/shortcuts` | Scoped keyboard shortcut registration.                                                 |
-| `@core/routing`   | Route title, focus and the reserved first segments (slugs).                            |
-| `@core/locale`    | Locale of the load, chosen and installed before bootstrap.                             |
+| `@core/routing`   | Route title, focus, reserved first segments (slugs) and shareable addresses.           |
+| `@core/locale`    | Locale of the build and the switch to another locale build.                            |
 | `@core/ui-labels` | The English texts of the `@cadenway/ui` bricks.                                        |
 
 ## Dependencies
@@ -27,8 +27,8 @@ The root transport provides Angular HTTP to the generated `@cadenway/api-client`
 
 ## Invariants
 
-- The application initializer loads the mounted `config.json` once through the concern's private
-  source service. The store fails an early read explicitly and retains the configuration across
+- The application initializer loads `/config.json`, mounted at the site root beside the locale
+  builds, once through the concern's private source service. The store fails an early read explicitly and retains the configuration across
   session and organization changes.
 - The API transport resolves generated relative paths against the configured gateway origin and
   uses the browser's session cookie there.
@@ -60,15 +60,18 @@ The root transport provides Angular HTTP to the generated `@cadenway/api-client`
 - Personal `notification.created.v1` and `reminder.due.v1` notices are validated and deduplicated
   by their envelope ID. They are invalidations, not replayed data; consumers refetch after reconnect.
   Delivery requires `REALTIME_PERSONAL_NOTICES_ENABLED` on the gateway.
-- The locale is chosen before bootstrap by `loadLocale`, which `main.ts` awaits before it imports the
-  application modules, since `$localize` translates a message when its module evaluates.
-  `?lang=fr` or `?lang=en` selects it and is remembered on the device (`cadenway-locale`, inaccessible
-  storage ignored); otherwise the remembered choice applies, else English, the source copy, which
-  loads nothing. French fetches `/messages.fr.json` (copied from `src/locale/messages.fr.json`)
-  and its Angular locale data, then calls `loadTranslations()`; a failed load starts in English and
-  is logged. `$localize.locale`, read by Angular's default `LOCALE_ID`, and `<html lang>` name the
-  active locale. `LocaleService` reads it and switches by reloading the page with `?lang=`; no
-  screen offers the switch yet.
+- The locale is the build's: each locale is a separate application compiled by `pnpm build` and
+  served below its own segment (`/en/`, `/fr/`, its `<base href>`), which sets `$localize.locale`,
+  read by Angular's default `LOCALE_ID`, its locale data and `<html lang>`. `main.ts` prepares
+  nothing. `LocaleService` reads the locale and `use()` switches it: it writes the first-party
+  `cw_locale` cookie (`Path=/; Max-Age=31536000; SameSite=Lax`, `Secure` over HTTPS, the locale code
+  only), which the web server reads for an address without a segment, then opens the same page
+  below the other segment with a full navigation, query and fragment kept. The account preference
+  calls it once a language is saved.
+- `AppLinkService.absolute()` builds every address given to copy or share (task, list, document,
+  public form) from a router path through the location strategy's `prepareExternalUrl`, so it
+  carries the base href, the current locale segment, on the page origin. No code writes a locale
+  segment by hand.
 - `isUnknownWriteOutcome` calls a failed write uncertain when it may still have been applied (no
   answer, an unreadable `2xx`, `408`, `5xx`, `409 idempotency.request-in-progress`); `isDroppedOrganizationWrite` calls
   it dropped when the pin blocked it during a switch or the gateway answered
@@ -77,8 +80,8 @@ The root transport provides Angular HTTP to the generated `@cadenway/api-client`
   `@cadenway/ui` bricks every area renders and no feature names (key names, the close buttons of
   alerts, banners and sheets, the sidebar defaults, the spinner, the split button menu, the
   priority words); their built-in texts are French. The `/:org` route provides it from its own
-  concern, `@core/ui-labels`, because its brick entry points would add about 330 kB to the initial
-  bundle from the root or from `@core/locale`, which `main.ts` loads. A feature's own labels
+  concern, `@core/ui-labels`, because its brick entry points would add about 330 kB to the shell
+  bundle from the root providers. A feature's own labels
   provider below it still wins.
 - The resolved theme is reflected in `data-theme` on the document element.
 - After a path change, focus moves to the innermost route focus target or `main` without scrolling;

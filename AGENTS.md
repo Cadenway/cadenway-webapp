@@ -44,8 +44,9 @@ src/app/
 - That includes URL paths and the user-facing copy: English strings with a stable
   `@@feature.area.key` id (`$localize`, `i18n`). No French text anywhere in the sources (code,
   comments, specs, fixtures). English is the default locale; the mockup's French wording, word for
-  word, lives only in the French catalog `src/locale/messages.fr.json`, loaded at runtime when
-  `?lang=fr` selects French (see `core/locale`). Keep copy out of logic.
+  word, lives only in the French catalog `src/locale/messages.fr.json`, compiled into the French
+  build. Each locale is a separate build below its own path segment, `/en/` and `/fr/` (see
+  `core/locale` and `deploy/nginx.conf`). Keep copy out of logic.
 - Follow the user's language in the conversation only. No emojis.
 - Never invent facts about the product, the contracts, the mockup or the tooling: cite the file or
   the document. When something does not exist yet, say so and say which step of the start-up plan

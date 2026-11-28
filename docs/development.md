@@ -32,7 +32,8 @@ Requirements: Node.js LTS and pnpm (versions in `package.json`), and Docker.
 
    ```bash
    pnpm install
-   pnpm start                  # http://localhost:4200
+   pnpm start                  # English, http://localhost:4200/en/
+   pnpm serve:fr               # French, http://localhost:4201/fr/
    ```
 
 ## Minimum checks by change
@@ -70,13 +71,23 @@ pnpm test:coverage
 pnpm build
 ```
 
-`pnpm build` and `pnpm start` produce a single English application at the root, with the French
-catalog copied to `/messages.fr.json`; open any page with `?lang=fr` to load it at runtime,
-and `?lang=en` to return to English (the choice is remembered on the device). `pnpm i18n:check`
-compares the extracted English catalog with `src/locale/messages.json`, then runs
+`pnpm build` produces one application per locale, `dist/cadenway-webapp/browser/en/` and
+`browser/fr/`, each with its `<base href>` (`/en/`, `/fr/`); a missing French translation fails
+the build. The dev server serves one locale: `pnpm start` serves English at
+`http://localhost:4200/en/` and `pnpm serve:fr` serves French at `http://localhost:4201/fr/`. Both
+serve `/config.json` from the site root, as the image does; neither redirects an address without
+a locale segment, which only the image's nginx does (see the [architecture](architecture.md#localization)).
+`pnpm i18n:check` compares the extracted English catalog with `src/locale/messages.json`, then runs
 `src/locale/messages.spec.ts`, which fails on a missing, empty, orphan or placeholder-mismatched
-French text. Unit specs run in English, without translations; only the `core/locale` specs load the
-French catalog.
+French text. Unit specs run in English, without translations.
+
+`pnpm e2e` (`tests/e2e/playwright.config.ts`) runs two Playwright projects: `en` runs every spec
+below `http://localhost:4200/en/`, and `fr` runs the `*.fr.spec.ts` specs, which assert the French
+build, below `http://localhost:4201/fr/`. It starts `pnpm start` and `pnpm serve:fr`, or reuses
+those already running. Specs navigate to relative paths (`page.goto('login')`) so they stay below
+the locale base. With `E2E_BASE_URL` set to the origin of an application that serves both locales
+(the image, or `cadenway-ops`), both projects run there without a dev server, for example
+`E2E_BASE_URL=http://localhost:8080 pnpm e2e`.
 
 For a focused check, run `pnpm test --include "<glob>"` with one spec glob.
 
