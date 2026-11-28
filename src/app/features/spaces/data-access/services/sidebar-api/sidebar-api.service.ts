@@ -3,8 +3,6 @@ import {
   type ArchivedListPage,
   type ArchivedTaskPage,
   ArchivesService,
-  BillingService,
-  type BillingSubscription,
   type TrashEntryPage,
   TrashService,
 } from '@cadenway/api-client';
@@ -12,59 +10,17 @@ import {
 import { abortableRead } from '../../utils/abortable-read/abortable-read.util';
 
 /**
- * Interface SeatSummary
- *
- * @description
- * The plan of the organization and its free seats, for the `Invite your team` suggestion.
- */
-export interface SeatSummary {
-  // #region Properties
-  /**
-   * Property plan
-   *
-   * @description
-   * Plan key (`free`, `team`, `enterprise` or a later one).
-   *
-   * @type {string}
-   * @readonly
-   */
-  readonly plan: string;
-
-  /**
-   * Property free
-   *
-   * @description
-   * Seats left on the plan, never below zero.
-   *
-   * @type {number}
-   * @readonly
-   */
-  readonly free: number;
-  // #endregion
-}
-
-/**
  * Service SidebarApi
  *
  * @description
- * The counts the spaces sidebar shows beside its navigation: the free seats of the plan, the
- * entries of the trash and the archived lists and tasks. Each count reads one item and takes the
- * page's `total`, so it costs one small request whatever the size of the collection.
+ * The counts the spaces sidebar shows beside its navigation: the entries of the trash and the
+ * archived lists and tasks. Each count reads one item and takes the page's `total`, so it costs
+ * one small request whatever the size of the collection. The free seats of `Invite your team` come
+ * from Organization's `PLAN_SEATS`, which shares the shell's one subscription read.
  */
 @Service()
 export class SidebarApi {
   // #region Properties
-  /**
-   * Property billing
-   *
-   * @description
-   * Generated billing operations.
-   *
-   * @type {BillingService}
-   * @readonly
-   */
-  private readonly billing: BillingService = inject(BillingService);
-
   /**
    * Property trash
    *
@@ -89,26 +45,6 @@ export class SidebarApi {
   // #endregion
 
   // #region Methods
-  /**
-   * Method seats
-   *
-   * @description
-   * Reads the plan and the seats left on it.
-   *
-   * @param {AbortSignal | undefined} signal - Cancels a superseded read.
-   * @returns {Promise<SeatSummary>} The plan and its free seats.
-   */
-  public async seats(signal?: AbortSignal): Promise<SeatSummary> {
-    const subscription: BillingSubscription = await abortableRead(
-      this.billing.getBillingSubscription(),
-      signal,
-    );
-    return {
-      plan: subscription.plan,
-      free: Math.max(0, subscription.seats.limit - subscription.seats.used),
-    };
-  }
-
   /**
    * Method trashCount
    *

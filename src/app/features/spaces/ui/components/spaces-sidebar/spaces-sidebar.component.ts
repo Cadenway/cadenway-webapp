@@ -36,6 +36,7 @@ import { CwToastService } from '@cadenway/ui/components/toast';
 import { NgIcon } from '@ng-icons/core';
 import { filter, map } from 'rxjs';
 
+import { PLAN_SEATS, type PlanSeatsPort } from '@features/organization/ports/plan-seats';
 import { TaskCreate } from '@features/task';
 import { WORKSPACE_CONTEXT } from '@features/workspace/ports/workspace-context';
 
@@ -323,6 +324,18 @@ export class SpacesSidebar {
   protected readonly retryLabel: string = SPACES_RETRY;
 
   /**
+   * Property planSeats
+   *
+   * @description
+   * The plan and free seats of Organization's shared subscription read, absent outside a workspace
+   * that provides it.
+   *
+   * @type {PlanSeatsPort | null}
+   * @readonly
+   */
+  private readonly planSeats: PlanSeatsPort | null = inject(PLAN_SEATS, { optional: true });
+
+  /**
    * Property navigation
    *
    * @description
@@ -555,7 +568,7 @@ export class SpacesSidebar {
    * @readonly
    */
   private readonly allTips: Signal<readonly SidebarTip[]> = computed((): readonly SidebarTip[] =>
-    sidebarTips(this.navigation.seats.hasValue() ? this.navigation.seats.value() : null),
+    sidebarTips(this.planSeats?.seats() ?? null),
   );
 
   /**
@@ -828,6 +841,22 @@ export class SpacesSidebar {
    */
   protected overviewLabel(space: SpaceDetails): string {
     return $localize`:@@spaces.sidebar.overview:Overview of ${space.name}:name:`;
+  }
+
+  /**
+   * Method taskCountLabel
+   *
+   * @description
+   * Spoken form of a list row's count, read once after its name (`Sprint 14, 5 tasks`): the
+   * brick hides the visible number from assistive technologies and reads this text instead.
+   *
+   * @param {number} count - The list's top-level tasks.
+   * @returns {string} The label.
+   */
+  protected taskCountLabel(count: number): string {
+    return count === 1
+      ? $localize`:@@spaces.sidebar.task-count-one:1 task`
+      : $localize`:@@spaces.sidebar.task-count:${count}:count: tasks`;
   }
 
   /**
