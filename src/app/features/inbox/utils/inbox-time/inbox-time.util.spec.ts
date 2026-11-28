@@ -41,9 +41,9 @@ describe('relativeTime', () => {
 
 describe('reminderTime', () => {
   it('writes the due times of the mockup', () => {
-    expect(reminderTime(at(8, 9), NOW, 'en-US')).toBe('Today, 9:00');
-    expect(reminderTime(at(9, 15, 30), NOW, 'en-US')).toBe('Tomorrow, 15:30');
-    expect(reminderTime(at(16, 9), NOW, 'en-US')).toBe('Mon 16 Nov, 9:00');
+    expect(reminderTime(at(8, 9), NOW, 'en-US')).toMatch(/^Today, 9:00\sAM$/u);
+    expect(reminderTime(at(9, 15, 30), NOW, 'en-US')).toMatch(/^Tomorrow, 3:30\sPM$/u);
+    expect(reminderTime(at(16, 9), NOW, 'en-US')).toMatch(/^Mon 16 Nov, 9:00\sAM$/u);
   });
 });
 

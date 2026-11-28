@@ -197,7 +197,7 @@ describe('ActivityViewPage', () => {
         },
         {
           provide: SpacesNavigationStore,
-          useValue: { spaces: ready([]), overviews: ready({}) },
+          useValue: { request: vi.fn(), spaces: ready([]), overviews: ready({}) },
         },
         {
           provide: CwToastService,

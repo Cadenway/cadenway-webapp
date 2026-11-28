@@ -252,7 +252,12 @@ describe('WorkloadViewPage', () => {
         },
         {
           provide: SpacesNavigationStore,
-          useValue: { spaces: ready([]), overviews: ready({}), openDialog: vi.fn() },
+          useValue: {
+            request: vi.fn(),
+            spaces: ready([]),
+            overviews: ready({}),
+            openDialog: vi.fn(),
+          },
         },
         { provide: WorkloadApi, useValue: { workload, spent } },
         { provide: TaskActionsApi, useValue: { bulk, restore: vi.fn(), remind: vi.fn() } },

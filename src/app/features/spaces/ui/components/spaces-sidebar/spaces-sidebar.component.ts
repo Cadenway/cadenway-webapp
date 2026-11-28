@@ -794,11 +794,13 @@ export class SpacesSidebar {
    * Constructor
    *
    * @description
-   * Follows the route's organization and opens the space holding the list shown.
+   * Starts the spaces, their overviews and the favorites it shows, follows the route's
+   * organization and opens the space holding the list shown.
    *
    * @constructor
    */
   public constructor() {
+    this.navigation.request(['spaces', 'favorites', 'overviews']);
     const workspace: { organization: Signal<{ name: string }> } = inject(WORKSPACE_CONTEXT);
     this.organizationName = computed((): string => workspace.organization().name);
     effect((): void => {

@@ -26,7 +26,6 @@ import {
   debounceTime,
   defer,
   distinctUntilChanged,
-  filter,
   groupBy,
   EMPTY,
   fromEvent,
@@ -78,6 +77,19 @@ import { InboxReads } from '../../services/inbox-reads/inbox-reads.service';
  * @type {number}
  */
 export const POLL_MS: number = 60_000;
+
+/**
+ * Constant FIRST_CONNECTION_WAIT_MS
+ *
+ * @description
+ * How long the first reads of the badge and the reminders wait for realtime's first connection
+ * attempt to settle, in milliseconds. Reading once that attempt connected covers every notice
+ * missed before it, so the first connection needs no second read; past this wait the reads start
+ * anyway and that connection, when it comes, reads again.
+ *
+ * @type {number}
+ */
+export const FIRST_CONNECTION_WAIT_MS: number = 3000;
 
 /**
  * Constant LOAD_ATTEMPTS
@@ -142,6 +154,18 @@ interface InboxState {
    * @readonly
    */
   readonly _isOpen: boolean;
+
+  /**
+   * Property _settled
+   *
+   * @description
+   * Whether the first reads may start: realtime's first connection attempt settled (connected,
+   * failed or disabled), `FIRST_CONNECTION_WAIT_MS` elapsed or the popover opened.
+   *
+   * @type {boolean}
+   * @readonly
+   */
+  readonly _settled: boolean;
 
   /**
    * Property _version
@@ -259,7 +283,8 @@ interface InboxStoreInstance {
    * Method open
    *
    * @description
-   * Reads the notifications and the reminders, as the popover opens.
+   * Reads the notifications and the reminders, as the popover opens; opened while the first reads
+   * wait for realtime's first connection, it starts them at once.
    */
   open(): void;
 
@@ -333,6 +358,7 @@ const initialState: InboxState = {
   _organizationId: null,
   _openings: 0,
   _isOpen: false,
+  _settled: false,
   _version: 0,
   _badgeVersion: 0,
 };
@@ -485,7 +511,7 @@ function createInboxStore(): Type<InboxStoreInstance> {
         reminders: resource({
           params: (): { organizationId: string } | undefined => {
             const organizationId: string | null = store._organizationId();
-            return organizationId ? { organizationId } : undefined;
+            return organizationId && store._settled() ? { organizationId } : undefined;
           },
           loader: ({
             params,
@@ -734,12 +760,13 @@ function createInboxStore(): Type<InboxStoreInstance> {
           refused.notifications = false;
           refused.reminders = false;
         },
-        _connected(): void {
+        _connected(first: boolean = false): void {
           store._refused.badge = false;
           store._refused.notifications = false;
           store._refused.reminders = false;
           const revision: number = store._pin.revision();
-          if (store._refused.connectedSkip.reminders !== revision) refreshReminders();
+          // The first reminders read waited for this first connection, so it starts only now.
+          if (!first && store._refused.connectedSkip.reminders !== revision) refreshReminders();
           store._refused.connectedSkip.reminders = -1;
           const skipNotifications: boolean =
             store._refused.connectedSkip.notifications === revision;
@@ -748,10 +775,22 @@ function createInboxStore(): Type<InboxStoreInstance> {
           if (claims.size > 0) notificationRefreshPending = true;
           else reloadNotifications(true);
         },
-        _poll: rxMethod<{ organizationId: string; connected: boolean }>(
+        _settle(): void {
+          if (!store._settled()) patchState(store, { _settled: true });
+        },
+        _poll: rxMethod<{ organizationId: string; connected: boolean; settled: boolean }>(
           pipe(
             switchMap(
-              ({ organizationId, connected }: { organizationId: string; connected: boolean }) => {
+              ({
+                organizationId,
+                connected,
+                settled,
+              }: {
+                organizationId: string;
+                connected: boolean;
+                settled: boolean;
+              }) => {
+                if (!settled) return EMPTY;
                 const skip: boolean =
                   connected && store._refused.connectedSkip.badge === store._pin.revision();
                 if (connected) store._refused.connectedSkip.badge = -1;
@@ -818,7 +857,8 @@ function createInboxStore(): Type<InboxStoreInstance> {
         open(): void {
           const previouslyOpened: boolean = store._openings() > 0;
           if (!previouslyOpened) store._reloadKinds.notifications = false;
-          patchState(store, { _openings: 1, _isOpen: true });
+          // Opened while the first reads wait for realtime: they start now, so the lists load.
+          patchState(store, { _openings: 1, _isOpen: true, _settled: true });
           if (previouslyOpened) reloadNotifications();
           refreshReminders(false);
         },
@@ -908,15 +948,21 @@ function createInboxStore(): Type<InboxStoreInstance> {
           computed(() => ({
             organizationId: organizationId(),
             connected: store._realtime?.status() === 'connected',
+            settled: store._settled(),
           })),
         );
-        status
-          .pipe(
-            filter((value: string) => value === 'connected'),
-            takeUntilDestroyed(),
-          )
+        // The first connection attempt settling, or the wait running out, starts the first reads;
+        // only a connection after that reads again.
+        status.pipe(takeUntilDestroyed()).subscribe((value: string) => {
+          if (value === 'connecting') return;
+          const first: boolean = !store._settled();
+          store._settle();
+          if (value === 'connected') store._connected(first);
+        });
+        timer(FIRST_CONNECTION_WAIT_MS)
+          .pipe(takeUntilDestroyed())
           .subscribe(() => {
-            store._connected();
+            store._settle();
           });
         store._reads.changes.pipe(takeUntilDestroyed()).subscribe((change: InboxRead) => {
           store._readElsewhere(change);

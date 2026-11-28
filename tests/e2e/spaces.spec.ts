@@ -86,8 +86,11 @@ function problem(status: number, code: string) {
   return { status, json: { type: 'about:blank', title: 'Never shown', status, code } };
 }
 
-/** Stubs `config.json` and the gateway for a signed-in owner of Atelier Nord with one space. */
-async function stubGateway(page: Page, failListOnce = false): Promise<Gateway> {
+/**
+ * Stubs `config.json` and the gateway for a signed-in owner of Atelier Nord with one space;
+ * `slowGrants` answers the list's grants after the member directory.
+ */
+async function stubGateway(page: Page, failListOnce = false, slowGrants = false): Promise<Gateway> {
   const calls: string[] = [];
   const savedViews: Record<string, unknown>[] = [];
 
@@ -158,6 +161,7 @@ async function stubGateway(page: Page, failListOnce = false): Promise<Gateway> {
       case `GET /v1/lists/${sprint14.id}/counts`:
         return route.fulfill({ json: { list: sprint14, counts } });
       case `GET /v1/lists/${sprint14.id}/grants`:
+        if (slowGrants) await new Promise((resolve) => setTimeout(resolve, 400));
         return route.fulfill({ json: { items: [], nextCursor: null, total: 0 } });
       case `GET /v1/lists/${sprint14.id}/task-groups`:
         return route.fulfill({
@@ -337,4 +341,46 @@ test('deleting a list needs its typed name', async ({ page }) => {
 
   await expect(page).toHaveURL(/\/atelier-nord$/);
   expect(gateway.calls).toContain(`DELETE /v1/lists/${sprint14.id}`);
+});
+
+/** How many times the gateway received a request, as `METHOD /path`. */
+function count(gateway: Gateway, key: string): number {
+  return gateway.calls.filter((call) => call === key).length;
+}
+
+test('the settings shell reads neither the overviews nor the counts of the absent sidebar', async ({
+  page,
+}) => {
+  const gateway = await stubGateway(page);
+  await page.goto('/atelier-nord/account/profile');
+  await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+  await page.waitForLoadState('networkidle');
+
+  expect(count(gateway, 'GET /v1/spaces')).toBe(1);
+  expect(count(gateway, 'GET /v1/me/favorites')).toBe(1);
+  expect(count(gateway, `GET /v1/spaces/${product.id}/overview`)).toBe(0);
+  expect(count(gateway, 'GET /v1/trash/entries')).toBe(0);
+  expect(count(gateway, 'GET /v1/archives/lists')).toBe(0);
+  expect(count(gateway, 'GET /v1/archives/tasks')).toBe(0);
+});
+
+test('a full load of the space overview reads its overview once', async ({ page }) => {
+  const gateway = await stubGateway(page);
+  await page.goto(`/atelier-nord/spaces/${product.id}`);
+  await expect(page.getByTestId('space-meta')).toContainText('2 lists');
+  await page.waitForLoadState('networkidle');
+
+  expect(count(gateway, `GET /v1/spaces/${product.id}/overview`)).toBe(1);
+});
+
+test('a list page reads the member directory once when the grants answer last', async ({
+  page,
+}) => {
+  const gateway = await stubGateway(page, false, true);
+  await page.goto(`/atelier-nord/l/${sprint14.id}/list`);
+  await expect(page.getByTestId('list-description')).toBeVisible();
+  await page.waitForLoadState('networkidle');
+
+  expect(count(gateway, `GET /v1/lists/${sprint14.id}/grants`)).toBe(1);
+  expect(count(gateway, 'GET /v1/members')).toBe(1);
 });

@@ -357,7 +357,12 @@ describe('CalendarViewPage', () => {
         { provide: RealtimeConnection, useValue: { watch: () => new Subject() } },
         {
           provide: SpacesNavigationStore,
-          useValue: { spaces: ready([]), overviews: ready({}), openDialog: vi.fn() },
+          useValue: {
+            request: vi.fn(),
+            spaces: ready([]),
+            overviews: ready({}),
+            openDialog: vi.fn(),
+          },
         },
         {
           provide: TaskDetailOpener,

@@ -402,6 +402,9 @@ describe('HomePage', () => {
     const element: HTMLElement = harness.fixture.nativeElement as HTMLElement;
 
     expect(element.querySelector('h1')?.textContent.trim()).toBe('Hello Camille');
+    expect(element.querySelector('[data-testid="home-date"]')?.textContent.trim()).toBe(
+      'Thursday, November 12',
+    );
     const loading: HTMLElement | null = element.querySelector('[data-testid="home-loading"]');
     expect(loading?.getAttribute('aria-label')).toBe('Loading the home page');
     expect(loading?.getAttribute('aria-busy')).toBe('true');

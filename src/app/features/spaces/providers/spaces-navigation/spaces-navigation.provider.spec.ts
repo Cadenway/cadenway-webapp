@@ -124,6 +124,7 @@ describe('provideSpacesNavigation', () => {
   it('reads the spaces, the favorites and the counts again on refresh', async () => {
     const refresh: NavigationRefreshPort = TestBed.inject(NAVIGATION_REFRESH);
     const store: InstanceType<typeof SpacesNavigationStore> = TestBed.inject(SpacesNavigationStore);
+    store.request(['favorites', 'overviews', 'counts']);
     await expect.poll(() => store.overviews.status()).toBe('resolved');
     await expect
       .poll(
@@ -152,6 +153,7 @@ describe('provideSpacesNavigation', () => {
     );
     const refresh: NavigationRefreshPort = TestBed.inject(NAVIGATION_REFRESH);
     const store: InstanceType<typeof SpacesNavigationStore> = TestBed.inject(SpacesNavigationStore);
+    store.request(['favorites', 'overviews', 'counts']);
     await expect.poll(() => sidebar.archiveCount.mock.calls.length).toBe(1);
     await expect.poll(() => store.trashCount.status()).toBe('resolved');
 

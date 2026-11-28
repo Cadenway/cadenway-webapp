@@ -1,4 +1,8 @@
-import { describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+
+import { clearTranslations, loadTranslations } from '@angular/localize';
+import { afterEach, describe, expect, it } from 'vitest';
 
 import {
   type ReminderPreset,
@@ -63,11 +67,49 @@ describe('reminderDays', () => {
   });
 });
 
+/**
+ * Constant FRENCH
+ *
+ * @description
+ * The maintained French catalog, read from the file so the spec holds no French.
+ *
+ * @type {Readonly<Record<string, string>>}
+ */
+const FRENCH: Readonly<Record<string, string>> = (
+  JSON.parse(readFileSync(resolve(process.cwd(), 'src/locale/messages.fr.json'), 'utf8')) as {
+    readonly translations: Readonly<Record<string, string>>;
+  }
+).translations;
+
 describe('reminderTimeLabel', () => {
-  it('reads a whole hour and a time with minutes in the same format', () => {
-    expect(reminderTimeLabel(11, 0)).toBe('11:00');
-    expect(reminderTimeLabel(9, 0)).toBe('9:00');
-    expect(reminderTimeLabel(14, 19)).toBe('14:19');
-    expect(reminderTimeLabel(8, 5)).toBe('8:05');
+  afterEach((): void => {
+    clearTranslations();
+  });
+
+  it('reads a whole hour and a time with minutes in the English time format', () => {
+    const format: Intl.DateTimeFormat = new Intl.DateTimeFormat('en-US', {
+      hour: 'numeric',
+      minute: '2-digit',
+    });
+    const times: readonly Date[] = [
+      new Date(2026, 10, 8, 11, 0),
+      new Date(2026, 10, 8, 9, 0),
+      new Date(2026, 10, 8, 14, 19),
+      new Date(2026, 10, 8, 8, 5),
+    ];
+
+    for (const time of times) expect(reminderTimeLabel(time, 'en-US')).toBe(format.format(time));
+    expect(reminderTimeLabel(new Date(2026, 10, 8, 15, 0), 'en-US')).toMatch(/^3:00\sPM$/u);
+  });
+
+  it('reads the French hours of the mockup', () => {
+    loadTranslations({
+      'task.detail.reminder.hour': FRENCH['task.detail.reminder.hour'],
+      'task.detail.reminder.hour-minute': FRENCH['task.detail.reminder.hour-minute'],
+    });
+
+    expect(reminderTimeLabel(new Date(2026, 10, 8, 15, 0), 'fr')).toBe('15 h');
+    expect(reminderTimeLabel(new Date(2026, 10, 8, 14, 19), 'fr')).toBe('14 h 19');
+    expect(reminderTimeLabel(new Date(2026, 10, 8, 9, 5), 'fr')).toBe('9 h 05');
   });
 });

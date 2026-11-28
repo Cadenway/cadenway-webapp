@@ -51,7 +51,9 @@ describe('task property utils', () => {
     expect(shortDayLabel('2026-11-07', '2026-11-08', 'en-US')).toBe('Yesterday');
     expect(shortDayLabel('2026-11-12', '2026-11-08', 'en-US')).toBe('Thu 12 Nov');
     expect(shortDayLabel('2027-01-04', '2026-11-08', 'en-US')).toBe('Mon 4 Jan 2027');
-    expect(longDayLabel('2026-11-08', '2026-11-08', 'en-US')).toBe('Today, Sunday 8 November');
+    expect(longDayLabel('2026-11-08', '2026-11-08', 'en-US')).toBe('Today, Sunday, November 8');
+    expect(longDayLabel('2026-11-09', '2026-11-08', 'en-US')).toBe('Monday, November 9');
+    expect(longDayLabel('2027-01-04', '2026-11-08', 'en-US')).toBe('Monday, January 4, 2027');
   });
 
   it('finds the next occurrence of a repeating task', () => {

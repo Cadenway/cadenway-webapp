@@ -3,7 +3,7 @@
   type="button"
   variant="ghost"
   size="sm"
-  class="h-7 gap-1 px-1.5 text-xs aria-expanded:bg-muted"
+  class="h-7 gap-1! px-1.5! text-xs aria-expanded:bg-muted"
   [class.text-primary]="reminder() !== null && !reminder()!.fired"
   [class.text-grenat-text]="reminder()?.fired === true"
   [class.text-muted-foreground]="reminder() === null"

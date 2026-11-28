@@ -158,6 +158,7 @@ const DECISION_ICONS: Readonly<Record<'approved' | 'changes-requested' | 'waitin
       #menu
       side="top"
       align="end"
+      minWidth="60"
       ariaLabel="Approvers"
       i18n-ariaLabel="@@task.properties.approvers"
     >

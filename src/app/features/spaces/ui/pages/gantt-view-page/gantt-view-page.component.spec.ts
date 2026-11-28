@@ -202,7 +202,12 @@ describe('GanttViewPage', () => {
         },
         {
           provide: SpacesNavigationStore,
-          useValue: { spaces: ready([]), overviews: ready({}), openDialog: vi.fn() },
+          useValue: {
+            request: vi.fn(),
+            spaces: ready([]),
+            overviews: ready({}),
+            openDialog: vi.fn(),
+          },
         },
         { provide: TaskActionsApi, useValue: { bulk: vi.fn(), restore: vi.fn(), remind: vi.fn() } },
         { provide: TaskApi, useValue: { changeStatus: vi.fn(() => of()), read: vi.fn() } },

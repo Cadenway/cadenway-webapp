@@ -100,7 +100,13 @@ export function peopleOf(
         <span class="text-muted-foreground" i18n="@@task.properties.empty">Empty</span>
       }
     </button>
-    <cw-menu #menu align="end" ariaLabel="Assignees" i18n-ariaLabel="@@task.properties.assignees">
+    <cw-menu
+      #menu
+      align="end"
+      minWidth="60"
+      ariaLabel="Assignees"
+      i18n-ariaLabel="@@task.properties.assignees"
+    >
       @if (failed()) {
         <span role="alert" class="block px-2 py-1.5 text-sm" i18n="@@task.create.read-failed"
           >Could not load this information.</span

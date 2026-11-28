@@ -60,6 +60,7 @@ import { peopleOf } from '../task-property-assignees/task-property-assignees.com
       #menu
       side="top"
       align="end"
+      minWidth="60"
       ariaLabel="Followers"
       i18n-ariaLabel="@@task.properties.watchers"
     >

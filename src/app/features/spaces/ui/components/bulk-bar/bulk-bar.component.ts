@@ -167,6 +167,7 @@ export interface BulkPerson {
     <cw-menu
       #assignMenu
       side="top"
+      minWidth="56"
       ariaLabel="Assign the selection"
       i18n-ariaLabel="@@spaces.bulk.assign-menu"
     >
@@ -191,6 +192,7 @@ export interface BulkPerson {
     <cw-menu
       #moveMenu
       side="top"
+      minWidth="64"
       ariaLabel="Move the selection"
       i18n-ariaLabel="@@spaces.bulk.move-menu"
     >

@@ -121,6 +121,20 @@ export class SpacesRailItem {
   );
   // #endregion
 
+  // #region Constructor
+  /**
+   * Constructor
+   *
+   * @description
+   * Starts the spaces, whose first one `Spaces` opens.
+   *
+   * @constructor
+   */
+  public constructor() {
+    this.navigation.request(['spaces']);
+  }
+  // #endregion
+
   // #region Methods
   /**
    * Method openSpaces

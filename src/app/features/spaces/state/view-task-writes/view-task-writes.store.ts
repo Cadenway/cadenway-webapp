@@ -1336,6 +1336,9 @@ function createViewTaskWritesStore(): Type<ViewTaskWritesStoreInstance> {
       };
     }),
     withHooks({
+      onInit(store): void {
+        store._navigation.request(['overviews']);
+      },
       onDestroy(store): void {
         for (const id of store._undoToasts) store._toasts.dismiss(id);
         store._undoToasts.clear();

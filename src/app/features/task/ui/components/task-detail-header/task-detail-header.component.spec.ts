@@ -186,7 +186,7 @@ describe('TaskDetailHeader', () => {
 
     expect(scheduled).toHaveLength(1);
     expect(scheduled[0].at).toEqual(new Date(2026, 10, 9, 9, 0, 0));
-    expect(scheduled[0].when).toBe('Tomorrow, 9:00');
+    expect(scheduled[0].when).toMatch(/^Tomorrow, 9:00\sAM$/u);
     expect(scheduled[0].note).toBe('Follow up on the mockups');
   });
 
@@ -199,7 +199,7 @@ describe('TaskDetailHeader', () => {
     });
     await fixture.whenStable();
     const reminder: HTMLButtonElement = button('[data-testid="task-detail-reminder"]');
-    expect(reminder.getAttribute('aria-label')).toBe('Reminder: Tomorrow, 9:00');
+    expect(reminder.getAttribute('aria-label')).toMatch(/^Reminder: Tomorrow, 9:00\sAM$/u);
 
     reminder.click();
     await fixture.whenStable();
@@ -225,7 +225,7 @@ describe('TaskDetailHeader', () => {
       .find((item: HTMLButtonElement) => item.textContent.trim() === 'Today')
       ?.click();
     buttons()
-      .find((item: HTMLButtonElement) => item.textContent.trim() === '9:00')
+      .find((item: HTMLButtonElement) => /^9:00\sAM$/u.test(item.textContent.trim()))
       ?.click();
     await fixture.whenStable();
 

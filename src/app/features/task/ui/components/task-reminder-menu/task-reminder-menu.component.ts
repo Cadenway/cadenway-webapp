@@ -51,7 +51,7 @@ export interface ReminderChoice {
    * Property when
    *
    * @description
-   * How the moment reads (`Tomorrow, 9:00`).
+   * How the moment reads (`Tomorrow, 9:00 AM`).
    *
    * @type {string}
    * @readonly
@@ -157,7 +157,7 @@ const PRESET_ICONS: Readonly<Record<ReminderPresetKey, string>> = {
  *
  * @description
  * The header's reminder button and its popover (`App.dc.html` lines 2048-2070, 4884-4949): the
- * button names the pending reminder (`Reminder: Tomorrow, 9:00`, the grenat tone once it fired)
+ * button names the pending reminder (`Reminder: Tomorrow, 9:00 AM`, the grenat tone once it fired)
  * or offers `Remind me of this task`; the popover lists the presets (in one hour, this afternoon,
  * tomorrow morning, next week, the day before the due date when there is one), `Choose a date and
  * a time…` (14 days and six hours, a past hour refused), the note (saved on change while a
@@ -509,28 +509,28 @@ export class TaskReminderMenu {
    * Method hourLabel
    *
    * @description
-   * How a whole hour reads (`9:00`).
+   * How a whole hour of the picker reads (`9:00 AM`).
    *
    * @param {number} hour - Hour, 0 to 23.
    * @returns {string} The label.
    */
   protected hourLabel(hour: number): string {
-    return reminderTimeLabel(hour, 0);
+    return reminderTimeLabel(at(this.now(), 0, hour), this.locale);
   }
 
   /**
    * Method whenOf
    *
    * @description
-   * How an instant reads: `Today, 11:00`, `Tomorrow, 9:00`, else the short day (`Mon, Nov 9,
-   * 9:00`), the time through `reminderTimeLabel` (minutes only when they are not zero).
+   * How an instant reads: `Today, 11:00 AM`, `Tomorrow, 9:00 AM`, else the short day (`Mon, Nov 9,
+   * 9:00 AM`), the time through `reminderTimeLabel`.
    *
    * @param {Date} instant - The instant.
    * @returns {string} The label.
    */
   protected whenOf(instant: Date): string {
     const offset: number = daysFrom(this.now(), instant);
-    const time: string = reminderTimeLabel(instant.getHours(), instant.getMinutes());
+    const time: string = reminderTimeLabel(instant, this.locale);
     if (offset === 0) return $localize`:@@task.detail.reminder.today-at:Today, ${time}:time:`;
     if (offset === 1) return $localize`:@@task.detail.reminder.tomorrow-at:Tomorrow, ${time}:time:`;
     const day: string = new Intl.DateTimeFormat(this.locale, {

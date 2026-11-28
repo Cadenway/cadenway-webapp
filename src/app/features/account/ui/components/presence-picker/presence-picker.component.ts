@@ -105,7 +105,7 @@ export const PRESENCE_CHOICES: readonly PresenceChoice[] = [
       (valueChange)="pick($event)"
     >
       @for (choice of choices; track choice.status) {
-        <cw-radio-group-item variant="card" [value]="choice.status">
+        <cw-radio-group-item variant="card" [indicator]="false" [value]="choice.status">
           <span class="flex min-w-0 items-start gap-2.5">
             <cw-presence-dot class="mt-[5px] size-2.5" [status]="choice.status" />
             <span class="flex min-w-0 flex-col gap-0.5">

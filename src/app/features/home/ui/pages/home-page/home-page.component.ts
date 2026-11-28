@@ -1,4 +1,3 @@
-import { formatDate } from '@angular/common';
 import {
   afterNextRender,
   Component,
@@ -263,14 +262,19 @@ export class HomePage {
    * Property today
    *
    * @description
-   * Weekday, day and month of the day the page opened, in the application locale, capitalized as
-   * the mockup's date line (`Sunday 8 November` in English).
+   * Weekday, day and month of the day the page opened, as the locale writes a full weekday date
+   * (`Sunday, November 8` in English, the mockup's `Dimanche 8 novembre` in French), capitalized as
+   * the mockup's date line.
    *
    * @type {string}
    * @readonly
    */
   protected readonly today: string = capitalize(
-    formatDate(Date.now(), 'EEEE d MMMM', inject(LOCALE_ID)),
+    new Intl.DateTimeFormat(inject(LOCALE_ID), {
+      weekday: 'long',
+      day: 'numeric',
+      month: 'long',
+    }).format(Date.now()),
   );
 
   /**

@@ -312,6 +312,20 @@ export class FavoriteSpacesRail {
   );
   // #endregion
 
+  // #region Constructor
+  /**
+   * Constructor
+   *
+   * @description
+   * Starts the spaces and the favorites the rail shows.
+   *
+   * @constructor
+   */
+  public constructor() {
+    this.navigation.request(['spaces', 'favorites']);
+  }
+  // #endregion
+
   // #region Methods
   /**
    * Method openOverview

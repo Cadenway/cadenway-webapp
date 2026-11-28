@@ -193,6 +193,7 @@ describe('ViewTaskWritesStore', () => {
         {
           provide: SpacesNavigationStore,
           useValue: {
+            request: vi.fn(),
             spaces: ready([{ id: 'product', name: 'Product' }]),
             overviews: ready({
               product: {

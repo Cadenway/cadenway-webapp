@@ -283,7 +283,12 @@ describe('SheetViewPage', () => {
         },
         {
           provide: SpacesNavigationStore,
-          useValue: { spaces: ready([]), overviews: ready({}), openDialog: vi.fn() },
+          useValue: {
+            request: vi.fn(),
+            spaces: ready([]),
+            overviews: ready({}),
+            openDialog: vi.fn(),
+          },
         },
         { provide: TaskApi, useValue: { changeStatus: vi.fn(() => of()), read: vi.fn() } },
         { provide: CwToastService, useValue: toasts },

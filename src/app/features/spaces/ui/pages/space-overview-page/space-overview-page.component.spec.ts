@@ -123,6 +123,8 @@ describe('SpaceOverviewPage', () => {
         },
       ],
     });
+    // The shell's sidebar, rendered beside the page, asks for the spaces and their overviews.
+    TestBed.inject(SpacesNavigationStore).request(['favorites', 'overviews']);
   });
 
   /**
@@ -434,7 +436,7 @@ describe('SpaceOverviewPage', () => {
   });
 
   it('tells an empty space from a failed milestones read, whose Retry reads them again', async () => {
-    api['overview'].mockResolvedValueOnce({ ...overview, taskCount: 0, lists: [] });
+    api['overview'].mockResolvedValue({ ...overview, taskCount: 0, lists: [] });
     api['milestones'].mockRejectedValueOnce(new Error('unavailable'));
     const harness: RouterTestingHarness = await RouterTestingHarness.create(
       '/atelier-nord/spaces/sp-design',

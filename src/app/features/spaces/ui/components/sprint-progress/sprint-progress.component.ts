@@ -131,4 +131,18 @@ export class SprintProgress {
     },
   );
   // #endregion
+
+  // #region Constructor
+  /**
+   * Constructor
+   *
+   * @description
+   * Starts the overviews the current sprint is found in.
+   *
+   * @constructor
+   */
+  public constructor() {
+    this.navigation.request(['overviews']);
+  }
+  // #endregion
 }

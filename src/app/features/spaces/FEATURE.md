@@ -856,7 +856,9 @@ through `SpaceStatusesApi` (`data-access/services/space-statuses-api/`, `updateS
 `providers` publishes, for the `/:org` route that loads the shell:
 
 - `provideSpacesNavigation()`: the workspace's `SpacesNavigationStore`, `LIST_DIRECTORY`,
-  `SPACE_DIRECTORY` and `NAVIGATION_REFRESH`;
+  `SPACE_DIRECTORY` and `NAVIGATION_REFRESH`. It reads nothing by itself: each read starts once a
+  rendered consumer asks for it (`SpacesNavigationStore.request`), so the settings shell, whose
+  rail shows the favorite spaces, reads only the spaces and the favorites;
 - `withSpacesRailItem()` (`railNavigation`, order 30, in both shells): `Spaces`, which opens the
   last list or space overview shown in the tab (else the first space) and is current on a spaces
   screen;
@@ -875,12 +877,14 @@ through `SpaceStatusesApi` (`data-access/services/space-statuses-api/`, `updateS
 `ListDirectoryEntry` — id, name, space id and name, Bold icon and tone class — in sidebar order),
 computed from the navigation's reads, for the command palette's `Lists`, the task detail's
 `Move to…` and the list names of the step 6 pages (Home, My tasks, Dashboards, Goals, Trash,
-Archives). It holds no archived list.
+Archives). It holds no archived list. Its first injection starts the spaces and their overviews,
+so a consumer that may stay hidden (the closed palette) takes it only when it shows.
 
 `ports/space-directory` publishes `SPACE_DIRECTORY` (`SpaceDirectoryPort`: `spaces`, a signal of
 `SpaceDirectoryEntry` — id, name, Bold icon or null for the initial, tone class and `callerRole`,
 the caller's role on the space itself (`edit`, `comment`, `view`, or null when only some of its
-lists are shared with the caller) — in sidebar order), computed from the navigation's spaces read,
+lists are shared with the caller) — in sidebar order), computed from the navigation's spaces read
+(which its first injection starts),
 for the documents' space names and `New document`, the space of an archived list and the goals a
 member may create. An absent gateway role reads as `edit`, an unknown one as `view`.
 
@@ -889,7 +893,7 @@ reads the spaces (the overviews follow them), the favorites and the trash and ar
 again, after another feature's write that may bring a list or a space back (a restore, an
 unarchived list); `refreshCounts()` reads only the trash and archive counts of the sidebar footer
 again (a purge, an emptied trash, an unarchived task). Both only schedule reads: a read in flight,
-even the first one, is followed by one more.
+even the first one, is followed by one more; a read no consumer asked for stays idle.
 Onboarding's assistant calls `refresh()` once the first space is provisioned, so the sidebar shows
 it before the assistant opens its first list.
 
@@ -942,7 +946,14 @@ colors with the same words.
 - Stores and scopes:
   - `SpacesNavigationStore`, route-scoped on `/:org` (`provideSpacesNavigation()`): the spaces,
     one overview per space read at most four at a time, each page given 10 s (a failed one
-    offers Retry), the favorites and the open spaces. Keyed on the committed organization id: a
+    offers Retry), the favorites and the open spaces. Each read starts only once a rendered
+    consumer asks for it with `request` (the overviews start the spaces): the sidebar asks for
+    the spaces, their overviews and the favorites, the sprint progress for the overviews, the
+    footer links for the trash and archive counts, the favorite spaces rail for the spaces and
+    the favorites, the `Spaces` rail item for the spaces, the list and overview pages for the
+    spaces and the favorites, `ViewTaskWritesStore` and `SpaceOverviewStore` for the overviews.
+    A request is never withdrawn, and each read's params follow only its own flag, so a later
+    request never reads the others again. Keyed on the committed organization id: a
     switch closes every space and
     reads again. A task created from this tab (`TaskCreate.created`) reads the overview of its
     list's space again, one creation after the other, each page given 10 s; a failed read, an
@@ -964,7 +975,8 @@ colors with the same words.
     milestone count, members, labels and saved views (secondary reads), the header's and the
     selection bar's writes. The header's member names and the member directory
     (`organizationMembers`) share the directory's first page while both read it
-    (`ListsApi.listMembers` and `organizationMembers`), so a list page opens with one request.
+    (`ListsApi.listMembers` and `organizationMembers`), so a list page opens with one request:
+    the header asks for it together with the list's grants, not once they answer.
     The shared page is bound to the organization id and `OrganizationPin` revision it was asked
     in; `organizationMembers` requests no further page once the context changed and rejects with
     `OrganizationSwitchPendingError`. It watches the list's realtime room while the page lives and
@@ -1053,7 +1065,9 @@ colors with the same words.
     own (`SpacesNavigationStore.overviewOrder`), lends its read to a sidebar that holds no
     overview yet (`shareOverviewRead`: the sidebar's next read of the space takes its answer
     instead of reading it again, waiting no longer than its own page timeout of 10 s and never
-    past its cancellation, and reads it itself if the lent read fails or stalls), gives its result to the sidebar
+    past its cancellation, and reads it itself if the lent read fails or stalls; on a full load the
+    page lends before the navigation follows its first organization, and only a later switch
+    forgets what was lent or offered), gives its result to the sidebar
     (`offerOverview`, which a sidebar read begun earlier never replaces), and takes a newer
     sidebar value received during its read when that read ends, even if its own failed, so both
     converge on the newest counts.

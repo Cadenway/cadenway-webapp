@@ -307,24 +307,26 @@ export class ListsApi {
    *
    * @description
    * Reads the first people the list is shared with and names them from the member directory;
-   * a directory the caller may not read leaves the names unknown.
+   * a directory the caller may not read leaves the names unknown. Both reads start together, so
+   * the directory's first page is the one the assignee directory reads as the page opens
+   * (`directoryPage`), not a second read once the grants answer.
    *
    * @param {string} listId - The list.
    * @param {AbortSignal | undefined} signal - Cancels a superseded read.
    * @returns {Promise<ListMembers>} The members and their total.
    */
   public async listMembers(listId: string, signal?: AbortSignal): Promise<ListMembers> {
+    const directoryRead: Promise<MemberPage | null> = abortableRead(
+      this.directoryPage(),
+      signal,
+    ).catch((): null => null);
     const grants: GrantPage = await abortableRead(
       this.access.listListGrants(listId, { limit: MEMBER_PREVIEW }),
       signal,
     );
     const names: Map<string, string> = new Map<string, string>();
-    try {
-      const directory: MemberPage = await abortableRead(this.directoryPage(), signal);
-      for (const member of directory.items) names.set(member.userId, member.name);
-    } catch {
-      names.clear();
-    }
+    const directory: MemberPage | null = await directoryRead;
+    for (const member of directory?.items ?? []) names.set(member.userId, member.name);
     return {
       total: grants.total,
       items: grants.items.map((grant: GrantPage['items'][number]): ListMember => ({
