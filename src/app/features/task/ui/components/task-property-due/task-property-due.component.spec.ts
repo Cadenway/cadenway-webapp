@@ -86,7 +86,7 @@ describe('TaskPropertyDue', () => {
     const label: HTMLElement | null = trigger().querySelector('[title]');
 
     expect(trigger().textContent).toContain('(late)');
-    expect(label?.getAttribute('title')).toBe('Monday 2 November (late)');
+    expect(label?.getAttribute('title')).toBe('Monday, November 2 (late)');
     await show('2026-11-02', 'done');
     expect(trigger().textContent).not.toContain('(late)');
   });
