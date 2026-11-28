@@ -301,7 +301,8 @@ be loaded.` with `Retry`, until a read or a save confirms the organization (anot
   those skipped (already a member or invited). The dialog stays open on a refusal.
 - An address the batch answered with another outcome (`InvitationResult.outcome` beyond `invited`,
   `already-member` and `already-invited`, which the contract counts as not sent; the adapter lists
-  them in `notSent`) stays in the dialog, which keeps only those addresses and its role, with
+  them in `notSent`) stays in the dialog, which keeps only those addresses and its role (both
+  fields are disabled while the batch is sent, so they hold the submitted snapshot), with
   `{n} address(es) could not be invited` / `The addresses stay in the list: press Invite to try again.`,
   after the invited ones' toast when some were invited, else with the skipped count first. A batch
   of unknown outcome keeps every address in the dialog, reads the list again and warns

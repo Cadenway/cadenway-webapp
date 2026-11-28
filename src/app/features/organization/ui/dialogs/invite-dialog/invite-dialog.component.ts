@@ -15,6 +15,7 @@ import {
   type WritableSignal,
 } from '@angular/core';
 import {
+  disabled,
   type FieldContext,
   type FieldTree,
   form,
@@ -250,7 +251,8 @@ function focusFirstError<T>(fields: FieldTree<T>): void {
  * take a seat`, or the shortage), the `Role` select (`Member`, `Administrator`, `Guest`, each with
  * what it gives) and `Cancel` / `Invite`. `Invite` stays enabled: an invalid submit shows the error
  * (no address, an invalid or refused one, more than 50, or more members than free seats) and
- * focuses the field. While `pending` the dialog cannot be closed and `Invite` shows its spinner.
+ * focuses the field. While `pending` the dialog cannot be closed, its fields are disabled and
+ * `Invite` shows its spinner.
  * The form starts empty, as a member, each time the dialog opens, and the addresses the page
  * `kept` to send again replace the typed ones. Presentational: a valid submit emits `submitted`;
  * the page sends it and closes the dialog on success.
@@ -424,12 +426,15 @@ export class InviteDialog {
    * @description
    * The form: the addresses must hold at least one valid address (the contract's e-mail check, 254
    * characters at most), no invalid or refused one, at most 50, and, when the seats are known, no
-   * more members or administrators than free seats.
+   * more members or administrators than free seats. Both fields are disabled while `pending`, so
+   * the addresses `kept` after the answer are those of the submitted form, with its role, and no
+   * edit made meanwhile is lost.
    *
    * @type {FieldTree<InviteModel>}
    * @readonly
    */
   protected readonly inviteForm: FieldTree<InviteModel> = form(this.model, (path) => {
+    disabled(path, { when: (): boolean => this.pending() });
     validate(path.emails, (context: FieldContext<string>) => {
       const { valid, invalid }: ParsedAddresses = parseAddresses(context.value());
       const refused: ReadonlySet<string> = new Set<string>(
