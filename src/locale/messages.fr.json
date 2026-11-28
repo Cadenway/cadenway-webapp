@@ -2514,7 +2514,7 @@
     "spaces.sheet.edit-label": "{$column} de {$key}",
     "spaces.sheet.empty": "Aucune tâche ne correspond à la recherche ou aux filtres.",
     "spaces.sheet.fields-failed": "Impossible de charger les champs personnalisés.",
-    "spaces.sheet.hint": " Cliquez sur une cellule pour la modifier · flèches pour se déplacer · Entrée valide, Échap annule. ",
+    "spaces.sheet.hint": " Double-cliquez sur une cellule ou appuyez sur Entrée pour la modifier · flèches pour se déplacer · Entrée valide, Échap annule. ",
     "spaces.sheet.hours": "{$hours} h",
     "spaces.sheet.loading": "Chargement de la feuille",
     "spaces.sheet.open": "Ouvrir {$key}",

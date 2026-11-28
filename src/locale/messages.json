@@ -2645,7 +2645,7 @@
     "spaces.rows.count-one": "{$count} task",
     "spaces.rows.add-subtask": "Add a subtask to {$key}",
     "spaces.sheet.region": "Sheet",
-    "spaces.sheet.hint": " Click a cell to edit it · arrows to move · Enter validates, Esc cancels. ",
+    "spaces.sheet.hint": " Double-click a cell or press Enter to edit it · arrows to move · Enter validates, Esc cancels. ",
     "spaces.sheet.empty": "No task matches the search or the filters.",
     "spaces.sheet.fields-failed": "The custom fields could not be loaded.",
     "spaces.sheet.columns-menu": "Columns shown",

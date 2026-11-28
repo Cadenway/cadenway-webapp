@@ -319,7 +319,7 @@ columns name the mockup's seed fields: the sheet draws the space's real custom f
   ticked tasks (once each) through `ViewTaskWritesStore` (`Mark done`, `Assign`, `Move to…`,
   `Delete`), a refused chunk stays ticked (`onRefused`), and the task menu of a ticked row acts on
   the whole selection.
-- Inline edits: a click, Enter or F2 (`editOn="click"`, as the mockup's hint says) on the name, due date, estimate (a bare number is
+- Inline edits: Enter or F2 (double click too) on the name, due date, estimate (a bare number is
   hours, `parseDuration`) and custom fields (`Points` refuses a negative number and stays open
   with `aria-invalid`); Enter validates, Escape cancels, Tab goes to the next editable cell. Each
   goes through `ViewTaskWritesStore.updateFields` (`If-Match`) with a toast and `Undo`; the
@@ -327,8 +327,8 @@ columns name the mockup's seed fields: the sheet draws the space's real custom f
   custom fields until a read reaches the version the write returned (dropped at once when a read
   answered before the write already reached it). Their `Undo` puts back the confirmed value the
   write replaced, read once the earlier edits of the task settle (never a pending or refused
-  edit). An unchanged value writes nothing. The name's open button opens the task, as do a click
-  and Enter on the name of a task the person cannot edit.
+  edit). An unchanged value writes nothing. A click or
+  Enter on the name opens the task.
 - A right click, Shift + F10 or the row's `…` button opens `cw-task-menu`
   (`rowContextMenu`): status, priority, assignees, `Move to`, reminder, copies, deletion.
 - The footer counts the tasks and those done, and sums the estimates, the numeric custom fields
@@ -360,12 +360,13 @@ columns name the mockup's seed fields: the sheet draws the space's real custom f
     mockup's horizontal scroll.
   - No realtime notice covers custom field definitions or time entries (G13).
 
-| Unit                                                                                 | Reason                                          |
-| ------------------------------------------------------------------------------------ | ----------------------------------------------- |
-| `spaces.sheet.updated`, `spaces.sheet.updated-value`, `spaces.sheet.updated-cleared` | The mockup shows no toast for a sheet edit.     |
-| `spaces.sheet.fields-failed`, `spaces.sheet.truncated`                               | The mockup draws no failed read or capped list. |
-| `spaces.sheet.spent-pending`                                                         | The mockup reads every time entry (G6).         |
-| `spaces.sheet.title-no-points`                                                       | The mockup's space always has points.           |
+| Unit                                                                                 | Reason                                                   |
+| ------------------------------------------------------------------------------------ | -------------------------------------------------------- |
+| `spaces.sheet.hint`                                                                  | The mockup's hint, with the table's double click and F2. |
+| `spaces.sheet.updated`, `spaces.sheet.updated-value`, `spaces.sheet.updated-cleared` | The mockup shows no toast for a sheet edit.              |
+| `spaces.sheet.fields-failed`, `spaces.sheet.truncated`                               | The mockup draws no failed read or capped list.          |
+| `spaces.sheet.spent-pending`                                                         | The mockup reads every time entry (G6).                  |
+| `spaces.sheet.title-no-points`                                                       | The mockup's space always has points.                    |
 
 ## Workload view
 
@@ -1236,6 +1237,9 @@ gateway checks them and `ORGANIZATION_PIN_OPERATIONS` lists them.
   publishes `planName` to Workspace only.
 - Realtime notices without a list or space id cannot be attributed to the open list and do not
   refresh its counts; the notice contract needs to include that context.
+- The sheet edits on a double click, Enter or F2 (the table brick's contract), so its hint says
+  so where the mockup's says a click: with `editOn="click"` Enter would edit the name instead of
+  opening the task, and keyboard users would lose their direct way to open it.
 - The filter dialog counts the visible tasks (`n of m tasks`, `ViewTools.visibleCount`), hides
   `Subtasks: …` without subtasks (`hasSubtasks`) and offers the signed-in member once as `Me`
   (`userId`). The mockup's `listHasKids` looks at every task of the list; `hasSubtasks` looks at the

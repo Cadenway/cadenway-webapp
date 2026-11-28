@@ -202,8 +202,8 @@ function isSheetRow(data: unknown): data is SheetRow {
  * name (the status icon before it, the key, an open button), status, priority, assignees, due
  * date (late icon), estimate, time spent (read for the rendered rows, gap G6), labels, list and
  * the list's custom fields. Headers sort (ascending, descending, none) into the presentation's
- * `sheetSort` or `customFieldSort`. The grid moves with the arrows; a click, Enter or F2
- * (`editOn="click"`) edits the name, the due date, the estimate (a bare number means hours) and the custom
+ * `sheetSort` or `customFieldSort`. The grid moves with the arrows; Enter or F2 (double click
+ * too) edits the name, the due date, the estimate (a bare number means hours) and the custom
  * fields (`Points` refuses a negative number and stays open); Enter validates, Escape cancels,
  * Tab goes to the next editable cell. Each edit goes through the shared writes
  * (`ViewTaskWritesStore.updateFields`, `If-Match`) with a toast and `Undo`; the estimate and custom

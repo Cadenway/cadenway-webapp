@@ -387,27 +387,6 @@ describe('SheetViewPage', () => {
     );
   });
 
-  it('edits a cell on a single click, as its hint says', async () => {
-    const fixture: ComponentFixture<SheetViewPage> = await render();
-    const host: HTMLElement = fixture.nativeElement as HTMLElement;
-
-    expect(table(fixture).editOn()).toBe('click');
-    expect(host.textContent.replace(/\s+/gu, ' ')).toContain(
-      'Click a cell to edit it · arrows to move · Enter validates, Esc cancels.',
-    );
-    const cell: HTMLElement | null = host.querySelector<HTMLElement>(
-      'td[data-cw-cell][data-cw-col="estimate"]',
-    );
-    expect(cell?.querySelector('cw-sheet-cell-editor')).toBeNull();
-    cell?.click();
-    await vi.waitFor(() => {
-      fixture.detectChanges();
-      expect(
-        host.querySelector('td[data-cw-cell][data-cw-col="estimate"] cw-sheet-cell-editor'),
-      ).not.toBeNull();
-    });
-  });
-
   it('writes nothing for an unchanged value', async () => {
     const fixture: ComponentFixture<SheetViewPage> = await render();
     const row: SheetRow = table(fixture).data()[0];
