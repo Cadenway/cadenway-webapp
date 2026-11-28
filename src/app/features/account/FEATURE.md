@@ -101,7 +101,10 @@ parent provides the English texts of `cw-password-strength` and `cw-input-otp` t
   ceremony; `@cadenway/ui` `alert`, `alert-dialog`, `badge`, `card`, `dialog`, `input`,
   `input-otp`, `password-strength` and `skeleton`.
 
-- Profile: `AuthService` (`getCurrentUser`, `updateCurrentUser`), `AccountService`
+- Profile: `AuthService` (`getCurrentUser`, whose first read of the page takes the workspace
+  guard's answer of the same navigation when it is at most 2 s old through Core's
+  `REUSE_READ_WITHIN_MS`, while every write checks the session afresh; `updateCurrentUser`),
+  `AccountService`
   (`requestEmailChange`, `confirmEmailChange`, `scheduleAccountDeletion`), the avatar operations
   of `ProfileMediaService` (`getAvatar`, `startAvatarUpload`, `setAvatar`, `deleteAvatar`) and
   `OrganizationsService.listMyOrganizations`, through `data-access/`; Workspace's

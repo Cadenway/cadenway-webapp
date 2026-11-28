@@ -356,6 +356,7 @@ test('the settings shell reads neither the overviews nor the counts of the absen
   await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
   await page.waitForLoadState('networkidle');
 
+  expect(count(gateway, 'GET /v1/me')).toBe(1);
   expect(count(gateway, 'GET /v1/spaces')).toBe(1);
   expect(count(gateway, 'GET /v1/me/favorites')).toBe(1);
   expect(count(gateway, `GET /v1/spaces/${product.id}/overview`)).toBe(0);

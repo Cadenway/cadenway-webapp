@@ -1,4 +1,4 @@
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpContext } from '@angular/common/http';
 import { inject, Service } from '@angular/core';
 import {
   AccountService,
@@ -10,7 +10,7 @@ import {
 } from '@cadenway/api-client';
 import { defer, firstValueFrom, fromEvent, NEVER, type Observable, takeUntil } from 'rxjs';
 
-import { readProblem } from '@core/api';
+import { readProblem, REUSE_READ_WITHIN_MS } from '@core/api';
 import { withSessionLock } from '@features/auth';
 
 import type {
@@ -43,6 +43,18 @@ import { AccountChangedError } from '../notification-preferences-api/account-cha
  * @type {number}
  */
 const MAX_ORGANIZATION_PAGES: number = 20;
+
+/**
+ * Constant SESSION_READ_REUSE_MS
+ *
+ * @description
+ * How old, in milliseconds, the workspace guard's account read may be for the profile's first
+ * read to show it instead of reading the account again (`REUSE_READ_WITHIN_MS`): the guard runs
+ * in the navigation that opens the page. Every write still checks the session afresh.
+ *
+ * @type {number}
+ */
+const SESSION_READ_REUSE_MS: number = 2000;
 
 /**
  * Function ifMatch
@@ -139,8 +151,9 @@ export class ProfileApi {
    * Method current
    *
    * @description
-   * Reads the account of the session under the shared session lock. Aborting the signal cancels
-   * the read.
+   * Reads the account of the session under the shared session lock, taking the workspace guard's
+   * answer of the same navigation when it is at most `SESSION_READ_REUSE_MS` old. Aborting the
+   * signal cancels the read.
    *
    * @param {string} userId - The account the page shows.
    * @param {AbortSignal} [signal] - Cancels the read.
@@ -152,6 +165,7 @@ export class ProfileApi {
       userId,
       (user: CurrentUser): Promise<AccountProfile> => Promise.resolve(toAccountProfile(user)),
       signal,
+      SESSION_READ_REUSE_MS,
     );
   }
 
@@ -429,6 +443,7 @@ export class ProfileApi {
    * @param {string} userId - The account the read is made for.
    * @param {(user: CurrentUser) => Promise<T>} read - The request, given the session's account.
    * @param {AbortSignal} [signal] - Cancels the read.
+   * @param {number} [reuseWithinMs] - How old a kept account answer may be to check the session.
    * @returns {Promise<T>} The request's result.
    * @throws {AccountChangedError} When the session belongs to another account, or to none.
    */
@@ -436,6 +451,7 @@ export class ProfileApi {
     userId: string,
     read: (user: CurrentUser) => Promise<T>,
     signal?: AbortSignal,
+    reuseWithinMs: number = 0,
   ): Promise<T> {
     signal?.throwIfAborted();
     const aborted: Observable<Event> = signal === undefined ? NEVER : fromEvent(signal, 'abort');
@@ -443,7 +459,7 @@ export class ProfileApi {
       withSessionLock(
         () =>
           defer(async (): Promise<{ readonly value: T }> => {
-            const user: CurrentUser = await this.sessionUser();
+            const user: CurrentUser = await this.sessionUser(reuseWithinMs);
             if (user.id !== userId) throw new AccountChangedError();
             return { value: await read(user) };
           }),
@@ -487,12 +503,17 @@ export class ProfileApi {
    * @description
    * Reads the account of the session; a `401` means the session holds no account.
    *
+   * @param {number} [reuseWithinMs] - How old a kept answer may be (`REUSE_READ_WITHIN_MS`).
    * @returns {Promise<CurrentUser>} The account.
    * @throws {AccountChangedError} When the session holds no account.
    */
-  private async sessionUser(): Promise<CurrentUser> {
+  private async sessionUser(reuseWithinMs: number = 0): Promise<CurrentUser> {
     try {
-      return await firstValueFrom(this.auth.getCurrentUser());
+      return await firstValueFrom(
+        this.auth.getCurrentUser({
+          context: new HttpContext().set(REUSE_READ_WITHIN_MS, reuseWithinMs),
+        }),
+      );
     } catch (error: unknown) {
       if (readProblem(error)?.status === 401) throw new AccountChangedError(error);
       throw error;
