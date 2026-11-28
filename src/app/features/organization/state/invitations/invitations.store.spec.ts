@@ -690,7 +690,7 @@ describe('InvitationsStore', () => {
     });
     expect(api.resend).toHaveBeenCalledTimes(1);
     expect(api.revoke).toHaveBeenCalledTimes(4);
-    expect(api.list).toHaveBeenCalledTimes(6);
+    expect(api.list).toHaveBeenCalledTimes(7);
   });
 
   it('restores a resend dropped for another session organization, silently', async () => {
@@ -751,7 +751,7 @@ describe('InvitationsStore', () => {
       expect(toasts.warning).not.toHaveBeenCalled();
     });
 
-    it('takes a throttled resend after an unknown one as resent', async () => {
+    it('takes no throttle after an unknown resend as proof while the expiry stays', async () => {
       const { store, toasts }: Harness = await setup({
         resend: vi
           .fn()
@@ -763,12 +763,75 @@ describe('InvitationsStore', () => {
       expect(toasts.warning).toHaveBeenCalledWith('The invitation may not have been resent', {
         description: 'atelier@nordstudio.fr',
       });
+      await expect(store.resend(STUDIO)).resolves.toBe(false);
+      await stable();
+
+      expect(toasts.success).not.toHaveBeenCalled();
+      expect(toasts.error).not.toHaveBeenCalled();
+      expect(toasts.warning).toHaveBeenLastCalledWith('The invitation may not have been resent', {
+        description: 'This invitation was just resent: try again in an hour.',
+      });
+      expect(store.items()[1]).toEqual(STUDIO);
+    });
+
+    it('takes a throttle after an unknown resend as resent once the list shows it', async () => {
+      const resentStudio: PendingInvitation = {
+        ...STUDIO,
+        expired: false,
+        expiresAt: '2026-12-05T10:00:00Z',
+      };
+      const { store, api, toasts }: Harness = await setup({
+        resend: vi
+          .fn()
+          .mockRejectedValueOnce(new HttpErrorResponse({ status: 0 }))
+          .mockRejectedValueOnce(refusal(429, { code: 'invitation.resend-throttled' })),
+      });
+
+      await expect(store.resend(STUDIO)).resolves.toBe(false);
+      api.list.mockResolvedValue({ items: [MARC, resentStudio], total: 2 });
       await expect(store.resend(STUDIO)).resolves.toBe(true);
+      await stable();
 
       expect(toasts.success).toHaveBeenCalledWith('Invitation resent', {
         description: 'atelier@nordstudio.fr',
       });
+      expect(store.items()[1]).toEqual(resentStudio);
+    });
+
+    it('confirms a cancellation refused after an unknown attempt once the list lacks it', async () => {
+      const { store, api, toasts }: Harness = await setup({
+        revoke: vi
+          .fn()
+          .mockRejectedValueOnce(refusal(503, {}))
+          .mockRejectedValueOnce(refusal(403, { code: 'organization.role-forbidden' })),
+      });
+      api.list.mockResolvedValue({ items: [STUDIO], total: 1 });
+
+      await expect(store.revoke(MARC)).resolves.toBe(true);
+
+      expect(store.items()).toEqual([STUDIO]);
+      expect(toasts.success).toHaveBeenCalledWith('Invitation cancelled', {
+        description: 'marc.roux@ateliernord.fr',
+      });
       expect(toasts.error).not.toHaveBeenCalled();
+    });
+
+    it('warns, not fails, of a cancellation refused after an unknown attempt it lists', async () => {
+      const { store, toasts }: Harness = await setup({
+        revoke: vi
+          .fn()
+          .mockRejectedValueOnce(refusal(503, {}))
+          .mockRejectedValueOnce(refusal(403, { code: 'organization.role-forbidden' })),
+      });
+
+      await expect(store.revoke(MARC)).resolves.toBe(false);
+      await stable();
+
+      expect(store.items()).toEqual([MARC, STUDIO]);
+      expect(toasts.error).not.toHaveBeenCalled();
+      expect(toasts.warning).toHaveBeenCalledWith('The invitation may not have been cancelled', {
+        description: 'marc.roux@ateliernord.fr',
+      });
     });
 
     it('stops settling once another organization is committed', async () => {

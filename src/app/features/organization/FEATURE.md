@@ -278,9 +278,15 @@ be loaded.` with `Retry`, until a read or a save confirms the organization (anot
   after 2, 4 and 8 s (`INVITATION_SETTLE_DELAYS_MS`; revoking again answers `204`). A resend of
   unknown outcome is never sent again (a second one within the hour is throttled): the row stays
   shown as resent and busy while the list is read after each of those waits, until it shows a new
-  expiry, and a later resend answered `429 invitation.resend-throttled` counts as resent. The
-  waits stop once the organization changes (a switch away and back included) or the page is gone.
-  When every attempt stays unknown, the row is restored, the list read again, and the toast warns
+  expiry. A later resend answered `429 invitation.resend-throttled` proves nothing (the original
+  invitation, or any resend within the hour, throttles too): the list is read, and it counts as
+  resent only when its expiry differs from the one before the unknown resend; otherwise the toast
+  warns `The invitation may not have been resent` with the throttle text. No expiry is shown that
+  the API did not answer. Once a cancellation attempt was unknown, a later refusal (a `403` after a
+  role change, say) is not reported as a failure: the list is read, a missing invitation is
+  confirmed cancelled, and a listed one is shown again with the warning. The waits stop once the
+  organization changes (a switch away and back included) or the page is gone. When every attempt
+  stays unknown, the row is restored, the list read again, and the toast warns
   `The invitation may not have been resent` / `The invitation may not have been cancelled` with
   the address. A write dropped for another session organization (`OrganizationSwitchPendingError`,
   `412 organization.context-changed`) restores the row, or closes the invite dialog, with no
