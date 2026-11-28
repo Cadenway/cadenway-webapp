@@ -37,7 +37,12 @@ const SPACE_NAME_MAX_LENGTH: number = 80;
  * The assistant's `Space` screen (`App.dc.html` lines 2684-2687): the space name, `aria-invalid`
  * while blank (the assistant then cannot continue), and the color among Spaces' swatches without
  * `gris` (line 5254), as a single-choice toggle group like Spaces' look picker. The key prefix is
- * not shown: the assistant derives it from the name. It edits `name` and `color` and sends nothing.
+ * not shown: the assistant derives it from the name. The name field is the 36 px (`lg`) input. Each
+ * swatch is the mockup's 32 px ring (`p-0.5`, `ring-primary/60` once checked) rather than the toggle
+ * item's grey 40 x 28 pill: the toggle group keeps the radio semantics and the keyboard, and the
+ * important modifiers replace the item's size, radius, padding and selected background, which its
+ * own classes would otherwise win (a swatch item is a design-system need). It edits `name` and
+ * `color` and sends nothing.
  */
 @Component({
   selector: 'cw-onboarding-space-step',
@@ -53,6 +58,7 @@ const SPACE_NAME_MAX_LENGTH: number = 80;
       >
       <input
         cwInput
+        size="lg"
         type="text"
         autocomplete="off"
         [id]="fieldId"
@@ -79,7 +85,7 @@ const SPACE_NAME_MAX_LENGTH: number = 80;
         @for (choice of colors; track choice.value) {
           <button
             cwToggleGroupItem
-            class="rounded-full"
+            class="size-8! min-w-8! rounded-full! p-0.5! ring-2 ring-transparent transition-shadow hover:bg-transparent! aria-checked:ring-primary/60 data-[state=on]:bg-transparent!"
             [value]="choice.value"
             [attr.aria-label]="choice.label"
             [attr.title]="choice.label"
@@ -90,7 +96,7 @@ const SPACE_NAME_MAX_LENGTH: number = 80;
               aria-hidden="true"
             >
               @if (color() === choice.value) {
-                <ng-icon name="phosphorCheckBold" class="size-3.5" />
+                <ng-icon name="phosphorCheckBold" size="0.875rem" />
               }
             </span>
           </button>

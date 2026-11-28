@@ -16,22 +16,24 @@
   />
 </cw-input-group>
 
-<cw-tabs [value]="role()" (valueChange)="pickRole($event)">
-  <cw-tabs-list ariaLabel="Filter by role" i18n-ariaLabel="@@organization.members.filter-role">
-    <button cwTab value="all" [count]="roleCounts().all">
-      <ng-container i18n="@@organization.members.filter-all">All</ng-container>
-    </button>
-    <button cwTab value="admin" [count]="roleCounts().admin">
-      <ng-container i18n="@@organization.members.filter-admins">Administrators</ng-container>
-    </button>
-    <button cwTab value="member" [count]="roleCounts().member">
-      <ng-container i18n="@@organization.members.filter-members">Members</ng-container>
-    </button>
-    <button cwTab value="guest" [count]="roleCounts().guest">
-      <ng-container i18n="@@organization.members.filter-guests">Guests</ng-container>
-    </button>
-  </cw-tabs-list>
-</cw-tabs>
+<div class="max-w-full overflow-x-auto">
+  <cw-tabs [value]="role()" (valueChange)="pickRole($event)">
+    <cw-tabs-list ariaLabel="Filter by role" i18n-ariaLabel="@@organization.members.filter-role">
+      <button cwTab value="all" [count]="roleCounts().all">
+        <ng-container i18n="@@organization.members.filter-all">All</ng-container>
+      </button>
+      <button cwTab value="admin" [count]="roleCounts().admin">
+        <ng-container i18n="@@organization.members.filter-admins">Administrators</ng-container>
+      </button>
+      <button cwTab value="member" [count]="roleCounts().member">
+        <ng-container i18n="@@organization.members.filter-members">Members</ng-container>
+      </button>
+      <button cwTab value="guest" [count]="roleCounts().guest">
+        <ng-container i18n="@@organization.members.filter-guests">Guests</ng-container>
+      </button>
+    </cw-tabs-list>
+  </cw-tabs>
+</div>
 
 <cw-tabs [value]="presence()" (valueChange)="pickPresence($event)">
   <cw-tabs-list

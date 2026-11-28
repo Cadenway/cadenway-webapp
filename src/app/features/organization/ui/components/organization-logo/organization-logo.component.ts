@@ -70,7 +70,12 @@ import { NgIcon } from '@ng-icons/core';
             @if (busy() === 'upload') {
               <svg cwSpinner aria-hidden="true"></svg>
             } @else {
-              <ng-icon name="phosphorUploadSimpleBold" class="size-4 shrink-0" aria-hidden="true" />
+              <ng-icon
+                name="phosphorUploadSimpleBold"
+                size="1rem"
+                class="shrink-0"
+                aria-hidden="true"
+              />
             }
             @if (hasLogo()) {
               <span i18n="@@organization.general.logo-change">Change logo</span>

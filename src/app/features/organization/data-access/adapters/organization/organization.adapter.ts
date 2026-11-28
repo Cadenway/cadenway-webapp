@@ -4,6 +4,8 @@ import type {
   ProfileMediaUpload,
 } from '@cadenway/api-client';
 
+import { initialsOf } from '@shared/initials';
+
 import type {
   OrganizationField,
   OrganizationLanguage,
@@ -44,25 +46,6 @@ const ORGANIZATION_FIELDS: ReadonlySet<string> = new Set<OrganizationField>([
 ]);
 
 /**
- * Function organizationInitials
- *
- * @description
- * The initials shown in place of a logo: the first letter of the first two words, upper case.
- *
- * @param {string} name - Name of the organization.
- * @returns {string} The initials (`AN` for `Atelier Nord`), empty for a blank name.
- */
-export function organizationInitials(name: string): string {
-  return name
-    .trim()
-    .split(/\s+/u)
-    .filter((word: string) => word !== '')
-    .slice(0, 2)
-    .map((word: string) => (Array.from(word)[0] ?? '').toUpperCase())
-    .join('');
-}
-
-/**
  * Function toOrganizationProfile
  *
  * @description
@@ -83,7 +66,7 @@ export function toOrganizationProfile(dto: OrganizationDto): OrganizationProfile
       ? (dto.defaultLanguage as OrganizationLanguage)
       : null,
     logoId: dto.logoId ?? null,
-    initials: organizationInitials(dto.name),
+    initials: initialsOf(dto.name),
     version: dto.version,
   };
 }

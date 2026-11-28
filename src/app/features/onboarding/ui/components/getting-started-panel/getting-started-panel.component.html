@@ -9,7 +9,7 @@
       class="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary"
       aria-hidden="true"
     >
-      <ng-icon name="phosphorRocketLaunchBold" class="size-4" />
+      <ng-icon name="phosphorRocketLaunchBold" size="1rem" />
     </span>
     <div class="flex min-w-0 flex-1 flex-col gap-1">
       <span class="text-sm font-medium" i18n="@@onboarding.getting-started.title"
@@ -49,7 +49,7 @@
     >
       <ng-icon
         [name]="expanded() ? 'phosphorCaretDownBold' : 'phosphorCaretUpBold'"
-        class="size-4"
+        size="1rem"
         aria-hidden="true"
       />
     </button>
@@ -64,7 +64,7 @@
       (click)="dismissed.emit()"
       data-testid="getting-started-dismiss"
     >
-      <ng-icon name="phosphorXBold" class="size-4" aria-hidden="true" />
+      <ng-icon name="phosphorXBold" size="1rem" aria-hidden="true" />
     </button>
   </div>
 
@@ -82,7 +82,8 @@
             @if (item.done) {
               <ng-icon
                 name="phosphorCheckCircleFill"
-                class="size-4 shrink-0 text-jade"
+                size="1rem"
+                class="shrink-0 text-jade"
                 aria-hidden="true"
               />
             } @else {
@@ -100,7 +101,8 @@
             @if (!item.done) {
               <ng-icon
                 name="phosphorArrowRightBold"
-                class="size-3.5 shrink-0 text-muted-foreground"
+                size="0.875rem"
+                class="shrink-0 text-muted-foreground"
                 aria-hidden="true"
               />
             }
