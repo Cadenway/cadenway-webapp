@@ -307,7 +307,7 @@ resent` from a resend that answered, or from the invitation itself listed with a
   invitations all leave it. So a write of unknown outcome that no answer settled ends with the
   warning (`The invitation may not have been cancelled` / `...resent`) and
   `The pending invitations and the members show where the invitation to <email> stands.`, and the
-  invitations, the members and, for the owner, the seats are read again. The waits stop once the organization changes (a switch away and back included) or the page is gone. When every attempt
+  invitations, the members and, for the owner, the seats are read again. The waits, and the reads of the list between them (through an `AbortSignal` the write passes to `InvitationsApi.list`, which requests no further page once it aborts), stop once the organization changes (a switch away and back included) or the page is gone, with nothing said. When every attempt
   stays unknown, the row is restored, the list read again, and the toast warns
   `The invitation may not have been resent` / `The invitation may not have been cancelled` the
   same way. A write dropped for another session organization (`OrganizationSwitchPendingError`,

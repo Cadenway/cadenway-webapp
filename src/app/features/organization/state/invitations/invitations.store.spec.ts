@@ -761,6 +761,65 @@ describe('InvitationsStore', () => {
     for (const toast of Object.values(toasts)) expect(toast).not.toHaveBeenCalled();
   });
 
+  describe('the reads settling a resend', () => {
+    /**
+     * Function pendingSettlement
+     *
+     * @description
+     * Starts a resend of unknown outcome whose first settling read waits, rejecting once its signal
+     * aborts as the data access does.
+     *
+     * @param {Harness} harness - The store and its fakes.
+     * @returns {Promise<[Promise<boolean>, AbortSignal]>} The resend and the signal of its read.
+     */
+    async function pendingSettlement(harness: Harness): Promise<[Promise<boolean>, AbortSignal]> {
+      const signals: AbortSignal[] = [];
+      harness.api.list.mockImplementation(
+        (signal: AbortSignal) =>
+          new Promise<InvitationList>(
+            (_resolve: (list: InvitationList) => void, reject: (error: Error) => void) => {
+              signals.push(signal);
+              signal.addEventListener('abort', () => {
+                reject(new Error('aborted'));
+              });
+            },
+          ),
+      );
+      const done: Promise<boolean> = harness.store.resend(STUDIO);
+      await vi.waitFor(() => {
+        expect(signals).toHaveLength(1);
+      });
+      return [done, signals[0]];
+    }
+
+    it('aborts the read once another organization is committed', async () => {
+      const harness: Harness = await setup({
+        resend: vi.fn().mockRejectedValue(refusal(503, {})),
+      });
+      const [done, signal]: [Promise<boolean>, AbortSignal] = await pendingSettlement(harness);
+      expect(signal.aborted).toBe(false);
+
+      harness.pin.set('o2');
+
+      expect(signal.aborted).toBe(true);
+      await expect(done).resolves.toBe(false);
+      for (const toast of Object.values(harness.toasts)) expect(toast).not.toHaveBeenCalled();
+    });
+
+    it('aborts the read once the page is gone', async () => {
+      const harness: Harness = await setup({
+        resend: vi.fn().mockRejectedValue(refusal(503, {})),
+      });
+      const [done, signal]: [Promise<boolean>, AbortSignal] = await pendingSettlement(harness);
+
+      TestBed.resetTestingModule();
+
+      expect(signal.aborted).toBe(true);
+      await expect(done).resolves.toBe(false);
+      for (const toast of Object.values(harness.toasts)) expect(toast).not.toHaveBeenCalled();
+    });
+  });
+
   describe('settling a write of unknown outcome', () => {
     it('cancels again until the cancellation is confirmed, past a read from before it', async () => {
       const { store, api, toasts }: Harness = await setup({

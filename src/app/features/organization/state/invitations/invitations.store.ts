@@ -105,6 +105,20 @@ export type InviteResult =
  * away and back included, so its answer changes nothing.
  */
 interface WriteFence {
+  // #region Properties
+  /**
+   * Property signal
+   *
+   * @description
+   * Aborted once another organization is committed or shown, or once the page is gone, so the
+   * reads that settle the write stop between pages.
+   *
+   * @type {AbortSignal}
+   * @readonly
+   */
+  readonly signal: AbortSignal;
+  // #endregion
+
   // #region Methods
   /**
    * Method moved
@@ -642,8 +656,15 @@ function createInvitationsStore(): Type<InvitationsStoreInstance> {
       const destroyRef: DestroyRef = inject(DestroyRef);
       // Waits end early once the page is gone, so nothing is sent or read for it afterwards.
       const timers: Set<() => void> = new Set<() => void>();
+      // The signals of the writes under way: aborted when the organization changes or the page
+      // goes, so no read settling a write goes on for another organization.
+      const reads: Set<AbortController> = new Set<AbortController>();
+      const abortReads: () => void = (): void => {
+        for (const controller of [...reads]) controller.abort();
+      };
       destroyRef.onDestroy((): void => {
         for (const stop of [...timers]) stop();
+        abortReads();
       });
       const wait: (ms: number) => Promise<void> = (ms: number): Promise<void> =>
         new Promise<void>((resolve: () => void): void => {
@@ -661,11 +682,15 @@ function createInvitationsStore(): Type<InvitationsStoreInstance> {
       // The invitation as one read of the list shows it; undefined when the read failed or did not
       // meet it. Its absence proves nothing: the list is paged by cursor, most recent first, and
       // another resend can move an invitation ahead of the cursor between two pages.
-      const readInvitation: (id: string) => Promise<PendingInvitation | undefined> = async (
+      const readInvitation: (
         id: string,
+        signal: AbortSignal,
+      ) => Promise<PendingInvitation | undefined> = async (
+        id: string,
+        signal: AbortSignal,
       ): Promise<PendingInvitation | undefined> => {
         try {
-          const list: InvitationList = await store._api.list();
+          const list: InvitationList = await store._api.list(signal);
           return list.items.find((item: PendingInvitation): boolean => item.id === id);
         } catch {
           return undefined;
@@ -713,17 +738,23 @@ function createInvitationsStore(): Type<InvitationsStoreInstance> {
       const fence: () => WriteFence = (): WriteFence => {
         const organization: string = store._workspace.organization().id;
         let switched: boolean = false;
+        const controller: AbortController = new AbortController();
+        reads.add(controller);
         const changes: Subscription = store._pin.organizationChanges.subscribe((): void => {
           switched = true;
+          controller.abort();
         });
         return {
+          signal: controller.signal,
           moved: (): boolean => switched || store._workspace.organization().id !== organization,
           release: (): void => {
             changes.unsubscribe();
+            reads.delete(controller);
           },
         };
       };
       const leave: () => void = (): void => {
+        abortReads();
         uncertainResends.clear();
         patchState(store, { ...writes, inviting: false, _last: null });
       };
@@ -916,7 +947,10 @@ function createInvitationsStore(): Type<InvitationsStoreInstance> {
               for (const ms of delays) {
                 await wait(ms);
                 if (!live()) return false;
-                const found: PendingInvitation | undefined = await readInvitation(invitation.id);
+                const found: PendingInvitation | undefined = await readInvitation(
+                  invitation.id,
+                  write.signal,
+                );
                 if (!live()) return false;
                 if (found !== undefined && found.expiresAt !== before) return resent(found);
               }
@@ -929,7 +963,10 @@ function createInvitationsStore(): Type<InvitationsStoreInstance> {
               uncertainResends.has(invitation.id) &&
               hasProblemCode(error, 'invitation.resend-throttled')
             ) {
-              const found: PendingInvitation | undefined = await readInvitation(invitation.id);
+              const found: PendingInvitation | undefined = await readInvitation(
+                invitation.id,
+                write.signal,
+              );
               if (!live()) return false;
               if (found !== undefined && found.expiresAt !== before) return resent(found);
               return unsettled(

@@ -57,6 +57,21 @@ describe('InvitationsApi', () => {
     expect(list.total).toBe(2);
   });
 
+  it('requests no further page once its signal is aborted', async () => {
+    const controller: AbortController = new AbortController();
+    const listInvitations: Mock = vi.fn((params: { cursor?: string }) => {
+      if (params.cursor === undefined) controller.abort();
+      return of(params.cursor === undefined ? page('i1', 'c2') : page('i2', null));
+    });
+    TestBed.configureTestingModule({
+      providers: [InvitationsApi, { provide: InvitationsService, useValue: { listInvitations } }],
+    });
+
+    await expect(TestBed.inject(InvitationsApi).list(controller.signal)).rejects.toBeDefined();
+
+    expect(listInvitations).toHaveBeenCalledTimes(1);
+  });
+
   it('gives an address the batch answer leaves out an unknown outcome', async () => {
     const inviteMembers: Mock = vi.fn(() =>
       of({
