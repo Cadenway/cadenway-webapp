@@ -27,10 +27,22 @@
         ariaLabel="Filter my tasks"
         i18n-ariaLabel="@@my-tasks.tabs.label"
       >
-        <button cwTab type="button" value="open" [count]="counts.open">
+        <button
+          cwTab
+          type="button"
+          value="open"
+          [count]="counts.open"
+          [countLabel]="taskCountLabel(counts.open)"
+        >
           <ng-container i18n="@@my-tasks.tabs.open">To do</ng-container>
         </button>
-        <button cwTab type="button" value="closed" [count]="counts.closed">
+        <button
+          cwTab
+          type="button"
+          value="closed"
+          [count]="counts.closed"
+          [countLabel]="taskCountLabel(counts.closed)"
+        >
           <ng-container i18n="@@my-tasks.tabs.closed">Done</ng-container>
         </button>
       </cw-tabs-list>

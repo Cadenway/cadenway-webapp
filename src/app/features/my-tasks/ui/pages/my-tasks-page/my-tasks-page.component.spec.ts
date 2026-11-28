@@ -346,6 +346,22 @@ describe('MyTasksPage', () => {
     );
   }
 
+  /**
+   * Function spoken
+   *
+   * @description
+   * The text of an element without its `aria-hidden` parts, as a screen reader reads it.
+   *
+   * @param {Element | undefined} element - The element.
+   * @returns {string} Its spoken text, whitespace collapsed.
+   */
+  function spoken(element: Element | undefined): string {
+    const copy: Node | undefined = element?.cloneNode(true);
+    if (!(copy instanceof Element)) return '';
+    copy.querySelectorAll('[aria-hidden="true"]').forEach((part: Element) => part.remove());
+    return copy.textContent.replace(/\s+/gu, ' ').trim();
+  }
+
   it('groups the open tasks by due date, in the mockup order, with their counts', async () => {
     const { element }: { element: HTMLElement } = await open('/atelier-nord/my-tasks');
 
@@ -364,8 +380,9 @@ describe('MyTasksPage', () => {
     ).toEqual(['Late, 1', 'Today, 1', 'Next seven days, 1', 'Later, 1', 'No due date, 1']);
     const tablist: HTMLElement | null = element.querySelector('[role="tablist"]');
     expect(tablist?.getAttribute('aria-label')).toBe('Filter my tasks');
-    expect(button(element, 'To do')?.textContent.replace(/\s+/gu, ' ').trim()).toBe('To do, 5');
-    expect(button(element, 'Done')?.textContent.replace(/\s+/gu, ' ').trim()).toBe('Done, 2');
+    expect(spoken(button(element, 'To do'))).toBe('To do, 5 tasks');
+    expect(spoken(button(element, 'Done'))).toBe('Done, 2 tasks');
+    expect(button(element, 'To do')?.querySelector('[aria-hidden="true"]')?.textContent).toBe('5');
     expect(read).toHaveBeenCalledWith('open', expect.objectContaining({ passive: false }));
     expect(rowActions.sync).toHaveBeenCalledTimes(1);
   });

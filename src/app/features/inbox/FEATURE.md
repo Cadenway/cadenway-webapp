@@ -104,6 +104,7 @@ and, when realtime is on, `RealtimeConnection`.
 | `inbox.mark-all-failed`, `inbox.mark-read-failed`, `inbox.reminder.snooze-failed`, `inbox.reminder.complete-failed`, `inbox.write-failed-text` | The mockup draws no refused write.                                                                                                |
 | `inbox.digest.loading`                                                                                                                         | The mockup gives the home screen's mentions no loading label; built on its `Loading …` skeleton labels.                           |
 | `inbox.time.tomorrow`, `inbox.time.at-time`                                                                                                    | Built on the mockup's `Today, 9:00` for tomorrow and for minutes.                                                                 |
+| `inbox.tab-notifications-count`, `inbox.tab-reminders-count`                                                                                   | Spoken counts of the tabs (`cwTab` `countLabel`), which the mockup shows as bare numbers.                                         |
 
 The extracted catalog only holds messages the application reaches, so `inbox.digest.loading` enters
 `messages.json`, and its French text `messages.fr.json`, in the change where Home mounts

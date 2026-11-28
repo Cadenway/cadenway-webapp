@@ -105,12 +105,13 @@ organization.context-changed`) keeps the rows silently and is sent again once th
 
 ## Copy not taken word for word from the mockup
 
-| Id                            | English                                 | French                                              | Source of the French                                       |
-| ----------------------------- | --------------------------------------- | --------------------------------------------------- | ---------------------------------------------------------- |
-| `my-tasks.partial.incomplete` | Some of your tasks could not be loaded. | Certaines de vos tâches n’ont pas pu être chargées. | Not in the mockup                                          |
-| `my-tasks.partial.stale`      | Your tasks could not be refreshed.      | Vos tâches n’ont pas pu être actualisées.           | Not in the mockup                                          |
-| `my-tasks.partial.retry`      | Retry                                   | Réessayer                                           | The mockup's page error (`App.dc.html` lines 4817-4823)    |
-| `my-tasks.closed.more`        | Show more                               | Afficher plus                                       | Not in the mockup (`spaces.activity.show-more`'s word)     |
-| `my-tasks.closed.more-failed` | The next tasks could not be loaded.     | Les tâches suivantes n’ont pas pu être chargées.    | Not in the mockup (`spaces.rows.more-failed`'s wording)    |
-| `my-tasks.row.archived-list`  | Archived list                           | Liste archivée                                      | The mockup's Archives screen (`App.dc.html` 5494 and 8821) |
-| `my-tasks.delete.cancel`      | Cancel                                  | Annuler                                             | The mockup's confirmations                                 |
+| Id                            | English                                  | French                                              | Source of the French                                       |
+| ----------------------------- | ---------------------------------------- | --------------------------------------------------- | ---------------------------------------------------------- |
+| `my-tasks.partial.incomplete` | Some of your tasks could not be loaded.  | Certaines de vos tâches n’ont pas pu être chargées. | Not in the mockup                                          |
+| `my-tasks.partial.stale`      | Your tasks could not be refreshed.       | Vos tâches n’ont pas pu être actualisées.           | Not in the mockup                                          |
+| `my-tasks.partial.retry`      | Retry                                    | Réessayer                                           | The mockup's page error (`App.dc.html` lines 4817-4823)    |
+| `my-tasks.closed.more`        | Show more                                | Afficher plus                                       | Not in the mockup (`spaces.activity.show-more`'s word)     |
+| `my-tasks.closed.more-failed` | The next tasks could not be loaded.      | Les tâches suivantes n’ont pas pu être chargées.    | Not in the mockup (`spaces.rows.more-failed`'s wording)    |
+| `my-tasks.row.archived-list`  | Archived list                            | Liste archivée                                      | The mockup's Archives screen (`App.dc.html` 5494 and 8821) |
+| `my-tasks.delete.cancel`      | Cancel                                   | Annuler                                             | The mockup's confirmations                                 |
+| `my-tasks.tabs.count-*`       | `<n>` task(s), spoken after the tab name | `<n>` tâche(s)                                      | Not in the mockup (spoken count of `cwTab` `countLabel`)   |

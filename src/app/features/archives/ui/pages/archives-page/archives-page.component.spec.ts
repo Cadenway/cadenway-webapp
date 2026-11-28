@@ -297,9 +297,13 @@ describe('ArchivesPage', () => {
         '2 lists and 1 archived task. Nothing is erased: everything can be restored in one click.',
       );
     const tabs: string[] = Array.from(root(harness).querySelectorAll('[role="tab"]')).map(
-      (tab: Element) => tab.textContent.replace(/\s+/gu, ' ').trim(),
+      (tab: Element) => {
+        const copy: Element = tab.cloneNode(true) as Element;
+        copy.querySelectorAll('[aria-hidden="true"]').forEach((part: Element) => part.remove());
+        return copy.textContent.replace(/\s+/gu, ' ').trim();
+      },
     );
-    expect(tabs).toEqual(['Lists, 2', 'Tasks, 1']);
+    expect(tabs).toEqual(['Lists, 2 lists', 'Tasks, 1 task']);
     await expect
       .poll(() => metas(harness, 'archives-lists'))
       .toEqual([
