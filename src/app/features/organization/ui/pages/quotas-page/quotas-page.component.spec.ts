@@ -1,7 +1,9 @@
 import { HttpErrorResponse } from '@angular/common/http';
-import { ApplicationRef, signal } from '@angular/core';
+import { ApplicationRef, type DebugElement, signal } from '@angular/core';
 import { type ComponentFixture, TestBed } from '@angular/core/testing';
+import { By } from '@angular/platform-browser';
 import { provideCadenwayIcons } from '@cadenway/icons';
+import { CwMeter } from '@cadenway/ui/components/meter';
 import { CwToastService } from '@cadenway/ui/components/toast';
 import { afterEach, describe, expect, it, type Mock, vi } from 'vitest';
 
@@ -228,6 +230,11 @@ describe('QuotasPage', () => {
     expect(host.querySelector('h1')?.textContent.trim()).toBe('Quotas and usage');
     expect(host.querySelector('h2')?.textContent.trim()).toBe('Team plan limits');
     expect(host.textContent).toContain('alert threshold at 80%');
+    expect(
+      fixture.debugElement
+        .queryAll(By.directive(CwMeter))
+        .map((meter: DebugElement) => (meter.componentInstance as CwMeter).marker()),
+    ).toEqual([20, 80_000_000_000]);
     expect(row(host, 'seats')?.getAttribute('data-zone')).toBe('normal');
     expect(
       row(host, 'seats')?.querySelector('[role="meter"]')?.getAttribute('aria-valuetext'),

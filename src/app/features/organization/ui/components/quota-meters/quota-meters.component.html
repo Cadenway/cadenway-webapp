@@ -4,9 +4,10 @@
       <h2 id="quotas-limits-title">{{ title() }}</h2>
     </cw-card-title>
     <cw-card-action>
-      <span class="text-xs text-muted-foreground" i18n="@@organization.quotas.alert-threshold"
-        >alert threshold at 80%</span
-      >
+      <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
+        <span class="h-3.5 w-0.5 bg-foreground" aria-hidden="true"></span>
+        <span i18n="@@organization.quotas.alert-threshold">alert threshold at 80%</span>
+      </span>
     </cw-card-action>
   </cw-card-header>
   <cw-card-content class="flex flex-col gap-5">
@@ -29,6 +30,7 @@
           [label]="meter.label"
           [value]="meter.used"
           [max]="meter.limit"
+          [marker]="0.8 * meter.limit"
           [zone]="meter.zone"
           [format]="format(meter)"
           [note]="meter.note"

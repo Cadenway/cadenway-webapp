@@ -19,16 +19,36 @@
 <div class="max-w-full overflow-x-auto">
   <cw-tabs [value]="role()" (valueChange)="pickRole($event)">
     <cw-tabs-list ariaLabel="Filter by role" i18n-ariaLabel="@@organization.members.filter-role">
-      <button cwTab value="all" [count]="roleCounts().all">
+      <button
+        cwTab
+        value="all"
+        [count]="roleCounts().all"
+        [countLabel]="memberCountLabel(roleCounts().all)"
+      >
         <ng-container i18n="@@organization.members.filter-all">All</ng-container>
       </button>
-      <button cwTab value="admin" [count]="roleCounts().admin">
+      <button
+        cwTab
+        value="admin"
+        [count]="roleCounts().admin"
+        [countLabel]="memberCountLabel(roleCounts().admin)"
+      >
         <ng-container i18n="@@organization.members.filter-admins">Administrators</ng-container>
       </button>
-      <button cwTab value="member" [count]="roleCounts().member">
+      <button
+        cwTab
+        value="member"
+        [count]="roleCounts().member"
+        [countLabel]="memberCountLabel(roleCounts().member)"
+      >
         <ng-container i18n="@@organization.members.filter-members">Members</ng-container>
       </button>
-      <button cwTab value="guest" [count]="roleCounts().guest">
+      <button
+        cwTab
+        value="guest"
+        [count]="roleCounts().guest"
+        [countLabel]="memberCountLabel(roleCounts().guest)"
+      >
         <ng-container i18n="@@organization.members.filter-guests">Guests</ng-container>
       </button>
     </cw-tabs-list>
@@ -40,14 +60,29 @@
     ariaLabel="Filter by presence"
     i18n-ariaLabel="@@organization.members.filter-presence"
   >
-    <button cwTab value="all" [count]="presenceCounts().all">
+    <button
+      cwTab
+      value="all"
+      [count]="presenceCounts().all"
+      [countLabel]="memberCountLabel(presenceCounts().all)"
+    >
       <ng-container i18n="@@organization.members.filter-all">All</ng-container>
     </button>
-    <button cwTab value="online" [count]="presenceCounts().online">
+    <button
+      cwTab
+      value="online"
+      [count]="presenceCounts().online"
+      [countLabel]="memberCountLabel(presenceCounts().online)"
+    >
       <span class="size-2 shrink-0 rounded-full bg-jade" aria-hidden="true"></span>
       <ng-container i18n="@@organization.members.filter-online">Online</ng-container>
     </button>
-    <button cwTab value="offline" [count]="presenceCounts().offline">
+    <button
+      cwTab
+      value="offline"
+      [count]="presenceCounts().offline"
+      [countLabel]="memberCountLabel(presenceCounts().offline)"
+    >
       <ng-container i18n="@@organization.members.filter-offline">Offline</ng-container>
     </button>
   </cw-tabs-list>
