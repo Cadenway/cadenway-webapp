@@ -1,16 +1,11 @@
-<cw-toolbar
-  size="sm"
-  ariaLabel="View tools"
-  i18n-ariaLabel="@@spaces.tools.label"
-  data-testid="view-tools"
->
+<cw-toolbar ariaLabel="View tools" i18n-ariaLabel="@@spaces.tools.label" data-testid="view-tools">
   @if (has('milestones')) {
     <button
       cwButton
       cwToolbarItem
       type="button"
-      size="sm"
-      variant="outline"
+      [variant]="milestonesOnly() ? 'ghost' : 'outline'"
+      [class.border]="milestonesOnly()"
       [class.border-primary/50]="milestonesOnly()"
       [class.bg-primary/10]="milestonesOnly()"
       [class.text-primary]="milestonesOnly()"
@@ -33,87 +28,85 @@
       }
     </button>
   }
-  @if (has('filter')) {
-    <button
-      cwButton
-      cwToolbarItem
-      pinned
-      type="button"
-      variant="outline"
-      size="sm"
-      [cwPopoverTrigger]="filterPopover"
-      data-testid="view-filter"
-    >
-      <ng-icon name="phosphorFunnelSimpleBold" aria-hidden="true" />
-      <ng-container i18n="@@spaces.tools.filter">Filter</ng-container>
-      @if (filterCount() > 0) {
-        <span
-          class="inline-flex h-4 min-w-4 items-center justify-center rounded-sm bg-secondary px-1 text-[11px] font-semibold whitespace-nowrap tabular-nums"
-          >{{ filterCount() }}</span
-        >
-      }
-    </button>
-  }
-  @if (has('sort')) {
-    <button
-      cwButton
-      cwToolbarItem
-      type="button"
-      variant="outline"
-      size="sm"
-      [cwMenuTriggerFor]="sortMenu"
-      data-testid="view-sort"
-    >
-      <ng-icon
-        [name]="
-          config().sort.direction === 'asc'
-            ? 'phosphorSortAscendingBold'
-            : 'phosphorSortDescendingBold'
-        "
-        aria-hidden="true"
-      />
-      {{ sortLabel() }}
-    </button>
-  }
-  @if (has('group')) {
-    <button
-      cwButton
-      cwToolbarItem
-      type="button"
-      variant="outline"
-      size="sm"
-      [cwMenuTriggerFor]="groupMenu"
-      data-testid="view-group"
-    >
-      <ng-icon name="phosphorStackBold" aria-hidden="true" />
-      {{ groupLabel() }}
-    </button>
-  }
-  @if (has('columns')) {
-    <button
-      cwButton
-      cwToolbarItem
-      type="button"
-      variant="outline"
-      size="sm"
-      [cwMenuTriggerFor]="columnsMenu"
-      data-testid="view-columns"
-    >
-      <ng-icon name="phosphorColumnsBold" aria-hidden="true" />
-      <ng-container i18n="@@spaces.columns.button">Columns</ng-container>
-    </button>
-  }
+  <cw-toolbar-group>
+    @if (has('filter')) {
+      <button
+        cwButton
+        cwToolbarItem
+        pinned
+        type="button"
+        variant="outline"
+        [cwPopoverTrigger]="filterPopover"
+        data-testid="view-filter"
+      >
+        <ng-icon name="phosphorFunnelSimpleBold" aria-hidden="true" />
+        <ng-container i18n="@@spaces.tools.filter">Filter</ng-container>
+        @if (filterCount() > 0) {
+          <span
+            class="inline-flex h-4 min-w-4 items-center justify-center rounded-sm bg-secondary px-1 text-[11px] font-semibold whitespace-nowrap tabular-nums"
+            >{{ filterCount() }}</span
+          >
+        }
+      </button>
+    }
+    @if (has('sort')) {
+      <button
+        cwButton
+        cwToolbarItem
+        type="button"
+        variant="outline"
+        [cwMenuTriggerFor]="sortMenu"
+        data-testid="view-sort"
+      >
+        <ng-icon
+          [name]="
+            config().sort.direction === 'asc'
+              ? 'phosphorSortAscendingBold'
+              : 'phosphorSortDescendingBold'
+          "
+          aria-hidden="true"
+        />
+        {{ sortLabel() }}
+      </button>
+    }
+    @if (has('group')) {
+      <button
+        cwButton
+        cwToolbarItem
+        type="button"
+        variant="outline"
+        [cwMenuTriggerFor]="groupMenu"
+        data-testid="view-group"
+      >
+        <ng-icon name="phosphorStackBold" aria-hidden="true" />
+        {{ groupLabel() }}
+      </button>
+    }
+    @if (has('columns')) {
+      <button
+        cwButton
+        cwToolbarItem
+        type="button"
+        variant="outline"
+        [cwMenuTriggerFor]="columnsMenu"
+        data-testid="view-columns"
+      >
+        <ng-icon name="phosphorColumnsBold" aria-hidden="true" />
+        <ng-container i18n="@@spaces.columns.button">Columns</ng-container>
+      </button>
+    }
+  </cw-toolbar-group>
   <cw-toolbar-spacer />
   @if (has('search')) {
     <div class="relative flex w-full items-center sm:w-56">
       <ng-icon
         name="phosphorMagnifyingGlassBold"
-        class="pointer-events-none absolute left-2.5 size-3.5 text-muted-foreground"
+        class="pointer-events-none absolute left-2.5 text-muted-foreground"
+        size="1rem"
         aria-hidden="true"
       />
       <input
         cwInput
-        size="sm"
         type="search"
         class="w-full pl-8"
         aria-label="Search the list"
@@ -132,7 +125,6 @@
       cwToolbarItem
       pinned
       type="button"
-      size="sm"
       data-testid="view-create-task"
       (click)="taskCreated.emit()"
     >
@@ -156,7 +148,7 @@
         data-testid="view-chip"
       >
         <span class="flex items-center gap-1.5 px-2 text-muted-foreground">
-          <ng-icon [name]="chip.icon" class="size-3.5" aria-hidden="true" />{{ chip.name }}
+          <ng-icon [name]="chip.icon" size="0.875rem" aria-hidden="true" />{{ chip.name }}
         </span>
         <span class="flex items-center border-l border-input px-2 text-muted-foreground">{{
           chip.operator
@@ -171,7 +163,7 @@
           [attr.aria-label]="removeLabel(chip)"
           (click)="filterCleared.emit(chip.field)"
         >
-          <ng-icon name="phosphorXBold" class="size-3.5" aria-hidden="true" />
+          <ng-icon name="phosphorXBold" size="0.875rem" aria-hidden="true" />
         </button>
       </div>
     }
@@ -288,19 +280,18 @@
   #filterPopover
   side="bottom"
   align="start"
+  size="xl"
+  padding="none"
   ariaLabel="Filters"
   i18n-ariaLabel="@@spaces.filter.dialog"
   [open]="filterOpen()"
   (openChange)="filterOpen.set($event)"
 >
-  <div
-    class="grid max-h-[28rem] w-[34rem] max-w-[calc(100vw-6rem)] grid-cols-2 gap-x-2 gap-y-3 overflow-y-auto max-md:max-w-[calc(100vw-2rem)] sm:grid-cols-4"
-    data-testid="view-filter-dialog"
-  >
+  <div class="grid grid-cols-2 gap-x-2 gap-y-3 p-3" data-testid="view-filter-dialog">
     @for (section of sections(); track section.field) {
       @if (section.options.length > 0) {
-        <fieldset class="flex flex-col gap-0.5">
-          <legend class="mb-1 text-xs font-medium text-muted-foreground">
+        <fieldset class="flex min-w-0 flex-col gap-0.5">
+          <legend class="mb-1 px-1 text-xs font-medium text-muted-foreground">
             {{ section.title }}
           </legend>
           @for (option of section.options; track option.value; let index = $index) {

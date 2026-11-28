@@ -26,7 +26,12 @@ import {
 } from '@cadenway/ui/components/menu';
 import { CwPopover, CwPopoverTrigger } from '@cadenway/ui/components/popover';
 import { CwStatusIcon } from '@cadenway/ui/components/status-icon';
-import { CwToolbar, CwToolbarItem, CwToolbarSpacer } from '@cadenway/ui/components/toolbar';
+import {
+  CwToolbar,
+  CwToolbarGroup,
+  CwToolbarItem,
+  CwToolbarSpacer,
+} from '@cadenway/ui/components/toolbar';
 import { NgIcon } from '@ng-icons/core';
 
 import { BOARD_ORDER, PRIORITY_ORDER } from '../../../constants/statuses/statuses.constants';
@@ -153,6 +158,7 @@ const FIELDS: readonly FilterField[] = ['status', 'priority', 'assignee', 'label
     CwPopoverTrigger,
     CwStatusIcon,
     CwToolbar,
+    CwToolbarGroup,
     CwToolbarItem,
     CwToolbarSpacer,
     NgIcon,

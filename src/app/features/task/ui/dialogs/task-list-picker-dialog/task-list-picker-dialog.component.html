@@ -8,7 +8,8 @@
     >
       <ng-icon
         name="phosphorMagnifyingGlassBold"
-        class="size-3.5 text-muted-foreground"
+        class="text-muted-foreground"
+        size="0.875rem"
         aria-hidden="true"
       />
       <label for="task-list-query" class="sr-only" i18n="@@task.detail.list.search"
@@ -40,7 +41,8 @@
           >
             <ng-icon
               [name]="list.icon"
-              class="size-4 shrink-0 text-muted-foreground"
+              class="shrink-0 text-muted-foreground"
+              size="1rem"
               aria-hidden="true"
             />
             <span class="min-w-0 flex-1 truncate">{{ list.name }}</span>
@@ -49,7 +51,12 @@
             }}</span>
             <span class="flex w-4 shrink-0 justify-end">
               @if (list.id === currentListId()) {
-                <ng-icon name="phosphorCheckBold" class="size-4 text-primary" aria-hidden="true" />
+                <ng-icon
+                  name="phosphorCheckBold"
+                  class="text-primary"
+                  size="1rem"
+                  aria-hidden="true"
+                />
               }
             </span>
           </button>

@@ -25,6 +25,7 @@ import {
   type ReminderPreset,
   type ReminderPresetKey,
   reminderPresets,
+  reminderTimeLabel,
 } from '../../../utils/reminder-time/reminder-time.util';
 
 /**
@@ -514,7 +515,7 @@ export class TaskReminderMenu {
    * @returns {string} The label.
    */
   protected hourLabel(hour: number): string {
-    return $localize`:@@task.detail.reminder.hour:${hour}:hour::00`;
+    return reminderTimeLabel(hour, 0);
   }
 
   /**
@@ -522,19 +523,14 @@ export class TaskReminderMenu {
    *
    * @description
    * How an instant reads: `Today, 11:00`, `Tomorrow, 9:00`, else the short day (`Mon, Nov 9,
-   * 9:00`), with minutes only when they are not zero.
+   * 9:00`), the time through `reminderTimeLabel` (minutes only when they are not zero).
    *
    * @param {Date} instant - The instant.
    * @returns {string} The label.
    */
   protected whenOf(instant: Date): string {
     const offset: number = daysFrom(this.now(), instant);
-    const time: string =
-      instant.getMinutes() === 0
-        ? this.hourLabel(instant.getHours())
-        : new Intl.DateTimeFormat(this.locale, { hour: 'numeric', minute: '2-digit' }).format(
-            instant,
-          );
+    const time: string = reminderTimeLabel(instant.getHours(), instant.getMinutes());
     if (offset === 0) return $localize`:@@task.detail.reminder.today-at:Today, ${time}:time:`;
     if (offset === 1) return $localize`:@@task.detail.reminder.tomorrow-at:Tomorrow, ${time}:time:`;
     const day: string = new Intl.DateTimeFormat(this.locale, {

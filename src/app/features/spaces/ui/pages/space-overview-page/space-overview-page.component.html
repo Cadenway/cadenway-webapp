@@ -9,7 +9,7 @@
         aria-hidden="true"
       >
         @if (spaceIcon(space); as icon) {
-          <ng-icon [name]="icon" class="size-5" />
+          <ng-icon [name]="icon" size="1.25rem" />
         } @else {
           {{ space.name.charAt(0).toUpperCase() }}
         }
@@ -24,7 +24,8 @@
           @if (space.private) {
             <ng-icon
               name="phosphorLockSimpleBold"
-              class="size-4 shrink-0 text-muted-foreground"
+              class="shrink-0 text-muted-foreground"
+              size="1rem"
               role="img"
               aria-label="Private space"
               i18n-aria-label="@@spaces.private"

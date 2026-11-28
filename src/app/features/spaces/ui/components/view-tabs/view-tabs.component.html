@@ -1,6 +1,11 @@
 <cw-tabs variant="bar" [value]="value()" (valueChange)="pick($event)">
   <div class="flex min-w-0 items-center gap-1 border-b border-border">
-    <cw-tabs-list ariaLabel="Views" i18n-ariaLabel="@@spaces.views.label" data-testid="view-tabs">
+    <cw-tabs-list
+      class="min-w-0 max-md:flex-wrap max-md:gap-x-3"
+      ariaLabel="Views"
+      i18n-ariaLabel="@@spaces.views.label"
+      data-testid="view-tabs"
+    >
       @for (layout of layouts(); track layout) {
         <button cwTab [value]="layout" [active]="value() === layout">
           <ng-icon [name]="layoutIcon(layout)" aria-hidden="true" />
@@ -49,7 +54,7 @@
       [cwMenuTriggerFor]="addMenu"
       data-testid="view-menu"
     >
-      <ng-icon name="phosphorPlusBold" class="size-3.5" aria-hidden="true" />
+      <ng-icon name="phosphorPlusBold" size="0.875rem" aria-hidden="true" />
       <ng-container i18n="@@spaces.views.menu">View</ng-container>
     </button>
   </div>

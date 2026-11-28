@@ -111,7 +111,8 @@ interface DueShortcut {
       @if (tone() === 'late') {
         <ng-icon
           name="phosphorWarningCircleFill"
-          class="size-3.5 shrink-0 text-destructive"
+          class="shrink-0 text-destructive"
+          size="0.875rem"
           aria-hidden="true"
         />
       }
@@ -130,7 +131,7 @@ interface DueShortcut {
       [open]="open()"
       (openChange)="open.set($event)"
     >
-      <div class="flex w-72 flex-col gap-1 p-1">
+      <div class="flex flex-col gap-1 p-1">
         @for (shortcut of shortcuts(); track shortcut.key) {
           <button
             type="button"

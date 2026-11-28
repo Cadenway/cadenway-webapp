@@ -9,6 +9,7 @@
   <cw-dialog-header>
     @if (store.header(); as header) {
       <cw-task-detail-header
+        class="-mx-2 -my-1"
         [header]="header"
         [statusLabel]="statusLabel()"
         [parent]="store.parent()"

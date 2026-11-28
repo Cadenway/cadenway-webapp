@@ -1,5 +1,5 @@
 <cw-dialog
-  size="lg"
+  size="xl"
   [open]="taskCreate.isOpen()"
   (openChange)="openChange($event)"
   [pending]="store.creating()"
@@ -271,47 +271,49 @@
     </aside>
   </div>
 
-  <cw-dialog-footer>
+  <cw-dialog-footer class="flex-wrap items-center">
     @if (footerErrors().length > 0) {
-      <div role="alert" class="text-xs text-destructive">
+      <div role="alert" class="basis-full text-xs text-destructive">
         @for (error of footerErrors(); track $index) {
           <p>{{ error.message }}</p>
         }
       </div>
     }
-    <div class="mr-auto flex items-center gap-2">
+    <div class="flex items-center gap-2">
       <cw-switch
         id="task-create-more"
         size="sm"
         [checked]="more()"
         (checkedChange)="more.set($event)"
       />
-      <label for="task-create-more" class="text-sm" i18n="@@task.create.more"
+      <label for="task-create-more" class="text-sm whitespace-nowrap" i18n="@@task.create.more"
         >Create more tasks</label
       >
     </div>
-    <button
-      cwButton
-      type="button"
-      variant="outline"
-      [disabled]="store.creating()"
-      (click)="taskCreate.close()"
-      i18n="@@task.create.cancel"
-    >
-      Cancel
-    </button>
-    <button
-      cwButton
-      type="button"
-      [disabled]="createForm().invalid() || store.creating()"
-      (click)="create()"
-    >
-      <span i18n="@@task.create.submit">Create the task</span>
-      <span class="inline-flex items-center gap-0.5" aria-hidden="true">
-        <kbd cwKbd i18n="@@task.create.key-ctrl">Ctrl</kbd>
-        <kbd cwKbd i18n="@@task.create.key-enter">Enter</kbd>
-      </span>
-    </button>
+    <div class="ml-auto flex items-center gap-2">
+      <button
+        cwButton
+        type="button"
+        variant="outline"
+        [disabled]="store.creating()"
+        (click)="taskCreate.close()"
+        i18n="@@task.create.cancel"
+      >
+        Cancel
+      </button>
+      <button
+        cwButton
+        type="button"
+        [disabled]="createForm().invalid() || store.creating()"
+        (click)="create()"
+      >
+        <span i18n="@@task.create.submit">Create the task</span>
+        <span class="inline-flex items-center gap-0.5" aria-hidden="true">
+          <kbd cwKbd i18n="@@task.create.key-ctrl">Ctrl</kbd>
+          <kbd cwKbd i18n="@@task.create.key-enter">Enter</kbd>
+        </span>
+      </button>
+    </div>
   </cw-dialog-footer>
 </cw-dialog>
 
