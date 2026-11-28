@@ -4,11 +4,9 @@ import {
   type GetSpaceClientResult,
   type ListLabelsClientResult,
   type ListListsClientResult,
-  type ListMembersClientResult,
   ListsService,
   type ListSpacesClientResult,
   type ListTaskTemplatesClientResult,
-  MembersService,
   SpacesService,
   TasksService,
 } from '@cadenway/api-client';
@@ -22,7 +20,6 @@ import type {
   TaskDraft,
   TaskTemplateOption,
 } from '../../../models/task-create/task-create.interface';
-import { toPerson } from '../../adapters/person/person.adapter';
 import { toStatusOptions } from '../../adapters/status-option/status-option.adapter';
 import {
   toCreatedTask,
@@ -31,6 +28,7 @@ import {
   toTaskCreation,
   toTaskTemplateOption,
 } from '../../adapters/task-create/task-create.adapter';
+import { TaskMembersApi } from '../task-members-api/task-members-api.service';
 
 /**
  * Constant PAGE_SIZE
@@ -128,15 +126,15 @@ export class TaskCreateApi {
   private readonly lists: ListsService = inject(ListsService);
 
   /**
-   * Property members
+   * Property directory
    *
    * @description
-   * Generated member operations.
+   * The organization's member directory, shared with the task detail's readers.
    *
-   * @type {MembersService}
+   * @type {TaskMembersApi}
    * @readonly
    */
-  private readonly members: MembersService = inject(MembersService);
+  private readonly directory: TaskMembersApi = inject(TaskMembersApi);
 
   /**
    * Property tasks
@@ -228,16 +226,13 @@ export class TaskCreateApi {
    *
    * @description
    * The members a task can be assigned to: every member of the organization but its guests, who
-   * the gateway refuses as assignees (`422 task.assignee-invalid`).
+   * the gateway refuses as assignees (`422 task.assignee-invalid`), from the shared directory
+   * read (`TaskMembersApi`).
    *
    * @returns {Observable<readonly Person[]>} The people, in the gateway's order.
    */
   public people(): Observable<readonly Person[]> {
-    return readAll((cursor: string | undefined) =>
-      this.members.listMembers({ limit: PAGE_SIZE, cursor, role: ['owner', 'admin', 'member'] }),
-    ).pipe(
-      map((members: readonly ListMembersClientResult['items'][number][]) => members.map(toPerson)),
-    );
+    return this.directory.assignable();
   }
 
   /**

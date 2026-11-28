@@ -11,12 +11,13 @@ import {
   TasksService,
   type TaskList,
 } from '@cadenway/api-client';
-import { Observable, of, throwError } from 'rxjs';
+import { Observable, of, Subject, throwError } from 'rxjs';
 import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 
 import { AccessDeniedRouteError } from '@shared/route-errors';
 
 import { DEFAULT_VIEW_CONFIG } from '../../../utils/list-view-query/list-view-query.util';
+import type { ListMember, ListMembers } from '../../../models/list-member/list-member.interface';
 import type { SavedView } from '../../../models/saved-view/saved-view.interface';
 import type { ListSprint } from '../../../models/task-list/task-list.interface';
 import { ListsApi } from './lists-api.service';
@@ -189,6 +190,25 @@ describe('ListsApi', () => {
     tasks['listLabels'].mockReturnValueOnce(of({ items: [{ name: 'Front' }], nextCursor: null }));
     expect(await api.labels()).toEqual(['Auth', 'Front']);
     expect(tasks['listLabels']).toHaveBeenLastCalledWith({ limit: 100, cursor: 'next' });
+  });
+
+  it('reads the first directory page once for the header and the assignees that ask together', async () => {
+    const directory: Subject<unknown> = new Subject<unknown>();
+    members['listMembers'].mockReturnValueOnce(directory);
+
+    const header: Promise<ListMembers> = api.listMembers('l-bugs');
+    const assignees: Promise<readonly ListMember[]> = api.organizationMembers();
+    await new Promise<void>((resolve: () => void) => setTimeout(resolve));
+    expect(members['listMembers']).toHaveBeenCalledTimes(1);
+    directory.next({ items: [{ userId: 'u1', name: 'Inès Robert' }], nextCursor: null, total: 1 });
+    directory.complete();
+
+    expect((await header).items[0]?.name).toBe('Inès Robert');
+    expect(await assignees).toEqual([{ userId: 'u1', name: 'Inès Robert' }]);
+    expect(members['listMembers']).toHaveBeenCalledTimes(1);
+
+    await api.organizationMembers();
+    expect(members['listMembers']).toHaveBeenCalledTimes(2);
   });
 
   it('keeps the members without names when the directory is refused', async () => {

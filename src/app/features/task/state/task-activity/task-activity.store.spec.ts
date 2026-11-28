@@ -73,6 +73,23 @@ describe('TaskActivityStore', () => {
     expect(store.hasMore()).toBe(false);
   });
 
+  it('reads once per opening of the tab, not on a repeated selection', async () => {
+    TestBed.tick();
+    store.show(true);
+    store.show(true);
+    await vi.waitFor(() => {
+      expect(store.items()).toHaveLength(2);
+    });
+    expect(api['activityPage']).toHaveBeenCalledTimes(1);
+
+    store.show(false);
+    store.show(true);
+
+    await vi.waitFor(() => {
+      expect(api['activityPage']).toHaveBeenCalledTimes(2);
+    });
+  });
+
   it('shows a failed read and reads again on Retry', async () => {
     api['activityPage'].mockRejectedValueOnce(new Error('offline'));
     store.show(true);

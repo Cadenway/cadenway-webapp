@@ -168,7 +168,8 @@ function createSpaceOverviewStore(): Type<SpaceOverviewStoreInstance> {
             // The sidebar's value of the space, even while it reads again, is shown at once and
             // followed. The page reads on its own only when the sidebar has none: it then ignores
             // any sidebar value read before its own read began, gives its result to the sidebar,
-            // and recovers a failed read with a newer sidebar value.
+            // and recovers a failed read with a newer sidebar value. Its read is lent to the
+            // sidebar, whose first read of the space waits for it instead of reading it twice.
             const held: () => SpaceOverview | undefined = (): SpaceOverview | undefined =>
               navigation.overviews.hasValue()
                 ? navigation.overviews.value()[params.spaceId]
@@ -179,7 +180,13 @@ function createSpaceOverviewStore(): Type<SpaceOverviewStoreInstance> {
             if (current !== undefined) return Promise.resolve(current);
             const own: number = navigation.overviewOrder.next();
             following.own = own;
-            return api.overview(params.spaceId, todayIso(), abortSignal).then(
+            const read: Promise<SpaceOverview> = api.overview(
+              params.spaceId,
+              todayIso(),
+              abortSignal,
+            );
+            navigation.shareOverviewRead(params.spaceId, read, own);
+            return read.then(
               (overview: SpaceOverview): SpaceOverview => {
                 navigation.offerOverview(overview, own);
                 return overview;

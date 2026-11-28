@@ -576,8 +576,8 @@ once it was opened, so the store lives with the list page, across closings and r
   (`openapi/public/lists.yaml`).
 - `Copy the link` copies `/<slug>/l/<listId>` with `List link copied` (`navigator.clipboard`).
 - Gaps: no presence on the avatars (Account's `PRESENCE` publishes the person's own presence
-  only); no realtime follow of `list.access-changed.v1` while the dialog is open; `cw-dialog`
-  has no `max-w-lg` size, so the dialog uses `default` (`max-w-md`).
+  only); no realtime follow of `list.access-changed.v1` while the dialog is open. The dialog is
+  `size="md"` (the mockup's `max-w-lg`).
 
 ## Timesheet view
 
@@ -837,8 +837,8 @@ through `SpaceStatusesApi` (`data-access/services/space-statuses-api/`, `updateS
   (the mockup draws no refused or unanswered write).
 - Known gaps: `space.updated.v1` is not relayed by the realtime gateway, so another tab sees the
   change only after it reads the space again; a write refused with `412` (the space changed
-  elsewhere) is taken back and the reads that follow bring the newer version. `cw-dialog` has no
-  `max-w-lg` size: the dialog uses `default` (`max-w-md`) where the mockup uses `max-w-lg`.
+  elsewhere) is taken back and the reads that follow bring the newer version. The dialog is
+  `size="md"` (the mockup's `max-w-lg`).
 
 ## Public entry points
 
@@ -958,7 +958,9 @@ colors with the same words.
     `followSpaceEdits` and the overview page follow.
   - `ListPageStore`, route-scoped on `l/:listId`: the list (primary read) and its space, counts,
     milestone count, members, labels and saved views (secondary reads), the header's and the
-    selection bar's writes. It watches the list's realtime room while the page lives and
+    selection bar's writes. The header's member names and the member directory
+    (`organizationMembers`) share the directory's first page while both read it
+    (`ListsApi.listMembers` and `organizationMembers`), so a list page opens with one request. It watches the list's realtime room while the page lives and
     refreshes the counts 300 ms after a notice, once per window, so a steady flow cannot hold them
     back; since the socket hands every notice to every watch, it ignores a notice naming another
     list or space and the comment and Git link notices, while a task update or status change
@@ -1041,7 +1043,9 @@ colors with the same words.
     overview of the same space, shown at once even while the sidebar reads again, and follow it
     once it changes. The page reads on its own only when the sidebar has no value for the space,
     without waiting for the sidebar; it then ignores a sidebar value from a read begun before its
-    own (`SpacesNavigationStore.overviewOrder`), gives its result to the sidebar
+    own (`SpacesNavigationStore.overviewOrder`), lends its read to a sidebar that holds no
+    overview yet (`shareOverviewRead`: the sidebar's next read of the space takes its answer
+    instead of reading it again, and reads it itself if it fails), gives its result to the sidebar
     (`offerOverview`, which a sidebar read begun earlier never replaces), and takes a newer
     sidebar value received during its read when that read ends, even if its own failed, so both
     converge on the newest counts.
@@ -1224,6 +1228,13 @@ gateway checks them and `ORGANIZATION_PIN_OPERATIONS` lists them.
   publishes `planName` to Workspace only.
 - Realtime notices without a list or space id cannot be attributed to the open list and do not
   refresh its counts; the notice contract needs to include that context.
+- `cw-popover` has no width beyond `xl` (`w-96`): the filter dialog lays its sections out in two
+  columns inside the `xl` panel, not the mockup's `w-[34rem]` panel with four columns from 640 px.
+  `cw-toolbar` moves the tools that do not fit into its `More options` menu where the mockup's row
+  wraps, and `button[cwButton]` `outline` keeps its transparent background when pressed, so
+  `Milestones` switches to `ghost` with the mockup's violet border and tint while pressed.
+- The sheet edits on a double click, Enter or F2 (the table brick's contract), so its hint says
+  so where the mockup's says a click.
 - The filter dialog counts the visible tasks (`n of m tasks`, `ViewTools.visibleCount`), hides
   `Subtasks: …` without subtasks (`hasSubtasks`) and offers the signed-in member once as `Me`
   (`userId`). The mockup's `listHasKids` looks at every task of the list; `hasSubtasks` looks at the

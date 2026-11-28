@@ -151,6 +151,28 @@ describe('SpaceOverviewPage', () => {
     expect(api['overview']).toHaveBeenCalledTimes(1);
   });
 
+  it('reads the overview once when it opens before the sidebar has read the spaces', async () => {
+    let listSpaces: (value: readonly Space[]) => void = () => undefined;
+    api['spaces'].mockImplementationOnce(
+      () =>
+        new Promise<readonly Space[]>((resolve: (value: readonly Space[]) => void) => {
+          listSpaces = resolve;
+        }),
+    );
+    const created: Promise<RouterTestingHarness> = RouterTestingHarness.create(
+      '/atelier-nord/spaces/sp-design',
+    );
+    await expect.poll(() => api['overview'].mock.calls.length).toBe(1);
+    listSpaces([design]);
+    const harness: RouterTestingHarness = await created;
+    const navigation: InstanceType<typeof SpacesNavigationStore> =
+      TestBed.inject(SpacesNavigationStore);
+
+    await expect.poll(() => navigation.overviews.value()?.['sp-design']).toEqual(overview);
+    expect(text(harness, 'list-card')).toContain('32 tasks');
+    expect(api['overview']).toHaveBeenCalledTimes(1);
+  });
+
   it('follows the sidebar overview of the space once it changes', async () => {
     const harness: RouterTestingHarness = await RouterTestingHarness.create(
       '/atelier-nord/spaces/sp-design',

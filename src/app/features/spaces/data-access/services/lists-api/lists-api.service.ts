@@ -18,7 +18,7 @@ import {
   type TaskSummaryPage,
   TasksService,
 } from '@cadenway/api-client';
-import { firstValueFrom } from 'rxjs';
+import { defer, firstValueFrom, type Observable, share } from 'rxjs';
 
 import type { BulkAction, BulkSelection } from '../../../models/bulk-action/bulk-action.interface';
 import type { ListMember, ListMembers } from '../../../models/list-member/list-member.interface';
@@ -199,6 +199,21 @@ export class ListsApi {
   private readonly members: MembersService = inject(MembersService);
 
   /**
+   * Property directoryPage
+   *
+   * @description
+   * The first page of the member directory, which the list header's names and the assignee
+   * directory both read when a list page opens: readers that ask while it runs share it, and a
+   * read asked after it ended reads again, so nothing is kept beyond the read in flight.
+   *
+   * @type {Observable<MemberPage>}
+   * @readonly
+   */
+  private readonly directoryPage: Observable<MemberPage> = defer(() =>
+    this.members.listMembers({ limit: PAGE_LIMIT }),
+  ).pipe(share());
+
+  /**
    * Property tasks
    *
    * @description
@@ -296,10 +311,7 @@ export class ListsApi {
     );
     const names: Map<string, string> = new Map<string, string>();
     try {
-      const directory: MemberPage = await abortableRead(
-        this.members.listMembers({ limit: PAGE_LIMIT }),
-        signal,
-      );
+      const directory: MemberPage = await abortableRead(this.directoryPage, signal);
       for (const member of directory.items) names.set(member.userId, member.name);
     } catch {
       names.clear();
@@ -327,7 +339,7 @@ export class ListsApi {
     let cursor: string | undefined;
     do {
       const page: MemberPage = await abortableRead(
-        this.members.listMembers({ limit: PAGE_LIMIT, ...(cursor ? { cursor } : {}) }),
+        cursor ? this.members.listMembers({ limit: PAGE_LIMIT, cursor }) : this.directoryPage,
         signal,
       );
       items.push(

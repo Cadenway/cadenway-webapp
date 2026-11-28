@@ -34,6 +34,7 @@ import {
   toTaskDependencyTask,
   toTaskStatusTimes,
 } from '../../adapters/task-property/task-property.adapter';
+import { TaskApprovalRead } from '../task-approval-read/task-approval-read.service';
 
 /**
  * Constant PAGE_SIZE
@@ -115,6 +116,17 @@ export interface CreatedDependency {
 @Service()
 export class TaskPropertyApi {
   // #region Properties
+  /**
+   * Property approvalRead
+   *
+   * @description
+   * The approval read shared with the other reader of the same task.
+   *
+   * @type {TaskApprovalRead}
+   * @readonly
+   */
+  private readonly approvalRead: TaskApprovalRead = inject(TaskApprovalRead);
+
   /**
    * Property tasks
    *
@@ -238,7 +250,7 @@ export class TaskPropertyApi {
    */
   public async approval(taskKey: string): Promise<TaskApproval> {
     const state: GetTaskApprovalClientResult = await firstValueFrom(
-      this.tasks.getTaskApproval(taskKey, { cache: 'no-store' }),
+      this.approvalRead.approval(taskKey),
     );
     return toTaskApproval(state);
   }
