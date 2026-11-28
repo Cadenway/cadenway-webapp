@@ -3,9 +3,10 @@ import { type ComponentFixture, TestBed } from '@angular/core/testing';
 import { Router } from '@angular/router';
 import { provideCadenwayIcons } from '@cadenway/icons';
 import { CwToastService } from '@cadenway/ui/components/toast';
-import { of } from 'rxjs';
+import { EMPTY, of } from 'rxjs';
 import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 
+import { RealtimeConnection } from '@core/realtime';
 import { PRESENCE, type PresenceStatus } from '@features/account/ports/presence';
 import { TaskDetailOpener } from '@features/task';
 import {
@@ -321,5 +322,65 @@ describe('InboxRailItem', () => {
       expect(document.querySelector('[data-testid="notification-row"]')).not.toBeNull();
     });
     expect(notifications).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('InboxRailItem while realtime first connects', () => {
+  it('reads the reminders at once when the popover opens during the wait, behind the skeleton', async () => {
+    const pendingReminders: Mock<() => Promise<InboxReminderPage>> = vi.fn(
+      () => new Promise<InboxReminderPage>(() => undefined),
+    );
+    TestBed.configureTestingModule({
+      imports: [InboxRailItem],
+      providers: [
+        {
+          provide: InboxApi,
+          useValue: {
+            unreadCount: () => of(1),
+            notifications: () => Promise.resolve(page()),
+            pendingReminders,
+            markAllRead: () => Promise.resolve(0),
+            markRead: vi.fn(),
+            complete: vi.fn(),
+          },
+        },
+        {
+          provide: RealtimeConnection,
+          useValue: {
+            status: signal('connecting'),
+            personalNotices: EMPTY,
+            reconnected: EMPTY,
+          },
+        },
+        {
+          provide: PRESENCE,
+          useValue: { ownStatus: signal<PresenceStatus>('online'), setPresence: vi.fn() },
+        },
+        { provide: WORKSPACE_CONTEXT, useValue: workspace },
+        { provide: Router, useValue: { navigate: vi.fn() } },
+        { provide: TaskDetailOpener, useValue: { open: vi.fn() } },
+        { provide: CwToastService, useValue: { error: vi.fn(), success: vi.fn() } },
+        provideCadenwayIcons(),
+      ],
+    });
+    const fixture: ComponentFixture<InboxRailItem> = TestBed.createComponent(InboxRailItem);
+    await fixture.whenStable();
+    expect(pendingReminders).not.toHaveBeenCalled();
+
+    (fixture.nativeElement as HTMLElement)
+      .querySelector<HTMLButtonElement>('[data-testid="inbox-rail-item"]')
+      ?.click();
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      expect(document.querySelector('[role="tab"]')).not.toBeNull();
+    });
+    Array.from(document.querySelectorAll<HTMLButtonElement>('[role="tab"]'))
+      .find((tab: HTMLButtonElement) => tab.textContent.includes('Reminders'))
+      ?.click();
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      expect(document.querySelector('[data-testid="inbox-reminders-loading"]')).not.toBeNull();
+    });
+    expect(pendingReminders).toHaveBeenCalledTimes(1);
   });
 });

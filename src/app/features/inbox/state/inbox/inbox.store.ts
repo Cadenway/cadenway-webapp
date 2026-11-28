@@ -160,7 +160,7 @@ interface InboxState {
    *
    * @description
    * Whether the first reads may start: realtime's first connection attempt settled (connected,
-   * failed or disabled) or `FIRST_CONNECTION_WAIT_MS` elapsed.
+   * failed or disabled), `FIRST_CONNECTION_WAIT_MS` elapsed or the popover opened.
    *
    * @type {boolean}
    * @readonly
@@ -283,7 +283,8 @@ interface InboxStoreInstance {
    * Method open
    *
    * @description
-   * Reads the notifications and the reminders, as the popover opens.
+   * Reads the notifications and the reminders, as the popover opens; opened while the first reads
+   * wait for realtime's first connection, it starts them at once.
    */
   open(): void;
 
@@ -856,7 +857,8 @@ function createInboxStore(): Type<InboxStoreInstance> {
         open(): void {
           const previouslyOpened: boolean = store._openings() > 0;
           if (!previouslyOpened) store._reloadKinds.notifications = false;
-          patchState(store, { _openings: 1, _isOpen: true });
+          // Opened while the first reads wait for realtime: they start now, so the lists load.
+          patchState(store, { _openings: 1, _isOpen: true, _settled: true });
           if (previouslyOpened) reloadNotifications();
           refreshReminders(false);
         },

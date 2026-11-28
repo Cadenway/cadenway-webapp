@@ -64,8 +64,9 @@ and, when realtime is on, `RealtimeConnection`.
   write result that belongs to the previous organization is ignored.
 - The first reads of the badge and the reminders wait for realtime's first connection attempt to
   settle (connected, failed or disabled), at most `FIRST_CONNECTION_WAIT_MS` (3 s): a read that starts
-  once connected misses no notice, so that first connection reads nothing again. Past the wait they
-  start anyway, and the connection that follows reads again.
+  once connected misses no notice, so that first connection reads nothing again. Past the wait, or
+  as soon as the popover opens during it (its lists then show their skeleton, never a blank tab),
+  they start anyway, and the connection that follows reads again.
 - The unread count is then read at once, on window focus, on every later transition to connected and
   every minute, connected or not, because notices only flow once the gateway enables them; a failed
   read keeps the last count. A notification notice

@@ -161,7 +161,7 @@
 
       <cw-tab-panel value="reminders">
         @if (store.reminders.isLoading() && !store.reminders.hasValue()) {
-          <div class="flex flex-col gap-2 p-2">
+          <div class="flex flex-col gap-2 p-2" data-testid="inbox-reminders-loading">
             <div cwSkeleton class="h-14 w-full"></div>
             <div cwSkeleton class="h-14 w-full"></div>
           </div>
