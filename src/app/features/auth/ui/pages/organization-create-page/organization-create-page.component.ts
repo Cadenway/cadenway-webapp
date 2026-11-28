@@ -28,13 +28,14 @@ import { CwSelect, CwSelectOption } from '@cadenway/ui/components/select';
 import { CwTextarea } from '@cadenway/ui/components/textarea';
 import { NgIcon } from '@ng-icons/core';
 
+import { initialsOf } from '@shared/initials';
+
 import type { PrimaryUse, TeamSize } from '../../../models/organization/organization.interface';
 import {
   type CreationResult,
   OrganizationCreateStore,
 } from '../../../state/organization-create/organization-create.store';
 import { focusFirstError, serverError } from '../../../utils/form-focus/form-focus.util';
-import { initials } from '../../../utils/initials/initials.util';
 import { slugFromName } from '../../../utils/slug/slug.util';
 
 /**
@@ -217,7 +218,7 @@ export class OrganizationCreatePage {
    * @type {(name: string) => string}
    * @readonly
    */
-  protected readonly initials: (name: string) => string = initials;
+  protected readonly initials: (name: string) => string = initialsOf;
 
   /**
    * Property host

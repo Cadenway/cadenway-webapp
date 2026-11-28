@@ -1,29 +1,11 @@
 import type { CurrentUser, MyOrganization, Organization } from '@cadenway/api-client';
 
+import { initialsOf } from '@shared/initials';
+
 import type {
   WorkspaceOrganization,
   WorkspaceUser,
 } from '../../../models/workspace-context/workspace-context.interface';
-
-/**
- * Function initialsOf
- *
- * @description
- * Derives the initials the rail and the avatars show: the first letters of the first and last
- * words of a name (`Atelier Nord` gives `AN`), or the first two letters of a single word.
- *
- * @param {string} name - Full name of a person or an organization.
- * @returns {string} One or two uppercase letters, or an empty string for a blank name.
- */
-export function initialsOf(name: string): string {
-  const words: string[] = name.trim().split(/\s+/u).filter(Boolean);
-  const first: string = words.at(0) ?? '';
-  const last: string = words.length > 1 ? (words.at(-1) ?? '') : '';
-  const letters: string = last
-    ? `${Array.from(first)[0] ?? ''}${Array.from(last)[0] ?? ''}`
-    : Array.from(first).slice(0, 2).join('');
-  return letters.toLocaleUpperCase();
-}
 
 /**
  * Function toWorkspaceUser

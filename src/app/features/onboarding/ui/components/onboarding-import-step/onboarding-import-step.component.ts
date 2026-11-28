@@ -41,7 +41,7 @@ import {
             class="flex flex-col items-center gap-2 text-sm font-medium"
             [class.text-primary]="choice.value === selected"
           >
-            <ng-icon class="size-5" [name]="choice.icon" aria-hidden="true" />
+            <ng-icon size="1.25rem" [name]="choice.icon" aria-hidden="true" />
             {{ choice.label }}
           </span>
         </cw-radio-group-item>

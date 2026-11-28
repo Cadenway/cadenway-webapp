@@ -5,6 +5,8 @@ import { provideCwInputOtpLabels } from '@cadenway/ui/components/input-otp';
 import { provideCwPasswordStrengthLabels } from '@cadenway/ui/components/password-strength';
 import { provideAuthLayoutSlots } from '@layouts/auth-layout/providers';
 
+import { provideCadenwayUiLabels } from '@core/ui-labels';
+
 import { openInvitation } from './http/guards/invitation/invitation.guard';
 import { requireSession } from './http/guards/session/session.guard';
 import {
@@ -20,7 +22,8 @@ import { AuthFlowStore } from './state/auth-flow/auth-flow.store';
  * @description
  * The public entry screens, mounted at `''` by `APP_ROUTES`. The root route loads the sign-in
  * frame (`AuthLayout`), binds its header host name and theme button and its footer legal links, provides the icons,
- * the English labels of the code and password-strength bricks, and the `AuthFlowStore` the
+ * the application-wide brick labels (`provideCadenwayUiLabels`), the English labels of the code
+ * and password-strength bricks, and the `AuthFlowStore` the
  * screens share. A path none of the children matches falls through to the next application
  * route (the workspace under `/:org`). Paths are the ones e-mails and the gateway link to.
  *
@@ -31,6 +34,7 @@ export const AUTH_ROUTES: Routes = [
     path: '',
     providers: [
       provideCadenwayIcons(),
+      provideCadenwayUiLabels(),
       provideAuthLayoutSlots({
         headerActions: [withHostName(), withThemeToggle()],
         footerLinks: [withLegalLinks()],

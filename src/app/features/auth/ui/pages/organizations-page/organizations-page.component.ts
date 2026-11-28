@@ -27,6 +27,8 @@ import {
 import { CwSkeleton } from '@cadenway/ui/components/skeleton';
 import { NgIcon } from '@ng-icons/core';
 
+import { initialsOf } from '@shared/initials';
+
 import type { AuthProblem } from '../../../models/auth-problem/auth-problem.interface';
 import type {
   OrganizationChoice,
@@ -35,7 +37,6 @@ import type {
 } from '../../../models/organization/organization.interface';
 import { AuthFlowStore, type StepResult } from '../../../state/auth-flow/auth-flow.store';
 import { OrganizationChoiceStore } from '../../../state/organization-choice/organization-choice.store';
-import { initials } from '../../../utils/initials/initials.util';
 
 /**
  * Component OrganizationsPage
@@ -209,7 +210,7 @@ export class OrganizationsPage {
    * @type {(name: string) => string}
    * @readonly
    */
-  protected readonly initials: (name: string) => string = initials;
+  protected readonly initials: (name: string) => string = initialsOf;
   // #endregion
 
   // #region Constructor

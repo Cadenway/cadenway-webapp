@@ -15,7 +15,7 @@ import { NgIcon } from '@ng-icons/core';
   selector: 'cw-host-name',
   imports: [NgIcon],
   host: { class: 'hidden items-center gap-1.5 text-xs text-muted-foreground sm:flex' },
-  template: `<ng-icon name="phosphorGlobeSimpleBold" class="size-3.5" aria-hidden="true" />{{
+  template: `<ng-icon name="phosphorGlobeSimpleBold" size="0.875rem" aria-hidden="true" />{{
       host
     }}`,
 })

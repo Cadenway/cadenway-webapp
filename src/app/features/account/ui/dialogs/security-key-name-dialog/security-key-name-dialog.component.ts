@@ -124,7 +124,8 @@ interface KeyNameModel {
           >
             <ng-icon
               name="phosphorWarningCircleFill"
-              class="size-3.5 shrink-0"
+              size="0.875rem"
+              class="shrink-0"
               aria-hidden="true"
             />
             {{ error }}

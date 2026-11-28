@@ -103,7 +103,8 @@ interface OrganizationNavigationItem {
             >
               <ng-icon
                 [name]="active.isActive ? section.activeIcon : section.icon"
-                class="size-4 shrink-0"
+                size="1rem"
+                class="shrink-0"
                 [class]="active.isActive ? 'text-primary' : 'text-muted-foreground'"
                 aria-hidden="true"
               />
@@ -112,7 +113,8 @@ interface OrganizationNavigationItem {
                 <ng-icon
                   name="phosphorWarningCircleFill"
                   aria-hidden="false"
-                  class="ml-auto size-3.5 shrink-0 text-destructive"
+                  size="0.875rem"
+                  class="ml-auto shrink-0 text-destructive"
                   aria-label="Critical quota"
                   i18n-aria-label="@@organization.navigation.quota-critical"
                 />
