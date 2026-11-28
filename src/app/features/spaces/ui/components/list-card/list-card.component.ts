@@ -26,7 +26,7 @@ import { listIconName, lookTone } from '../../../utils/look/look.util';
       data-testid="list-card"
     >
       <span class="flex min-w-0 items-center gap-2">
-        <ng-icon [name]="icon()" class="size-4 shrink-0" [class]="tone()" aria-hidden="true" />
+        <ng-icon [name]="icon()" class="shrink-0" size="1rem" [class]="tone()" aria-hidden="true" />
         <span class="min-w-0 truncate text-sm font-medium">{{ summary().list.name }}</span>
         @if (range(); as sprintRange) {
           <span class="shrink-0 text-xs whitespace-nowrap text-muted-foreground">{{
@@ -59,7 +59,8 @@ import { listIconName, lookTone } from '../../../utils/look/look.util';
           <span class="flex items-center gap-1 font-medium text-grenat-text">
             <ng-icon
               name="phosphorWarningCircleFill"
-              class="size-3.5 text-destructive"
+              class="text-destructive"
+              size="0.875rem"
               aria-hidden="true"
             />
             <ng-container i18n="@@spaces.overview.card-late"

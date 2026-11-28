@@ -150,7 +150,7 @@ describe('TaskCreateApi', () => {
     const answer: Promise<readonly Person[]> = firstValueFrom(api.people());
     const request: TestRequest = http.expectOne((r) => r.url === '/v1/members');
 
-    expect(request.request.params.getAll('role')).toEqual(['owner', 'admin', 'member']);
+    expect(request.request.params.get('limit')).toBe('100');
     request.flush({
       items: [
         {
@@ -162,10 +162,19 @@ describe('TaskCreateApi', () => {
           joinedAt: '2026-11-01T10:00:00Z',
           version: 1,
         },
+        {
+          id: 'm9',
+          userId: 'u9',
+          name: 'Nora Guest',
+          email: 'nora@studio.example',
+          role: 'guest',
+          joinedAt: '2026-11-02T10:00:00Z',
+          version: 1,
+        },
       ],
       nextCursor: null,
-      total: 1,
-      counts: { owner: 1, admin: 0, member: 0, guest: 0 },
+      total: 2,
+      counts: { owner: 1, admin: 0, member: 0, guest: 1 },
     });
     await expect(answer).resolves.toEqual([
       { id: 'u1', name: 'Camille Martin', initials: 'CM', avatar: null },

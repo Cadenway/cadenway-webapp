@@ -105,6 +105,18 @@ describe('TaskDetailHeader', () => {
     expect(watch.getAttribute('aria-pressed')).toBe('true');
   });
 
+  it('names a single follower in the singular', async () => {
+    const watch: HTMLButtonElement = button('[data-testid="task-detail-watch"]');
+
+    fixture.componentRef.setInput('watchers', { total: 1, following: true });
+    await fixture.whenStable();
+    expect(watch.getAttribute('aria-label')).toBe('Stop following this task (1 follower)');
+
+    fixture.componentRef.setInput('watchers', { total: 1, following: false });
+    await fixture.whenStable();
+    expect(watch.getAttribute('aria-label')).toBe('Follow this task (1 follower)');
+  });
+
   it('lists the actions of a top-level task in the mockup order', async () => {
     button('[data-testid="task-detail-more"]').click();
     await fixture.whenStable();

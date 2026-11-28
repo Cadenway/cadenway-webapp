@@ -146,7 +146,7 @@
       key="assignees"
       header="Assignees"
       i18n-header="@@spaces.rows.assignees"
-      [width]="136"
+      [width]="104"
     >
       <ng-template cwCell [cwCellOf]="rows.rows()" let-row>
         <span
@@ -197,7 +197,7 @@
       key="priority"
       header="Priority"
       i18n-header="@@spaces.rows.priority"
-      [width]="120"
+      [width]="112"
     >
       <ng-template cwCell [cwCellOf]="rows.rows()" let-row>
         <span
@@ -236,7 +236,7 @@
       header="Actions"
       i18n-header="@@spaces.rows.actions-header"
       headerHidden
-      [width]="48"
+      [width]="40"
     >
       <ng-template cwCell [cwCellOf]="rows.rows()" let-row>
         <button
@@ -250,7 +250,7 @@
           (pointerdown)="$event.stopPropagation()"
           (click)="open(row.task.key, row.task)"
         >
-          <ng-icon name="phosphorDotsThreeBold" aria-hidden="true" />
+          <ng-icon name="phosphorDotsThreeBold" size="1rem" aria-hidden="true" />
         </button>
       </ng-template>
     </cw-data-table-column>
