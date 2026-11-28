@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 import { IntegrationsPage } from './integrations-page.component';
 
 describe('IntegrationsPage', () => {
-  it('shows the lead of the section and an empty state without inventing providers', () => {
+  it('shows the lead of the section and an unavailable state, never an empty list', () => {
     TestBed.configureTestingModule({ providers: [provideCadenwayIcons()] });
     const fixture: ComponentFixture<IntegrationsPage> = TestBed.createComponent(IntegrationsPage);
     fixture.detectChanges();
@@ -16,7 +16,7 @@ describe('IntegrationsPage', () => {
       'the branches, commits and pull requests that mention an identifier',
     );
     expect(host.querySelector('[data-testid="integrations-empty"]')?.textContent.trim()).toBe(
-      'No repository',
+      'Integrations are not available yet',
     );
     expect(host.querySelectorAll('section')).toHaveLength(0);
   });

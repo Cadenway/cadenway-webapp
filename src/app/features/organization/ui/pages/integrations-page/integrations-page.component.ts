@@ -8,9 +8,11 @@ import { NgIcon } from '@ng-icons/core';
  * @description
  * Stub of the organization settings section `Integrations` (mockup `Organisation.dc.html` lines
  * 493-497): the centred `max-w-4xl` column of the organization settings with the section title, the
- * mockup's lead (`Connect code to tasks: …`) and an outlined empty state, `No repository`, with the
- * section's plugs icon. It reads no data yet (the integration backend, B7, does not exist), so it
- * draws no provider card, no loading and no error state; package O6 of steps 7 and 8 replaces it.
+ * mockup's lead (`Connect code to tasks: …`) and an outlined state saying the integrations are not
+ * available yet, with the section's plugs icon. It reads no data yet (the integration backend, B7,
+ * does not exist), so it never states that there is no repository: an empty state belongs after a
+ * successful read only. It draws no provider card, no loading and no error state; package O6 of
+ * steps 7 and 8 replaces it.
  */
 @Component({
   selector: 'cw-integrations-page',
@@ -31,8 +33,8 @@ import { NgIcon } from '@ng-icons/core';
           <cw-empty-media>
             <ng-icon name="phosphorPlugsConnectedBold" aria-hidden="true" />
           </cw-empty-media>
-          <cw-empty-title i18n="@@organization.integrations.empty-title"
-            >No repository</cw-empty-title
+          <cw-empty-title i18n="@@organization.integrations.unavailable"
+            >Integrations are not available yet</cw-empty-title
           >
         </cw-empty-header>
       </cw-empty>

@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 import { AuditLogPage } from './audit-log-page.component';
 
 describe('AuditLogPage', () => {
-  it('shows the lead of the section and an empty state without inventing entries', () => {
+  it('shows the lead of the section and an unavailable state, never an empty history', () => {
     TestBed.configureTestingModule({ providers: [provideCadenwayIcons()] });
     const fixture: ComponentFixture<AuditLogPage> = TestBed.createComponent(AuditLogPage);
     fixture.detectChanges();
@@ -16,7 +16,7 @@ describe('AuditLogPage', () => {
       'Sensitive actions of the last 90 days',
     );
     expect(host.querySelector('[data-testid="audit-log-empty"]')?.textContent.trim()).toBe(
-      'No action recorded',
+      'The audit log is not available yet',
     );
     expect(host.querySelector('table, [role="table"]')).toBeNull();
   });
