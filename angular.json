@@ -39,7 +39,16 @@
       "sourceRoot": "src",
       "prefix": "cw",
       "i18n": {
-        "sourceLocale": "en"
+        "sourceLocale": {
+          "code": "en",
+          "baseHref": "/en/"
+        },
+        "locales": {
+          "fr": {
+            "translation": "src/locale/messages.fr.json",
+            "baseHref": "/fr/"
+          }
+        }
       },
       "architect": {
         "build": {
@@ -48,15 +57,12 @@
             "browser": "src/main.ts",
             "polyfills": ["@angular/localize/init"],
             "tsConfig": "tsconfig.app.json",
+            "localize": true,
+            "i18nMissingTranslation": "error",
             "assets": [
               {
                 "glob": "**/*",
                 "input": "public"
-              },
-              {
-                "glob": "messages.fr.json",
-                "input": "src/locale",
-                "output": "/"
               }
             ],
             "styles": ["src/styles.css"]
@@ -81,6 +87,14 @@
               "optimization": false,
               "extractLicenses": false,
               "sourceMap": true
+            },
+            "en": {
+              "localize": ["en"],
+              "baseHref": "/en/"
+            },
+            "fr": {
+              "localize": ["fr"],
+              "baseHref": "/fr/"
             }
           },
           "defaultConfiguration": "production"
@@ -89,10 +103,13 @@
           "builder": "@angular/build:dev-server",
           "configurations": {
             "production": {
-              "buildTarget": "cadenway-webapp:build:production"
+              "buildTarget": "cadenway-webapp:build:production,en"
             },
             "development": {
-              "buildTarget": "cadenway-webapp:build:development"
+              "buildTarget": "cadenway-webapp:build:development,en"
+            },
+            "fr": {
+              "buildTarget": "cadenway-webapp:build:development,fr"
             }
           },
           "defaultConfiguration": "development"

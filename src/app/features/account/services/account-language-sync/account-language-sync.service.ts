@@ -66,7 +66,8 @@ export function displayLocale(language: AccountLanguage): AppLocale {
  *   state; otherwise `unconfirmed` turns on and the page shows a neutral note with `retry`.
  *   A first write refused with `412` is fenced the same way.
  * - Once the latest pick is confirmed, the application shows its locale: `LocaleService.use`
- *   reloads it when that locale is not the one shown, and otherwise `Preference saved` confirms.
+ *   remembers it and opens the same page below its segment (`/fr/`, `/en/`) when that locale is
+ *   not the one shown, and otherwise `Preference saved` confirms.
  * - Only a first write refused for certain (a `4xx` other than `412`, while the state is
  *   certain) puts the confirmed language back with `Could not save`; when an earlier pick of the
  *   same run was saved, its locale is applied the same way.
@@ -547,7 +548,7 @@ export class AccountLanguageSync {
    * Method show
    *
    * @description
-   * Reloads the application in a confirmed language's locale when it is not the one shown.
+   * Opens the application in a confirmed language's locale build when it is not the one shown.
    *
    * @param {AccountLanguage} language - The confirmed language.
    * @returns {boolean} Whether the application reloads.

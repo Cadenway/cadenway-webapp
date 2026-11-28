@@ -4,7 +4,7 @@ import { expect, test } from '@playwright/test';
 test('the application starts and loads its runtime configuration', async ({ page }) => {
   const config = page.waitForResponse((response) => response.url().endsWith('/config.json'));
 
-  await page.goto('/');
+  await page.goto('./');
 
   expect((await config).ok()).toBe(true);
   await expect(page).toHaveTitle(/Cadenway$/u);

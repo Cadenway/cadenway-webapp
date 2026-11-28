@@ -7,7 +7,8 @@ import { parseRuntimeConfig } from '../../utils/runtime-config/runtime-config.ut
  * Service RuntimeConfigSource
  *
  * @description
- * Reads `config.json`, mounted next to the application by the environment.
+ * Reads `/config.json`, mounted by the environment at the site root, beside the `/en/` and `/fr/`
+ * builds: it is fetched from the root, never relative to the locale base href.
  */
 @Service()
 export class RuntimeConfigSource {
@@ -24,7 +25,7 @@ export class RuntimeConfigSource {
    */
   public async load(): Promise<RuntimeConfig> {
     // `no-store`: a new deployment may mount a different file under the same URL.
-    const response: Response = await fetch('config.json', { cache: 'no-store' });
+    const response: Response = await fetch('/config.json', { cache: 'no-store' });
     if (!response.ok) {
       throw new Error(`config.json could not be loaded (HTTP ${String(response.status)}).`);
     }
