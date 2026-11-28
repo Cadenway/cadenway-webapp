@@ -3,7 +3,7 @@
  *
  * @description
  * Methods and paths whose generated public validators declare If-Organization-Match in
- * @cadenway/contracts 0.44.0. Match full paths so unrelated operations do not gain the header.
+ * @cadenway/contracts 0.46.0. Match full paths so unrelated operations do not gain the header.
  *
  * @type {ReadonlyArray<readonly [string, RegExp]>}
  */
@@ -94,6 +94,7 @@ export const ORGANIZATION_PIN_OPERATIONS: readonly (readonly [string, RegExp])[]
   ['DELETE', /^\/v1\/members\/[^/]+$/],
   ['POST', /^\/v1\/invitations$/],
   ['GET', /^\/v1\/invitations$/],
+  ['GET', /^\/v1\/invitations\/[^/]+$/],
   ['DELETE', /^\/v1\/invitations\/[^/]+$/],
   ['POST', /^\/v1\/invitations\/[^/]+\/resend$/],
   ['GET', /^\/v1\/organization$/],

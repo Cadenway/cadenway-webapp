@@ -641,10 +641,10 @@ describe('OnboardingWizardStore', () => {
 
     await store.next();
 
-    expect(fakes.invite).toHaveBeenCalledWith([
-      'ines.robert@ateliernord.fr',
-      'marc.roux@ateliernord.fr',
-    ]);
+    expect(fakes.invite).toHaveBeenCalledWith(
+      ['ines.robert@ateliernord.fr', 'marc.roux@ateliernord.fr'],
+      expect.any(String),
+    );
     expect(fakes.saveDraft).toHaveBeenCalledWith(expect.objectContaining({ step: 'import' }));
     expect(order(fakes.invite, fakes.saveDraft)).toBe(true);
     expect(store.step()).toBe('import');
@@ -805,6 +805,137 @@ describe('OnboardingWizardStore', () => {
     });
   });
 
+  describe('a batch of unknown outcome sent again', () => {
+    const emails: string[] = Array.from(
+      { length: 100 },
+      (_email: unknown, index: number) => `member${String(index)}@ateliernord.fr`,
+    );
+
+    it('replays it with its body and key, and sends a leftover address apart', async () => {
+      const { store, fakes }: Setup = setup(progress(2, { step: 'team' }));
+      fakes.invite
+        .mockResolvedValueOnce({
+          invited: 49,
+          skipped: 0,
+          alreadyInvited: 0,
+          notSent: ['member0@ateliernord.fr'],
+        })
+        .mockRejectedValueOnce(new HttpErrorResponse({ status: 503 }));
+      store.changeEmails(emails);
+
+      await store.next();
+      expect(store.step()).toBe('team');
+      await store.next();
+
+      const calls: unknown[][] = fakes.invite.mock.calls;
+      expect(calls).toHaveLength(4);
+      expect(calls[2]).toEqual([emails.slice(50), calls[1]?.[1]]);
+      expect(calls[3]?.[0]).toEqual(['member0@ateliernord.fr']);
+      expect(new Set([calls[0]?.[1], calls[1]?.[1], calls[3]?.[1]]).size).toBe(3);
+      expect(store.step()).toBe('import');
+    });
+
+    it('takes a new key for that batch only once one of its addresses was edited', async () => {
+      const { store, fakes }: Setup = setup(progress(2, { step: 'team' }));
+      fakes.invite
+        .mockRejectedValueOnce(new HttpErrorResponse({ status: 0 }))
+        .mockRejectedValueOnce(new HttpErrorResponse({ status: 0 }));
+      store.changeEmails(emails);
+
+      await store.next();
+      const edited: string[] = emails.map((email: string) =>
+        email === 'member3@ateliernord.fr' ? 'lea.petit@ateliernord.fr' : email,
+      );
+      store.changeEmails(edited);
+      await store.next();
+
+      const calls: unknown[][] = fakes.invite.mock.calls;
+      expect(calls).toHaveLength(4);
+      expect(calls[2]).toEqual([emails.slice(50), calls[1]?.[1]]);
+      expect(calls[3]?.[0]).toEqual(edited.slice(0, 50));
+      expect(calls[3]?.[1]).not.toBe(calls[0]?.[1]);
+      expect(calls[3]?.[1]).not.toBe(calls[1]?.[1]);
+    });
+  });
+
+  it('sends each batch of 50 under its own key', async () => {
+    const { store, fakes }: Setup = setup(progress(2, { step: 'team' }));
+    store.changeEmails(
+      Array.from(
+        { length: 120 },
+        (_email: unknown, index: number) => `member${String(index)}@ateliernord.fr`,
+      ),
+    );
+
+    await store.next();
+
+    const keys: unknown[] = fakes.invite.mock.calls.map((call: unknown[]) => call[1]);
+    expect(keys).toHaveLength(3);
+    expect(new Set(keys).size).toBe(3);
+    for (const key of keys) expect(typeof key).toBe('string');
+  });
+
+  const unknownOutcomes: readonly [string, unknown][] = [
+    ['no answer', new HttpErrorResponse({ status: 0 })],
+    ['a timeout', problem(408, 'request.timeout')],
+    ['a release that cannot replay keyed batches yet', problem(503, 'upstream.unavailable')],
+    ['the same request still in progress', problem(409, 'idempotency.request-in-progress')],
+  ];
+
+  for (const [name, error] of unknownOutcomes) {
+    it(`sends the same batch under the same key after ${name}`, async () => {
+      const { store, fakes }: Setup = setup(progress(2, { step: 'team' }));
+      fakes.invite
+        .mockRejectedValueOnce(error)
+        .mockResolvedValueOnce({ invited: 1, skipped: 0, alreadyInvited: 0 });
+      store.changeEmails(['ines.robert@ateliernord.fr']);
+
+      await store.next();
+      expect(store.step()).toBe('team');
+      await store.next();
+
+      expect(store.step()).toBe('import');
+      expect(fakes.invite.mock.calls[1]?.[1]).toBe(fakes.invite.mock.calls[0]?.[1]);
+    });
+  }
+
+  it('keeps the team screen after a reused key, never as a refusal, and renews the key', async () => {
+    const { store, fakes }: Setup = setup(progress(2, { step: 'team' }));
+    fakes.invite
+      .mockRejectedValueOnce(problem(422, 'idempotency.key-reused'))
+      .mockResolvedValueOnce({ invited: 1, skipped: 0, alreadyInvited: 0 });
+    store.changeEmails(['ines.robert@ateliernord.fr']);
+
+    await store.next();
+
+    expect(store.step()).toBe('team');
+    expect(fakes.error).toHaveBeenCalledTimes(1);
+    expect(fakes.error).toHaveBeenCalledWith('The invitations may not have been sent', {
+      description: 'Press Continue to send them again: it is safe.',
+    });
+
+    await store.next();
+
+    expect(store.step()).toBe('import');
+    expect(fakes.invite.mock.calls[1]?.[1]).not.toBe(fakes.invite.mock.calls[0]?.[1]);
+  });
+
+  it('renews the key of a batch after a definite answer', async () => {
+    const { store, fakes }: Setup = setup(progress(2, { step: 'team' }));
+    fakes.invite
+      .mockRejectedValueOnce(problem(403, 'organization.role-forbidden'))
+      .mockResolvedValueOnce({ invited: 1, skipped: 0, alreadyInvited: 0 });
+    store.changeEmails(['ines.robert@ateliernord.fr']);
+
+    await store.next();
+    expect(store.step()).toBe('import');
+    store.back();
+    await store.next();
+
+    expect(fakes.invite).toHaveBeenCalledTimes(2);
+    expect(fakes.invite.mock.calls[1]?.[1]).not.toBe(fakes.invite.mock.calls[0]?.[1]);
+  });
+
   it('moves on when the invitations are refused, and says so', async () => {
     const { store, fakes }: Setup = setup(progress(2, { step: 'team' }));
     fakes.invite.mockRejectedValue(problem(429, 'invitation.daily-limit-reached'));
@@ -854,6 +985,8 @@ describe('OnboardingWizardStore', () => {
       50, 10, 10,
     ]);
     expect(fakes.invite.mock.calls[2]?.[0]).toEqual(emails.slice(50));
+    expect(fakes.invite.mock.calls[2]?.[1]).toBe(fakes.invite.mock.calls[1]?.[1]);
+    expect(fakes.invite.mock.calls[1]?.[1]).not.toBe(fakes.invite.mock.calls[0]?.[1]);
 
     await store.finish();
 

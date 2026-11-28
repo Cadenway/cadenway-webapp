@@ -85,8 +85,8 @@ section has `organizationSectionGuard(<section>)` (`http/guards/organization-sec
   address sent to its own result).
 - `@cadenway/ui` (`banner`, `button`) and `@cadenway/icons`.
 - Members section: `MembersService` (`listMembers`, `changeMemberRole`, `removeMember`) and
-  `InvitationsService` (`listInvitations`, `inviteMembers`, `resendInvitation`, `revokeInvitation`)
-  through `data-access/services/{members-api,invitations-api}`; Core's `OrganizationPin`
+  `InvitationsService` (`listInvitations`, `inviteMembers`, `getInvitation`, `resendInvitation`,
+  `revokeInvitation`) through `data-access/services/{members-api,invitations-api}`; Core's `OrganizationPin`
   (`organizationChanges`) and write classifiers (`isUnknownWriteOutcome`,
   `isDroppedOrganizationWrite`) for the invitation writes, `InvitationsStore`'s optional
   `MembersStore` and `SubscriptionStore` (read again when an invitee may have joined), and
@@ -289,31 +289,45 @@ be loaded.` with `Retry`, until a read or a save confirms the organization (anot
   under way. A cancellation of unknown outcome keeps the row hidden and busy and is sent again
   after 2, 4 and 8 s (`INVITATION_SETTLE_DELAYS_MS`; revoking again answers `204`). A resend of
   unknown outcome is never sent again (a second one within the hour is throttled): the row stays
-  shown as resent and busy while the list is read after each of those waits, until it shows a new
-  expiry. A later resend answered `429 invitation.resend-throttled` proves nothing (the original
-  invitation, or any resend within the hour, throttles too): the list is read, and it counts as
-  resent only when its expiry differs from the one before the unknown resend; otherwise the toast
-  warns `The invitation may not have been resent`, saying the invitation was sent less than an
-  hour ago so it cannot be resent yet (never that it was just resent). No expiry is shown that
-  the API did not answer. Once a cancellation attempt was unknown, a later refusal (a `403` after a
-  role change, say) is not reported as a failure either: the row shows again with the warning.
+  shown as resent and busy while the invitation is read on its own (`getInvitation`, through
+  `InvitationsApi.standing`) after each of those waits. A later resend answered
+  `429 invitation.resend-throttled` proves nothing (the original invitation, or any resend within
+  the hour, throttles too): the invitation is read once and settled the same way; otherwise the
+  toast warns `The invitation may not have been resent`, saying the invitation was sent less than
+  an hour ago so it cannot be resent yet (never that it was just resent). No expiry is shown that
+  the API did not answer. Once a cancellation attempt was unknown, a later refusal (a `403` after
+  a role change, say) is not reported as a failure either.
+- A write of unknown outcome is settled from `getInvitation`, the invitation in any state of its
+  lifecycle (`Cache-Control: private, no-store`, no `ETag`): each read asks the API again and no
+  answer is kept. A cancellation whose attempts all stayed unknown, or that a later refusal
+  followed, reads it once: `revoked` confirms it (`Invitation cancelled`), `accepted` or `refused`
+  says the invitee answered first, as `409 invitation.answered` does. A resend counts as resent
+  only when the invitation reads pending with another expiry than before the unknown resend: the
+  contract says a resend moves `sentAt` (the expiry is `sentAt` plus 7 days) and adds one to
+  `version`, so `pending` alone, which the invitation already was, proves nothing. Read
+  `accepted`, `refused` or `revoked`, it leaves the list as `This invitation is no longer pending`
+  (with the members read again when accepted), without claiming whether the resend happened.
+  `404 invitation.not-found`, a state this version does not know (the enum is extensible), still
+  pending (or expired) without that proof, and a failed read claim nothing.
 - Outcomes are claimed only from the API's own answers: `Invitation cancelled` only when a revoke
-  answers success; `The invitation was accepted before it could be cancelled` /
-  `<email> is now a member of the organization.` (with the page's `MembersStore` and, for the
-  owner, the seats read again) or `The invitation was declined before it could be cancelled` only
-  from `409 invitation.answered` and its `details.status` (`accepted` or `refused`); `Invitation
-resent` from a resend that answered, or from the invitation itself listed with another expiry.
-  Absence claims nothing: one traversal of a list paged by cursor, most recent first, can miss an
-  invitation another resend moved ahead of the cursor, and cancelled, accepted and declined
-  invitations all leave it. So a write of unknown outcome that no answer settled ends with the
-  warning (`The invitation may not have been cancelled` / `...resent`) and
-  `The pending invitations and the members show where the invitation to <email> stands.`, and the
-  invitations, the members and, for the owner, the seats are read again. The waits, and the reads of the list between them (through an `AbortSignal` the write passes to `InvitationsApi.list`, which requests no further page once it aborts), stop once the organization changes (a switch away and back included) or the page is gone, with nothing said; so does a resend or cancellation answered after that, success or refusal. When every attempt
-  stays unknown, the row is restored, the list read again, and the toast warns
-  `The invitation may not have been resent` / `The invitation may not have been cancelled` the
-  same way. A write dropped for another session organization (`OrganizationSwitchPendingError`,
-  `412 organization.context-changed`) restores the row, or closes the invite dialog, with no
-  toast: the workspace recovery takes over.
+  answers success or the invitation reads `revoked`; `The invitation was accepted before it could
+be cancelled` / `<email> is now a member of the organization.` (with the page's `MembersStore`
+  and, for the owner, the seats read again) or `The invitation was declined before it could be
+cancelled` only from `409 invitation.answered` and its `details.status` (`accepted` or
+  `refused`) or from the invitation read `accepted` or `refused`; `Invitation resent` from a resend
+  that answered, or from the invitation read pending with another expiry. Absence from the list
+  claims nothing: it is not read from one snapshot (see the gap below). So a write of unknown
+  outcome that no answer settled ends with the warning (`The invitation may not have been
+cancelled` / `...resent`) and
+  `The pending invitations and the members show where the invitation to <email> stands.`, the
+  row is restored, and the invitations, the members and, for the owner, the seats are read again.
+  The waits, and the reads of the invitation between them (through an `AbortSignal` the write
+  passes to `InvitationsApi.standing`), stop once the organization changes (a switch away and back
+  included, `OrganizationPin.organizationChanges` keeps the write moved) or the page is gone, with
+  nothing said and nothing claimed from a read answered after that; so does a resend or
+  cancellation answered after that, success or refusal. A write dropped for another session
+  organization (`OrganizationSwitchPendingError`, `412 organization.context-changed`) restores the
+  row, or closes the invite dialog, with no toast: the workspace recovery takes over.
 - `<n> free seats` (summary) and `<n> seats available on the <plan> plan.` (dialog) show to the
   owner only, who alone reads billing (gap Q1); the invite dialog then refuses more members than
   free seats. The last-activity column (gap M1) and the invitation link card (B12) are left out.
@@ -337,23 +351,32 @@ resent` from a resend that answered, or from the invitation itself listed with a
   `{n} address(es) could not be invited` / `The addresses stay in the list: press Invite to try again.`,
   after the invited ones' toast when some were invited, else with the skipped count first. A batch
   of unknown outcome keeps every address in the dialog, reads the list again and warns
-  `The invitations may not have been sent` / `Sending again is safe.`: a second send answers
-  `already-invited` for an address the first reached. A batch with addresses of both kinds counts
-  only the definite ones in `{n} address(es) could not be invited` and adds
-  `Some may already have been sent: sending again is safe.`. `inviteMembers` declares no
-  `Idempotency-Key` (`@cadenway/contracts` 0.44.0), so none is sent and the retry relies on that
-  answer (a contract gap, to raise in cadenway-api-contracts).
+  `The invitations may not have been sent` / `Sending again is safe.`. A batch with addresses of
+  both kinds counts only the definite ones in `{n} address(es) could not be invited` and adds
+  `Some may already have been sent: sending again is safe.`.
+- Every `inviteMembers` batch carries an `Idempotency-Key` (`crypto.randomUUID()`, as the other
+  keyed writes), one per batch body: the organization, the role and the addresses in order. The
+  gateway scopes it to the organization, the person and the operation, and replays the original
+  `200` for the same body for 24 hours without sending again. `InvitationsStore` keeps the key
+  while the batch's outcome is unknown (no answer, an unreadable `2xx`, `408`, `5xx`,
+  `503 upstream.unavailable` while the serving release cannot replay keyed batches,
+  `409 idempotency.request-in-progress`) and after a `429` (nothing is stored), so sending the
+  same addresses with the same role again sends the same body under the same key, which is why
+  `Sending again is safe.` holds. A key is renewed once the body changes (addresses edited,
+  another role) and after any definite answer (a readable `200`, whatever its outcomes, or another
+  refusal), and dropped with the organization. `422 idempotency.key-reused` (another body under
+  the key) is a fault of this client, never a refusal of the addresses: the key is renewed and the
+  batch is reported as of unknown outcome, with the same warning and the role locked.
 - A batch answered once the Members page is gone, in the same organization, changes no state (the
   store is destroyed) and still says what it did, as Onboarding's invite dialog does: the sent
   count, then one toast counting the addresses left, `{n} address(es) could not be invited` /
   `Invite them again from the Members page.`, or, when any has an unknown outcome,
   `{n} address(es) may not have been invited` / `Sending them again from the Members page is safe.`.
   Once the organization changed too, it says nothing.
-- Contract gaps of the invitations (to raise in cadenway-api-contracts): `inviteMembers` takes no
-  `Idempotency-Key`; no operation reads one invitation with its terminal status (revoked,
-  accepted, refused, expired); and `listInvitations` pages are not read from one snapshot. So the
-  state of an invitation after a write of unknown outcome can only come from a later answer of the
-  API about that invitation.
+- Contract gap of the invitations (to raise in cadenway-api-contracts): `listInvitations` pages
+  are not read from one snapshot, so one traversal of the list paged by cursor, most recent first,
+  can miss an invitation another resend moved ahead of the cursor, and an invitation's absence
+  from it proves nothing. Writes of unknown outcome are settled from `getInvitation` instead.
 - Counts pick their singular or plural text with `Intl.PluralRules($localize.locale)`, so French
   reads `0 membre` as the mockup does.
 - Screen readers hear a row's presence as `Status: Active | Away | Do not disturb | Offline`

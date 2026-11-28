@@ -470,6 +470,7 @@ describe('MembersPage', () => {
     expect(fakes.invitations.invite).toHaveBeenCalledWith(
       ['marc.roux@ateliernord.fr', 'lucie@example.com'],
       'member',
+      expect.any(String),
     );
   });
 
@@ -504,7 +505,11 @@ describe('MembersPage', () => {
     });
     await fixture.whenStable();
 
-    expect(fakes.invitations.invite).toHaveBeenLastCalledWith(['lucie@example.com'], 'member');
+    expect(fakes.invitations.invite).toHaveBeenLastCalledWith(
+      ['lucie@example.com'],
+      'member',
+      expect.any(String),
+    );
     expect((find('invite-emails') as HTMLTextAreaElement | null)?.value).toBe('lucie@example.com');
     expect(fakes.toasts.error).toHaveBeenCalledTimes(1);
   });

@@ -10,12 +10,15 @@ import { firstValueFrom, fromEvent, type Observable, takeUntil } from 'rxjs';
 import type {
   InvitationList,
   InvitationOutcome,
+  InvitationStanding,
   PendingInvitation,
 } from '../../../models/invitation/invitation.interface';
 import type { AssignableMemberRole } from '../../../models/member/member.interface';
 import {
+  type InvitationStateDto,
   toInvitationList,
   toInvitationOutcome,
+  toInvitationStanding,
   toPendingInvitation,
 } from '../../adapters/invitation/invitation.adapter';
 
@@ -50,7 +53,8 @@ function abortable<T>(source: Observable<T>, signal?: AbortSignal): Promise<T> {
  *
  * @description
  * The organization feature's access to the invitations of the current organization, mapped to
- * display models. Every operation is owner and administrator only.
+ * display models. Every operation is owner and administrator only. Core's `OrganizationPin` adds
+ * `If-Organization-Match` to each of them.
  */
 @Service()
 export class InvitationsApi {
@@ -102,24 +106,54 @@ export class InvitationsApi {
    * Method invite
    *
    * @description
-   * Invites addresses with one role. Rejects with `429 invitation.daily-limit-reached` when the
-   * batch exceeds the daily allowance, nothing being sent. The contract declares no
-   * `Idempotency-Key` for this operation: sending the same addresses again after an unknown
-   * outcome is safe because an address the first batch reached answers `already-invited`.
+   * Invites addresses with one role, under the batch's `Idempotency-Key`. The key is scoped to the
+   * organization, the person and this operation: the same key with the same body replays the
+   * original `200` for 24 hours without sending again, so send it again after an unknown outcome;
+   * another body under it answers `422 idempotency.key-reused`, an equivalent request still running
+   * `409 idempotency.request-in-progress`, and `503 upstream.unavailable` (with `Retry-After`) while
+   * the serving release cannot replay keyed batches yet, nothing being run. Rejects with
+   * `429 invitation.daily-limit-reached` when the batch exceeds the daily allowance, nothing being
+   * sent and nothing stored, so the same key may run again.
    *
    * @param {readonly string[]} emails - Distinct addresses, 1 to 50.
    * @param {AssignableMemberRole} role - Role of every address.
+   * @param {string} idempotencyKey - Key of this body (`Idempotency-Key`, 1 to 255 characters).
    * @returns {Promise<InvitationOutcome>} How many were invited and skipped, and the addresses
    * not sent.
    */
   public async invite(
     emails: readonly string[],
     role: AssignableMemberRole,
+    idempotencyKey: string,
   ): Promise<InvitationOutcome> {
     const result: InvitationBatchResult = await firstValueFrom(
-      this.invitations.inviteMembers({ emails: [...emails], role }),
+      this.invitations.inviteMembers(
+        { emails: [...emails], role },
+        { headers: { 'Idempotency-Key': idempotencyKey } },
+      ),
     );
     return toInvitationOutcome(result, emails);
+  }
+
+  /**
+   * Method standing
+   *
+   * @description
+   * Reads one invitation in any state of its lifecycle (`getInvitation`), to settle a resend or a
+   * cancellation of unknown outcome. The answer is `Cache-Control: private, no-store` and is never
+   * kept here: each call is a fresh read. Rejects with `404 invitation.not-found` when the
+   * organization holds no such invitation; aborting the signal gives the read up and rejects.
+   *
+   * @param {string} invitationId - The invitation.
+   * @param {AbortSignal} [signal] - Abort signal of the write being settled.
+   * @returns {Promise<InvitationStanding>} Where the invitation stands now.
+   */
+  public async standing(invitationId: string, signal?: AbortSignal): Promise<InvitationStanding> {
+    const state: InvitationStateDto = await abortable(
+      this.invitations.getInvitation(invitationId),
+      signal,
+    );
+    return toInvitationStanding(state);
   }
 
   /**

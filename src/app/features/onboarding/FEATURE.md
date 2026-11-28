@@ -60,8 +60,8 @@ route), `withGettingStarted()` and `withOnboardingWizard()` (the `overlays` cont
 - `@cadenway/api-client` through `data-access/` (`OnboardingApi`): `MyTasksService`
   (`getOnboarding`, `updateOnboarding`, `updateOnboardingChecklist` and `finishOnboarding`, each
   write with `If-Match: "<version>"`, `finishOnboarding` with an `Idempotency-Key` too) and
-  `InvitationsService.inviteMembers` (role `member`, 50 addresses per call; called by the
-  assistant and the getting-started invite dialog). Core's `OrganizationPin` adds
+  `InvitationsService.inviteMembers` (role `member`, 50 addresses per call, each with the
+  `Idempotency-Key` of its body; called by the assistant and the getting-started invite dialog). Core's `OrganizationPin` adds
   `If-Organization-Match` to the four onboarding operations and to `POST /v1/invitations`.
 - `@core/api` (`readProblem`, `OrganizationSwitchPendingError`, `OrganizationPin`, which also
   fences the assistant's finish and dismissal).
@@ -163,8 +163,27 @@ route), `withGettingStarted()` and `withOnboardingWizard()` (the `overlays` cont
   counts as a batch of unknown outcome. A batch whose outcome is unknown keeps its addresses
   unsent, keeps the screen and shows
   `The invitations may not have been sent` / `Press Continue to send them again: it is safe.`
-  (an address the lost batch reached then answers `already-invited`); a refused batch (a `429`
-  daily limit included) shows `The invitations could not be sent` and the screen still changes.
+  (the same body goes out under the same key, which replays the lost answer; an address the lost
+  batch reached answers `already-invited` in another body); a refused batch (a `429` daily limit
+  included) shows `The invitations could not be sent` and the screen still changes.
+- Every `inviteMembers` batch, from the assistant and from the getting-started invite dialog,
+  carries an `Idempotency-Key` (`crypto.randomUUID()`, as `finishOnboarding`), one per batch body:
+  the organization and the 50 addresses at most of that batch, in order. The gateway scopes it to
+  the organization, the person and the operation, and replays the original `200` for the same body
+  for 24 hours. Each store keeps every batch sent whose outcome is unknown (no answer, an
+  unreadable `2xx`, `408`, `5xx`, `503 upstream.unavailable` while the serving release cannot
+  replay keyed batches, `409 idempotency.request-in-progress`), or which a `429` refused (nothing
+  is stored), with its exact body and key. The next send (`Continue`, `Invite`) is cut by
+  `utils/invite-batches` (`planInviteBatches`): each kept batch whose addresses are all still to
+  send goes out first, unchanged and under its own key, whatever became of the other addresses (an
+  address an earlier batch left unsent never joins it); the remaining addresses are cut into new
+  batches of 50 under new keys. A kept batch one of whose addresses was edited or removed has
+  another body: its key is dropped and its other addresses join the new batches, while the other
+  kept batches still replay. A key is also dropped after any definite answer (a readable `200`,
+  whatever its outcomes, or another refusal); the dialog's batches are dropped with the
+  organization, and the assistant's are kept per organization. `422 idempotency.key-reused`
+  (another body under the key) is a fault of this client, never a refusal of the addresses: the
+  key is dropped and the batch counts as of unknown outcome, with the same warning.
 - The invitation marker: once a batch invited an address or found one `already-invited`, the
   assistant records `invitationSent` at once (`recordInvitation`), which the contract allows
   during the assistant (`updateOnboardingChecklist`: "the caller can record an invitation outcome
@@ -328,8 +347,9 @@ route), `withGettingStarted()` and `withOnboardingWizard()` (the `overlays` cont
   with another outcome (`notSent`), either of which adds
   `Some may already have been sent: sending again is safe.` when other batches or addresses have
   an unknown outcome, else `The invitations may not have been sent` /
-  `Sending again is safe.` for batches whose outcome is unknown (`isUnknownWriteOutcome` from `@core/api`),
-  since a second batch answers `already-invited` for an address the first one reached. A batch
+  `Sending again is safe.` for batches whose outcome is unknown (`isUnknownWriteOutcome` from
+  `@core/api`, or `422 idempotency.key-reused`), since the same batch body goes out again under
+  the same key and another body answers `already-invited` for an address the first one reached. A batch
   the organization pin dropped (`OrganizationSwitchPendingError`, `412 organization.context-changed`)
   stops the sending and closes the dialog with no toast. When the host was destroyed while the
   batches went on (a settings shell opened), the send still ends with its toasts, which outlive

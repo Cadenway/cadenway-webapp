@@ -536,7 +536,7 @@ describe('OnboardingWizard', () => {
     });
     expect(recordInvitation).toHaveBeenCalledTimes(1);
     expect(finish).toHaveBeenCalledTimes(1);
-    expect(invite).toHaveBeenCalledWith(['ines.robert@ateliernord.fr']);
+    expect(invite).toHaveBeenCalledWith(['ines.robert@ateliernord.fr'], expect.any(String));
   });
 
   it('keeps an address typed without Add when continuing from the team screen', async () => {
@@ -553,7 +553,7 @@ describe('OnboardingWizard', () => {
     expect(title()?.textContent.trim()).toBe('Import your existing projects');
     await click(fixture, find('onboarding-next'));
     await vi.waitFor(() => {
-      expect(invite).toHaveBeenCalledWith(['ines.robert@ateliernord.fr']);
+      expect(invite).toHaveBeenCalledWith(['ines.robert@ateliernord.fr'], expect.any(String));
     });
   });
 

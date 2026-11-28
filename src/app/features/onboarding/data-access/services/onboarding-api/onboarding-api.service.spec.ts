@@ -105,14 +105,17 @@ describe('OnboardingApi', () => {
     );
   });
 
-  it('invites as members and counts the addresses invited', async () => {
+  it('invites as members under the batch key and counts the addresses invited', async () => {
     await expect(
-      api.invite(['ines.robert@ateliernord.fr', 'hugo.martin@ateliernord.fr']),
+      api.invite(['ines.robert@ateliernord.fr', 'hugo.martin@ateliernord.fr'], 'key-2'),
     ).resolves.toEqual({ invited: 1, skipped: 1, alreadyInvited: 1, notSent: [], unknown: [] });
-    expect(inviteMembers).toHaveBeenCalledWith({
-      emails: ['ines.robert@ateliernord.fr', 'hugo.martin@ateliernord.fr'],
-      role: 'member',
-    });
+    expect(inviteMembers).toHaveBeenCalledWith(
+      {
+        emails: ['ines.robert@ateliernord.fr', 'hugo.martin@ateliernord.fr'],
+        role: 'member',
+      },
+      { headers: { 'Idempotency-Key': 'key-2' } },
+    );
   });
 
   it('passes the abort signal to the read', async () => {

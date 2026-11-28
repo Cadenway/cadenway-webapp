@@ -904,7 +904,7 @@ describe('GettingStartedStore', () => {
       await sending;
       await settle();
 
-      expect(api.invite).toHaveBeenCalledWith(['ines.robert@ateliernord.fr']);
+      expect(api.invite).toHaveBeenCalledWith(['ines.robert@ateliernord.fr'], expect.any(String));
       expect(toasts.success).toHaveBeenCalledWith('1 invitation sent', { description: '' });
       expect(store.inviteOpen()).toBe(false);
       expect(store.inviting()).toBe(false);
@@ -1046,10 +1046,182 @@ describe('GettingStartedStore', () => {
       expect(
         api.invite.mock.calls.map((call: unknown[]): number => (call[0] as string[]).length),
       ).toEqual([50, 50, 20]);
-      expect(api.invite).toHaveBeenNthCalledWith(2, emails.slice(50, 100));
+      expect(api.invite).toHaveBeenNthCalledWith(2, emails.slice(50, 100), expect.any(String));
       expect(toasts.success).toHaveBeenCalledWith('120 invitations sent', { description: '' });
       expect(store.inviteOpen()).toBe(false);
       expect(api.updateChecklist).toHaveBeenCalledTimes(1);
+    });
+
+    describe('the Idempotency-Key of each batch', () => {
+      const many: readonly string[] = Array.from(
+        { length: 120 },
+        (_unused: unknown, index: number): string => `member${String(index)}@ateliernord.fr`,
+      );
+
+      /**
+       * Function keys
+       *
+       * @description
+       * The key each batch was sent under, in call order.
+       *
+       * @returns {string[]} The keys.
+       */
+      function keys(): string[] {
+        return api.invite.mock.calls.map((call: unknown[]): string => call[1] as string);
+      }
+
+      it('replays a batch of unknown outcome with its body and key, apart from a leftover address', async () => {
+        api.invite
+          .mockResolvedValueOnce({
+            invited: 49,
+            skipped: 0,
+            alreadyInvited: 0,
+            notSent: [many[0]],
+          })
+          .mockRejectedValueOnce(problem(503, 'upstream.unavailable'))
+          .mockResolvedValueOnce({ invited: 20, skipped: 0, alreadyInvited: 0 });
+        const store: GettingStartedStore = await setup();
+        store.start('invite');
+
+        await store.invite(many);
+        expect(store.inviteKept()).toEqual([many[0], ...many.slice(50, 100)]);
+        api.invite
+          .mockResolvedValueOnce({ invited: 0, skipped: 50, alreadyInvited: 50 })
+          .mockResolvedValueOnce({ invited: 1, skipped: 0, alreadyInvited: 0 });
+        await store.invite(store.inviteKept());
+
+        const calls: unknown[][] = api.invite.mock.calls;
+        expect(calls).toHaveLength(5);
+        expect(calls[3]).toEqual([many.slice(50, 100), calls[1]?.[1]]);
+        expect(calls[4]?.[0]).toEqual([many[0]]);
+        expect(new Set(keys()).size).toBe(4);
+        expect(store.inviteOpen()).toBe(false);
+      });
+
+      it('takes a new key for an unresolved batch only once one of its addresses was edited', async () => {
+        api.invite
+          .mockRejectedValueOnce(new HttpErrorResponse({ status: 0 }))
+          .mockRejectedValueOnce(new HttpErrorResponse({ status: 0 }))
+          .mockResolvedValueOnce({ invited: 20, skipped: 0, alreadyInvited: 0 });
+        const store: GettingStartedStore = await setup();
+        store.start('invite');
+
+        await store.invite(many);
+        const edited: string[] = store
+          .inviteKept()
+          .map((email: string) => (email === many[3] ? 'lea.petit@ateliernord.fr' : email));
+        await store.invite(edited);
+
+        const calls: unknown[][] = api.invite.mock.calls;
+        expect(calls).toHaveLength(5);
+        expect(calls[3]).toEqual([many.slice(50, 100), calls[1]?.[1]]);
+        expect(calls[4]?.[0]).toEqual(edited.slice(0, 50));
+        expect(calls[4]?.[1]).not.toBe(calls[0]?.[1]);
+      });
+
+      it('is one per batch of 50', async () => {
+        api.invite.mockImplementation((batch: readonly string[]) =>
+          Promise.resolve({ invited: batch.length, skipped: 0, alreadyInvited: 0 }),
+        );
+        const store: GettingStartedStore = await setup();
+        store.start('invite');
+
+        await store.invite(many);
+
+        expect(new Set(keys()).size).toBe(3);
+      });
+
+      it('is sent again with the batch of unknown outcome only', async () => {
+        api.invite
+          .mockResolvedValueOnce({ invited: 50, skipped: 0, alreadyInvited: 0 })
+          .mockRejectedValueOnce(problem(503, 'upstream.unavailable'))
+          .mockResolvedValueOnce({ invited: 20, skipped: 0, alreadyInvited: 0 });
+        const store: GettingStartedStore = await setup();
+        store.start('invite');
+
+        await store.invite(many);
+        expect(store.inviteKept()).toEqual(many.slice(50, 100));
+        api.invite.mockResolvedValueOnce({ invited: 0, skipped: 50, alreadyInvited: 50 });
+        await store.invite(store.inviteKept());
+
+        const sent: string[] = keys();
+        expect(sent).toHaveLength(4);
+        expect(sent[3]).toBe(sent[1]);
+        expect(new Set(sent.slice(0, 3)).size).toBe(3);
+        expect(store.inviteOpen()).toBe(false);
+      });
+
+      const unknown: readonly [string, unknown][] = [
+        ['no answer', new HttpErrorResponse({ status: 0 })],
+        ['an answer the client could not read', new HttpErrorResponse({ status: 200 })],
+        ['a timeout', problem(408, 'request.timeout')],
+        ['a server failure', problem(500, 'upstream.failed')],
+        ['a release that cannot replay keyed batches yet', problem(503, 'upstream.unavailable')],
+        ['the same request still in progress', problem(409, 'idempotency.request-in-progress')],
+        ['a 429, which stores nothing', problem(429, 'invitation.daily-limit-reached')],
+      ];
+
+      for (const [name, error] of unknown) {
+        it(`is kept for the same addresses after ${name}`, async () => {
+          api.invite
+            .mockRejectedValueOnce(error)
+            .mockResolvedValueOnce({ invited: 1, skipped: 0, alreadyInvited: 0 });
+          const store: GettingStartedStore = await setup();
+          store.start('invite');
+
+          await store.invite(['ines.robert@ateliernord.fr']);
+          await store.invite(['ines.robert@ateliernord.fr']);
+
+          const [first, second]: string[] = keys();
+          expect(second).toBe(first);
+        });
+      }
+
+      it('is renewed after a definite answer and when the addresses change', async () => {
+        api.invite
+          .mockRejectedValueOnce(problem(503, 'upstream.unavailable'))
+          .mockRejectedValueOnce(problem(503, 'upstream.unavailable'))
+          .mockResolvedValueOnce({
+            invited: 0,
+            skipped: 0,
+            alreadyInvited: 0,
+            unknown: ['marc.roux@ateliernord.fr'],
+          })
+          .mockResolvedValueOnce({ invited: 1, skipped: 0, alreadyInvited: 0 });
+        const store: GettingStartedStore = await setup();
+        store.start('invite');
+
+        await store.invite(['ines.robert@ateliernord.fr']);
+        await store.invite(['marc.roux@ateliernord.fr']);
+        await store.invite(['marc.roux@ateliernord.fr']);
+        await store.invite(['marc.roux@ateliernord.fr']);
+
+        const [ines, marc, again, afterAnswer]: string[] = keys();
+        expect(marc).not.toBe(ines);
+        expect(again).toBe(marc);
+        expect(afterAnswer).not.toBe(again);
+      });
+
+      it('reused with another body warns of an unknown outcome and is renewed', async () => {
+        api.invite
+          .mockRejectedValueOnce(problem(422, 'idempotency.key-reused'))
+          .mockResolvedValueOnce({ invited: 1, skipped: 0, alreadyInvited: 0 });
+        const store: GettingStartedStore = await setup();
+        store.start('invite');
+
+        await store.invite(['ines.robert@ateliernord.fr']);
+
+        expect(toasts.error).not.toHaveBeenCalled();
+        expect(toasts.warning).toHaveBeenCalledWith('The invitations may not have been sent', {
+          description: 'Sending again is safe.',
+        });
+        expect(store.inviteKept()).toEqual(['ines.robert@ateliernord.fr']);
+
+        await store.invite(['ines.robert@ateliernord.fr']);
+        const [first, second]: string[] = keys();
+        expect(second).not.toBe(first);
+        expect(store.inviteOpen()).toBe(false);
+      });
     });
 
     it('keeps only the addresses the gateway did not invite, with a toast counting them', async () => {
@@ -1079,10 +1251,10 @@ describe('GettingStartedStore', () => {
       api.invite.mockResolvedValueOnce({ invited: 2, skipped: 0, alreadyInvited: 0 });
       await store.invite(store.inviteKept());
 
-      expect(api.invite).toHaveBeenLastCalledWith([
-        'marc.roux@ateliernord.fr',
-        'lea.petit@ateliernord.fr',
-      ]);
+      expect(api.invite).toHaveBeenLastCalledWith(
+        ['marc.roux@ateliernord.fr', 'lea.petit@ateliernord.fr'],
+        expect.any(String),
+      );
       expect(store.inviteOpen()).toBe(false);
       expect(store.inviteKept()).toEqual([]);
     });

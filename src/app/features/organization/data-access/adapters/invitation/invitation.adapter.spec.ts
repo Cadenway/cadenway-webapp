@@ -1,8 +1,40 @@
+import type { Invitation } from '@cadenway/api-client';
 import { describe, expect, it } from 'vitest';
 
-import { toInvitationOutcome, toPendingInvitation } from './invitation.adapter';
+import {
+  toInvitationOutcome,
+  toInvitationStanding,
+  toPendingInvitation,
+} from './invitation.adapter';
 
 describe('invitation adapter', () => {
+  it('reads an invitation in any state, and a state it does not know as other', () => {
+    const marc: Omit<Invitation, 'status'> = {
+      id: 'i1',
+      email: 'marc.roux@ateliernord.fr',
+      role: 'member',
+      invitedBy: { userId: 'u-ir', name: 'Inès Robert' },
+      sentAt: '2026-11-06T16:20:00Z',
+      expiresAt: '2026-11-13T16:20:00Z',
+      version: 2,
+    };
+
+    for (const status of ['pending', 'expired', 'accepted', 'refused', 'revoked']) {
+      expect(toInvitationStanding({ ...marc, status }).status).toBe(status);
+    }
+    expect(toInvitationStanding({ ...marc, status: 'archived' })).toEqual({
+      status: 'other',
+      invitation: {
+        id: 'i1',
+        email: 'marc.roux@ateliernord.fr',
+        role: 'member',
+        invitedBy: 'Inès Robert',
+        expired: false,
+        expiresAt: '2026-11-13T16:20:00Z',
+      },
+    });
+  });
+
   it('reads an expired invitation and the name of its sender', () => {
     expect(
       toPendingInvitation({

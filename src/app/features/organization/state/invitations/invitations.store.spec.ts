@@ -15,6 +15,7 @@ import {
 import { InvitationsApi } from '../../data-access/services/invitations-api/invitations-api.service';
 import type {
   InvitationList,
+  InvitationStanding,
   PendingInvitation,
 } from '../../models/invitation/invitation.interface';
 import { MembersStore } from '../members/members.store';
@@ -42,9 +43,9 @@ type ToastTone = 'success' | 'error' | 'info' | 'warning';
  * @description
  * Fake of the invitations data access, one mock per method.
  *
- * @type {Record<'list' | 'invite' | 'resend' | 'revoke', Mock>}
+ * @type {Record<'list' | 'invite' | 'standing' | 'resend' | 'revoke', Mock>}
  */
-type ApiFake = Record<'list' | 'invite' | 'resend' | 'revoke', Mock>;
+type ApiFake = Record<'list' | 'invite' | 'standing' | 'resend' | 'revoke', Mock>;
 
 /**
  * Constant MARC
@@ -119,6 +120,47 @@ const ATELIER_NORD: WorkspaceOrganization = {
  */
 function refusal(status: number, body: Record<string, unknown>): HttpErrorResponse {
   return new HttpErrorResponse({ status, error: body });
+}
+
+/**
+ * Constant NOT_FOUND
+ *
+ * @description
+ * `404 invitation.not-found`, as `getInvitation` answers an invitation the organization does not
+ * hold.
+ *
+ * @type {HttpErrorResponse}
+ */
+const NOT_FOUND: HttpErrorResponse = refusal(404, { code: 'invitation.not-found' });
+
+/**
+ * Function standing
+ *
+ * @description
+ * An invitation as `getInvitation` answers it, mapped by the data access.
+ *
+ * @param {InvitationStanding['status']} status - Its lifecycle state.
+ * @param {PendingInvitation} invitation - The invitation.
+ * @returns {InvitationStanding} The answer.
+ */
+function standing(
+  status: InvitationStanding['status'],
+  invitation: PendingInvitation,
+): InvitationStanding {
+  return { status, invitation };
+}
+
+/**
+ * Function keysOf
+ *
+ * @description
+ * The `Idempotency-Key` of each batch the fake data access was asked to send.
+ *
+ * @param {Mock} invite - The fake `invite`.
+ * @returns {string[]} The keys, in call order.
+ */
+function keysOf(invite: Mock): string[] {
+  return invite.mock.calls.map((call: unknown[]): string => call[2] as string);
 }
 
 /**
@@ -227,6 +269,7 @@ async function setup(
   const api: ApiFake = {
     list: vi.fn(() => Promise.resolve(LIST)),
     invite: vi.fn(() => Promise.resolve({ invited: 2, skipped: 0, notSent: [], unknown: [] })),
+    standing: vi.fn().mockRejectedValue(NOT_FOUND),
     resend: vi.fn((): Promise<PendingInvitation> => Promise.resolve({ ...STUDIO, expired: false })),
     revoke: vi.fn(() => Promise.resolve()),
     ...overrides,
@@ -545,11 +588,154 @@ describe('InvitationsStore', () => {
       });
       await expect(store.invite(emails, 'admin')).resolves.toBe('sent');
 
-      expect(api.invite).toHaveBeenNthCalledWith(2, emails, 'admin');
+      expect(api.invite).toHaveBeenNthCalledWith(2, emails, 'admin', keysOf(api.invite)[0]);
       expect(toasts.success).toHaveBeenCalledWith('1 invitation sent', {
         description: 'They expire in 7 days. 1 address skipped: already a member or invited.',
       });
       expect(toasts.error).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('the Idempotency-Key of a batch', () => {
+    const emails: readonly string[] = ['lucie@example.com', 'paul@example.com'];
+
+    it('is sent with each batch', async () => {
+      const { store, api }: Harness = await setup({});
+
+      await expect(store.invite(emails, 'member')).resolves.toBe('sent');
+
+      expect(api.invite).toHaveBeenCalledWith(emails, 'member', expect.any(String));
+      expect(keysOf(api.invite)[0]).toMatch(/^[0-9a-f-]{36}$/u);
+    });
+
+    const unknown: readonly [string, unknown][] = [
+      ['no answer', new HttpErrorResponse({ status: 0 })],
+      ['an answer the client could not read', new HttpErrorResponse({ status: 200 })],
+      ['a timeout', refusal(408, { code: 'request.timeout' })],
+      ['a server failure', refusal(500, {})],
+      [
+        'a release that cannot replay keyed batches yet',
+        refusal(503, {
+          code: 'upstream.unavailable',
+          details: { service: 'organization-service' },
+        }),
+      ],
+      [
+        'the same request still in progress',
+        refusal(409, { code: 'idempotency.request-in-progress' }),
+      ],
+    ];
+
+    for (const [name, error] of unknown) {
+      it(`is sent again with the same body after ${name}`, async () => {
+        const { store, api, toasts }: Harness = await setup({
+          invite: vi
+            .fn()
+            .mockRejectedValueOnce(error)
+            .mockResolvedValueOnce({ invited: 2, skipped: 0, notSent: [], unknown: [] }),
+        });
+
+        await expect(store.invite(emails, 'member')).resolves.toEqual({
+          kept: emails,
+          uncertain: true,
+        });
+        await expect(store.invite(emails, 'member')).resolves.toBe('sent');
+
+        const [first, second]: string[] = keysOf(api.invite);
+        expect(second).toBe(first);
+        expect(toasts.error).not.toHaveBeenCalled();
+      });
+    }
+
+    it('is sent again after a 429, which stores nothing', async () => {
+      const { store, api, toasts }: Harness = await setup({
+        invite: vi
+          .fn()
+          .mockRejectedValueOnce(new HttpErrorResponse({ status: 0 }))
+          .mockRejectedValueOnce(refusal(429, { code: 'rate.limited' }))
+          .mockResolvedValueOnce({ invited: 2, skipped: 0, notSent: [], unknown: [] }),
+      });
+
+      await store.invite(emails, 'member');
+      await expect(store.invite(emails, 'member')).resolves.toBe('failed');
+      await expect(store.invite(emails, 'member')).resolves.toBe('sent');
+
+      expect(new Set(keysOf(api.invite)).size).toBe(1);
+      expect(toasts.error).toHaveBeenCalledWith('The invitations could not be sent', {});
+    });
+
+    it('is renewed when the addresses or the role change', async () => {
+      const { store, api }: Harness = await setup({
+        invite: vi.fn().mockRejectedValue(refusal(503, {})),
+      });
+
+      await store.invite(emails, 'member');
+      await store.invite(['lucie@example.com'], 'member');
+      await store.invite(['lucie@example.com'], 'guest');
+      await store.invite(['lucie@example.com'], 'guest');
+
+      const [first, edited, role, again]: string[] = keysOf(api.invite);
+      expect(edited).not.toBe(first);
+      expect(role).not.toBe(edited);
+      expect(again).toBe(role);
+    });
+
+    it('is renewed after a definite answer', async () => {
+      const { store, api }: Harness = await setup({
+        invite: vi
+          .fn()
+          .mockResolvedValueOnce({ invited: 0, skipped: 0, notSent: [], unknown: emails })
+          .mockRejectedValueOnce(refusal(403, { code: 'organization.role-forbidden' }))
+          .mockRejectedValueOnce(refusal(503, {})),
+      });
+
+      await expect(store.invite(emails, 'member')).resolves.toEqual({
+        kept: emails,
+        uncertain: true,
+      });
+      await expect(store.invite(emails, 'member')).resolves.toBe('failed');
+      await store.invite(emails, 'member');
+
+      expect(new Set(keysOf(api.invite)).size).toBe(3);
+    });
+
+    it('reused with another body warns of an unknown outcome and is renewed', async () => {
+      const { store, api, toasts }: Harness = await setup({
+        invite: vi
+          .fn()
+          .mockRejectedValueOnce(refusal(422, { code: 'idempotency.key-reused' }))
+          .mockResolvedValueOnce({ invited: 2, skipped: 0, notSent: [], unknown: [] }),
+      });
+
+      await expect(store.invite(emails, 'member')).resolves.toEqual({
+        kept: emails,
+        uncertain: true,
+      });
+      await stable();
+
+      expect(toasts.error).not.toHaveBeenCalled();
+      expect(toasts.warning).toHaveBeenCalledWith('The invitations may not have been sent', {
+        description: 'Sending again is safe.',
+      });
+      expect(api.list).toHaveBeenCalledTimes(2);
+
+      await expect(store.invite(emails, 'member')).resolves.toBe('sent');
+      const [first, second]: string[] = keysOf(api.invite);
+      expect(second).not.toBe(first);
+    });
+
+    it('is renewed in the next organization', async () => {
+      const { store, api, pin }: Harness = await setup({
+        invite: vi.fn().mockRejectedValue(refusal(503, {})),
+      });
+
+      await store.invite(emails, 'member');
+      pin.set('o2');
+      pin.set(ATELIER_NORD.id);
+      await store.invite(emails, 'member');
+
+      const [first, second]: string[] = keysOf(api.invite);
+      expect(second).not.toBe(first);
     });
   });
 
@@ -747,7 +933,13 @@ describe('InvitationsStore', () => {
     });
     expect(api.resend).toHaveBeenCalledTimes(1);
     expect(api.revoke).toHaveBeenCalledTimes(4);
-    expect(api.list).toHaveBeenCalledTimes(6);
+    expect(api.standing.mock.calls.map((call: unknown[]) => call[0])).toEqual([
+      'i3',
+      'i3',
+      'i3',
+      'i1',
+    ]);
+    expect(api.list).toHaveBeenCalledTimes(3);
   });
 
   it('restores a resend dropped for another session organization, silently', async () => {
@@ -958,18 +1150,22 @@ describe('InvitationsStore', () => {
      * Function pendingSettlement
      *
      * @description
-     * Starts a resend of unknown outcome whose first settling read waits, rejecting once its signal
-     * aborts as the data access does.
+     * Starts a resend or a cancellation of unknown outcome whose first settling read of the
+     * invitation waits, rejecting once its signal aborts as the data access does.
      *
      * @param {Harness} harness - The store and its fakes.
-     * @returns {Promise<[Promise<boolean>, AbortSignal]>} The resend and the signal of its read.
+     * @param {'resend' | 'revoke'} [write] - The write settled.
+     * @returns {Promise<[Promise<boolean>, AbortSignal]>} The write and the signal of its read.
      */
-    async function pendingSettlement(harness: Harness): Promise<[Promise<boolean>, AbortSignal]> {
+    async function pendingSettlement(
+      harness: Harness,
+      write: 'resend' | 'revoke' = 'resend',
+    ): Promise<[Promise<boolean>, AbortSignal]> {
       const signals: AbortSignal[] = [];
-      harness.api.list.mockImplementation(
-        (signal: AbortSignal) =>
-          new Promise<InvitationList>(
-            (_resolve: (list: InvitationList) => void, reject: (error: Error) => void) => {
+      harness.api.standing.mockImplementation(
+        (_id: string, signal: AbortSignal) =>
+          new Promise<InvitationStanding>(
+            (_resolve: (answer: InvitationStanding) => void, reject: (error: Error) => void) => {
               signals.push(signal);
               signal.addEventListener('abort', () => {
                 reject(new Error('aborted'));
@@ -977,7 +1173,8 @@ describe('InvitationsStore', () => {
             },
           ),
       );
-      const done: Promise<boolean> = harness.store.resend(STUDIO);
+      const done: Promise<boolean> =
+        write === 'resend' ? harness.store.resend(STUDIO) : harness.store.revoke(MARC);
       await vi.waitFor(() => {
         expect(signals).toHaveLength(1);
       });
@@ -995,6 +1192,24 @@ describe('InvitationsStore', () => {
 
       expect(signal.aborted).toBe(true);
       await expect(done).resolves.toBe(false);
+      for (const toast of Object.values(harness.toasts)) expect(toast).not.toHaveBeenCalled();
+    });
+
+    it('claims nothing of a cancellation once another organization is committed during its read', async () => {
+      const harness: Harness = await setup({
+        revoke: vi.fn().mockRejectedValue(refusal(503, {})),
+      });
+      const [done, signal]: [Promise<boolean>, AbortSignal] = await pendingSettlement(
+        harness,
+        'revoke',
+      );
+
+      harness.pin.set('o2');
+      harness.pin.set(ATELIER_NORD.id);
+
+      expect(signal.aborted).toBe(true);
+      await expect(done).resolves.toBe(false);
+      expect(harness.api.standing).toHaveBeenCalledTimes(1);
       for (const toast of Object.values(harness.toasts)) expect(toast).not.toHaveBeenCalled();
     });
 
@@ -1032,7 +1247,7 @@ describe('InvitationsStore', () => {
       expect(toasts.warning).not.toHaveBeenCalled();
     });
 
-    it('reads the list until it shows the resend, never resending', async () => {
+    it('reads the invitation until it shows the resend, never resending', async () => {
       const resentStudio: PendingInvitation = {
         ...STUDIO,
         expired: false,
@@ -1041,9 +1256,9 @@ describe('InvitationsStore', () => {
       const { store, api, toasts }: Harness = await setup({
         resend: vi.fn().mockRejectedValue(refusal(504, {})),
       });
-      api.list
-        .mockResolvedValueOnce(LIST)
-        .mockResolvedValue({ items: [MARC, resentStudio], total: 2 });
+      api.standing
+        .mockResolvedValueOnce(standing('expired', STUDIO))
+        .mockResolvedValue(standing('pending', resentStudio));
 
       const done: Promise<boolean> = store.resend(STUDIO);
       expect(store.pendingIds().has('i3')).toBe(true);
@@ -1051,6 +1266,7 @@ describe('InvitationsStore', () => {
       await stable();
 
       expect(api.resend).toHaveBeenCalledTimes(1);
+      expect(api.standing).toHaveBeenCalledTimes(2);
       expect(store.items()[1]).toEqual(resentStudio);
       expect(store.pendingIds().size).toBe(0);
       expect(toasts.success).toHaveBeenCalledWith('Invitation resent', {
@@ -1065,6 +1281,7 @@ describe('InvitationsStore', () => {
           .fn()
           .mockRejectedValueOnce(new HttpErrorResponse({ status: 0 }))
           .mockRejectedValueOnce(refusal(429, { code: 'invitation.resend-throttled' })),
+        standing: vi.fn(() => Promise.resolve(standing('expired', STUDIO))),
       });
 
       await expect(store.resend(STUDIO)).resolves.toBe(false);
@@ -1084,7 +1301,7 @@ describe('InvitationsStore', () => {
       expect(store.items()[1]).toEqual(STUDIO);
     });
 
-    it('takes a throttle after an unknown resend as resent once the list shows it', async () => {
+    it('takes a throttle after an unknown resend as resent once the invitation shows it', async () => {
       const resentStudio: PendingInvitation = {
         ...STUDIO,
         expired: false,
@@ -1098,6 +1315,7 @@ describe('InvitationsStore', () => {
       });
 
       await expect(store.resend(STUDIO)).resolves.toBe(false);
+      api.standing.mockResolvedValue(standing('pending', resentStudio));
       api.list.mockResolvedValue({ items: [MARC, resentStudio], total: 2 });
       await expect(store.resend(STUDIO)).resolves.toBe(true);
       await stable();
@@ -1213,6 +1431,182 @@ describe('InvitationsStore', () => {
       expect(toasts.warning).toHaveBeenCalledWith('The invitation may not have been cancelled', {
         description:
           'The pending invitations and the members show where the invitation to marc.roux@ateliernord.fr stands.',
+      });
+    });
+
+    describe('a cancellation every attempt left unknown, read once', () => {
+      it('is confirmed when the invitation reads revoked', async () => {
+        const { store, api, toasts }: Harness = await setup({
+          revoke: vi.fn().mockRejectedValue(refusal(503, {})),
+          standing: vi.fn(() => Promise.resolve(standing('revoked', MARC))),
+        });
+
+        await expect(store.revoke(MARC)).resolves.toBe(true);
+        await stable();
+
+        expect(api.revoke).toHaveBeenCalledTimes(4);
+        expect(api.standing).toHaveBeenCalledTimes(1);
+        expect(api.standing).toHaveBeenCalledWith('i1', expect.any(AbortSignal));
+        expect(store.items()).toEqual([STUDIO]);
+        expect(store.total()).toBe(1);
+        expect(toasts.success).toHaveBeenCalledWith('Invitation cancelled', {
+          description: 'marc.roux@ateliernord.fr',
+        });
+        expect(toasts.warning).not.toHaveBeenCalled();
+      });
+
+      it('says the invitee accepted when the invitation reads accepted', async () => {
+        const { store, api, toasts, membersStore }: Harness = await setup({
+          revoke: vi.fn().mockRejectedValue(new HttpErrorResponse({ status: 0 })),
+          standing: vi.fn(() => Promise.resolve(standing('accepted', MARC))),
+        });
+        api.list.mockResolvedValue({ items: [STUDIO], total: 1 });
+
+        await expect(store.revoke(MARC)).resolves.toBe(false);
+        await stable();
+
+        expect(store.items()).toEqual([STUDIO]);
+        expect(toasts.info).toHaveBeenCalledWith(
+          'The invitation was accepted before it could be cancelled',
+          { description: 'marc.roux@ateliernord.fr is now a member of the organization.' },
+        );
+        expect(membersStore.retry).toHaveBeenCalledTimes(1);
+        expect(toasts.warning).not.toHaveBeenCalled();
+      });
+
+      it('says the invitee declined when the invitation reads refused', async () => {
+        const { store, toasts }: Harness = await setup({
+          revoke: vi.fn().mockRejectedValue(refusal(504, {})),
+          standing: vi.fn(() => Promise.resolve(standing('refused', MARC))),
+        });
+
+        await expect(store.revoke(MARC)).resolves.toBe(false);
+
+        expect(toasts.info).toHaveBeenCalledWith(
+          'The invitation was declined before it could be cancelled',
+          { description: 'marc.roux@ateliernord.fr' },
+        );
+        expect(toasts.warning).not.toHaveBeenCalled();
+      });
+
+      const unsettling: readonly [string, () => Mock][] = [
+        ['still pending', () => vi.fn().mockResolvedValue(standing('pending', MARC))],
+        ['expired', () => vi.fn().mockResolvedValue(standing('expired', MARC))],
+        [
+          'in a state this version does not know',
+          () => vi.fn().mockResolvedValue(standing('other', MARC)),
+        ],
+        ['not found', () => vi.fn().mockRejectedValue(NOT_FOUND)],
+        ['unreadable', () => vi.fn().mockRejectedValue(refusal(503, {}))],
+      ];
+
+      for (const [name, read] of unsettling) {
+        it(`claims nothing when the invitation reads ${name}`, async () => {
+          const { store, api, toasts }: Harness = await setup({
+            revoke: vi.fn().mockRejectedValue(refusal(503, {})),
+            standing: read(),
+          });
+
+          await expect(store.revoke(MARC)).resolves.toBe(false);
+          await stable();
+
+          expect(api.standing).toHaveBeenCalledTimes(1);
+          expect(store.items()).toEqual([MARC, STUDIO]);
+          expect(toasts.success).not.toHaveBeenCalled();
+          expect(toasts.info).not.toHaveBeenCalled();
+          expect(toasts.error).not.toHaveBeenCalled();
+          expect(toasts.warning).toHaveBeenCalledWith(
+            'The invitation may not have been cancelled',
+            {
+              description:
+                'The pending invitations and the members show where the invitation to marc.roux@ateliernord.fr stands.',
+            },
+          );
+        });
+      }
+
+      it('reads it after a refusal that follows an unknown attempt', async () => {
+        const { store, api, toasts }: Harness = await setup({
+          revoke: vi
+            .fn()
+            .mockRejectedValueOnce(refusal(503, {}))
+            .mockRejectedValueOnce(refusal(403, { code: 'organization.role-forbidden' })),
+          standing: vi.fn(() => Promise.resolve(standing('revoked', MARC))),
+        });
+
+        await expect(store.revoke(MARC)).resolves.toBe(true);
+
+        expect(api.revoke).toHaveBeenCalledTimes(2);
+        expect(api.standing).toHaveBeenCalledTimes(1);
+        expect(toasts.success).toHaveBeenCalledWith('Invitation cancelled', {
+          description: 'marc.roux@ateliernord.fr',
+        });
+        expect(toasts.error).not.toHaveBeenCalled();
+      });
+
+      it('is never read after a definite refusal of the first attempt', async () => {
+        const { store, api, toasts }: Harness = await setup({
+          revoke: vi.fn().mockRejectedValue(refusal(403, { code: 'organization.role-forbidden' })),
+        });
+
+        await expect(store.revoke(MARC)).resolves.toBe(false);
+
+        expect(api.standing).not.toHaveBeenCalled();
+        expect(toasts.error).toHaveBeenCalledWith('The invitation could not be cancelled');
+      });
+    });
+
+    describe('a resend of unknown outcome, read on its own', () => {
+      it('proves nothing while the invitation stays pending with the same expiry', async () => {
+        const { store, api, toasts }: Harness = await setup({
+          resend: vi.fn().mockRejectedValue(refusal(503, {})),
+          standing: vi.fn(() => Promise.resolve(standing('pending', MARC))),
+        });
+
+        await expect(store.resend(MARC)).resolves.toBe(false);
+        await stable();
+
+        expect(api.resend).toHaveBeenCalledTimes(1);
+        expect(api.standing).toHaveBeenCalledTimes(3);
+        expect(store.items()[0]).toEqual(MARC);
+        expect(toasts.success).not.toHaveBeenCalled();
+        expect(toasts.warning).toHaveBeenCalledWith('The invitation may not have been resent', {
+          description:
+            'The pending invitations and the members show where the invitation to marc.roux@ateliernord.fr stands.',
+        });
+      });
+
+      it('drops an invitation that reads revoked, as no longer pending', async () => {
+        const { store, toasts, membersStore }: Harness = await setup({
+          resend: vi.fn().mockRejectedValue(new HttpErrorResponse({ status: 0 })),
+          standing: vi.fn(() => Promise.resolve(standing('revoked', STUDIO))),
+        });
+
+        await expect(store.resend(STUDIO)).resolves.toBe(false);
+
+        expect(store.items()).toEqual([MARC]);
+        expect(store.pendingIds().size).toBe(0);
+        expect(toasts.success).not.toHaveBeenCalled();
+        expect(toasts.warning).not.toHaveBeenCalled();
+        expect(toasts.info).toHaveBeenCalledWith('This invitation is no longer pending', {
+          description: 'atelier@nordstudio.fr',
+        });
+        expect(membersStore.retry).not.toHaveBeenCalled();
+      });
+
+      it('reads the members again when the invitation reads accepted', async () => {
+        const { store, toasts, membersStore }: Harness = await setup({
+          resend: vi.fn().mockRejectedValue(refusal(502, {})),
+          standing: vi.fn(() => Promise.resolve(standing('accepted', STUDIO))),
+        });
+
+        await expect(store.resend(STUDIO)).resolves.toBe(false);
+
+        expect(store.items()).toEqual([MARC]);
+        expect(toasts.info).toHaveBeenCalledWith('This invitation is no longer pending', {
+          description: 'atelier@nordstudio.fr',
+        });
+        expect(membersStore.retry).toHaveBeenCalledTimes(1);
       });
     });
 

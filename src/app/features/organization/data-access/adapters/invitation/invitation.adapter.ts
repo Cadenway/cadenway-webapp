@@ -5,6 +5,8 @@ import { type BatchOutcomes, matchBatchOutcomes } from '@shared/batch-outcomes';
 import type {
   InvitationList,
   InvitationOutcome,
+  InvitationStanding,
+  InvitationStatus,
   PendingInvitation,
 } from '../../../models/invitation/invitation.interface';
 import type { AssignableMemberRole } from '../../../models/member/member.interface';
@@ -40,6 +42,65 @@ export function toPendingInvitation(invitation: Invitation): PendingInvitation {
     invitedBy: invitation.invitedBy.name,
     expired: invitation.status === 'expired',
     expiresAt: invitation.expiresAt,
+  };
+}
+
+/**
+ * Type InvitationStateDto
+ *
+ * @description
+ * The fields of `InvitationState` (`members.yaml`, `getInvitation`) the adapter reads: those of
+ * `Invitation`, whose `status` there also takes `accepted`, `refused` and `revoked`. api-client
+ * 1.5.0 does not export the generated type, so the answer is checked against this shape where it
+ * is passed in.
+ *
+ * @type {Invitation}
+ */
+export type InvitationStateDto = Invitation;
+
+/**
+ * Constant INVITATION_STATUSES
+ *
+ * @description
+ * The lifecycle states `getInvitation` documents.
+ *
+ * @type {ReadonlySet<string>}
+ */
+const INVITATION_STATUSES: ReadonlySet<string> = new Set<string>([
+  'pending',
+  'expired',
+  'accepted',
+  'refused',
+  'revoked',
+]);
+
+/**
+ * Function isInvitationStatus
+ *
+ * @description
+ * Whether a status is one of the lifecycle states `getInvitation` documents.
+ *
+ * @param {string} status - Status as the API sends it.
+ * @returns {boolean} Whether it is known.
+ */
+function isInvitationStatus(status: string): status is Exclude<InvitationStatus, 'other'> {
+  return INVITATION_STATUSES.has(status);
+}
+
+/**
+ * Function toInvitationStanding
+ *
+ * @description
+ * Maps one invitation read on its own (`GET /v1/invitations/{invitationId}`). A status this
+ * version does not know reads as `other`, which settles nothing.
+ *
+ * @param {InvitationStateDto} state - `getInvitation` answer.
+ * @returns {InvitationStanding} Where the invitation stands, with its pending-list display model.
+ */
+export function toInvitationStanding(state: InvitationStateDto): InvitationStanding {
+  return {
+    status: isInvitationStatus(state.status) ? state.status : 'other',
+    invitation: toPendingInvitation(state),
   };
 }
 
