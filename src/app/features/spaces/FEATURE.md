@@ -574,7 +574,7 @@ once it was opened, so the store lives with the list page, across closings and r
   invitation (`Adresse externe : …` note and `Invité ajouté` toast) is not built.
 - `Organization access` is hidden in a private space, where it changes nothing
   (`openapi/public/lists.yaml`).
-- `Copy the link` copies `/<slug>/l/<listId>` with `List link copied` (`navigator.clipboard`).
+- `Copy the link` copies `<origin>/<locale>/<slug>/l/<listId>` with `List link copied` (`navigator.clipboard`).
 - Gaps: no presence on the avatars (Account's `PRESENCE` publishes the person's own presence
   only); no realtime follow of `list.access-changed.v1` while the dialog is open. The dialog is
   `size="md"` (the mockup's `max-w-lg`).
@@ -663,7 +663,7 @@ Copy not taken word for word from the mockup:
 
 The `Form` view (`ui/pages/form-view-page`, `App.dc.html` lines 1102-1297) designs the list's
 request form. The preview is Intake's renderer (`IntakeForm` from `@features/intake`), in a
-browser frame whose address is the public link (`<origin>/f/<publicKey>`, `Not published` until
+browser frame whose address is the public link (`<origin>/<locale>/f/<publicKey>`, `Not published` until
 published), with the organization badge of `WORKSPACE_CONTEXT`. It follows the settings live and
 is inert: a valid request is not sent, and a toast says so. The settings aside shows from 1024 px:
 the name and description, a `Required` checkbox and a show switch per field (the title is locked),
@@ -928,6 +928,8 @@ colors with the same words.
   `cw-task-due-date`, `cw-task-label-chips`, `cw-task-cancel-dialog`, `cw-task-menu` with its
   `TaskMoveTarget` (`Move to` of the menu and of the selection bar), `personOf` and the status
   rules.
+- `@core/routing` (`AppLinkService`): the copied list and task addresses and the public form link
+  carry the current locale segment (`<origin>/<locale>/<slug>/l/<listId>`).
 - `@core/api` (problem readers), `@core/realtime` (`watch({ kind: 'list' })`), `@shared/layout-slot`
   (`SlotFeature`, `SHELL_SIDEBAR`) and `@shared/route-errors`.
 - Errors' `.` entry: the `RouteErrorData` type of the `list` route's `data`.

@@ -19,6 +19,7 @@ import {
 import { CwToastService } from '@cadenway/ui/components/toast';
 import { NgIcon } from '@ng-icons/core';
 
+import { AppLinkService } from '@core/routing';
 import {
   WORKSPACE_CONTEXT,
   type WorkspaceContextPort,
@@ -29,7 +30,7 @@ import type {
   DocumentRow,
 } from '../../../models/document/document.interface';
 import { DocsStore } from '../../../state/docs/docs.store';
-import { copyDocumentLink } from '../../../utils/document-link/document-link.util';
+import { copyDocumentLink, documentPath } from '../../../utils/document-link/document-link.util';
 import { DocsSkeleton } from '../../components/docs-skeleton/docs-skeleton.component';
 import { DocumentTable } from '../../components/document-table/document-table.component';
 import { DocumentDeleteDialog } from '../../dialogs/document-delete-dialog/document-delete-dialog.component';
@@ -195,12 +196,23 @@ export class DocsPage {
    * Property document
    *
    * @description
-   * Document whose window holds the clipboard and the origin of the links.
+   * Document whose window holds the clipboard.
    *
    * @type {Document}
    * @readonly
    */
   private readonly document: Document = inject(DOCUMENT);
+
+  /**
+   * Property links
+   *
+   * @description
+   * Builds the shareable addresses below the current locale segment.
+   *
+   * @type {AppLinkService}
+   * @readonly
+   */
+  private readonly links: AppLinkService = inject(AppLinkService);
 
   /**
    * Property searchTimer
@@ -331,8 +343,7 @@ export class DocsPage {
   protected async copyLink(row: DocumentRow): Promise<void> {
     await copyDocumentLink(
       this.document,
-      this.workspace.organization().slug,
-      row.document.id,
+      this.links.absolute(documentPath(this.workspace.organization().slug, row.document.id)),
       this.toasts,
     );
   }

@@ -15,6 +15,7 @@ import {
 } from '@ngrx/signals';
 import { map, merge, type Observable, Subject } from 'rxjs';
 
+import { AppLinkService } from '@core/routing';
 import {
   WORKSPACE_CONTEXT,
   type WorkspaceContextPort,
@@ -855,7 +856,7 @@ export interface TaskRowActionsStoreInstance {
    * Method copyLink
    *
    * @description
-   * `Copy the link`: the shareable address of the task (`<origin>/<slug>/t/<KEY>`).
+   * `Copy the link`: the shareable address of the task (`<origin>/<locale>/<slug>/t/<KEY>`).
    *
    * @param {TaskSummary} task - The task.
    * @returns {Promise<void>} Resolves once reported.
@@ -936,6 +937,7 @@ function createTaskRowActionsStore(): Type<TaskRowActionsStoreInstance> {
         _toasts: inject(CwToastService),
         _taskDetail: inject(TaskDetailOpener),
         _document: inject(DOCUMENT),
+        _links: inject(AppLinkService),
         _locale: inject(LOCALE_ID),
         _destroyRef: inject(DestroyRef),
         _shownToasts: new Set<string>(),
@@ -1527,10 +1529,9 @@ function createTaskRowActionsStore(): Type<TaskRowActionsStoreInstance> {
           });
         },
         async copyLink(task: TaskSummary): Promise<void> {
-          const origin: string = store._document.defaultView?.location.origin ?? '';
           const slug: string = store._workspace.organization().slug;
           await copy(
-            `${origin}/${slug}/t/${task.key}`,
+            store._links.absolute(`/${slug}/t/${task.key}`),
             $localize`:@@task.row-actions.link-copied:Link copied`,
           );
         },

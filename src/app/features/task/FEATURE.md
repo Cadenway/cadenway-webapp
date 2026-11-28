@@ -324,7 +324,7 @@ the task` with `Retry`; otherwise Errors' `RouteErrorPanel` renders the typed ro
     other, the last typed winning and a refusal rolling back only the latest to the last
     confirmed note; `Delete the reminder`; every time in one format, `reminderTimeLabel`:
     `11:00` or `14:19`, `11 h` or `14 h 19` in French, as the mockup's `Aujourd’hui, 11 h`),
-    `Copy the link` (`<origin>/<slug>/t/<KEY>`), `More actions` (`Copy the identifier`,
+    `Copy the link` (`<origin>/<locale>/<slug>/t/<KEY>`, `AppLinkService` of `@core/routing`), `More actions` (`Copy the identifier`,
     `Duplicate` with `Open`, `Move to…`, `Archive` with `Undo`, `Save as a template`,
     `Convert to a subtask of…` or `Move to another task…`, `Detach from <key>`, `Delete`
     confirmed, then `Undo` restores the trash entry) and `Close`. Duplicate, archive and delete

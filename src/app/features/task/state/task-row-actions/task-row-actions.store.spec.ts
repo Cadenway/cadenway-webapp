@@ -1,3 +1,4 @@
+import { APP_BASE_HREF } from '@angular/common';
 import { HttpErrorResponse } from '@angular/common/http';
 import {
   createEnvironmentInjector,
@@ -185,9 +186,10 @@ describe('TaskRowActionsStore', () => {
    * Provides the page's row providers in their own injector (destroyed to leave the page), with
    * faked data access, opener and toasts.
    *
+   * @param {string} base - The base href of the build (`/fr/`); none by default.
    * @returns {TaskRowActionsStoreInstance} The store.
    */
-  function setup(): TaskRowActionsStoreInstance {
+  function setup(base?: string): TaskRowActionsStoreInstance {
     const workspace: WorkspaceContextPort = {
       user: signal({
         id: 'u1',
@@ -211,6 +213,7 @@ describe('TaskRowActionsStore', () => {
           provide: CwToastService,
           useValue: { show, error, warning, dismiss, toasts: signal([{ id: 't1' }]) },
         },
+        ...(base === undefined ? [] : [{ provide: APP_BASE_HREF, useValue: base }]),
       ],
     });
     page = createEnvironmentInjector(
@@ -637,6 +640,20 @@ describe('TaskRowActionsStore', () => {
         'CAD-482',
       ]);
       expect(show.mock.calls.map((call) => call[0])).toEqual(['Link copied', 'Identifier copied']);
+    } finally {
+      Reflect.deleteProperty(navigator, 'clipboard');
+    }
+  });
+
+  it('copies the link below the locale segment of the build', async () => {
+    const writeText: Mock<(text: string) => Promise<void>> = vi.fn(() => Promise.resolve());
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+    try {
+      const store: TaskRowActionsStoreInstance = setup('/fr/');
+
+      await store.copyLink(task);
+
+      expect(writeText).toHaveBeenCalledWith(`${location.origin}/fr/atelier-nord/t/CAD-482`);
     } finally {
       Reflect.deleteProperty(navigator, 'clipboard');
     }

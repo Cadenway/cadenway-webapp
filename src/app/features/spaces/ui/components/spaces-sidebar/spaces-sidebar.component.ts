@@ -36,6 +36,7 @@ import { CwToastService } from '@cadenway/ui/components/toast';
 import { NgIcon } from '@ng-icons/core';
 import { filter, map } from 'rxjs';
 
+import { AppLinkService } from '@core/routing';
 import { PLAN_SEATS, type PlanSeatsPort } from '@features/organization/ports/plan-seats';
 import { TaskCreate } from '@features/task';
 import { WORKSPACE_CONTEXT } from '@features/workspace/ports/workspace-context';
@@ -406,12 +407,23 @@ export class SpacesSidebar {
    * Property document
    *
    * @description
-   * Document whose window holds the clipboard and the address origin.
+   * Document whose window holds the clipboard.
    *
    * @type {Document}
    * @readonly
    */
   private readonly document: Document = inject(DOCUMENT);
+
+  /**
+   * Property links
+   *
+   * @description
+   * Builds the shareable addresses below the current locale segment.
+   *
+   * @type {AppLinkService}
+   * @readonly
+   */
+  private readonly links: AppLinkService = inject(AppLinkService);
 
   /**
    * Property storage
@@ -1076,7 +1088,7 @@ export class SpacesSidebar {
    */
   protected async copyListLink(list: TaskList): Promise<void> {
     const view: Window | null = this.document.defaultView;
-    const link: string = `${view?.location.origin ?? ''}/${this.slug()}/l/${list.id}`;
+    const link: string = this.links.absolute(`/${this.slug()}/l/${list.id}`);
     try {
       await view?.navigator.clipboard.writeText(link);
       this.toasts.show($localize`:@@spaces.list.link-copied:List link copied`, {

@@ -1,19 +1,19 @@
 import type { CwToastService } from '@cadenway/ui/components/toast';
 
 /**
- * Function documentLink
+ * Function documentPath
  *
  * @description
- * The shareable address of a document, `<origin>/<slug>/d/<id>` (the mockup's `copyDocLink`,
- * `App.dc.html` line 9197).
+ * The router path of a document, `/<slug>/d/<id>` (the mockup's `copyDocLink`, `App.dc.html`
+ * line 9197). `AppLinkService.absolute` turns it into the shareable address, below the locale
+ * segment.
  *
- * @param {Document} document - Document whose location gives the origin.
  * @param {string} slug - The organization's slug.
  * @param {string} id - The document.
- * @returns {string} The address.
+ * @returns {string} The path.
  */
-export function documentLink(document: Document, slug: string, id: string): string {
-  return `${document.location.origin}/${encodeURIComponent(slug)}/d/${encodeURIComponent(id)}`;
+export function documentPath(slug: string, id: string): string {
+  return `/${encodeURIComponent(slug)}/d/${encodeURIComponent(id)}`;
 }
 
 /**
@@ -24,21 +24,19 @@ export function documentLink(document: Document, slug: string, id: string): stri
  * says the copy failed when the clipboard refuses or is missing.
  *
  * @param {Document} document - Document whose window holds the clipboard.
- * @param {string} slug - The organization's slug.
- * @param {string} id - The document.
+ * @param {string} link - The document's absolute address.
  * @param {CwToastService} toasts - The shell's toaster.
  * @returns {Promise<void>} Resolves once the clipboard answered.
  */
 export async function copyDocumentLink(
   document: Document,
-  slug: string,
-  id: string,
+  link: string,
   toasts: CwToastService,
 ): Promise<void> {
   try {
     const clipboard: Clipboard | undefined = document.defaultView?.navigator.clipboard;
     if (clipboard === undefined) throw new Error('The clipboard is unavailable.');
-    await clipboard.writeText(documentLink(document, slug, id));
+    await clipboard.writeText(link);
     toasts.success($localize`:@@docs.toast.link-copied:Document link copied`);
   } catch {
     toasts.error($localize`:@@docs.toast.copy-failed:The link could not be copied`, {
