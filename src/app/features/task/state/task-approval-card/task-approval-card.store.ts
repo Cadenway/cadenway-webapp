@@ -248,7 +248,7 @@ function createTaskApprovalCardStore(): Type<TaskApprovalCardStoreInstance> {
         if (key === null) return;
         patchState(store, { loading: true, failed: false });
         try {
-          const snapshot: TaskApprovalSnapshot = await store._api.approval(key, store._version());
+          const snapshot: TaskApprovalSnapshot = await store._api.approval(key);
           if (store._detail.taskKey() === key) {
             patchState(store, { snapshot, loading: false });
           }

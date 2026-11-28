@@ -127,7 +127,7 @@ for `Create your first task`, and reads its progress again after each `created`.
   members). Every collection is read to its last cursor page.
 - For the properties panel (`TaskPropertyApi`, `TaskTimeApi`): `TasksService.assignTask`,
   `unassignTask` (the new version from the `ETag`), `addTaskLabel`, `removeTaskLabel`,
-  `listTaskWatchers` (to its last page), `getTaskApproval` (through `TaskApprovalRead`),
+  `listTaskWatchers` (to its last page), `getTaskApproval`,
   `requestTaskApproval` (`If-Match`),
   `listTaskDependencies`, `createTaskDependency` (`Idempotency-Key`), `deleteTaskDependency`,
   `listDependencyCandidates`; `TaskTimeService.listTaskTimeEntries`, `createTaskTimeEntry`
@@ -141,8 +141,7 @@ for `Create your first task`, and reads its progress again after each `created`.
   `MILESTONE_STATUS_KEYS`, `PRIORITY_KEYS`, `CANCEL_REASONS`, `RECURRENCES`.
 - `@core/api` (`hasProblemCode`, `readProblem`, `OrganizationPin`), `@shared/route-errors`, `@core/shortcuts` (`N`, Ctrl Enter), `@shared/layout-slot`
   (`ShellOverlay`, slot contribution), Workspace's `ports/workspace-context`.
-- For the tabs (`TaskSectionsApi`): `TasksService.getTaskApproval` (through
-  `TaskApprovalRead`), `voteOnTaskApproval`,
+- For the tabs (`TaskSectionsApi`): `TasksService.getTaskApproval`, `voteOnTaskApproval`,
   `withdrawTaskApprovalVote` and `requestTaskApproval`; `listTaskComments` (later pages),
   `createTaskComment` (mention spans, `Idempotency-Key`), `deleteTaskComment` (`If-Match`),
   `listTaskParticipants` (the `@` menus of the composer and the description), `updateTask`
@@ -156,18 +155,16 @@ for `Create your first task`, and reads its progress again after each `created`.
   `comment-composer`, `markdown`, `attachment`, `dropzone`, `checkbox`, `progress`, `avatar`,
   `context-menu`.
 - Shared reads: `TaskMembersApi` reads `MembersService.listMembers` to its last page once for
-  every role and gives the assignable people (guests left out) and all the people from it;
-  `TaskApprovalRead` reads `TasksService.getTaskApproval` (`cache: 'no-store'`) by task. Each
+  every role and gives the assignable people (guests left out) and all the people from it. It
   shares the read in flight with the readers that ask meanwhile (the tabs and the properties
-  panel open together and follow the same version) and keeps nothing once it ends, so a later
-  read is fresh. The directory read is bound to the organization id and `OrganizationPin`
-  revision it began with: readers of another context start their own read, and once the context
-  changes the old read requests no further page and fails with `OrganizationSwitchPendingError`.
-  Approval reads are shared by organization context and task key, and an answer received after
-  its context changed fails the same way. An approval reader passes the confirmed task version it
-  follows (`atLeast`) and checks every answer against it, its retries included: while an answer
-  is older (a read begun before a write), it reads again (a read it has not received yet, or a new
-  one), twice at most, then keeps the latest answer for its version follower to refresh later.
+  panel open together) and keeps nothing once it ends, so a later read is fresh. The read is bound
+  to the organization id and `OrganizationPin` revision it began with: readers of another context
+  start their own read, and once the context changes the old read requests no further page and
+  fails with `OrganizationSwitchPendingError`. The approval is not shared: the approval card and
+  the properties panel each call `getTaskApproval` (`cache: 'no-store'`), so opening a detail
+  reads it twice. That duplicate request is accepted: a shared approval read must stay correct
+  across organization switches, writes that land while it runs and stalled requests, which costs
+  more than the request it saves.
 - `@core/realtime` (`watch({ kind: 'task' })`) for the open detail; Errors' `.` entry
   (`RouteErrorPanel`) for the detail's not-found, deleted-task and unavailable states; Spaces'
   `ports/list-directory` (`LIST_DIRECTORY`) for `Move to…`.
@@ -511,9 +508,8 @@ people`), and the due trigger shows the short date without `Tomorrow ·` or the
   no thumbnail without a signed address per tile; `cw-checklist` has no tick-and-add-only mode,
   so the checklist composes `cw-checkbox`, `cw-progress` and `cw-input`; the attachment preview
   is a full-size `cw-dialog`, not the mockup's dark viewer. The approval card and the properties
-  panel each read the approval (`getTaskApproval` into their own models, one request shared
-  through `TaskApprovalRead` while both ask); both read it again once the confirmed version moves
-  past the one they read, so they agree after any write.
+  panel each read the approval (`getTaskApproval` into their own models); both read it again
+  once the confirmed version moves past the one they read, so they agree after any write.
 - Development gaps: `Link a PR` and `Create a branch` are left out, not shown disabled, as other
   actions without an API are (the Git chip, `Share`): linking, unlinking and branch creation need
   the outbound provider client of gap B5. The row menu (`Copy the link`, `Copy the branch name`,

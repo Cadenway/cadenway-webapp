@@ -51,7 +51,6 @@ import {
   toTaskCommentPage,
   toTaskDetailTask,
 } from '../../adapters/task-detail/task-detail.adapter';
-import { TaskApprovalRead } from '../task-approval-read/task-approval-read.service';
 import { TaskMembersApi } from '../task-members-api/task-members-api.service';
 
 /**
@@ -146,17 +145,6 @@ export interface TaskCommentDraft {
 export class TaskSectionsApi {
   // #region Properties
   /**
-   * Property approvalRead
-   *
-   * @description
-   * The approval read shared with the other reader of the same task.
-   *
-   * @type {TaskApprovalRead}
-   * @readonly
-   */
-  private readonly approvalRead: TaskApprovalRead = inject(TaskApprovalRead);
-
-  /**
    * Property tasks
    *
    * @description
@@ -221,16 +209,11 @@ export class TaskSectionsApi {
    * Reads the current approval round of a task.
    *
    * @param {string} taskKey - Key of the task.
-   * @param {number | null} atLeast - The task version the answer must reach (the confirmed
-   * version the reader follows), or null for any.
    * @returns {Promise<TaskApprovalSnapshot>} The approval.
    */
-  public async approval(
-    taskKey: string,
-    atLeast: number | null = null,
-  ): Promise<TaskApprovalSnapshot> {
+  public async approval(taskKey: string): Promise<TaskApprovalSnapshot> {
     const state: GetTaskApprovalClientResult = await firstValueFrom(
-      this.approvalRead.approval(taskKey, atLeast),
+      this.tasks.getTaskApproval(taskKey, { cache: 'no-store' }),
     );
     return toApprovalSnapshot(state);
   }
