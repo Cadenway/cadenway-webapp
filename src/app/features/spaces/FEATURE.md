@@ -709,7 +709,8 @@ The `Calendar` view (`ui/pages/calendar-view-page`, `App.dc.html` lines 775-828,
 a day, then `+N others`, and the `No due date` panel beside it from 1280 px, below it under (the
 grid keeps 720 px and scrolls across). The grid is the mockup's `outlined` look; its header is the
 `title` toolbar (the month as an `h2`, then `Today` and the arrows in the `Calendar navigation`
-group) without the month and week toggle (`[viewToggle]="false"`), the brick's M and S keys still switching views.
+group) and the brick's month and week toggle. The mockup draws no toggle (month only); the toggle
+stays because the week view exists and has no other pointer control (the M and S keys also switch).
 
 - `CalendarViewStore` (`state/calendar-view`, route-scoped through `CALENDAR_VIEW_PROVIDERS`, with
   `ListTasksApi`, Task's `TaskStatusChangesStore` and two `ListTasksStore` instances) holds the
