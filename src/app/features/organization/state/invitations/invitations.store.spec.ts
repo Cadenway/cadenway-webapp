@@ -761,6 +761,77 @@ describe('InvitationsStore', () => {
     for (const toast of Object.values(toasts)) expect(toast).not.toHaveBeenCalled();
   });
 
+  describe('a write whose page is gone before it is answered', () => {
+    it('says nothing of a cancellation retry answered after the page is gone', async () => {
+      let answer: () => void = () => undefined;
+      const { store, api, toasts }: Harness = await setup({
+        revoke: vi
+          .fn()
+          .mockRejectedValueOnce(refusal(503, {}))
+          .mockImplementationOnce(
+            () =>
+              new Promise<void>((resolve: () => void) => {
+                answer = resolve;
+              }),
+          ),
+      });
+
+      const done: Promise<boolean> = store.revoke(MARC);
+      await vi.waitFor(() => {
+        expect(api.revoke).toHaveBeenCalledTimes(2);
+      });
+      TestBed.resetTestingModule();
+      answer();
+
+      await expect(done).resolves.toBe(false);
+      for (const toast of Object.values(toasts)) expect(toast).not.toHaveBeenCalled();
+    });
+
+    it('says nothing of a refused cancellation retry answered after the page is gone', async () => {
+      let refuse: (error: unknown) => void = () => undefined;
+      const { store, api, toasts }: Harness = await setup({
+        revoke: vi
+          .fn()
+          .mockRejectedValueOnce(refusal(503, {}))
+          .mockImplementationOnce(
+            () =>
+              new Promise<void>((_resolve: () => void, reject: (error: unknown) => void) => {
+                refuse = reject;
+              }),
+          ),
+      });
+
+      const done: Promise<boolean> = store.revoke(MARC);
+      await vi.waitFor(() => {
+        expect(api.revoke).toHaveBeenCalledTimes(2);
+      });
+      TestBed.resetTestingModule();
+      refuse(refusal(403, { code: 'organization.role-forbidden' }));
+
+      await expect(done).resolves.toBe(false);
+      for (const toast of Object.values(toasts)) expect(toast).not.toHaveBeenCalled();
+    });
+
+    it('says nothing of a resend answered after the page is gone', async () => {
+      let answer: (invitation: PendingInvitation) => void = () => undefined;
+      const { store, toasts }: Harness = await setup({
+        resend: vi.fn(
+          () =>
+            new Promise<PendingInvitation>((resolve: (invitation: PendingInvitation) => void) => {
+              answer = resolve;
+            }),
+        ),
+      });
+
+      const done: Promise<boolean> = store.resend(STUDIO);
+      TestBed.resetTestingModule();
+      answer({ ...STUDIO, expired: false });
+
+      await expect(done).resolves.toBe(false);
+      for (const toast of Object.values(toasts)) expect(toast).not.toHaveBeenCalled();
+    });
+  });
+
   describe('the reads settling a resend', () => {
     /**
      * Function pendingSettlement
@@ -981,15 +1052,19 @@ describe('InvitationsStore', () => {
     });
 
     it('says a cancellation answered as accepted was accepted', async () => {
-      const { store, toasts, membersStore }: Harness = await setup({
+      const { store, api, toasts, membersStore }: Harness = await setup({
         revoke: vi
           .fn()
           .mockRejectedValue(
             refusal(409, { code: 'invitation.answered', details: { status: 'accepted' } }),
           ),
       });
+      api.list.mockResolvedValue({ items: [STUDIO], total: 1 });
 
       await expect(store.revoke(MARC)).resolves.toBe(false);
+      await stable();
+
+      expect(api.list).toHaveBeenCalledTimes(2);
 
       expect(store.items()).toEqual([STUDIO]);
       expect(toasts.success).not.toHaveBeenCalled();

@@ -934,10 +934,10 @@ function createInvitationsStore(): Type<InvitationsStoreInstance> {
           };
           try {
             const updated: PendingInvitation = await store._api.resend(invitation.id);
-            if (write.moved()) return false;
+            if (!live()) return false;
             return resent(updated);
           } catch (error: unknown) {
-            if (write.moved()) return false;
+            if (!live()) return false;
             if (isUnknownWriteOutcome(error)) {
               // Never sent again (a second resend within the hour is refused): the row stays shown
               // as resent and busy while the list is read after each wait, until the invitation
@@ -1019,6 +1019,7 @@ function createInvitationsStore(): Type<InvitationsStoreInstance> {
           const answered: (status: unknown) => false = (status: unknown): false => {
             confirm(invitation.id, null);
             drop();
+            bump();
             if (status === 'accepted') {
               refreshMembers();
               store._toasts.info(
@@ -1028,7 +1029,6 @@ function createInvitationsStore(): Type<InvitationsStoreInstance> {
                 },
               );
             } else {
-              bump();
               store._toasts.info(
                 $localize`:@@organization.members.cancel-refused:The invitation was declined before it could be cancelled`,
                 { description: invitation.email },
@@ -1058,10 +1058,11 @@ function createInvitationsStore(): Type<InvitationsStoreInstance> {
             for (let attempt: number = 0; attempt <= delays.length; attempt += 1) {
               try {
                 await store._api.revoke(invitation.id);
-                if (write.moved()) return false;
+                // Another organization, or the page gone: nothing is applied or said.
+                if (!live()) return false;
                 return cancelled();
               } catch (error: unknown) {
-                if (write.moved()) return false;
+                if (!live()) return false;
                 if (isUnknownWriteOutcome(error)) uncertain = true;
                 if (isUnknownWriteOutcome(error) && attempt < delays.length) {
                   await wait(delays[attempt]);
