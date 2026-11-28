@@ -137,6 +137,8 @@ interface Gateway {
   readonly calls: string[];
   /** Bodies received, by `METHOD /path`. */
   readonly bodies: Map<string, unknown[]>;
+  /** The `Idempotency-Key` of each invitation batch received, null when absent. */
+  readonly invitationKeys: (string | null)[];
   /** The onboarding state the gateway holds now. */
   readonly onboarding: () => Onboarding;
   /** Answers the first draft save held by `holdFirstDraft`. */
@@ -155,6 +157,7 @@ function problem(status: number, code: string) {
 async function stubGateway(page: Page, options: GatewayOptions = {}): Promise<Gateway> {
   const calls: string[] = [];
   const bodies = new Map<string, unknown[]>();
+  const invitationKeys: (string | null)[] = [];
   let onboarding: Onboarding = options.onboarding ?? initialOnboarding();
   let created: boolean = options.creating !== true;
   let release: () => void = (): void => undefined;
@@ -310,6 +313,7 @@ async function stubGateway(page: Page, options: GatewayOptions = {}): Promise<Ga
         return route.fulfill({ status: 201, ...answer });
       }
       case 'POST /v1/invitations': {
+        invitationKeys.push(request.headers()['idempotency-key'] ?? null);
         const { emails } = body as { emails: string[] };
         return route.fulfill({
           json: {
@@ -386,6 +390,7 @@ async function stubGateway(page: Page, options: GatewayOptions = {}): Promise<Ga
   return {
     calls,
     bodies,
+    invitationKeys,
     onboarding: (): Onboarding => onboarding,
     releaseFirstDraft: (): void => {
       release();
@@ -450,6 +455,7 @@ test('a new organization opens the assistant, which provisions the space and sho
   expect(gateway.bodies.get('POST /v1/invitations')).toEqual([
     { emails: ['ines.robert@ateliernord.fr'], role: 'member' },
   ]);
+  expect(gateway.invitationKeys).toEqual([expect.stringMatching(/^.{1,255}$/u)]);
   await expect(wizard.getByRole('radio', { name: /Later/ })).toBeChecked();
   await wizard.getByRole('button', { name: 'Create the space' }).click();
 

@@ -23,6 +23,7 @@ import {
 import { filter, fromEvent, map, type Subscription } from 'rxjs';
 
 import {
+  hasProblemCode,
   isDroppedOrganizationWrite,
   isUnknownWriteOutcome,
   OrganizationPin,
@@ -460,7 +461,11 @@ interface GettingStartedStoreInstance {
    *
    * @description
    * Invites the addresses as members of the organization the dialog was opened in, in batches of
-   * 50 (the `inviteMembers` limit), toasts the outcome and closes the dialog. Right after the first
+   * 50 (the `inviteMembers` limit), each under the `Idempotency-Key` of its body, toasts the
+   * outcome and closes the dialog. A batch body whose outcome was unknown (or which a `429`
+   * refused) is sent again under the same key, so the gateway replays its first answer; a key is
+   * renewed once the body changes and after any other answer. `422 idempotency.key-reused` counts
+   * as an unknown outcome, never as a refusal of the addresses. Right after the first
    * batch that reaches an address (invited now, or already invited), it records the checklist's
    * invitation marker. The batches go on while the organization is the one the dialog was opened
    * in, even once the host is destroyed; an organization change, a batch the organization pin
@@ -576,6 +581,11 @@ function createGettingStartedStore(): Type<GettingStartedStoreInstance> {
     }),
     withMethods((store) => {
       let followed: string | null = null;
+      // The `Idempotency-Key` of each batch body (organization and addresses, in order) whose
+      // outcome is unknown, or which a `429` refused (nothing is stored): sending that body again
+      // sends it under the same key, so the gateway replays the first answer. Any other answer
+      // drops it, and an organization change drops them all.
+      const batchKeys: Map<string, string> = new Map<string, string>();
 
       // `tracked` toasts are dismissed with the store (an organization change, its destruction); a
       // toast shown once the host is gone is not.
@@ -635,6 +645,7 @@ function createGettingStartedStore(): Type<GettingStartedStoreInstance> {
       };
 
       const leaveOrganization: () => void = (): void => {
+        batchKeys.clear();
         clearTrailingRead();
         setInviteOpen(false);
         dismissToasts();
@@ -938,8 +949,13 @@ function createGettingStartedStore(): Type<GettingStartedStoreInstance> {
             // person asked for.
             if (moved()) break;
             const batch: readonly string[] = emails.slice(start, start + INVITE_BATCH_SIZE);
+            const fingerprint: string = JSON.stringify([organization, batch]);
+            const key: string = batchKeys.get(fingerprint) ?? crypto.randomUUID();
+            batchKeys.set(fingerprint, key);
             try {
-              const outcome: OnboardingInvitationOutcome = await store._api.invite(batch);
+              const outcome: OnboardingInvitationOutcome = await store._api.invite(batch, key);
+              // A readable answer is definite: this key would only replay it.
+              batchKeys.delete(fingerprint);
               const unsent: ReadonlySet<string> = new Set(
                 (outcome.notSent ?? []).map((email: string): string => email.toLowerCase()),
               );
@@ -967,11 +983,21 @@ function createGettingStartedStore(): Type<GettingStartedStoreInstance> {
                 void store._onboarding.recordInvitation().catch((): undefined => undefined);
               }
             } catch (error: unknown) {
+              // `422 idempotency.key-reused`: this client sent another body under the key, a fault
+              // of its own and never a refusal of the addresses; the key is renewed and the
+              // outcome stays unknown.
+              const keyReused: boolean = hasProblemCode(error, 'idempotency.key-reused');
+              if (
+                keyReused ||
+                (!isUnknownWriteOutcome(error) && readProblem(error)?.status !== 429)
+              ) {
+                batchKeys.delete(fingerprint);
+              }
               if (isDroppedOrganizationWrite(error)) {
                 dropped = true;
                 break;
               }
-              if (isUnknownWriteOutcome(error)) {
+              if (keyReused || isUnknownWriteOutcome(error)) {
                 uncertain = true;
                 for (const email of batch) unsure.add(email.toLowerCase());
                 continue;

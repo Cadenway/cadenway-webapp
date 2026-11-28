@@ -12,7 +12,13 @@ import {
   withState,
 } from '@ngrx/signals';
 
-import { type ApiProblem, isUnknownWriteOutcome, OrganizationPin, readProblem } from '@core/api';
+import {
+  type ApiProblem,
+  hasProblemCode,
+  isUnknownWriteOutcome,
+  OrganizationPin,
+  readProblem,
+} from '@core/api';
 import {
   NAVIGATION_REFRESH,
   type NavigationRefreshPort,
@@ -643,8 +649,11 @@ interface OnboardingWizardStoreInstance {
    * inviting. Leaving the `Team` screen first invites the addresses not sent yet as members, in
    * batches of 50, when the person may invite: organization invitations hold on their own, so a
    * reload afterwards loses none (the addresses are not part of the draft, gap G6). An address
-   * sent is never sent again. A batch whose outcome is unknown keeps its addresses unsent, shows a
-   * toast and keeps the screen, so `Continue` sends them again safely; a refused batch (a `429`
+   * sent is never sent again. Each batch carries the `Idempotency-Key` of its body, kept while its
+   * outcome is unknown (or after a `429`, which stores nothing) and renewed once the body changes
+   * or after any other answer. A batch whose outcome is unknown (`422 idempotency.key-reused`
+   * included, never taken as a refusal) keeps its addresses unsent, shows a toast and keeps the
+   * screen, so `Continue` sends them again safely, the same body under the same key; a refused batch (a `429`
    * daily limit included) shows the failure toast and the screen still changes. Within a batch,
    * an address answered `invited`, `already-invited` or `already-member` is done; any other
    * outcome leaves it unsent (sent again by a later `Continue`) and shows a toast with their
@@ -785,9 +794,16 @@ function createOnboardingWizardStore(): Type<OnboardingWizardStoreInstance> {
           });
       };
 
+      // The `Idempotency-Key` of each batch body (organization and addresses, in order) whose
+      // outcome is unknown, or which a `429` refused (nothing is stored): a second Continue sends
+      // that body again under the same key, so the gateway replays the first answer. Any other
+      // answer drops it.
+      const batchKeys: Map<string, string> = new Map<string, string>();
+
       // Returns whether the person may move on: false only when a batch's outcome is unknown, so
-      // its addresses stay unsent and a second Continue sends them again (an address the lost
-      // batch reached then answers `already-invited`, so nothing is invited twice).
+      // its addresses stay unsent and a second Continue sends them again (the same body under the
+      // same key replays the lost answer; an address the lost batch reached answers
+      // `already-invited` in another body, so nothing is invited twice).
       const invite: (organizationId: string) => Promise<boolean> = async (
         organizationId: string,
       ): Promise<boolean> => {
@@ -803,8 +819,13 @@ function createOnboardingWizardStore(): Type<OnboardingWizardStoreInstance> {
         for (let start: number = 0; start < pending.length; start += INVITE_BATCH_SIZE) {
           if (!live(organizationId)) return false;
           const batch: readonly string[] = pending.slice(start, start + INVITE_BATCH_SIZE);
+          const fingerprint: string = JSON.stringify([organizationId, batch]);
+          const key: string = batchKeys.get(fingerprint) ?? crypto.randomUUID();
+          batchKeys.set(fingerprint, key);
           try {
-            const outcome: OnboardingInvitationOutcome = await store._api.invite(batch);
+            const outcome: OnboardingInvitationOutcome = await store._api.invite(batch, key);
+            // A readable answer is definite: this key would only replay it.
+            batchKeys.delete(fingerprint);
             if (!live(organizationId)) return false;
             const notSent: ReadonlySet<string> = new Set(
               (outcome.notSent ?? []).map((email: string): string => email.toLowerCase()),
@@ -825,8 +846,19 @@ function createOnboardingWizardStore(): Type<OnboardingWizardStoreInstance> {
               _invited: state._invited + outcome.invited,
             }));
           } catch (error: unknown) {
+            // `422 idempotency.key-reused`: another body was sent under the key, a fault of this
+            // client and never a refusal of the addresses; the key is renewed and the outcome
+            // stays unknown.
+            const unknown: boolean =
+              hasProblemCode(error, 'idempotency.key-reused') || isUnknownWriteOutcome(error);
+            if (
+              hasProblemCode(error, 'idempotency.key-reused') ||
+              (!unknown && readProblem(error)?.status !== 429)
+            ) {
+              batchKeys.delete(fingerprint);
+            }
             if (!live(organizationId)) return false;
-            if (isUnknownWriteOutcome(error)) uncertain = true;
+            if (unknown) uncertain = true;
             else failed = true;
           }
         }

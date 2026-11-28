@@ -191,15 +191,27 @@ export class OnboardingApi {
    * Method invite
    *
    * @description
-   * Invites addresses to the organization as members (owners and administrators only). Recording
-   * the checklist marker afterwards is the caller's choice, when at least one address was invited.
+   * Invites addresses to the organization as members (owners and administrators only), under the
+   * batch's `Idempotency-Key`. The same key with the same body replays the original `200` for 24
+   * hours without sending again: send it again after an unknown outcome, and a new key with any
+   * other body (`422 idempotency.key-reused` otherwise). `503 upstream.unavailable` while the
+   * serving release cannot replay keyed batches ran nothing, and a `429` stores nothing, so the
+   * same key may be sent again. Recording the checklist marker afterwards is the caller's choice,
+   * when at least one address was invited.
    *
    * @param {readonly string[]} emails - Distinct addresses, 1 to 50.
+   * @param {string} idempotencyKey - Key of this body (`Idempotency-Key`, 1 to 255 characters).
    * @returns {Promise<OnboardingInvitationOutcome>} How many were invited and skipped.
    */
-  public async invite(emails: readonly string[]): Promise<OnboardingInvitationOutcome> {
+  public async invite(
+    emails: readonly string[],
+    idempotencyKey: string,
+  ): Promise<OnboardingInvitationOutcome> {
     const result: InvitationBatchResult = await firstValueFrom(
-      this.invitations.inviteMembers({ emails: [...emails], role: 'member' }),
+      this.invitations.inviteMembers(
+        { emails: [...emails], role: 'member' },
+        { headers: { 'Idempotency-Key': idempotencyKey } },
+      ),
     );
     return toInvitationOutcome(result, emails);
   }
