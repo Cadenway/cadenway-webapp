@@ -31,7 +31,7 @@ import {
   CwDialogHeader,
   CwDialogTitle,
 } from '@cadenway/ui/components/dialog';
-import { CwFieldSet } from '@cadenway/ui/components/field';
+import { CwFieldLegend, CwFieldSet } from '@cadenway/ui/components/field';
 import { CwInput } from '@cadenway/ui/components/input';
 import {
   CwInputGroup,
@@ -211,6 +211,7 @@ function emptyModel(): TokenCreateModel {
     CwDialogFooter,
     CwDialogHeader,
     CwDialogTitle,
+    CwFieldLegend,
     CwFieldSet,
     CwInput,
     CwInputGroup,
