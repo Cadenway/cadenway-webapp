@@ -79,7 +79,9 @@ section has `organizationSectionGuard(<section>)` (`http/guards/organization-sec
   `InvitationsService` (`listInvitations`, `inviteMembers`, `resendInvitation`, `revokeInvitation`)
   through `data-access/services/{members-api,invitations-api}`; Core's `OrganizationPin`
   (`organizationChanges`) and write classifiers (`isUnknownWriteOutcome`,
-  `isDroppedOrganizationWrite`) for the invitation writes, and `RealtimeConnection.presences`
+  `isDroppedOrganizationWrite`) for the invitation writes, `InvitationsStore`'s optional
+  `MembersStore` and `SubscriptionStore` (read again when an invitee joined), and
+  `RealtimeConnection.presences`
   (optional) for the presence dots and tabs; `@cadenway/ui` `alert-dialog`, `avatar`, `badge`,
   `dialog`, `empty`, `input-group`, `select`, `skeleton`, `table`, `tabs`, `textarea`, `toast` and
   `tooltip`.
@@ -283,8 +285,15 @@ be loaded.` with `Retry`, until a read or a save confirms the organization (anot
   resent only when its expiry differs from the one before the unknown resend; otherwise the toast
   warns `The invitation may not have been resent` with the throttle text. No expiry is shown that
   the API did not answer. Once a cancellation attempt was unknown, a later refusal (a `403` after a
-  role change, say) is not reported as a failure: the list is read, a missing invitation is
-  confirmed cancelled, and a listed one is shown again with the warning. The waits stop once the
+  role change, say) is not reported as a failure: the list is read, and a listed one is shown
+  again with the warning. A missing one may have been accepted meanwhile (accepted invitations
+  leave the pending list too), and the contract has no read of one invitation, so
+  `InvitationsStore` searches the members for its address (`MembersApi.page`): a member means
+  `The invitation was accepted before it could be cancelled` / `<email> is now a member of the
+organization.`, with the page's `MembersStore` and, for the owner, the seats read again; no
+  member confirms the cancellation; a failed read keeps the warning. A cancellation answered
+  `409 invitation.answered` with `details.status: accepted` says the same. A resend whose
+  invitation left the list only says `This invitation is no longer pending`. The waits stop once the
   organization changes (a switch away and back included) or the page is gone. When every attempt
   stays unknown, the row is restored, the list read again, and the toast warns
   `The invitation may not have been resent` / `The invitation may not have been cancelled` with
@@ -446,6 +455,7 @@ Members section (`organization.members.*`):
 | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
 | `role-failed`, `role-failed-seats`, `remove-failed`, `resend-failed`, `resend-failed-limit`, `cancel-failed`, `invite-failed`, `invite-failed-limit`                                                    | The mockup draws no refused write.                                                                     |
 | `role-stale`, `role-stale-text`, `invitation-closed`                                                                                                                                                    | The mockup draws no write overtaken by another person's.                                               |
+| `cancel-accepted`, `cancel-accepted-text`                                                                                                                                                               | The mockup draws no cancellation overtaken by an accepted invitation.                                  |
 | `invite-uncertain`, `invite-uncertain-text`, `invite-not-sent`, `invite-not-sent-one`, `invite-not-sent-text`, `resend-uncertain`, `cancel-uncertain`                                                   | The mockup draws no write of unknown outcome or address left unsent; the wording follows Onboarding's. |
 | `resend-throttled`                                                                                                                                                                                      | Copy of the contract (`resendInvitation`); the mockup draws no throttled resend.                       |
 | `invite-none`, `invite-skipped`, `invite-skipped-one`                                                                                                                                                   | The mockup draws no address already a member or invited.                                               |

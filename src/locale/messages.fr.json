@@ -1514,6 +1514,8 @@
     "organization.members.avatar-others": "et",
     "organization.members.avatar-unknown": "Utilisateur inconnu",
     "organization.members.cancel": "Annuler",
+    "organization.members.cancel-accepted": "L’invitation a été acceptée avant d’être annulée",
+    "organization.members.cancel-accepted-text": "{$email} est désormais membre de l’organisation.",
     "organization.members.cancel-failed": "Impossible d’annuler l’invitation",
     "organization.members.cancel-invitation": "Annuler",
     "organization.members.cancel-uncertain": "L’invitation n’a peut-être pas été annulée",

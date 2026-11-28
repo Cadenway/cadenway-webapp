@@ -1425,6 +1425,8 @@
     "organization.members.resend-failed-limit": "The daily invitation limit is reached: try again later.",
     "organization.members.resend-failed": "The invitation could not be resent",
     "organization.members.invitation-cancelled": "Invitation cancelled",
+    "organization.members.cancel-accepted": "The invitation was accepted before it could be cancelled",
+    "organization.members.cancel-accepted-text": "{$email} is now a member of the organization.",
     "organization.members.cancel-uncertain": "The invitation may not have been cancelled",
     "organization.members.cancel-failed": "The invitation could not be cancelled",
     "organization.members.role-changed": "Role changed",

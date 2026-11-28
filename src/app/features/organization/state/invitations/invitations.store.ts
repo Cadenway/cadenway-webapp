@@ -35,13 +35,20 @@ import {
 } from '@features/workspace/ports/workspace-context';
 
 import { InvitationsApi } from '../../data-access/services/invitations-api/invitations-api.service';
+import { MembersApi } from '../../data-access/services/members-api/members-api.service';
 import type {
   InvitationList,
   InvitationOutcome,
   PendingInvitation,
 } from '../../models/invitation/invitation.interface';
-import type { AssignableMemberRole } from '../../models/member/member.interface';
+import type {
+  AssignableMemberRole,
+  MemberPage,
+  OrganizationMember,
+} from '../../models/member/member.interface';
 import { takesSingular } from '../../models/member/plural-form.util';
+import { MembersStore } from '../members/members.store';
+import { SubscriptionStore } from '../subscription/subscription.store';
 import { INVITATION_SETTLE_DELAYS_MS } from './invitation-settle-delays.token';
 
 /**
@@ -63,6 +70,17 @@ const VALIDITY_MS: number = 7 * 24 * 60 * 60 * 1000;
  * @type {readonly string[]}
  */
 const CLOSED_CODES: readonly string[] = ['invitation.answered', 'invitation.revoked'];
+
+/**
+ * Constant MEMBER_LOOKUP_LIMIT
+ *
+ * @description
+ * Members read to tell whether an invitee joined: the largest page the contract accepts, for a
+ * search on the address.
+ *
+ * @type {number}
+ */
+const MEMBER_LOOKUP_LIMIT: number = 100;
 
 /**
  * Constant EMAIL_ISSUE
@@ -468,8 +486,11 @@ export interface InvitationsStoreInstance {
    * undo, so the toast has none. An unknown outcome keeps it hidden and busy and revokes again after
    * each wait of `INVITATION_SETTLE_DELAYS_MS` (revoking again answers `204`). Once an attempt
    * was unknown, a later refusal, or every attempt staying unknown, is not taken as a failure: the
-   * list is read, a missing invitation is confirmed cancelled, and a listed one is shown again
-   * with the warning that it may not have been cancelled. A dropped revocation says nothing.
+   * list is read, and a listed one is shown again with the warning that it may not have been
+   * cancelled. A missing one is looked up among the members: a member means the invitation was
+   * accepted first (said so, with the members and seats read again), no member confirms the
+   * cancellation, and a failed lookup keeps the warning; `409 invitation.answered` as `accepted`
+   * says it was accepted too. A dropped revocation says nothing.
    *
    * @param {PendingInvitation} invitation - The invitation.
    * @returns {Promise<boolean>} Whether the revocation was confirmed.
@@ -536,6 +557,9 @@ function createInvitationsStore(): Type<InvitationsStoreInstance> {
         _api: api,
         _workspace: workspace,
         _pin: inject(OrganizationPin),
+        _membersApi: inject(MembersApi),
+        _members: inject(MembersStore, { optional: true }),
+        _subscription: inject(SubscriptionStore, { optional: true }),
         _toasts: inject(CwToastService),
         _issued: issued,
         invitations: resource({
@@ -657,6 +681,26 @@ function createInvitationsStore(): Type<InvitationsStoreInstance> {
         try {
           const list: InvitationList = await store._api.list();
           return list.items.find((item: PendingInvitation): boolean => item.id === id) ?? null;
+        } catch {
+          return undefined;
+        }
+      };
+      // Whether an address belongs to a member of the organization now; undefined when the
+      // members could not be read. The search matches names and addresses, so the address itself
+      // is compared.
+      const isMember: (email: string) => Promise<boolean | undefined> = async (
+        email: string,
+      ): Promise<boolean | undefined> => {
+        try {
+          const page: MemberPage = await store._membersApi.page(
+            { search: email, roles: [] },
+            MEMBER_LOOKUP_LIMIT,
+            null,
+          );
+          const address: string = email.toLowerCase();
+          return page.items.some(
+            (member: OrganizationMember): boolean => member.email.toLowerCase() === address,
+          );
         } catch {
           return undefined;
         }
@@ -958,6 +1002,39 @@ function createInvitationsStore(): Type<InvitationsStoreInstance> {
             );
             return true;
           };
+          // The invitee joined before the cancellation could be applied: the invitation is gone,
+          // but it was not cancelled, and the members and seats changed.
+          const accepted: () => false = (): false => {
+            confirm(invitation.id, null);
+            drop();
+            store._members?.retry();
+            if (store._workspace.role() === 'owner') store._subscription?.retry();
+            store._toasts.info(
+              $localize`:@@organization.members.cancel-accepted:The invitation was accepted before it could be cancelled`,
+              {
+                description: $localize`:@@organization.members.cancel-accepted-text:${invitation.email}:email: is now a member of the organization.`,
+              },
+            );
+            return false;
+          };
+          const unsettled: () => false = (): false => {
+            drop();
+            bump();
+            store._toasts.warning(
+              $localize`:@@organization.members.cancel-uncertain:The invitation may not have been cancelled`,
+              { description: invitation.email },
+            );
+            return false;
+          };
+          // Gone from the pending list after an attempt of unknown outcome: revoked, or answered
+          // meanwhile. The contract has no read of one invitation, so the members tell whether the
+          // invitee joined; without that answer nothing is claimed.
+          const settleGone: () => Promise<boolean> = async (): Promise<boolean> => {
+            const joined: boolean | undefined = await isMember(invitation.email);
+            if (!live()) return false;
+            if (joined === undefined) return unsettled();
+            return joined ? accepted() : cancelled();
+          };
           // Set once an attempt ended with an unknown outcome: that attempt may have revoked it,
           // so a later refusal is not the cancellation's failure.
           let uncertain: boolean = false;
@@ -983,24 +1060,20 @@ function createInvitationsStore(): Type<InvitationsStoreInstance> {
                   return false;
                 }
                 if (CLOSED_CODES.some((code: string): boolean => hasProblemCode(error, code))) {
+                  // `409 invitation.answered` says which answer in `details.status`.
+                  if (readProblem(error)?.details?.['status'] === 'accepted') return accepted();
                   drop();
                   closed(invitation);
                   return false;
                 }
                 if (uncertain) {
-                  // The list tells whether an earlier attempt revoked it.
+                  // The list tells whether it is still pending; if not, the members tell why.
                   const found: PendingInvitation | null | undefined = await readInvitation(
                     invitation.id,
                   );
                   if (!live()) return false;
-                  if (found === null) return cancelled();
-                  drop();
-                  bump();
-                  store._toasts.warning(
-                    $localize`:@@organization.members.cancel-uncertain:The invitation may not have been cancelled`,
-                    { description: invitation.email },
-                  );
-                  return false;
+                  if (found === null) return await settleGone();
+                  return unsettled();
                 }
                 drop();
                 store._toasts.error(
