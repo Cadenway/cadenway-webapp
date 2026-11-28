@@ -1,6 +1,9 @@
-import type { Provider } from '@angular/core';
+import { computed, inject, type Provider } from '@angular/core';
 import type { SlotContribution, SlotFeature } from '@shared/layout-slot';
 
+import type { OrganizationSubscription } from '../../models/organization-subscription/organization-subscription.interface';
+import type { PlanSeats, PlanSeatsPort } from '../../ports/plan-seats/plan-seats-port.interface';
+import { PLAN_SEATS } from '../../ports/plan-seats/plan-seats.token';
 import { SubscriptionStore } from '../../state/subscription/subscription.store';
 
 import { PlanSummary } from '../../ui/components/plan-summary/plan-summary.component';
@@ -48,11 +51,32 @@ export function withStorageBanner(): SlotFeature<SlotContribution> {
  * Function provideOrganizationUsage
  *
  * @description
- * Provides the one `SubscriptionStore` the plan line and the storage banner share. Give it to the
- * `/:org` route, next to the shell slots, whose injector provides `WORKSPACE_CONTEXT`.
+ * Provides the one `SubscriptionStore` the plan line and the storage banner share, and
+ * `PLAN_SEATS`, its plan and free seats for other features (Spaces' `Invite your team`
+ * suggestion), so the shell reads the subscription once. Give it to the `/:org` route, next to the
+ * shell slots, whose injector provides `WORKSPACE_CONTEXT`.
  *
- * @returns {Provider[]} The store.
+ * @returns {Provider[]} The store and the plan seats port.
  */
 export function provideOrganizationUsage(): Provider[] {
-  return [SubscriptionStore];
+  return [
+    SubscriptionStore,
+    {
+      provide: PLAN_SEATS,
+      useFactory: (): PlanSeatsPort => {
+        const store: InstanceType<typeof SubscriptionStore> = inject(SubscriptionStore);
+        return {
+          seats: computed((): PlanSeats | null => {
+            const subscription: OrganizationSubscription | null = store.current();
+            return subscription === null
+              ? null
+              : {
+                  plan: subscription.plan,
+                  free: Math.max(0, subscription.seatsLimit - subscription.seatsUsed),
+                };
+          }),
+        };
+      },
+    },
+  ];
 }

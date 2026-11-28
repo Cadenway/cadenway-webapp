@@ -25,7 +25,7 @@ import { injectOrganizationSlug } from '../../../utils/workspace-route/workspace
       class="flex items-center gap-1.5 rounded-sm text-xs text-muted-foreground hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background focus-visible:outline-none"
       data-testid="sidebar-trash"
     >
-      <ng-icon name="phosphorTrashBold" class="size-3.5" aria-hidden="true" />
+      <ng-icon size="0.875rem" name="phosphorTrashBold" aria-hidden="true" />
       <ng-container i18n="@@spaces.footer.trash">Trash</ng-container>
       @if (navigation.trashCount.hasValue()) {
         <span class="ml-auto tabular-nums">{{ navigation.trashCount.value() }}</span>
@@ -36,7 +36,7 @@ import { injectOrganizationSlug } from '../../../utils/workspace-route/workspace
       class="flex items-center gap-1.5 rounded-sm text-xs text-muted-foreground hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background focus-visible:outline-none"
       data-testid="sidebar-archives"
     >
-      <ng-icon name="phosphorArchiveBold" class="size-3.5" aria-hidden="true" />
+      <ng-icon size="0.875rem" name="phosphorArchiveBold" aria-hidden="true" />
       <ng-container i18n="@@spaces.footer.archives">Archives</ng-container>
       @if (navigation.archiveCount.hasValue()) {
         <span class="ml-auto tabular-nums">{{ navigation.archiveCount.value() }}</span>

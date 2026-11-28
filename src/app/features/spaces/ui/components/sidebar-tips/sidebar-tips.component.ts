@@ -31,7 +31,7 @@ import type { SidebarTip } from '../../../constants/sidebar-tips/sidebar-tips.co
         <span
           class="flex size-7 shrink-0 items-center justify-center rounded-md border border-border bg-background"
           aria-hidden="true"
-          ><ng-icon [name]="tip().icon" class="size-4" [class]="tip().tone"
+          ><ng-icon size="1rem" [name]="tip().icon" [class]="tip().tone"
         /></span>
         <p class="min-w-0 flex-1 truncate text-sm font-medium" aria-live="polite">
           {{ tip().title }}
@@ -48,7 +48,7 @@ import type { SidebarTip } from '../../../constants/sidebar-tips/sidebar-tips.co
           i18n-title="@@spaces.tips.dismiss"
           (click)="dismissed.emit()"
         >
-          <ng-icon name="phosphorXBold" class="size-3.5" aria-hidden="true" />
+          <ng-icon name="phosphorXBold" aria-hidden="true" />
         </button>
       </div>
       <p class="text-xs leading-5 text-pretty text-muted-foreground">{{ tip().text }}</p>
@@ -67,7 +67,7 @@ import type { SidebarTip } from '../../../constants/sidebar-tips/sidebar-tips.co
             i18n-aria-label="@@spaces.tips.previous"
             (click)="previous.emit()"
           >
-            <ng-icon name="phosphorCaretLeftBold" class="size-3.5" aria-hidden="true" />
+            <ng-icon name="phosphorCaretLeftBold" aria-hidden="true" />
           </button>
           <button
             cwButton
@@ -78,7 +78,7 @@ import type { SidebarTip } from '../../../constants/sidebar-tips/sidebar-tips.co
             i18n-aria-label="@@spaces.tips.next"
             (click)="next.emit()"
           >
-            <ng-icon name="phosphorCaretRightBold" class="size-3.5" aria-hidden="true" />
+            <ng-icon name="phosphorCaretRightBold" aria-hidden="true" />
           </button>
         }
       </div>

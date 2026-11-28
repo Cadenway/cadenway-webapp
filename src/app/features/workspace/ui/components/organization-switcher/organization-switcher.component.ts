@@ -85,7 +85,10 @@ const ROLE_NAMES: Readonly<Record<WorkspaceRole, string>> = {
  * come `Organization settings` (administrators), `Members and invitations` (members, with the
  * member count) and `Billing and quotas` (the owner), each shown only to the roles whose section
  * guard lets them in, which open `/<slug>/organization/<section>`, and `Create or join an
- * organization`, which opens `/organizations`. It provides its own
+ * organization`, which opens `/organizations`. The rail trigger keeps 4 px below it before the
+ * separator (`mb-1`, line 33), and the menu is at least 256 px wide (`min-w-64`, line 74): its
+ * heading holds the 246 px inside the panel's padding and border, since `cw-menu` takes no width.
+ * It provides its own
  * `OrganizationMenuStore` and follows an organization switch in place through the `workspace`
  * port. Its host is `display: contents`, so the item joins the rail group's layout.
  */

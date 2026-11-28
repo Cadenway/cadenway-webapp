@@ -25,7 +25,7 @@ import { WORKSPACE_CONTEXT } from '../../../ports/workspace-context/workspace-co
       class="flex h-8 items-center gap-2 rounded-md px-2 text-sm text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:outline-none focus-visible:ring-inset"
       data-testid="settings-back-to-app"
     >
-      <ng-icon name="phosphorArrowLeftBold" class="size-4 shrink-0" aria-hidden="true" />
+      <ng-icon size="1rem" name="phosphorArrowLeftBold" class="shrink-0" aria-hidden="true" />
       <ng-container i18n="@@workspace.settings.back-to-app">Back to the application</ng-container>
     </a>
   `,

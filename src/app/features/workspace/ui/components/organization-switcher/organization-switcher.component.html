@@ -16,8 +16,9 @@
         <span class="truncate text-xs text-muted-foreground">{{ address() }}</span>
       </span>
       <ng-icon
+        size="0.875rem"
         name="phosphorCaretUpDownBold"
-        class="ml-auto size-3.5 shrink-0 text-muted-foreground"
+        class="ml-auto shrink-0 text-muted-foreground"
         aria-hidden="true"
       />
     </button>
@@ -27,6 +28,7 @@
     cwAppRailItem
     variant="primary"
     desktopOnly
+    class="mb-1"
     [cwMenuTriggerFor]="organizationMenu"
     [tooltip]="workspace.organization().name"
     data-testid="organization-switcher"
@@ -47,7 +49,9 @@
   ariaLabel="Organizations"
   i18n-ariaLabel="@@workspace.organization-menu.aria-label"
 >
-  <cw-menu-label i18n="@@workspace.organization-menu.heading">Organizations</cw-menu-label>
+  <cw-menu-label class="min-w-61.5" i18n="@@workspace.organization-menu.heading"
+    >Organizations</cw-menu-label
+  >
   @if (store.loading()) {
     <div class="flex flex-col gap-1 px-2 py-1.5" data-testid="organization-menu-loading">
       <div cwSkeleton class="h-8 w-56"></div>
