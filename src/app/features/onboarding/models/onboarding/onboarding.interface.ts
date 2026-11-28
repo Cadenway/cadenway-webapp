@@ -439,11 +439,24 @@ export interface OnboardingInvitationOutcome {
    * @description
    * The addresses of the batch the gateway answered with an outcome other than `invited`,
    * `already-invited` or `already-member` (an outcome a later contract adds, which counts as not
-   * sent), as the gateway spelled them; a caller may send them again. Absent counts as none.
+   * sent), spelled as sent; a caller may send them again. Absent counts as none.
    *
    * @type {readonly string[] | undefined}
    * @readonly
    */
   readonly notSent?: readonly string[];
+
+  /**
+   * Property unknown
+   *
+   * @description
+   * The addresses of the batch the gateway answered no result or conflicting results, spelled as
+   * sent: their outcome is unknown, as after a lost answer, so a caller keeps them and may send
+   * them again. Absent counts as none.
+   *
+   * @type {readonly string[] | undefined}
+   * @readonly
+   */
+  readonly unknown?: readonly string[];
   // #endregion
 }

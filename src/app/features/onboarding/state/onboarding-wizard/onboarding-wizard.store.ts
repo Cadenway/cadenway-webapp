@@ -12,7 +12,7 @@ import {
   withState,
 } from '@ngrx/signals';
 
-import { type ApiProblem, OrganizationPin, readProblem } from '@core/api';
+import { type ApiProblem, isUnknownWriteOutcome, OrganizationPin, readProblem } from '@core/api';
 import {
   NAVIGATION_REFRESH,
   type NavigationRefreshPort,
@@ -28,10 +28,7 @@ import {
   type OnboardingPresetChoice,
   onboardingPresets,
 } from '../../constants/presets/onboarding-presets.constants';
-import {
-  isUncertainOnboardingWrite,
-  OnboardingApi,
-} from '../../data-access/services/onboarding-api/onboarding-api.service';
+import { OnboardingApi } from '../../data-access/services/onboarding-api/onboarding-api.service';
 import type {
   OnboardingInvitationOutcome,
   OnboardingProgress,
@@ -812,10 +809,16 @@ function createOnboardingWizardStore(): Type<OnboardingWizardStoreInstance> {
             const notSent: ReadonlySet<string> = new Set(
               (outcome.notSent ?? []).map((email: string): string => email.toLowerCase()),
             );
+            // Addresses the answer left out or gave conflicting results: as unknown as a lost
+            // answer, so they stay unsent and the step says the outcome is unknown.
+            const unknown: ReadonlySet<string> = new Set(
+              (outcome.unknown ?? []).map((email: string): string => email.toLowerCase()),
+            );
+            if (unknown.size > 0) uncertain = true;
             const done: readonly string[] = batch
               .map((email: string): string => email.toLowerCase())
-              .filter((email: string): boolean => !notSent.has(email));
-            unsent += batch.length - done.length;
+              .filter((email: string): boolean => !notSent.has(email) && !unknown.has(email));
+            unsent += batch.length - done.length - unknown.size;
             reached ||= outcome.invited + outcome.alreadyInvited > 0;
             patchState(store, (state: OnboardingWizardState) => ({
               _sent: [...state._sent, ...done],
@@ -823,7 +826,7 @@ function createOnboardingWizardStore(): Type<OnboardingWizardStoreInstance> {
             }));
           } catch (error: unknown) {
             if (!live(organizationId)) return false;
-            if (isUncertainOnboardingWrite(error)) uncertain = true;
+            if (isUnknownWriteOutcome(error)) uncertain = true;
             else failed = true;
           }
         }
@@ -942,7 +945,7 @@ function createOnboardingWizardStore(): Type<OnboardingWizardStoreInstance> {
               patchState(store, { finishing: false, _attempt: null });
               return;
             }
-            if (isUncertainOnboardingWrite(error)) {
+            if (isUnknownWriteOutcome(error)) {
               patchState(store, {
                 finishing: false,
                 failure: 'unknown',
@@ -1005,7 +1008,7 @@ function createOnboardingWizardStore(): Type<OnboardingWizardStoreInstance> {
             showSkipFailed();
             return;
           }
-          const unsaved: boolean = isUncertainOnboardingWrite(error)
+          const unsaved: boolean = isUnknownWriteOutcome(error)
             ? shown.wizard.status === 'in-progress'
             : problemCode(error) !== 'onboarding.wizard-closed';
           if (unsaved) showSkipFailed();

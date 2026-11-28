@@ -8,6 +8,7 @@ import {
 } from '@cadenway/api-client';
 
 import type { LookColor } from '@features/spaces/utils/space-look';
+import { type BatchEntry, type BatchOutcomes, matchBatchOutcomes } from '@shared/batch-outcomes';
 
 import type {
   OnboardingChecklistChange,
@@ -181,29 +182,33 @@ const SETTLED_INVITATION_OUTCOMES: ReadonlySet<string> = new Set([
  * Function toInvitationOutcome
  *
  * @description
- * Counts the addresses an invitation batch invited; any other outcome, an unknown one included,
+ * Counts the addresses sent that a batch invited; any other outcome, an unknown one included,
  * counts as not sent, as the contract asks. The `already-invited` ones are also counted apart: an
  * invitation is already out for them. The addresses with an outcome outside
- * `SETTLED_INVITATION_OUTCOMES` are listed in `notSent`, so a caller can send them again.
+ * `SETTLED_INVITATION_OUTCOMES` are listed in `notSent`, so a caller can send them again. Each
+ * address sent is matched to its own result (`matchBatchOutcomes`): one the answer leaves out or
+ * gives conflicting results is listed in `unknown`, never counted.
  *
  * @param {InvitationBatchResult} dto - Gateway result.
- * @returns {OnboardingInvitationOutcome} The counts.
+ * @param {readonly string[]} emails - The addresses sent.
+ * @returns {OnboardingInvitationOutcome} The counts, and the addresses not sent or of unknown
+ * outcome, spelled as sent.
  */
-export function toInvitationOutcome(dto: InvitationBatchResult): OnboardingInvitationOutcome {
-  const invited: number = dto.invitations.filter(
-    (entry: InvitationBatchResult['invitations'][number]): boolean => entry.outcome === 'invited',
+export function toInvitationOutcome(
+  dto: InvitationBatchResult,
+  emails: readonly string[],
+): OnboardingInvitationOutcome {
+  const { settled, unknown }: BatchOutcomes = matchBatchOutcomes(emails, dto.invitations);
+  const invited: number = settled.filter(
+    (entry: BatchEntry): boolean => entry.outcome === 'invited',
   ).length;
-  const alreadyInvited: number = dto.invitations.filter(
-    (entry: InvitationBatchResult['invitations'][number]): boolean =>
-      entry.outcome === 'already-invited',
+  const alreadyInvited: number = settled.filter(
+    (entry: BatchEntry): boolean => entry.outcome === 'already-invited',
   ).length;
-  const notSent: readonly string[] = dto.invitations
-    .filter(
-      (entry: InvitationBatchResult['invitations'][number]): boolean =>
-        !SETTLED_INVITATION_OUTCOMES.has(entry.outcome),
-    )
-    .map((entry: InvitationBatchResult['invitations'][number]): string => entry.email);
-  return { invited, skipped: dto.invitations.length - invited, alreadyInvited, notSent };
+  const notSent: readonly string[] = settled
+    .filter((entry: BatchEntry): boolean => !SETTLED_INVITATION_OUTCOMES.has(entry.outcome))
+    .map((entry: BatchEntry): string => entry.email);
+  return { invited, skipped: settled.length - invited, alreadyInvited, notSent, unknown };
 }
 
 /**

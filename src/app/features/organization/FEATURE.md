@@ -39,8 +39,10 @@ section has `organizationSectionGuard(<section>)` (`http/guards/organization-sec
   (`Organisation.dc.html` line 321); Quotas reads the same `getBillingSubscription`.
 - Each page is a stub (WP0 of steps 7 and 8) showing the mockup's section title in the
   organization column (`max-w-4xl`); packages O1 to O6 replace them. General (O1) and Security (O5) are built. Integrations and the Audit
-  log stay stubs until their backends exist (B7, B11). The stubs read no data, so they have no
-  loading, error or empty state yet.
+  log stay stubs until their backends exist (B7, B11): each shows the mockup's lead under its
+  title and an outlined "not available yet" state (`organization.integrations.unavailable`,
+  `organization.audit-log.unavailable`). The stubs read no data, so they have no loading or
+  error state yet.
 - A failed primary read of a section renders the default error boundary in the shell, titled
   `Could not load this section` by the mounting route's `data`.
 
@@ -78,11 +80,17 @@ section has `organizationSectionGuard(<section>)` (`http/guards/organization-sec
   `skeleton`, `spinner`, `textarea` and `toast`.
 - Workspace's `ports/workspace-context`, `ports/workspace-refresh` (General) and
   `http/guards/organization-role`, Errors' `errors.routes`,
-  `@shared/unsaved-changes`.
+  `@shared/unsaved-changes`, `@shared/initials` (the organization's initials),
+  `@shared/batch-outcomes` (the invitation adapter matches each
+  address sent to its own result).
 - `@cadenway/ui` (`banner`, `button`) and `@cadenway/icons`.
 - Members section: `MembersService` (`listMembers`, `changeMemberRole`, `removeMember`) and
   `InvitationsService` (`listInvitations`, `inviteMembers`, `resendInvitation`, `revokeInvitation`)
-  through `data-access/services/{members-api,invitations-api}`; Core's `RealtimeConnection.presences`
+  through `data-access/services/{members-api,invitations-api}`; Core's `OrganizationPin`
+  (`organizationChanges`) and write classifiers (`isUnknownWriteOutcome`,
+  `isDroppedOrganizationWrite`) for the invitation writes, `InvitationsStore`'s optional
+  `MembersStore` and `SubscriptionStore` (read again when an invitee may have joined), and
+  `RealtimeConnection.presences`
   (optional) for the presence dots and tabs; `@cadenway/ui` `alert-dialog`, `avatar`, `badge`,
   `dialog`, `empty`, `input-group`, `select`, `skeleton`, `table`, `tabs`, `textarea`, `toast` and
   `tooltip`.
@@ -174,7 +182,8 @@ loaded.` with `Retry`; the banner stays hidden until a retry succeeds.
   logo image is a secondary read keyed by `<organization id>:<logo id>`, so a save that keeps the
   logo reads no image; a replaced read is aborted and shows nothing. Its object URL is revoked once
   another is shown, as soon as the organization has no logo, and with the page; without a logo,
-  or when its image cannot be read, the tile shows the initials of the saved name.
+  or when its image cannot be read, the tile shows the initials of the saved name, from
+  `@shared/initials` (the first letters of its first and last words).
 - The draft is kept apart from the saved organization it started from. When a read brings a newer
   organization (the reread after a logo change or after a stale version), each field the person
   changed keeps their edit and every other field takes the new value; when someone else changed a
@@ -235,7 +244,15 @@ be loaded.` with `Retry`, until a read or a save confirms the organization (anot
   writes and the section skeleton (the next organization's first read failing reaches the error
   boundary), and a write that settles after it changes nothing and shows no toast. The page binds
   the invite dialog and the removal confirmation to the organization they were opened for: a
-  switch closes and empties them, and a submission for another organization sends nothing.
+  switch closes and empties them, and a submission for another organization sends nothing. Each
+  opening (and each closing by the page) starts a new dialog generation: an invite's answer
+  applies only to the dialog that submitted it while it is still open, so a dialog or removal
+  confirmation opened while an older invite was pending keeps its state, whatever that invite
+  ends with.
+  `InvitationsStore` also hears `OrganizationPin.organizationChanges`: a commit resets its writes
+  at once, and each invite, resend and cancellation listens to it while pending and stays moved
+  once it fired, so a switch away and back (A, then B, then A) before the answer still drops it
+  silently, which comparing the current organization ids alone would miss.
 - `MembersStore` subscribes to `RealtimeConnection.presenceChanges` for its lifetime, which starts
   the connection on a direct visit; the presence dots and tabs read `presences`. A presence tab's
   page that live changes leave without rows goes back to the last page with rows.
@@ -265,6 +282,38 @@ be loaded.` with `Retry`, until a read or a save confirms the organization (anot
   `invitation.revoked` drops the row and reads the list again. The server has no undo, so the
   removal and cancellation toasts have none. A confirmed role change or removal reads the
   subscription again for the owner's free seats.
+- Invitation writes follow the app-wide write discipline (`isUnknownWriteOutcome` and
+  `isDroppedOrganizationWrite`, `@core/api`): an unknown outcome (no answer, `408`, `5xx`,
+  `409 idempotency.request-in-progress`, or a `2xx` the client could not read) is never reported
+  as a failure, and one read right away is not taken as the answer, since the write may still be
+  under way. A cancellation of unknown outcome keeps the row hidden and busy and is sent again
+  after 2, 4 and 8 s (`INVITATION_SETTLE_DELAYS_MS`; revoking again answers `204`). A resend of
+  unknown outcome is never sent again (a second one within the hour is throttled): the row stays
+  shown as resent and busy while the list is read after each of those waits, until it shows a new
+  expiry. A later resend answered `429 invitation.resend-throttled` proves nothing (the original
+  invitation, or any resend within the hour, throttles too): the list is read, and it counts as
+  resent only when its expiry differs from the one before the unknown resend; otherwise the toast
+  warns `The invitation may not have been resent`, saying the invitation was sent less than an
+  hour ago so it cannot be resent yet (never that it was just resent). No expiry is shown that
+  the API did not answer. Once a cancellation attempt was unknown, a later refusal (a `403` after a
+  role change, say) is not reported as a failure either: the row shows again with the warning.
+- Outcomes are claimed only from the API's own answers: `Invitation cancelled` only when a revoke
+  answers success; `The invitation was accepted before it could be cancelled` /
+  `<email> is now a member of the organization.` (with the page's `MembersStore` and, for the
+  owner, the seats read again) or `The invitation was declined before it could be cancelled` only
+  from `409 invitation.answered` and its `details.status` (`accepted` or `refused`); `Invitation
+resent` from a resend that answered, or from the invitation itself listed with another expiry.
+  Absence claims nothing: one traversal of a list paged by cursor, most recent first, can miss an
+  invitation another resend moved ahead of the cursor, and cancelled, accepted and declined
+  invitations all leave it. So a write of unknown outcome that no answer settled ends with the
+  warning (`The invitation may not have been cancelled` / `...resent`) and
+  `The pending invitations and the members show where the invitation to <email> stands.`, and the
+  invitations, the members and, for the owner, the seats are read again. The waits, and the reads of the list between them (through an `AbortSignal` the write passes to `InvitationsApi.list`, which requests no further page once it aborts), stop once the organization changes (a switch away and back included) or the page is gone, with nothing said; so does a resend or cancellation answered after that, success or refusal. When every attempt
+  stays unknown, the row is restored, the list read again, and the toast warns
+  `The invitation may not have been resent` / `The invitation may not have been cancelled` the
+  same way. A write dropped for another session organization (`OrganizationSwitchPendingError`,
+  `412 organization.context-changed`) restores the row, or closes the invite dialog, with no
+  toast: the workspace recovery takes over.
 - `<n> free seats` (summary) and `<n> seats available on the <plan> plan.` (dialog) show to the
   owner only, who alone reads billing (gap Q1); the invite dialog then refuses more members than
   free seats. The last-activity column (gap M1) and the invitation link card (B12) are left out.
@@ -273,6 +322,38 @@ be loaded.` with `Retry`, until a read or a save confirms the organization (anot
   more than 50, then reads the invitations again. A `400` whose `details.issues[].path` is
   `emails.<n>` names those addresses on the field until they change or the dialog opens again. The toast counts the addresses invited and
   those skipped (already a member or invited). The dialog stays open on a refusal.
+- An address the batch answered with another outcome (`InvitationResult.outcome` beyond `invited`,
+  `already-member` and `already-invited`, which the contract counts as not sent; the adapter lists
+  them in `notSent`) stays in the dialog. An address the `200` answer leaves out, or gives
+  conflicting results, is never counted as sent or skipped: the adapter lists it in `unknown`, and
+  the dialog keeps it as after a lost answer (the uncertain warning, the role locked). The dialog
+  keeps only the addresses left and its role (both
+  fields are disabled while the batch is sent, so they hold the submitted snapshot; after a batch
+  of unknown outcome the role stays the one sent, disabled with the `invite-role-locked` hint,
+  until the dialog closes: clearing or editing the addresses does not unlock it, since a second
+  send of an address the lost batch reached answers `already-invited` and keeps that
+  invitation's role, which the toast never restates (it counts such addresses as skipped, already
+  a member or invited)), with
+  `{n} address(es) could not be invited` / `The addresses stay in the list: press Invite to try again.`,
+  after the invited ones' toast when some were invited, else with the skipped count first. A batch
+  of unknown outcome keeps every address in the dialog, reads the list again and warns
+  `The invitations may not have been sent` / `Sending again is safe.`: a second send answers
+  `already-invited` for an address the first reached. A batch with addresses of both kinds counts
+  only the definite ones in `{n} address(es) could not be invited` and adds
+  `Some may already have been sent: sending again is safe.`. `inviteMembers` declares no
+  `Idempotency-Key` (`@cadenway/contracts` 0.44.0), so none is sent and the retry relies on that
+  answer (a contract gap, to raise in cadenway-api-contracts).
+- A batch answered once the Members page is gone, in the same organization, changes no state (the
+  store is destroyed) and still says what it did, as Onboarding's invite dialog does: the sent
+  count, then one toast counting the addresses left, `{n} address(es) could not be invited` /
+  `Invite them again from the Members page.`, or, when any has an unknown outcome,
+  `{n} address(es) may not have been invited` / `Sending them again from the Members page is safe.`.
+  Once the organization changed too, it says nothing.
+- Contract gaps of the invitations (to raise in cadenway-api-contracts): `inviteMembers` takes no
+  `Idempotency-Key`; no operation reads one invitation with its terminal status (revoked,
+  accepted, refused, expired); and `listInvitations` pages are not read from one snapshot. So the
+  state of an invitation after a write of unknown outcome can only come from a later answer of the
+  API about that invitation.
 - Counts pick their singular or plural text with `Intl.PluralRules($localize.locale)`, so French
   reads `0 membre` as the mockup does.
 - Screen readers hear a row's presence as `Status: Active | Away | Do not disturb | Offline`
@@ -405,21 +486,24 @@ General section (`organization.general.*`):
 
 Members section (`organization.members.*`):
 
-| Unit                                                                                                                                                                                                    | Reason                                                                                       |
-| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
-| `role-failed`, `role-failed-seats`, `remove-failed`, `resend-failed`, `resend-failed-limit`, `cancel-failed`, `invite-failed`, `invite-failed-limit`                                                    | The mockup draws no refused write.                                                           |
-| `role-stale`, `role-stale-text`, `invitation-closed`                                                                                                                                                    | The mockup draws no write overtaken by another person's.                                     |
-| `resend-throttled`                                                                                                                                                                                      | Copy of the contract (`resendInvitation`); the mockup draws no throttled resend.             |
-| `invite-none`, `invite-skipped`, `invite-skipped-one`                                                                                                                                                   | The mockup draws no address already a member or invited.                                     |
-| `invite-invalid`, `invite-required`, `invite-too-many`, `invite-no-seats`                                                                                                                               | The mockup disables `Invite`; the forms rule keeps it enabled and shows an error.            |
-| `invite-seats-one`, `invite-valid-one`, `invite-only-one`, `invite-left-one`, `invite-sent-one`, `summary-member`, `summary-guest`, `summary-seat`, `summary-invitation`, `range-one`, `expires-in-one` | Singular forms of the mockup's `plural()` texts, with the count.                             |
-| `expires-in`, `expired-on`                                                                                                                                                                              | The mockup's fixed texts with the dates of the contract.                                     |
-| `invitations-failed`                                                                                                                                                                                    | The mockup draws no failed invitations read.                                                 |
-| `presence-truncated`                                                                                                                                                                                    | The mockup filters its 22 members; the read stops at 2,000.                                  |
-| `loading`, `failed-title`, `failed-text`, `retry`                                                                                                                                                       | The mockup's section states (`Organisation.dc.html` lines 73-128), with this section's ids.  |
-| `remove-text`                                                                                                                                                                                           | `de <organization>` rather than the mockup's `d’Atelier Nord`, for any name.                 |
-| `invite-placeholder`                                                                                                                                                                                    | English source with `example.com`; the French keeps the mockup's `exemple.fr`.               |
-| `avatar-*`, `alert-*`, `dialog-close`, `select-*`                                                                                                                                                       | Texts of the bricks (the avatar's title, hidden from screen readers); the mockup draws none. |
+| Unit                                                                                                                                                                                                    | Reason                                                                                                 |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| `role-failed`, `role-failed-seats`, `remove-failed`, `resend-failed`, `resend-failed-limit`, `cancel-failed`, `invite-failed`, `invite-failed-limit`                                                    | The mockup draws no refused write.                                                                     |
+| `role-stale`, `role-stale-text`, `invitation-closed`                                                                                                                                                    | The mockup draws no write overtaken by another person's.                                               |
+| `invite-uncertain-part`, `invite-uncertain-count`, `invite-uncertain-count-one`, `invite-uncertain-later`, `invite-not-sent-later`                                                                      | The mockup draws no mixed batch, nor a batch answered once the page is gone.                           |
+| `cancel-accepted`, `cancel-accepted-text`, `cancel-refused`, `invitation-unsettled-text`, `invite-role-locked`                                                                                          | The mockup draws no cancellation overtaken by an answer, nor an unknown one.                           |
+| `invite-uncertain`, `invite-uncertain-text`, `invite-not-sent`, `invite-not-sent-one`, `invite-not-sent-text`, `resend-uncertain`, `cancel-uncertain`                                                   | The mockup draws no write of unknown outcome or address left unsent; the wording follows Onboarding's. |
+| `resend-throttled`                                                                                                                                                                                      | Copy of the contract (`resendInvitation`); the mockup draws no throttled resend.                       |
+| `invite-none`, `invite-skipped`, `invite-skipped-one`                                                                                                                                                   | The mockup draws no address already a member or invited.                                               |
+| `invite-invalid`, `invite-required`, `invite-too-many`, `invite-no-seats`                                                                                                                               | The mockup disables `Invite`; the forms rule keeps it enabled and shows an error.                      |
+| `invite-seats-one`, `invite-valid-one`, `invite-only-one`, `invite-left-one`, `invite-sent-one`, `summary-member`, `summary-guest`, `summary-seat`, `summary-invitation`, `range-one`, `expires-in-one` | Singular forms of the mockup's `plural()` texts, with the count.                                       |
+| `expires-in`, `expired-on`                                                                                                                                                                              | The mockup's fixed texts with the dates of the contract.                                               |
+| `invitations-failed`                                                                                                                                                                                    | The mockup draws no failed invitations read.                                                           |
+| `presence-truncated`                                                                                                                                                                                    | The mockup filters its 22 members; the read stops at 2,000.                                            |
+| `loading`, `failed-title`, `failed-text`, `retry`                                                                                                                                                       | The mockup's section states (`Organisation.dc.html` lines 73-128), with this section's ids.            |
+| `remove-text`                                                                                                                                                                                           | `de <organization>` rather than the mockup's `d’Atelier Nord`, for any name.                           |
+| `invite-placeholder`                                                                                                                                                                                    | English source with `example.com`; the French keeps the mockup's `exemple.fr`.                         |
+| `avatar-*`, `alert-*`, `dialog-close`, `select-*`                                                                                                                                                       | Texts of the bricks (the avatar's title, hidden from screen readers); the mockup draws none.           |
 
 Quotas section (`organization.quotas.*`):
 

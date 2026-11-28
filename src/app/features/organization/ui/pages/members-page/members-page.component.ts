@@ -198,6 +198,18 @@ export class MembersPage {
   private readonly dialogOrganization: WritableSignal<string | null> = signal<string | null>(null);
 
   /**
+   * Property dialog
+   *
+   * @description
+   * Generation of the dialogs: every opening and every closing by the page raises it, so the late
+   * answer of an invite applies only to the dialog that submitted it, while it is still open.
+   *
+   * @type {WritableSignal<number>}
+   * @readonly
+   */
+  private readonly dialog: WritableSignal<number> = signal<number>(0);
+
+  /**
    * Property skeleton
    *
    * @description
@@ -268,6 +280,30 @@ export class MembersPage {
    * @readonly
    */
   protected readonly refused: WritableSignal<readonly string[]> = signal<readonly string[]>([]);
+
+  /**
+   * Property kept
+   *
+   * @description
+   * Addresses the last invite left to send again (an unknown outcome, or an outcome that sent
+   * nothing), which replace the dialog's addresses.
+   *
+   * @type {WritableSignal<readonly string[]>}
+   * @readonly
+   */
+  protected readonly kept: WritableSignal<readonly string[]> = signal<readonly string[]>([]);
+
+  /**
+   * Property roleLocked
+   *
+   * @description
+   * Whether a batch of unknown outcome was sent from the open dialog: its role may already have
+   * been given to the kept addresses, so the dialog keeps it until it closes.
+   *
+   * @type {WritableSignal<boolean>}
+   * @readonly
+   */
+  protected readonly roleLocked: WritableSignal<boolean> = signal<boolean>(false);
 
   /**
    * Property table
@@ -404,6 +440,9 @@ export class MembersPage {
    */
   protected openInvite(): void {
     this.refused.set([]);
+    this.kept.set([]);
+    this.roleLocked.set(false);
+    this.dialog.update((generation: number): number => generation + 1);
     this.dialogOrganization.set(this.workspace.organization().id);
     this.inviteOpen.set(true);
   }
@@ -431,6 +470,7 @@ export class MembersPage {
    * @param {MemberRow} member - The member.
    */
   protected askRemove(member: MemberRow): void {
+    this.dialog.update((generation: number): number => generation + 1);
     this.dialogOrganization.set(this.workspace.organization().id);
     this.removing.set(member);
     this.confirmOpen.set(true);
@@ -497,9 +537,13 @@ export class MembersPage {
    * Method invite
    *
    * @description
-   * Sends the dialog's invitations and closes it once they are accepted; a refusal keeps it open,
-   * and addresses the API refused as invalid are named on its field. A dialog opened for another
-   * organization sends nothing and closes.
+   * Sends the dialog's invitations and closes it once every address is done; a refusal keeps it
+   * open, addresses the API refused as invalid are named on its field, and the addresses left to
+   * send again (an unknown outcome, or an outcome that sent nothing) replace its addresses. A
+   * dropped batch (the organization changed, or the gateway refused it for another session
+   * organization) closes it silently, and a dialog opened for another organization sends nothing
+   * and closes. The answer applies only to the dialog that submitted it, while it is still open:
+   * a dialog or confirmation opened since, after a switch for instance, keeps its state.
    *
    * @param {InviteRequest} request - Addresses and role.
    * @returns {Promise<void>} Resolves once the batch is settled.
@@ -509,12 +553,22 @@ export class MembersPage {
       this.closeDialogs();
       return;
     }
+    const dialog: number = this.dialog();
     this.refused.set([]);
+    this.kept.set([]);
     const result: InviteResult = await this.invitations.invite(request.emails, request.role);
+    if (this.dialog() !== dialog || !this.inviteOpen()) return;
     if (result === 'sent') {
       this.inviteOpen.set(false);
-    } else if (result !== 'failed') {
+    } else if (result === 'dropped') {
+      this.closeDialogs();
+    } else if (result === 'failed') {
+      return;
+    } else if ('refused' in result) {
       this.refused.set(result.refused);
+    } else {
+      if (result.uncertain) this.roleLocked.set(true);
+      this.kept.set(result.kept);
     }
   }
 
@@ -547,10 +601,13 @@ export class MembersPage {
    * Closes the invite dialog and the removal confirmation and forgets what they held.
    */
   private closeDialogs(): void {
+    this.dialog.update((generation: number): number => generation + 1);
     this.inviteOpen.set(false);
     this.confirmOpen.set(false);
     this.removing.set(null);
     this.refused.set([]);
+    this.kept.set([]);
+    this.roleLocked.set(false);
     this.dialogOrganization.set(null);
   }
   // #endregion

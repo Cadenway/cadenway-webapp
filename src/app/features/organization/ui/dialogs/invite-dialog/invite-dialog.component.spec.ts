@@ -237,4 +237,104 @@ describe('InviteDialog', () => {
     await submit(fixture);
     expect(submitted).toHaveBeenCalledWith({ emails: ['p0@ateliernord.fr'], role: 'member' });
   });
+
+  describe('while the invitations are sent', () => {
+    /**
+     * Function roleLocked
+     *
+     * @description
+     * Whether the `Role` select's trigger is disabled.
+     *
+     * @returns {boolean} Whether the role cannot be changed.
+     */
+    function roleLocked(): boolean {
+      const trigger: HTMLElement | null | undefined = find(
+        'invite-role',
+      )?.querySelector<HTMLElement>('[role="combobox"], button');
+      return (
+        trigger?.hasAttribute('disabled') === true ||
+        trigger?.getAttribute('aria-disabled') === 'true'
+      );
+    }
+
+    const answers: readonly [string, readonly string[]][] = [
+      ['a partial answer', ['p2@ateliernord.fr']],
+      ['an unknown outcome', ['p0@ateliernord.fr', 'p1@ateliernord.fr', 'p2@ateliernord.fr']],
+    ];
+
+    for (const [name, kept] of answers) {
+      it(`locks the fields, then holds the kept addresses and the role after ${name}`, async () => {
+        const [fixture, submitted]: [ComponentFixture<InviteDialog>, Mock] = await open(null);
+        await pickGuest(fixture);
+        await type(fixture, addresses(3));
+        await submit(fixture);
+        fixture.componentRef.setInput('pending', true);
+        await fixture.whenStable();
+
+        const field: HTMLTextAreaElement = find('invite-emails') as HTMLTextAreaElement;
+        expect(field.disabled).toBe(true);
+        expect(roleLocked()).toBe(true);
+
+        fixture.componentRef.setInput('pending', false);
+        fixture.componentRef.setInput('kept', kept);
+        await fixture.whenStable();
+
+        expect(field.disabled).toBe(false);
+        expect(roleLocked()).toBe(false);
+        expect(field.value).toBe(kept.join(', '));
+        await submit(fixture);
+        expect(submitted).toHaveBeenLastCalledWith({ emails: kept, role: 'guest' });
+      });
+    }
+  });
+
+  it('keeps the role sent after a batch of unknown outcome, even once the field is cleared', async () => {
+    const [fixture, submitted]: [ComponentFixture<InviteDialog>, Mock] = await open(null);
+    const roleDisabled: () => boolean = (): boolean => {
+      const trigger: HTMLElement | null | undefined = find(
+        'invite-role',
+      )?.querySelector<HTMLElement>('[role="combobox"], button');
+      return (
+        trigger?.hasAttribute('disabled') === true ||
+        trigger?.getAttribute('aria-disabled') === 'true'
+      );
+    };
+    await pickGuest(fixture);
+    await type(fixture, addresses(2));
+    await submit(fixture);
+    fixture.componentRef.setInput('kept', ['p0@ateliernord.fr', 'p1@ateliernord.fr']);
+    fixture.componentRef.setInput('roleLocked', true);
+    await fixture.whenStable();
+
+    expect(roleDisabled()).toBe(true);
+    expect(text(find('invite-role-locked'))).toBe(
+      'The role stays the one sent until this dialog closes: the addresses sent may already be invited with it.',
+    );
+    await type(fixture, '');
+    expect(roleDisabled()).toBe(true);
+    expect(find('invite-role-locked')).not.toBeNull();
+    await type(fixture, 'p1@ateliernord.fr');
+    await submit(fixture);
+
+    expect(submitted).toHaveBeenLastCalledWith({ emails: ['p1@ateliernord.fr'], role: 'guest' });
+  });
+
+  it('replaces the addresses with those kept to send again, keeping the role', async () => {
+    const [fixture, submitted]: [ComponentFixture<InviteDialog>, Mock] = await open(null);
+    await pickGuest(fixture);
+    await type(fixture, addresses(3));
+    await submit(fixture);
+
+    fixture.componentRef.setInput('kept', ['p1@ateliernord.fr', 'p2@ateliernord.fr']);
+    await fixture.whenStable();
+    expect((find('invite-emails') as HTMLTextAreaElement).value).toBe(
+      'p1@ateliernord.fr, p2@ateliernord.fr',
+    );
+    await submit(fixture);
+
+    expect(submitted).toHaveBeenLastCalledWith({
+      emails: ['p1@ateliernord.fr', 'p2@ateliernord.fr'],
+      role: 'guest',
+    });
+  });
 });

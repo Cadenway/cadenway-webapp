@@ -112,8 +112,9 @@ export interface InvitationList {
  * Interface InvitationOutcome
  *
  * @description
- * What became of a batch of addresses: how many were invited and how many were skipped, being
- * already a member, already invited or an outcome this version does not know.
+ * What became of a batch of addresses: how many were invited, how many were skipped, being
+ * already a member or already invited, and which were not sent (an outcome this version does not
+ * know, which the contract counts as not sent).
  */
 export interface InvitationOutcome {
   // #region Properties
@@ -132,11 +133,35 @@ export interface InvitationOutcome {
    * Property skipped
    *
    * @description
-   * Addresses for which nothing was sent.
+   * Addresses for which nothing was sent, being already a member or already invited.
    *
    * @type {number}
    * @readonly
    */
   readonly skipped: number;
+
+  /**
+   * Property notSent
+   *
+   * @description
+   * Addresses the batch answered with another outcome, as the API spelled them: nothing was sent
+   * to them, and sending them again is the way to invite them.
+   *
+   * @type {readonly string[]}
+   * @readonly
+   */
+  readonly notSent: readonly string[];
+
+  /**
+   * Property unknown
+   *
+   * @description
+   * Addresses sent that the answer gave no result or conflicting results, spelled as sent: their
+   * outcome is unknown, so they are neither sent nor skipped.
+   *
+   * @type {readonly string[]}
+   * @readonly
+   */
+  readonly unknown: readonly string[];
   // #endregion
 }

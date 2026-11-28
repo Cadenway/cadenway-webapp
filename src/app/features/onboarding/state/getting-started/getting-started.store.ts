@@ -22,7 +22,12 @@ import {
 } from '@ngrx/signals';
 import { filter, fromEvent, map, type Subscription } from 'rxjs';
 
-import { OrganizationPin, readProblem } from '@core/api';
+import {
+  isDroppedOrganizationWrite,
+  isUnknownWriteOutcome,
+  OrganizationPin,
+  readProblem,
+} from '@core/api';
 import { TaskCreate } from '@features/task';
 import {
   WORKSPACE_CONTEXT,
@@ -34,11 +39,7 @@ import {
   ONBOARDING_INVITE_DIALOG_OVERLAY,
   ONBOARDING_WIZARD_OVERLAY,
 } from '../../constants/overlays/onboarding-overlays.constants';
-import {
-  isDroppedOnboardingWrite,
-  isUncertainOnboardingWrite,
-  OnboardingApi,
-} from '../../data-access/services/onboarding-api/onboarding-api.service';
+import { OnboardingApi } from '../../data-access/services/onboarding-api/onboarding-api.service';
 import type {
   GettingStartedItem,
   GettingStartedItemKey,
@@ -644,7 +645,7 @@ function createGettingStartedStore(): Type<GettingStartedStoreInstance> {
         title: string,
       ): void => {
         if (error instanceof OnboardingWriteDroppedError) return;
-        if (isUncertainOnboardingWrite(error)) {
+        if (isUnknownWriteOutcome(error)) {
           show(
             'warning',
             $localize`:@@onboarding.getting-started.presentation-uncertain:Your change to “Getting started” may not have been saved`,
@@ -691,9 +692,12 @@ function createGettingStartedStore(): Type<GettingStartedStoreInstance> {
       // The summary of a send whose host was destroyed while its batches went on: the dialog is
       // gone and cannot keep the addresses left unsent, so the failure toast counts them and says
       // where to invite them again. These toasts outlive the store.
-      const toastDetached: (send: InviteSend, unsent: number) => void = (
+      // `unknown`: some of the addresses left have an unknown outcome, so the toast does not say
+      // they could not be invited, only that they may not have been and that sending is safe.
+      const toastDetached: (send: InviteSend, unsent: number, unknown: boolean) => void = (
         send: InviteSend,
         unsent: number,
+        unknown: boolean,
       ): void => {
         if (send.invited > 0 || unsent === 0) {
           toastOutcome({ invited: send.invited, skipped: send.skipped }, false);
@@ -711,6 +715,20 @@ function createGettingStartedStore(): Type<GettingStartedStoreInstance> {
           lines.push(
             $localize`:@@onboarding.getting-started.invite-failed-limit:The daily invitation limit is reached: try again later.`,
           );
+        }
+        if (unknown) {
+          lines.push(
+            $localize`:@@onboarding.getting-started.invite-uncertain-later:Sending them again from “Getting started” or the Members page is safe.`,
+          );
+          show(
+            'warning',
+            takesSingular(unsent)
+              ? $localize`:@@onboarding.getting-started.invite-uncertain-count-one:${unsent}:count: address may not have been invited`
+              : $localize`:@@onboarding.getting-started.invite-uncertain-count-other:${unsent}:count: addresses may not have been invited`,
+            { description: lines.join(' ') },
+            false,
+          );
+          return;
         }
         lines.push(
           $localize`:@@onboarding.getting-started.invite-not-sent-later:Invite them again from “Getting started” or the Members page.`,
@@ -762,8 +780,12 @@ function createGettingStartedStore(): Type<GettingStartedStoreInstance> {
 
       // The summary of a send that left addresses in the dialog: the invited ones when there are
       // some, then one failure summary. When nothing was invited, the addresses already members or
-      // invited, which leave the list, are counted in the failure summary.
-      const toastKept: (send: InviteSend) => void = (send: InviteSend): void => {
+      // invited, which leave the list, are counted in the failure summary. `uncertain`: other
+      // batches, or addresses, have an unknown outcome, which a refusal or not-sent summary says too.
+      const toastKept: (send: InviteSend, uncertain: boolean) => void = (
+        send: InviteSend,
+        uncertain: boolean,
+      ): void => {
         if (send.invited > 0) toastOutcome({ invited: send.invited, skipped: send.skipped });
         const lines: string[] = [];
         if (send.invited === 0 && send.skipped > 0) {
@@ -782,10 +804,20 @@ function createGettingStartedStore(): Type<GettingStartedStoreInstance> {
               $localize`:@@onboarding.getting-started.invite-failed-limit:The daily invitation limit is reached: try again later.`,
             );
           }
+          if (uncertain) {
+            lines.push(
+              $localize`:@@onboarding.getting-started.invite-uncertain-part:Some may already have been sent: sending again is safe.`,
+            );
+          }
         } else if (send.notSent > 0) {
           title = takesSingular(send.notSent)
             ? $localize`:@@onboarding.getting-started.invite-not-sent-one:${send.notSent}:count: address could not be invited`
             : $localize`:@@onboarding.getting-started.invite-not-sent-other:${send.notSent}:count: addresses could not be invited`;
+          if (uncertain) {
+            lines.push(
+              $localize`:@@onboarding.getting-started.invite-uncertain-part:Some may already have been sent: sending again is safe.`,
+            );
+          }
           lines.push(
             $localize`:@@onboarding.getting-started.invite-not-sent-text:The addresses stay in the list: press Invite to try again.`,
           );
@@ -894,6 +926,9 @@ function createGettingStartedStore(): Type<GettingStartedStoreInstance> {
           // Addresses a batch settled (invited, already invited or already a member), in lower
           // case: never sent again. Every other address of the list stays in the dialog.
           const settled: Set<string> = new Set<string>();
+          // Addresses of unknown outcome, in lower case: a lost batch's, and those an answer left
+          // out or gave conflicting results. Never settled.
+          const unsure: Set<string> = new Set<string>();
           const send: InviteSend = { invited: 0, skipped: 0, notSent: 0, refusal: null };
           let uncertain: boolean = false;
           let dropped: boolean = false;
@@ -908,9 +943,16 @@ function createGettingStartedStore(): Type<GettingStartedStoreInstance> {
               const unsent: ReadonlySet<string> = new Set(
                 (outcome.notSent ?? []).map((email: string): string => email.toLowerCase()),
               );
+              // Addresses the answer left out or gave conflicting results: as unknown as a lost
+              // answer, so they stay unsent and the summary says the outcome is unknown.
+              const unknown: ReadonlySet<string> = new Set(
+                (outcome.unknown ?? []).map((email: string): string => email.toLowerCase()),
+              );
+              if (unknown.size > 0) uncertain = true;
+              for (const address of unknown) unsure.add(address);
               for (const email of batch) {
                 const address: string = email.toLowerCase();
-                if (!unsent.has(address)) settled.add(address);
+                if (!unsent.has(address) && !unknown.has(address)) settled.add(address);
               }
               send.invited += outcome.invited;
               send.notSent += unsent.size;
@@ -925,12 +967,13 @@ function createGettingStartedStore(): Type<GettingStartedStoreInstance> {
                 void store._onboarding.recordInvitation().catch((): undefined => undefined);
               }
             } catch (error: unknown) {
-              if (isDroppedOnboardingWrite(error)) {
+              if (isDroppedOrganizationWrite(error)) {
                 dropped = true;
                 break;
               }
-              if (isUncertainOnboardingWrite(error)) {
+              if (isUnknownWriteOutcome(error)) {
                 uncertain = true;
+                for (const email of batch) unsure.add(email.toLowerCase());
                 continue;
               }
               // A definite refusal (a daily limit, a role) would refuse the next batches too.
@@ -946,7 +989,7 @@ function createGettingStartedStore(): Type<GettingStartedStoreInstance> {
             (email: string): boolean => !settled.has(email.toLowerCase()),
           );
           if (store._lifecycle.destroyed) {
-            if (!dropped) toastDetached(send, kept.length);
+            if (!dropped) toastDetached(send, kept.length, unsure.size > 0);
             return;
           }
           if (!current()) return;
@@ -959,7 +1002,7 @@ function createGettingStartedStore(): Type<GettingStartedStoreInstance> {
             setInviteOpen(false);
             return;
           }
-          toastKept(send);
+          toastKept(send, uncertain);
           patchState(store, { inviteKept: kept });
         },
       };

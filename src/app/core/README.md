@@ -10,16 +10,16 @@ configured in `api/client/`. The shell belongs to
 
 ## Public entry points
 
-| Entry point       | Responsibility                                               |
-| ----------------- | ------------------------------------------------------------ |
-| `@core/config`    | The root `RuntimeConfigStore` and the `RuntimeConfig` model. |
-| `@core/api`       | Transport, `OrganizationPin`, and validated problem readers. |
-| `@core/realtime`  | Workspace-scoped connection, rooms, presence, and notices.   |
-| `@core/theme`     | Theme preference and document synchronization.               |
-| `@core/shortcuts` | Scoped keyboard shortcut registration.                       |
-| `@core/routing`   | Route title, focus and the reserved first segments (slugs).  |
-| `@core/locale`    | Locale of the load, chosen and installed before bootstrap.   |
-| `@core/ui-labels` | The English texts of the `@cadenway/ui` bricks.              |
+| Entry point       | Responsibility                                                                         |
+| ----------------- | -------------------------------------------------------------------------------------- |
+| `@core/config`    | The root `RuntimeConfigStore` and the `RuntimeConfig` model.                           |
+| `@core/api`       | Transport, `OrganizationPin`, validated problem readers and write-outcome classifiers. |
+| `@core/realtime`  | Workspace-scoped connection, rooms, presence, and notices.                             |
+| `@core/theme`     | Theme preference and document synchronization.                                         |
+| `@core/shortcuts` | Scoped keyboard shortcut registration.                                                 |
+| `@core/routing`   | Route title, focus and the reserved first segments (slugs).                            |
+| `@core/locale`    | Locale of the load, chosen and installed before bootstrap.                             |
+| `@core/ui-labels` | The English texts of the `@cadenway/ui` bricks.                                        |
 
 ## Dependencies
 
@@ -69,6 +69,10 @@ The root transport provides Angular HTTP to the generated `@cadenway/api-client`
   is logged. `$localize.locale`, read by Angular's default `LOCALE_ID`, and `<html lang>` name the
   active locale. `LocaleService` reads it and switches by reloading the page with `?lang=`; no
   screen offers the switch yet.
+- `isUnknownWriteOutcome` calls a failed write uncertain when it may still have been applied (no
+  answer, an unreadable `2xx`, `408`, `5xx`, `409 idempotency.request-in-progress`); `isDroppedOrganizationWrite` calls
+  it dropped when the pin blocked it during a switch or the gateway answered
+  `412 organization.context-changed`. Features never report either as a definite failure.
 - `provideCadenwayUiLabels()` gives English texts, with `@@core.ui-labels.*` ids, to the
   `@cadenway/ui` bricks every area renders and no feature names (key names, the close buttons of
   alerts, banners and sheets, the sidebar defaults, the spinner, the split button menu, the

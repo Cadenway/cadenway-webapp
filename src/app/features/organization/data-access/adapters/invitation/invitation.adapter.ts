@@ -1,9 +1,6 @@
-import type {
-  Invitation,
-  InvitationBatchResult,
-  InvitationPage,
-  InvitationResult,
-} from '@cadenway/api-client';
+import type { Invitation, InvitationBatchResult, InvitationPage } from '@cadenway/api-client';
+
+import { type BatchOutcomes, matchBatchOutcomes } from '@shared/batch-outcomes';
 
 import type {
   InvitationList,
@@ -60,18 +57,46 @@ export function toInvitationList(page: InvitationPage): InvitationList {
 }
 
 /**
+ * Constant SKIPPED_OUTCOMES
+ *
+ * @description
+ * Per-address outcomes for which nothing was sent because nothing is left to send: the address is
+ * a member (`already-member`) or has a pending invitation (`already-invited`).
+ *
+ * @type {ReadonlySet<string>}
+ */
+const SKIPPED_OUTCOMES: ReadonlySet<string> = new Set<string>([
+  'already-member',
+  'already-invited',
+]);
+
+/**
  * Function toInvitationOutcome
  *
  * @description
- * Counts the addresses of a batch that were invited; every other outcome, an unknown one
- * included, counts as skipped, as the contract asks.
+ * Counts the addresses sent that were invited and those skipped, being already a member or
+ * invited. Any other outcome, one a later contract adds included, counts as not sent, as the
+ * contract asks: those addresses are listed in `notSent`, so they can be sent again. Each address
+ * sent is matched to its own result (`matchBatchOutcomes`): one the answer leaves out or gives
+ * conflicting results is listed in `unknown`, never counted as sent or skipped.
  *
  * @param {InvitationBatchResult} result - `POST /v1/invitations` answer.
- * @returns {InvitationOutcome} How many were invited and skipped.
+ * @param {readonly string[]} emails - The addresses sent.
+ * @returns {InvitationOutcome} How many were invited and skipped, and the addresses not sent or
+ * of unknown outcome, spelled as sent.
  */
-export function toInvitationOutcome(result: InvitationBatchResult): InvitationOutcome {
-  const invited: number = result.invitations.filter(
-    (entry: InvitationResult): boolean => entry.outcome === 'invited',
-  ).length;
-  return { invited, skipped: result.invitations.length - invited };
+export function toInvitationOutcome(
+  result: InvitationBatchResult,
+  emails: readonly string[],
+): InvitationOutcome {
+  const { settled, unknown }: BatchOutcomes = matchBatchOutcomes(emails, result.invitations);
+  let invited: number = 0;
+  let skipped: number = 0;
+  const notSent: string[] = [];
+  for (const entry of settled) {
+    if (entry.outcome === 'invited') invited += 1;
+    else if (SKIPPED_OUTCOMES.has(entry.outcome)) skipped += 1;
+    else notSent.push(entry.email);
+  }
+  return { invited, skipped, notSent, unknown };
 }

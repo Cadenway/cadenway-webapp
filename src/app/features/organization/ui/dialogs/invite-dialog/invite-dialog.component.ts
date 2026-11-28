@@ -15,6 +15,7 @@ import {
   type WritableSignal,
 } from '@angular/core';
 import {
+  disabled,
   type FieldContext,
   type FieldTree,
   form,
@@ -250,10 +251,11 @@ function focusFirstError<T>(fields: FieldTree<T>): void {
  * take a seat`, or the shortage), the `Role` select (`Member`, `Administrator`, `Guest`, each with
  * what it gives) and `Cancel` / `Invite`. `Invite` stays enabled: an invalid submit shows the error
  * (no address, an invalid or refused one, more than 50, or more members than free seats) and
- * focuses the field. While `pending` the dialog cannot be closed and `Invite` shows its spinner.
- * The form starts empty, as a member, each time the dialog opens. Presentational: a valid submit
- * emits
- * `submitted`; the page sends it and closes the dialog on success.
+ * focuses the field. While `pending` the dialog cannot be closed, its fields are disabled and
+ * `Invite` shows its spinner.
+ * The form starts empty, as a member, each time the dialog opens, and the addresses the page
+ * `kept` to send again replace the typed ones. Presentational: a valid submit emits `submitted`;
+ * the page sends it and closes the dialog on success.
  */
 @Component({
   selector: 'cw-invite-dialog',
@@ -329,6 +331,32 @@ export class InviteDialog {
    * @readonly
    */
   public readonly refused: InputSignal<readonly string[]> = input<readonly string[]>([]);
+
+  /**
+   * Property kept
+   *
+   * @description
+   * Addresses left to send again after the last submit; a new non-empty list replaces the typed
+   * addresses, keeping the role, so `Invite` sends only them.
+   *
+   * @type {InputSignal<readonly string[]>}
+   * @readonly
+   */
+  public readonly kept: InputSignal<readonly string[]> = input<readonly string[]>([]);
+
+  /**
+   * Property roleLocked
+   *
+   * @description
+   * Whether a batch of unknown outcome was sent from this dialog: any of its addresses may already
+   * be invited with the role sent, and a second send of one answers `already-invited` without
+   * changing that role, so the role stays fixed, whatever the field holds, until the page closes
+   * the dialog.
+   *
+   * @type {InputSignal<boolean>}
+   * @readonly
+   */
+  public readonly roleLocked: InputSignal<boolean> = input<boolean>(false);
 
   /**
    * Property submitted
@@ -412,12 +440,16 @@ export class InviteDialog {
    * @description
    * The form: the addresses must hold at least one valid address (the contract's e-mail check, 254
    * characters at most), no invalid or refused one, at most 50, and, when the seats are known, no
-   * more members or administrators than free seats.
+   * more members or administrators than free seats. Both fields are disabled while `pending`, so
+   * the addresses `kept` after the answer are those of the submitted form, with its role, and no
+   * edit made meanwhile is lost.
    *
    * @type {FieldTree<InviteModel>}
    * @readonly
    */
   protected readonly inviteForm: FieldTree<InviteModel> = form(this.model, (path) => {
+    disabled(path, { when: (): boolean => this.pending() });
+    disabled(path.role, { when: (): boolean => this.roleLocked() });
     validate(path.emails, (context: FieldContext<string>) => {
       const { valid, invalid }: ParsedAddresses = parseAddresses(context.value());
       const refused: ReadonlySet<string> = new Set<string>(
@@ -533,8 +565,9 @@ export class InviteDialog {
    * Constructor
    *
    * @description
-   * Empties the form, as a member, each time the dialog opens, and forgets the refused
-   * addresses then and whenever the addresses change.
+   * Empties the form, as a member, each time the dialog opens, replaces the addresses with the
+   * kept ones whenever the page hands a new list, and forgets the refused addresses when it opens
+   * and whenever the addresses change.
    *
    * @constructor
    */
@@ -545,6 +578,16 @@ export class InviteDialog {
         this.model.set({ emails: '', role: 'member' });
         this.refusedShown.set([]);
         this.inviteForm().reset();
+      });
+    });
+    effect((): void => {
+      const kept: readonly string[] = this.kept();
+      if (kept.length === 0) return;
+      untracked((): void => {
+        this.model.update((model: InviteModel): InviteModel => ({
+          ...model,
+          emails: kept.join(', '),
+        }));
       });
     });
     let typed: string | null = null;

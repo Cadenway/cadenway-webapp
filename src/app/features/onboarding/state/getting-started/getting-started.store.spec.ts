@@ -984,6 +984,52 @@ describe('GettingStartedStore', () => {
       expect(store.items()[1]).toEqual({ key: 'invite', done: true });
     });
 
+    it('keeps an address the answer left out as of unknown outcome', async () => {
+      api.invite.mockResolvedValueOnce({
+        invited: 1,
+        skipped: 0,
+        alreadyInvited: 0,
+        notSent: [],
+        unknown: ['marc.roux@ateliernord.fr'],
+      });
+      const store: GettingStartedStore = await setup();
+      store.start('invite');
+
+      await store.invite(['ines.robert@ateliernord.fr', 'marc.roux@ateliernord.fr']);
+
+      expect(toasts.success).toHaveBeenCalledWith('1 invitation sent', { description: '' });
+      expect(toasts.error).not.toHaveBeenCalled();
+      expect(toasts.warning).toHaveBeenCalledWith('The invitations may not have been sent', {
+        description: 'Sending again is safe.',
+      });
+      expect(store.inviteOpen()).toBe(true);
+      expect(store.inviteKept()).toEqual(['marc.roux@ateliernord.fr']);
+    });
+
+    it('says a mixed batch left one address unsent and others of unknown outcome', async () => {
+      api.invite.mockResolvedValueOnce({
+        invited: 0,
+        skipped: 1,
+        alreadyInvited: 0,
+        notSent: ['ines.robert@ateliernord.fr'],
+        unknown: ['marc.roux@ateliernord.fr'],
+      });
+      const store: GettingStartedStore = await setup();
+      store.start('invite');
+
+      await store.invite(['ines.robert@ateliernord.fr', 'marc.roux@ateliernord.fr']);
+
+      expect(toasts.warning).not.toHaveBeenCalled();
+      expect(toasts.error).toHaveBeenCalledWith('1 address could not be invited', {
+        description:
+          'Some may already have been sent: sending again is safe. The addresses stay in the list: press Invite to try again.',
+      });
+      expect(store.inviteKept()).toEqual([
+        'ines.robert@ateliernord.fr',
+        'marc.roux@ateliernord.fr',
+      ]);
+    });
+
     it('sends the addresses in batches of 50', async () => {
       api.invite.mockImplementation((batch: readonly string[]) =>
         Promise.resolve({ invited: batch.length, skipped: 0, alreadyInvited: 0 }),
@@ -1142,6 +1188,33 @@ describe('GettingStartedStore', () => {
         });
         expect(toasts.dismiss).not.toHaveBeenCalled();
         expect(toasts.toasts()).toHaveLength(2);
+      });
+
+      it('says addresses of unknown outcome may not have been invited once the host is destroyed', async () => {
+        const answer: () => void = holdFirstBatch();
+        api.invite
+          .mockResolvedValueOnce({
+            invited: 49,
+            skipped: 0,
+            alreadyInvited: 0,
+            notSent: ['member50@ateliernord.fr'],
+            unknown: [],
+          })
+          .mockRejectedValueOnce(problem(503, 'service.unavailable'));
+        const store: GettingStartedStore = await setup();
+        store.start('invite');
+
+        const sending: Promise<void> = store.invite(many);
+        host.destroy();
+        answer();
+        await sending;
+
+        expect(api.invite).toHaveBeenCalledTimes(3);
+        expect(toasts.success).toHaveBeenCalledWith('99 invitations sent', { description: '' });
+        expect(toasts.error).not.toHaveBeenCalled();
+        expect(toasts.warning).toHaveBeenCalledWith('21 addresses may not have been invited', {
+          description: 'Sending them again from “Getting started” or the Members page is safe.',
+        });
       });
 
       it('says nothing once the organization changed, even with the host destroyed', async () => {
