@@ -31,6 +31,7 @@ import type { Person } from '../../../models/person/person.interface';
   template: `
     <cw-combobox
       multiple
+      minWidth="56"
       size="sm"
       [value]="value()"
       (valueChange)="choose($event)"

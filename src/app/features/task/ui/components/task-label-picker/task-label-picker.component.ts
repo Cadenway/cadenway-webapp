@@ -32,6 +32,7 @@ import { TASK_COMBOBOX_LABELS } from '../../../constants/task-brick-labels/task-
   template: `
     <cw-combobox
       multiple
+      minWidth="48"
       [creatable]="!failed()"
       size="sm"
       [value]="value()"
