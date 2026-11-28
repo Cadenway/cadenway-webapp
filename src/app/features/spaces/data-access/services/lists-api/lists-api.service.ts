@@ -18,7 +18,9 @@ import {
   type TaskSummaryPage,
   TasksService,
 } from '@cadenway/api-client';
-import { defer, firstValueFrom, type Observable, share } from 'rxjs';
+import { defer, finalize, firstValueFrom, type Observable, share, tap } from 'rxjs';
+
+import { OrganizationPin, OrganizationSwitchPendingError } from '@core/api';
 
 import type { BulkAction, BulkSelection } from '../../../models/bulk-action/bulk-action.interface';
 import type { ListMember, ListMembers } from '../../../models/list-member/list-member.interface';
@@ -199,19 +201,26 @@ export class ListsApi {
   private readonly members: MembersService = inject(MembersService);
 
   /**
-   * Property directoryPage
+   * Property pin
    *
    * @description
-   * The first page of the member directory, which the list header's names and the assignee
-   * directory both read when a list page opens: readers that ask while it runs share it, and a
-   * read asked after it ended reads again, so nothing is kept beyond the read in flight.
+   * The workspace organization and its revision, which fence the shared directory page.
    *
-   * @type {Observable<MemberPage>}
+   * @type {OrganizationPin}
    * @readonly
    */
-  private readonly directoryPage: Observable<MemberPage> = defer(() =>
-    this.members.listMembers({ limit: PAGE_LIMIT }),
-  ).pipe(share());
+  private readonly pin: OrganizationPin = inject(OrganizationPin);
+
+  /**
+   * Property sharedPage
+   *
+   * @description
+   * The first directory page in flight and the organization context it was asked in, dropped
+   * once it ends, fails or loses its last reader.
+   *
+   * @type {{ context: string; read: Observable<MemberPage> } | null}
+   */
+  private sharedPage: { context: string; read: Observable<MemberPage> } | null = null;
 
   /**
    * Property tasks
@@ -311,7 +320,7 @@ export class ListsApi {
     );
     const names: Map<string, string> = new Map<string, string>();
     try {
-      const directory: MemberPage = await abortableRead(this.directoryPage, signal);
+      const directory: MemberPage = await abortableRead(this.directoryPage(), signal);
       for (const member of directory.items) names.set(member.userId, member.name);
     } catch {
       names.clear();
@@ -329,25 +338,72 @@ export class ListsApi {
    * Method organizationMembers
    *
    * @description
-   * Reads every member for assignee choices and labels.
+   * Reads every member for assignee choices and labels, within the organization context it began
+   * in: once the context changes it requests no further page and rejects with
+   * `OrganizationSwitchPendingError`.
    *
    * @param {AbortSignal | undefined} signal - Cancels a superseded read.
    * @returns {Promise<readonly ListMember[]>} The member directory.
    */
   public async organizationMembers(signal?: AbortSignal): Promise<readonly ListMember[]> {
+    const context: string = this.context();
     const items: ListMember[] = [];
     let cursor: string | undefined;
     do {
+      if (this.context() !== context) throw new OrganizationSwitchPendingError();
       const page: MemberPage = await abortableRead(
-        cursor ? this.members.listMembers({ limit: PAGE_LIMIT, cursor }) : this.directoryPage,
+        cursor ? this.members.listMembers({ limit: PAGE_LIMIT, cursor }) : this.directoryPage(),
         signal,
       );
+      if (this.context() !== context) throw new OrganizationSwitchPendingError();
       items.push(
         ...page.items.map((member): ListMember => ({ userId: member.userId, name: member.name })),
       );
       cursor = page.nextCursor ?? undefined;
     } while (cursor);
     return items;
+  }
+
+  /**
+   * Method directoryPage
+   *
+   * @description
+   * The first page of the member directory, which the list header's names and the assignee
+   * directory both read when a list page opens: readers that ask while it runs in the same
+   * organization context share it, and a read asked after it ended, or in another context, reads
+   * again, so nothing is kept beyond the read in flight and no page crosses organizations. A page
+   * answered after the context changed fails with `OrganizationSwitchPendingError`.
+   *
+   * @returns {Observable<MemberPage>} The first page.
+   */
+  private directoryPage(): Observable<MemberPage> {
+    return defer((): Observable<MemberPage> => {
+      const context: string = this.context();
+      if (this.sharedPage?.context === context) return this.sharedPage.read;
+      const read: Observable<MemberPage> = this.members.listMembers({ limit: PAGE_LIMIT }).pipe(
+        tap((): void => {
+          if (this.context() !== context) throw new OrganizationSwitchPendingError();
+        }),
+        finalize((): void => {
+          if (this.sharedPage?.read === read) this.sharedPage = null;
+        }),
+        share(),
+      );
+      this.sharedPage = { context, read };
+      return read;
+    });
+  }
+
+  /**
+   * Method context
+   *
+   * @description
+   * The current organization context: its id and the pin revision.
+   *
+   * @returns {string} The context key.
+   */
+  private context(): string {
+    return `${this.pin.current() ?? ''}#${String(this.pin.revision())}`;
   }
 
   /**

@@ -8,6 +8,8 @@ import { TestBed } from '@angular/core/testing';
 import { firstValueFrom } from 'rxjs';
 import { beforeEach, describe, expect, it } from 'vitest';
 
+import { OrganizationPin, OrganizationSwitchPendingError } from '@core/api';
+
 import type { Person } from '../../../models/person/person.interface';
 import { TaskMembersApi } from './task-members-api.service';
 
@@ -87,6 +89,43 @@ describe('TaskMembersApi', () => {
 
     expect((await everyone).map((person: Person) => person.id)).toEqual(['u1', 'u2', 'u9']);
     expect((await assignable).map((person: Person) => person.id)).toEqual(['u1', 'u2']);
+    http.verify();
+  });
+
+  it('gives a reader of another organization its own read and stops the old one', async () => {
+    const pin: OrganizationPin = TestBed.inject(OrganizationPin);
+    pin.set('org-atelier');
+    const before: Promise<readonly Person[]> = firstValueFrom(api.people());
+    const old: TestRequest = http.expectOne('/v1/members?limit=100');
+
+    pin.set('org-studio');
+    const after: Promise<readonly Person[]> = firstValueFrom(api.people());
+    const fresh: TestRequest = http.expectOne('/v1/members?limit=100');
+    old.flush(page([member('u1', 'Camille Martin', 'owner')], 'c2'));
+    fresh.flush(page([member('u7', 'Hugo Durand', 'member')], null));
+
+    await expect(before).rejects.toBeInstanceOf(OrganizationSwitchPendingError);
+    expect((await after).map((person: Person) => person.id)).toEqual(['u7']);
+    http.expectNone((request) => request.params.get('cursor') === 'c2');
+    http.verify();
+  });
+
+  it('requests no further page of a read once the organization changed', async () => {
+    const pin: OrganizationPin = TestBed.inject(OrganizationPin);
+    pin.set('org-atelier');
+    const before: Promise<readonly Person[]> = firstValueFrom(api.people());
+    http
+      .expectOne('/v1/members?limit=100')
+      .flush(page([member('u1', 'Camille Martin', 'owner')], 'c2'));
+    const second: TestRequest = http.expectOne(
+      (request) => request.url === '/v1/members' && request.params.get('cursor') === 'c2',
+    );
+
+    pin.set('org-studio');
+    second.flush(page([member('u2', 'Ines Robert', 'member')], 'c3'));
+
+    await expect(before).rejects.toBeInstanceOf(OrganizationSwitchPendingError);
+    http.expectNone((request) => request.params.get('cursor') === 'c3');
     http.verify();
   });
 

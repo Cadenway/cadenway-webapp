@@ -152,14 +152,19 @@ for `Create your first task`, and reads its progress again after each `created`.
   `AttachmentsService.listTaskAttachments`, `startTaskAttachmentUpload` (`Idempotency-Key`), the
   signed form post to object storage (`HttpClient`, never to the API), `completeTaskAttachmentUpload`,
   `deleteTaskAttachment` (`If-Match`) and `getTaskAttachmentDownload`; the people of
-  `TaskMembersApi` (every role, guests included).
+  `TaskMembersApi` (every role, guests included). `@cadenway/ui` `tabs`, `block-editor`,
+  `comment-composer`, `markdown`, `attachment`, `dropzone`, `checkbox`, `progress`, `avatar`,
+  `context-menu`.
 - Shared reads: `TaskMembersApi` reads `MembersService.listMembers` to its last page once for
   every role and gives the assignable people (guests left out) and all the people from it;
   `TaskApprovalRead` reads `TasksService.getTaskApproval` (`cache: 'no-store'`) by task. Each
   shares the read in flight with the readers that ask meanwhile (the tabs and the properties
   panel open together and follow the same version) and keeps nothing once it ends, so a later
-  read is fresh. `@cadenway/ui` `tabs`, `block-editor`, `comment-composer`,
-  `markdown`, `attachment`, `dropzone`, `checkbox`, `progress`, `avatar`, `context-menu`.
+  read is fresh. The directory read is bound to the organization id and `OrganizationPin`
+  revision it began with: readers of another context start their own read, and once the context
+  changes the old read requests no further page and fails with `OrganizationSwitchPendingError`.
+  An approval reader passes the confirmed task version it follows (`atLeast`): when the shared
+  read answers an older version (it began before a write), that reader reads again.
 - `@core/realtime` (`watch({ kind: 'task' })`) for the open detail; Errors' `.` entry
   (`RouteErrorPanel`) for the detail's not-found, deleted-task and unavailable states; Spaces'
   `ports/list-directory` (`LIST_DIRECTORY`) for `Move to…`.

@@ -246,11 +246,13 @@ export class TaskPropertyApi {
    * Reads the current approval round of the task.
    *
    * @param {string} taskKey - Key of the task.
+   * @param {number | null} atLeast - The task version the answer must reach (the confirmed
+   * version the reader follows), or null for any.
    * @returns {Promise<TaskApproval>} The approval.
    */
-  public async approval(taskKey: string): Promise<TaskApproval> {
+  public async approval(taskKey: string, atLeast: number | null = null): Promise<TaskApproval> {
     const state: GetTaskApprovalClientResult = await firstValueFrom(
-      this.approvalRead.approval(taskKey),
+      this.approvalRead.approval(taskKey, atLeast),
     );
     return toTaskApproval(state);
   }

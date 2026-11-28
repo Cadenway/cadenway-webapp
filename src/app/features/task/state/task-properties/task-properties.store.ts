@@ -802,7 +802,7 @@ function createTaskPropertiesStore(): Type<TaskPropertiesStoreInstance> {
       const readApproval: (key: string) => Promise<void> = (key: string): Promise<void> =>
         read(
           key,
-          () => store._api.approval(key),
+          () => store._api.approval(key, store._detail.confirmedTask()?.version ?? null),
           (approval: TaskApproval) => ({ approval, approvalFailed: false }),
           { approvalFailed: true },
         );

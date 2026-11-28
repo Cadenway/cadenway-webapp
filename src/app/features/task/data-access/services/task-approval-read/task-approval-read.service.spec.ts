@@ -50,6 +50,43 @@ describe('TaskApprovalRead', () => {
     http.verify();
   });
 
+  it('reads again for a reader after a write when the shared read answers an older version', async () => {
+    const opening: Promise<GetTaskApprovalClientResult> = firstValueFrom(
+      reader.approval('CAD-482'),
+    );
+    const delayed: TestRequest = http.expectOne('/v1/tasks/CAD-482/approvals');
+
+    const afterWrite: Promise<GetTaskApprovalClientResult> = firstValueFrom(
+      reader.approval('CAD-482', 8),
+    );
+    const panel: Promise<GetTaskApprovalClientResult> = firstValueFrom(
+      reader.approval('CAD-482', 8),
+    );
+    http.expectNone('/v1/tasks/CAD-482/approvals');
+    delayed.flush(round);
+    expect(await opening).toEqual(round);
+
+    http.expectOne('/v1/tasks/CAD-482/approvals').flush({ ...round, taskVersion: 8 });
+
+    expect(await afterWrite).toEqual({ ...round, taskVersion: 8 });
+    expect(await panel).toEqual({ ...round, taskVersion: 8 });
+    http.verify();
+  });
+
+  it('keeps a shared answer that already reaches the version asked', async () => {
+    const opening: Promise<GetTaskApprovalClientResult> = firstValueFrom(
+      reader.approval('CAD-482'),
+    );
+    const current: Promise<GetTaskApprovalClientResult> = firstValueFrom(
+      reader.approval('CAD-482', 7),
+    );
+    http.expectOne('/v1/tasks/CAD-482/approvals').flush(round);
+
+    expect(await opening).toEqual(round);
+    expect(await current).toEqual(round);
+    http.verify();
+  });
+
   it('reads again once the previous read ended, and each task on its own', async () => {
     const first: Promise<GetTaskApprovalClientResult> = firstValueFrom(reader.approval('CAD-482'));
     const other: Promise<GetTaskApprovalClientResult> = firstValueFrom(reader.approval('CAD-490'));

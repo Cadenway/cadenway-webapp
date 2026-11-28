@@ -962,7 +962,10 @@ colors with the same words.
     milestone count, members, labels and saved views (secondary reads), the header's and the
     selection bar's writes. The header's member names and the member directory
     (`organizationMembers`) share the directory's first page while both read it
-    (`ListsApi.listMembers` and `organizationMembers`), so a list page opens with one request. It watches the list's realtime room while the page lives and
+    (`ListsApi.listMembers` and `organizationMembers`), so a list page opens with one request.
+    The shared page is bound to the organization id and `OrganizationPin` revision it was asked
+    in; `organizationMembers` requests no further page once the context changed and rejects with
+    `OrganizationSwitchPendingError`. It watches the list's realtime room while the page lives and
     refreshes the counts 300 ms after a notice, once per window, so a steady flow cannot hold them
     back; since the socket hands every notice to every watch, it ignores a notice naming another
     list or space and the comment and Git link notices, while a task update or status change
@@ -1047,7 +1050,8 @@ colors with the same words.
     without waiting for the sidebar; it then ignores a sidebar value from a read begun before its
     own (`SpacesNavigationStore.overviewOrder`), lends its read to a sidebar that holds no
     overview yet (`shareOverviewRead`: the sidebar's next read of the space takes its answer
-    instead of reading it again, and reads it itself if it fails), gives its result to the sidebar
+    instead of reading it again, waiting no longer than its own page timeout of 10 s and never
+    past its cancellation, and reads it itself if the lent read fails or stalls), gives its result to the sidebar
     (`offerOverview`, which a sidebar read begun earlier never replaces), and takes a newer
     sidebar value received during its read when that read ends, even if its own failed, so both
     converge on the newest counts.

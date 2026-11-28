@@ -18,7 +18,18 @@ import {
 } from '@ngrx/signals';
 import { rxMethod } from '@ngrx/signals/rxjs-interop';
 import { tapResponse } from '@ngrx/operators';
-import { concatMap, EMPTY, from, type Observable, pipe, Subject } from 'rxjs';
+import {
+  concatMap,
+  EMPTY,
+  firstValueFrom,
+  from,
+  fromEvent,
+  type Observable,
+  pipe,
+  Subject,
+  takeUntil,
+  timeout,
+} from 'rxjs';
 
 import { hasProblemCode } from '@core/api';
 import { type CreatedTask, TaskCreate } from '@features/task';
@@ -49,6 +60,29 @@ import { isWithin, todayIso } from '../../utils/calendar-date/calendar-date.util
  * @type {number}
  */
 const OVERVIEW_PAGE_TIMEOUT_MS: number = 10_000;
+
+/**
+ * Function boundedLentRead
+ *
+ * @description
+ * Waits for a space overview read another reader lent the sidebar, no longer than the sidebar
+ * would wait for a page of its own and never past the sidebar read's cancellation: the lent read
+ * has no timeout of its own, so a stalled one must not hold back the batch it is waited in.
+ *
+ * @param {Promise<SpaceOverview>} read - The lent read.
+ * @param {AbortSignal} signal - The sidebar read's cancellation.
+ * @param {number} timeoutMs - Longest wait, in milliseconds.
+ * @returns {Promise<SpaceOverview>} The overview; rejects on the read's failure, on timeout or on
+ * cancellation (an empty sequence).
+ */
+function boundedLentRead(
+  read: Promise<SpaceOverview>,
+  signal: AbortSignal,
+  timeoutMs: number,
+): Promise<SpaceOverview> {
+  signal.throwIfAborted();
+  return firstValueFrom(from(read).pipe(timeout(timeoutMs), takeUntil(fromEvent(signal, 'abort'))));
+}
 
 /**
  * Type Reloadable
@@ -745,8 +779,17 @@ function createSpacesNavigationStore(): Type<SpacesNavigationStoreInstance> {
                     shared.get(id);
                   if (lent !== undefined) {
                     try {
-                      return { overview: await lent.read, order: lent.order };
+                      return {
+                        overview: await boundedLentRead(
+                          lent.read,
+                          abortSignal,
+                          OVERVIEW_PAGE_TIMEOUT_MS,
+                        ),
+                        order: lent.order,
+                      };
                     } catch {
+                      // A failed, stalled or cancelled lent read: the sidebar reads the space
+                      // itself, within its own page timeout, unless its read was cancelled.
                       abortSignal.throwIfAborted();
                     }
                   }

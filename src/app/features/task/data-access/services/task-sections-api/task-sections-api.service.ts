@@ -221,11 +221,16 @@ export class TaskSectionsApi {
    * Reads the current approval round of a task.
    *
    * @param {string} taskKey - Key of the task.
+   * @param {number | null} atLeast - The task version the answer must reach (the confirmed
+   * version the reader follows), or null for any.
    * @returns {Promise<TaskApprovalSnapshot>} The approval.
    */
-  public async approval(taskKey: string): Promise<TaskApprovalSnapshot> {
+  public async approval(
+    taskKey: string,
+    atLeast: number | null = null,
+  ): Promise<TaskApprovalSnapshot> {
     const state: GetTaskApprovalClientResult = await firstValueFrom(
-      this.approvalRead.approval(taskKey),
+      this.approvalRead.approval(taskKey, atLeast),
     );
     return toApprovalSnapshot(state);
   }
