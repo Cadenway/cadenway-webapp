@@ -458,7 +458,9 @@ large` and an empty file with `Empty file`, a name already attached skipped, fil
   none); avatars draw initials (members give an avatar id, no address). The people and label
   triggers show the combobox's own content (the chosen option, `(me)` included, or `n
 people`), and the due trigger shows the short date without `Tomorrow ·` or the
-  `Today` tone, until `cw-combobox` and `cw-date-picker` take a trigger template. The dialog is
+  `Today` tone, until `cw-combobox` and `cw-date-picker` take a trigger template. The people
+  and label panels keep the mockup's minimum widths (`minWidth="56"` and `"48"`, `@cadenway/ui`
+  0.15.0). The dialog is
   `size="xl"` (the mockup's `max-w-4xl`) pinned at `top-[8vh]` (`placement="top"`), with a flush
   scrolling body (`padding="none"`, `scrollable`) and the mockup's `px-5 py-3` bar header
   (`variant="bar"`) and `px-5` footer. Its footer wraps on a phone: the `Create more tasks`
