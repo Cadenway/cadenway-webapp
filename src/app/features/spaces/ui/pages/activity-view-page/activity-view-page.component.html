@@ -22,9 +22,9 @@
     <cw-toggle-group
       type="multiple"
       variant="outline"
-      size="sm"
-      class="flex-wrap"
-      [spacing]="1"
+      size="xs"
+      spacing="1"
+      class="flex-wrap gap-1.5"
       ariaLabel="Activity types"
       i18n-ariaLabel="@@spaces.activity.types"
       [value]="chipValue()"
@@ -32,7 +32,7 @@
     >
       @for (chip of chips; track chip.value) {
         <button cwToggleGroupItem [value]="chip.value">
-          <ng-icon [name]="chip.icon" size="0.875rem" aria-hidden="true" />{{ chip.label }}
+          <ng-icon [name]="chip.icon" aria-hidden="true" />{{ chip.label }}
         </button>
       }
     </cw-toggle-group>

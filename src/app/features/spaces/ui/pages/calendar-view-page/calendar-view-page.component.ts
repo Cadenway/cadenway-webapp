@@ -176,6 +176,7 @@ function calendarLabels(): CwCalendarViewProvidedLabels {
     cancelled: $localize`:@@spaces.calendar.cancelled:Move cancelled.`,
     loading: $localize`:@@spaces.calendar.loading:Loading the calendar`,
     scheduled: $localize`:@@spaces.calendar.scheduled:${ITEM_TOKEN}:item: rescheduled. Due: ${DATE_TOKEN}:date:.`,
+    navigation: $localize`:@@spaces.calendar.navigation:Calendar navigation`,
   };
 }
 

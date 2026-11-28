@@ -12,7 +12,7 @@
       </h2>
     }
     <p class="hidden text-xs text-muted-foreground xl:block" i18n="@@spaces.sheet.hint">
-      Double-click a cell or press Enter to edit it · arrows to move · Enter validates, Esc cancels.
+      Click a cell to edit it · arrows to move · Enter validates, Esc cancels.
     </p>
     <button
       cwButton
@@ -33,6 +33,7 @@
     [virtual]="virtualReady()"
     manual
     editable
+    editOn="click"
     selectable
     phoneLayout="grid"
     density="default"
@@ -351,6 +352,7 @@
 
 <cw-menu
   #columnsMenu
+  minWidth="56"
   ariaLabel="Columns shown"
   i18n-ariaLabel="@@spaces.sheet.columns-menu"
   align="end"

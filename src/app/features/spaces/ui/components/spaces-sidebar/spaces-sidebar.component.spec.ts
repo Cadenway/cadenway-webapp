@@ -311,11 +311,11 @@ describe('SpacesSidebar', () => {
       '[data-testid="sidebar-spaces"] a[href="/atelier-nord/l/l-sprint14"]',
     );
     const spoken: string[] = Array.from(
-      row?.querySelectorAll<HTMLElement>('span:not([aria-hidden="true"])') ?? [],
-      (part: HTMLElement): string => part.textContent.trim(),
+      row?.querySelectorAll<HTMLElement>(':scope > span:not([aria-hidden="true"])') ?? [],
+      (part: HTMLElement): string => part.textContent.replace(/\s+/gu, ' ').trim(),
     ).filter((part: string): boolean => part !== '');
 
-    expect(spoken).toEqual(['Sprint 14', ', 28 tasks']);
+    expect(spoken).toEqual(['Sprint 14, 28 tasks']);
     const hidden: string[] = Array.from(
       row?.querySelectorAll<HTMLElement>(':scope > [aria-hidden="true"]') ?? [],
       (part: HTMLElement): string => part.textContent.trim(),
