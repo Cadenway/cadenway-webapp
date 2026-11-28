@@ -36,6 +36,8 @@ running a route again.
 - `@cadenway/api-client`: `AccessRequestsService.createAccessRequest` and
   `TrashService.restoreTrashEntry`, through `ErrorRecovery`.
 - Workspace's `ports/workspace-context`, optional, for the trash link of the current workspace.
+- Search's `ports/command-palette-launcher` (`COMMAND_PALETTE_LAUNCHER`), optional, for the
+  404's `Search`.
 - `@core/api` problem readers, `@core/config` (`statusUrl`), `@core/ui-labels`
   (`provideCadenwayUiLabels`, on the 404 route), `@cadenway/ui` and `@cadenway/icons`.
 
@@ -43,8 +45,9 @@ running a route again.
 
 - The boundary passes what the page threw; a resource read in its error state throws an error
   whose `cause` is the loader's rejection, so the page follows the `cause` chain to the typed error.
-- States: not found (`Back to home` to `/home`; the mockup's secondary `Search`, `App.dc.html`
-  line 4203, waits for an entry of Search that opens its palette), access denied (optional
+- States: not found (`Back to home` to `/home`, then the mockup's secondary `Search`,
+  `App.dc.html` line 4203, which opens the command palette; it shows only where
+  `COMMAND_PALETTE_LAUNCHER` is provided, so the root 404, outside a workspace, has none), access denied (optional
   message to the owner, `Request access`, then `Request sent`), deleted task
   (`Restore the task`, then the route runs again; `Already restored` for a
   `trash-entry.not-found`; `Open the trash` to `/<slug>/trash`), and unavailable for any other failure (`Could not load this page`,

@@ -24,7 +24,8 @@ belong to Auth.
   it provides `provideCadenwayIcons()`, Core's `provideCadenwayUiLabels()` (the English texts of
   the `@cadenway/ui` bricks every screen renders) and the workspace-wide services (the workspace runtime and
   context, Account's `providePresence()`, Organization's `provideOrganizationUsage()`,
-  Onboarding's `provideOnboarding()` and Spaces' `provideSpacesNavigation()`), and its children
+  Onboarding's `provideOnboarding()`, Spaces' `provideSpacesNavigation()` and Search's
+  `provideCommandPaletteLauncher()`), and its children
   mount the shells, in this order:
   - `account` and `organization` load `SettingsShell` and mount Account's `ACCOUNT_ROUTES` and
     Organization's `ORGANIZATION_ROUTES`. Their `data` names the settings navigation (`Settings`,

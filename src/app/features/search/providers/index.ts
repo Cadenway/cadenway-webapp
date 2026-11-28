@@ -1,1 +1,6 @@
-export { withCommandPalette, withSearchButton, withSearchRailItem } from './search/search.provider';
+export {
+  provideCommandPaletteLauncher,
+  withCommandPalette,
+  withSearchButton,
+  withSearchRailItem,
+} from './search/search.provider';

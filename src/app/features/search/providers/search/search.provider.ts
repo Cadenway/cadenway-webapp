@@ -1,5 +1,9 @@
+import { inject, type Provider } from '@angular/core';
 import type { SlotContribution, SlotFeature } from '@shared/layout-slot';
 
+import type { CommandPaletteLauncherPort } from '../../ports/command-palette-launcher/command-palette-launcher-port.interface';
+import { COMMAND_PALETTE_LAUNCHER } from '../../ports/command-palette-launcher/command-palette-launcher.token';
+import { CommandPalette } from '../../services/command-palette/command-palette.service';
 import { SearchButton } from '../../ui/components/search-button/search-button.component';
 import { SearchRailItem } from '../../ui/components/search-rail-item/search-rail-item.component';
 import { CommandPaletteDialog } from '../../ui/dialogs/command-palette/command-palette.component';
@@ -56,5 +60,28 @@ export function withCommandPalette(): SlotFeature<SlotContribution> {
       order: 0,
       component: CommandPaletteDialog,
     }),
+  };
+}
+
+/**
+ * Function provideCommandPaletteLauncher
+ *
+ * @description
+ * Provides `COMMAND_PALETTE_LAUNCHER` for the other features, over the palette's open state. Put
+ * it in the providers of the `/:org` route, whose shells all contribute `withCommandPalette()`.
+ *
+ * @returns {Provider} The port provider.
+ */
+export function provideCommandPaletteLauncher(): Provider {
+  return {
+    provide: COMMAND_PALETTE_LAUNCHER,
+    useFactory: (): CommandPaletteLauncherPort => {
+      const palette: CommandPalette = inject(CommandPalette);
+      return {
+        open: (): void => {
+          palette.setOpen(true);
+        },
+      };
+    },
   };
 }

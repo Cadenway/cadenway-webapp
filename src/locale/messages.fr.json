@@ -1020,6 +1020,7 @@
     "errors.deleted-task.title": "Cette tâche a été supprimée",
     "errors.not-found.code": "Erreur 404",
     "errors.not-found.route-title": "Page introuvable",
+    "errors.not-found.search": "Rechercher",
     "errors.not-found.text": "Le lien est incomplet, ou la page a été déplacée ou supprimée. Vérifiez l’adresse ou cherchez ce que vous vouliez ouvrir.",
     "errors.not-found.title": "Page introuvable",
     "errors.unavailable.reference": "réf. {$INTERPOLATION}",

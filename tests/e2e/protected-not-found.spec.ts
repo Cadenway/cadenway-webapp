@@ -77,6 +77,17 @@ test('an unknown workspace address shows a 404 in the shell with a way back home
   await expect(page.getByRole('heading', { name: 'Hello Camille' })).toBeVisible();
 });
 
+test('the workspace 404 opens the command palette from its Search', async ({ page }) => {
+  await stubGateway(page, { signedIn: true });
+
+  await page.goto('/atelier-nord/missing/page');
+
+  await expect(page.getByRole('heading', { name: 'Page not found' })).toBeVisible();
+  await page.getByRole('button', { name: 'Search', exact: true }).click();
+  await expect(page.getByRole('dialog', { name: 'Command palette' })).toBeVisible();
+  await expect(page).toHaveURL(/\/atelier-nord\/missing\/page$/u);
+});
+
 test('unknown workspace addresses require a session', async ({ page }) => {
   await stubGateway(page, { signedIn: false });
 

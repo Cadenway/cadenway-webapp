@@ -31,6 +31,7 @@ import {
   withStorageBanner,
 } from '@features/organization/providers';
 import {
+  provideCommandPaletteLauncher,
   withCommandPalette,
   withSearchButton,
   withSearchRailItem,
@@ -115,6 +116,7 @@ export const WORKSPACE_ROUTES: Routes = [
       provideOrganizationUsage(),
       provideOnboarding(),
       provideSpacesNavigation(),
+      provideCommandPaletteLauncher(),
     ],
     children: [
       {

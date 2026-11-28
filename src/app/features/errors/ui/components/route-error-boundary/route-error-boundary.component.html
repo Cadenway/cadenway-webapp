@@ -8,9 +8,11 @@
     [unavailableTitle]="unavailableTitle"
     [statusUrl]="kind() === 'unavailable' ? statusUrl() : null"
     [trashLink]="trashLink"
+    [searchable]="paletteLauncher !== null"
     [accessRequest]="store.accessRequest()"
     [restore]="store.restore()"
     (retried)="retry()"
+    (searchRequested)="paletteLauncher?.open()"
     (accessRequested)="requestAccess($event)"
     (restoreRequested)="restore()"
   />
