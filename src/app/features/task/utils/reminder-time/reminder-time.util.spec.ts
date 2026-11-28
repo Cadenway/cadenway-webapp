@@ -82,7 +82,9 @@ const FRENCH: Readonly<Record<string, string>> = (
 ).translations;
 
 describe('reminderTimeLabel', () => {
-  afterEach(() => clearTranslations());
+  afterEach((): void => {
+    clearTranslations();
+  });
 
   it('reads a whole hour and a time with minutes in the English time format', () => {
     const format: Intl.DateTimeFormat = new Intl.DateTimeFormat('en-US', {

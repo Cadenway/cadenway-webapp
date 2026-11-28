@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { timeParts } from './time-parts.utils';
+import { type TimeParts, timeParts } from './time-parts.utils';
 
 describe('timeParts', () => {
   it('cuts the time on a 12-hour clock, the day period after the minutes', () => {
@@ -16,7 +16,7 @@ describe('timeParts', () => {
       minute: '00',
       period: format.format(afternoon).slice('3:00'.length),
     });
-    const { hour, minute, period } = timeParts(morning, 'en-US');
+    const { hour, minute, period }: TimeParts = timeParts(morning, 'en-US');
     expect(`${hour}:${minute}${period}`).toBe(format.format(morning));
     expect(period.trim()).toBe('AM');
   });
