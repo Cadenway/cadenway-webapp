@@ -62,12 +62,17 @@ and, when realtime is on, `RealtimeConnection`.
 - `InboxStore` is provided by the rail item and keyed on the workspace's organization. A committed
   organization switch clears the count and the lists at once and restarts the poll; any answer or
   write result that belongs to the previous organization is ignored.
-- The unread count is read at once, on window focus, on every transition to connected and every
-  minute, connected or not, because notices only flow once the gateway enables them; a failed read
-  keeps the last count. A notification notice
+- The first reads of the badge and the reminders wait for realtime's first connection attempt to
+  settle (connected, failed or disabled), at most `FIRST_CONNECTION_WAIT_MS` (3 s): a read that starts
+  once connected misses no notice, so that first connection reads nothing again. Past the wait they
+  start anyway, and the connection that follows reads again.
+- The unread count is then read at once, on window focus, on every later transition to connected and
+  every minute, connected or not, because notices only flow once the gateway enables them; a failed
+  read keeps the last count. A notification notice
   refreshes the badge and the open notification list. A due-reminder notice first revalidates the
   reminder with `getReminder`; a failed read is retried once before refreshing the reminders list.
-  The badge and reminders are read after reconnect because notices are not replayed. Personal notices require `REALTIME_PERSONAL_NOTICES_ENABLED` on the gateway.
+  The badge and reminders are read again after every connection but that first one, because notices
+  are not replayed. Personal notices require `REALTIME_PERSONAL_NOTICES_ENABLED` on the gateway.
   Reminders are read on load, and both lists are refreshed on opening; failed list reads show an
   inline `Retry`. Verification retries passive reads refused by an organization mismatch or local fence, once per
   verified revision, even while realtime reconnects. A later connection skips those retries, and

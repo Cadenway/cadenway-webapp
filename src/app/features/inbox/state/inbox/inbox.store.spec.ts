@@ -34,7 +34,7 @@ import type {
   InboxReminderPage,
 } from '../../models/inbox-reminder/inbox-reminder.interface';
 import { InboxReads } from '../../services/inbox-reads/inbox-reads.service';
-import { InboxStore, POLL_MS } from './inbox.store';
+import { FIRST_CONNECTION_WAIT_MS, InboxStore, POLL_MS } from './inbox.store';
 
 /**
  * Constant mention
@@ -565,9 +565,47 @@ describe('InboxStore', () => {
     expect(api.reminder).toHaveBeenCalledTimes(1);
   });
 
+  it('reads the badge and the reminders once when the first connection comes within the wait', async () => {
+    connectionStatus.set('connecting');
+    const store: InstanceType<typeof InboxStore> = TestBed.inject(InboxStore);
+    TestBed.tick();
+    await vi.advanceTimersByTimeAsync(FIRST_CONNECTION_WAIT_MS - 1);
+    TestBed.tick();
+    expect(api.unreadCount).not.toHaveBeenCalled();
+    expect(api.pendingReminders).not.toHaveBeenCalled();
+
+    connectionStatus.set('connected');
+    TestBed.tick();
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.waitFor(() => {
+      TestBed.tick();
+      expect(store.reminders.hasValue()).toBe(true);
+    });
+    await vi.advanceTimersByTimeAsync(FIRST_CONNECTION_WAIT_MS);
+    TestBed.tick();
+    expect(store.unreadCount()).toBe(1);
+    expect(api.unreadCount).toHaveBeenCalledTimes(1);
+    expect(api.pendingReminders).toHaveBeenCalledTimes(1);
+
+    connectionStatus.set('reconnecting');
+    TestBed.tick();
+    connectionStatus.set('connected');
+    TestBed.tick();
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.waitFor(() => {
+      TestBed.tick();
+      expect(api.pendingReminders).toHaveBeenCalledTimes(2);
+    });
+    expect(api.unreadCount).toHaveBeenCalledTimes(2);
+  });
+
   it('polls every minute, connected or not, and refreshes on first admission', async () => {
     connectionStatus.set('connecting');
     const store: InstanceType<typeof InboxStore> = TestBed.inject(InboxStore);
+    TestBed.tick();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(api.unreadCount).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(FIRST_CONNECTION_WAIT_MS);
     TestBed.tick();
     await vi.advanceTimersByTimeAsync(0);
     expect(api.unreadCount).toHaveBeenCalledTimes(1);
