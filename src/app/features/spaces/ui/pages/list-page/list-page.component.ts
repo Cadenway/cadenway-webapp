@@ -30,6 +30,7 @@ import { CwToastService } from '@cadenway/ui/components/toast';
 import { NgIcon } from '@ng-icons/core';
 import { filter, map } from 'rxjs';
 
+import { AppLinkService } from '@core/routing';
 import { TaskCreate } from '@features/task';
 import {
   WORKSPACE_CONTEXT,
@@ -287,6 +288,17 @@ export class ListPage {
    * @readonly
    */
   private readonly document: Document = inject(DOCUMENT);
+
+  /**
+   * Property links
+   *
+   * @description
+   * Builds the shareable addresses below the current locale segment.
+   *
+   * @type {AppLinkService}
+   * @readonly
+   */
+  private readonly links: AppLinkService = inject(AppLinkService);
 
   /**
    * Property locale
@@ -900,7 +912,7 @@ export class ListPage {
    */
   protected async copyLink(list: TaskList): Promise<void> {
     const view: Window | null = this.document.defaultView;
-    const link: string = `${view?.location.origin ?? ''}/${this.slug()}/l/${list.id}`;
+    const link: string = this.links.absolute(`/${this.slug()}/l/${list.id}`);
     try {
       await view?.navigator.clipboard.writeText(link);
       this.toasts.show($localize`:@@spaces.list.link-copied:List link copied`, {

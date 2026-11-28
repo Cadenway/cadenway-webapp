@@ -191,20 +191,10 @@ async function typeCode(page: Page, label: string | RegExp, code: string): Promi
 test('a protected screen sends a signed-out visitor to the sign-in page', async ({ page }) => {
   await stubGateway(page);
 
-  await page.goto('/organizations');
+  await page.goto('organizations');
 
   await expect(page).toHaveURL(/\/login\?next=%2Forganizations$/);
   await expect(page.getByRole('heading', { name: 'Sign in' })).toBeVisible();
-});
-
-// The only French in the specs: `?lang=fr` loads the French catalog at runtime.
-test('?lang=fr serves the sign-in page in French', async ({ page }) => {
-  await stubGateway(page);
-
-  await page.goto('/login?lang=fr');
-
-  await expect(page.locator('html')).toHaveAttribute('lang', 'fr');
-  await expect(page.getByRole('heading', { name: 'Se connecter' })).toBeVisible();
 });
 
 test('sign-in with two-step verification, then the organization choice opens its workspace', async ({
@@ -212,7 +202,7 @@ test('sign-in with two-step verification, then the organization choice opens its
 }) => {
   const gateway = await stubGateway(page, { requireChallenge: true });
 
-  await page.goto('/login');
+  await page.goto('login');
   const submit = page.getByRole('button', { name: 'Sign in', exact: true });
   // An empty form stays submittable: it shows its errors and focuses the first field.
   await submit.click();
@@ -249,7 +239,7 @@ test('sign-in with two-step verification, then the organization choice opens its
 test('a wrong password shows the attempts left before the lockout', async ({ page }) => {
   await stubGateway(page);
 
-  await page.goto('/login');
+  await page.goto('login');
   await page.getByLabel('Email address').fill(email);
   await page.getByLabel('Password', { exact: true }).fill('wrong-password');
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
@@ -265,7 +255,7 @@ test('a wrong password shows the attempts left before the lockout', async ({ pag
 test('an unavailable organization list offers Retry', async ({ page }) => {
   const gateway = await stubGateway(page, { signedIn: true, unavailableOrganizations: true });
 
-  await page.goto('/organizations');
+  await page.goto('organizations');
 
   await expect(page.getByText('This page could not be loaded')).toBeVisible();
   await page.getByRole('button', { name: 'Retry' }).click();
@@ -273,17 +263,22 @@ test('an unavailable organization list offers Retry', async ({ page }) => {
   expect(gateway.calls.filter((call: string) => call === 'GET /v1/organizations')).toHaveLength(2);
 });
 
-test('a provider sign-in starts at the gateway and continues once on return', async ({ page }) => {
+test('a provider sign-in starts at the gateway and continues once on return', async ({
+  page,
+  baseURL,
+}) => {
   const gateway = await stubGateway(page);
+  // The gateway returns to `/auth/federated/continue`, which the web server sends below the
+  // chosen locale (`deploy/nginx.conf`); the dev server serves only below it, so the provider
+  // stub returns there directly.
   await page.route('https://oauth.provider.example/**', async (route: Route) => {
-    const origin = new URL(page.url()).origin;
     await route.fulfill({
       status: 302,
-      headers: { location: `${origin}/auth/federated/continue` },
+      headers: { location: new URL('auth/federated/continue', baseURL).href },
     });
   });
 
-  await page.goto('/login');
+  await page.goto('login');
   await page.getByRole('button', { name: 'GitHub' }).click();
 
   await expect(page).toHaveURL(/\/organizations$/);
@@ -296,7 +291,7 @@ test('a provider sign-in starts at the gateway and continues once on return', as
 test('sign-up verifies the address with its code', async ({ page }) => {
   const gateway = await stubGateway(page);
 
-  await page.goto('/signup');
+  await page.goto('signup');
   await page.getByLabel('Full name').fill('Camille Martin');
   await page.getByLabel('Work email address').fill(email);
   await page.getByLabel('Password', { exact: true }).fill('atelier-nord-2026');
@@ -318,13 +313,13 @@ test('sign-up verifies the address with its code', async ({ page }) => {
 test('a forgotten password is reset from the e-mail link', async ({ page }) => {
   const gateway = await stubGateway(page);
 
-  await page.goto('/forgot');
+  await page.goto('forgot');
   await page.getByLabel('Email address').fill(email);
   await page.getByRole('button', { name: 'Send the reset link' }).click();
   await expect(page.getByRole('heading', { name: 'Check your email' })).toBeVisible();
   await expect(page.getByRole('button', { name: /Resend the email in 0:4/ })).toBeDisabled();
 
-  await page.goto('/reset#token=synthetic-reset-token');
+  await page.goto('reset#token=synthetic-reset-token');
   await expect(page.getByText(`For the account ${email}.`)).toBeVisible();
   await expect(page).toHaveURL(/\/reset$/);
   await page.getByLabel('New password').fill('Atelier-nord-2027');
@@ -347,7 +342,7 @@ test('the signed-out screen signs in again with a remembered account', async ({ 
     );
   }, email);
 
-  await page.goto('/logged-out?reason=signed-out');
+  await page.goto('logged-out?reason=signed-out');
   await expect(page.getByRole('heading', { name: 'You are signed out' })).toBeVisible();
   await expect(page.getByText('See you soon, Camille.')).toBeVisible();
   await page.getByRole('button', { name: `Sign in with ${email}` }).click();
@@ -365,7 +360,7 @@ test('a protected workspace link opened signed out comes back after sign-in with
 }) => {
   await stubGateway(page);
 
-  await page.goto('/atelier-nord/missing/page?x=1');
+  await page.goto('atelier-nord/missing/page?x=1');
   await expect(page).toHaveURL(/\/login\?next=%2Fatelier-nord%2Fmissing%2Fpage%3Fx%3D1$/u);
   await page.getByLabel('Email address').fill(email);
   await page.getByLabel('Password', { exact: true }).fill(password);

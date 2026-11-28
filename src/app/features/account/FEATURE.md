@@ -219,7 +219,8 @@ parent provides the English texts of `cw-password-strength` and `cw-input-otp` t
   - `AccountLanguageSync` (`services/account-language-sync`, root-scoped `@Service()`, bound to
     `WORKSPACE_CONTEXT`'s user through the page's read) holds the confirmed language, the latest
     pick and the save run, so a save outlives the page: once confirmed, the application reloads
-    in the pick's locale with `LocaleService.use` (`?lang=`) when that locale is not the one shown
+    in the pick's locale with `LocaleService.use` (the `cw_locale` cookie, then a full navigation
+    to the same page below the `/en/` or `/fr/` segment) when that locale is not the one shown
     (German and Spanish show English), even after the page closed, and otherwise confirms with
     `Preference saved`. Binding another account, or a session held by another account or none,
     resets it silently. Each run belongs to its binding and writes for that binding's account

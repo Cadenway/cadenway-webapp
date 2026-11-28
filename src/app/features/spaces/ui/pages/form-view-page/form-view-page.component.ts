@@ -27,6 +27,7 @@ import { CwTextarea } from '@cadenway/ui/components/textarea';
 import { CwToastService } from '@cadenway/ui/components/toast';
 import { NgIcon } from '@ng-icons/core';
 
+import { AppLinkService } from '@core/routing';
 import {
   INTAKE_FIELD_KEYS,
   type IntakeFieldKey,
@@ -306,14 +307,14 @@ export class FormViewPage {
    * Property publicLink
    *
    * @description
-   * The public page's address (`https://<host>/f/<publicKey>`), or null while unpublished.
+   * The public page's address (`https://<host>/<locale>/f/<publicKey>`), or null while unpublished.
    *
    * @type {Signal<string | null>}
    * @readonly
    */
   protected readonly publicLink: Signal<string | null> = computed((): string | null => {
     const key: string | null = this.store.publicKey();
-    return key === null ? null : `${this.document.location.origin}/f/${key}`;
+    return key === null ? null : this.links.absolute(`/f/${key}`);
   });
 
   /**
@@ -461,12 +462,23 @@ export class FormViewPage {
    * Property document
    *
    * @description
-   * Document of the public link's origin and of the clipboard.
+   * Document of the clipboard.
    *
    * @type {Document}
    * @readonly
    */
   private readonly document: Document = inject(DOCUMENT);
+
+  /**
+   * Property links
+   *
+   * @description
+   * Builds the shareable addresses below the current locale segment.
+   *
+   * @type {AppLinkService}
+   * @readonly
+   */
+  private readonly links: AppLinkService = inject(AppLinkService);
   // #endregion
 
   // #region Constructor

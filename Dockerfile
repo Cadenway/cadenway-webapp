@@ -17,12 +17,17 @@ RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store \
 COPY angular.json tsconfig.json tsconfig.app.json .postcssrc.json ./
 COPY public ./public
 COPY src ./src
-RUN pnpm build
+# One build per locale, dist/cadenway-webapp/browser/en/ and fr/. config.json is served from the
+# site root only, so the copies the public assets leave in each locale are dropped.
+RUN pnpm build && find dist/cadenway-webapp/browser -mindepth 2 -maxdepth 2 -name config.json -delete
 
 # Static files behind an unprivileged nginx (uid 101, port 8080).
 FROM nginxinc/nginx-unprivileged:1.30.6-alpine3.24@sha256:f5116ed4606f3eb015dd4a8e28cb9b351476dc0ad4bc6e9f93b19cec130cdf03 AS runtime
 COPY deploy/nginx.conf /etc/nginx/conf.d/default.conf
+# /usr/share/nginx/html/en/ and fr/ hold the locale builds; config.json sits at the root, where the
+# environment mounts its own over these local defaults.
 COPY --from=build /app/dist/cadenway-webapp/browser /usr/share/nginx/html
+COPY public/config.json /usr/share/nginx/html/config.json
 EXPOSE 8080
 HEALTHCHECK --interval=10s --timeout=3s --start-period=5s --retries=3 \
   CMD wget -qO- http://127.0.0.1:8080/health/ready || exit 1

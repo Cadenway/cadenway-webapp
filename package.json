@@ -12,6 +12,7 @@
     "prepare": "git config core.hooksPath .githooks",
     "ng": "ng",
     "start": "ng serve",
+    "serve:fr": "ng serve --configuration fr --port 4201",
     "build": "ng build",
     "format": "prettier --write .",
     "format:check": "prettier --check .",

@@ -105,7 +105,8 @@ feature owns its workflow under `features/` with its own `FEATURE.md`.
   listed once in `RESERVED_SLUGS` (`@core/routing`, checked against the route tables by
   `app.routes.spec.ts`); the application never navigates to `/<slug>` for one of them, and the
   organization service will refuse them. The other features mount below it: `/:org/t/:taskKey`, `/:org/l/:listId/<view>`,
-  `/:org/d/:docId`, `/:org/account/:section`, `/:org/organization/:section`.
+  `/:org/d/:docId`, `/:org/account/:section`, `/:org/organization/:section`. These paths sit below
+  the locale segment of the build (`/en/`, `/fr/`, see Localization), which is not a route.
 - `provideRouter(APP_ROUTES, withComponentInputBinding(), withAutoCleanupInjectors(), withRouterConfig({ paramsInheritanceStrategy:
 'always' }), withErrorBoundaries({ defaultErrorComponent, onError }))`: parameters, query parameters
   and `data` reach pages as signal inputs.
@@ -141,19 +142,30 @@ Layouts never import features. Features fill them in three ways:
 
 ## Localization
 
-- `@angular/localize` at runtime, in one build whose source and default locale is English. Every
-  string uses `$localize` or `i18n` and carries a stable `@@feature.area.key` id; the sources hold no
-  French text. `src/locale/messages.json` is the extracted English catalog and
-  `src/locale/messages.fr.json` (Angular's JSON format) holds the mockup's French wording, word for
-  word. `pnpm i18n:check` fails on a stale source catalog and on a missing, empty, orphan or
-  placeholder-mismatched French text.
-- `core/locale` chooses the locale before bootstrap: `?lang=fr` or `?lang=en` selects it and is
-  remembered on the device, otherwise the remembered choice applies, else English. French fetches
-  `/messages.fr.json` and its locale data, calls `loadTranslations()`, then sets
-  `$localize.locale` (read by Angular's default `LOCALE_ID`) and `<html lang>`; only then does
-  `main.ts` import the application modules, since messages are translated when their module
-  evaluates. English loads nothing extra. A failed French load starts in English.
-  `LocaleService.use()` switches by reloading the page with `?lang=`.
+- `@angular/localize` at compile time: `pnpm build` (`localize: true`, missing translations are
+  errors) produces one application per locale, `dist/cadenway-webapp/browser/en/` from the English
+  source and `browser/fr/` translated with `src/locale/messages.fr.json`. Each build sets
+  `$localize.locale` (read by Angular's default `LOCALE_ID`), its locale data, `<html lang>` and
+  its `<base href>`: `/en/` and `/fr/` (`i18n` in `angular.json`). Every string uses `$localize` or
+  `i18n` and carries a stable `@@feature.area.key` id; the sources hold no French text.
+  `src/locale/messages.json` is the extracted English catalog and `src/locale/messages.fr.json`
+  (Angular's JSON format) holds the mockup's French wording, word for word. `pnpm i18n:check` fails
+  on a stale source catalog and on a missing, empty, orphan or placeholder-mismatched French text.
+- The router works below the base href, so every route keeps its path after the locale segment
+  (`/fr/atelier-nord/t/CAD-482`); organization slugs follow the segment, so the locale codes need no
+  reserved slug. `LocaleService.use()` (`@core/locale`) remembers the choice in the first-party
+  `cw_locale` cookie (`Path=/; Max-Age=31536000; SameSite=Lax`, `Secure` over HTTPS, the code only)
+  and opens the same page below the other segment with a full navigation, query and fragment kept.
+  An address the application gives to copy or share goes through `AppLinkService.absolute()`
+  (`@core/routing`, the location strategy's `prepareExternalUrl`), so it carries the current
+  segment; the segment is never written by hand.
+- `deploy/nginx.conf` serves each build below its segment with a fallback to its own
+  `index.html`, and answers any other path (the root and the slug-less links the backend sends,
+  such as `/login/code`, `/reset#…`, `/invite/:invitationId`, `/home`, `/auth/federated/continue`)
+  with a `302` to `/<locale>` plus the path and query, `Vary: Accept-Language, Cookie` and
+  `Cache-Control: no-store`. The locale is the `cw_locale` cookie when it names a built locale, else
+  the first built language of `Accept-Language`, else English. `/en` and `/fr` redirect to `/en/`
+  and `/fr/`. `config.json` stays at the site root, fetched as `/config.json`.
 - Bricks with their own text receive English source labels through their labels providers, given by
   the layout or feature that renders them. Route titles use `$localize` and go through the
   application `TitleStrategy`.

@@ -12,6 +12,7 @@ import {
   withState,
 } from '@ngrx/signals';
 
+import { AppLinkService } from '@core/routing';
 import {
   CANCEL_REASON_LABELS,
   defaultStatusOptions,
@@ -710,6 +711,7 @@ function createViewTaskWritesStore(): Type<ViewTaskWritesStoreInstance> {
       _toasts: inject(CwToastService),
       _taskDetail: inject(TaskDetailOpener),
       _document: inject(DOCUMENT),
+      _links: inject(AppLinkService),
       _locale: inject(LOCALE_ID),
       _destroyRef: inject(DestroyRef),
       _undoToasts: new Set<string>(),
@@ -1230,11 +1232,12 @@ function createViewTaskWritesStore(): Type<ViewTaskWritesStoreInstance> {
           });
         },
         copyLinks(tasks: readonly TaskSummary[]): void {
-          const origin: string = store._document.defaultView?.location.origin ?? '';
           const slug: string = store._workspace.organization().slug;
           const count: number = tasks.length;
           void copy(
-            tasks.map((task: TaskSummary): string => `${origin}/${slug}/t/${task.key}`).join('\n'),
+            tasks
+              .map((task: TaskSummary): string => store._links.absolute(`/${slug}/t/${task.key}`))
+              .join('\n'),
             count > 1
               ? $localize`:@@spaces.rows.links-copied:${count}:count: links copied`
               : $localize`:@@spaces.rows.link-copied:Link copied`,

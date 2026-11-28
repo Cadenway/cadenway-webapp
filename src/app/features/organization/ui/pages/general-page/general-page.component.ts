@@ -317,7 +317,7 @@ function isWebAddress(value: string): boolean {
  * An application address with its first segment, the organization, replaced; null when it does not
  * start with `from`.
  *
- * @param {string} url - The address (`/atelier-nord/organization/members?lang=fr`).
+ * @param {string} url - The address (`/atelier-nord/organization/members?from=menu`).
  * @param {string} from - The old slug.
  * @param {string} to - The new slug.
  * @returns {string | null} The address below the new slug.

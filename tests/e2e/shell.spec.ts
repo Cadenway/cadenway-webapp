@@ -167,7 +167,7 @@ test.beforeEach(async ({ page }) => {
 test('the shell renders its rail, sidebar and banner', async ({ page }) => {
   const gateway = await stubGateway(page);
 
-  await page.goto('/atelier-nord');
+  await page.goto('atelier-nord');
 
   const rail = page.getByRole('navigation', { name: 'Applications' });
   await expect(rail.getByRole('link', { name: 'Home' })).toHaveAttribute('aria-current', 'page');
@@ -183,7 +183,7 @@ test('the shell renders its rail, sidebar and banner', async ({ page }) => {
 
 test('Ctrl K opens the palette and a search shows its results', async ({ page }) => {
   const gateway = await stubGateway(page);
-  await page.goto('/atelier-nord');
+  await page.goto('atelier-nord');
   await expect(page.getByRole('heading', { name: 'Hello Camille' })).toBeVisible();
 
   await page.keyboard.press('Control+k');
@@ -200,7 +200,7 @@ test('Ctrl K opens the palette and a search shows its results', async ({ page })
 
 test('the inbox marks everything read and its badge clears', async ({ page }) => {
   await stubGateway(page);
-  await page.goto('/atelier-nord');
+  await page.goto('atelier-nord');
   const inbox = page.getByTestId('inbox-rail-item');
   await expect(inbox).toContainText('1');
 
@@ -228,7 +228,7 @@ test('the inbox marks everything read and its badge clears', async ({ page }) =>
 
 test('the account menu signs out to the signed-out screen', async ({ page }) => {
   await stubGateway(page);
-  await page.goto('/atelier-nord');
+  await page.goto('atelier-nord');
 
   await page.getByRole('button', { name: /Account of Camille Martin/ }).click();
   await page.getByRole('menuitem', { name: 'Sign out' }).click();
@@ -239,7 +239,7 @@ test('the account menu signs out to the signed-out screen', async ({ page }) => 
 
 test('the question mark key opens the keyboard shortcuts', async ({ page }) => {
   await stubGateway(page);
-  await page.goto('/atelier-nord');
+  await page.goto('atelier-nord');
   await expect(page.getByRole('heading', { name: 'Hello Camille' })).toBeVisible();
 
   await page.keyboard.press('?');
@@ -252,7 +252,7 @@ test('the question mark key opens the keyboard shortcuts', async ({ page }) => {
 
 test('the organizations menu switches to another organization', async ({ page }) => {
   const gateway = await stubGateway(page);
-  await page.goto('/atelier-nord');
+  await page.goto('atelier-nord');
 
   await page.getByRole('button', { name: 'Switch organization: Atelier Nord' }).click();
   await expect(page.getByRole('menuitemradio', { name: /Atelier Nord/ })).toHaveAttribute(

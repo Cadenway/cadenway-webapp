@@ -65,7 +65,7 @@ test('an unknown workspace address shows a 404 in the shell with a way back home
 }) => {
   await stubGateway(page, { signedIn: true });
 
-  await page.goto('/atelier-nord/missing/page');
+  await page.goto('atelier-nord/missing/page');
 
   await expect(page.getByRole('heading', { name: 'Page not found' })).toBeVisible();
   await expect(page).toHaveURL(/\/atelier-nord\/missing\/page$/u);
@@ -80,7 +80,7 @@ test('an unknown workspace address shows a 404 in the shell with a way back home
 test('the workspace 404 opens the command palette from its Search', async ({ page }) => {
   await stubGateway(page, { signedIn: true });
 
-  await page.goto('/atelier-nord/missing/page');
+  await page.goto('atelier-nord/missing/page');
 
   await expect(page.getByRole('heading', { name: 'Page not found' })).toBeVisible();
   await page.getByRole('button', { name: 'Search', exact: true }).click();
@@ -91,7 +91,7 @@ test('the workspace 404 opens the command palette from its Search', async ({ pag
 test('unknown workspace addresses require a session', async ({ page }) => {
   await stubGateway(page, { signedIn: false });
 
-  await page.goto('/atelier-nord/missing/page');
+  await page.goto('atelier-nord/missing/page');
 
   await expect(page).toHaveURL(/\/login\?next=%2Fatelier-nord%2Fmissing%2Fpage$/u);
   await expect(page.getByRole('heading', { name: 'Page not found' })).toHaveCount(0);

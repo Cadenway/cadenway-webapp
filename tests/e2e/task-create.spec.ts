@@ -242,7 +242,7 @@ test.beforeEach(async ({ page }) => {
 
 test('N opens the create dialog, a task is created and the toast offers Open', async ({ page }) => {
   const gateway = await stubGateway(page);
-  await page.goto('/atelier-nord');
+  await page.goto('atelier-nord');
   await expect(page.getByRole('heading', { name: 'Hello Camille' })).toBeVisible();
 
   await page.keyboard.press('n');
@@ -280,7 +280,7 @@ test('N opens the create dialog, a task is created and the toast offers Open', a
 
 test('Escape closes an open menu first, then the dialog', async ({ page }) => {
   await stubGateway(page);
-  await page.goto('/atelier-nord');
+  await page.goto('atelier-nord');
   await expect(page.getByRole('heading', { name: 'Hello Camille' })).toBeVisible();
   await page.keyboard.press('n');
   const dialog = page.getByRole('dialog', { name: 'Create a task' });

@@ -36,6 +36,7 @@ import {
 import { CwToastService } from '@cadenway/ui/components/toast';
 import { NgIcon } from '@ng-icons/core';
 
+import { AppLinkService } from '@core/routing';
 import { RouteErrorPanel } from '@features/errors';
 import {
   LIST_DIRECTORY,
@@ -392,12 +393,23 @@ export class TaskDetailDialog {
    * Property document
    *
    * @description
-   * Document whose origin the shareable link starts with.
+   * Document whose window holds the clipboard.
    *
    * @type {Document}
    * @readonly
    */
   private readonly document: Document = inject(DOCUMENT);
+
+  /**
+   * Property links
+   *
+   * @description
+   * Builds the shareable addresses below the current locale segment.
+   *
+   * @type {AppLinkService}
+   * @readonly
+   */
+  private readonly links: AppLinkService = inject(AppLinkService);
   // #endregion
 
   // #region Constructor
@@ -489,12 +501,12 @@ export class TaskDetailDialog {
    * Method copyLink
    *
    * @description
-   * Copies the shareable link (`<origin>/<slug>/t/<KEY>`) and says so.
+   * Copies the shareable link (`<origin>/<locale>/<slug>/t/<KEY>`) and says so.
    */
   protected copyLink(): void {
     const key: string | undefined = this.store.header()?.key;
     if (!key) return;
-    const link: string = `${this.document.location.origin}/${this.workspace.organization().slug}/t/${key}`;
+    const link: string = this.links.absolute(`/${this.workspace.organization().slug}/t/${key}`);
     void this.copy(link, $localize`:@@task.detail.link-copied:Link copied`);
   }
 

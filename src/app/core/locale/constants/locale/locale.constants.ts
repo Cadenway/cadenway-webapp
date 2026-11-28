@@ -4,7 +4,7 @@ import type { AppLocale } from '../../models/locale/locale.type';
  * Constant DEFAULT_LOCALE
  *
  * @description
- * The locale of the source copy, shown when nothing selects another one.
+ * The locale of the source copy, served when nothing selects another one.
  *
  * @type {AppLocale}
  */
@@ -14,40 +14,31 @@ export const DEFAULT_LOCALE: AppLocale = 'en';
  * Constant APP_LOCALES
  *
  * @description
- * Every locale the application can be shown in, the default first.
+ * Every locale the application is built in, the default first. Each one is a separate build served
+ * below its own first path segment (`/en/`, `/fr/`), the `baseHref` of its `angular.json` locale.
  *
  * @type {readonly AppLocale[]}
  */
 export const APP_LOCALES: readonly AppLocale[] = ['en', 'fr'];
 
 /**
- * Constant LOCALE_PARAMETER
+ * Constant LOCALE_COOKIE
  *
  * @description
- * Query parameter that selects the locale on load (`?lang=fr`, `?lang=en`).
+ * First-party cookie that remembers the locale a person chose. The web server reads it to send an
+ * address without a locale segment (`/`, an e-mail link) to `/<locale>/…`; it holds the locale code
+ * only.
  *
  * @type {string}
  */
-export const LOCALE_PARAMETER: string = 'lang';
+export const LOCALE_COOKIE: string = 'cw_locale';
 
 /**
- * Constant LOCALE_STORAGE_KEY
+ * Constant LOCALE_COOKIE_MAX_AGE
  *
  * @description
- * Local storage key under which the device remembers the last selected locale.
+ * How long the locale cookie is kept, in seconds: one year.
  *
- * @type {string}
+ * @type {number}
  */
-export const LOCALE_STORAGE_KEY: string = 'cadenway-locale';
-
-/**
- * Constant FRENCH_CATALOG_PATH
- *
- * @description
- * Address of the French translation catalog, relative to the document base. The build copies
- * `src/locale/messages.fr.json` there, at the root like `config.json`: a first segment with a
- * dot is never an organization slug, so the address cannot hide a workspace.
- *
- * @type {string}
- */
-export const FRENCH_CATALOG_PATH: string = 'messages.fr.json';
+export const LOCALE_COOKIE_MAX_AGE: number = 31_536_000;

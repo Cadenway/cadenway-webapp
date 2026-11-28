@@ -23,14 +23,14 @@ describe('RuntimeConfigSource', () => {
     vi.unstubAllGlobals();
   });
 
-  it('fetches config.json without the HTTP cache and validates it', async () => {
+  it('fetches /config.json from the site root without the HTTP cache and validates it', async () => {
     const fetchConfig: Mock<() => Promise<Response>> = vi.fn(() =>
       Promise.resolve(Response.json({ ...localConfig, extra: 1 })),
     );
     vi.stubGlobal('fetch', fetchConfig);
 
     await expect(TestBed.inject(RuntimeConfigSource).load()).resolves.toEqual(localConfig);
-    expect(fetchConfig).toHaveBeenCalledWith('config.json', { cache: 'no-store' });
+    expect(fetchConfig).toHaveBeenCalledWith('/config.json', { cache: 'no-store' });
   });
 
   it('fails when config.json is not served', async () => {

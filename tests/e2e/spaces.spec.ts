@@ -211,7 +211,7 @@ test.beforeEach(async ({ page }) => {
 
 test('the sidebar lists the spaces with their lists', async ({ page }) => {
   await stubGateway(page);
-  await page.goto('/atelier-nord');
+  await page.goto('atelier-nord');
 
   const spaces = page.getByTestId('sidebar-spaces');
   const space = spaces.getByRole('button', { name: /^Product/ });
@@ -224,7 +224,7 @@ test('the sidebar lists the spaces with their lists', async ({ page }) => {
 
 test('the space overview opens with its list cards', async ({ page }) => {
   await stubGateway(page);
-  await page.goto(`/atelier-nord/spaces/${product.id}`);
+  await page.goto(`atelier-nord/spaces/${product.id}`);
 
   await expect(page.getByRole('heading', { level: 1, name: 'Product' })).toBeVisible();
   await expect(page.getByTestId('space-meta')).toContainText('2 lists');
@@ -237,7 +237,7 @@ test('the space overview opens with its list cards', async ({ page }) => {
 
 test('a list page shows its header, its filters and its group menu', async ({ page }) => {
   await stubGateway(page);
-  await page.goto(`/atelier-nord/l/${sprint14.id}`);
+  await page.goto(`atelier-nord/l/${sprint14.id}`);
 
   await expect(page).toHaveURL(new RegExp(`/l/${sprint14.id}/list$`));
   await expect(page.getByTestId('list-description')).toContainText(/Sprint of .*3 – .*17/u);
@@ -275,7 +275,7 @@ test('a saved view saves and reopens', async ({ page }) => {
   const errors: string[] = [];
   page.on('pageerror', (error: Error) => errors.push(error.message));
   const gateway = await stubGateway(page);
-  await page.goto(`/atelier-nord/l/${sprint14.id}`);
+  await page.goto(`atelier-nord/l/${sprint14.id}`);
   await expect(page.getByTestId('list-description')).toBeVisible();
 
   await page.getByRole('button', { name: /Group:/ }).click();
@@ -315,7 +315,7 @@ test('a saved view saves and reopens', async ({ page }) => {
 
 test('a failed list read can be retried', async ({ page }) => {
   const gateway = await stubGateway(page, true);
-  await page.goto(`/atelier-nord/l/${sprint14.id}`);
+  await page.goto(`atelier-nord/l/${sprint14.id}`);
   await expect(page.getByRole('heading', { name: 'Could not load this page' })).toBeVisible();
   await page.getByRole('button', { name: 'Retry' }).click();
   await expect(page.getByRole('heading', { name: 'Sprint 14' })).toBeVisible();
@@ -324,7 +324,7 @@ test('a failed list read can be retried', async ({ page }) => {
 
 test('deleting a list needs its typed name', async ({ page }) => {
   const gateway = await stubGateway(page);
-  await page.goto(`/atelier-nord/l/${sprint14.id}`);
+  await page.goto(`atelier-nord/l/${sprint14.id}`);
   await expect(page.getByTestId('list-description')).toBeVisible();
 
   await page.getByRole('button', { name: 'More actions on the list' }).click();
@@ -352,7 +352,7 @@ test('the settings shell reads neither the overviews nor the counts of the absen
   page,
 }) => {
   const gateway = await stubGateway(page);
-  await page.goto('/atelier-nord/account/profile');
+  await page.goto('atelier-nord/account/profile');
   await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
   await page.waitForLoadState('networkidle');
 
@@ -366,7 +366,7 @@ test('the settings shell reads neither the overviews nor the counts of the absen
 
 test('a full load of the space overview reads its overview once', async ({ page }) => {
   const gateway = await stubGateway(page);
-  await page.goto(`/atelier-nord/spaces/${product.id}`);
+  await page.goto(`atelier-nord/spaces/${product.id}`);
   await expect(page.getByTestId('space-meta')).toContainText('2 lists');
   await page.waitForLoadState('networkidle');
 
@@ -377,7 +377,7 @@ test('a list page reads the member directory once when the grants answer last', 
   page,
 }) => {
   const gateway = await stubGateway(page, false, true);
-  await page.goto(`/atelier-nord/l/${sprint14.id}/list`);
+  await page.goto(`atelier-nord/l/${sprint14.id}/list`);
   await expect(page.getByTestId('list-description')).toBeVisible();
   await page.waitForLoadState('networkidle');
 

@@ -58,6 +58,7 @@ is shown, whatever the query parameters.
 - Spaces' `ports/space-directory` (`SPACE_DIRECTORY`, optional) for the space names, the caller's
   rights and the space of `New document`.
 - Errors' `.` entry (`RouteErrorBoundary`) for the routes' `errorComponent`.
+- `@core/routing` (`AppLinkService`) for the copied document addresses, below the locale segment.
 - `@shared/route-errors` (`NotFoundRouteError`, `UnavailableRouteError`) and
   `@shared/unsaved-changes` (`unsavedChangesGuard`, `warnBeforeUnload`).
 - `@cadenway/ui` (`app-rail`, `alert-dialog`, `avatar`, `block-editor`, `button`, `context-menu`,

@@ -420,7 +420,7 @@ test('a new organization opens the assistant, which provisions the space and sho
 }) => {
   const gateway = await stubGateway(page, { creating: true, holdFirstDraft: true });
 
-  await page.goto('/organizations/new');
+  await page.goto('organizations/new');
   await page.getByLabel('Organization name').fill('Atelier Nord');
   await page.getByRole('button', { name: 'Create the organization' }).click();
 
@@ -481,7 +481,7 @@ test('the checklist ticks the first task and the Board view as the person tries 
 }) => {
   const gateway = await stubGateway(page, { onboarding: finishedOnboarding() });
 
-  await page.goto(`/atelier-nord/l/${backlog.id}`);
+  await page.goto(`atelier-nord/l/${backlog.id}`);
   const checklist = page.getByRole('region', { name: 'Getting started' });
   await expect(checklist.getByTestId('getting-started-counter')).toHaveText('0 of 3');
 
@@ -517,7 +517,7 @@ test('Set up later closes the assistant for good, with no checklist', async ({ p
     },
   });
 
-  await page.goto('/atelier-nord?onboarding=start');
+  await page.goto('atelier-nord?onboarding=start');
   const wizard = page.getByTestId('onboarding-wizard');
   await expect(wizard.getByRole('heading', { name: 'Welcome to Atelier Nord' })).toBeVisible();
   await wizard.getByRole('button', { name: 'Set up later' }).click();
@@ -552,13 +552,13 @@ test('a saved draft reopens the assistant on the workspace root, never over a de
 
   // The checklist's host reads the progress on every page; the assistant opens only on the root.
   const read: Promise<unknown> = onboardingRead(page);
-  await page.goto('/atelier-nord/my-tasks');
+  await page.goto('atelier-nord/my-tasks');
   await read;
   await expect(page.getByRole('heading', { level: 1, name: 'My tasks' })).toBeVisible();
   await page.waitForLoadState('networkidle');
   await expect(page.getByTestId('onboarding-wizard')).toHaveCount(0);
 
-  await page.goto('/atelier-nord');
+  await page.goto('atelier-nord');
   const wizard = page.getByTestId('onboarding-wizard');
   await expect(wizard.getByRole('heading', { name: 'Invite your team' })).toBeVisible();
   await expect(wizard.getByTestId('onboarding-position')).toHaveText('Step 3 of 4');

@@ -389,12 +389,16 @@ describe('GeneralPage', () => {
   });
 
   it('opens the section at the new address after a slug change, keeping the query', async () => {
-    const harness: RouterTestingHarness = await open('/atelier-nord/organization/general?lang=fr');
+    const harness: RouterTestingHarness = await open(
+      '/atelier-nord/organization/general?from=menu',
+    );
 
     type(harness, 'organization-slug', 'nord');
     button('Save')?.click();
 
-    await expect.poll(() => TestBed.inject(Router).url).toBe('/nord/organization/general?lang=fr');
+    await expect
+      .poll(() => TestBed.inject(Router).url)
+      .toBe('/nord/organization/general?from=menu');
     expect(api['update']).toHaveBeenCalledWith({ slug: 'nord' }, 3);
     expect(refresh).not.toHaveBeenCalled();
   });

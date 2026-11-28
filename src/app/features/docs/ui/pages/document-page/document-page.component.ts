@@ -40,6 +40,7 @@ import { CwToastService } from '@cadenway/ui/components/toast';
 import { NgIcon } from '@ng-icons/core';
 import { filter, map } from 'rxjs';
 
+import { AppLinkService } from '@core/routing';
 import {
   WORKSPACE_CONTEXT,
   type WorkspaceContextPort,
@@ -60,7 +61,7 @@ import type {
   DocumentSaveOutcome,
 } from '../../../models/document/document.interface';
 import { DocumentStore } from '../../../state/document/document.store';
-import { copyDocumentLink } from '../../../utils/document-link/document-link.util';
+import { copyDocumentLink, documentPath } from '../../../utils/document-link/document-link.util';
 import { updatedLabel } from '../../../utils/updated-label/updated-label.util';
 import { DocsSkeleton } from '../../components/docs-skeleton/docs-skeleton.component';
 import { DocumentDeleteDialog } from '../../dialogs/document-delete-dialog/document-delete-dialog.component';
@@ -342,12 +343,23 @@ export class DocumentPage implements UnsavedChanges {
    * Property document
    *
    * @description
-   * Document whose window holds the clipboard and the origin of the links.
+   * Document whose window holds the clipboard.
    *
    * @type {Document}
    * @readonly
    */
   private readonly document: Document = inject(DOCUMENT);
+
+  /**
+   * Property links
+   *
+   * @description
+   * Builds the shareable addresses below the current locale segment.
+   *
+   * @type {AppLinkService}
+   * @readonly
+   */
+  private readonly links: AppLinkService = inject(AppLinkService);
 
   /**
    * Property locale
@@ -620,7 +632,11 @@ export class DocumentPage implements UnsavedChanges {
    * @returns {Promise<void>} Resolves once the clipboard answered.
    */
   protected async copyLink(id: string): Promise<void> {
-    await copyDocumentLink(this.document, this.workspace.organization().slug, id, this.toasts);
+    await copyDocumentLink(
+      this.document,
+      this.links.absolute(documentPath(this.workspace.organization().slug, id)),
+      this.toasts,
+    );
   }
 
   /**

@@ -29,7 +29,8 @@ Requirements: Node.js LTS and pnpm (versions in `package.json`), and Docker.
 
    ```bash
    pnpm install
-   pnpm start                  # http://localhost:4200
+   pnpm start                  # English, http://localhost:4200/en/
+   pnpm serve:fr               # French, http://localhost:4201/fr/
    ```
 
 ## Checks

@@ -307,7 +307,7 @@ test.beforeEach(async ({ page }) => {
 
 test('the list view shows the rows of Sprint 14 under their status', async ({ page }) => {
   const gateway = await stubGateway(page);
-  await page.goto(`/atelier-nord/l/${sprint14.id}/list`);
+  await page.goto(`atelier-nord/l/${sprint14.id}/list`);
 
   const grid = page.getByRole('grid', { name: 'Tasks of the list Sprint 14' });
   await expect(grid).toBeVisible();
@@ -320,7 +320,7 @@ test('the list view shows the rows of Sprint 14 under their status', async ({ pa
 
 test('the row status icon opens the task without changing its status', async ({ page }) => {
   const gateway = await stubGateway(page);
-  await page.goto(`/atelier-nord/l/${sprint14.id}/list`);
+  await page.goto(`atelier-nord/l/${sprint14.id}/list`);
   const grid = page.getByRole('grid', { name: 'Tasks of the list Sprint 14' });
   await grid
     .getByRole('button', { name: /Redesign the SSO sign-in screen/ })
@@ -332,7 +332,7 @@ test('the row status icon opens the task without changing its status', async ({ 
 
 test('Create a task creates in the list and the row shows', async ({ page }) => {
   const gateway = await stubGateway(page);
-  await page.goto(`/atelier-nord/l/${sprint14.id}/list`);
+  await page.goto(`atelier-nord/l/${sprint14.id}/list`);
   const grid = page.getByRole('grid', { name: 'Tasks of the list Sprint 14' });
   await expect(grid.getByText('Redesign the SSO sign-in screen')).toBeVisible();
 
@@ -349,7 +349,7 @@ test('Create a task creates in the list and the row shows', async ({ page }) => 
 
 test('the selection marks its tasks done through the bulk action', async ({ page }) => {
   const gateway = await stubGateway(page);
-  await page.goto(`/atelier-nord/l/${sprint14.id}/list`);
+  await page.goto(`atelier-nord/l/${sprint14.id}/list`);
   const grid = page.getByRole('grid', { name: 'Tasks of the list Sprint 14' });
   await expect(grid.getByText('Redesign the SSO sign-in screen')).toBeVisible();
 
