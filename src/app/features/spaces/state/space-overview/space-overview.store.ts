@@ -255,6 +255,7 @@ function createSpaceOverviewStore(): Type<SpaceOverviewStoreInstance> {
     }),
     withHooks({
       onInit(store): void {
+        store._navigation.request(['overviews']);
         store._followNavigation(
           computed((): SpaceOverview | undefined => {
             const spaceId: string | null = store.spaceId();

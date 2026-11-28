@@ -39,6 +39,7 @@ import { ListsApi } from '../../data-access/services/lists-api/lists-api.service
 import { SidebarApi } from '../../data-access/services/sidebar-api/sidebar-api.service';
 import { SpacesApi } from '../../data-access/services/spaces-api/spaces-api.service';
 import type { Favorite, FavoriteKind } from '../../models/favorite/favorite.interface';
+import type { NavigationRead } from '../../models/navigation-read/navigation-read.type';
 import type { SpaceDetails, SpaceDraft } from '../../models/space/space.interface';
 import type {
   ListDraft,
@@ -255,6 +256,18 @@ interface SpacesNavigationState {
    * @readonly
    */
   readonly _organizationId: string | null;
+
+  /**
+   * Property _requested
+   *
+   * @description
+   * The reads a rendered consumer asked for (`request`); the others stay idle. A request is
+   * never withdrawn: a read once shown keeps following the organization.
+   *
+   * @type {Readonly<Record<NavigationRead, boolean>>}
+   * @readonly
+   */
+  readonly _requested: Readonly<Record<NavigationRead, boolean>>;
   // #endregion
 }
 
@@ -605,11 +618,24 @@ interface SpacesNavigationStoreInstance {
   removeList(list: TaskList): Promise<boolean>;
 
   /**
+   * Method request
+   *
+   * @description
+   * Starts the reads a consumer about to show them needs, when no other consumer started them
+   * yet: the overviews start the spaces too. The workspace starts nothing on its own, so a
+   * settings screen without the sidebar reads neither the overviews nor the footer's counts.
+   *
+   * @param {readonly NavigationRead[]} reads - The reads.
+   */
+  request(reads: readonly NavigationRead[]): void;
+
+  /**
    * Method refresh
    *
    * @description
    * Reads the spaces and their counts again, after a write that changed them: the overviews
    * follow the new spaces, so they are read again directly only when the spaces could not be.
+   * A read no consumer requested stays idle.
    */
   refresh(): void;
 
@@ -672,6 +698,7 @@ const initialState: SpacesNavigationState = {
   lastSpacesUrl: null,
   expanded: {},
   _organizationId: null,
+  _requested: { spaces: false, favorites: false, overviews: false, counts: false },
 };
 
 /**
@@ -687,11 +714,16 @@ function createSpacesNavigationStore(): Type<SpacesNavigationStoreInstance> {
     withState(initialState),
     withProps((store) => {
       const api: SpacesApi = inject(SpacesApi);
-      const spaces: ResourceRef<readonly SpaceDetails[] | undefined> = resource({
-        params: () => {
+      const asked: (read: NavigationRead) => () => { organizationId: string } | undefined =
+        (read: NavigationRead) => () => {
           const organizationId: string | null = store._organizationId();
-          return organizationId === null ? undefined : { organizationId };
-        },
+          // The read's own flag (a deep signal), so another request never changes these params.
+          return organizationId === null || !store._requested[read]()
+            ? undefined
+            : { organizationId };
+        };
+      const spaces: ResourceRef<readonly SpaceDetails[] | undefined> = resource({
+        params: asked('spaces'),
         loader: ({ abortSignal }: { abortSignal: AbortSignal }): Promise<readonly SpaceDetails[]> =>
           api.spaces(abortSignal),
       });
@@ -726,10 +758,6 @@ function createSpacesNavigationStore(): Type<SpacesNavigationStoreInstance> {
         },
       };
       const counts: SidebarApi = inject(SidebarApi);
-      const byOrganization: () => { organizationId: string } | undefined = () => {
-        const organizationId: string | null = store._organizationId();
-        return organizationId === null ? undefined : { organizationId };
-      };
       const listEdits: Subject<TaskList> = new Subject<TaskList>();
       const spaceEdits: Subject<SpaceDetails> = new Subject<SpaceDetails>();
       return {
@@ -740,12 +768,12 @@ function createSpacesNavigationStore(): Type<SpacesNavigationStoreInstance> {
         listEdited: listEdits.asObservable(),
         spaceEdited: spaceEdits.asObservable(),
         trashCount: resource({
-          params: byOrganization,
+          params: asked('counts'),
           loader: ({ abortSignal }: { abortSignal: AbortSignal }): Promise<number> =>
             counts.trashCount(abortSignal),
         }),
         archiveCount: resource({
-          params: byOrganization,
+          params: asked('counts'),
           loader: ({ abortSignal }: { abortSignal: AbortSignal }): Promise<number> =>
             counts.archiveCount(abortSignal),
         }),
@@ -758,7 +786,7 @@ function createSpacesNavigationStore(): Type<SpacesNavigationStoreInstance> {
         spaces,
         overviews: resource({
           params: () =>
-            spaces.hasValue()
+            spaces.hasValue() && store._requested.overviews()
               ? { ids: spaces.value().map((space: SpaceDetails): string => space.id) }
               : undefined,
           loader: async ({
@@ -820,10 +848,7 @@ function createSpacesNavigationStore(): Type<SpacesNavigationStoreInstance> {
           },
         }),
         favorites: resource({
-          params: () => {
-            const organizationId: string | null = store._organizationId();
-            return organizationId === null ? undefined : { organizationId };
-          },
+          params: asked('favorites'),
           loader: ({ abortSignal }: { abortSignal: AbortSignal }): Promise<readonly Favorite[]> =>
             api.favorites(abortSignal),
         }),
@@ -1104,6 +1129,19 @@ function createSpacesNavigationStore(): Type<SpacesNavigationStoreInstance> {
             if (store._shared.get(spaceId) === lent) store._shared.delete(spaceId);
           });
         },
+        request(reads: readonly NavigationRead[]): void {
+          const requested: Readonly<Record<NavigationRead, boolean>> = store._requested();
+          const wanted: readonly NavigationRead[] = reads.includes('overviews')
+            ? [...reads, 'spaces']
+            : reads;
+          if (wanted.every((read: NavigationRead): boolean => requested[read])) return;
+          patchState(store, {
+            _requested: {
+              ...requested,
+              ...Object.fromEntries(wanted.map((read: NavigationRead) => [read, true])),
+            },
+          });
+        },
         setExpanded(spaceId: string, open: boolean): void {
           patchState(store, { expanded: { ...store.expanded(), [spaceId]: open } });
         },
@@ -1358,7 +1396,8 @@ function createSpacesNavigationStore(): Type<SpacesNavigationStoreInstance> {
  *
  * @description
  * The spaces navigation of a workspace, provided on `/:org` by `provideSpacesNavigation()` so the
- * sidebar, the sprint progress and the list screens share one read. Keyed on the organization
+ * sidebar, the sprint progress and the list screens share one read; each read starts only once a
+ * rendered consumer asks for it (`request`). Keyed on the organization
  * id committed by the workspace. A switch closes every space and reads again. At most four
  * overviews run at once; a failed read offers an inline retry. A task created from this tab reads
  * the overview of its list's space again, and only that one, one creation after the other, each

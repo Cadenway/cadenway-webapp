@@ -31,7 +31,9 @@ import { SprintProgress } from '../../ui/components/sprint-progress/sprint-progr
  * Provides the workspace's `SpacesNavigationStore`, shared by the sidebar, the sprint progress and
  * the spaces screens, and for the other features `LIST_DIRECTORY` and `SPACE_DIRECTORY`, the lists
  * and spaces it read, and `NAVIGATION_REFRESH`, which reads them again after another feature's
- * write. Put it in the providers of the `/:org` route that loads the shell.
+ * write. Put it in the providers of the `/:org` route that loads the shell. Nothing is read until
+ * a consumer asks: the first injection of `LIST_DIRECTORY` starts the spaces and their overviews,
+ * that of `SPACE_DIRECTORY` the spaces, and `NAVIGATION_REFRESH` only reads again what started.
  *
  * @returns {Provider[]} The store and port providers.
  */
@@ -43,6 +45,7 @@ export function provideSpacesNavigation(): Provider[] {
       useFactory: (): ListDirectoryPort => {
         const navigation: InstanceType<typeof SpacesNavigationStore> =
           inject(SpacesNavigationStore);
+        navigation.request(['overviews']);
         return {
           lists: computed((): readonly ListDirectoryEntry[] => {
             if (!navigation.spaces.hasValue() || !navigation.overviews.hasValue()) return [];
@@ -70,6 +73,7 @@ export function provideSpacesNavigation(): Provider[] {
       useFactory: (): SpaceDirectoryPort => {
         const navigation: InstanceType<typeof SpacesNavigationStore> =
           inject(SpacesNavigationStore);
+        navigation.request(['spaces']);
         return {
           spaces: computed((): readonly SpaceDirectoryEntry[] =>
             navigation.spaces.hasValue()

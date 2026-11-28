@@ -266,6 +266,45 @@ describe('SpacesNavigationStore', () => {
       ],
     });
     store = TestBed.inject(SpacesNavigationStore);
+    store.request(['favorites', 'overviews', 'counts']);
+  });
+
+  it('reads only what a consumer asked for, the overviews with their spaces', async () => {
+    TestBed.resetTestingModule();
+    vi.clearAllMocks();
+    TestBed.configureTestingModule({
+      providers: [
+        SpacesNavigationStore,
+        { provide: SpacesApi, useValue: api },
+        { provide: ListsApi, useValue: lists },
+        { provide: SidebarApi, useValue: sidebar },
+        { provide: WORKSPACE_CONTEXT, useValue: { organization } },
+        { provide: TaskCreate, useValue: { created: creations.asObservable() } },
+      ],
+    });
+    const settings: InstanceType<typeof SpacesNavigationStore> =
+      TestBed.inject(SpacesNavigationStore);
+    TestBed.tick();
+    await new Promise<void>((resolve: () => void) => setTimeout(resolve));
+    expect(api.spaces).not.toHaveBeenCalled();
+    expect(api.favorites).not.toHaveBeenCalled();
+
+    settings.request(['spaces', 'favorites']);
+    TestBed.tick();
+    await expect.poll(() => settings.favorites.hasValue() && settings.spaces.hasValue()).toBe(true);
+    settings.refresh();
+    settings.refreshCounts();
+    TestBed.tick();
+    await new Promise<void>((resolve: () => void) => setTimeout(resolve));
+    expect(api.overview).not.toHaveBeenCalled();
+    expect(sidebar.trashCount).not.toHaveBeenCalled();
+    expect(sidebar.archiveCount).not.toHaveBeenCalled();
+
+    settings.request(['overviews']);
+    TestBed.tick();
+    await expect.poll(() => settings.overviews.hasValue()).toBe(true);
+    expect(api.spaces).toHaveBeenCalledTimes(2);
+    expect(sidebar.trashCount).not.toHaveBeenCalled();
   });
 
   it('reads nothing before following an organization, then the spaces, counts and favorites', async () => {

@@ -32,7 +32,8 @@ out what would open the palette when it is missing.
 
 - `@cadenway/api-client`: `SearchService.search` through `data-access/`.
 - Auth's `.` entry (`SignOut`), Task's `.` entry (`TaskCreate`, `TaskDetailOpener`), Spaces' `ports/list-directory`
-  (`LIST_DIRECTORY`, provided on `/:org` by `provideSpacesNavigation()`, injected as optional),
+  (`LIST_DIRECTORY`, provided on `/:org` by `provideSpacesNavigation()`, taken as optional the first
+  time the palette opens, since taking it starts the spaces and overviews reads),
   Workspace's `ports/workspace-context`, `@core/shortcuts`, `@core/theme`.
 - `@cadenway/ui` (`app-rail`, `command`, `kbd`, `status-icon`, `toast`) and `@cadenway/icons`.
 

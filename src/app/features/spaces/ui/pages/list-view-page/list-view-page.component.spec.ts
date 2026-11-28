@@ -333,7 +333,7 @@ describe('ListViewPage', () => {
         { provide: TaskActionsApi, useValue: { bulk, restore, remind: vi.fn() } },
         {
           provide: SpacesNavigationStore,
-          useValue: { spaces: ready([]), overviews: ready({}), openDialog },
+          useValue: { request: vi.fn(), spaces: ready([]), overviews: ready({}), openDialog },
         },
         { provide: TaskApi, useValue: { changeStatus: vi.fn(() => of()), read: vi.fn() } },
         { provide: CwToastService, useValue: toasts },

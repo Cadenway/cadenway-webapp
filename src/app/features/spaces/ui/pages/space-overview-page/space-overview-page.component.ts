@@ -216,12 +216,14 @@ export class SpaceOverviewPage {
    * Constructor
    *
    * @description
-   * Follows the space of the route, and the organization in the navigation for the favorite;
-   * reads the space again once its dialog recorded a change.
+   * Starts the spaces and the favorites of its header, follows the space of the route, and the
+   * organization in the navigation for the favorite; reads the space again once its dialog
+   * recorded a change.
    *
    * @constructor
    */
   public constructor() {
+    this.navigation.request(['spaces', 'favorites']);
     this.store.load(this.spaceId);
     this.navigation.spaceEdited.pipe(takeUntilDestroyed()).subscribe((space: SpaceDetails) => {
       if (space.id === this.spaceId()) this.store.space.reload();

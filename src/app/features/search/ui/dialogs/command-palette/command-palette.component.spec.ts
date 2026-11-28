@@ -1,4 +1,4 @@
-import { signal, type WritableSignal } from '@angular/core';
+import { type Signal, signal, type WritableSignal } from '@angular/core';
 import { type ComponentFixture, TestBed } from '@angular/core/testing';
 import { Router } from '@angular/router';
 import { CwToastService } from '@cadenway/ui/components/toast';
@@ -130,8 +130,10 @@ describe('CommandPaletteDialog', () => {
   let createTask: Mock<() => boolean>;
   let openTask: Mock<(taskKey: string, preview?: unknown) => Promise<boolean>>;
   let fixture: ComponentFixture<CommandPaletteDialog>;
+  let directoryTaken: Mock<() => { lists: Signal<readonly ListDirectoryEntry[]> }>;
 
   beforeEach(async () => {
+    directoryTaken = vi.fn(() => ({ lists: signal(directory) }));
     role.set('owner');
     search = vi.fn(() =>
       of([{ kind: 'task', key: 'CAD-482', name: 'Review of the SSO flow', status: 'review' }]),
@@ -152,7 +154,7 @@ describe('CommandPaletteDialog', () => {
         { provide: ThemeService, useValue: { resolved: () => 'light', toggle } },
         { provide: WORKSPACE_CONTEXT, useValue: workspace },
         { provide: CwToastService, useValue: { error: vi.fn() } },
-        { provide: LIST_DIRECTORY, useValue: { lists: signal(directory) } },
+        { provide: LIST_DIRECTORY, useFactory: directoryTaken },
       ],
     });
     fixture = TestBed.createComponent(CommandPaletteDialog);
@@ -252,8 +254,10 @@ describe('CommandPaletteDialog', () => {
   });
 
   it('shows the first four lists of the workspace before anything is typed', async () => {
+    expect(directoryTaken).not.toHaveBeenCalled();
     TestBed.inject(CommandPalette).setOpen(true);
     await fixture.whenStable();
+    expect(directoryTaken).toHaveBeenCalledTimes(1);
 
     const list: HTMLElement | undefined = optionNamed('Sprint 14');
     expect(list?.textContent).toContain('Product');

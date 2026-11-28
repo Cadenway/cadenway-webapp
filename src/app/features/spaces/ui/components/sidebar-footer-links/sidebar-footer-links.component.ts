@@ -69,4 +69,18 @@ export class SidebarFooterLinks {
    */
   protected readonly slug: Signal<string> = injectOrganizationSlug();
   // #endregion
+
+  // #region Constructor
+  /**
+   * Constructor
+   *
+   * @description
+   * Starts the trash and archive counts, which only this footer shows.
+   *
+   * @constructor
+   */
+  public constructor() {
+    this.navigation.request(['counts']);
+  }
+  // #endregion
 }

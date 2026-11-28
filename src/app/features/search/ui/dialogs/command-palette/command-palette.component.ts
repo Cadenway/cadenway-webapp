@@ -1,4 +1,15 @@
-import { Component, computed, DestroyRef, inject, type Signal } from '@angular/core';
+import {
+  Component,
+  computed,
+  DestroyRef,
+  effect,
+  inject,
+  Injector,
+  type Signal,
+  signal,
+  untracked,
+  type WritableSignal,
+} from '@angular/core';
 import { Router } from '@angular/router';
 import { CwButton } from '@cadenway/ui/components/button';
 import {
@@ -229,14 +240,15 @@ export class CommandPaletteDialog {
    * Property listDirectory
    *
    * @description
-   * Spaces' lists of the workspace, which the sidebar already read; absent outside a workspace.
+   * Spaces' lists of the workspace, taken the first time the palette opens: taking the port
+   * starts the spaces and overviews reads, which a closed palette (in the settings shell, without
+   * a sidebar) must not start. Null until then, and outside a workspace.
    *
-   * @type {ListDirectoryPort | null}
+   * @type {WritableSignal<ListDirectoryPort | null>}
    * @readonly
    */
-  private readonly listDirectory: ListDirectoryPort | null = inject(LIST_DIRECTORY, {
-    optional: true,
-  });
+  private readonly listDirectory: WritableSignal<ListDirectoryPort | null> =
+    signal<ListDirectoryPort | null>(null);
 
   /**
    * Property recentTasks
@@ -369,7 +381,7 @@ export class CommandPaletteDialog {
    */
   protected readonly localLists: Signal<readonly ListDirectoryEntry[]> = computed(
     (): readonly ListDirectoryEntry[] => {
-      const lists: readonly ListDirectoryEntry[] = this.listDirectory?.lists() ?? [];
+      const lists: readonly ListDirectoryEntry[] = this.listDirectory()?.lists() ?? [];
       const query: string = this.store.query().toLocaleLowerCase();
       if (query === '') return lists.slice(0, IDLE_LIST_COUNT);
       return lists
@@ -407,11 +419,16 @@ export class CommandPaletteDialog {
    *
    * @description
    * Binds Ctrl K (⌘ K) to opening the palette, outside fields, until the shell is destroyed; an
-   * open palette stays open.
+   * open palette stays open. Takes Spaces' list directory the first time it opens.
    *
    * @constructor
    */
   public constructor() {
+    const injector: Injector = inject(Injector);
+    effect((): void => {
+      if (!this.palette.isOpen() || untracked(this.listDirectory) !== null) return;
+      this.listDirectory.set(untracked(() => injector.get(LIST_DIRECTORY, null)));
+    });
     inject(ShortcutsService).register(
       {
         keys: 'mod+k',

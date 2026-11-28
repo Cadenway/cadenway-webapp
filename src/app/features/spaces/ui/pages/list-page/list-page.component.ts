@@ -601,12 +601,14 @@ export class ListPage {
    * Constructor
    *
    * @description
-   * Binds the list, claims the sidebar toggle, follows `?savedView=` and shows the changes the
-   * navigation's dialogs record for the list and its space.
+   * Starts the spaces and the favorites its header needs, binds the list, claims the sidebar
+   * toggle, follows `?savedView=` and shows the changes the navigation's dialogs record for the
+   * list and its space.
    *
    * @constructor
    */
   public constructor() {
+    this.navigation.request(['spaces', 'favorites']);
     if (this.store.list.error()) this.store.list.reload();
     this.store.load(this.listId);
     this.sidebar?.claimToggle(inject(DestroyRef));
