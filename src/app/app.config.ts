@@ -14,7 +14,7 @@ import {
   withRouterConfig,
 } from '@angular/router';
 
-import { apiClientInterceptor, organizationPinInterceptor, recentReadInterceptor } from '@core/api';
+import { apiClientInterceptor, organizationPinInterceptor } from '@core/api';
 import { RuntimeConfigStore } from '@core/config';
 import { provideAppRouting } from '@core/routing';
 import { provideTheme } from '@core/theme';
@@ -35,9 +35,7 @@ export const appConfig: ApplicationConfig = {
     provideBrowserGlobalErrorListeners(),
     // The REST gateway address must be known before anything calls the API.
     provideAppInitializer(() => inject(RuntimeConfigStore).load()),
-    provideHttpClient(
-      withInterceptors([apiClientInterceptor, recentReadInterceptor, organizationPinInterceptor]),
-    ),
+    provideHttpClient(withInterceptors([apiClientInterceptor, organizationPinInterceptor])),
     // Parameters, query parameters and data reach pages as inputs, a child seeing its ancestors'
     // parameters. Leaving a route destroys the environment injector of its providers, so the
     // route-scoped stores (AuthFlowStore, WorkspaceContextStore) die with it. A routed page that

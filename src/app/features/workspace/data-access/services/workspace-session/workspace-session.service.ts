@@ -10,7 +10,7 @@ import {
 } from '@cadenway/api-client';
 import { catchError, EMPTY, expand, map, type Observable, of, reduce } from 'rxjs';
 
-import { type ApiProblem, readProblem, RECORD_READ, SKIP_ORGANIZATION_PIN } from '@core/api';
+import { type ApiProblem, readProblem, SKIP_ORGANIZATION_PIN } from '@core/api';
 import { withSessionLock } from '@features/auth';
 
 import type { OrganizationMenuEntry } from '../../../models/organization-menu-entry/organization-menu-entry.interface';
@@ -89,17 +89,13 @@ export class WorkspaceSession {
    * Method currentUser
    *
    * @description
-   * Reads the signed-in account. A missing or expired session answers `401`. The answer is kept
-   * (`RECORD_READ`) for the account screen opened by the same navigation, which takes it instead
-   * of reading the account again.
+   * Reads the signed-in account. A missing or expired session answers `401`.
    *
    * @returns {Observable<WorkspaceResult<WorkspaceUser>>} The person, or the problem.
    */
   public currentUser(): Observable<WorkspaceResult<WorkspaceUser>> {
     return workspaceResult(
-      this.auth
-        .getCurrentUser({ context: new HttpContext().set(RECORD_READ, true) })
-        .pipe(map((user: CurrentUser) => toWorkspaceUser(user))),
+      this.auth.getCurrentUser().pipe(map((user: CurrentUser) => toWorkspaceUser(user))),
     );
   }
 

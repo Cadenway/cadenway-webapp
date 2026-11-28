@@ -19,9 +19,7 @@ belong to Auth.
 - A slug that is a reserved first segment (`RESERVED_SLUGS` of `@core/routing`) is never opened
   or redirected to: `organizationGuard` and `slugRedirectGuard` send it to `/organizations`, so
   `/home` cannot redirect to itself while organization-service does not refuse such slugs yet.
-- `/:org` runs `sessionGuard` (whose account read is kept with Core's `RECORD_READ`, so the
-  profile page it opens does not read the account again), then `organizationGuard`, then
-  `workspaceResolver`, with
+- `/:org` runs `sessionGuard`, then `organizationGuard`, then `workspaceResolver`, with
   guards rerun when the slug changes or context revalidation is requested. It is componentless:
   it provides `provideCadenwayIcons()`, Core's `provideCadenwayUiLabels()` (the English texts of
   the `@cadenway/ui` bricks every screen renders) and the workspace-wide services (the workspace runtime and

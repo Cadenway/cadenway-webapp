@@ -10,16 +10,16 @@ configured in `api/client/`. The shell belongs to
 
 ## Public entry points
 
-| Entry point       | Responsibility                                                                                              |
-| ----------------- | ----------------------------------------------------------------------------------------------------------- |
-| `@core/config`    | The root `RuntimeConfigStore` and the `RuntimeConfig` model.                                                |
-| `@core/api`       | Transport, `OrganizationPin`, recent read sharing, validated problem readers and write-outcome classifiers. |
-| `@core/realtime`  | Workspace-scoped connection, rooms, presence, and notices.                                                  |
-| `@core/theme`     | Theme preference and document synchronization.                                                              |
-| `@core/shortcuts` | Scoped keyboard shortcut registration.                                                                      |
-| `@core/routing`   | Route title, focus and the reserved first segments (slugs).                                                 |
-| `@core/locale`    | Locale of the load, chosen and installed before bootstrap.                                                  |
-| `@core/ui-labels` | The English texts of the `@cadenway/ui` bricks.                                                             |
+| Entry point       | Responsibility                                                                         |
+| ----------------- | -------------------------------------------------------------------------------------- |
+| `@core/config`    | The root `RuntimeConfigStore` and the `RuntimeConfig` model.                           |
+| `@core/api`       | Transport, `OrganizationPin`, validated problem readers and write-outcome classifiers. |
+| `@core/realtime`  | Workspace-scoped connection, rooms, presence, and notices.                             |
+| `@core/theme`     | Theme preference and document synchronization.                                         |
+| `@core/shortcuts` | Scoped keyboard shortcut registration.                                                 |
+| `@core/routing`   | Route title, focus and the reserved first segments (slugs).                            |
+| `@core/locale`    | Locale of the load, chosen and installed before bootstrap.                             |
+| `@core/ui-labels` | The English texts of the `@cadenway/ui` bricks.                                        |
 
 ## Dependencies
 
@@ -32,11 +32,6 @@ The root transport provides Angular HTTP to the generated `@cadenway/api-client`
   session and organization changes.
 - The API transport resolves generated relative paths against the configured gateway origin and
   uses the browser's session cookie there.
-- `recentReadInterceptor` lets two readers of one address share an answer during a screen load:
-  a `GET` marked `RECORD_READ` keeps its last successful answer (`RecentReads`), and a `GET`
-  marked `REUSE_READ_WITHIN_MS` takes a kept answer of the same address and parameters no older
-  than that instead of asking again. Any other method forgets every kept answer first. Nothing is
-  shared unless both readers opt in.
 - `OrganizationPin` attaches the expected organization to supported gateway operations and reports
   `organization.context-changed`; the guard may explicitly read the actual session organization
   without the pin to recover. The operation list follows the installed public contracts and a drift
