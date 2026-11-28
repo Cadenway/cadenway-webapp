@@ -1,7 +1,9 @@
 import { signal, type WritableSignal } from '@angular/core';
 import { type ComponentFixture, TestBed } from '@angular/core/testing';
+import { By } from '@angular/platform-browser';
 import { Router } from '@angular/router';
 import { provideCadenwayIcons } from '@cadenway/icons';
+import { CwMenu } from '@cadenway/ui/components/menu';
 import { CwToastService } from '@cadenway/ui/components/toast';
 import { type Observable, of } from 'rxjs';
 import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
@@ -190,6 +192,18 @@ describe('OrganizationSwitcher', () => {
     });
   }
 
+  /**
+   * Function menu
+   *
+   * @description
+   * The organizations menu brick.
+   *
+   * @returns {CwMenu} The `cw-menu` instance.
+   */
+  function menu(): CwMenu {
+    return fixture.debugElement.query(By.directive(CwMenu)).componentInstance as CwMenu;
+  }
+
   it('reads the organizations only when the menu opens', async () => {
     expect(menuOrganizations).not.toHaveBeenCalled();
     await openMenu();
@@ -231,6 +245,16 @@ describe('OrganizationSwitcher', () => {
     expect(show).toHaveBeenCalledOnce();
   });
 
+  it('opens the menu 4 px beside the rail, at least 256 px wide', async () => {
+    await openMenu();
+
+    expect(menu().sideOffset()).toBe(14);
+    expect(menu().minWidth()).toBe('64');
+    expect(
+      document.querySelector('[role="menu"][aria-label="Organizations"]')?.className,
+    ).toContain('min-w-[min(16rem,calc(100vw-1rem))]');
+  });
+
   it('renders the sidebar organization row, which opens the same menu', async () => {
     fixture.componentRef.setInput('placement', 'sidebar');
     await fixture.whenStable();
@@ -247,6 +271,8 @@ describe('OrganizationSwitcher', () => {
       expect(item('Studio Pivot')).toBeDefined();
     });
     expect(item('Create or join an organization')).toBeDefined();
+    expect(menu().side()).toBe('bottom');
+    expect(menu().sideOffset()).toBe(4);
   });
 
   it('opens the organization settings and the organization choice', async () => {
