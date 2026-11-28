@@ -800,16 +800,29 @@ function createInvitationsStore(): Type<InvitationsStoreInstance> {
             const outcome: InvitationOutcome = await store._api.invite(emails, role);
             if (write.moved()) return 'dropped';
             bump();
-            const unsent: ReadonlySet<string> = new Set<string>(
-              outcome.notSent.map((email: string): string => email.toLowerCase()),
+            // The adapter spells both lists as sent: an address the answer left out (or gave
+            // conflicting results) is as unknown as a lost answer, so it stays like one.
+            const left: ReadonlySet<string> = new Set<string>(
+              [...outcome.notSent, ...outcome.unknown].map((email: string): string =>
+                email.toLowerCase(),
+              ),
             );
-            let kept: readonly string[] = emails.filter((email: string): boolean =>
-              unsent.has(email.toLowerCase()),
+            const kept: readonly string[] = emails.filter((email: string): boolean =>
+              left.has(email.toLowerCase()),
             );
-            if (kept.length === 0) kept = outcome.notSent;
             if (kept.length === 0) {
               toastOutcome(outcome);
               return 'sent';
+            }
+            if (outcome.unknown.length > 0) {
+              if (outcome.invited > 0) toastOutcome(outcome);
+              store._toasts.warning(
+                $localize`:@@organization.members.invite-uncertain:The invitations may not have been sent`,
+                {
+                  description: $localize`:@@organization.members.invite-uncertain-text:Sending again is safe.`,
+                },
+              );
+              return { kept, uncertain: true };
             }
             toastKept(outcome, kept.length);
             return { kept, uncertain: false };

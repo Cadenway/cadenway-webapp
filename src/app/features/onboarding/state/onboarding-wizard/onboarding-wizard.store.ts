@@ -809,10 +809,16 @@ function createOnboardingWizardStore(): Type<OnboardingWizardStoreInstance> {
             const notSent: ReadonlySet<string> = new Set(
               (outcome.notSent ?? []).map((email: string): string => email.toLowerCase()),
             );
+            // Addresses the answer left out or gave conflicting results: as unknown as a lost
+            // answer, so they stay unsent and the step says the outcome is unknown.
+            const unknown: ReadonlySet<string> = new Set(
+              (outcome.unknown ?? []).map((email: string): string => email.toLowerCase()),
+            );
+            if (unknown.size > 0) uncertain = true;
             const done: readonly string[] = batch
               .map((email: string): string => email.toLowerCase())
-              .filter((email: string): boolean => !notSent.has(email));
-            unsent += batch.length - done.length;
+              .filter((email: string): boolean => !notSent.has(email) && !unknown.has(email));
+            unsent += batch.length - done.length - unknown.size;
             reached ||= outcome.invited + outcome.alreadyInvited > 0;
             patchState(store, (state: OnboardingWizardState) => ({
               _sent: [...state._sent, ...done],

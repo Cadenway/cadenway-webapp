@@ -151,5 +151,17 @@ export interface InvitationOutcome {
    * @readonly
    */
   readonly notSent: readonly string[];
+
+  /**
+   * Property unknown
+   *
+   * @description
+   * Addresses sent that the answer gave no result or conflicting results, spelled as sent: their
+   * outcome is unknown, so they are neither sent nor skipped.
+   *
+   * @type {readonly string[]}
+   * @readonly
+   */
+  readonly unknown: readonly string[];
   // #endregion
 }

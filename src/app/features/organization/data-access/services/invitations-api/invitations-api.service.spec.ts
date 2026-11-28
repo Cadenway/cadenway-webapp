@@ -56,4 +56,19 @@ describe('InvitationsApi', () => {
     ]);
     expect(list.total).toBe(2);
   });
+
+  it('gives an address the batch answer leaves out an unknown outcome', async () => {
+    const inviteMembers: Mock = vi.fn(() =>
+      of({
+        invitations: [{ email: 'lucie@example.com', outcome: 'invited', invitationId: 'i5' }],
+      }),
+    );
+    TestBed.configureTestingModule({
+      providers: [InvitationsApi, { provide: InvitationsService, useValue: { inviteMembers } }],
+    });
+
+    await expect(
+      TestBed.inject(InvitationsApi).invite(['lucie@example.com', 'paul@example.com'], 'member'),
+    ).resolves.toEqual({ invited: 1, skipped: 0, notSent: [], unknown: ['paul@example.com'] });
+  });
 });

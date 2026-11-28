@@ -78,7 +78,8 @@ section has `organizationSectionGuard(<section>)` (`http/guards/organization-sec
   `skeleton`, `spinner`, `textarea` and `toast`.
 - Workspace's `ports/workspace-context`, `ports/workspace-refresh` (General) and
   `http/guards/organization-role`, Errors' `errors.routes`,
-  `@shared/unsaved-changes`.
+  `@shared/unsaved-changes`, `@shared/batch-outcomes` (the invitation adapter matches each
+  address sent to its own result).
 - `@cadenway/ui` (`banner`, `button`) and `@cadenway/icons`.
 - Members section: `MembersService` (`listMembers`, `changeMemberRole`, `removeMember`) and
   `InvitationsService` (`listInvitations`, `inviteMembers`, `resendInvitation`, `revokeInvitation`)
@@ -318,7 +319,10 @@ resent` from a resend that answered, or from the invitation itself listed with a
   those skipped (already a member or invited). The dialog stays open on a refusal.
 - An address the batch answered with another outcome (`InvitationResult.outcome` beyond `invited`,
   `already-member` and `already-invited`, which the contract counts as not sent; the adapter lists
-  them in `notSent`) stays in the dialog, which keeps only those addresses and its role (both
+  them in `notSent`) stays in the dialog. An address the `200` answer leaves out, or gives
+  conflicting results, is never counted as sent or skipped: the adapter lists it in `unknown`, and
+  the dialog keeps it as after a lost answer (the uncertain warning, the role locked). The dialog
+  keeps only the addresses left and its role (both
   fields are disabled while the batch is sent, so they hold the submitted snapshot; after a batch
   of unknown outcome the role stays the one sent, disabled with the `invite-role-locked` hint,
   until the dialog closes: clearing or editing the addresses does not unlock it, since a second

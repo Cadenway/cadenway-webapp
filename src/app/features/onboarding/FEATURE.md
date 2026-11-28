@@ -65,6 +65,8 @@ route), `withGettingStarted()` and `withOnboardingWizard()` (the `overlays` cont
   `If-Organization-Match` to the four onboarding operations and to `POST /v1/invitations`.
 - `@core/api` (`readProblem`, `OrganizationSwitchPendingError`, `OrganizationPin`, which also
   fences the assistant's finish and dismissal).
+- `@shared/batch-outcomes` (`matchBatchOutcomes`), with which the adapter matches each address
+  sent to its own result of `inviteMembers`.
 - Workspace's `ports/workspace-context` (the current organization, which fences every write; its
   name in the assistant's welcome; `can('member')` for who sees the assistant; `can('admin')` for
   who may invite from the assistant and shows the checklist's invitation item).
@@ -155,8 +157,10 @@ route), `withGettingStarted()` and `withOnboardingWizard()` (the `overlays` cont
   and never sent again: going back to `Team` keeps it as a pill, and `Continue` sends only the
   others. Any other outcome (one a later contract adds counts as not sent; the adapter lists
   them in `notSent`) leaves the address unsent for a later `Continue`, and shows
-  `{n} address(es) could not be invited`; the screen still changes. A batch whose outcome is
-  unknown keeps its addresses unsent, keeps the screen and shows
+  `{n} address(es) could not be invited`; the screen still changes. An address the answer
+  leaves out, or gives conflicting results, is no proof (the adapter lists it in `unknown`): it
+  counts as a batch of unknown outcome. A batch whose outcome is unknown keeps its addresses
+  unsent, keeps the screen and shows
   `The invitations may not have been sent` / `Press Continue to send them again: it is safe.`
   (an address the lost batch reached then answers `already-invited`); a refused batch (a `429`
   daily limit included) shows `The invitations could not be sent` and the screen still changes.

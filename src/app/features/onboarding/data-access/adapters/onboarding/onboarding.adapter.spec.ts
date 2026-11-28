@@ -101,30 +101,58 @@ describe('onboarding adapter', () => {
 
   it('counts only invited addresses as sent and lists the unknown outcomes as not sent', () => {
     expect(
-      toInvitationOutcome({
-        invitations: [
-          { email: 'ines.robert@ateliernord.fr', outcome: 'invited', invitationId: null },
-          { email: 'hugo.martin@ateliernord.fr', outcome: 'already-member', invitationId: null },
-          { email: 'lea.bernard@ateliernord.fr', outcome: 'seat-limit', invitationId: null },
-        ],
-      }),
+      toInvitationOutcome(
+        {
+          invitations: [
+            { email: 'ines.robert@ateliernord.fr', outcome: 'invited', invitationId: null },
+            { email: 'hugo.martin@ateliernord.fr', outcome: 'already-member', invitationId: null },
+            { email: 'lea.bernard@ateliernord.fr', outcome: 'seat-limit', invitationId: null },
+          ],
+        },
+        ['ines.robert@ateliernord.fr', 'hugo.martin@ateliernord.fr', 'lea.bernard@ateliernord.fr'],
+      ),
     ).toEqual({
       invited: 1,
       skipped: 2,
       alreadyInvited: 0,
       notSent: ['lea.bernard@ateliernord.fr'],
+      unknown: [],
     });
   });
 
   it('counts the addresses already invited apart', () => {
     expect(
-      toInvitationOutcome({
-        invitations: [
-          { email: 'ines.robert@ateliernord.fr', outcome: 'already-invited', invitationId: null },
-          { email: 'hugo.martin@ateliernord.fr', outcome: 'already-member', invitationId: null },
-        ],
-      }),
-    ).toEqual({ invited: 0, skipped: 2, alreadyInvited: 1, notSent: [] });
+      toInvitationOutcome(
+        {
+          invitations: [
+            { email: 'ines.robert@ateliernord.fr', outcome: 'already-invited', invitationId: null },
+            { email: 'hugo.martin@ateliernord.fr', outcome: 'already-member', invitationId: null },
+          ],
+        },
+        ['ines.robert@ateliernord.fr', 'hugo.martin@ateliernord.fr'],
+      ),
+    ).toEqual({ invited: 0, skipped: 2, alreadyInvited: 1, notSent: [], unknown: [] });
+  });
+
+  it('counts no address the answer leaves out or gives conflicting results', () => {
+    expect(
+      toInvitationOutcome(
+        {
+          invitations: [
+            { email: 'ines.robert@ateliernord.fr', outcome: 'invited', invitationId: null },
+            { email: 'hugo.martin@ateliernord.fr', outcome: 'invited', invitationId: null },
+            { email: 'hugo.martin@ateliernord.fr', outcome: 'already-member', invitationId: null },
+          ],
+        },
+        ['ines.robert@ateliernord.fr', 'hugo.martin@ateliernord.fr', 'lea.bernard@ateliernord.fr'],
+      ),
+    ).toEqual({
+      invited: 1,
+      skipped: 0,
+      alreadyInvited: 0,
+      notSent: [],
+      unknown: ['hugo.martin@ateliernord.fr', 'lea.bernard@ateliernord.fr'],
+    });
   });
 
   it('quotes the version as the precondition', () => {

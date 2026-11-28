@@ -119,7 +119,7 @@ export class InvitationsApi {
     const result: InvitationBatchResult = await firstValueFrom(
       this.invitations.inviteMembers({ emails: [...emails], role }),
     );
-    return toInvitationOutcome(result);
+    return toInvitationOutcome(result, emails);
   }
 
   /**

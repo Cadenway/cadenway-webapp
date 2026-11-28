@@ -1,5 +1,7 @@
 import type { Invitation, InvitationBatchResult, InvitationPage } from '@cadenway/api-client';
 
+import { type BatchOutcomes, matchBatchOutcomes } from '@shared/batch-outcomes';
+
 import type {
   InvitationList,
   InvitationOutcome,
@@ -72,21 +74,29 @@ const SKIPPED_OUTCOMES: ReadonlySet<string> = new Set<string>([
  * Function toInvitationOutcome
  *
  * @description
- * Counts the addresses of a batch that were invited and those skipped, being already a member or
+ * Counts the addresses sent that were invited and those skipped, being already a member or
  * invited. Any other outcome, one a later contract adds included, counts as not sent, as the
- * contract asks: those addresses are listed in `notSent`, so they can be sent again.
+ * contract asks: those addresses are listed in `notSent`, so they can be sent again. Each address
+ * sent is matched to its own result (`matchBatchOutcomes`): one the answer leaves out or gives
+ * conflicting results is listed in `unknown`, never counted as sent or skipped.
  *
  * @param {InvitationBatchResult} result - `POST /v1/invitations` answer.
- * @returns {InvitationOutcome} How many were invited and skipped, and the addresses not sent.
+ * @param {readonly string[]} emails - The addresses sent.
+ * @returns {InvitationOutcome} How many were invited and skipped, and the addresses not sent or
+ * of unknown outcome, spelled as sent.
  */
-export function toInvitationOutcome(result: InvitationBatchResult): InvitationOutcome {
+export function toInvitationOutcome(
+  result: InvitationBatchResult,
+  emails: readonly string[],
+): InvitationOutcome {
+  const { settled, unknown }: BatchOutcomes = matchBatchOutcomes(emails, result.invitations);
   let invited: number = 0;
   let skipped: number = 0;
   const notSent: string[] = [];
-  for (const entry of result.invitations) {
+  for (const entry of settled) {
     if (entry.outcome === 'invited') invited += 1;
     else if (SKIPPED_OUTCOMES.has(entry.outcome)) skipped += 1;
     else notSent.push(entry.email);
   }
-  return { invited, skipped, notSent };
+  return { invited, skipped, notSent, unknown };
 }

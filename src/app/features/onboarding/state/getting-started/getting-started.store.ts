@@ -909,9 +909,15 @@ function createGettingStartedStore(): Type<GettingStartedStoreInstance> {
               const unsent: ReadonlySet<string> = new Set(
                 (outcome.notSent ?? []).map((email: string): string => email.toLowerCase()),
               );
+              // Addresses the answer left out or gave conflicting results: as unknown as a lost
+              // answer, so they stay unsent and the summary says the outcome is unknown.
+              const unknown: ReadonlySet<string> = new Set(
+                (outcome.unknown ?? []).map((email: string): string => email.toLowerCase()),
+              );
+              if (unknown.size > 0) uncertain = true;
               for (const email of batch) {
                 const address: string = email.toLowerCase();
-                if (!unsent.has(address)) settled.add(address);
+                if (!unsent.has(address) && !unknown.has(address)) settled.add(address);
               }
               send.invited += outcome.invited;
               send.notSent += unsent.size;

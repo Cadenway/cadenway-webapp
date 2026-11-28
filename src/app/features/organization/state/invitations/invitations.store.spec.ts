@@ -226,7 +226,7 @@ async function setup(
 ): Promise<Harness> {
   const api: ApiFake = {
     list: vi.fn(() => Promise.resolve(LIST)),
-    invite: vi.fn(() => Promise.resolve({ invited: 2, skipped: 0, notSent: [] })),
+    invite: vi.fn(() => Promise.resolve({ invited: 2, skipped: 0, notSent: [], unknown: [] })),
     resend: vi.fn((): Promise<PendingInvitation> => Promise.resolve({ ...STUDIO, expired: false })),
     revoke: vi.fn(() => Promise.resolve()),
     ...overrides,
@@ -425,7 +425,7 @@ describe('InvitationsStore', () => {
   it('reads the list again after a batch, even while a read is under way', async () => {
     let first: (list: InvitationList) => void = () => undefined;
     const { store, api, toasts }: Harness = await setup({
-      invite: vi.fn(() => Promise.resolve({ invited: 2, skipped: 1, notSent: [] })),
+      invite: vi.fn(() => Promise.resolve({ invited: 2, skipped: 1, notSent: [], unknown: [] })),
     });
     api.list.mockReturnValueOnce(
       new Promise<InvitationList>((resolve: (list: InvitationList) => void) => {
@@ -535,7 +535,7 @@ describe('InvitationsStore', () => {
         invite: vi
           .fn()
           .mockRejectedValueOnce(refusal(502, {}))
-          .mockResolvedValueOnce({ invited: 1, skipped: 1, notSent: [] }),
+          .mockResolvedValueOnce({ invited: 1, skipped: 1, notSent: [], unknown: [] }),
       });
       const emails: readonly string[] = ['lucie@example.com', 'paul@example.com'];
 
@@ -556,7 +556,7 @@ describe('InvitationsStore', () => {
   it('keeps the addresses a batch did not send, after the invited ones', async () => {
     const { store, toasts }: Harness = await setup({
       invite: vi.fn(() =>
-        Promise.resolve({ invited: 1, skipped: 1, notSent: ['Paul@Example.com'] }),
+        Promise.resolve({ invited: 1, skipped: 1, notSent: ['Paul@Example.com'], unknown: [] }),
       ),
     });
 
@@ -572,6 +572,26 @@ describe('InvitationsStore', () => {
     });
   });
 
+  it('keeps an address the answer left out as of unknown outcome', async () => {
+    const { store, toasts }: Harness = await setup({
+      invite: vi.fn(() =>
+        Promise.resolve({ invited: 1, skipped: 0, notSent: [], unknown: ['paul@example.com'] }),
+      ),
+    });
+
+    await expect(store.invite(['lucie@example.com', 'paul@example.com'], 'admin')).resolves.toEqual(
+      { kept: ['paul@example.com'], uncertain: true },
+    );
+
+    expect(toasts.success).toHaveBeenCalledWith('1 invitation sent', {
+      description: 'They expire in 7 days.',
+    });
+    expect(toasts.error).not.toHaveBeenCalled();
+    expect(toasts.warning).toHaveBeenCalledWith('The invitations may not have been sent', {
+      description: 'Sending again is safe.',
+    });
+  });
+
   it('counts the skipped addresses in the summary when none was invited', async () => {
     const { store, toasts }: Harness = await setup({
       invite: vi.fn(() =>
@@ -579,6 +599,7 @@ describe('InvitationsStore', () => {
           invited: 0,
           skipped: 1,
           notSent: ['lucie@example.com', 'paul@example.com'],
+          unknown: [],
         }),
       ),
     });
@@ -640,9 +661,9 @@ describe('InvitationsStore', () => {
       const { store, api, toasts }: Harness = harness;
 
       const done: Promise<InviteResult> = store.invite(['lucie@example.com'], 'member');
-      api.invite.mockResolvedValue({ invited: 1, skipped: 0, notSent: [] });
+      api.invite.mockResolvedValue({ invited: 1, skipped: 0, notSent: [], unknown: [] });
       switchAwayAndBack(harness);
-      answer({ invited: 1, skipped: 0, notSent: [] });
+      answer({ invited: 1, skipped: 0, notSent: [], unknown: [] });
 
       await expect(done).resolves.toBe('dropped');
       await stable();

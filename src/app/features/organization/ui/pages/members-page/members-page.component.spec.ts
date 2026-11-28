@@ -186,7 +186,7 @@ async function render(
     },
     invitations: {
       list: vi.fn(() => Promise.resolve(INVITATIONS)),
-      invite: vi.fn(() => Promise.resolve({ invited: 2, skipped: 0, notSent: [] })),
+      invite: vi.fn(() => Promise.resolve({ invited: 2, skipped: 0, notSent: [], unknown: [] })),
       resend: vi.fn(),
       revoke: vi.fn(),
     },
@@ -476,7 +476,12 @@ describe('MembersPage', () => {
   it('keeps the dialog open with the addresses a batch did not send', async () => {
     const [fixture, fakes]: [ComponentFixture<MembersPage>, Fakes] = await render('admin');
     fakes.invitations.invite
-      .mockResolvedValueOnce({ invited: 1, skipped: 0, notSent: ['lucie@example.com'] })
+      .mockResolvedValueOnce({
+        invited: 1,
+        skipped: 0,
+        notSent: ['lucie@example.com'],
+        unknown: [],
+      })
       .mockRejectedValueOnce(new HttpErrorResponse({ status: 503 }));
 
     find('members-invite')?.click();
@@ -572,7 +577,7 @@ describe('MembersPage', () => {
       fixture: ComponentFixture<MembersPage>,
       answer: (outcome: unknown) => void,
     ): Promise<void> {
-      answer({ invited: 1, skipped: 0, notSent: [] });
+      answer({ invited: 1, skipped: 0, notSent: [], unknown: [] });
       await new Promise<void>((done: () => void) => {
         setTimeout(done, 0);
       });

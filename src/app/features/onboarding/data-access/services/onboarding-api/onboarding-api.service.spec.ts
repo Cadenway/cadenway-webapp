@@ -108,7 +108,7 @@ describe('OnboardingApi', () => {
   it('invites as members and counts the addresses invited', async () => {
     await expect(
       api.invite(['ines.robert@ateliernord.fr', 'hugo.martin@ateliernord.fr']),
-    ).resolves.toEqual({ invited: 1, skipped: 1, alreadyInvited: 1, notSent: [] });
+    ).resolves.toEqual({ invited: 1, skipped: 1, alreadyInvited: 1, notSent: [], unknown: [] });
     expect(inviteMembers).toHaveBeenCalledWith({
       emails: ['ines.robert@ateliernord.fr', 'hugo.martin@ateliernord.fr'],
       role: 'member',

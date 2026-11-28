@@ -201,7 +201,7 @@ export class OnboardingApi {
     const result: InvitationBatchResult = await firstValueFrom(
       this.invitations.inviteMembers({ emails: [...emails], role: 'member' }),
     );
-    return toInvitationOutcome(result);
+    return toInvitationOutcome(result, emails);
   }
   // #endregion
 }
