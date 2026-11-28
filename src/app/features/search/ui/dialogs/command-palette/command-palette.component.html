@@ -204,5 +204,14 @@
       </button>
     </div>
   }
-  <cw-command-footer />
+  <cw-command-footer>
+    <span class="flex items-center gap-1"
+      ><kbd cwKbd size="sm">↑</kbd><kbd cwKbd size="sm">↓</kbd
+      ><ng-container i18n="@@search.palette.navigate">navigate</ng-container></span
+    >
+    <span class="flex items-center gap-1"
+      ><kbd cwKbd size="sm">{{ keyLabels.enter }}</kbd
+      ><ng-container i18n="@@search.palette.run">open</ng-container></span
+    >
+  </cw-command-footer>
 </cw-command-dialog>

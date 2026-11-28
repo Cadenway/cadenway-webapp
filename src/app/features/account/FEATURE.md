@@ -120,7 +120,10 @@ parent provides the English texts of `cw-password-strength` and `cw-input-otp` t
 - The menu is a slot contribution acting as a container: it injects `WORKSPACE_CONTEXT`, `PRESENCE`,
   the router and the toasts; `PresenceDot` stays presentational.
 - The rail's account button has no tooltip (mockup lines 63-66); its accessible name names the
-  person and their presence.
+  person and their presence. Its avatar's presence dot is ringed with the rail's canvas
+  (`ring="canvas"`), the menu header's with the popover (`ring="popover"`, lines 66 and 95).
+- `Status` and `Theme` show their current value in `cw-menu-item-value`, next to the submenu
+  chevron (lines 106 and 121).
 - The theme submenu drives `ThemeService`; the transition spreads from the account button.
 - A refused sign-out keeps the page and shows an error toast.
 - The account settings navigation lists the 5 sections in the mockup's order

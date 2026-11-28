@@ -831,7 +831,7 @@
     "core.ui-labels.spinner.loading": "Chargement",
     "core.ui-labels.split-button.menu": "Plus d’options",
     "dashboards.chart.capacity": "Capacité",
-    "dashboards.chart.caption": "La dernière barre correspond à la semaine en cours.",
+    "dashboards.chart.caption": "La dernière barre, plus claire, correspond à la semaine en cours.",
     "dashboards.chart.current-week": "{$week} (semaine en cours)",
     "dashboards.chart.empty": "Aucune donnée sur la période",
     "dashboards.chart.label": "Tâches terminées par semaine, {$count} dernières semaines : {$values}",

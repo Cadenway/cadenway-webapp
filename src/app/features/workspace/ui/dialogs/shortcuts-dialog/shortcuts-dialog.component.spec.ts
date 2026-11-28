@@ -37,6 +37,9 @@ describe('ShortcutsDialog', () => {
       Array.from(dialog?.querySelectorAll('h3') ?? []).map((title: Element) => title.textContent),
     ).toEqual(['Everywhere', 'Lists and tasks', 'Editing']);
     expect(dialog?.textContent).toContain('Command palette and search');
+    const keys: Element[] = Array.from(dialog?.querySelectorAll('kbd') ?? []);
+    expect(keys.length).toBeGreaterThan(0);
+    expect(keys.every((key: Element) => key.getAttribute('data-size') === 'xl')).toBe(true);
   });
 
   it('opens from the button of the sidebar footer', async () => {
