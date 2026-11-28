@@ -33,7 +33,8 @@ import { AccessRequestForm } from '../../forms/access-request-form/access-reques
  * @description
  * Renders one state of the route error page (mockup `App.dc.html` lines 487-500 and 1499-1522,
  * `ERR_PAGES`), from the values the page derived and the progress of its writes:
- * - `not-found`: `Error 404`, `Page not found` and `Back to home` to `/home`;
+ * - `not-found`: `Error 404`, `Page not found`, `Back to home` to `/home` and, when `searchable`,
+ *   `Search`, which emits `searchRequested`;
  * - `access-denied`: the private space and its owner when known, the access request form, then
  *   `Request sent`;
  * - `deleted-task`: the task, `Restore the task` (`Already restored` once the entry is gone) and
@@ -158,6 +159,17 @@ export class RouteErrorState {
   >(null);
 
   /**
+   * Property searchable
+   *
+   * @description
+   * Whether the not-found state offers `Search`, which needs a command palette to open.
+   *
+   * @type {InputSignal<boolean>}
+   * @readonly
+   */
+  public readonly searchable: InputSignal<boolean> = input<boolean>(false);
+
+  /**
    * Property accessRequest
    *
    * @description
@@ -212,6 +224,17 @@ export class RouteErrorState {
    * @readonly
    */
   public readonly restoreRequested: OutputEmitterRef<void> = output();
+
+  /**
+   * Property searchRequested
+   *
+   * @description
+   * Emitted when the person asks to search for what they wanted to open.
+   *
+   * @type {OutputEmitterRef<void>}
+   * @readonly
+   */
+  public readonly searchRequested: OutputEmitterRef<void> = output();
 
   /**
    * Property ownerFirstName

@@ -33,6 +33,17 @@
           <ng-icon name="phosphorHouseBold" aria-hidden="true" />
           <ng-container i18n="@@errors.back-home">Back to home</ng-container>
         </a>
+        @if (searchable()) {
+          <button
+            cwButton
+            variant="outline"
+            type="button"
+            (click)="searchRequested.emit()"
+            i18n="@@errors.not-found.search"
+          >
+            Search
+          </button>
+        }
       </div>
     </div>
   }

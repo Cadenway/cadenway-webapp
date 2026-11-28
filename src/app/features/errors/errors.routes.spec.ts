@@ -15,6 +15,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { type RuntimeConfig, RuntimeConfigStore } from '@core/config';
 import {
+  COMMAND_PALETTE_LAUNCHER,
+  type CommandPaletteLauncherPort,
+} from '@features/search/ports/command-palette-launcher';
+import {
   WORKSPACE_CONTEXT,
   type WorkspaceContextPort,
   type WorkspaceOrganization,
@@ -126,7 +130,10 @@ describe('ERRORS_ROUTES and the route error boundary', () => {
 
   let config: WritableSignal<RuntimeConfig>;
 
+  let launcher: { open: ReturnType<typeof vi.fn<CommandPaletteLauncherPort['open']>> };
+
   beforeEach(() => {
+    launcher = { open: vi.fn() };
     config = signal<RuntimeConfig>({ apiUrl: 'http://api.cadenway.localhost' });
     loads.count = 0;
     loads.failures = [];
@@ -144,6 +151,7 @@ describe('ERRORS_ROUTES and the route error boundary', () => {
               providers: [
                 provideCadenwayIcons(),
                 { provide: WORKSPACE_CONTEXT, useValue: workspace },
+                { provide: COMMAND_PALETTE_LAUNCHER, useValue: launcher },
               ],
               children: [
                 { path: 'page', component: LoadingPage },
@@ -237,6 +245,8 @@ describe('ERRORS_ROUTES and the route error boundary', () => {
 
     expect(heading(element)).toBe('Page not found');
     expect(element.querySelector('[data-testid="shell"]')).toBeNull();
+    expect(button(element, 'Back to home')?.getAttribute('href')).toBe('/home');
+    expect(button(element, 'Search')).toBeUndefined();
   });
 
   it('renders the 404 of an unknown address inside the workspace shell', async () => {
@@ -246,6 +256,18 @@ describe('ERRORS_ROUTES and the route error boundary', () => {
     expect(element.querySelector('[data-testid="shell"]')).not.toBeNull();
     expect(button(element, 'Back to home')?.getAttribute('href')).toBe('/home');
     expect(loads.count).toBe(0);
+  });
+
+  it('opens the command palette from the Search of the workspace 404', async () => {
+    const { element }: { element: HTMLElement } = await open('/atelier-nord/missing/page');
+
+    const search: HTMLElement | undefined = button(element, 'Search');
+    expect(search?.getAttribute('type')).toBe('button');
+    expect(launcher.open).not.toHaveBeenCalled();
+
+    search?.click();
+
+    expect(launcher.open).toHaveBeenCalledOnce();
   });
 
   it('renders the not-found state when the page read rejects with a not-found error', async () => {

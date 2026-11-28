@@ -3,6 +3,10 @@ import { ActivatedRoute, Router } from '@angular/router';
 
 import { RuntimeConfigStore } from '@core/config';
 import {
+  COMMAND_PALETTE_LAUNCHER,
+  type CommandPaletteLauncherPort,
+} from '@features/search/ports/command-palette-launcher';
+import {
   WORKSPACE_CONTEXT,
   type WorkspaceContextPort,
 } from '@features/workspace/ports/workspace-context';
@@ -35,7 +39,8 @@ type RouteErrorKind = KnownRouteError['kind'];
  * The router's `errorComponent` (mockup `App.dc.html` lines 487-500 and 1499-1522, `ERR_PAGES`).
  * The boundary renders it in place of a page that failed, in the same outlet, so the shell and
  * the page header stay; it receives the failure through its `error` input and renders:
- * - not found: `Page not found` with a link back to `/home`;
+ * - not found: `Page not found` with a link back to `/home` and, where a command palette can be
+ *   opened (inside a workspace), `Search`, which opens it;
  * - access denied: an optional message to the owner and `Request access`, which becomes
  *   `Request sent`;
  * - deleted task: `Restore the task`, which runs the route again once restored, and `Open the
@@ -212,6 +217,21 @@ export class RouteErrorBoundary {
    * @readonly
    */
   protected readonly statusUrl: Signal<string | null>;
+
+  /**
+   * Property paletteLauncher
+   *
+   * @description
+   * Opens the command palette of the enclosing workspace, or null outside one (the root 404),
+   * where `Search` is left out.
+   *
+   * @type {CommandPaletteLauncherPort | null}
+   * @readonly
+   */
+  protected readonly paletteLauncher: CommandPaletteLauncherPort | null = inject(
+    COMMAND_PALETTE_LAUNCHER,
+    { optional: true },
+  );
 
   /**
    * Property router

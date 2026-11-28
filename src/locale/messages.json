@@ -1010,6 +1010,7 @@
     "errors.not-found.title": " Page not found ",
     "errors.not-found.text": " The link is incomplete, or the page was moved or deleted. Check the address or search for what you wanted to open. ",
     "errors.back-home": "Back to home",
+    "errors.not-found.search": " Search ",
     "errors.access-denied.code": " Access denied ",
     "errors.access-denied.title": " You do not have access to this space ",
     "errors.access-denied.private-space": "“{$INTERPOLATION}” is a private space.",

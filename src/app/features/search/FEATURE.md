@@ -4,7 +4,8 @@
 
 The command palette (Ctrl + K): search across lists and tasks, recent tasks, navigation and
 actions. It owns the palette overlay and its triggers: the rail's `Search` item and the
-sidebar's `Search…` button. Search inside a single list belongs to Spaces.
+sidebar's `Search…` button, and the port through which another feature opens the palette (the
+404's `Search`). Search inside a single list belongs to Spaces.
 
 ## Routes
 
@@ -12,12 +13,20 @@ None.
 
 ## Public entry points
 
-| Entry point | Consumers |
-| ----------- | --------- |
-| `providers` | workspace |
+| Entry point                      | Consumers |
+| -------------------------------- | --------- |
+| `providers`                      | workspace |
+| `ports/command-palette-launcher` | errors    |
 
 `providers` publishes `withSearchRailItem()` (`railFooter`, order 0), `withSearchButton()`
-(`sidebarHeader`, order 10) and `withCommandPalette()` (`overlays`, order 0).
+(`sidebarHeader`, order 10), `withCommandPalette()` (`overlays`, order 0) and
+`provideCommandPaletteLauncher()`, which Workspace puts on `/:org`, where every shell renders the
+palette.
+
+`ports/command-palette-launcher` publishes `COMMAND_PALETTE_LAUNCHER`
+(`CommandPaletteLauncherPort`: `open()`, which opens the palette as the rail's `Search` does,
+never over another shell overlay). It exists only below `/:org`: inject it as optional and leave
+out what would open the palette when it is missing.
 
 ## Dependencies
 
