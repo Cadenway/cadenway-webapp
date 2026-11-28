@@ -1006,6 +1006,30 @@ describe('GettingStartedStore', () => {
       expect(store.inviteKept()).toEqual(['marc.roux@ateliernord.fr']);
     });
 
+    it('says a mixed batch left one address unsent and others of unknown outcome', async () => {
+      api.invite.mockResolvedValueOnce({
+        invited: 0,
+        skipped: 1,
+        alreadyInvited: 0,
+        notSent: ['ines.robert@ateliernord.fr'],
+        unknown: ['marc.roux@ateliernord.fr'],
+      });
+      const store: GettingStartedStore = await setup();
+      store.start('invite');
+
+      await store.invite(['ines.robert@ateliernord.fr', 'marc.roux@ateliernord.fr']);
+
+      expect(toasts.warning).not.toHaveBeenCalled();
+      expect(toasts.error).toHaveBeenCalledWith('1 address could not be invited', {
+        description:
+          'Some may already have been sent: sending again is safe. The addresses stay in the list: press Invite to try again.',
+      });
+      expect(store.inviteKept()).toEqual([
+        'ines.robert@ateliernord.fr',
+        'marc.roux@ateliernord.fr',
+      ]);
+    });
+
     it('sends the addresses in batches of 50', async () => {
       api.invite.mockImplementation((batch: readonly string[]) =>
         Promise.resolve({ invited: batch.length, skipped: 0, alreadyInvited: 0 }),

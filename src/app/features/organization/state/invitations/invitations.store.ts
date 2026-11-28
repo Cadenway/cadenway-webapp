@@ -447,7 +447,9 @@ export interface InvitationsStoreInstance {
    * `The invitations may not have been sent`, since sending again is safe; a `400` naming addresses
    * answers them as `refused`; any other refusal shows the failure toast. A batch whose
    * organization changed while it was pending (a switch away and back included), or which the
-   * gateway refused for another session organization, ends `dropped` with no toast.
+   * gateway refused for another session organization, ends `dropped` with no toast. A batch
+   * answered once the page is gone, in the same organization, changes no state and still says what
+   * it did: the sent count, then the addresses left with where to invite them again.
    *
    * @param {readonly string[]} emails - Distinct addresses, 1 to 50.
    * @param {AssignableMemberRole} role - Role of every address.
@@ -782,13 +784,21 @@ function createInvitationsStore(): Type<InvitationsStoreInstance> {
       };
       // A batch that left addresses unsent: the invited ones when there are some, then one failure
       // summary, which counts the skipped addresses when none was invited, so none goes unsaid.
-      const toastKept: (outcome: InvitationOutcome, kept: number) => void = (
+      // `uncertain`: other addresses of the batch have an unknown outcome, which the summary says
+      // too, so a mixed batch is not reported as a definite failure alone.
+      const toastKept: (outcome: InvitationOutcome, kept: number, uncertain: boolean) => void = (
         outcome: InvitationOutcome,
         kept: number,
+        uncertain: boolean,
       ): void => {
         if (outcome.invited > 0) toastOutcome(outcome);
         const lines: string[] = [];
         if (outcome.invited === 0 && outcome.skipped > 0) lines.push(skippedLine(outcome.skipped));
+        if (uncertain) {
+          lines.push(
+            $localize`:@@organization.members.invite-uncertain-part:Some may already have been sent: sending again is safe.`,
+          );
+        }
         lines.push(
           $localize`:@@organization.members.invite-not-sent-text:The addresses stay in the list: press Invite to try again.`,
         );
@@ -797,6 +807,36 @@ function createInvitationsStore(): Type<InvitationsStoreInstance> {
             ? $localize`:@@organization.members.invite-not-sent-one:${kept}:count: address could not be invited`
             : $localize`:@@organization.members.invite-not-sent:${kept}:count: addresses could not be invited`,
           { description: lines.join(' ') },
+        );
+      };
+      // The summary of a batch answered once the page is gone (same organization): no dialog keeps
+      // the addresses left, so the toast counts them and says where to invite them again. Toasts
+      // outlive the page; the store's state is left alone.
+      const toastDetached: (
+        outcome: InvitationOutcome | null,
+        left: number,
+        unknown: boolean,
+      ) => void = (outcome: InvitationOutcome | null, left: number, unknown: boolean): void => {
+        if (outcome !== null && (outcome.invited > 0 || left === 0)) toastOutcome(outcome);
+        if (left === 0) return;
+        if (unknown) {
+          store._toasts.warning(
+            takesSingular(left)
+              ? $localize`:@@organization.members.invite-uncertain-count-one:${left}:count: address may not have been invited`
+              : $localize`:@@organization.members.invite-uncertain-count:${left}:count: addresses may not have been invited`,
+            {
+              description: $localize`:@@organization.members.invite-uncertain-later:Sending them again from the Members page is safe.`,
+            },
+          );
+          return;
+        }
+        store._toasts.error(
+          takesSingular(left)
+            ? $localize`:@@organization.members.invite-not-sent-one:${left}:count: address could not be invited`
+            : $localize`:@@organization.members.invite-not-sent:${left}:count: addresses could not be invited`,
+          {
+            description: $localize`:@@organization.members.invite-not-sent-later:Invite them again from the Members page.`,
+          },
         );
       };
       return {
@@ -830,7 +870,6 @@ function createInvitationsStore(): Type<InvitationsStoreInstance> {
           try {
             const outcome: InvitationOutcome = await store._api.invite(emails, role);
             if (write.moved()) return 'dropped';
-            bump();
             // The adapter spells both lists as sent: an address the answer left out (or gave
             // conflicting results) is as unknown as a lost answer, so it stays like one.
             const left: ReadonlySet<string> = new Set<string>(
@@ -841,9 +880,18 @@ function createInvitationsStore(): Type<InvitationsStoreInstance> {
             const kept: readonly string[] = emails.filter((email: string): boolean =>
               left.has(email.toLowerCase()),
             );
+            if (destroyRef.destroyed) {
+              toastDetached(outcome, kept.length, outcome.unknown.length > 0);
+              return 'dropped';
+            }
+            bump();
             if (kept.length === 0) {
               toastOutcome(outcome);
               return 'sent';
+            }
+            if (outcome.unknown.length > 0 && outcome.notSent.length > 0) {
+              toastKept(outcome, outcome.notSent.length, true);
+              return { kept, uncertain: true };
             }
             if (outcome.unknown.length > 0) {
               if (outcome.invited > 0) toastOutcome(outcome);
@@ -855,10 +903,18 @@ function createInvitationsStore(): Type<InvitationsStoreInstance> {
               );
               return { kept, uncertain: true };
             }
-            toastKept(outcome, kept.length);
+            toastKept(outcome, kept.length, false);
             return { kept, uncertain: false };
           } catch (error: unknown) {
             if (write.moved() || isDroppedOrganizationWrite(error)) return 'dropped';
+            if (destroyRef.destroyed && isUnknownWriteOutcome(error)) {
+              toastDetached(null, emails.length, true);
+              return 'dropped';
+            }
+            if (destroyRef.destroyed && refusedAddresses(error, emails).length > 0) {
+              toastDetached(null, emails.length, false);
+              return 'dropped';
+            }
             const refused: readonly string[] = refusedAddresses(error, emails);
             if (refused.length > 0) return { refused };
             if (isUnknownWriteOutcome(error)) {
@@ -881,12 +937,13 @@ function createInvitationsStore(): Type<InvitationsStoreInstance> {
                   }
                 : {},
             );
+            if (destroyRef.destroyed) return 'dropped';
             return 'failed';
           } finally {
             write.release();
             // A moved write's state was reset with the organization change, and another send may
-            // have started since.
-            if (!write.moved()) patchState(store, { inviting: false });
+            // have started since; a destroyed store is left alone.
+            if (!write.moved() && !destroyRef.destroyed) patchState(store, { inviting: false });
           }
         },
 

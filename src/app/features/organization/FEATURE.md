@@ -337,9 +337,17 @@ resent` from a resend that answered, or from the invitation itself listed with a
   after the invited ones' toast when some were invited, else with the skipped count first. A batch
   of unknown outcome keeps every address in the dialog, reads the list again and warns
   `The invitations may not have been sent` / `Sending again is safe.`: a second send answers
-  `already-invited` for an address the first reached. `inviteMembers` declares no
+  `already-invited` for an address the first reached. A batch with addresses of both kinds counts
+  only the definite ones in `{n} address(es) could not be invited` and adds
+  `Some may already have been sent: sending again is safe.`. `inviteMembers` declares no
   `Idempotency-Key` (`@cadenway/contracts` 0.44.0), so none is sent and the retry relies on that
   answer (a contract gap, to raise in cadenway-api-contracts).
+- A batch answered once the Members page is gone, in the same organization, changes no state (the
+  store is destroyed) and still says what it did, as Onboarding's invite dialog does: the sent
+  count, then one toast counting the addresses left, `{n} address(es) could not be invited` /
+  `Invite them again from the Members page.`, or, when any has an unknown outcome,
+  `{n} address(es) may not have been invited` / `Sending them again from the Members page is safe.`.
+  Once the organization changed too, it says nothing.
 - Contract gaps of the invitations (to raise in cadenway-api-contracts): `inviteMembers` takes no
   `Idempotency-Key`; no operation reads one invitation with its terminal status (revoked,
   accepted, refused, expired); and `listInvitations` pages are not read from one snapshot. So the
@@ -481,6 +489,7 @@ Members section (`organization.members.*`):
 | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
 | `role-failed`, `role-failed-seats`, `remove-failed`, `resend-failed`, `resend-failed-limit`, `cancel-failed`, `invite-failed`, `invite-failed-limit`                                                    | The mockup draws no refused write.                                                                     |
 | `role-stale`, `role-stale-text`, `invitation-closed`                                                                                                                                                    | The mockup draws no write overtaken by another person's.                                               |
+| `invite-uncertain-part`, `invite-uncertain-count`, `invite-uncertain-count-one`, `invite-uncertain-later`, `invite-not-sent-later`                                                                      | The mockup draws no mixed batch, nor a batch answered once the page is gone.                           |
 | `cancel-accepted`, `cancel-accepted-text`, `cancel-refused`, `invitation-unsettled-text`, `invite-role-locked`                                                                                          | The mockup draws no cancellation overtaken by an answer, nor an unknown one.                           |
 | `invite-uncertain`, `invite-uncertain-text`, `invite-not-sent`, `invite-not-sent-one`, `invite-not-sent-text`, `resend-uncertain`, `cancel-uncertain`                                                   | The mockup draws no write of unknown outcome or address left unsent; the wording follows Onboarding's. |
 | `resend-throttled`                                                                                                                                                                                      | Copy of the contract (`resendInvitation`); the mockup draws no throttled resend.                       |

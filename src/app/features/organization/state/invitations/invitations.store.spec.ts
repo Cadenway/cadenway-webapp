@@ -761,6 +761,127 @@ describe('InvitationsStore', () => {
     for (const toast of Object.values(toasts)) expect(toast).not.toHaveBeenCalled();
   });
 
+  it('says a mixed batch left one address unsent and others of unknown outcome', async () => {
+    const { store, toasts }: Harness = await setup({
+      invite: vi.fn(() =>
+        Promise.resolve({
+          invited: 0,
+          skipped: 0,
+          notSent: ['lucie@example.com'],
+          unknown: ['paul@example.com'],
+        }),
+      ),
+    });
+
+    await expect(
+      store.invite(['lucie@example.com', 'paul@example.com'], 'member'),
+    ).resolves.toEqual({ kept: ['lucie@example.com', 'paul@example.com'], uncertain: true });
+
+    expect(toasts.error).toHaveBeenCalledTimes(1);
+    expect(toasts.error).toHaveBeenCalledWith('1 address could not be invited', {
+      description:
+        'Some may already have been sent: sending again is safe. The addresses stay in the list: press Invite to try again.',
+    });
+  });
+
+  describe('an invite answered once the page is gone', () => {
+    /**
+     * Function pendingInvite
+     *
+     * @description
+     * Starts an invite whose answer waits.
+     *
+     * @param {Harness} harness - The store and its fakes.
+     * @returns {[Promise<InviteResult>, (outcome: unknown) => void, (error: unknown) => void]} The
+     * invite, and how to answer or refuse it.
+     */
+    function pendingInvite(
+      harness: Harness,
+    ): [Promise<InviteResult>, (outcome: unknown) => void, (error: unknown) => void] {
+      let answer: (outcome: unknown) => void = () => undefined;
+      let refuse: (error: unknown) => void = () => undefined;
+      harness.api.invite.mockImplementation(
+        () =>
+          new Promise<unknown>(
+            (resolve: (outcome: unknown) => void, reject: (error: unknown) => void) => {
+              answer = resolve;
+              refuse = reject;
+            },
+          ),
+      );
+      const done: Promise<InviteResult> = harness.store.invite(
+        ['lucie@example.com', 'paul@example.com'],
+        'member',
+      );
+      return [
+        done,
+        (outcome: unknown) => {
+          answer(outcome);
+        },
+        (error: unknown) => {
+          refuse(error);
+        },
+      ];
+    }
+
+    it('still says what it did, without touching the state', async () => {
+      const harness: Harness = await setup({});
+      const [done, answer]: [
+        Promise<InviteResult>,
+        (outcome: unknown) => void,
+        (error: unknown) => void,
+      ] = pendingInvite(harness);
+      expect(harness.store.inviting()).toBe(true);
+
+      TestBed.resetTestingModule();
+      answer({ invited: 1, skipped: 0, notSent: ['paul@example.com'], unknown: [] });
+      await done;
+
+      expect(harness.store.inviting()).toBe(true);
+      expect(harness.toasts.success).toHaveBeenCalledWith('1 invitation sent', {
+        description: 'They expire in 7 days.',
+      });
+      expect(harness.toasts.error).toHaveBeenCalledWith('1 address could not be invited', {
+        description: 'Invite them again from the Members page.',
+      });
+    });
+
+    it('counts the addresses of unknown outcome, without touching the state', async () => {
+      const harness: Harness = await setup({});
+      const [done, , refuse]: [
+        Promise<InviteResult>,
+        (outcome: unknown) => void,
+        (error: unknown) => void,
+      ] = pendingInvite(harness);
+
+      TestBed.resetTestingModule();
+      refuse(refusal(503, {}));
+      await done;
+
+      expect(harness.store.inviting()).toBe(true);
+      expect(harness.toasts.error).not.toHaveBeenCalled();
+      expect(harness.toasts.warning).toHaveBeenCalledWith('2 addresses may not have been invited', {
+        description: 'Sending them again from the Members page is safe.',
+      });
+    });
+
+    it('says nothing once the organization changed too', async () => {
+      const harness: Harness = await setup({});
+      const [done, answer]: [
+        Promise<InviteResult>,
+        (outcome: unknown) => void,
+        (error: unknown) => void,
+      ] = pendingInvite(harness);
+
+      harness.pin.set('o2');
+      TestBed.resetTestingModule();
+      answer({ invited: 2, skipped: 0, notSent: [], unknown: [] });
+
+      await expect(done).resolves.toBe('dropped');
+      for (const toast of Object.values(harness.toasts)) expect(toast).not.toHaveBeenCalled();
+    });
+  });
+
   describe('a write whose page is gone before it is answered', () => {
     it('says nothing of a cancellation retry answered after the page is gone', async () => {
       let answer: () => void = () => undefined;

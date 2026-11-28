@@ -763,8 +763,12 @@ function createGettingStartedStore(): Type<GettingStartedStoreInstance> {
 
       // The summary of a send that left addresses in the dialog: the invited ones when there are
       // some, then one failure summary. When nothing was invited, the addresses already members or
-      // invited, which leave the list, are counted in the failure summary.
-      const toastKept: (send: InviteSend) => void = (send: InviteSend): void => {
+      // invited, which leave the list, are counted in the failure summary. `uncertain`: other
+      // batches, or addresses, have an unknown outcome, which a refusal or not-sent summary says too.
+      const toastKept: (send: InviteSend, uncertain: boolean) => void = (
+        send: InviteSend,
+        uncertain: boolean,
+      ): void => {
         if (send.invited > 0) toastOutcome({ invited: send.invited, skipped: send.skipped });
         const lines: string[] = [];
         if (send.invited === 0 && send.skipped > 0) {
@@ -783,10 +787,20 @@ function createGettingStartedStore(): Type<GettingStartedStoreInstance> {
               $localize`:@@onboarding.getting-started.invite-failed-limit:The daily invitation limit is reached: try again later.`,
             );
           }
+          if (uncertain) {
+            lines.push(
+              $localize`:@@onboarding.getting-started.invite-uncertain-part:Some may already have been sent: sending again is safe.`,
+            );
+          }
         } else if (send.notSent > 0) {
           title = takesSingular(send.notSent)
             ? $localize`:@@onboarding.getting-started.invite-not-sent-one:${send.notSent}:count: address could not be invited`
             : $localize`:@@onboarding.getting-started.invite-not-sent-other:${send.notSent}:count: addresses could not be invited`;
+          if (uncertain) {
+            lines.push(
+              $localize`:@@onboarding.getting-started.invite-uncertain-part:Some may already have been sent: sending again is safe.`,
+            );
+          }
           lines.push(
             $localize`:@@onboarding.getting-started.invite-not-sent-text:The addresses stay in the list: press Invite to try again.`,
           );
@@ -966,7 +980,7 @@ function createGettingStartedStore(): Type<GettingStartedStoreInstance> {
             setInviteOpen(false);
             return;
           }
-          toastKept(send);
+          toastKept(send, uncertain);
           patchState(store, { inviteKept: kept });
         },
       };
