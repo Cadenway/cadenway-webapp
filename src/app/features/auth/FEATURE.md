@@ -53,7 +53,8 @@ was scheduled, whose session the gateway already ended.
 - `@cadenway/api-client` (`AuthService`, `OrganizationsService`, `InvitationsService`,
   `ProfileMediaService`) through `data-access/`; `@simplewebauthn/browser` for the security key.
 - `@layouts/auth-layout` and `@layouts/auth-layout/providers` (root route only), `@core/theme`,
-  `@core/config` (`siteUrl`), `@core/api` (`readProblem`).
+  `@core/config` (`siteUrl`), `@core/api` (`readProblem`), `@core/ui-labels`
+  (`provideCadenwayUiLabels`, on the root route).
 
 ## Invariants
 
