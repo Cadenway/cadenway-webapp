@@ -272,10 +272,17 @@ be loaded.` with `Retry`, until a read or a save confirms the organization (anot
   subscription again for the owner's free seats.
 - Invitation writes follow the app-wide write discipline (`isUnknownWriteOutcome` and
   `isDroppedOrganizationWrite`, `@core/api`): an unknown outcome (no answer, `408`, `5xx`,
-  `409 idempotency.request-in-progress`) is never reported as a failure. A resend or cancellation
-  of unknown outcome restores the row, reads the list again and warns
-  `The invitation may not have been resent` / `The invitation may not have been cancelled` with the
-  address. A write dropped for another session organization (`OrganizationSwitchPendingError`,
+  `409 idempotency.request-in-progress`, or a `2xx` the client could not read) is never reported
+  as a failure, and one read right away is not taken as the answer, since the write may still be
+  under way. A cancellation of unknown outcome keeps the row hidden and busy and is sent again
+  after 2, 4 and 8 s (`INVITATION_SETTLE_DELAYS_MS`; revoking again answers `204`). A resend of
+  unknown outcome is never sent again (a second one within the hour is throttled): the row stays
+  shown as resent and busy while the list is read after each of those waits, until it shows a new
+  expiry, and a later resend answered `429 invitation.resend-throttled` counts as resent. The
+  waits stop once the organization changes (a switch away and back included) or the page is gone.
+  When every attempt stays unknown, the row is restored, the list read again, and the toast warns
+  `The invitation may not have been resent` / `The invitation may not have been cancelled` with
+  the address. A write dropped for another session organization (`OrganizationSwitchPendingError`,
   `412 organization.context-changed`) restores the row, or closes the invite dialog, with no
   toast: the workspace recovery takes over.
 - `<n> free seats` (summary) and `<n> seats available on the <plan> plan.` (dialog) show to the
