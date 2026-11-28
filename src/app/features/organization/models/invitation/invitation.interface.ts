@@ -165,3 +165,48 @@ export interface InvitationOutcome {
   readonly unknown: readonly string[];
   // #endregion
 }
+
+/**
+ * Type InvitationStatus
+ *
+ * @description
+ * Lifecycle state of one invitation as `getInvitation` answers it; `other` for a state this
+ * version does not know (the contract's enum is extensible), which settles nothing.
+ *
+ * @type {'pending' | 'expired' | 'accepted' | 'refused' | 'revoked' | 'other'}
+ */
+export type InvitationStatus = 'pending' | 'expired' | 'accepted' | 'refused' | 'revoked' | 'other';
+
+/**
+ * Interface InvitationStanding
+ *
+ * @description
+ * One invitation in any state of its lifecycle, read on its own to settle a write of unknown
+ * outcome. Never kept: each read is a fresh answer of the API.
+ */
+export interface InvitationStanding {
+  // #region Properties
+  /**
+   * Property status
+   *
+   * @description
+   * Where the invitation stands now.
+   *
+   * @type {InvitationStatus}
+   * @readonly
+   */
+  readonly status: InvitationStatus;
+
+  /**
+   * Property invitation
+   *
+   * @description
+   * The invitation as `Pending invitations` would list it; its `expiresAt` moves with each resend
+   * (`sentAt` plus 7 days).
+   *
+   * @type {PendingInvitation}
+   * @readonly
+   */
+  readonly invitation: PendingInvitation;
+  // #endregion
+}
